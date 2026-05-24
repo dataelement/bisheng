@@ -27,6 +27,7 @@ export interface ApprovalTaskItem {
   business_name?: string;
   status?: string;
   instance_status?: string;
+  grant_revoked?: boolean;
   current_node_name?: string | null;
   applicant_user_name?: string;
   applicant_department_id?: number | null;

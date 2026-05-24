@@ -76,6 +76,8 @@ export default function MainLayout() {
     // 侧栏：系统管理 — 超管 / 部门管理员 / Child Admin。SystemPage 内部按
     // PRD §3.3 已为 Child Admin 分了 Tab 视角（组织 + 角色）
     const showSystemNav = isFullAdminShell || isChildAdmin
+    // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
+    const showApprovalNav = isSuperAdmin || isChildAdmin
     const menuApprovalMode = Boolean(user.menu_approval_mode)
     const hasAdminEntry =
         isSuperAdmin
@@ -224,7 +226,7 @@ export default function MainLayout() {
                             </NavLink>
                         }
                         {
-                            showSystemNav &&
+                            showApprovalNav &&
                             <NavLink to='/approval' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
                                 <ApprovalMenuIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('menu.approval')}</span>
                             </NavLink>

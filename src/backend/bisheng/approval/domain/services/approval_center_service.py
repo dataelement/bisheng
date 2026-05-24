@@ -63,6 +63,14 @@ class ApprovalCenterService:
             depts = await DepartmentDao.aget_by_ids(list(set(dept_ids)))
             dept_name_map = {d.id: d.name for d in depts}
 
+        # Batch-check which menu_access instances have had their grant revoked
+        from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
+        menu_executed_ids = [
+            inst.id for inst in instances
+            if inst.scenario_code == 'menu_access_request' and inst.status == 'executed'
+        ]
+        revoked_instance_ids = await UserMenuAccessRepository.get_revoked_instance_ids(menu_executed_ids)
+
         data = []
         for task in tasks:
             inst = instance_map.get(task.instance_id)
@@ -75,6 +83,7 @@ class ApprovalCenterService:
                 'business_name': inst.business_name if inst else task.node_name,
                 'status': task.status,
                 'instance_status': inst.status if inst else None,
+                'grant_revoked': task.instance_id in revoked_instance_ids,
                 'current_node_name': task.node_name,
                 'applicant_user_name': inst.applicant_user_name if inst else None,
                 'applicant_department_id': inst.applicant_department_id if inst else None,
@@ -106,6 +115,12 @@ class ApprovalCenterService:
 
         action_logs = await ApprovalInstanceRepository.list_action_logs(instance.id)
 
+        grant_revoked = False
+        if instance.scenario_code == 'menu_access_request' and instance.status == 'executed':
+            from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
+            revoked_ids = await UserMenuAccessRepository.get_revoked_instance_ids([instance.id])
+            grant_revoked = instance.id in revoked_ids
+
         return {
             'task_id': task.id,
             'instance_id': task.instance_id,
@@ -114,6 +129,7 @@ class ApprovalCenterService:
             'business_name': instance.business_name,
             'status': task.status,
             'instance_status': instance.status,
+            'grant_revoked': grant_revoked,
             'current_node_name': task.node_name,
             'comment': task.comment,
             'detail_snapshot': instance.detail_snapshot,
@@ -399,6 +415,15 @@ class ApprovalCenterService:
                 action_code='approval_instance_withdrawn',
                 business_name=instance.business_name,
                 instance_id=instance.id,
+            )
+        try:
+            from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+            await handler.on_withdrawn(instance.id, instance.payload_snapshot or {}, reason)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'withdraw_instance: on_withdrawn hook failed for instance %s', instance.id
             )
         return await cls.get_instance_detail(
             instance_id=instance.id,
@@ -694,6 +719,15 @@ class ApprovalCenterService:
                 business_name=instance.business_name,
                 instance_id=instance.id,
             )
+            try:
+                from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+                handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+                await handler.on_rejected(instance.id, instance.payload_snapshot or {}, comment)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    'decide_task: on_rejected hook failed for instance %s', instance.id
+                )
             return
 
         task.status = ApprovalTaskStatus.APPROVED

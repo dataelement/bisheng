@@ -327,11 +327,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const isTaskPending = activeTab === "my_tasks" && taskDetail?.status === "pending";
   const isInstancePending = activeTab === "my_requests" && requestDetail?.status === "pending";
   const canResubmit = activeTab === "my_requests" && requestDetail?.status === "rejected";
-  // Only the approver (my_tasks) can revoke a granted menu permission
+  // Only the approver (my_tasks) can revoke a granted menu permission, and only if not already revoked
   const canRevoke =
     activeTab === "my_tasks" &&
     String(taskDetail?.scenario_code ?? "").toLowerCase() === "menu_access_request" &&
-    ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase());
+    ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase()) &&
+    !taskDetail?.grant_revoked;
 
   const dialogTitle = activeTab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests");
   const dialogSubtitle = activeTab === "my_tasks" ? localize("com_approval_my_approval_desc") : localize("com_approval_my_requests_desc");
@@ -409,7 +410,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                             onClick={() => id && openTask(id)}>
                             <div className="flex items-start justify-between gap-2">
                               <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
-                              <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
+                              <div className="flex shrink-0 items-center gap-1">
+                                {item.grant_revoked && (
+                                  <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
+                                    {localize("com_approval_grant_revoked")}
+                                  </span>
+                                )}
+                                <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
+                              </div>
                             </div>
                             {item.current_node_name && (
                               <div className="mt-1.5 text-[12px] text-[#86909c]">
@@ -712,52 +720,83 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
                 s === "approved" ? "bg-[#00b42a]" : s === "rejected" ? "bg-[#f53f3f]" :
                 (s === "cancelled" || s === "skipped") ? "bg-[#c9cdd4]" : "bg-[#165dff]";
               const isLast = i === nodes.length - 1 && !hasTrailingLogs;
-              // Comment from the task that decided the outcome, or the first with a comment
-              const decidingTask = matchedTasks.find((t) => t.status === "rejected" || t.status === "approved");
-              const comment = (decidingTask ?? matchedTasks[0])?.comment;
-              // Latest update_time among all matched tasks
-              const updateTime = matchedTasks.map((t) => t.update_time).filter(Boolean).sort().at(-1);
+              const nodeBadgeMap: Record<string, { text: string; cls: string }> = {
+                approved:  { text: localize("com_approval_status_approved"),  cls: "bg-[#e8ffea] text-[#00b42a]" },
+                rejected:  { text: localize("com_approval_status_rejected"),  cls: "bg-[#fff2f0] text-[#f53f3f]" },
+                pending:   { text: localize("com_approval_status_pending"),   cls: "bg-[#e8f3ff] text-[#165dff]" },
+                skipped:   { text: localize("com_approval_status_skipped"),   cls: "bg-[#f7f8fa] text-[#86909c]" },
+                cancelled: { text: localize("com_approval_status_cancelled"), cls: "bg-[#f7f8fa] text-[#86909c]" },
+              };
               return (
                 <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
                   <div className="flex flex-col items-center">
                     <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full", dotColor)} />
                     {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
                   </div>
-                  <div className={cn("min-w-0", isLast ? "pb-1" : "pb-4")}>
-                    <div className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-[#1d2129]")}>
-                      {node.node_name || "--"}
+                  <div className={cn("min-w-0 flex-1", isLast ? "pb-1" : "pb-4")}>
+                    {/* Node name + aggregate status badge */}
+                    <div className="flex items-center gap-2">
+                      <span className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-[#1d2129]")}>
+                        {node.node_name || "--"}
+                      </span>
+                      {!isNotStarted && nodeBadgeMap[s] && (
+                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", nodeBadgeMap[s].cls)}>
+                          {nodeBadgeMap[s].text}
+                        </span>
+                      )}
                     </div>
-                    {matchedTasks.length > 0 ? (
-                      matchedTasks.map((t) => {
-                        const ts = String(t.status || "").toLowerCase();
-                        const tLabel = ts === "approved" ? localize("com_approval_status_approved") :
-                          ts === "rejected" ? localize("com_approval_status_rejected") :
-                          ts === "pending" ? localize("com_approval_status_pending") :
-                          ts === "skipped" ? localize("com_approval_status_skipped") :
-                          ts === "cancelled" ? localize("com_approval_status_cancelled") :
-                          localize("com_approval_node_not_started");
-                        return (
-                          <div key={t.task_id ?? t.id} className="mt-0.5 text-[12px] text-[#86909c]">
-                            {t.approver_user_name && <span>{t.approver_user_name} · </span>}
-                            <span>{tLabel}</span>
-                          </div>
-                        );
-                      })
-                    ) : (
+                    {/* Per-approver entries */}
+                    {matchedTasks.length > 0 && (
+                      <div className="mt-2 space-y-1.5">
+                        {matchedTasks.map((t) => {
+                          const ts = String(t.status || "").toLowerCase();
+                          const tLabel = ts === "approved" ? localize("com_approval_status_approved") :
+                            ts === "rejected" ? localize("com_approval_status_rejected") :
+                            ts === "pending" ? localize("com_approval_status_pending") :
+                            ts === "skipped" ? localize("com_approval_status_skipped") :
+                            ts === "cancelled" ? localize("com_approval_status_cancelled") :
+                            localize("com_approval_node_not_started");
+                          const tIconCls = ts === "approved" ? "text-[#00b42a]" : ts === "rejected" ? "text-[#f53f3f]" :
+                            (ts === "skipped" || ts === "cancelled") ? "text-[#c9cdd4]" : "text-[#165dff]";
+                          const tIcon = ts === "approved" ? "✓" : ts === "rejected" ? "✗" :
+                            (ts === "skipped" || ts === "cancelled") ? "⊘" : "●";
+                          return (
+                            <div key={t.task_id ?? t.id} className="rounded-lg border border-[#f2f3f5] bg-[#fafbfc] px-3 py-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={cn("text-[12px] font-bold", tIconCls)}>{tIcon}</span>
+                                  {t.approver_user_name && (
+                                    <span className="text-[13px] text-[#1d2129]">{t.approver_user_name}</span>
+                                  )}
+                                  <span className="text-[12px] text-[#86909c]">{tLabel}</span>
+                                </div>
+                                {t.update_time && ts !== "pending" && (
+                                  <span className="shrink-0 text-[11px] text-[#c9cdd4]">{formatTime(t.update_time)}</span>
+                                )}
+                              </div>
+                              {t.comment && (
+                                <div className="mt-1.5 rounded-lg bg-[#f0f1f3] px-3 py-1.5 text-[12px] text-[#4e5969] break-all">
+                                  {t.comment}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Not-started placeholder */}
+                    {isNotStarted && (
+                      <div className="mt-0.5 text-[12px] text-[#86909c]">{localize("com_approval_node_not_started")}</div>
+                    )}
+                    {/* flow_nodes-only entry with no matched tasks */}
+                    {!isNotStarted && matchedTasks.length === 0 && (
                       <div className="mt-0.5 text-[12px] text-[#86909c]">{
-                        isNotStarted ? localize("com_approval_node_not_started") :
                         s === "approved" ? localize("com_approval_status_approved") :
                         s === "rejected" ? localize("com_approval_status_rejected") :
                         s === "pending" ? localize("com_approval_status_pending") :
                         s === "skipped" ? localize("com_approval_status_skipped") :
                         localize("com_approval_status_cancelled")
                       }</div>
-                    )}
-                    {comment && (
-                      <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>
-                    )}
-                    {updateTime && !isNotStarted && s !== "pending" && (
-                      <div className="mt-1 text-[11px] text-[#c9cdd4]">{formatTime(updateTime)}</div>
                     )}
                   </div>
                 </div>
