@@ -400,6 +400,15 @@ class ApprovalCenterService:
                 business_name=instance.business_name,
                 instance_id=instance.id,
             )
+        try:
+            from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+            await handler.on_withdrawn(instance.id, instance.payload_snapshot or {}, reason)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'withdraw_instance: on_withdrawn hook failed for instance %s', instance.id
+            )
         return await cls.get_instance_detail(
             instance_id=instance.id,
             login_user=_SystemLoginUser(operator_user_id, tenant_id=instance.tenant_id),
@@ -694,6 +703,15 @@ class ApprovalCenterService:
                 business_name=instance.business_name,
                 instance_id=instance.id,
             )
+            try:
+                from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+                handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+                await handler.on_rejected(instance.id, instance.payload_snapshot or {}, comment)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    'decide_task: on_rejected hook failed for instance %s', instance.id
+                )
             return
 
         task.status = ApprovalTaskStatus.APPROVED

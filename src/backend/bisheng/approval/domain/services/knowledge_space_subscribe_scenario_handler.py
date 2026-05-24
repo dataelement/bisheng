@@ -7,6 +7,51 @@ from bisheng.common.models.space_channel_member import MembershipStatusEnum
 logger = logging.getLogger(__name__)
 
 
+async def _resolve_space_roles_via_fga(space_id: int) -> tuple[list[int], list[int]]:
+    """Return (owner_ids, manager_ids) for a knowledge space, queried via OpenFGA tuples.
+
+    Falls back to the SpaceChannelMember DB table when FGA is unavailable so
+    approver resolution degrades gracefully rather than blocking the flow.
+    Direct `user:{id}` tuples are extracted; group-userset entries are skipped
+    because approver tasks must be assigned to individual users.
+    """
+    try:
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        fga = await PermissionService._aget_fga()
+        if fga is not None:
+            obj = f'knowledge_space:{space_id}'
+            owner_tuples = await fga.read_tuples(relation='owner', object=obj)
+            manager_tuples = await fga.read_tuples(relation='manager', object=obj)
+
+            def _extract_user_ids(tuples: list[dict]) -> list[int]:
+                ids: list[int] = []
+                for t in tuples:
+                    user_str = t.get('user', '')
+                    if user_str.startswith('user:'):
+                        try:
+                            ids.append(int(user_str.split(':', 1)[1]))
+                        except (ValueError, IndexError):
+                            pass
+                return ids
+
+            return _extract_user_ids(owner_tuples), _extract_user_ids(manager_tuples)
+    except Exception:
+        logger.exception('resolve_approvers: FGA query failed for space_id=%s, falling back to DB', space_id)
+
+    # DB fallback
+    try:
+        from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
+        members = await SpaceChannelMemberDao.async_get_members_by_space(
+            space_id, user_roles=[UserRoleEnum.CREATOR, UserRoleEnum.ADMIN]
+        )
+        owner_ids = [m.user_id for m in members if m.user_role == UserRoleEnum.CREATOR]
+        manager_ids = [m.user_id for m in members if m.user_role == UserRoleEnum.ADMIN]
+        return owner_ids, manager_ids
+    except Exception:
+        logger.exception('resolve_approvers: DB fallback also failed for space_id=%s', space_id)
+        return [], []
+
+
 class KnowledgeSpaceSubscribeScenarioHandler:
     scenario_code = 'knowledge_space_subscribe_request'
 
@@ -42,38 +87,22 @@ class KnowledgeSpaceSubscribeScenarioHandler:
         space_source_types = {'knowledge_space_owner', 'knowledge_space_manager', 'space_admin'}
         has_space_source = any(s.get('type') in space_source_types for s in sources)
 
-        space = None
-        space_admins: list[int] = []
+        space_owner_ids: list[int] = []
+        space_manager_ids: list[int] = []
         if has_space_source:
             space_id = req.payload_snapshot.get('space_id') or req.business_resource_id
             if space_id:
-                try:
-                    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-                    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
-                    space = await KnowledgeDao.aquery_by_id(int(space_id))
-                    members = await SpaceChannelMemberDao.async_get_members_by_space(
-                        int(space_id), user_roles=[UserRoleEnum.CREATOR, UserRoleEnum.ADMIN]
-                    )
-                    space_admins = [m.user_id for m in members]
-                except Exception:
-                    logger.exception('resolve_approvers: failed to load space owner/admins for space_id=%s', space_id)
+                space_owner_ids, space_manager_ids = await _resolve_space_roles_via_fga(int(space_id))
 
         for source in sources:
             source_type = source.get('type', '')
             if source_type == 'knowledge_space_owner':
-                owner_ids: list[int] = []
-                if space and space.user_id:
-                    owner_ids.append(int(space.user_id))
-                # Also include members with CREATOR role as fallback
-                for uid in space_admins:
-                    if uid not in owner_ids:
-                        owner_ids.append(uid)
-                for uid in owner_ids:
+                for uid in space_owner_ids:
                     if uid not in seen:
                         seen.add(uid)
                         result.append(uid)
             elif source_type in ('knowledge_space_manager', 'space_admin'):
-                for uid in space_admins:
+                for uid in space_manager_ids:
                     if uid not in seen:
                         seen.add(uid)
                         result.append(uid)
@@ -113,4 +142,8 @@ class KnowledgeSpaceSubscribeScenarioHandler:
         await self.update_member(member)
 
     async def on_withdrawn(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
-        return None
+        member = await self.find_member(int(payload_snapshot['space_id']), int(payload_snapshot['applicant_user_id']))
+        if not member:
+            return
+        member.status = MembershipStatusEnum.REJECTED
+        await self.update_member(member)
