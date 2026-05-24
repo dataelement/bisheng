@@ -82,6 +82,10 @@ class ShougangApprovalService:
         )
 
     @classmethod
+    def _is_personal_space_create(cls, params: dict) -> bool:
+        return cls._enum_value(params.get('space_level')) == KnowledgeSpaceLevelEnum.PERSONAL.value
+
+    @classmethod
     def _space_visibility_for_payload(cls, params: dict) -> str:
         if bool(params.get('is_released')):
             return 'released'
@@ -90,7 +94,9 @@ class ShougangApprovalService:
     async def _requires_create_approval(self, *, login_user, params: dict) -> bool:
         if self._is_private_personal_space_create(params):
             return False
-        return not await self._is_create_approval_exempt(login_user)
+        if self._is_personal_space_create(params):
+            return not await self._is_create_approval_exempt(login_user)
+        return True
 
     async def _task_approver_user_ids(self, task_ids: list[int]) -> list[int]:
         approver_user_ids: list[int] = []
@@ -165,9 +171,13 @@ class ShougangApprovalService:
         space_service,
     ) -> ShougangKnowledgeSpaceCreateValidateResp:
         params = self._space_create_params(req)
-        await space_service.validate_knowledge_space_create(**params)
+        approval_required = await self._requires_create_approval(login_user=login_user, params=params)
+        await space_service.validate_knowledge_space_create(
+            **params,
+            approval_request=approval_required,
+        )
         return ShougangKnowledgeSpaceCreateValidateResp(
-            approval_required=await self._requires_create_approval(login_user=login_user, params=params)
+            approval_required=approval_required
         )
 
     async def submit_knowledge_space_create(
@@ -178,9 +188,13 @@ class ShougangApprovalService:
         space_service,
     ) -> dict:
         params = self._space_create_params(req)
-        await space_service.validate_knowledge_space_create(**params)
+        approval_required = await self._requires_create_approval(login_user=login_user, params=params)
+        await space_service.validate_knowledge_space_create(
+            **params,
+            approval_request=approval_required,
+        )
 
-        if not await self._requires_create_approval(login_user=login_user, params=params):
+        if not approval_required:
             created = await space_service.create_knowledge_space(**params)
             get_info = getattr(space_service, 'get_space_info', None)
             space_info = await get_info(created.id) if get_info else created

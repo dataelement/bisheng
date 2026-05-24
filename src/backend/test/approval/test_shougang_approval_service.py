@@ -7,6 +7,97 @@ from fastapi import HTTPException
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision
 
 
+def _pending_approval_gate(instance_id: int = 101):
+    return SimpleNamespace(
+        request_or_pass=AsyncMock(
+            return_value=SimpleNamespace(
+                decision=ApprovalGateDecision.PENDING,
+                instance_id=instance_id,
+                task_ids=[instance_id + 100],
+                model_dump=lambda: {
+                    "decision": "pending",
+                    "instance_id": instance_id,
+                    "task_ids": [instance_id + 100],
+                },
+            )
+        )
+    )
+
+
+def _create_space_service(created_id: int = 88, name: str = "资料库"):
+    return SimpleNamespace(
+        validate_knowledge_space_create=AsyncMock(return_value=None),
+        create_knowledge_space=AsyncMock(return_value=SimpleNamespace(id=created_id)),
+        get_space_info=AsyncMock(return_value={"id": created_id, "name": name}),
+    )
+
+
+def _login_user(user_id: int = 11, user_name: str = "申请人", tenant_id: int = 1, is_admin: bool = False):
+    return SimpleNamespace(
+        user_id=user_id,
+        user_name=user_name,
+        tenant_id=tenant_id,
+        is_admin=lambda: is_admin,
+    )
+
+
+def _patch_non_exempt_user(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.TenantService._is_tenant_admin",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.DepartmentDao.aget_user_admin_departments",
+        AsyncMock(return_value=[]),
+    )
+
+
+@pytest.mark.asyncio
+async def test_regular_user_public_space_create_validates_as_approval_request(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangKnowledgeSpaceCreateSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    _patch_non_exempt_user(monkeypatch)
+    space_service = _create_space_service(name="公共资料库")
+    approval_gate = _pending_approval_gate(100)
+    service = ShougangApprovalService(approval_gate=approval_gate)
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+    monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
+
+    await service.submit_knowledge_space_create(
+        req=ShougangKnowledgeSpaceCreateSubmitReq(
+            name="公共资料库",
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=False,
+            space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+            reason="申请公共知识库",
+        ),
+        login_user=_login_user(),
+        space_service=space_service,
+    )
+
+    space_service.validate_knowledge_space_create.assert_awaited_once_with(
+        name="公共资料库",
+        description=None,
+        icon=None,
+        auth_type=AuthTypeEnum.PUBLIC.value,
+        is_released=False,
+        space_level=KnowledgeSpaceLevelEnum.PUBLIC.value,
+        department_id=None,
+        user_group_id=None,
+        auto_tag_enabled=False,
+        auto_tag_library_id=None,
+        auto_tag_custom_tags=None,
+        approval_request=True,
+    )
+
+
 @pytest.mark.asyncio
 async def test_knowledge_space_create_submit_requires_approval_without_creating(monkeypatch):
     from bisheng.approval.domain.schemas.shougang_approval_schema import (
@@ -75,7 +166,7 @@ async def test_knowledge_space_create_submit_requires_approval_without_creating(
 
 
 @pytest.mark.asyncio
-async def test_knowledge_space_create_submit_exempt_user_creates_directly(monkeypatch):
+async def test_system_admin_public_space_create_requires_approval_without_creating(monkeypatch):
     from bisheng.approval.domain.schemas.shougang_approval_schema import (
         ShougangKnowledgeSpaceCreateSubmitReq,
     )
@@ -85,15 +176,11 @@ async def test_knowledge_space_create_submit_exempt_user_creates_directly(monkey
     from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
-    created_space = SimpleNamespace(id=88)
-    space_service = SimpleNamespace(
-        validate_knowledge_space_create=AsyncMock(return_value=None),
-        create_knowledge_space=AsyncMock(return_value=created_space),
-        get_space_info=AsyncMock(return_value={"id": 88, "name": "公共资料库"}),
-    )
-    approval_gate = SimpleNamespace(request_or_pass=AsyncMock())
+    space_service = _create_space_service(name="公共资料库")
+    approval_gate = _pending_approval_gate(101)
     service = ShougangApprovalService(approval_gate=approval_gate)
-    monkeypatch.setattr(service, "_is_create_approval_exempt", AsyncMock(return_value=True))
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+    monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
 
     result = await service.submit_knowledge_space_create(
         req=ShougangKnowledgeSpaceCreateSubmitReq(
@@ -102,14 +189,203 @@ async def test_knowledge_space_create_submit_exempt_user_creates_directly(monkey
             is_released=True,
             space_level=KnowledgeSpaceLevelEnum.PUBLIC,
         ),
-        login_user=SimpleNamespace(user_id=1, user_name="管理员", tenant_id=1, is_admin=lambda: True),
+        login_user=_login_user(user_id=1, user_name="系统管理员", is_admin=True),
+        space_service=space_service,
+    )
+
+    space_service.validate_knowledge_space_create.assert_awaited_once()
+    space_service.create_knowledge_space.assert_not_called()
+    approval_gate.request_or_pass.assert_awaited_once()
+    gate_req = approval_gate.request_or_pass.await_args.args[0]
+    assert gate_req.payload_snapshot["space_level"] == KnowledgeSpaceLevelEnum.PUBLIC.value
+    assert result["decision"] == "pending"
+    assert result["created"] is False
+
+
+@pytest.mark.asyncio
+async def test_system_admin_department_space_create_requires_approval_without_creating(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangKnowledgeSpaceCreateSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    space_service = _create_space_service(name="部门资料库")
+    approval_gate = _pending_approval_gate(102)
+    service = ShougangApprovalService(approval_gate=approval_gate)
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+    monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
+
+    result = await service.submit_knowledge_space_create(
+        req=ShougangKnowledgeSpaceCreateSubmitReq(
+            name="部门资料库",
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=False,
+            space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            department_id=9,
+        ),
+        login_user=_login_user(user_id=1, user_name="系统管理员", is_admin=True),
+        space_service=space_service,
+    )
+
+    space_service.validate_knowledge_space_create.assert_awaited_once()
+    space_service.create_knowledge_space.assert_not_called()
+    approval_gate.request_or_pass.assert_awaited_once()
+    gate_req = approval_gate.request_or_pass.await_args.args[0]
+    assert gate_req.payload_snapshot["space_level"] == KnowledgeSpaceLevelEnum.DEPARTMENT.value
+    assert gate_req.payload_snapshot["department_id"] == 9
+    assert result["decision"] == "pending"
+    assert result["created"] is False
+
+
+@pytest.mark.asyncio
+async def test_regular_user_personal_public_space_create_requires_approval_without_creating(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangKnowledgeSpaceCreateSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    _patch_non_exempt_user(monkeypatch)
+    space_service = _create_space_service(name="个人公开资料库")
+    approval_gate = _pending_approval_gate(103)
+    service = ShougangApprovalService(approval_gate=approval_gate)
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+    monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[]))
+
+    result = await service.submit_knowledge_space_create(
+        req=ShougangKnowledgeSpaceCreateSubmitReq(
+            name="个人公开资料库",
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=False,
+            space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+        ),
+        login_user=_login_user(),
+        space_service=space_service,
+    )
+
+    space_service.validate_knowledge_space_create.assert_awaited_once()
+    space_service.create_knowledge_space.assert_not_called()
+    approval_gate.request_or_pass.assert_awaited_once()
+    gate_req = approval_gate.request_or_pass.await_args.args[0]
+    assert gate_req.payload_snapshot["space_level"] == KnowledgeSpaceLevelEnum.PERSONAL.value
+    assert gate_req.payload_snapshot["space_visibility"] == AuthTypeEnum.PUBLIC.value
+    assert result["decision"] == "pending"
+    assert result["created"] is False
+
+
+@pytest.mark.asyncio
+async def test_system_admin_personal_public_space_create_skips_approval(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangKnowledgeSpaceCreateSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    space_service = _create_space_service(created_id=91, name="个人公开资料库")
+    approval_gate = _pending_approval_gate(104)
+    service = ShougangApprovalService(approval_gate=approval_gate)
+
+    result = await service.submit_knowledge_space_create(
+        req=ShougangKnowledgeSpaceCreateSubmitReq(
+            name="个人公开资料库",
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=False,
+            space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+        ),
+        login_user=_login_user(user_id=1, user_name="系统管理员", is_admin=True),
         space_service=space_service,
     )
 
     approval_gate.request_or_pass.assert_not_called()
     space_service.create_knowledge_space.assert_awaited_once()
     assert result["created"] is True
-    assert result["space"]["id"] == 88
+    assert result["space"]["id"] == 91
+
+
+@pytest.mark.asyncio
+async def test_tenant_admin_personal_public_space_create_skips_approval(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangKnowledgeSpaceCreateSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.TenantService._is_tenant_admin",
+        AsyncMock(return_value=True),
+    )
+    space_service = _create_space_service(created_id=92, name="个人公开资料库")
+    approval_gate = _pending_approval_gate(105)
+    service = ShougangApprovalService(approval_gate=approval_gate)
+
+    result = await service.submit_knowledge_space_create(
+        req=ShougangKnowledgeSpaceCreateSubmitReq(
+            name="个人公开资料库",
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=False,
+            space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+        ),
+        login_user=_login_user(user_id=2, user_name="租户管理员"),
+        space_service=space_service,
+    )
+
+    approval_gate.request_or_pass.assert_not_called()
+    space_service.create_knowledge_space.assert_awaited_once()
+    assert result["created"] is True
+    assert result["space"]["id"] == 92
+
+
+@pytest.mark.asyncio
+async def test_department_admin_personal_public_space_create_skips_approval(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangKnowledgeSpaceCreateSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.TenantService._is_tenant_admin",
+        AsyncMock(return_value=False),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.DepartmentDao.aget_user_admin_departments",
+        AsyncMock(return_value=[SimpleNamespace(id=9)]),
+    )
+    space_service = _create_space_service(created_id=93, name="个人公开资料库")
+    approval_gate = _pending_approval_gate(106)
+    service = ShougangApprovalService(approval_gate=approval_gate)
+
+    result = await service.submit_knowledge_space_create(
+        req=ShougangKnowledgeSpaceCreateSubmitReq(
+            name="个人公开资料库",
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=False,
+            space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+        ),
+        login_user=_login_user(user_id=3, user_name="部门管理员"),
+        space_service=space_service,
+    )
+
+    approval_gate.request_or_pass.assert_not_called()
+    space_service.create_knowledge_space.assert_awaited_once()
+    assert result["created"] is True
+    assert result["space"]["id"] == 93
 
 
 @pytest.mark.asyncio

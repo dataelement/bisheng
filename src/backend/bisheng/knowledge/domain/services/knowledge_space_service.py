@@ -379,8 +379,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             names = [dept.name]
         return '/'.join(names) if names else None
 
-    async def _department_options_for_create(self) -> list[KnowledgeSpaceCreateOptionDepartment]:
-        if self.login_user.is_admin():
+    async def _department_options_for_create(self, *, approval_request: bool = False) -> list[KnowledgeSpaceCreateOptionDepartment]:
+        if self.login_user.is_admin() or approval_request:
             departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
         else:
             department_ids = await self._admin_department_ids()
@@ -402,8 +402,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ]
         return sorted(options, key=lambda item: (item.path_name or item.name or '', item.id))
 
-    async def _department_tree_for_create(self) -> list[dict]:
-        if self.login_user.is_admin():
+    async def _department_tree_for_create(self, *, approval_request: bool = False) -> list[dict]:
+        if self.login_user.is_admin() or approval_request:
             departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
         else:
             department_ids = await self._admin_department_ids()
@@ -477,13 +477,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_level: KnowledgeSpaceLevelEnum | str | None,
         department_id: Optional[int],
         user_group_id: Optional[int],
+        approval_request: bool = False,
     ) -> tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int]:
         level = self._normalize_space_level(space_level)
 
         if level == KnowledgeSpaceLevelEnum.PUBLIC:
             if department_id is not None or user_group_id is not None:
                 raise SpaceInvalidScopeOwnerError()
-            if not self.login_user.is_admin():
+            if not self.login_user.is_admin() and not approval_request:
                 raise SpaceCreatePublicDeniedError()
             return level, KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT, await self._get_tenant_root_department_id()
 
@@ -493,7 +494,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             dept = await DepartmentDao.aget_by_id(int(department_id))
             if dept is None or getattr(dept, 'status', 'active') != 'active':
                 raise SpaceInvalidScopeOwnerError(msg='Department does not exist or is archived')
-            if not self.login_user.is_admin():
+            if not self.login_user.is_admin() and not approval_request:
                 admin_department_ids = await self._admin_department_ids()
                 if int(department_id) not in admin_department_ids:
                     raise SpaceCreateDepartmentDeniedError()
@@ -618,8 +619,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         keyword: str = '',
         page: int = 1,
         page_size: int = 20,
+        approval_request: bool = False,
     ) -> KnowledgeSpaceCreateOptionDepartmentsResp:
-        tree = await self._department_tree_for_create()
+        tree = await self._department_tree_for_create(approval_request=approval_request)
         return KnowledgeSpaceCreateOptionDepartmentsResp(data=tree, total=len(tree))
 
     async def get_create_user_groups(
@@ -1963,6 +1965,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_id: Optional[int] = None,
         auto_tag_custom_tags: Optional[List[str]] = None,
         skip_user_limit: bool = False,
+        approval_request: bool = False,
     ) -> tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int]:
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
@@ -1980,6 +1983,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_level=space_level,
             department_id=department_id,
             user_group_id=user_group_id,
+            approval_request=approval_request,
         )
         await self._ensure_space_name_unique_in_scope(
             name=name,

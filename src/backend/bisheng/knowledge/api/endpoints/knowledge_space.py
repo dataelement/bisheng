@@ -82,12 +82,14 @@ async def get_create_option_departments(
         keyword: str = Query(default=''),
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=20, ge=1, le=100),
+        approval_request: bool = Query(default=False),
         svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     options = await svc.get_create_departments(
         keyword=keyword,
         page=page,
         page_size=page_size,
+        approval_request=approval_request,
     )
     return resp_200(options)
 

@@ -894,6 +894,7 @@ export async function getCreateSpaceDepartmentsApi(params?: {
     keyword?: string;
     page?: number;
     pageSize?: number;
+    approvalRequest?: boolean;
     signal?: AbortSignal;
 }): Promise<KnowledgeSpaceCreateOptionPage<KnowledgeSpaceCreateDepartmentNode>> {
     const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/space/create-options/departments`, {
@@ -901,6 +902,7 @@ export async function getCreateSpaceDepartmentsApi(params?: {
             keyword: params?.keyword ?? "",
             page: params?.page ?? 1,
             page_size: params?.pageSize ?? 20,
+            approval_request: params?.approvalRequest ? true : undefined,
         },
         signal: params?.signal,
     });

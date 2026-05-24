@@ -152,10 +152,15 @@ export function CreateKnowledgeSpaceDrawer({
         enabled: open && mode === "create",
     });
 
+    const approvalCreateMode = mode === "create" && showApprovalReason;
+
     const loadCreateDepartments = useCallback(async (config?: { signal?: AbortSignal }): Promise<DepartmentNode[]> => {
-        const result = await getCreateSpaceDepartmentsApi({ signal: config?.signal });
+        const result = await getCreateSpaceDepartmentsApi({
+            signal: config?.signal,
+            approvalRequest: approvalCreateMode,
+        });
         return result.data;
-    }, []);
+    }, [approvalCreateMode]);
 
     const loadCreateUserGroups = useCallback(async (config?: { signal?: AbortSignal; keyword?: string }) => {
         const result = await getCreateSpaceUserGroupsApi({
@@ -173,24 +178,24 @@ export function CreateKnowledgeSpaceDrawer({
         {
             value: SpaceLevel.PUBLIC,
             label: localize("com_knowledge.public_spaces"),
-            enabled: createOptions?.canCreatePublic ?? false,
+            enabled: approvalCreateMode || (createOptions?.canCreatePublic ?? false),
         },
         {
             value: SpaceLevel.DEPARTMENT,
             label: localize("com_knowledge.department_spaces"),
-            enabled: createOptions?.canCreateDepartment ?? false,
+            enabled: approvalCreateMode || (createOptions?.canCreateDepartment ?? false),
         },
         {
             value: SpaceLevel.TEAM,
             label: localize("com_knowledge.team_spaces"),
-            enabled: createOptions?.canCreateTeam ?? false,
+            enabled: approvalCreateMode || (createOptions?.canCreateTeam ?? false),
         },
         {
             value: SpaceLevel.PERSONAL,
             label: localize("com_knowledge.personal_spaces"),
             enabled: createOptions?.canCreatePersonal ?? true,
         },
-    ]), [createOptions, localize]);
+    ]), [approvalCreateMode, createOptions, localize]);
     const visibleLevelOptions = useMemo(
         () => levelOptions.filter((option) => option.enabled),
         [levelOptions],
