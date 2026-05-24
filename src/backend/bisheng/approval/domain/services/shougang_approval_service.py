@@ -28,7 +28,7 @@ from bisheng.approval.domain.services.shougang_approval_handler import (
     KnowledgeSpaceFilePublishApprovalHandler,
 )
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
     KnowledgeFileDao,
@@ -68,6 +68,23 @@ class ShougangApprovalService:
         if await TenantService._is_tenant_admin(login_user.user_id, login_user.tenant_id):
             return True
         return bool(await DepartmentDao.aget_user_admin_departments(login_user.user_id))
+
+    @staticmethod
+    def _enum_value(value) -> Any:
+        return value.value if hasattr(value, 'value') else value
+
+    @classmethod
+    def _is_private_personal_space_create(cls, params: dict) -> bool:
+        return (
+            cls._enum_value(params.get('space_level')) == KnowledgeSpaceLevelEnum.PERSONAL.value
+            and cls._enum_value(params.get('auth_type')) == AuthTypeEnum.PRIVATE.value
+            and not bool(params.get('is_released'))
+        )
+
+    async def _requires_create_approval(self, *, login_user, params: dict) -> bool:
+        if self._is_private_personal_space_create(params):
+            return False
+        return not await self._is_create_approval_exempt(login_user)
 
     async def _task_approver_user_ids(self, task_ids: list[int]) -> list[int]:
         approver_user_ids: list[int] = []
@@ -144,7 +161,7 @@ class ShougangApprovalService:
         params = self._space_create_params(req)
         await space_service.validate_knowledge_space_create(**params)
         return ShougangKnowledgeSpaceCreateValidateResp(
-            approval_required=not await self._is_create_approval_exempt(login_user)
+            approval_required=await self._requires_create_approval(login_user=login_user, params=params)
         )
 
     async def submit_knowledge_space_create(
@@ -157,7 +174,7 @@ class ShougangApprovalService:
         params = self._space_create_params(req)
         await space_service.validate_knowledge_space_create(**params)
 
-        if await self._is_create_approval_exempt(login_user):
+        if not await self._requires_create_approval(login_user=login_user, params=params):
             created = await space_service.create_knowledge_space(**params)
             get_info = getattr(space_service, 'get_space_info', None)
             space_info = await get_info(created.id) if get_info else created
@@ -189,6 +206,11 @@ class ShougangApprovalService:
                     'applicant_user_id': login_user.user_id,
                     'applicant_user_name': login_user.user_name,
                     'applicant_department_id': applicant_department_id,
+                    'space_level': params.get('space_level'),
+                    'auth_type': params.get('auth_type'),
+                    'is_released': params.get('is_released'),
+                    'department_id': params.get('department_id'),
+                    'user_group_id': params.get('user_group_id'),
                     'create_params': params,
                 },
             )
@@ -238,8 +260,15 @@ class ShougangApprovalService:
         if target_level not in {KnowledgeSpaceLevelEnum.PUBLIC, KnowledgeSpaceLevelEnum.DEPARTMENT}:
             raise HTTPException(status_code=400, detail='目标知识空间必须是公共或业务域知识库')
         if space_service is not None:
-            await space_service._require_permission_id('knowledge_space', target_space_id, 'upload_file')
+            await space_service._require_permission_id('knowledge_space', target_space_id, 'view_space')
         return target_space
+
+    async def _space_level_for_payload(self, space) -> str:
+        level = getattr(space, 'space_level', None)
+        if level is None:
+            scope = await KnowledgeSpaceScopeDao.aget_by_space_id(int(space.id))
+            level = scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
+        return self._enum_value(level)
 
     async def list_file_publish_target_spaces(self, *, space_service) -> ShougangFilePublishTargetSpacesResp:
         grouped = await space_service.get_grouped_spaces()
@@ -333,6 +362,7 @@ class ShougangApprovalService:
             space_service=space_service,
         )
         target_space = await self._ensure_publish_target_space(req.target_space_id, space_service=space_service)
+        target_level = await self._space_level_for_payload(target_space)
 
         target_document_title = None
         if req.target_document_id:
@@ -372,10 +402,12 @@ class ShougangApprovalService:
                     'applicant_department_id': applicant_department_id,
                     'source_space_id': int(source_space.id),
                     'source_space_name': source_space.name,
+                    'source_space_level': self._enum_value(source_level),
                     'source_file_id': int(source_file.id),
                     'source_file_name': file_name,
                     'target_space_id': int(target_space.id),
                     'target_space_name': target_space.name,
+                    'target_space_level': target_level,
                     'target_document_id': req.target_document_id,
                     'target_document_title': target_document_title,
                 },

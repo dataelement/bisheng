@@ -381,6 +381,7 @@ export function PortalDialogs({
                 mode={editingSpace ? "edit" : "create"}
                 editingSpace={editingSpace}
                 initialSpaceLevel={pendingCreateLevel}
+                showApprovalReason
                 onViewSpace={onViewCreatedSpace}
                 onManageMembers={onManageEditingSpaceMembers}
             />

@@ -69,6 +69,7 @@ export type PublishToSquare = "yes" | "no";
 export interface CreateKnowledgeSpaceFormData {
     name: string;
     description: string;
+    reason?: string;
     joinPolicy: JoinPolicy;
     publishToSquare: PublishToSquare;
     spaceLevel: SpaceLevel;
@@ -89,6 +90,7 @@ interface CreateKnowledgeSpaceDrawerProps {
     mode?: "create" | "edit";
     editingSpace?: KnowledgeSpace | null;
     initialSpaceLevel?: SpaceLevel;
+    showApprovalReason?: boolean;
 }
 
 export function CreateKnowledgeSpaceDrawer({
@@ -100,12 +102,14 @@ export function CreateKnowledgeSpaceDrawer({
     mode = "create",
     editingSpace,
     initialSpaceLevel,
+    showApprovalReason = false,
 }: CreateKnowledgeSpaceDrawerProps) {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
     const localize = useLocalize();
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
+    const [reason, setReason] = useState("");
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
     const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
@@ -191,6 +195,7 @@ export function CreateKnowledgeSpaceDrawer({
     const resetForm = () => {
         setName("");
         setDescription("");
+        setReason("");
         setJoinPolicy("review");
         setPublishToSquare("yes");
         setSpaceLevel(SpaceLevel.PERSONAL);
@@ -419,6 +424,7 @@ export function CreateKnowledgeSpaceDrawer({
         const payload: CreateKnowledgeSpaceFormData = {
             name: name.trim(),
             description: description.trim(),
+            reason: mode === "create" && showApprovalReason ? reason.trim() || undefined : undefined,
             joinPolicy,
             publishToSquare: needPublishOption ? publishToSquare : "no",
             spaceLevel,
@@ -673,6 +679,20 @@ export function CreateKnowledgeSpaceDrawer({
                                     />
                                 </div>
                             </div>
+
+                            {mode === "create" && showApprovalReason && (
+                                <div className="space-y-2">
+                                    <Label className="text-sm text-[#1D2129] font-medium">
+                                        申请意见
+                                    </Label>
+                                    <Textarea
+                                        value={reason}
+                                        onChange={(e) => setReason(e.target.value)}
+                                        placeholder="请输入申请意见"
+                                        className="min-h-[88px] rounded-[6px] border-[#E5E6EB] bg-[#fff] text-[14px]"
+                                    />
+                                </div>
+                            )}
 
                             {/* 权限设置 */}
                             <div className="space-y-3">

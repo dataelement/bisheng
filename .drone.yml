@@ -179,13 +179,9 @@ steps:
 
         cd /opt/code/bisheng
 
-        echo "======= reset local changes ======="
-
-        git reset --hard HEAD
-
         echo "======= pull latest code ======="
 
-        git pull origin feat/2.5.0-sg
+        git pull
 
         echo "======= restart backend ======="
 

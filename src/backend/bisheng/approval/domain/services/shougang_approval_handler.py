@@ -11,7 +11,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
-from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceScopeDao
 
 KNOWLEDGE_SPACE_CREATE_SCENARIO = 'knowledge_space_create_request'
 FILE_PUBLISH_SCENARIO = 'knowledge_space_file_publish_request'
@@ -197,6 +197,10 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                 return file
         return None
 
+    async def _space_level(self, space_id: int) -> KnowledgeSpaceLevelEnum:
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        return scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
+
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -235,6 +239,12 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             raise ValueError('target space not found')
         if not source_file or source_file.knowledge_id != source_space_id:
             raise ValueError('source file not found')
+        source_level = await self._space_level(source_space_id)
+        target_level = await self._space_level(target_space_id)
+        if source_level not in {KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceLevelEnum.PERSONAL}:
+            raise ValueError('source space must be team or personal')
+        if target_level not in {KnowledgeSpaceLevelEnum.PUBLIC, KnowledgeSpaceLevelEnum.DEPARTMENT}:
+            raise ValueError('target space must be public or department')
         if source_file.status != KnowledgeFileStatus.SUCCESS.value:
             raise ValueError('source file is not parsed successfully')
 

@@ -138,18 +138,20 @@ jest.mock("~/components/ui/icon/File", () => ({
 }));
 
 jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
-    CreateKnowledgeSpaceDrawer: ({ open, initialSpaceLevel, mode = "create", editingSpace, onConfirm }: any) => {
+    CreateKnowledgeSpaceDrawer: ({ open, initialSpaceLevel, mode = "create", editingSpace, showApprovalReason, onConfirm }: any) => {
         if (!open) return null;
         return (
             <div data-testid="create-space-drawer">
                 mode:{mode}
                 initial:{initialSpaceLevel}
                 editing:{editingSpace?.name || ""}
+                approvalReason:{String(Boolean(showApprovalReason))}
                 <button
                     type="button"
                     onClick={() => onConfirm?.({
                         name: "新空间",
                         description: "说明",
+                        reason: "申请创建团队知识库",
                         joinPolicy: "review",
                         publishToSquare: "yes",
                         spaceLevel: initialSpaceLevel,
@@ -584,6 +586,7 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         fireEvent.click(await screen.findByRole("button", { name: "新增团队知识库知识空间" }));
+        expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("approvalReason:true");
         fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
 
         await waitFor(() => {
@@ -597,6 +600,7 @@ describe("PortalKnowledgeWorkbench", () => {
                 user_group_id: undefined,
                 auto_tag_enabled: false,
                 auto_tag_library_id: null,
+                reason: "申请创建团队知识库",
             });
         });
         expect(createSpaceApi).not.toHaveBeenCalled();
