@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "r
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -30,6 +30,7 @@ import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
+import { FilePublishDialog } from "./FilePublishDialog";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
@@ -280,6 +281,8 @@ export function KnowledgeSpaceContent({
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
+    const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
+    const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
     const permissionEntryProbeKey = displayFiles
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
@@ -524,6 +527,51 @@ export function KnowledgeSpaceContent({
             controller.abort();
         };
     }, [isAdmin, permissionEntryProbeKey]);
+
+    useEffect(() => {
+        const eligibleSourceSpace = space.spaceLevel === SpaceLevel.TEAM || space.spaceLevel === SpaceLevel.PERSONAL;
+        const candidates = displayFiles.filter((file) => (
+            eligibleSourceSpace &&
+            !file.isCreating &&
+            file.type !== FileType.FOLDER &&
+            file.status === FileStatus.SUCCESS &&
+            /^\d+$/.test(String(file.id))
+        ));
+
+        if (!eligibleSourceSpace || candidates.length === 0) {
+            setPublishEntryIds(new Set());
+            return;
+        }
+
+        if (isAdmin) {
+            setPublishEntryIds(new Set(candidates.map((file) => file.id)));
+            return;
+        }
+
+        let cancelled = false;
+        const controller = new AbortController();
+        Promise.all(
+            candidates.map(async (file) => {
+                const result = await checkPermission(
+                    "knowledge_file",
+                    file.id,
+                    "can_edit",
+                    "upload_file",
+                    { signal: controller.signal },
+                ).catch(() => ({ allowed: false }));
+                return result.allowed ? file.id : null;
+            }),
+        ).then((ids) => {
+            if (!cancelled) {
+                setPublishEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [isAdmin, permissionEntryProbeKey, space.id, space.spaceLevel]);
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -1062,6 +1110,8 @@ export function KnowledgeSpaceContent({
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
                                             canDownload={downloadEntryIds.has(file.id)}
+                                            canPublish={publishEntryIds.has(file.id)}
+                                            onPublishFile={setPublishingFile}
                                             mobileListMode={isH5 && viewMode === "list"}
                                             versionManagementEnabled={versionManagementEnabled}
                                             onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
@@ -1093,7 +1143,9 @@ export function KnowledgeSpaceContent({
                                     renameEntryIds={renameEntryIds}
                                     deleteEntryIds={deleteEntryIds}
                                     downloadEntryIds={downloadEntryIds}
+                                    publishEntryIds={publishEntryIds}
                                     onManagePermission={handleManagePermission}
+                                    onPublishFile={setPublishingFile}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
@@ -1144,6 +1196,15 @@ export function KnowledgeSpaceContent({
                     )}
                 </div>
             </div>
+
+            <FilePublishDialog
+                open={Boolean(publishingFile)}
+                activeSpace={space}
+                file={publishingFile}
+                onOpenChange={(open) => {
+                    if (!open) setPublishingFile(null);
+                }}
+            />
 
             {/* Edit Tags Modal */}
             <EditTagsModal

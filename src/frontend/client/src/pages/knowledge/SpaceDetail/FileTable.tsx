@@ -15,6 +15,7 @@ import {
     MoreVertical,
     PencilLineIcon,
     RefreshCw,
+    Send,
     Shield,
     Tag, Trash2,
     FileSearch
@@ -525,7 +526,9 @@ interface FileTableProps {
     renameEntryIds?: Set<string>;
     deleteEntryIds?: Set<string>;
     downloadEntryIds?: Set<string>;
+    publishEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
+    onPublishFile?: (file: KnowledgeFile) => void;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
@@ -534,7 +537,7 @@ interface FileTableProps {
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -646,6 +649,8 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 canRename={Boolean(renameEntryIds?.has(file.id))}
                                 canDelete={Boolean(deleteEntryIds?.has(file.id))}
                                 canDownload={Boolean(downloadEntryIds?.has(file.id))}
+                                canPublish={Boolean(publishEntryIds?.has(file.id))}
+                                onPublishFile={onPublishFile}
                                 columnWidths={columnWidths}
                                 showStatusColumn={showStatusColumn}
                                 showLeftShadow={showLeftShadow}
@@ -705,6 +710,8 @@ function FileRow({
     canRename = false,
     canDelete = false,
     canDownload = false,
+    canPublish = false,
+    onPublishFile,
     columnWidths,
     showStatusColumn,
     showLeftShadow,
@@ -733,6 +740,8 @@ function FileRow({
     canRename?: boolean;
     canDelete?: boolean;
     canDownload?: boolean;
+    canPublish?: boolean;
+    onPublishFile?: (file: KnowledgeFile) => void;
     columnWidths: Record<ColumnKey, number>;
     showStatusColumn: boolean;
     showLeftShadow: boolean;
@@ -778,7 +787,8 @@ function FileRow({
     );
     const canEditTags = isAdmin && !isFolder;
     const canRetry = isAdmin && hasRetryOption;
-    const showMoreMenu = canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
+    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
+    const showMoreMenu = showPublish || canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
     const showRowActions = rowHovered || moreMenuOpen;
@@ -810,6 +820,17 @@ function FileRow({
                         align="end"
                         className={cn("w-32", knowledgeSpaceDropdownSurfaceClassName)}
                     >
+                        {showPublish && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onPublishFile?.(file);
+                                }}
+                            >
+                                <Send className="mr-2 size-4" />
+                                发布
+                            </DropdownMenuItem>
+                        )}
                         {canEditTags && (
                             <DropdownMenuItem
                                 onClick={(e) => {

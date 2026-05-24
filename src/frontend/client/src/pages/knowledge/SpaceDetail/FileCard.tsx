@@ -1,4 +1,4 @@
-import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
+import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Send, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -37,6 +37,8 @@ interface FileCardProps {
     canRename?: boolean;
     canDelete?: boolean;
     canDownload?: boolean;
+    canPublish?: boolean;
+    onPublishFile?: (file: KnowledgeFile) => void;
     disableClickNavigate?: boolean;
     hideSelectionCheckbox?: boolean;
     /** H5: render as list-row (not card tile). */
@@ -66,6 +68,8 @@ export function FileCard({
     canRename = false,
     canDelete = false,
     canDownload = false,
+    canPublish = false,
+    onPublishFile,
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
     mobileListMode = false,
@@ -263,7 +267,8 @@ export function FileCard({
     );
     const canEditTags = isAdmin && !isFolder;
     const canRetry = isAdmin && hasRetryOption;
-    const showMoreMenu = canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
+    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder;
+    const showMoreMenu = showPublish || canEditTags || canRename || canRetry || canDelete || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
@@ -386,6 +391,16 @@ export function FileCard({
                                             >
                                                 <Download className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.download")}
+                                            </DropdownMenuItem>
+                                        )}
+
+                                        {showPublish && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onPublishFile?.(file); }}
+                                                className="flex items-center"
+                                            >
+                                                <Send className="mr-2 size-4 shrink-0" />
+                                                发布
                                             </DropdownMenuItem>
                                         )}
 
@@ -542,6 +557,16 @@ export function FileCard({
                                                 {localize("com_knowledge.download")}
                                             </DropdownMenuItem>
                                         )}
+
+                                {showPublish && (
+                                    <DropdownMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onPublishFile?.(file); }}
+                                        className="flex items-center"
+                                    >
+                                        <Send className="mr-2 size-4 shrink-0" />
+                                        发布
+                                    </DropdownMenuItem>
+                                )}
 
                                 {onManagePermission && (
                                     <DropdownMenuItem
