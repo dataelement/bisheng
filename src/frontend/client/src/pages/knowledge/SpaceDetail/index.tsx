@@ -716,13 +716,13 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    const handlePreviewFile = (fileId: string) => {
+    const handlePreviewFile = (fileId: string, nameOverride?: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         if (file?.status === FileStatus.VIOLATION) {
             setViolationFile(file);
             return;
         }
-        const fileName = file?.name || localize("com_knowledge.unknown_file");
+        const fileName = nameOverride || file?.name || localize("com_knowledge.unknown_file");
         // Use extension from filename for preview viewer dispatch instead of API type field
         const ext = fileName.split('.').pop()?.toLowerCase() || "";
         const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(ext)}&spaceId=${encodeURIComponent(space.id)}`;
@@ -1190,8 +1190,8 @@ export function KnowledgeSpaceContent({
                         fileId={versionHistoryFile ? Number(versionHistoryFile.id) : null}
                         documentTitle={versionHistoryFile?.name}
                         canManage={isAdmin}
-                        onPreview={(versionFileId) => handlePreviewFile(String(versionFileId))}
-                        onDownload={async (versionFileId) => {
+                        onPreview={(versionFileId, fileName) => handlePreviewFile(String(versionFileId), fileName)}
+                        onDownload={async (versionFileId, fileName) => {
                             try {
                                 const downloadData = await getFileDownloadApi(
                                     String(space.id),
@@ -1205,7 +1205,7 @@ export function KnowledgeSpaceContent({
                                     });
                                     return;
                                 }
-                                triggerUrlDownload(downloadUrl);
+                                triggerUrlDownload(downloadUrl, fileName);
                             } catch {
                                 showToast({
                                     message: localize("com_knowledge.download_failed"),

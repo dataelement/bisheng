@@ -167,12 +167,11 @@ export function RelateDocumentPanel({
             });
             onLinked(response);
         },
-        onError: () => {
-            showToast({
-                message: localize("com_knowledge.version.toast_link_failure"),
-                status: "error",
-            });
-        },
+        // The unified request interceptor already toasts api_errors.<code>
+        // (e.g. 18061/18062/18063/18064) when skip403Redirect is set, so the
+        // onError handler is a no-op to avoid a duplicate generic toast that
+        // would overwrite the precise product-spec message.
+        onError: () => undefined,
     });
 
     const handleLink = async (targetDoc: { document_id: number; title: string }) => {

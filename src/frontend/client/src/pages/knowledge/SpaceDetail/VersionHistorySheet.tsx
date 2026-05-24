@@ -31,8 +31,8 @@ interface VersionHistoryDialogProps {
     documentTitle?: string;
     /** User has owner/manager role on this space */
     canManage: boolean;
-    onPreview?: (versionFileId: number) => void;
-    onDownload?: (versionFileId: number) => void;
+    onPreview?: (versionFileId: number, fileName: string) => void;
+    onDownload?: (versionFileId: number, fileName: string) => void;
     onPrimaryChanged?: () => void;
     onDeleted?: () => void;
 }
@@ -172,8 +172,8 @@ interface VersionTableRowProps {
     canManage: boolean;
     setPrimaryPending: boolean;
     deletePending: boolean;
-    onPreview?: (versionFileId: number) => void;
-    onDownload?: (versionFileId: number) => void;
+    onPreview?: (versionFileId: number, fileName: string) => void;
+    onDownload?: (versionFileId: number, fileName: string) => void;
     onSetPrimary: (versionId: number, versionNo: number) => void;
     onDelete: (versionId: number, versionNo: number) => void;
 }
@@ -243,7 +243,7 @@ function VersionTableRow({
                     {onPreview && (
                         <ActionButton
                             label={localize("com_knowledge.version.history_action_preview")}
-                            onClick={() => onPreview(version.knowledge_file_id)}
+                            onClick={() => onPreview(version.knowledge_file_id, version.original_file_name)}
                             disabled={anyPending}
                         >
                             <Eye className="size-4" />
@@ -252,7 +252,7 @@ function VersionTableRow({
                     {onDownload && (
                         <ActionButton
                             label={localize("com_knowledge.version.history_action_download")}
-                            onClick={() => onDownload(version.knowledge_file_id)}
+                            onClick={() => onDownload(version.knowledge_file_id, version.original_file_name)}
                             disabled={anyPending}
                         >
                             <Download className="size-4" />
