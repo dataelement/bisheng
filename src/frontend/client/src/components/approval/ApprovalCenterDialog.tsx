@@ -327,11 +327,12 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const isTaskPending = activeTab === "my_tasks" && taskDetail?.status === "pending";
   const isInstancePending = activeTab === "my_requests" && requestDetail?.status === "pending";
   const canResubmit = activeTab === "my_requests" && requestDetail?.status === "rejected";
-  // Only the approver (my_tasks) can revoke a granted menu permission
+  // Only the approver (my_tasks) can revoke a granted menu permission, and only if not already revoked
   const canRevoke =
     activeTab === "my_tasks" &&
     String(taskDetail?.scenario_code ?? "").toLowerCase() === "menu_access_request" &&
-    ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase());
+    ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase()) &&
+    !taskDetail?.grant_revoked;
 
   const dialogTitle = activeTab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests");
   const dialogSubtitle = activeTab === "my_tasks" ? localize("com_approval_my_approval_desc") : localize("com_approval_my_requests_desc");
@@ -409,7 +410,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                             onClick={() => id && openTask(id)}>
                             <div className="flex items-start justify-between gap-2">
                               <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
-                              <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
+                              <div className="flex shrink-0 items-center gap-1">
+                                {item.grant_revoked && (
+                                  <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
+                                    {localize("com_approval_grant_revoked")}
+                                  </span>
+                                )}
+                                <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
+                              </div>
                             </div>
                             {item.current_node_name && (
                               <div className="mt-1.5 text-[12px] text-[#86909c]">
