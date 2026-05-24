@@ -27,18 +27,12 @@ export const createAssistantsApi = async (
     name: string,
     prompt: string,
     url: string,
-    shareToChildren?: boolean,
 ) => {
     if (url) {
         // logo保存相对路径
         url = url.replace('/bisheng', '')
     }
-    // F017: forward share_to_children only when the caller set it. Omit
-    // the field when undefined so the backend applies the Root default
-    // (`share_default_to_children`) rather than a forced boolean.
-    const body: Record<string, any> = { name, prompt, logo: url }
-    if (shareToChildren !== undefined) body.share_to_children = shareToChildren
-    return await axios.post(`/api/v1/assistant`, body)
+    return await axios.post(`/api/v1/assistant`, { name, prompt, logo: url })
 };
 
 // 获取助手详情
