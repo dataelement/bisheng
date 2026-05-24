@@ -194,6 +194,15 @@ class ApprovalExceptionService:
             reason=reason.strip(),
             ip_address=ip_address,
         )
+        # Reset business-side membership so the applicant can re-apply
+        try:
+            handler = await service._build_handler(instance.scenario_code)
+            on_cancelled = getattr(handler, 'on_cancelled', None)
+            if callable(on_cancelled):
+                await on_cancelled(instance.id, instance.payload_snapshot or {}, reason.strip())
+        except Exception:
+            logger.exception('cancel_exception: on_cancelled hook failed for instance %s', instance.id)
+
         # Notify applicant
         await cls._notify_user(
             sender=operator_user_id,
@@ -228,6 +237,19 @@ class ApprovalExceptionService:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
         detail = exception.detail or {}
+        if 'node_code' not in detail and instance.flow_version_id:
+            nodes = await ApprovalScenarioRepository.list_node_definitions(
+                tenant_id=instance.tenant_id, flow_version_id=instance.flow_version_id
+            )
+            matched = next(
+                (n for n in nodes if n.node_name == instance.current_node_name),
+                nodes[0] if nodes else None,
+            )
+            if matched:
+                detail.setdefault('node_code', matched.node_code)
+                detail.setdefault('node_name', matched.node_name)
+                detail.setdefault('node_order', matched.node_order)
+                detail.setdefault('node_mode', matched.node_mode)
         node = type('Node', (), detail)()
         await self._create_tasks(
             instance_id=instance.id,
@@ -251,19 +273,94 @@ class ApprovalExceptionService:
     async def skip_node(self, *, exception_id: int, resolved_by_user_id: int) -> None:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
-        instance.status = ApprovalInstanceStatus.APPROVED
-        await self.instance_repository.update_instance(instance)
-        outbox = await self.instance_repository.create_outbox(
-            ApprovalOutbox(
-                tenant_id=instance.tenant_id,
-                instance_id=instance.id,
-                handler_key=instance.handler_key,
-                status=ApprovalOutboxStatus.PENDING,
-                payload_snapshot=instance.payload_snapshot,
-            )
-        )
-        self._dispatch_outbox(outbox.id)
+        detail = exception.detail or {}
+        current_node_order = detail.get('node_order', 0)
         await self._resolve_exception(exception, resolved_by_user_id, 'skip_node')
+        await self._advance_from_skipped_node(instance=instance, current_node_order=current_node_order, operator_user_id=resolved_by_user_id)
+
+    async def _advance_from_skipped_node(self, *, instance, current_node_order: int, operator_user_id: int) -> None:
+        next_node = None
+        if instance.flow_version_id:
+            node_defs = await ApprovalScenarioRepository.list_node_definitions(
+                instance.tenant_id, instance.flow_version_id
+            )
+            sorted_nodes = sorted(node_defs, key=lambda n: n.node_order)
+            next_node = next((n for n in sorted_nodes if n.node_order > current_node_order), None)
+
+        if next_node is None:
+            instance.status = ApprovalInstanceStatus.APPROVED
+            instance.current_node_name = None
+            await self.instance_repository.update_instance(instance)
+            outbox = await self.instance_repository.create_outbox(
+                ApprovalOutbox(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    handler_key=instance.handler_key,
+                    status=ApprovalOutboxStatus.PENDING,
+                    payload_snapshot=instance.payload_snapshot,
+                )
+            )
+            self._dispatch_outbox(outbox.id)
+            return
+
+        handler = await self._build_handler(instance.scenario_code)
+        from types import SimpleNamespace
+        req = SimpleNamespace(
+            tenant_id=instance.tenant_id,
+            applicant_user_id=instance.applicant_user_id,
+            applicant_user_name=instance.applicant_user_name,
+            applicant_department_id=instance.applicant_department_id,
+            payload_snapshot=instance.payload_snapshot or {},
+            business_resource_id=instance.business_resource_id,
+            business_resource_type=instance.business_resource_type,
+            business_key=instance.business_key,
+            business_name=instance.business_name,
+            reason=instance.reason,
+            scenario_code=instance.scenario_code,
+        )
+        approvers = await handler.resolve_approvers(next_node.approver_config or {}, req)
+
+        if not approvers:
+            from bisheng.approval.domain.models.approval_instance import ApprovalException, ApprovalExceptionType
+            instance.status = ApprovalInstanceStatus.EXCEPTION
+            instance.current_node_name = next_node.node_name
+            await self.instance_repository.update_instance(instance)
+            await self.instance_repository.create_exception(
+                ApprovalException(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    exception_type=ApprovalExceptionType.APPROVER_EMPTY,
+                    detail={
+                        'scenario_code': instance.scenario_code,
+                        'business_key': instance.business_key,
+                        'node_code': next_node.node_code,
+                        'node_name': next_node.node_name,
+                        'node_order': next_node.node_order,
+                        'node_mode': next_node.node_mode,
+                    },
+                )
+            )
+            return
+
+        for approver_user_id in approvers:
+            await self.instance_repository.create_task(
+                ApprovalTask(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    flow_version_id=instance.flow_version_id,
+                    node_code=next_node.node_code,
+                    node_name=next_node.node_name,
+                    node_order=next_node.node_order,
+                    approver_user_id=approver_user_id,
+                    approver_source_type='resolved',
+                    node_mode=next_node.node_mode,
+                    status=ApprovalTaskStatus.PENDING,
+                )
+            )
+
+        instance.status = ApprovalInstanceStatus.PENDING
+        instance.current_node_name = next_node.node_name
+        await self.instance_repository.update_instance(instance)
 
     async def retry_execute_failed(
         self,
