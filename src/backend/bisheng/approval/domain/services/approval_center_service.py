@@ -883,8 +883,10 @@ class ApprovalCenterService:
                     detail={
                         'scenario_code': instance.scenario_code,
                         'business_key': instance.business_key,
-                        'current_node_name': next_node.node_name,
+                        'node_code': next_node.node_code,
+                        'node_name': next_node.node_name,
                         'node_order': next_node.node_order,
+                        'node_mode': next_node.node_mode,
                     },
                 )
             )

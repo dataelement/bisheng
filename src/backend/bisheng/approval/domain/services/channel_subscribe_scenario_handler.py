@@ -99,6 +99,13 @@ class ChannelSubscribeScenarioHandler:
     async def on_withdrawn(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
         return None
 
+    async def on_cancelled(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:
+        membership = await self._get_membership(payload_snapshot)
+        if not membership:
+            return
+        membership.status = MembershipStatusEnum.REJECTED
+        await self.space_channel_member_repository.update(membership)
+
     async def _get_membership(self, payload_snapshot: dict):
         return await self.space_channel_member_repository.find_membership(
             business_id=str(payload_snapshot['channel_id']),
