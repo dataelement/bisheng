@@ -176,7 +176,7 @@ class KnowledgeSpaceTagLibraryNotExistError(BaseErrorCode):
 
 class KnowledgeSpaceTagLibraryInvalidError(BaseErrorCode):
     Code: int = 10989
-    Msg: str = '{message}'
+    Msg: str = '标签库无效'
 
 
 # source keyword Processing in the background, try again later
