@@ -26,7 +26,7 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
         self.max_chunk_size = max_chunk_size
         self.max_chunk_limit = max_chunk_limit
         if not fallback_separator:
-            fallback_separator = ["\n\n", "\n"]
+            fallback_separator = ["\n\n", "\n", "。", "\\."]
         if not fallback_separator_rule:
             fallback_separator_rule = ["after" for _ in fallback_separator]
         self.fallback_splitter = SplitterTransformer(

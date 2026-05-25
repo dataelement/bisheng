@@ -43,8 +43,8 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
                     "slice_length": 10
                 }
             })),
-            separator: ["\n\n", "\n"],
-            separator_rule: ["after", "after"],
+            separator: ["\n\n", "\n", "。", "\\."],
+            separator_rule: ["after", "after", "after", "after"],
             chunk_size: 1000,
             chunk_overlap: 100,
             retain_images: true,
