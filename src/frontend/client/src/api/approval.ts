@@ -66,6 +66,8 @@ export interface ApprovalTaskDetail extends ApprovalTaskItem {
   detail_snapshot?: Record<string, any>;
   payload_snapshot?: Record<string, any>;
   detail?: Record<string, any>;
+  flow_nodes?: ApprovalFlowNode[];
+  tasks?: ApprovalTaskItem[];
   action_logs?: Array<{
     id?: number;
     action?: string;

@@ -181,6 +181,7 @@ class ApprovalGate:
                 flow_version_id=flow_version.id,
                 route_rule_id=getattr(matched_route, 'id', None),
                 current_node_name=getattr(first_node, 'node_name', None),
+                node=first_node,
             )
 
         instance = await self.instance_repository.create_instance(
@@ -250,6 +251,7 @@ class ApprovalGate:
         flow_version_id: int | None = None,
         route_rule_id: int | None = None,
         current_node_name: str | None = None,
+        node=None,
     ) -> ApprovalGateResult:
         status = ApprovalInstanceStatus.EXCEPTION
         if exception_type == ApprovalExceptionType.EXECUTE_FAILED:
@@ -276,16 +278,24 @@ class ApprovalGate:
                 current_node_name=current_node_name,
             )
         )
+        exception_detail: dict[str, Any] = {
+            'scenario_code': req.scenario_code,
+            'business_key': req.business_key,
+            'current_node_name': current_node_name,
+        }
+        if node is not None:
+            exception_detail.update({
+                'node_code': getattr(node, 'node_code', None),
+                'node_name': getattr(node, 'node_name', None),
+                'node_order': getattr(node, 'node_order', None),
+                'node_mode': getattr(node, 'node_mode', None),
+            })
         await self.instance_repository.create_exception(
             ApprovalException(
                 tenant_id=req.tenant_id,
                 instance_id=instance.id,
                 exception_type=exception_type,
-                detail={
-                    'scenario_code': req.scenario_code,
-                    'business_key': req.business_key,
-                    'current_node_name': current_node_name,
-                },
+                detail=exception_detail,
             )
         )
         # Notify tenant admins so they can handle the exception

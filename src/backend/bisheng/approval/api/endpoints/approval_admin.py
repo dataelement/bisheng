@@ -57,21 +57,6 @@ class FlowUpdateReq(BaseModel):
     is_active: bool | None = None
 
 
-class NodeCreateReq(BaseModel):
-    node_name: str
-    node_order: int = 0
-    node_mode: str
-    approver_config: dict = Field(default_factory=dict)
-    extra_config: dict = Field(default_factory=dict)
-
-
-class NodeUpdateReq(BaseModel):
-    node_name: str | None = None
-    node_order: int | None = None
-    node_mode: str | None = None
-    approver_config: dict | None = None
-    extra_config: dict | None = None
-
 
 class RouteReorderReq(BaseModel):
     ordered_route_ids: list[int]
@@ -216,44 +201,6 @@ async def list_nodes(flow_definition_id: int, login_user: UserPayload = Depends(
         return ApprovalFlowNotFoundError.return_resp()
     return resp_200(data)
 
-
-@router.post('/flows/{flow_definition_id}/nodes')
-async def create_node(
-    flow_definition_id: int,
-    req: NodeCreateReq,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-):
-    await _ensure_admin(login_user)
-    return resp_200(
-        await ApprovalScenarioAdminService.create_node(
-            tenant_id=login_user.tenant_id,
-            flow_definition_id=flow_definition_id,
-            payload=req.model_dump(),
-        )
-    )
-
-
-@router.put('/nodes/{node_definition_id}')
-async def update_node(
-    node_definition_id: int,
-    req: NodeUpdateReq,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-):
-    await _ensure_admin(login_user)
-    return resp_200(
-        await ApprovalScenarioAdminService.update_node(
-            tenant_id=login_user.tenant_id,
-            node_definition_id=node_definition_id,
-            payload=req.model_dump(exclude_none=True),
-        )
-    )
-
-
-@router.delete('/nodes/{node_definition_id}')
-async def delete_node(node_definition_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
-    await _ensure_admin(login_user)
-    await ApprovalScenarioAdminService.delete_node(tenant_id=login_user.tenant_id, node_definition_id=node_definition_id)
-    return resp_200({'deleted': node_definition_id})
 
 
 @router.delete('/scenarios/{scenario_id}')

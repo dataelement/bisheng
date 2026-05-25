@@ -388,6 +388,7 @@ export default function MainLayout() {
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
     if (pathname.startsWith('/knowledge')) return 'knowledge_tab';
+    if (pathname.startsWith('/menu-unavailable')) return 'menu_unavailable_tab';
     return 'other';
   })();
 
@@ -434,55 +435,70 @@ export default function MainLayout() {
           isMobile ? 'min-h-[100dvh]' : 'h-[100dvh]',
         )}
       >
-        <KeepAlive
-          name={cacheKey}
-          id={cacheKey}
-          saveScroll={true}
-        >
+        {pathname.startsWith('/menu-unavailable') ? (
+          // Bypass KeepAlive for menu-unavailable: always mount fresh so
+          // useEffect fires on every navigation and re-checks pending status.
           <div
-            ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
             className={cn(
               'rounded-xl bg-white shadow-xl',
               isMobile
-                ? innerScrollShell
-                  ? 'flex h-[calc(100dvh-16px)] min-h-0 w-full flex-col overflow-hidden'
-                  : 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
-                : innerScrollShell
-                  ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
-                  : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+                ? 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
+                : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
             )}
           >
-            {/* 移动端应用中心顶栏：与首页对话 MobileNav 一致（safe-area + 8px、内层 h-11、px-4） */}
-            {shouldHideSidebarOnMobileAppsArea &&
-              isAppsArea &&
-              !isAppChatRoute &&
-              !isAppsExploreRoute &&
-              !mobileSidebarOpen ? (
-              <div
-                className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]"
-              >
-                <div className="flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
-                  <button
-                    type="button"
-                    aria-label={localize('com_nav_open_sidebar')}
-                    onClick={() => setMobileSidebarOpen(true)}
-                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
-                  >
-                    <Menu className="size-4" strokeWidth={2} />
-                  </button>
-                  <div className="min-w-0 flex-1" aria-hidden />
-                </div>
-              </div>
-            ) : null}
-            {innerScrollShell ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {outlet}
-              </div>
-            ) : (
-              outlet
-            )}
+            {outlet}
           </div>
-        </KeepAlive>
+        ) : (
+          <KeepAlive
+            name={cacheKey}
+            id={cacheKey}
+            saveScroll={true}
+          >
+            <div
+              ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
+              className={cn(
+                'rounded-xl bg-white shadow-xl',
+                isMobile
+                  ? innerScrollShell
+                    ? 'flex h-[calc(100dvh-16px)] min-h-0 w-full flex-col overflow-hidden'
+                    : 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
+                  : innerScrollShell
+                    ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
+                    : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+              )}
+            >
+              {/* 移动端应用中心顶栏：与首页对话 MobileNav 一致（safe-area + 8px、内层 h-11、px-4） */}
+              {shouldHideSidebarOnMobileAppsArea &&
+                isAppsArea &&
+                !isAppChatRoute &&
+                !isAppsExploreRoute &&
+                !mobileSidebarOpen ? (
+                <div
+                  className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]"
+                >
+                  <div className="flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
+                    <button
+                      type="button"
+                      aria-label={localize('com_nav_open_sidebar')}
+                      onClick={() => setMobileSidebarOpen(true)}
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
+                    >
+                      <Menu className="size-4" strokeWidth={2} />
+                    </button>
+                    <div className="min-w-0 flex-1" aria-hidden />
+                  </div>
+                </div>
+              ) : null}
+              {innerScrollShell ? (
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  {outlet}
+                </div>
+              ) : (
+                outlet
+              )}
+            </div>
+          </KeepAlive>
+        )}
       </main>
       <Dialog
         open={!!systemNotice}

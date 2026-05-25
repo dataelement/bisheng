@@ -196,60 +196,6 @@ class ApprovalScenarioAdminService:
         return [row.model_dump() for row in rows]
 
     @classmethod
-    async def create_node(
-        cls,
-        *,
-        tenant_id: int,
-        flow_definition_id: int,
-        payload: dict,
-    ):
-        flow = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
-        if flow is None or flow.tenant_id != tenant_id:
-            raise ValueError(f'flow not found: {flow_definition_id}')
-        version = await ApprovalScenarioRepository.get_active_flow_version(tenant_id, flow_definition_id)
-        if version is None:
-            raise ValueError(f'active flow version not found: {flow_definition_id}')
-        node_order = int(payload.get('node_order', 0))
-        node_code = f'node_{node_order}_{uuid4().hex[:8]}'
-        row = await ApprovalScenarioRepository.create_node_definition(
-            ApprovalNodeDefinition(
-                tenant_id=tenant_id,
-                flow_version_id=version.id,
-                node_code=node_code,
-                node_name=payload['node_name'],
-                node_order=node_order,
-                node_mode=payload['node_mode'],
-                approver_config=payload.get('approver_config') or {},
-                extra_config=payload.get('extra_config') or {},
-            )
-        )
-        return row.model_dump()
-
-    @classmethod
-    async def update_node(
-        cls,
-        *,
-        tenant_id: int,
-        node_definition_id: int,
-        payload: dict,
-    ):
-        row = await ApprovalScenarioRepository.get_node_definition(node_definition_id)
-        if row is None or row.tenant_id != tenant_id:
-            raise ValueError(f'node not found: {node_definition_id}')
-        if 'node_name' in payload and payload['node_name']:
-            row.node_name = payload['node_name']
-        if 'node_order' in payload:
-            row.node_order = int(payload['node_order'])
-        if 'node_mode' in payload and payload['node_mode']:
-            row.node_mode = payload['node_mode']
-        if 'approver_config' in payload:
-            row.approver_config = payload['approver_config'] or {}
-        if 'extra_config' in payload:
-            row.extra_config = payload['extra_config'] or {}
-        updated = await ApprovalScenarioRepository.update_node_definition(row)
-        return updated.model_dump()
-
-    @classmethod
     async def delete_scenario(cls, *, tenant_id: int, scenario_id: int) -> None:
         row = await ApprovalScenarioRepository.get_scenario(scenario_id)
         if row is None or row.tenant_id != tenant_id:
@@ -271,13 +217,6 @@ class ApprovalScenarioAdminService:
             if rid not in existing_ids:
                 raise ValueError(f'route {rid} does not belong to scenario {scenario_id}')
         await ApprovalScenarioRepository.bulk_update_route_sort_order(ordered_route_ids)
-
-    @classmethod
-    async def delete_node(cls, *, tenant_id: int, node_definition_id: int) -> None:
-        row = await ApprovalScenarioRepository.get_node_definition(node_definition_id)
-        if row is None or row.tenant_id != tenant_id:
-            raise ValueError(f'node not found: {node_definition_id}')
-        await ApprovalScenarioRepository.delete_node_definition(node_definition_id)
 
     @classmethod
     async def delete_flow(cls, *, tenant_id: int, flow_definition_id: int) -> None:

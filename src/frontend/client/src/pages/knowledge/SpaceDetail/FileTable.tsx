@@ -535,9 +535,11 @@ interface FileTableProps {
     versionManagementEnabled?: boolean;
     onOpenVersionManagement?: (file: KnowledgeFile) => void;
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    /** Mirrors member-management gating: creators + manage_space_relation holders. */
+    canManageMembers?: boolean;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, publishEntryIds, onManagePermission, onPublishFile, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -661,6 +663,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 versionManagementEnabled={versionManagementEnabled}
                                 onOpenVersionManagement={onOpenVersionManagement}
                                 onOpenVersionHistory={onOpenVersionHistory}
+                                canManageMembers={canManageMembers}
                             />
                         ))}
                     </TableBody>
@@ -722,11 +725,13 @@ function FileRow({
     versionManagementEnabled = false,
     onOpenVersionManagement,
     onOpenVersionHistory,
+    canManageMembers = false,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
     onSelect: (val: boolean) => void;
     isAdmin: boolean;
+    canManageMembers?: boolean;
     onDownload: () => void;
     onEditTags: () => void;
     onRename: (newName: string) => void;
@@ -983,7 +988,7 @@ function FileRow({
                                     {`V${file.version_no}`}
                                 </span>
                             )}
-                            {versionManagementEnabled && file.has_similar && !file.is_multi_version && (
+                            {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
                                 <button
                                     type="button"
                                     onClick={(e) => {

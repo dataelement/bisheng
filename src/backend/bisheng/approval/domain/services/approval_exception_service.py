@@ -119,12 +119,13 @@ class ApprovalExceptionService:
         if exception.exception_type == 'route_missing':
             await service._retry_route_missing(exception, instance, operator_user_id)
         elif exception.exception_type == 'approver_empty':
+            from bisheng.common.errcode.approval import ApprovalApproverEmptyError
             route_rule, flow_version_id, node = await service._resolve_retry_route(instance)
             handler = await service._build_handler(instance.scenario_code)
             req = service._build_gate_request(instance)
             approver_user_ids = await handler.resolve_approvers(getattr(node, 'approver_config', {}) or {}, req)
             if not approver_user_ids:
-                raise ValueError(f'no approvers resolved for exception {exception_id}')
+                raise ApprovalApproverEmptyError()
             await service.assign_approvers(
                 exception_id=exception_id,
                 approver_user_ids=approver_user_ids,
@@ -168,7 +169,6 @@ class ApprovalExceptionService:
                 await service.instance_repository.update_task(task)
 
         instance.status = ApprovalInstanceStatus.CANCELLED
-        instance.reason = reason.strip()
         await service.instance_repository.update_instance(instance)
         await service.instance_repository.create_action_log(
             ApprovalActionLog(
@@ -274,7 +274,44 @@ class ApprovalExceptionService:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
         detail = exception.detail or {}
-        current_node_order = detail.get('node_order', 0)
+
+        node_code = detail.get('node_code', '')
+        node_name = detail.get('node_name', '') or detail.get('current_node_name', '')
+        node_order = detail.get('node_order')
+        node_mode = detail.get('node_mode', 'or')
+
+        # Older exception records may lack node_code/node_order; resolve from node definitions.
+        if (node_order is None or not node_code) and instance.flow_version_id and node_name:
+            node_defs = await ApprovalScenarioRepository.list_node_definitions(
+                instance.tenant_id, instance.flow_version_id
+            )
+            matched = next((n for n in node_defs if n.node_name == node_name or n.node_code == node_code), None)
+            if matched:
+                node_code = node_code or matched.node_code
+                node_name = matched.node_name
+                node_order = matched.node_order
+                node_mode = matched.node_mode
+
+        current_node_order = node_order if node_order is not None else 0
+
+        # Create a SKIPPED-status task so the node shows "已跳过" in the progress timeline
+        if node_code or node_name:
+            from datetime import datetime as _dt
+            await self.instance_repository.create_task(
+                ApprovalTask(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    flow_version_id=instance.flow_version_id or 0,
+                    node_code=node_code,
+                    node_name=node_name,
+                    node_order=current_node_order,
+                    approver_user_id=resolved_by_user_id,
+                    approver_source_type='skipped',
+                    node_mode=node_mode,
+                    status=ApprovalTaskStatus.SKIPPED,
+                    acted_at=_dt.utcnow(),
+                )
+            )
         await self._resolve_exception(exception, resolved_by_user_id, 'skip_node')
         await self._advance_from_skipped_node(instance=instance, current_node_order=current_node_order, operator_user_id=resolved_by_user_id)
 
@@ -361,6 +398,16 @@ class ApprovalExceptionService:
         instance.status = ApprovalInstanceStatus.PENDING
         instance.current_node_name = next_node.node_name
         await self.instance_repository.update_instance(instance)
+
+        # Notify the new approvers that they have a pending task
+        for approver_user_id in approvers:
+            await self._notify_user(
+                sender=operator_user_id,
+                receiver_user_id=approver_user_id,
+                action_code='approval_task_pending',
+                business_name=instance.business_name or '',
+                instance_id=instance.id,
+            )
 
     async def retry_execute_failed(
         self,
@@ -471,6 +518,7 @@ class ApprovalExceptionService:
         from bisheng.approval.domain.models.approval_instance import ApprovalOutbox, ApprovalOutboxStatus
         from bisheng.approval.domain.services.approval_gate import ApprovalGate
         from bisheng.common.errcode.approval import (
+            ApprovalApproverEmptyError,
             ApprovalRetryNoActiveFlowVersionError,
             ApprovalRetryNoFlowNodesError,
             ApprovalRetryNoFlowRouteError,
@@ -524,7 +572,7 @@ class ApprovalExceptionService:
         first_node = node_definitions[0]
         approver_user_ids = await handler.resolve_approvers(first_node.approver_config or {}, req)
         if not approver_user_ids:
-            raise ValueError(f'no approvers resolved for route_missing exception {exception.id}')
+            raise ApprovalApproverEmptyError()
 
         await self.assign_flow(
             exception_id=exception.id,

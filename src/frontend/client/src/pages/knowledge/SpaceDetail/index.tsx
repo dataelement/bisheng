@@ -81,6 +81,10 @@ interface KnowledgeSpaceContentProps {
     isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
+    markPendingDeletion: (ids: Array<string | number>) => void;
+    clearPendingDeletion: (ids: Array<string | number>) => void;
+    setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
+    setTotal: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export function KnowledgeSpaceContent({
@@ -113,6 +117,10 @@ export function KnowledgeSpaceContent({
     isAiAssistantOpen,
     onCreateSpace,
     onGoKnowledgeSquare,
+    markPendingDeletion,
+    clearPendingDeletion,
+    setFiles,
+    setTotal,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -220,6 +228,24 @@ export function KnowledgeSpaceContent({
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
 
+    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
+        [space.id],
+        { fullAccessSpaceIds: isAdmin ? [space.id] : [] },
+    );
+    // Version-management write entries (process-similar button, list "similar"
+    // pill) gate on the user's OpenFGA relation to this space: creator (owner)
+    // or manager. We can't trust `space.role === ADMIN` alone because shared
+    // spaces can return a stale SpaceChannelMember.user_role for users whose
+    // real grant lives only in OpenFGA. checkPermission(..., "manager") covers
+    // both owner and manager — OpenFGA's owner ⊃ manager makes owners allowed too.
+    const { data: spaceManageCheck } = useQuery({
+        queryKey: ["space-manage-check", space.id],
+        queryFn: () => checkPermission("knowledge_space", space.id, "manager"),
+        enabled: !!space.id,
+    });
+    const canManageMembers = space.role === SpaceRole.CREATOR
+        || Boolean(spaceManageCheck?.allowed);
+
     // ─── Version Management ──────────────────────────────────────────────
     const versionManagementEnabled = useVersionManagementEnabled();
     const queryClient = useQueryClient();
@@ -232,7 +258,7 @@ export function KnowledgeSpaceContent({
     const { data: pendingSimilarList = [] } = useQuery({
         queryKey: ["pending-similar", spaceIdNum],
         queryFn: () => getPendingSimilarFilesApi(spaceIdNum),
-        enabled: versionManagementEnabled && spaceIdNum > 0,
+        enabled: versionManagementEnabled && spaceIdNum > 0 && canManageMembers,
     });
     const pendingSimilarCount = pendingSimilarList.length;
 
@@ -260,10 +286,6 @@ export function KnowledgeSpaceContent({
         onDeleteFile("");
     };
 
-    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(
-        [space.id],
-        { fullAccessSpaceIds: isAdmin ? [space.id] : [] },
-    );
     const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
@@ -844,19 +866,28 @@ export function KnowledgeSpaceContent({
 
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
+        const allIds = selectedList.map(f => f.id);
+        const removeCount = allIds.length;
+
+        // Optimistic: drop selected rows immediately + mark to suppress poll ghosts.
+        markPendingDeletion(allIds);
+        setFiles(prev => prev.filter(f => !selectedFiles.has(f.id)));
+        setTotal(prev => Math.max(0, prev - removeCount));
+        setSelectedFiles(new Set());
+        showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
 
         try {
             await batchDeleteApi(space.id, {
                 file_ids: fileIds.length ? fileIds : undefined,
                 folder_ids: folderIds.length ? folderIds : undefined,
             });
-            setSelectedFiles(new Set());
-            showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
-            // Notify parent to refresh the list
-            onDeleteFile("");
         } catch {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
+            clearPendingDeletion(allIds);
+            onDeleteFile("");
+            return;
         }
+        clearPendingDeletion(allIds);
     };
 
     const handleDelete = async (fileId: string) => {
@@ -1024,6 +1055,7 @@ export function KnowledgeSpaceContent({
                 versionManagementEnabled={versionManagementEnabled}
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}
+                canManageMembers={canManageMembers}
             />
             </div>
 
@@ -1116,6 +1148,7 @@ export function KnowledgeSpaceContent({
                                             versionManagementEnabled={versionManagementEnabled}
                                             onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                             onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
+                                            canManageMembers={canManageMembers}
                                         />
                                     </div>
                                 ))}
@@ -1152,6 +1185,7 @@ export function KnowledgeSpaceContent({
                                     versionManagementEnabled={versionManagementEnabled}
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
+                                    canManageMembers={canManageMembers}
                                 />
                             </div>
                         </div>

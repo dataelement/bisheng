@@ -2252,6 +2252,7 @@
     "retryAction": "再試行",
     "assignApproversAction": "承認者を指定",
     "skipNodeAction": "ノードをスキップ",
+    "noUsers": "ユーザーが見つかりません",
     "approverIdsPlaceholder": "承認者 ID をカンマ区切りで入力",
     "approverIdsRequired": "有効な承認者 ID を 1 件以上入力してください",
     "routeFallback": "分岐",

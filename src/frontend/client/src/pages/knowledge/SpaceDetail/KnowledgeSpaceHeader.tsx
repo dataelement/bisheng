@@ -81,6 +81,8 @@ interface KnowledgeSpaceHeaderProps {
     versionManagementEnabled?: boolean;
     pendingSimilarCount?: number;
     onProcessSimilar?: () => void;
+    /** Mirrors member-management gating: creators + members with manage_space_relation. */
+    canManageMembers?: boolean;
 }
 
 export function KnowledgeSpaceHeader({
@@ -121,6 +123,7 @@ export function KnowledgeSpaceHeader({
     versionManagementEnabled = false,
     pendingSimilarCount = 0,
     onProcessSimilar,
+    canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -288,7 +291,7 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
-            {versionManagementEnabled && pendingSimilarCount > 0 && onProcessSimilar && (
+            {versionManagementEnabled && canManageMembers && pendingSimilarCount > 0 && onProcessSimilar && (
                 <Button
                     variant="ghost"
                     size="sm"

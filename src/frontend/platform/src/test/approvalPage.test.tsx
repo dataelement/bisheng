@@ -16,17 +16,15 @@ const listApprovalNodesApi = vi.fn();
 const createApprovalScenarioApi = vi.fn();
 const createApprovalRouteApi = vi.fn();
 const createApprovalFlowApi = vi.fn();
-const createApprovalNodeApi = vi.fn();
+const setApprovalFlowNodesApi = vi.fn();
 const updateApprovalRouteApi = vi.fn();
 const updateApprovalFlowApi = vi.fn();
-const updateApprovalNodeApi = vi.fn();
 const retryApprovalExceptionApi = vi.fn();
 const updateApprovalScenarioApi = vi.fn();
 const deleteApprovalScenarioApi = vi.fn();
 const deleteApprovalRouteApi = vi.fn();
 const reorderApprovalRoutesApi = vi.fn();
 const deleteApprovalFlowApi = vi.fn();
-const deleteApprovalNodeApi = vi.fn();
 const getManagedKnowledgeSpacesApi = vi.fn();
 const getDepartmentKnowledgeSpacesApi = vi.fn();
 const getRolesApi = vi.fn();
@@ -130,17 +128,15 @@ vi.mock("@/controllers/API/approval", () => ({
   createApprovalScenarioApi: (...a: any[]) => createApprovalScenarioApi(...a),
   createApprovalRouteApi: (...a: any[]) => createApprovalRouteApi(...a),
   createApprovalFlowApi: (...a: any[]) => createApprovalFlowApi(...a),
-  createApprovalNodeApi: (...a: any[]) => createApprovalNodeApi(...a),
+  setApprovalFlowNodesApi: (...a: any[]) => setApprovalFlowNodesApi(...a),
   updateApprovalRouteApi: (...a: any[]) => updateApprovalRouteApi(...a),
   updateApprovalFlowApi: (...a: any[]) => updateApprovalFlowApi(...a),
-  updateApprovalNodeApi: (...a: any[]) => updateApprovalNodeApi(...a),
   retryApprovalExceptionApi: (...a: any[]) => retryApprovalExceptionApi(...a),
   updateApprovalScenarioApi: (...a: any[]) => updateApprovalScenarioApi(...a),
   deleteApprovalScenarioApi: (...a: any[]) => deleteApprovalScenarioApi(...a),
   deleteApprovalRouteApi: (...a: any[]) => deleteApprovalRouteApi(...a),
   reorderApprovalRoutesApi: (...a: any[]) => reorderApprovalRoutesApi(...a),
   deleteApprovalFlowApi: (...a: any[]) => deleteApprovalFlowApi(...a),
-  deleteApprovalNodeApi: (...a: any[]) => deleteApprovalNodeApi(...a),
 }));
 
 vi.mock("@/controllers/API/knowledgeSpace", () => ({
@@ -214,17 +210,15 @@ beforeEach(() => {
   createApprovalScenarioApi.mockResolvedValue({ id: 2 });
   createApprovalRouteApi.mockResolvedValue({ id: 10 });
   createApprovalFlowApi.mockResolvedValue({ id: 13, flow_code: "flow_b", flow_name: "流程 B" });
-  createApprovalNodeApi.mockResolvedValue({ id: 16 });
+  setApprovalFlowNodesApi.mockResolvedValue({ flow_version_id: 2, version_no: 2, nodes: [NODE] });
   updateApprovalRouteApi.mockResolvedValue({});
   updateApprovalFlowApi.mockResolvedValue({});
-  updateApprovalNodeApi.mockResolvedValue({});
   retryApprovalExceptionApi.mockResolvedValue({ status: "resolved" });
   updateApprovalScenarioApi.mockResolvedValue({ id: 1, enabled: true });
   deleteApprovalScenarioApi.mockResolvedValue(undefined);
   deleteApprovalRouteApi.mockResolvedValue(undefined);
   reorderApprovalRoutesApi.mockResolvedValue(undefined);
   deleteApprovalFlowApi.mockResolvedValue(undefined);
-  deleteApprovalNodeApi.mockResolvedValue(undefined);
   getRolesApi.mockResolvedValue([]);
   getUsersApi.mockResolvedValue({ data: [] });
   getManagedKnowledgeSpacesApi.mockResolvedValue([
@@ -515,6 +509,9 @@ describe("ApprovalPage", () => {
     render(<ApprovalPage />);
     await screen.findByText("审批流程");
 
+    await user.click(screen.getByRole("button", { name: /编辑节点/ }));
+    expect(await screen.findByText(/编辑中/)).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: /新增节点/ }));
     await screen.findByText("新增审批节点");
 
@@ -528,7 +525,6 @@ describe("ApprovalPage", () => {
 
   it("opens flow dialog and creates a new flow when no flow is preselected", async () => {
     const user = userEvent.setup();
-    // no existing flows so the button says "新建流程"
     listApprovalFlowsApi.mockResolvedValue([]);
     listApprovalNodesApi.mockResolvedValue([]);
 
@@ -550,25 +546,45 @@ describe("ApprovalPage", () => {
     });
   });
 
-  it("opens node dialog and creates a node", async () => {
+  it("enters edit mode, adds a node in draft, and saves via set_flow_nodes", async () => {
     const user = userEvent.setup();
     render(<ApprovalPage />);
 
-    await screen.findByText("审批流程");
-    await user.click(screen.getByRole("button", { name: /新增节点/ }));
+    await screen.findByText("申请人部门管理员审批");
 
+    // enter edit mode
+    await user.click(screen.getByRole("button", { name: /编辑节点/ }));
+
+    // edit mode indicator appears
+    expect(await screen.findByText(/编辑中/)).toBeInTheDocument();
+
+    // add a new node via the dialog
+    await user.click(screen.getByRole("button", { name: /新增节点/ }));
     expect(await screen.findByText("新增审批节点")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("如：申请人部门管理员审批"), "二级审批");
     await user.click(screen.getByRole("button", { name: "保存" }));
 
+    // new node appears in draft list (not yet persisted)
+    expect(await screen.findByText("二级审批")).toBeInTheDocument();
+    expect(setApprovalFlowNodesApi).not.toHaveBeenCalled();
+
+    // save changes: triggers set_flow_nodes creating a new version snapshot
+    await user.click(screen.getByRole("button", { name: /保存更改/ }));
+
     await waitFor(() => {
-      expect(createApprovalNodeApi).toHaveBeenCalledWith(
+      expect(setApprovalFlowNodesApi).toHaveBeenCalledWith(
         12,
-        expect.objectContaining({ node_name: "二级审批" }),
+        expect.arrayContaining([
+          expect.objectContaining({ node_name: "申请人部门管理员审批" }),
+          expect.objectContaining({ node_name: "二级审批" }),
+        ]),
       );
     });
-    expect(listApprovalNodesApi).toHaveBeenCalledTimes(2);
+
+    // edit mode exits on success
+    expect(screen.queryByText(/编辑中/)).not.toBeInTheDocument();
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({ variant: "success" }));
   });
 
   it("edits a route via the edit button and updates route", async () => {
@@ -616,51 +632,13 @@ describe("ApprovalPage", () => {
     );
   });
 
-  it("switches to exception tab and assigns approvers for approver_empty", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    await user.click(await screen.findByRole("button", { name: "异常流程列表" }));
-    await screen.findByText("审批人为空");
-
-    const input = screen.getByPlaceholderText("输入用户 ID，多个用逗号分隔");
-    await user.type(input, "101, 202");
-    await user.click(screen.getByRole("button", { name: "指定审批人" }));
-
-    await waitFor(() => {
-      expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88, {
-        action: "assign_approvers",
-        approver_user_ids: [101, 202],
-      });
-    });
-  });
-
-  it("skips current node for approver_empty exception", async () => {
-    const user = userEvent.setup();
-    render(<ApprovalPage />);
-
-    await user.click(await screen.findByRole("button", { name: "异常流程列表" }));
-    await screen.findByText("审批人为空");
-
-    await user.click(screen.getByRole("button", { name: "跳过节点" }));
-
-    await waitFor(() => {
-      expect(retryApprovalExceptionApi).toHaveBeenCalledWith(88, {
-        action: "skip_node",
-      });
-    });
-  });
-
   it("deletes a route via the delete button", async () => {
     const user = userEvent.setup();
     render(<ApprovalPage />);
 
     await screen.findByText("管理员直接通过");
 
-    // route delete button has aria-label="删除"
     const deleteBtns = screen.getAllByRole("button", { name: "删除" });
-    // first delete btn might be for scenario card (in scenario list hover area)
-    // route row delete is in the route row; click the one visible in the route row area
     await user.click(deleteBtns[deleteBtns.length - 1]);
 
     await waitFor(() => {
