@@ -54,6 +54,7 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     sensitive_rejected_department_knowledge_space_upload: "com_notifications_action_sensitive_rejected_department_knowledge_space_upload",
     // approval center notifications
     request_menu_access: "com_notifications_action_request_menu_access",
+    approval_task_pending: "com_notifications_action_approval_task_pending",
     approval_task_rejected: "com_notifications_action_approval_task_rejected",
     approval_instance_approved: "com_notifications_action_approval_instance_approved",
     approval_instance_withdrawn: "com_notifications_action_approval_instance_withdrawn",

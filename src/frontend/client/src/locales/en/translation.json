@@ -401,6 +401,7 @@
   "com_notifications_action_generic": "Sent you a notification",
   "com_notifications_action_generic_with_target": "Sent you a notification — {{target}}",
   "com_notifications_action_request_menu_access": "Requested access to menu「{{target}}」",
+  "com_notifications_action_approval_task_pending": "Please review the approval request for「{{target}}」",
   "com_notifications_action_approval_task_rejected": "Rejected your approval request for「{{target}}」",
   "com_notifications_action_approval_instance_approved": "Approved your approval request for「{{target}}」",
   "com_notifications_action_approval_instance_withdrawn": "Withdrew the approval request for「{{target}}」, no action needed",

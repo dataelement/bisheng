@@ -275,6 +275,24 @@ class ApprovalExceptionService:
         instance = await self._get_instance(exception.instance_id)
         detail = exception.detail or {}
         current_node_order = detail.get('node_order', 0)
+        # Create a SKIPPED-status task so the node shows "已跳过" in the progress timeline
+        if detail.get('node_code') or detail.get('node_name'):
+            from datetime import datetime as _dt
+            await self.instance_repository.create_task(
+                ApprovalTask(
+                    tenant_id=instance.tenant_id,
+                    instance_id=instance.id,
+                    flow_version_id=instance.flow_version_id or 0,
+                    node_code=detail.get('node_code', ''),
+                    node_name=detail.get('node_name', ''),
+                    node_order=current_node_order,
+                    approver_user_id=resolved_by_user_id,
+                    approver_source_type='skipped',
+                    node_mode=detail.get('node_mode', 'or'),
+                    status=ApprovalTaskStatus.SKIPPED,
+                    acted_at=_dt.utcnow(),
+                )
+            )
         await self._resolve_exception(exception, resolved_by_user_id, 'skip_node')
         await self._advance_from_skipped_node(instance=instance, current_node_order=current_node_order, operator_user_id=resolved_by_user_id)
 
@@ -361,6 +379,16 @@ class ApprovalExceptionService:
         instance.status = ApprovalInstanceStatus.PENDING
         instance.current_node_name = next_node.node_name
         await self.instance_repository.update_instance(instance)
+
+        # Notify the new approvers that they have a pending task
+        for approver_user_id in approvers:
+            await self._notify_user(
+                sender=operator_user_id,
+                receiver_user_id=approver_user_id,
+                action_code='approval_task_pending',
+                business_name=instance.business_name or '',
+                instance_id=instance.id,
+            )
 
     async def retry_execute_failed(
         self,

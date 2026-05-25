@@ -389,6 +389,7 @@
   "com_notifications_action_generic": "给你发送了一条通知",
   "com_notifications_action_generic_with_target": "给你发送了一条通知",
   "com_notifications_action_request_menu_access": "申请访问菜单「{{target}}」",
+  "com_notifications_action_approval_task_pending": "请审批「{{target}}」的申请",
   "com_notifications_action_approval_task_rejected": "拒绝了你「{{target}}」的审批申请",
   "com_notifications_action_approval_instance_approved": "通过了你「{{target}}」的审批申请",
   "com_notifications_action_approval_instance_withdrawn": "撤回了「{{target}}」的审批申请，无需处理",
