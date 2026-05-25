@@ -67,9 +67,16 @@ async def get_knowledge_space_chat_service_for_openapi(
     """KnowledgeSpaceChatService bound to the configured default operator.
 
     Used by the OpenAPI surface so external systems do not need user JWTs.
+
+    The HTTP middleware only sets the tenant ContextVar from JWT cookies;
+    OpenAPI calls have no cookie, so under multi_tenant.enabled=True the
+    SQLAlchemy tenant filter would raise NoTenantContextError. Seed the
+    ContextVar from the default operator's resolved tenant_id here.
     """
+    from bisheng.core.context.tenant import set_current_tenant_id
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 
+    set_current_tenant_id(default_user.tenant_id)
     service = KnowledgeSpaceChatService(request=request, login_user=default_user)
     service.version_repo = version_repo
     return service
