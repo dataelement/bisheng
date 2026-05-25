@@ -53,6 +53,7 @@ from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
 from bisheng.database.models.group import GroupDao
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
@@ -351,12 +352,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _user_group_ids_for_create(self) -> set[int]:
         if self.login_user.is_admin():
             groups, _ = await GroupDao.aget_all_groups(1, 2000, '')
-        else:
-            groups, _ = await GroupDao.aget_visible_groups(self.login_user.user_id, 1, 2000, '')
+            return {
+                int(group.id)
+                for group in groups or []
+                if getattr(group, 'id', None) is not None
+            }
+
+        member_groups = await UserGroupDao.aget_user_group(self.login_user.user_id)
+        admin_groups = await UserGroupDao.aget_user_admin_group(self.login_user.user_id)
         return {
-            int(group.id)
-            for group in groups or []
-            if getattr(group, 'id', None) is not None
+            int(link.group_id)
+            for link in [*(member_groups or []), *(admin_groups or [])]
+            if getattr(link, 'group_id', None) is not None
         }
 
     @staticmethod

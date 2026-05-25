@@ -184,6 +184,45 @@ async def test_knowledge_space_create_submit_requires_approval_without_creating(
 
 
 @pytest.mark.asyncio
+async def test_knowledge_space_create_denied_team_group_does_not_enter_approval(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangKnowledgeSpaceCreateSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.common.errcode.knowledge_space import SpaceCreateTeamDeniedError
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    space_service = SimpleNamespace(
+        validate_knowledge_space_create=AsyncMock(side_effect=SpaceCreateTeamDeniedError()),
+        create_knowledge_space=AsyncMock(),
+    )
+    approval_gate = _pending_approval_gate()
+    service = ShougangApprovalService(approval_gate=approval_gate)
+    monkeypatch.setattr(service, "_is_create_approval_exempt", AsyncMock(return_value=False))
+
+    with pytest.raises(SpaceCreateTeamDeniedError):
+        await service.submit_knowledge_space_create(
+            req=ShougangKnowledgeSpaceCreateSubmitReq(
+                name="团队资料库",
+                auth_type=AuthTypeEnum.PUBLIC,
+                is_released=True,
+                space_level=KnowledgeSpaceLevelEnum.TEAM,
+                user_group_id=7,
+                reason="申请创建",
+            ),
+            login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
+            space_service=space_service,
+        )
+
+    space_service.validate_knowledge_space_create.assert_awaited_once()
+    space_service.create_knowledge_space.assert_not_called()
+    approval_gate.request_or_pass.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_knowledge_space_create_creates_exception_when_scenario_disabled(monkeypatch):
     from bisheng.approval.domain.models.approval_instance import (
         ApprovalExceptionType,

@@ -15,6 +15,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFileSizeLimitError,
     SpaceFileNotFoundError,
     SpaceFolderNotFoundError,
+    SpaceCreateTeamDeniedError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
@@ -43,6 +44,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     SpaceSubscriptionStatusEnum,
 )
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.database.models.user_group import UserGroupDao
 
 
 def _install_schema_stubs() -> None:
@@ -312,10 +314,152 @@ def _make_space(
 
 
 @pytest.mark.asyncio
+async def test_create_options_do_not_allow_team_space_from_visible_public_groups():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_visible_groups',
+        new_callable=AsyncMock,
+        return_value=([SimpleNamespace(id=5, group_name='公开组')], 1),
+    ) as mock_visible_groups, patch.object(
+        UserGroupDao,
+        'aget_user_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch.object(
+        UserGroupDao,
+        'aget_user_admin_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        options = await svc.get_create_options()
+
+    assert options.can_create_team is False
+    mock_visible_groups.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_user_groups_excludes_visible_public_groups_for_non_members():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_visible_groups',
+        new_callable=AsyncMock,
+        return_value=([SimpleNamespace(id=5, group_name='公开组')], 1),
+    ) as mock_visible_groups, patch.object(
+        UserGroupDao,
+        'aget_user_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch.object(
+        UserGroupDao,
+        'aget_user_admin_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_group_by_ids',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(id=5, group_name='公开组')],
+    ):
+        options = await svc.get_create_user_groups()
+
+    assert options.data == []
+    assert options.total == 0
+    mock_visible_groups.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_team_space_create_rejects_visible_public_group_for_non_member():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
+    svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+        new_callable=AsyncMock,
+        return_value=0,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_visible_groups',
+        new_callable=AsyncMock,
+        return_value=([SimpleNamespace(id=5, group_name='公开组')], 1),
+    ), patch.object(
+        UserGroupDao,
+        'aget_user_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch.object(
+        UserGroupDao,
+        'aget_user_admin_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_by_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(id=5, group_name='公开组'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+    ):
+        with pytest.raises(SpaceCreateTeamDeniedError):
+            await svc.validate_knowledge_space_create(
+                name='团队空间',
+                space_level=KnowledgeSpaceLevelEnum.TEAM,
+                user_group_id=5,
+            )
+
+
+@pytest.mark.asyncio
+async def test_create_user_groups_include_member_and_admin_groups():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_visible_groups',
+        new_callable=AsyncMock,
+        return_value=([], 0),
+    ) as mock_visible_groups, patch.object(
+        UserGroupDao,
+        'aget_user_group',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(group_id=5)],
+    ), patch.object(
+        UserGroupDao,
+        'aget_user_admin_group',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(group_id=6)],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_group_by_ids',
+        new_callable=AsyncMock,
+        return_value=[
+            SimpleNamespace(id=6, group_name='管理组'),
+            SimpleNamespace(id=5, group_name='成员组'),
+        ],
+    ):
+        options = await svc.get_create_user_groups()
+
+    assert [item.id for item in options.data] == [5, 6]
+    mock_visible_groups.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_create_team_space_writes_scope_and_default_user_group_viewer():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
+    svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
     created_space = _make_space(space_id=11, user_id=7)
 
     with patch(
