@@ -133,6 +133,10 @@ function formatTitle(
 }
 
 const DETAIL_INTERNAL_KEYS = new Set(["menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name"]);
+const KNOWLEDGE_SPACE_CREATE_SCENARIO = "knowledge_space_create_request";
+const FILE_PUBLISH_SCENARIO = "knowledge_space_file_publish_request";
+
+type BusinessContentRow = [string, string];
 
 function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>): string {
   const map: Record<string, string> = {
@@ -146,6 +150,111 @@ function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>)
     space_id:      localize("com_approval_field_space_id" as any),
   };
   return map[key] ?? key;
+}
+
+function hasDisplayValue(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== "";
+}
+
+function formatBusinessValue(value: unknown): string {
+  return Array.isArray(value) ? value.join(", ") : String(value);
+}
+
+function localizeBooleanValue(value: unknown, localize: ReturnType<typeof useLocalize>): string {
+  if (value === true || value === "true") return localize("com_approval_value_yes" as any);
+  if (value === false || value === "false") return localize("com_approval_value_no" as any);
+  return formatBusinessValue(value);
+}
+
+function localizeBusinessType(value: unknown, localize: ReturnType<typeof useLocalize>): string {
+  const map: Record<string, string> = {
+    knowledge_space_create: localize("com_approval_business_type_knowledge_space_create" as any),
+    knowledge_space_file_publish: localize("com_approval_business_type_knowledge_space_file_publish" as any),
+  };
+  return map[String(value)] ?? formatBusinessValue(value);
+}
+
+function localizeSpaceLevel(value: unknown, localize: ReturnType<typeof useLocalize>): string {
+  const map: Record<string, string> = {
+    personal: localize("com_approval_space_level_personal" as any),
+    team: localize("com_approval_space_level_team" as any),
+    department: localize("com_approval_space_level_department" as any),
+    public: localize("com_approval_space_level_public" as any),
+  };
+  return map[String(value)] ?? formatBusinessValue(value);
+}
+
+function localizeAuthType(value: unknown, localize: ReturnType<typeof useLocalize>): string {
+  const map: Record<string, string> = {
+    public: localize("com_approval_auth_type_public" as any),
+    private: localize("com_approval_auth_type_private" as any),
+    approval: localize("com_approval_auth_type_approval" as any),
+  };
+  return map[String(value)] ?? formatBusinessValue(value);
+}
+
+function pushBusinessRow(rows: BusinessContentRow[], label: string, value: unknown, formatter = formatBusinessValue): void {
+  if (hasDisplayValue(value)) rows.push([label, formatter(value)]);
+}
+
+function buildDefaultBusinessContentRows(snapshot: Record<string, any>, localize: ReturnType<typeof useLocalize>): BusinessContentRow[] {
+  return Object.entries(snapshot)
+    .filter(([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && hasDisplayValue(v))
+    .map(([k, v]): BusinessContentRow => [localizeFieldKey(k, localize), formatBusinessValue(v)]);
+}
+
+function buildKnowledgeSpaceCreateRows(snapshot: Record<string, any>, localize: ReturnType<typeof useLocalize>): BusinessContentRow[] {
+  const rows: BusinessContentRow[] = [];
+  pushBusinessRow(rows, localize("com_approval_field_business_type" as any), snapshot.type, (value) => localizeBusinessType(value, localize));
+  pushBusinessRow(rows, localize("com_approval_field_space_name_create" as any), snapshot.name);
+  pushBusinessRow(rows, localize("com_approval_field_space_level" as any), snapshot.space_level, (value) => localizeSpaceLevel(value, localize));
+  pushBusinessRow(rows, localize("com_approval_field_department_id" as any), snapshot.department_id);
+  pushBusinessRow(rows, localize("com_approval_field_user_group_id" as any), snapshot.user_group_id);
+  pushBusinessRow(rows, localize("com_approval_field_auth_type" as any), snapshot.auth_type, (value) => localizeAuthType(value, localize));
+  pushBusinessRow(rows, localize("com_approval_field_is_released" as any), snapshot.is_released, (value) => localizeBooleanValue(value, localize));
+  pushBusinessRow(rows, localize("com_approval_field_reason" as any), snapshot.reason);
+  return rows;
+}
+
+function pushNameOrIdRow(
+  rows: BusinessContentRow[],
+  localize: ReturnType<typeof useLocalize>,
+  labelKey: string,
+  idLabelKey: string,
+  nameValue: unknown,
+  idValue: unknown,
+): void {
+  if (hasDisplayValue(nameValue)) {
+    rows.push([localize(labelKey as any), formatBusinessValue(nameValue)]);
+    return;
+  }
+  pushBusinessRow(rows, localize(idLabelKey as any), idValue);
+}
+
+function buildFilePublishRows(snapshot: Record<string, any>, localize: ReturnType<typeof useLocalize>): BusinessContentRow[] {
+  const rows: BusinessContentRow[] = [];
+  pushBusinessRow(rows, localize("com_approval_field_business_type" as any), snapshot.type, (value) => localizeBusinessType(value, localize));
+  pushNameOrIdRow(rows, localize, "com_approval_field_source_space_name", "com_approval_field_source_space_id", snapshot.source_space_name, snapshot.source_space_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_source_file_name", "com_approval_field_source_file_id", snapshot.source_file_name, snapshot.source_file_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_target_space_name", "com_approval_field_target_space_id", snapshot.target_space_name, snapshot.target_space_id);
+  pushNameOrIdRow(rows, localize, "com_approval_field_target_document_title", "com_approval_field_target_document_id", snapshot.target_document_title, snapshot.target_document_id);
+  pushBusinessRow(rows, localize("com_approval_field_reason" as any), snapshot.reason);
+  return rows;
+}
+
+function buildBusinessContentRows(
+  scenarioCode: string | undefined,
+  snapshot: Record<string, any> | null | undefined,
+  localize: ReturnType<typeof useLocalize>,
+): BusinessContentRow[] {
+  const data = snapshot ?? {};
+  if (scenarioCode === KNOWLEDGE_SPACE_CREATE_SCENARIO) {
+    return buildKnowledgeSpaceCreateRows(data, localize);
+  }
+  if (scenarioCode === FILE_PUBLISH_SCENARIO) {
+    return buildFilePublishRows(data, localize);
+  }
+  return buildDefaultBusinessContentRows(data, localize);
 }
 
 function InfoGrid({ rows }: { rows: [string, string][] }) {
@@ -575,10 +684,8 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.instance_status ?? detail.status}` as any, { defaultValue: detail.instance_status || detail.status || "--" }) as string],
   ];
 
-  const detailEntries = Object.entries(detail.detail_snapshot ?? detail.payload_snapshot ?? {}).filter(
-    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
-  );
-  const showContent = detailEntries.length > 0;
+  const detailRows = buildBusinessContentRows(detail.scenario_code, detail.detail_snapshot ?? detail.payload_snapshot, localize);
+  const showContent = detailRows.length > 0;
 
   return (
     <div className="space-y-5">
@@ -594,10 +701,10 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
         <div>
           <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_business_content")}</div>
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#f2f3f5] bg-[#f2f3f5]">
-            {detailEntries.map(([k, v]) => (
-              <div key={k} className="bg-white px-4 py-3">
-                <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
-                <div className="mt-1 text-[14px] text-[#1d2129] break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+            {detailRows.map(([label, value]) => (
+              <div key={label} className="bg-white px-4 py-3">
+                <div className="text-[12px] text-[#86909c]">{label}</div>
+                <div className="mt-1 text-[14px] text-[#1d2129] break-all">{value}</div>
               </div>
             ))}
           </div>
@@ -646,9 +753,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
   ];
 
-  const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
-    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
-  );
+  const detailRows = buildBusinessContentRows(detail.scenario_code, detail.detail_snapshot, localize);
 
   return (
     <div className="space-y-5">
@@ -660,14 +765,14 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
         <InfoGrid rows={basicRows} />
       </div>
 
-      {detailEntries.length > 0 && (
+      {detailRows.length > 0 && (
         <div>
           <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_business_content")}</div>
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#f2f3f5] bg-[#f2f3f5]">
-            {detailEntries.map(([k, v]) => (
-              <div key={k} className="bg-white px-4 py-3">
-                <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
-                <div className="mt-1 text-[14px] text-[#1d2129] break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+            {detailRows.map(([label, value]) => (
+              <div key={label} className="bg-white px-4 py-3">
+                <div className="text-[12px] text-[#86909c]">{label}</div>
+                <div className="mt-1 text-[14px] text-[#1d2129] break-all">{value}</div>
               </div>
             ))}
           </div>
