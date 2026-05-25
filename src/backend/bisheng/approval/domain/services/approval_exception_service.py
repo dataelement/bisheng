@@ -168,7 +168,6 @@ class ApprovalExceptionService:
                 await service.instance_repository.update_task(task)
 
         instance.status = ApprovalInstanceStatus.CANCELLED
-        instance.reason = reason.strip()
         await service.instance_repository.update_instance(instance)
         await service.instance_repository.create_action_log(
             ApprovalActionLog(

@@ -97,20 +97,22 @@ function ActionBtn({
   children,
   variant = "ghost",
   label,
+  className,
 }: {
   onClick: () => void;
   children: React.ReactNode;
   variant?: "ghost" | "primary" | "outline";
   label?: string;
+  className?: string;
 }) {
-  const cls =
+  const base =
     variant === "primary"
       ? "inline-flex items-center gap-1 rounded px-3 py-1.5 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
       : variant === "outline"
         ? "inline-flex items-center gap-1 rounded border border-border-subtle px-3 py-1.5 text-xs text-text-primary hover:bg-gray-50"
         : "inline-flex items-center justify-center rounded p-1 text-text-secondary hover:bg-gray-100 hover:text-text-primary";
   return (
-    <button type="button" className={cls} onClick={onClick} aria-label={label} title={label}>
+    <button type="button" className={`${base}${className ? ` ${className}` : ""}`} onClick={onClick} aria-label={label} title={label}>
       {children}
     </button>
   );
@@ -959,9 +961,16 @@ export default function ApprovalPage() {
   }>({ open: false, flowName: "", nodes: [] });
 
   // ── exception state ───────────────────────────────────────────────────────
-  const [exceptionApproverInputs, setExceptionApproverInputs] = useState<
-    Record<number, string>
-  >({});
+  // exception approver picker dialog state
+  const [exceptionPickerOpen, setExceptionPickerOpen] = useState(false);
+  const [exceptionPickerItem, setExceptionPickerItem] = useState<ApprovalExceptionItem | null>(null);
+  const [exceptionPickerSearch, setExceptionPickerSearch] = useState("");
+  const [exceptionPickerList, setExceptionPickerList] = useState<{ user_id: number; user_name: string }[]>([]);
+  const [exceptionPickerPage, setExceptionPickerPage] = useState(1);
+  const [exceptionPickerHasMore, setExceptionPickerHasMore] = useState(false);
+  const [exceptionPickerLoading, setExceptionPickerLoading] = useState(false);
+  const [exceptionPickerTempIds, setExceptionPickerTempIds] = useState<number[]>([]);
+  const [exceptionPickerTempNames, setExceptionPickerTempNames] = useState<string[]>([]);
 
   // ── computed ──────────────────────────────────────────────────────────────
   const selectedScenario = useMemo(
@@ -1038,6 +1047,28 @@ export default function ApprovalPage() {
   useEffect(() => {
     void loadPage();
   }, []);
+
+  // exception approver picker: load users
+  const EX_PAGE_SIZE = 50;
+  const loadExceptionPickerUsers = (page: number, search: string, append: boolean) => {
+    setExceptionPickerLoading(true);
+    getUsersApi({ name: search, page, pageSize: EX_PAGE_SIZE, simple: true }).then((res) => {
+      const data: { user_id: number; user_name: string }[] = res.data ?? [];
+      setExceptionPickerList((prev) => append ? [...prev, ...data] : data);
+      setExceptionPickerHasMore(data.length >= EX_PAGE_SIZE);
+    }).catch(() => {
+      if (!append) setExceptionPickerList([]);
+    }).finally(() => setExceptionPickerLoading(false));
+  };
+
+  useEffect(() => {
+    if (!exceptionPickerOpen) return;
+    const timer = setTimeout(() => {
+      setExceptionPickerPage(1);
+      loadExceptionPickerUsers(1, exceptionPickerSearch, false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [exceptionPickerOpen, exceptionPickerSearch]);
 
   // ── scenario actions ──────────────────────────────────────────────────────
   const handleAddScenario = async (preset: ApprovalScenarioPreset) => {
@@ -1280,7 +1311,6 @@ export default function ApprovalPage() {
     try {
       await retryApprovalExceptionApi(item.id, payload);
       toast({ title: t("approvalPage.hint"), variant: "success", description: t("approvalPage.genericOperateSuccess") });
-      setExceptionApproverInputs((c) => ({ ...c, [item.id]: "" }));
       await loadPage();
     } catch (e: any) {
       toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericOperateFailed")) });
@@ -1793,26 +1823,17 @@ export default function ApprovalPage() {
                       {/* approver_empty: assign approvers / skip node */}
                       {item.status === "open" && item.exception_type === "approver_empty" && (
                         <>
-                          <input
-                            value={exceptionApproverInputs[item.id] ?? ""}
-                            onChange={(e) =>
-                              setExceptionApproverInputs((c) => ({ ...c, [item.id]: e.target.value }))
-                            }
-                            placeholder={t("approvalPage.inputApproverIds")}
-                            className="h-8 rounded-lg border border-border-subtle bg-white px-3 text-xs text-text-primary outline-none"
-                          />
                           <ActionBtn
                             variant="outline"
-                            onClick={async () => {
-                              const ids = (exceptionApproverInputs[item.id] ?? "")
-                                .split(",")
-                                .map((s) => Number(s.trim()))
-                                .filter((n) => n > 0);
-                              if (!ids.length) {
-                                toast({ title: t("approvalPage.hint"), variant: "error", description: t("approvalPage.invalidUserId") });
-                                return;
-                              }
-                              await handleRetryException(item, { action: "assign_approvers", approver_user_ids: ids });
+                            onClick={() => {
+                              setExceptionPickerTempIds([]);
+                              setExceptionPickerTempNames([]);
+                              setExceptionPickerSearch("");
+                              setExceptionPickerPage(1);
+                              setExceptionPickerHasMore(false);
+                              setExceptionPickerList([]);
+                              setExceptionPickerItem(item);
+                              setExceptionPickerOpen(true);
                             }}
                           >
                             {t("approvalPage.assignApproversAction")}
@@ -2022,6 +2043,98 @@ export default function ApprovalPage() {
               type="button"
               disabled={!editScenarioDialog.name.trim()}
               onClick={() => void handleSaveScenarioName()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
+            >
+              {t("approvalPage.save")}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Exception Approver Picker Dialog ────────────────────────────────── */}
+      <Dialog open={exceptionPickerOpen} onOpenChange={(v) => !v && setExceptionPickerOpen(false)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("approvalPage.assignApproversAction")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <input
+              value={exceptionPickerSearch}
+              onChange={(e) => setExceptionPickerSearch(e.target.value)}
+              placeholder={t("approvalPage.searchUser")}
+              className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+            />
+            <div
+              className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle"
+              onScroll={(e) => {
+                if (!exceptionPickerHasMore || exceptionPickerLoading) return;
+                const el = e.currentTarget;
+                if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+                  const nextPage = exceptionPickerPage + 1;
+                  setExceptionPickerPage(nextPage);
+                  loadExceptionPickerUsers(nextPage, exceptionPickerSearch, true);
+                }
+              }}
+            >
+              {exceptionPickerList.length === 0 && !exceptionPickerLoading && (
+                <div className="py-4 text-center text-xs text-text-secondary">{t("approvalPage.noUsers")}</div>
+              )}
+              {exceptionPickerList.map((u) => {
+                const checked = exceptionPickerTempIds.includes(u.user_id);
+                return (
+                  <label
+                    key={u.user_id}
+                    className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        if (checked) {
+                          setExceptionPickerTempIds((ids) => ids.filter((id) => id !== u.user_id));
+                          setExceptionPickerTempNames((names) =>
+                            names.filter((_, i) => exceptionPickerTempIds[i] !== u.user_id)
+                          );
+                        } else {
+                          setExceptionPickerTempIds((ids) => [...ids, u.user_id]);
+                          setExceptionPickerTempNames((names) => [...names, u.user_name]);
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-border-subtle accent-primary"
+                    />
+                    <span className="text-sm text-text-primary">{u.user_name}</span>
+                  </label>
+                );
+              })}
+              {exceptionPickerLoading && (
+                <div className="py-2 text-center text-xs text-text-secondary">{t("approvalPage.loading")}</div>
+              )}
+            </div>
+            {exceptionPickerTempIds.length > 0 && (
+              <div className="text-xs text-text-secondary">
+                已选 {exceptionPickerTempIds.length} 人：{exceptionPickerTempNames.join("、")}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setExceptionPickerOpen(false)}
+              className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+            >
+              {t("approvalPage.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={!exceptionPickerTempIds.length}
+              onClick={async () => {
+                if (!exceptionPickerItem || !exceptionPickerTempIds.length) return;
+                setExceptionPickerOpen(false);
+                await handleRetryException(exceptionPickerItem, {
+                  action: "assign_approvers",
+                  approver_user_ids: exceptionPickerTempIds,
+                });
+              }}
               className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
             >
               {t("approvalPage.save")}

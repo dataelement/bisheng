@@ -382,7 +382,6 @@ class ApprovalCenterService:
                 task.acted_at = datetime.utcnow()
                 await ApprovalInstanceRepository.update_task(task)
         instance.status = ApprovalInstanceStatus.WITHDRAWN
-        instance.reason = reason or instance.reason
         await ApprovalInstanceRepository.update_instance(instance)
         await ApprovalInstanceRepository.create_action_log(
             ApprovalActionLog(

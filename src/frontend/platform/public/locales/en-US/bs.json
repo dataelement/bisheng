@@ -2302,6 +2302,7 @@
     "retryAction": "Retry",
     "assignApproversAction": "Assign Approvers",
     "skipNodeAction": "Skip Node",
+    "noUsers": "No users found",
     "approverIdsPlaceholder": "Enter approver IDs separated by commas",
     "approverIdsRequired": "Enter at least one valid approver ID",
     "routeFallback": "Route",
