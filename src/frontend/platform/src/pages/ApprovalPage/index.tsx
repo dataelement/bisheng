@@ -135,6 +135,18 @@ function presetConditionFieldCodes(preset: ApprovalScenarioPreset | null | undef
     .filter(Boolean);
 }
 
+const PUBLISH_ALLOWED_CONDITION_FIELDS = new Set([
+  'applicant_role',
+  'source_space_level',
+  'target_space_level',
+]);
+
+function scenarioConditionFieldCodes(preset: ApprovalScenarioPreset | null | undefined): string[] {
+  const fields = presetConditionFieldCodes(preset);
+  if (preset?.scenario_code !== 'knowledge_space_file_publish_request') return fields;
+  return fields.filter((field) => PUBLISH_ALLOWED_CONDITION_FIELDS.has(field));
+}
+
 // All label strings below are i18n keys resolved with t() at render time.
 
 // Static fixed identity labels (always present regardless of system roles)
@@ -279,7 +291,7 @@ function AddScenarioDialog({
 
   const preset = available.find((p) => p.scenario_code === selected) ?? null;
 
-  const conditionFieldLabels = presetConditionFieldCodes(preset)
+  const conditionFieldLabels = scenarioConditionFieldCodes(preset)
     .map((f) => t(`approvalPage.condition.${f}`, { defaultValue: f }))
     .join("、");
 
@@ -1141,7 +1153,7 @@ export default function ApprovalPage() {
     }
     const preset = presets.find((p) => p.scenario_code === selectedScenario.scenario_code);
     // preset 字段是前端展示来源；未知字段也保留，并用通用文本输入兜底。
-    const presetFields = presetConditionFieldCodes(preset);
+    const presetFields = scenarioConditionFieldCodes(preset);
     return dedup([...ALWAYS_INCLUDED, ...presetFields]);
   }, [selectedScenario, presets]);
   // Approver source types allowed for the selected scenario (drives NodeDialog dropdown)

@@ -2296,8 +2296,8 @@
       "space_type": "知识空间类型",
       "space_level": "知识空间等级",
       "space_visibility": "空间可见性",
-      "source_space_level": "来源知识空间等级",
-      "target_space_level": "目标知识空间等级",
+      "source_space_level": "来源知识空间类型",
+      "target_space_level": "目标知识空间类型",
       "target_space_id": "目标知识空间"
     },
     "approverSource": {

@@ -83,10 +83,11 @@ vi.mock("react-i18next", () => ({
         "approvalPage.skipNodeAction": "跳过节点",
         "approvalPage.cancelExceptionAction": "取消异常",
         "approvalPage.inputApproverIds": "输入用户 ID，多个用逗号分隔",
+        "approvalPage.condition.applicant_role": "申请人身份",
         "approvalPage.condition.space_level": "知识空间等级",
         "approvalPage.condition.space_visibility": "空间可见性",
-        "approvalPage.condition.source_space_level": "来源知识空间等级",
-        "approvalPage.condition.target_space_level": "目标知识空间等级",
+        "approvalPage.condition.source_space_level": "来源知识空间类型",
+        "approvalPage.condition.target_space_level": "目标知识空间类型",
         "approvalPage.condition.target_space_id": "目标知识空间",
         "approvalPage.spaceLevel.public": "公共",
         "approvalPage.spaceLevel.department": "部门",
@@ -338,14 +339,14 @@ describe("ApprovalPage", () => {
     expect(listApprovalRoutesApi).toHaveBeenCalledTimes(2);
   });
 
-  it("shows Shougang space level condition fields from preset and submits selected enum value", async () => {
+  it("shows only Shougang publish identity and space type conditions from stale preset", async () => {
     const user = userEvent.setup();
     listApprovalScenarioPresetsApi.mockResolvedValue([
       {
         scenario_code: "knowledge_space_file_publish_request",
         scenario_name: "知识空间文件发布审批",
         handler_key: "knowledge_space_file_publish_request",
-        condition_fields: ["source_space_level", "target_space_level"],
+        condition_fields: ["applicant_role", "source_space_level", "target_space_level", "target_space_id"],
         approver_source_types: [
           "direct_user",
           "department_admin",
@@ -371,8 +372,10 @@ describe("ApprovalPage", () => {
     await screen.findByText("新增条件分支");
 
     const fieldSelect = getSelectWithOptionValue("target_space_level");
-    expect(within(fieldSelect).getByRole("option", { name: "来源知识空间等级" })).toHaveValue("source_space_level");
-    expect(within(fieldSelect).getByRole("option", { name: "目标知识空间等级" })).toHaveValue("target_space_level");
+    expect(within(fieldSelect).getByRole("option", { name: "申请人身份" })).toHaveValue("applicant_role");
+    expect(within(fieldSelect).getByRole("option", { name: "来源知识空间类型" })).toHaveValue("source_space_level");
+    expect(within(fieldSelect).getByRole("option", { name: "目标知识空间类型" })).toHaveValue("target_space_level");
+    expect(within(fieldSelect).queryByRole("option", { name: "目标知识空间" })).not.toBeInTheDocument();
 
     await user.selectOptions(fieldSelect, "target_space_level");
 
@@ -451,7 +454,7 @@ describe("ApprovalPage", () => {
     });
   });
 
-  it("uses target_space_id as a searchable target space selector and keeps match_config key", async () => {
+  it("filters target_space_id from stale Shougang publish preset", async () => {
     const user = userEvent.setup();
     listApprovalScenarioPresetsApi.mockResolvedValue([
       {
@@ -478,30 +481,10 @@ describe("ApprovalPage", () => {
     await user.click(screen.getByRole("button", { name: /新增分支/ }));
     await screen.findByText("新增条件分支");
 
-    await user.selectOptions(getSelectWithOptionValue("target_space_id"), "target_space_id");
-
-    await waitFor(() => {
-      expect(getManagedKnowledgeSpacesApi).toHaveBeenCalledWith({ order_by: "name" });
-      expect(getDepartmentKnowledgeSpacesApi).toHaveBeenCalledWith({ order_by: "name" });
-    });
-
-    const targetSpaceSelect = getSelectWithOptionValue("202");
-    expect(within(targetSpaceSelect).getByRole("option", { name: "公共空间A" })).toHaveValue("101");
-    expect(within(targetSpaceSelect).getByRole("option", { name: "部门空间B（研发部）" })).toHaveValue("202");
-
-    await user.selectOptions(targetSpaceSelect, "202");
-    await user.type(screen.getByPlaceholderText("如：管理员直接通过"), "发布到部门空间");
-    await user.selectOptions(getSelectWithOptionValue("pass"), "pass");
-    await user.click(screen.getByRole("button", { name: "保存" }));
-
-    await waitFor(() => {
-      expect(createApprovalRouteApi).toHaveBeenCalledWith(
-        32,
-        expect.objectContaining({
-          match_config: { field: "target_space_id", value: "202" },
-        }),
-      );
-    });
+    const fieldSelect = getSelectWithOptionValue("applicant_role");
+    expect(within(fieldSelect).queryByRole("option", { name: "目标知识空间" })).not.toBeInTheDocument();
+    expect(getManagedKnowledgeSpacesApi).not.toHaveBeenCalled();
+    expect(getDepartmentKnowledgeSpacesApi).not.toHaveBeenCalled();
   });
 
   it("filters approver source choices by Shougang publish preset", async () => {

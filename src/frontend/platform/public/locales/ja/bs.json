@@ -2296,8 +2296,8 @@
       "space_type": "ナレッジスペースタイプ",
       "space_level": "ナレッジスペースレベル",
       "space_visibility": "スペース公開範囲",
-      "source_space_level": "元スペースレベル",
-      "target_space_level": "対象スペースレベル",
+      "source_space_level": "元ナレッジスペースタイプ",
+      "target_space_level": "対象ナレッジスペースタイプ",
       "target_space_id": "対象ナレッジスペース"
     },
     "approverSource": {

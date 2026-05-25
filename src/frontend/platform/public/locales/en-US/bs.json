@@ -2346,8 +2346,8 @@
       "space_type": "Knowledge Space Type",
       "space_level": "Knowledge Space Level",
       "space_visibility": "Space Visibility",
-      "source_space_level": "Source Space Level",
-      "target_space_level": "Target Space Level",
+      "source_space_level": "Source Knowledge Space Type",
+      "target_space_level": "Target Knowledge Space Type",
       "target_space_id": "Target Knowledge Space"
     },
     "approverSource": {

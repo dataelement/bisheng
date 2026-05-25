@@ -940,7 +940,6 @@ def test_shougang_scenarios_registered_in_default_presets():
         "applicant_role",
         "source_space_level",
         "target_space_level",
-        "target_space_id",
     ]
     assert presets["knowledge_space_file_publish_request"].approver_source_types == [
         "direct_user",
@@ -970,8 +969,21 @@ def test_shougang_scenarios_registered_in_default_presets():
         option.field: option.model_dump()
         for option in presets["knowledge_space_file_publish_request"].condition_field_options
     }
-    assert publish_field_options["target_space_id"]["type"] == "selector"
-    assert publish_field_options["target_space_id"]["selector_type"] == "knowledge_space_publish_target"
+    assert "target_space_id" not in publish_field_options
+    assert publish_field_options["source_space_level"]["label"] == "来源知识空间类型"
+    assert publish_field_options["target_space_level"]["label"] == "目标知识空间类型"
+    assert [item["value"] for item in publish_field_options["source_space_level"]["values"]] == [
+        "public",
+        "department",
+        "team",
+        "personal",
+    ]
+    assert [item["value"] for item in publish_field_options["target_space_level"]["values"]] == [
+        "public",
+        "department",
+        "team",
+        "personal",
+    ]
     assert [
         option.source_type
         for option in presets["knowledge_space_file_publish_request"].approver_source_options
