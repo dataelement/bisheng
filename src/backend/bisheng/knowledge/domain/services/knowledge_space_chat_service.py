@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import List, Optional, AsyncIterator, Tuple, Dict, Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
@@ -23,7 +23,7 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
-from bisheng.database.models.tag import TagDao
+from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
@@ -467,6 +467,135 @@ class KnowledgeSpaceChatService:
             config = KnowledgeSpaceConfig()
 
         return llm, config
+
+    async def _resolve_kb_target_file_ids(
+        self,
+        knowledge_id: int,
+        tag_names: List[str],
+    ) -> Optional[List[int]]:
+        """Map a list of tag names (scoped to a knowledge space) to file ids.
+
+        Returns ``None`` when no tag filter is requested (caller treats as
+        whole-space). Returns an empty list when tags are provided but resolve
+        to no files (caller short-circuits and skips this KB).
+        """
+        if not tag_names:
+            return None
+
+        resolved_tag_ids: List[int] = []
+        for tag_name in tag_names:
+            tags = await TagDao.get_tags_by_business(
+                business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+                business_id=str(knowledge_id),
+                name=tag_name,
+            )
+            resolved_tag_ids.extend([t.id for t in tags])
+        if not resolved_tag_ids:
+            return []
+
+        tag_links = await TagDao.aget_resources_by_tags(
+            resolved_tag_ids,
+            resource_type=ResourceTypeEnum.SPACE_FILE,
+        )
+        return [int(link.resource_id) for link in tag_links]
+
+    async def aretrieve_chunks(
+        self,
+        *,
+        query: str,
+        knowledge_base_ids: List[int],
+        kb_filters: Optional[Dict[int, Dict[str, Any]]] = None,
+        top_k: int = 10,
+        max_content: int = 15000,
+    ) -> List[Tuple[int, Document]]:
+        """Retrieve chunks across one or more knowledge bases without LLM generation.
+
+        Args:
+            query: User question.
+            knowledge_base_ids: Knowledge space ids to search.
+            kb_filters: Optional ``{kb_id: {"tags": [name, ...], "tag_match_mode": "ANY"}}``
+                entries used to narrow each KB by tag. ``tag_match_mode`` other than
+                ``"ANY"`` raises HTTP 400.
+            top_k: Hard cap on returned chunks across all KBs.
+            max_content: Per-KB combined-content size limit handed to KnowledgeRetrieverTool.
+
+        Returns:
+            Up to ``top_k`` ``(knowledge_id, Document)`` pairs.
+        """
+        if not knowledge_base_ids:
+            raise HTTPException(status_code=400, detail="knowledge_base_ids must not be empty")
+
+        kb_id_set = set(knowledge_base_ids)
+        filters_by_kb: Dict[int, Dict[str, Any]] = {}
+        if kb_filters:
+            for kb_id, spec in kb_filters.items():
+                if kb_id not in kb_id_set:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"filter references kb_id {kb_id} not present in knowledge_base_ids",
+                    )
+                mode = (spec or {}).get("tag_match_mode", "ANY")
+                if mode != "ANY":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="tag_match_mode=ALL is not yet supported",
+                    )
+                filters_by_kb[kb_id] = spec
+
+        per_kb_results = await asyncio.gather(
+            *(
+                self._aretrieve_chunks_for_kb(
+                    kb_id,
+                    query=query,
+                    tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
+                    max_content=max_content,
+                )
+                for kb_id in knowledge_base_ids
+            )
+        )
+
+        flattened: List[Tuple[int, Document]] = []
+        for chunks in per_kb_results:
+            flattened.extend(chunks)
+        return flattened[:top_k]
+
+    async def _aretrieve_chunks_for_kb(
+        self,
+        kb_id: int,
+        *,
+        query: str,
+        tag_names: List[str],
+        max_content: int,
+    ) -> List[Tuple[int, Document]]:
+        """Retrieve chunks for a single knowledge base. Raises NotFoundError if missing."""
+        await self._require_space_view_permission(kb_id)
+        space = await KnowledgeDao.aquery_by_id(kb_id)
+        if not space:
+            raise NotFoundError(msg=f"Knowledge base {kb_id} not found")
+
+        target_file_ids = await self._resolve_kb_target_file_ids(kb_id, tag_names)
+        if tag_names and not target_file_ids:
+            return []
+
+        milvus_kwargs, es_kwargs = await self._build_folder_search_kwargs(kb_id, target_file_ids)
+        if milvus_kwargs is None and es_kwargs is None:
+            return []
+
+        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
+            self.login_user.user_id, knowledge=space
+        )
+        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=space)
+        vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
+        es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
+
+        retriever_tool = KnowledgeRetrieverTool(
+            vector_retriever=vector_retriever,
+            elastic_retriever=es_retriever,
+            max_content=max_content,
+            sort_by_source_and_index=False,
+        )
+        docs: List[Document] = await retriever_tool.ainvoke(query)
+        return [(kb_id, d) for d in docs]
 
     @staticmethod
     async def get_history(chat_id: str, limit: int = 4) -> List[BaseMessage]:
