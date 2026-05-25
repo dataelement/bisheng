@@ -608,7 +608,6 @@ export default function PortalKnowledgeWorkbench() {
             eligibleSourceSpace
             && !file.isCreating
             && file.type !== FileType.FOLDER
-            && file.status === FileStatus.SUCCESS
             && /^\d+$/.test(String(file.id))
         ));
         if (!activeSpace || candidates.length === 0) {
@@ -622,18 +621,15 @@ export default function PortalKnowledgeWorkbench() {
 
         let cancelled = false;
         const controller = new AbortController();
-        Promise.all(candidates.map(async (file) => {
-            const result = await checkPermission(
-                "knowledge_file",
-                file.id,
-                "can_edit",
-                "upload_file",
-                { signal: controller.signal },
-            ).catch(() => ({ allowed: false }));
-            return { id: file.id, allowed: Boolean(result.allowed) };
-        })).then((results) => {
+        checkPermission(
+            "knowledge_space",
+            activeSpace.id,
+            "can_edit",
+            "upload_file",
+            { signal: controller.signal },
+        ).catch(() => ({ allowed: false })).then((result) => {
             if (cancelled) return;
-            setPublishIds(new Set(results.filter((item) => item.allowed).map((item) => item.id)));
+            setPublishIds(result.allowed ? new Set(candidates.map((file) => file.id)) : new Set());
         });
         return () => {
             cancelled = true;
@@ -999,12 +995,11 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [selectedFile?.fileEncoding, showToast]);
 
-    const canPublishFile = useCallback((file: KnowledgeFile) => {
+    const canShowPublishFile = useCallback((file: KnowledgeFile) => {
         return Boolean(
             activeSpace
             && (activeSpace.spaceLevel === SpaceLevel.TEAM || activeSpace.spaceLevel === SpaceLevel.PERSONAL)
             && file.type !== FileType.FOLDER
-            && file.status === FileStatus.SUCCESS
             && publishEntryIds.has(file.id),
         );
     }, [activeSpace, publishEntryIds]);
@@ -1142,7 +1137,7 @@ export default function PortalKnowledgeWorkbench() {
                 onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
                 onSelectFile={handleSelectFile}
                 onToggleFileSelection={handleToggleFileSelection}
-                canPublishFile={canPublishFile}
+                canShowPublishFile={canShowPublishFile}
                 onPublishFile={setPublishingFile}
                 onToggleFolder={(node) => void handleToggleFolder(node)}
                 onLoadMoreChildren={(node) => void handleLoadMoreChildren(node)}

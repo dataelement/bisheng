@@ -528,10 +528,9 @@ async def test_file_publish_source_requires_upload_file_permission():
     )
 
     space_service._require_permission_id.assert_awaited_once_with(
-        "knowledge_file",
-        100,
+        "knowledge_space",
+        10,
         "upload_file",
-        space_id=10,
     )
 
 
@@ -770,7 +769,7 @@ async def test_file_publish_query_requires_publish_permissions(monkeypatch):
         space_service=space_service,
     )
 
-    space_service._require_permission_id.assert_any_await("knowledge_file", 100, "upload_file", space_id=10)
+    space_service._require_permission_id.assert_any_await("knowledge_space", 10, "upload_file")
     service._ensure_publish_target_space.assert_awaited_once_with(20, space_service=space_service)
 
 

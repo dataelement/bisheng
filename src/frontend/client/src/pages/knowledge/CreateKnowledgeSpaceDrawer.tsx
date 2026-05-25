@@ -178,24 +178,24 @@ export function CreateKnowledgeSpaceDrawer({
         {
             value: SpaceLevel.PUBLIC,
             label: localize("com_knowledge.public_spaces"),
-            enabled: approvalCreateMode || (createOptions?.canCreatePublic ?? false),
+            enabled: createOptions?.canCreatePublic ?? false,
         },
         {
             value: SpaceLevel.DEPARTMENT,
             label: localize("com_knowledge.department_spaces"),
-            enabled: approvalCreateMode || (createOptions?.canCreateDepartment ?? false),
+            enabled: createOptions?.canCreateDepartment ?? false,
         },
         {
             value: SpaceLevel.TEAM,
             label: localize("com_knowledge.team_spaces"),
-            enabled: approvalCreateMode || (createOptions?.canCreateTeam ?? false),
+            enabled: createOptions?.canCreateTeam ?? false,
         },
         {
             value: SpaceLevel.PERSONAL,
             label: localize("com_knowledge.personal_spaces"),
             enabled: createOptions?.canCreatePersonal ?? true,
         },
-    ]), [approvalCreateMode, createOptions, localize]);
+    ]), [createOptions, localize]);
     const visibleLevelOptions = useMemo(
         () => levelOptions.filter((option) => option.enabled),
         [levelOptions],

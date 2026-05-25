@@ -69,8 +69,8 @@ jest.mock("~/components/ui/DropdownMenu", () => ({
     DropdownMenu: ({ children }: any) => <div>{children}</div>,
     DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
     DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
-    DropdownMenuItem: ({ children, onClick }: any) => (
-        <button type="button" onClick={onClick}>
+    DropdownMenuItem: ({ children, disabled, onClick }: any) => (
+        <button type="button" disabled={disabled} onClick={onClick}>
             {children}
         </button>
     ),
@@ -918,6 +918,105 @@ describe("PortalKnowledgeWorkbench", () => {
                 reason: undefined,
             });
         });
+    });
+
+    test("hides publish action without knowledge space upload permission", async () => {
+        const teamSpace = makeSpace("team-1", "团队空间01", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.TEAM,
+        });
+        const file = makeFile("302", "无权限文件.pdf", {
+            type: FileType.PDF,
+            status: FileStatus.SUCCESS,
+            spaceId: "team-1",
+        });
+        mockCheckPermission.mockImplementation((objectType, _objectId, _relation, permissionId) => {
+            if (objectType === "knowledge_space" && permissionId === "upload_file") {
+                return Promise.resolve({ allowed: false });
+            }
+            if (objectType === "knowledge_file" && permissionId === "upload_file") {
+                return Promise.resolve({ allowed: true });
+            }
+            return Promise.resolve({ allowed: true });
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-302");
+
+        await waitFor(() => {
+            expect(mockCheckPermission).toHaveBeenCalledWith(
+                "knowledge_space",
+                "team-1",
+                "can_edit",
+                "upload_file",
+                expect.any(Object),
+            );
+        });
+        expect(within(fileRow).queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
+    });
+
+    test("disables publish action for non-success file when space upload permission exists", async () => {
+        const teamSpace = makeSpace("team-1", "团队空间01", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.TEAM,
+        });
+        const successFile = makeFile("303", "可发布.pdf", {
+            type: FileType.PDF,
+            status: FileStatus.SUCCESS,
+            spaceId: "team-1",
+        });
+        const processingFile = makeFile("304", "解析中文件.pdf", {
+            type: FileType.PDF,
+            status: FileStatus.PROCESSING,
+            spaceId: "team-1",
+        });
+        mockCheckPermission.mockImplementation((objectType, _objectId, _relation, permissionId) => {
+            if (objectType === "knowledge_space" && permissionId === "upload_file") {
+                return Promise.resolve({ allowed: true });
+            }
+            return Promise.resolve({ allowed: true });
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [successFile, processingFile],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const successRow = await screen.findByTestId("file-tree-row-303");
+        const processingRow = await screen.findByTestId("file-tree-row-304");
+
+        await waitFor(() => {
+            expect(mockCheckPermission).toHaveBeenCalledWith(
+                "knowledge_space",
+                "team-1",
+                "can_edit",
+                "upload_file",
+                expect.any(Object),
+            );
+        });
+        expect(within(successRow).getByRole("button", { name: "发布" })).toBeEnabled();
+        expect(within(processingRow).getByRole("button", { name: "发布" })).toBeDisabled();
+
+        fireEvent.click(within(processingRow).getByRole("button", { name: "发布" }));
+        expect(screen.queryByText("发布文件")).not.toBeInTheDocument();
     });
 
     test("opens approval center and notifications from portal shell messages", async () => {

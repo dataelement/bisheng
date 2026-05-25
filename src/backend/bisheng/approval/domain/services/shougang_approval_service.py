@@ -333,10 +333,9 @@ class ShougangApprovalService:
             raise HTTPException(status_code=400, detail='仅解析成功文件可发布')
         if space_service is not None:
             await space_service._require_permission_id(
-                'knowledge_file',
-                int(source_file.id),
+                'knowledge_space',
+                int(source_file.knowledge_id),
                 'upload_file',
-                space_id=int(source_file.knowledge_id),
             )
 
     async def _ensure_publish_target_space(self, target_space_id: int, space_service=None):

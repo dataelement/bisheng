@@ -61,7 +61,7 @@ interface FilePaneProps {
     onCancelCreateFolder: () => void;
     onSelectFile: (file: KnowledgeFile) => void;
     onToggleFileSelection: (file: KnowledgeFile, checked: boolean) => void;
-    canPublishFile: (file: KnowledgeFile) => boolean;
+    canShowPublishFile: (file: KnowledgeFile) => boolean;
     onPublishFile: (file: KnowledgeFile) => void;
     onToggleFolder: (node: PortalFileTreeNode) => void;
     onLoadMoreChildren: (node: PortalFileTreeNode) => void;
@@ -104,7 +104,7 @@ export function FilePane({
     onCancelCreateFolder,
     onSelectFile,
     onToggleFileSelection,
-    canPublishFile,
+    canShowPublishFile,
     onPublishFile,
     onToggleFolder,
     onLoadMoreChildren,
@@ -246,7 +246,7 @@ export function FilePane({
                                 onCancelCreateFolder={onCancelCreateFolder}
                                 onSelectFile={onSelectFile}
                                 onToggleFileSelection={onToggleFileSelection}
-                                canPublishFile={canPublishFile}
+                                canShowPublishFile={canShowPublishFile}
                                 onPublishFile={onPublishFile}
                                 onToggleFolder={onToggleFolder}
                                 onLoadMoreChildren={onLoadMoreChildren}
@@ -268,7 +268,7 @@ export function FilePane({
                             onCancelCreateFolder={onCancelCreateFolder}
                             onSelectFile={onSelectFile}
                             onToggleFileSelection={onToggleFileSelection}
-                            canPublishFile={canPublishFile}
+                            canShowPublishFile={canShowPublishFile}
                             onPublishFile={onPublishFile}
                             onToggleFolder={onToggleFolder}
                             onLoadMoreChildren={onLoadMoreChildren}

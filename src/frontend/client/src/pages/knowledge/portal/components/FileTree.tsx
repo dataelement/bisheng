@@ -30,7 +30,7 @@ interface FileTreeProps {
     onCancelCreateFolder: () => void;
     onSelectFile: (file: KnowledgeFile) => void;
     onToggleFileSelection: (file: KnowledgeFile, checked: boolean) => void;
-    canPublishFile: (file: KnowledgeFile) => boolean;
+    canShowPublishFile: (file: KnowledgeFile) => boolean;
     onPublishFile: (file: KnowledgeFile) => void;
     onToggleFolder: (node: PortalFileTreeNode) => void;
     onLoadMoreChildren: (node: PortalFileTreeNode) => void;
@@ -66,7 +66,7 @@ export function FileTree({
     onCancelCreateFolder,
     onSelectFile,
     onToggleFileSelection,
-    canPublishFile,
+    canShowPublishFile,
     onPublishFile,
     onToggleFolder,
     onLoadMoreChildren,
@@ -76,6 +76,7 @@ export function FileTree({
         const active = selectedFileId === file.id;
         const label = statusText(file);
         const countText = isFolder(file) ? folderCountText(file) : "";
+        const publishDisabled = file.status !== FileStatus.SUCCESS;
         return (
             <div
                 key={file.id}
@@ -139,7 +140,7 @@ export function FileTree({
                 </button>
                 {countText ? <span className={s.folderCount}>{countText}</span> : null}
                 {!isFolder(file) && label ? <span className={getStatusClassName(file)}>{label}</span> : null}
-                {!isFolder(file) && canPublishFile(file) ? (
+                {!isFolder(file) && canShowPublishFile(file) ? (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button
@@ -153,7 +154,9 @@ export function FileTree({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className={s.actionMenu}>
                             <DropdownMenuItem
+                                disabled={publishDisabled}
                                 onClick={(event) => {
+                                    if (publishDisabled) return;
                                     event?.stopPropagation?.();
                                     onPublishFile(file);
                                 }}
