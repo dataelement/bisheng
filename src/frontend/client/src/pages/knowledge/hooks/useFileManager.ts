@@ -62,6 +62,21 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
     const [currentPath, setCurrentPath] = useState<Array<{ id?: string; name: string }>>([]);
 
+    // Optimistic-deletion ignore set. Held in a ref so loadFiles can read the
+    // latest value synchronously without re-rendering. Items in this set are
+    // dropped from any list fetched by the server until cleared, preventing
+    // the auto-refresh poll from "reviving" a row whose delete API hasn't
+    // returned yet (folders with many files can take a long time on the API).
+    const pendingDeletionIdsRef = useRef<Set<string>>(new Set());
+
+    const markPendingDeletion = useCallback((ids: Array<string | number>) => {
+        ids.forEach(id => pendingDeletionIdsRef.current.add(String(id)));
+    }, []);
+
+    const clearPendingDeletion = useCallback((ids: Array<string | number>) => {
+        ids.forEach(id => pendingDeletionIdsRef.current.delete(String(id)));
+    }, []);
+
     const { showToast } = useToastContext();
 
     // ─── Load file/folder list ──────────────────────────────────────────
@@ -99,10 +114,17 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                     });
                 const mergedData = res.data;
                 const mergedTotal = res.total;
-                setFiles(mergedData);
-                setTotal(mergedTotal);
+                // Filter out rows that the user has optimistically deleted but
+                // whose backend deletion has not yet returned (ghosts).
+                const ignore = pendingDeletionIdsRef.current;
+                const visibleData = ignore.size > 0
+                    ? mergedData.filter(f => !ignore.has(String(f.id)))
+                    : mergedData;
+                const ghostCount = mergedData.length - visibleData.length;
+                setFiles(visibleData);
+                setTotal(Math.max(0, mergedTotal - ghostCount));
                 setCurrentPage(page);
-                return mergedData;
+                return visibleData;
             } catch {
                 showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
                 return [];
@@ -290,5 +312,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         handleSort,
         handlePageChange,
         handleNavigateFolder,
+        markPendingDeletion,
+        clearPendingDeletion,
     };
 }

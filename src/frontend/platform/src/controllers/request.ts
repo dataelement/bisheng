@@ -88,9 +88,19 @@ function decodeEnvelopeMessage(envelope: any) {
         ? i18next.t(mappedStatusMessageKey, envelope?.data)
         : null
 
-    return i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
+    const finalMsg = i18MsgFromStatus && i18MsgFromStatus !== mappedStatusMessageKey
         ? i18MsgFromStatus
         : (i18Msg !== `errors.${statusCode}` ? i18Msg : statusMessage)
+
+    // Defensive fallback: backend may leave Msg template like "{message}" or
+    // "{field_name}" unsubstituted (BaseErrorCode does not .format(**kwargs)).
+    // Surface envelope.data.message rather than the literal placeholder so the
+    // user sees a meaningful error instead of "{message}".
+    if (/^\{\w+\}$/.test(String(finalMsg).trim())) {
+        const fromData = coerceErrorMessage(envelope?.data?.message)
+        if (fromData) return fromData
+    }
+    return finalMsg
 }
 
 // Detect the unified envelope shape so we can apply the same message
