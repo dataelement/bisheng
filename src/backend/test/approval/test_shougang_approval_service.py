@@ -52,6 +52,24 @@ def _patch_non_exempt_user(monkeypatch):
     )
 
 
+def _patch_exception_repository(monkeypatch, instance_id: int = 501):
+    create_instance = AsyncMock(side_effect=lambda row: row.model_copy(update={"id": instance_id}))
+    create_exception = AsyncMock(side_effect=lambda row: row)
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.ApprovalInstanceRepository.create_instance",
+        create_instance,
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.ApprovalInstanceRepository.create_exception",
+        create_exception,
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.approval_gate.ApprovalGate._notify_admins_of_exception",
+        AsyncMock(return_value=None),
+    )
+    return create_instance, create_exception
+
+
 @pytest.mark.asyncio
 async def test_regular_user_public_space_create_validates_as_approval_request(monkeypatch):
     from bisheng.approval.domain.schemas.shougang_approval_schema import (
@@ -163,6 +181,69 @@ async def test_knowledge_space_create_submit_requires_approval_without_creating(
     assert result["decision"] == "pending"
     assert result["created"] is False
     message_service.send_generic_approval.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_knowledge_space_create_creates_exception_when_scenario_disabled(monkeypatch):
+    from bisheng.approval.domain.models.approval_instance import (
+        ApprovalExceptionType,
+        ApprovalInstanceStatus,
+    )
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangKnowledgeSpaceCreateSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import (
+        ShougangApprovalService,
+    )
+    from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    space_service = SimpleNamespace(
+        validate_knowledge_space_create=AsyncMock(return_value=None),
+        create_knowledge_space=AsyncMock(),
+    )
+    approval_gate = SimpleNamespace(
+        request_or_pass=AsyncMock(side_effect=ApprovalScenarioDisabledError())
+    )
+    create_instance, create_exception = _patch_exception_repository(monkeypatch, instance_id=501)
+    service = ShougangApprovalService(approval_gate=approval_gate)
+    monkeypatch.setattr(service, "_is_create_approval_exempt", AsyncMock(return_value=False))
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+
+    result = await service.submit_knowledge_space_create(
+        req=ShougangKnowledgeSpaceCreateSubmitReq(
+            name="团队资料库",
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=True,
+            space_level=KnowledgeSpaceLevelEnum.TEAM,
+            user_group_id=7,
+            reason="申请创建",
+        ),
+        login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
+        space_service=space_service,
+    )
+
+    space_service.create_knowledge_space.assert_not_called()
+    assert result == {
+        "decision": "exception",
+        "instance_id": 501,
+        "task_ids": [],
+        "exception_type": ApprovalExceptionType.ROUTE_MISSING,
+        "created": False,
+    }
+    saved_instance = create_instance.await_args.args[0]
+    assert saved_instance.status == ApprovalInstanceStatus.EXCEPTION
+    assert saved_instance.scenario_code == "knowledge_space_create_request"
+    assert saved_instance.scenario_name == "知识空间创建审批"
+    assert saved_instance.business_name == "新建知识库：团队资料库"
+    assert saved_instance.applicant_user_id == 11
+    assert saved_instance.payload_snapshot["create_params"]["name"] == "团队资料库"
+    assert saved_instance.detail_snapshot["type"] == "knowledge_space_create"
+    assert saved_instance.detail_snapshot["name"] == "团队资料库"
+    saved_exception = create_exception.await_args.args[0]
+    assert saved_exception.instance_id == 501
+    assert saved_exception.exception_type == ApprovalExceptionType.ROUTE_MISSING
 
 
 @pytest.mark.asyncio
@@ -536,6 +617,75 @@ async def test_file_publish_submit_requires_team_or_personal_success_file(monkey
     assert gate_req.payload_snapshot["source_file_id"] == 100
     assert gate_req.payload_snapshot["target_space_id"] == 20
     assert result["created"] is False
+
+
+@pytest.mark.asyncio
+async def test_file_publish_creates_exception_when_scenario_disabled(monkeypatch):
+    from bisheng.approval.domain.models.approval_instance import (
+        ApprovalExceptionType,
+        ApprovalInstanceStatus,
+    )
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    service = ShougangApprovalService(
+        approval_gate=SimpleNamespace(
+            request_or_pass=AsyncMock(side_effect=ApprovalScenarioDisabledError())
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(
+            return_value=(
+                SimpleNamespace(id=10, name="团队空间"),
+                SimpleNamespace(id=100, file_name="制度.pdf", status=KnowledgeFileStatus.SUCCESS.value),
+                KnowledgeSpaceLevelEnum.TEAM,
+            )
+        ),
+    )
+    monkeypatch.setattr(service, "_ensure_can_publish_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        service,
+        "_ensure_publish_target_space",
+        AsyncMock(return_value=SimpleNamespace(id=20, name="公共空间", space_level=KnowledgeSpaceLevelEnum.PUBLIC.value)),
+    )
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+    create_instance, create_exception = _patch_exception_repository(monkeypatch, instance_id=502)
+
+    result = await service.submit_file_publish(
+        req=ShougangFilePublishSubmitReq(
+            source_space_id=10,
+            source_file_id=100,
+            target_space_id=20,
+            target_document_id=None,
+            reason="发布到公共空间",
+        ),
+        login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
+    )
+
+    assert result == {
+        "decision": "exception",
+        "instance_id": 502,
+        "task_ids": [],
+        "exception_type": ApprovalExceptionType.ROUTE_MISSING,
+        "created": False,
+    }
+    saved_instance = create_instance.await_args.args[0]
+    assert saved_instance.status == ApprovalInstanceStatus.EXCEPTION
+    assert saved_instance.scenario_code == "knowledge_space_file_publish_request"
+    assert saved_instance.scenario_name == "知识空间文件发布审批"
+    assert saved_instance.business_name == "发布文件：制度.pdf → 公共空间"
+    assert saved_instance.payload_snapshot["source_file_id"] == 100
+    assert saved_instance.payload_snapshot["target_space_id"] == 20
+    assert saved_instance.detail_snapshot["type"] == "knowledge_space_file_publish"
+    assert saved_instance.detail_snapshot["source_file_name"] == "制度.pdf"
+    saved_exception = create_exception.await_args.args[0]
+    assert saved_exception.instance_id == 502
+    assert saved_exception.exception_type == ApprovalExceptionType.ROUTE_MISSING
 
 
 @pytest.mark.asyncio

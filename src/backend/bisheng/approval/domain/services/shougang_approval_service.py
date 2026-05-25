@@ -4,10 +4,17 @@ from typing import Any, Optional
 
 from fastapi import HTTPException
 
+from bisheng.approval.domain.models.approval_instance import (
+    ApprovalException,
+    ApprovalExceptionType,
+    ApprovalInstance,
+    ApprovalInstanceStatus,
+)
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateDecision,
     ApprovalGateRequest,
+    ApprovalGateResult,
 )
 from bisheng.approval.domain.schemas.shougang_approval_schema import (
     ShougangFilePublishDocumentSearchResp,
@@ -27,6 +34,7 @@ from bisheng.approval.domain.services.shougang_approval_handler import (
     KnowledgeSpaceCreateApprovalHandler,
     KnowledgeSpaceFilePublishApprovalHandler,
 )
+from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -163,6 +171,62 @@ class ShougangApprovalService:
                 return result.model_dump()
         return dict(result)
 
+    async def _request_or_create_config_exception(
+        self,
+        *,
+        req: ApprovalGateRequest,
+        scenario_name: str,
+        handler: Any,
+    ) -> ApprovalGateResult:
+        try:
+            return await self.approval_gate.request_or_pass(req)
+        except ApprovalScenarioDisabledError:
+            detail_snapshot = await handler.build_detail(req)
+            business_name = await handler.build_title(req)
+            instance = await ApprovalInstanceRepository.create_instance(
+                ApprovalInstance(
+                    tenant_id=req.tenant_id,
+                    scenario_code=req.scenario_code,
+                    scenario_name=scenario_name,
+                    handler_key=req.scenario_code,
+                    business_key=req.business_key,
+                    business_resource_type=req.business_resource_type,
+                    business_resource_id=req.business_resource_id,
+                    business_name=business_name,
+                    applicant_user_id=req.applicant_user_id,
+                    applicant_user_name=req.applicant_user_name,
+                    applicant_department_id=req.applicant_department_id,
+                    status=ApprovalInstanceStatus.EXCEPTION,
+                    reason=req.reason,
+                    payload_snapshot=req.payload_snapshot,
+                    detail_snapshot=detail_snapshot,
+                )
+            )
+            await ApprovalInstanceRepository.create_exception(
+                ApprovalException(
+                    tenant_id=req.tenant_id,
+                    instance_id=int(instance.id),
+                    exception_type=ApprovalExceptionType.ROUTE_MISSING,
+                    detail={
+                        'scenario_code': req.scenario_code,
+                        'business_key': req.business_key,
+                        'current_node_name': None,
+                    },
+                )
+            )
+            await ApprovalGate._notify_admins_of_exception(
+                tenant_id=req.tenant_id,
+                applicant_user_id=req.applicant_user_id,
+                exception_type=ApprovalExceptionType.ROUTE_MISSING,
+                business_name=business_name,
+                instance_id=int(instance.id),
+            )
+            return ApprovalGateResult(
+                decision=ApprovalGateDecision.EXCEPTION,
+                instance_id=int(instance.id),
+                exception_type=ApprovalExceptionType.ROUTE_MISSING,
+            )
+
     async def validate_knowledge_space_create(
         self,
         *,
@@ -209,32 +273,35 @@ class ShougangApprovalService:
             }
 
         applicant_department_id = await self._get_primary_department_id(login_user)
-        result = await self.approval_gate.request_or_pass(
-            ApprovalGateRequest(
-                tenant_id=login_user.tenant_id,
-                scenario_code=KNOWLEDGE_SPACE_CREATE_SCENARIO,
-                business_key=f"knowledge-space-create:user:{login_user.user_id}:level:{params.get('space_level')}:name:{params.get('name')}",
-                business_resource_type='knowledge_space_create_request',
-                business_resource_id=f"{params.get('space_level')}:{params.get('name')}",
-                business_name=f"新建知识库：{params.get('name')}",
-                applicant_user_id=login_user.user_id,
-                applicant_user_name=login_user.user_name,
-                applicant_department_id=applicant_department_id,
-                reason=req.reason,
-                payload_snapshot={
-                    'tenant_id': login_user.tenant_id,
-                    'applicant_user_id': login_user.user_id,
-                    'applicant_user_name': login_user.user_name,
-                    'applicant_department_id': applicant_department_id,
-                    'space_level': params.get('space_level'),
-                    'space_visibility': self._space_visibility_for_payload(params),
-                    'auth_type': params.get('auth_type'),
-                    'is_released': params.get('is_released'),
-                    'department_id': params.get('department_id'),
-                    'user_group_id': params.get('user_group_id'),
-                    'create_params': params,
-                },
-            )
+        approval_req = ApprovalGateRequest(
+            tenant_id=login_user.tenant_id,
+            scenario_code=KNOWLEDGE_SPACE_CREATE_SCENARIO,
+            business_key=f"knowledge-space-create:user:{login_user.user_id}:level:{params.get('space_level')}:name:{params.get('name')}",
+            business_resource_type='knowledge_space_create_request',
+            business_resource_id=f"{params.get('space_level')}:{params.get('name')}",
+            business_name=f"新建知识库：{params.get('name')}",
+            applicant_user_id=login_user.user_id,
+            applicant_user_name=login_user.user_name,
+            applicant_department_id=applicant_department_id,
+            reason=req.reason,
+            payload_snapshot={
+                'tenant_id': login_user.tenant_id,
+                'applicant_user_id': login_user.user_id,
+                'applicant_user_name': login_user.user_name,
+                'applicant_department_id': applicant_department_id,
+                'space_level': params.get('space_level'),
+                'space_visibility': self._space_visibility_for_payload(params),
+                'auth_type': params.get('auth_type'),
+                'is_released': params.get('is_released'),
+                'department_id': params.get('department_id'),
+                'user_group_id': params.get('user_group_id'),
+                'create_params': params,
+            },
+        )
+        result = await self._request_or_create_config_exception(
+            req=approval_req,
+            scenario_name='知识空间创建审批',
+            handler=KnowledgeSpaceCreateApprovalHandler(),
         )
         await self._send_approval_message(
             login_user=login_user,
@@ -404,35 +471,38 @@ class ShougangApprovalService:
 
         applicant_department_id = await self._get_primary_department_id(login_user)
         file_name = getattr(source_file, 'file_name', None) or getattr(source_file, 'name', None) or str(source_file.id)
-        result = await self.approval_gate.request_or_pass(
-            ApprovalGateRequest(
-                tenant_id=login_user.tenant_id,
-                scenario_code=FILE_PUBLISH_SCENARIO,
-                business_key=f"knowledge-file-publish:file:{req.source_file_id}:target:{req.target_space_id}:user:{login_user.user_id}",
-                business_resource_type='knowledge_space_file_publish_request',
-                business_resource_id=f"{req.source_file_id}:{req.target_space_id}",
-                business_name=f"发布文件：{file_name}",
-                applicant_user_id=login_user.user_id,
-                applicant_user_name=login_user.user_name,
-                applicant_department_id=applicant_department_id,
-                reason=req.reason,
-                payload_snapshot={
-                    'tenant_id': login_user.tenant_id,
-                    'applicant_user_id': login_user.user_id,
-                    'applicant_user_name': login_user.user_name,
-                    'applicant_department_id': applicant_department_id,
-                    'source_space_id': int(source_space.id),
-                    'source_space_name': source_space.name,
-                    'source_space_level': self._enum_value(source_level),
-                    'source_file_id': int(source_file.id),
-                    'source_file_name': file_name,
-                    'target_space_id': int(target_space.id),
-                    'target_space_name': target_space.name,
-                    'target_space_level': target_level,
-                    'target_document_id': req.target_document_id,
-                    'target_document_title': target_document_title,
-                },
-            )
+        approval_req = ApprovalGateRequest(
+            tenant_id=login_user.tenant_id,
+            scenario_code=FILE_PUBLISH_SCENARIO,
+            business_key=f"knowledge-file-publish:file:{req.source_file_id}:target:{req.target_space_id}:user:{login_user.user_id}",
+            business_resource_type='knowledge_space_file_publish_request',
+            business_resource_id=f"{req.source_file_id}:{req.target_space_id}",
+            business_name=f"发布文件：{file_name}",
+            applicant_user_id=login_user.user_id,
+            applicant_user_name=login_user.user_name,
+            applicant_department_id=applicant_department_id,
+            reason=req.reason,
+            payload_snapshot={
+                'tenant_id': login_user.tenant_id,
+                'applicant_user_id': login_user.user_id,
+                'applicant_user_name': login_user.user_name,
+                'applicant_department_id': applicant_department_id,
+                'source_space_id': int(source_space.id),
+                'source_space_name': source_space.name,
+                'source_space_level': self._enum_value(source_level),
+                'source_file_id': int(source_file.id),
+                'source_file_name': file_name,
+                'target_space_id': int(target_space.id),
+                'target_space_name': target_space.name,
+                'target_space_level': target_level,
+                'target_document_id': req.target_document_id,
+                'target_document_title': target_document_title,
+            },
+        )
+        result = await self._request_or_create_config_exception(
+            req=approval_req,
+            scenario_name='知识空间文件发布审批',
+            handler=KnowledgeSpaceFilePublishApprovalHandler(),
         )
         await self._send_approval_message(
             login_user=login_user,
