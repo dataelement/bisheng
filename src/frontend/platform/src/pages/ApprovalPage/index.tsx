@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import SelectSearch from "@/components/bs-ui/select/select";
@@ -14,13 +14,12 @@ import {
 } from "@/components/bs-ui/dialog";
 import {
   createApprovalFlowApi,
-  createApprovalNodeApi,
   createApprovalRouteApi,
   createApprovalScenarioApi,
   deleteApprovalFlowApi,
-  deleteApprovalNodeApi,
   deleteApprovalRouteApi,
   deleteApprovalScenarioApi,
+  getApprovalInstanceDetailForAdminApi,
   listApprovalFlowsApi,
   listApprovalExceptionsApi,
   listApprovalNodesApi,
@@ -28,14 +27,15 @@ import {
   listApprovalScenarioPresetsApi,
   listApprovalScenariosApi,
   reorderApprovalRoutesApi,
+  setApprovalFlowNodesApi,
   cancelApprovalExceptionApi,
   retryApprovalExceptionApi,
   updateApprovalFlowApi,
-  updateApprovalNodeApi,
   updateApprovalRouteApi,
   updateApprovalScenarioApi,
   type ApprovalExceptionItem,
   type ApprovalFlowItem,
+  type ApprovalInstanceDetail,
   type ApprovalNodeItem,
   type ApprovalRouteItem,
   type ApprovalScenarioItem,
@@ -57,7 +57,10 @@ function formatDateTime(isoStr?: string): string {
 }
 
 // Keys shown separately in the business-info row or purely internal — skip in detail table
-const HIDDEN_DETAIL_KEYS = new Set(["business_key", "scenario_code", "exception_type"]);
+const HIDDEN_DETAIL_KEYS = new Set([
+  "business_key", "scenario_code", "exception_type",
+  "node_code", "node_mode", "node_name", "node_order",
+]);
 
 function StatusBadge({ enabled }: { enabled?: boolean }) {
   return enabled ? (
@@ -907,6 +910,192 @@ function NodeDialog({
   );
 }
 
+// ─── Approval progress timeline (for exception detail) ───────────────────────
+
+const NODE_BADGE_MAP: Record<string, { text: string; cls: string }> = {
+  approved:  { text: "已通过",   cls: "bg-green-50 text-green-600" },
+  rejected:  { text: "已拒绝",   cls: "bg-red-50 text-red-600" },
+  pending:   { text: "待审批",   cls: "bg-blue-50 text-blue-600" },
+  skipped:   { text: "已跳过",   cls: "bg-gray-100 text-gray-500" },
+  cancelled: { text: "已取消",   cls: "bg-gray-100 text-gray-500" },
+};
+
+function taskIcon(status: string): { icon: string; cls: string } {
+  if (status === "approved")  return { icon: "✓", cls: "text-green-600" };
+  if (status === "rejected")  return { icon: "✗", cls: "text-red-500" };
+  if (status === "skipped" || status === "cancelled") return { icon: "⊘", cls: "text-gray-400" };
+  return { icon: "●", cls: "text-blue-500" };
+}
+
+function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
+  const nodes = detail.flow_nodes && detail.flow_nodes.length > 0
+    ? [...detail.flow_nodes].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0))
+    : [...(detail.tasks || [])].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0));
+
+  const submitLogs = (detail.action_logs || []).filter(
+    (l) => l.action === "submitted" || l.action === "resubmitted",
+  );
+  const trailingLogs = (detail.action_logs || []).filter(
+    (l) => !["submitted", "resubmitted", "skip_node", "approved", "rejected"].includes(l.action ?? ""),
+  );
+  const hasTrailingLogs = trailingLogs.length > 0;
+
+  const totalSteps = submitLogs.length + nodes.length + trailingLogs.length;
+  let stepIdx = 0;
+
+  const renderConnector = (isLast: boolean) =>
+    !isLast ? <span className="mt-1 w-px flex-1 bg-gray-200 min-h-[12px]" /> : null;
+
+  return (
+    <div className="mt-4 rounded-lg border border-border-subtle bg-gray-50 px-4 py-3 space-y-0">
+      <div className="mb-2 text-xs font-semibold text-text-secondary">审批进度</div>
+
+      {/* submit / resubmit logs */}
+      {submitLogs.map((log, i) => {
+        stepIdx++;
+        const isLast = stepIdx === totalSteps;
+        const isSubmit = log.action === "submitted";
+        return (
+          <div key={log.id ?? `s${i}`} className="flex gap-2.5">
+            <div className="flex flex-col items-center">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500 text-[10px] text-white">●</span>
+              {renderConnector(isLast)}
+            </div>
+            <div className={`min-w-0 pt-0.5 ${isLast ? "pb-1" : "pb-3"}`}>
+              <div className="text-xs font-medium text-text-primary">
+                {isSubmit ? "提交申请" : "重新提交"}
+              </div>
+              {log.operator_user_name && (
+                <div className="text-[11px] text-text-secondary">{log.operator_user_name}</div>
+              )}
+              {log.create_time && (
+                <div className="text-[11px] text-text-tertiary">{formatDateTime(log.create_time)}</div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* flow nodes */}
+      {nodes.map((node: any, i) => {
+        stepIdx++;
+        const matchedTasks = (detail.tasks || []).filter(
+          (t) => t.node_order === node.node_order || t.node_name === node.node_name,
+        );
+        const isNotStarted = matchedTasks.length === 0 && !node.task_id;
+        const aggStatus = matchedTasks.length === 0
+          ? (node.task_id ? (node.status ?? "pending") : "not_started")
+          : matchedTasks.some((t) => t.status === "rejected") ? "rejected"
+          : matchedTasks.some((t) => t.status === "approved") ? "approved"
+          : matchedTasks.some((t) => t.status === "pending") ? "pending"
+          : matchedTasks.some((t) => t.status === "skipped") ? "skipped"
+          : (matchedTasks[0]?.status ?? "pending");
+        const s = aggStatus.toLowerCase();
+        const dotColor = isNotStarted ? "bg-gray-300"
+          : s === "approved" ? "bg-green-500"
+          : s === "rejected" ? "bg-red-500"
+          : (s === "cancelled" || s === "skipped") ? "bg-gray-400"
+          : "bg-blue-500";
+        const isLast = stepIdx === totalSteps - (hasTrailingLogs ? trailingLogs.length : 0)
+          && i === nodes.length - 1 && !hasTrailingLogs;
+        const badge = NODE_BADGE_MAP[s];
+
+        return (
+          <div key={node.node_code ?? node.task_id ?? i} className="flex gap-2.5">
+            <div className="flex flex-col items-center">
+              <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotColor}`} />
+              {renderConnector(isLast)}
+            </div>
+            <div className={`min-w-0 flex-1 pt-0.5 ${isLast ? "pb-1" : "pb-3"}`}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className={`text-xs font-medium ${isNotStarted ? "text-text-secondary" : "text-text-primary"}`}>
+                  {node.node_name || "--"}
+                </span>
+                {!isNotStarted && badge && (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${badge.cls}`}>
+                    {badge.text}
+                  </span>
+                )}
+              </div>
+              {isNotStarted && (
+                <div className="text-[11px] text-text-secondary">未到达</div>
+              )}
+              {matchedTasks.length > 0 && (
+                <div className="mt-1.5 space-y-1">
+                  {matchedTasks.map((t) => {
+                    const ts = String(t.status || "").toLowerCase();
+                    const { icon, cls } = taskIcon(ts);
+                    const tLabel = NODE_BADGE_MAP[ts]?.text ?? ts;
+                    return (
+                      <div key={t.task_id ?? t.id} className="rounded border border-border-subtle bg-white px-2.5 py-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1">
+                            <span className={`text-[11px] font-bold ${cls}`}>{icon}</span>
+                            {t.approver_user_name && (
+                              <span className="text-xs text-text-primary">{t.approver_user_name}</span>
+                            )}
+                            <span className="text-[11px] text-text-secondary">{tLabel}</span>
+                          </div>
+                          {t.update_time && ts !== "pending" && (
+                            <span className="shrink-0 text-[10px] text-text-tertiary">{formatDateTime(t.update_time)}</span>
+                          )}
+                        </div>
+                        {t.comment && (
+                          <div className="mt-1 rounded bg-gray-50 px-2 py-1 text-[11px] text-text-secondary break-all">
+                            {t.comment}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* trailing action logs (withdrawn, cancelled, etc.) */}
+      {trailingLogs.map((log, i) => {
+        stepIdx++;
+        const isLast = stepIdx === totalSteps;
+        const a = String(log.action || "").toLowerCase();
+        const dotCls = a === "approved" ? "bg-green-500" : a === "rejected" ? "bg-red-500" : "bg-gray-400";
+        const titleMap: Record<string, string> = {
+          withdrawn: "已撤回", cancelled: "已取消", revoked: "已撤销",
+        };
+        const title = titleMap[a] ?? log.action ?? "--";
+        return (
+          <div key={log.id ?? `l${i}`} className="flex gap-2.5">
+            <div className="flex flex-col items-center">
+              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] text-white ${dotCls}`}>●</span>
+              {renderConnector(isLast)}
+            </div>
+            <div className={`min-w-0 pt-0.5 ${isLast ? "pb-1" : "pb-3"}`}>
+              <div className="text-xs font-medium text-text-primary">{title}</div>
+              {log.operator_user_name && (
+                <div className="text-[11px] text-text-secondary">{log.operator_user_name}</div>
+              )}
+              {log.detail?.comment && (
+                <div className="mt-1 rounded bg-gray-50 px-2 py-1 text-[11px] text-text-secondary break-all">
+                  {log.detail.comment}
+                </div>
+              )}
+              {log.create_time && (
+                <div className="text-[11px] text-text-tertiary">{formatDateTime(log.create_time)}</div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {nodes.length === 0 && submitLogs.length === 0 && (
+        <div className="text-xs text-text-secondary py-2">暂无进度数据</div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export default function ApprovalPage() {
@@ -919,6 +1108,11 @@ export default function ApprovalPage() {
   const [flows, setFlows] = useState<ApprovalFlowItem[]>([]);
   const [nodes, setNodes] = useState<ApprovalNodeItem[]>([]);
   const [exceptions, setExceptions] = useState<ApprovalExceptionItem[]>([]);
+  // node edit mode: changes are staged locally and only committed via set_flow_nodes (creates a new version)
+  const [isNodeEditMode, setIsNodeEditMode] = useState(false);
+  const [draftNodes, setDraftNodes] = useState<ApprovalNodeItem[]>([]);
+  const [isNodeDirty, setIsNodeDirty] = useState(false);
+  const localIdRef = useRef(-1);
   // role_id → role_name map for condition label display
   const [pageRoleNameMap, setPageRoleNameMap] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -1021,6 +1215,9 @@ export default function ApprovalPage() {
         : list[0]?.id ?? null;
     setSelectedFlowId(nextId);
     setNodes(nextId ? await listApprovalNodesApi(nextId) : []);
+    setIsNodeEditMode(false);
+    setDraftNodes([]);
+    setIsNodeDirty(false);
   };
 
   const selectScenario = async (scenarioId: number) => {
@@ -1247,60 +1444,87 @@ export default function ApprovalPage() {
     }
   };
 
+  // ── node edit mode ────────────────────────────────────────────────────────
+  const enterNodeEditMode = () => {
+    setDraftNodes([...nodes]);
+    setIsNodeDirty(false);
+    setIsNodeEditMode(true);
+  };
+
+  const cancelNodeEditMode = () => {
+    if (isNodeDirty) {
+      bsConfirm({
+        title: t("approvalPage.discardChangesTitle", { defaultValue: "放弃更改" }),
+        desc: t("approvalPage.discardChangesDesc", { defaultValue: "您有未保存的节点更改，确定要放弃吗？" }),
+        onOk: (next) => {
+          setIsNodeEditMode(false);
+          setDraftNodes([]);
+          setIsNodeDirty(false);
+          next();
+        },
+      });
+    } else {
+      setIsNodeEditMode(false);
+      setDraftNodes([]);
+    }
+  };
+
+  const saveNodeChanges = async () => {
+    if (!selectedFlowId) return;
+    try {
+      const payload = draftNodes.map((n, idx) => ({
+        node_code: (n.id ?? 0) > 0 ? n.node_code : undefined,
+        node_name: n.node_name ?? "",
+        node_order: idx + 1,
+        node_mode: n.node_mode ?? "or",
+        approver_config: n.approver_config ?? {},
+      }));
+      await setApprovalFlowNodesApi(selectedFlowId, payload);
+      const refreshed = await listApprovalNodesApi(selectedFlowId);
+      setNodes(refreshed);
+      setIsNodeEditMode(false);
+      setDraftNodes([]);
+      setIsNodeDirty(false);
+      toast({ title: t("approvalPage.hint"), variant: "success", description: t("approvalPage.saveSuccess", { defaultValue: "保存成功" }) });
+    } catch (e: any) {
+      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSaveFailed")) });
+    }
+  };
+
   // ── node actions ──────────────────────────────────────────────────────────
   const handleSaveNode = async (data: {
     node_name: string;
     node_mode: string;
     approver_config: Record<string, unknown>;
   }) => {
-    if (!selectedFlowId) return;
-    try {
-      if (nodeDialog.initial.id) {
-        await updateApprovalNodeApi(nodeDialog.initial.id, data);
-      } else {
-        await createApprovalNodeApi(selectedFlowId, {
-          ...data,
-          node_order: nodes.length + 1,
-        });
-      }
-      setNodeDialog({ open: false, initial: {} });
-      setNodes(await listApprovalNodesApi(selectedFlowId));
-    } catch (e: any) {
-      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSaveFailed")) });
+    if (!isNodeEditMode || !selectedFlowId) return;
+    if (nodeDialog.initial.id) {
+      setDraftNodes((prev) => prev.map((n) => n.id === nodeDialog.initial.id ? { ...n, ...data } : n));
+    } else {
+      const localId = localIdRef.current--;
+      setDraftNodes((prev) => [
+        ...prev,
+        { id: localId, node_name: data.node_name, node_order: prev.length + 1, node_mode: data.node_mode, approver_config: data.approver_config },
+      ]);
     }
+    setIsNodeDirty(true);
+    setNodeDialog({ open: false, initial: {} });
   };
 
-  const moveNode = async (index: number, direction: "up" | "down") => {
-    if (!selectedFlowId) return;
+  const moveNode = (index: number, direction: "up" | "down") => {
+    if (!isNodeEditMode) return;
     const swapIdx = direction === "up" ? index - 1 : index + 1;
-    if (swapIdx < 0 || swapIdx >= nodes.length) return;
-    const nodeA = nodes[index];
-    const nodeB = nodes[swapIdx];
-    try {
-      await Promise.all([
-        updateApprovalNodeApi(nodeA.id, { node_order: nodeB.node_order }),
-        updateApprovalNodeApi(nodeB.id, { node_order: nodeA.node_order }),
-      ]);
-      setNodes(await listApprovalNodesApi(selectedFlowId));
-    } catch (e: any) {
-      toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericSortFailed")) });
-    }
+    if (swapIdx < 0 || swapIdx >= draftNodes.length) return;
+    const next = [...draftNodes];
+    [next[index], next[swapIdx]] = [next[swapIdx], next[index]];
+    setDraftNodes(next);
+    setIsNodeDirty(true);
   };
 
   const handleDeleteNode = (node: ApprovalNodeItem) => {
-    bsConfirm({
-      title: t("approvalPage.deleteNodeTitle"),
-      desc: t("approvalPage.deleteNodeDesc", { name: node.node_name }),
-      onOk: async (next) => {
-        try {
-          await deleteApprovalNodeApi(node.id);
-          if (selectedFlowId) setNodes(await listApprovalNodesApi(selectedFlowId));
-          next();
-        } catch (e: any) {
-          toast({ title: t("approvalPage.hint"), variant: "error", description: String(e || t("approvalPage.genericDeleteFailed")) });
-        }
-      },
-    });
+    if (!isNodeEditMode) return;
+    setDraftNodes((prev) => prev.filter((n) => n.id !== node.id));
+    setIsNodeDirty(true);
   };
 
   // ── exception actions ─────────────────────────────────────────────────────
@@ -1319,6 +1543,30 @@ export default function ApprovalPage() {
 
   const [cancelDialogItem, setCancelDialogItem] = useState<ApprovalExceptionItem | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+
+  // exception approval progress state
+  const [expandedProgressIds, setExpandedProgressIds] = useState<Set<number>>(new Set());
+  const [instanceDetailCache, setInstanceDetailCache] = useState<Record<number, ApprovalInstanceDetail>>({});
+  const [loadingProgressId, setLoadingProgressId] = useState<number | null>(null);
+
+  const toggleExceptionProgress = async (item: ApprovalExceptionItem) => {
+    const id = item.id;
+    if (expandedProgressIds.has(id)) {
+      setExpandedProgressIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
+      return;
+    }
+    setExpandedProgressIds((prev) => { const s = new Set(prev); s.add(id); return s; });
+    if (!item.instance_id || instanceDetailCache[id]) return;
+    setLoadingProgressId(id);
+    try {
+      const detail = await getApprovalInstanceDetailForAdminApi(item.instance_id);
+      setInstanceDetailCache((prev) => ({ ...prev, [id]: detail }));
+    } catch {
+      // silently ignore; timeline will show empty state
+    } finally {
+      setLoadingProgressId(null);
+    }
+  };
 
   const handleCancelException = async () => {
     if (!cancelDialogItem) return;
@@ -1581,6 +1829,24 @@ export default function ApprovalPage() {
                         value={selectedFlowId ?? ""}
                         onChange={async (e) => {
                           const id = Number(e.target.value) || null;
+                          if (isNodeEditMode && isNodeDirty) {
+                            bsConfirm({
+                              title: t("approvalPage.discardChangesTitle", { defaultValue: "放弃更改" }),
+                              desc: t("approvalPage.discardChangesDesc", { defaultValue: "切换流程将丢失未保存的节点更改，确定继续吗？" }),
+                              onOk: async (next) => {
+                                setIsNodeEditMode(false);
+                                setDraftNodes([]);
+                                setIsNodeDirty(false);
+                                setSelectedFlowId(id);
+                                setNodes(id ? await listApprovalNodesApi(id) : []);
+                                next();
+                              },
+                            });
+                            return;
+                          }
+                          setIsNodeEditMode(false);
+                          setDraftNodes([]);
+                          setIsNodeDirty(false);
                           setSelectedFlowId(id);
                           setNodes(id ? await listApprovalNodesApi(id) : []);
                         }}
@@ -1595,34 +1861,57 @@ export default function ApprovalPage() {
                       </select>
                       {selectedFlow && <StatusBadge enabled={selectedFlow.is_active} />}
                       <div className="ml-auto flex items-center gap-2">
-                        {selectedFlow && (
+                        {isNodeEditMode ? (
                           <>
-                            <ActionBtn
-                              variant="outline"
-                              onClick={() => setFlowDialog({ open: true, initial: selectedFlow })}
-                            >
-                              {t("approvalPage.editFlowBtn")}
-                            </ActionBtn>
-                            <ActionBtn
-                              variant="outline"
-                              onClick={() => handleDeleteFlow(selectedFlow)}
-                            >
-                              {t("approvalPage.deleteFlowBtn")}
-                            </ActionBtn>
                             <ActionBtn
                               variant="outline"
                               onClick={() => setNodeDialog({ open: true, initial: {} })}
                             >
                               <Plus size={12} /> {t("approvalPage.addNodeBtn")}
                             </ActionBtn>
+                            <ActionBtn variant="outline" onClick={cancelNodeEditMode}>
+                              {t("approvalPage.cancelEditBtn", { defaultValue: "取消编辑" })}
+                            </ActionBtn>
+                            <ActionBtn
+                              variant="primary"
+                              onClick={() => void saveNodeChanges()}
+                              className={isNodeDirty ? "" : "opacity-70"}
+                            >
+                              {t("approvalPage.saveChangesBtn", { defaultValue: "保存更改" })}
+                              {isNodeDirty && (
+                                <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-white opacity-80" />
+                              )}
+                            </ActionBtn>
+                          </>
+                        ) : (
+                          <>
+                            {selectedFlow && (
+                              <>
+                                <ActionBtn
+                                  variant="outline"
+                                  onClick={() => setFlowDialog({ open: true, initial: selectedFlow })}
+                                >
+                                  {t("approvalPage.editFlowBtn")}
+                                </ActionBtn>
+                                <ActionBtn
+                                  variant="outline"
+                                  onClick={() => handleDeleteFlow(selectedFlow)}
+                                >
+                                  {t("approvalPage.deleteFlowBtn")}
+                                </ActionBtn>
+                                <ActionBtn variant="outline" onClick={enterNodeEditMode}>
+                                  <Pencil size={12} /> {t("approvalPage.editNodesBtn", { defaultValue: "编辑节点" })}
+                                </ActionBtn>
+                              </>
+                            )}
+                            <ActionBtn
+                              variant="outline"
+                              onClick={() => setFlowDialog({ open: true, initial: {} })}
+                            >
+                              {t("approvalPage.createFlowBtn")}
+                            </ActionBtn>
                           </>
                         )}
-                        <ActionBtn
-                          variant="outline"
-                          onClick={() => setFlowDialog({ open: true, initial: {} })}
-                        >
-                          {t("approvalPage.createFlowBtn")}
-                        </ActionBtn>
                       </div>
                     </div>
 
@@ -1631,13 +1920,25 @@ export default function ApprovalPage() {
                       <div className="rounded-lg border border-dashed border-border-subtle py-8 text-center text-xs text-text-secondary">
                         {t("approvalPage.selectFlowHint")}
                       </div>
-                    ) : nodes.length === 0 ? (
+                    ) : (() => {
+                      const displayNodes = isNodeEditMode ? draftNodes : nodes;
+                      return displayNodes.length === 0 ? (
                       <div className="rounded-lg border border-dashed border-border-subtle py-8 text-center text-xs text-text-secondary">
-                        {t("approvalPage.noNodes")}
+                        {isNodeEditMode
+                          ? t("approvalPage.noNodes")
+                          : <>{t("approvalPage.noNodes")} — <button type="button" className="text-primary underline" onClick={enterNodeEditMode}>{t("approvalPage.editNodesBtn", { defaultValue: "编辑节点" })}</button></>
+                        }
                       </div>
                     ) : (
+                      <>
+                      {isNodeEditMode && (
+                        <div className="mb-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                          <Pencil size={11} className="shrink-0" />
+                          <span>{t("approvalPage.nodeEditModeHint", { defaultValue: "编辑中 — 增删改节点后点击「保存更改」才会生效，并自动创建新版本快照" })}</span>
+                        </div>
+                      )}
                       <div className="rounded-lg border border-border-subtle overflow-hidden">
-                        {nodes.map((node, idx) => {
+                        {displayNodes.map((node, idx) => {
                           const sources: { type: string; label: string }[] =
                             (node.approver_config?.sources as any[]) ?? [];
                           return (
@@ -1660,7 +1961,7 @@ export default function ApprovalPage() {
                                     当前节点通过后，才会生成下一节点任务
                                   </div>
                                 </div>
-                                <div className="shrink-0 flex items-center gap-1.5">
+                                <div className={`shrink-0 flex items-center gap-1.5 ${!isNodeEditMode ? "pointer-events-none opacity-40" : ""}`}>
                                   <ActionBtn onClick={() => void moveNode(idx, "up")}>
                                     <ChevronUp size={14} />
                                   </ActionBtn>
@@ -1669,23 +1970,18 @@ export default function ApprovalPage() {
                                   </ActionBtn>
                                   <select
                                     value={node.node_mode ?? "or"}
-                                    onChange={async (e) => {
-                                      await updateApprovalNodeApi(node.id, {
-                                        node_mode: e.target.value,
-                                      });
-                                      if (selectedFlowId)
-                                        setNodes(await listApprovalNodesApi(selectedFlowId));
+                                    disabled={!isNodeEditMode}
+                                    onChange={(e) => {
+                                      if (!isNodeEditMode) return;
+                                      setDraftNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, node_mode: e.target.value } : n));
+                                      setIsNodeDirty(true);
                                     }}
                                     className="h-7 rounded border border-border-subtle bg-white px-2 text-xs text-text-primary outline-none"
                                   >
                                     <option value="or">{t("approvalPage.nodeModeOr")}</option>
                                     <option value="and">{t("approvalPage.nodeModeAnd")}</option>
                                   </select>
-                                  <ActionBtn
-                                    onClick={() =>
-                                      setNodeDialog({ open: true, initial: node })
-                                    }
-                                  >
+                                  <ActionBtn onClick={() => setNodeDialog({ open: true, initial: node })}>
                                     <Pencil size={13} />
                                   </ActionBtn>
                                   <ActionBtn onClick={() => handleDeleteNode(node)}>
@@ -1721,14 +2017,16 @@ export default function ApprovalPage() {
                                     </span>
                                   );
                                 })}
-                                <button
-                                  type="button"
-                                  onClick={() => setNodeDialog({ open: true, initial: node })}
-                                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-border-subtle px-2.5 py-0.5 text-xs text-text-secondary hover:bg-gray-50"
-                                >
-                                  <Plus size={10} /> {t("approvalPage.addApprover")}
-                                  <ChevronDown size={10} />
-                                </button>
+                                {isNodeEditMode && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setNodeDialog({ open: true, initial: node })}
+                                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-border-subtle px-2.5 py-0.5 text-xs text-text-secondary hover:bg-gray-50"
+                                  >
+                                    <Plus size={10} /> {t("approvalPage.addApprover")}
+                                    <ChevronDown size={10} />
+                                  </button>
+                                )}
                                 <span className="inline-flex items-center rounded border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-secondary">
                                   {node.node_mode === "and" ? t("approvalPage.nodeModeAnd") : t("approvalPage.nodeModeOr")}
                                 </span>
@@ -1737,7 +2035,9 @@ export default function ApprovalPage() {
                           );
                         })}
                       </div>
-                    )}
+                      </>
+                    );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1903,6 +2203,31 @@ export default function ApprovalPage() {
                   {item.exception_type === "execute_failed" && item.error_summary && (
                     <div className="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-600 break-all">
                       {item.error_summary}
+                    </div>
+                  )}
+                  {/* approval progress toggle */}
+                  {item.instance_id && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={() => void toggleExceptionProgress(item)}
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        {expandedProgressIds.has(item.id) ? (
+                          <><ChevronUp size={12} /> 收起审批进度</>
+                        ) : (
+                          <><ChevronDown size={12} /> 查看审批进度</>
+                        )}
+                      </button>
+                      {expandedProgressIds.has(item.id) && (
+                        loadingProgressId === item.id ? (
+                          <div className="mt-2 text-xs text-text-secondary">加载中…</div>
+                        ) : instanceDetailCache[item.id] ? (
+                          <ApprovalTimeline detail={instanceDetailCache[item.id]} />
+                        ) : (
+                          <div className="mt-2 text-xs text-text-secondary">暂无进度数据</div>
+                        )
+                      )}
                     </div>
                   )}
                 </div>

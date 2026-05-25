@@ -239,11 +239,21 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
-      const allIds = new Set(resp.data.map((i) => getId(i, "instance")));
-      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
-      const visibleItems = requestsFilter === "in_progress"
+      // If there's a preferred instance, derive the correct filter tab from its status so
+      // the item is actually visible in the left panel (not hidden by the current filter).
+      let targetFilter = requestsFilter;
+      if (preferredId) {
+        const prefItem = resp.data.find((i) => getId(i, "instance") === preferredId);
+        if (prefItem) {
+          const prefInProgress = IN_PROGRESS_STATUSES.has(prefItem.status ?? "");
+          targetFilter = prefInProgress ? "in_progress" : "completed";
+          if (targetFilter !== requestsFilter) setRequestsFilter(targetFilter);
+        }
+      }
+      const visibleItems = targetFilter === "in_progress"
         ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
         : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+      const validPreferred = preferredId && resp.data.some((i) => getId(i, "instance") === preferredId) ? preferredId : null;
       const nextId = validPreferred ?? getId(visibleItems[0], "instance");
       setSelectedInstanceId(nextId);
       if (nextId) { setLoadingDetail(true); setRequestDetail(await getApprovalInstanceDetailApi(nextId)); }
@@ -751,9 +761,9 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
               );
             });
           })()}
-          {/* other action logs — skip_node is shown on the node itself */}
+          {/* other action logs — skip_node/approved/rejected are shown on the node itself */}
           {(detail.action_logs || [])
-            .filter((l) => l.action !== "submitted" && l.action !== "resubmitted" && l.action !== "skip_node")
+            .filter((l) => !["submitted", "resubmitted", "skip_node", "approved", "rejected"].includes(l.action ?? ""))
             .map((log, i, arr) => (
               <TimelineStep key={log.id ?? `l${i}`} action={log.action} operatorName={log.operator_user_name}
                 createTime={log.create_time} detail={log.detail} localize={localize} isLast={i === arr.length - 1} />
@@ -937,9 +947,9 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
               );
             });
           })()}
-          {/* other action logs (withdrawn, cancelled, etc.) — skip_node is shown on the node itself */}
+          {/* other action logs (withdrawn, cancelled, etc.) — skip_node/approved/rejected are shown on the node itself */}
           {(detail.action_logs || [])
-            .filter((l) => l.action !== "submitted" && l.action !== "resubmitted" && l.action !== "skip_node")
+            .filter((l) => !["submitted", "resubmitted", "skip_node", "approved", "rejected"].includes(l.action ?? ""))
             .map((log, i, arr) => (
               <TimelineStep key={log.id ?? `l${i}`} action={log.action} operatorName={log.operator_user_name}
                 createTime={log.create_time} detail={log.detail} localize={localize} isLast={i === arr.length - 1} />
