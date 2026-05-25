@@ -1172,6 +1172,7 @@ export default function PortalKnowledgeWorkbench() {
                         documentPath={documentPath}
                         onClose={() => setActivePanel(null)}
                         onCopyShareLink={() => void copyShareLink()}
+                        onPanelChange={setActivePanel}
                     />
                 ) : null}
 
@@ -1180,10 +1181,6 @@ export default function PortalKnowledgeWorkbench() {
                         activePanel={activePanel}
                         onTogglePanel={() => setActivePanel((current) => current ? null : "properties")}
                         onOpenPanel={setActivePanel}
-                        onOpenPermission={() => {
-                            setActivePanel(null);
-                            setPermissionOpen(true);
-                        }}
                     />
                 ) : null}
             </main>

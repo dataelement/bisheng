@@ -6,7 +6,7 @@ import type {
 } from "~/api/knowledge";
 
 export type SpaceGroupKey = "public" | "department" | "team" | "personal";
-export type PanelKey = "properties" | "time" | "source" | "usage" | "share";
+export type PanelKey = "properties" | "time" | "source" | "usage" | "permission" | "share";
 export type PortalToolRailKey = "toggle" | "properties" | "time" | "source" | "usage" | "permission";
 
 export interface SpaceGroup {

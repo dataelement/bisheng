@@ -84,7 +84,8 @@
 .uploadFolderExpandButton,
 .uploadFolderSelectButton,
 .uploadRemoveButton,
-.aiDialogClose {
+.aiDialogClose,
+.drawerTab {
   border: 0;
   font: inherit;
 }
@@ -961,7 +962,7 @@
   top: 0;
   right: 44px;
   z-index: 20;
-  width: 340px;
+  width: 420px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -985,11 +986,57 @@
   font-weight: 600;
 }
 
+.drawerTabsHeader {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.drawerTabs {
+  align-self: stretch;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 26px;
+  overflow-x: auto;
+}
+
+.drawerTab {
+  position: relative;
+  min-width: max-content;
+  padding: 0 0 2px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.drawerTab:hover,
+.drawerTabActive {
+  color: #3662e3;
+}
+
+.drawerTabActive::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: #3662e3;
+}
+
 .drawerBody {
   min-height: 0;
   flex: 1;
   overflow: auto;
-  padding: 14px;
+  padding: 18px 20px;
 }
 
 .aiDialogContent {
@@ -1097,24 +1144,27 @@
 
 .detailList {
   display: grid;
-  gap: 12px;
+  gap: 18px;
 }
 
 .detailItem {
   display: grid;
-  gap: 4px;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
 }
 
 .detailLabel {
   color: #768499;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .detailValue {
   overflow-wrap: anywhere;
   color: #273142;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 22px;
 }
 
 .tagList {

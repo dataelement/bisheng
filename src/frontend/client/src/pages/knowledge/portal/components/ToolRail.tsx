@@ -6,28 +6,26 @@ const TOOLBAR_ITEMS: Array<{
     key: PortalToolRailKey;
     title: string;
     icon: typeof PanelRight;
-    panelKey?: Extract<PanelKey, "properties" | "time" | "source" | "usage">;
+    panelKey?: Extract<PanelKey, "properties" | "time" | "source" | "usage" | "permission">;
 }> = [
     { key: "toggle", title: "侧边栏展开和关闭", icon: PanelRight },
     { key: "properties", title: "属性", icon: FileText, panelKey: "properties" },
     { key: "time", title: "时间", icon: Clock, panelKey: "time" },
     { key: "source", title: "来源", icon: Link2, panelKey: "source" },
     { key: "usage", title: "使用", icon: BriefcaseBusiness, panelKey: "usage" },
-    { key: "permission", title: "权限", icon: LockKeyhole },
+    { key: "permission", title: "权限", icon: LockKeyhole, panelKey: "permission" },
 ];
 
 interface ToolRailProps {
     activePanel: PanelKey | null;
     onTogglePanel: () => void;
-    onOpenPanel: (panel: Extract<PanelKey, "properties" | "time" | "source" | "usage">) => void;
-    onOpenPermission: () => void;
+    onOpenPanel: (panel: Extract<PanelKey, "properties" | "time" | "source" | "usage" | "permission">) => void;
 }
 
 export function ToolRail({
     activePanel,
     onTogglePanel,
     onOpenPanel,
-    onOpenPermission,
 }: ToolRailProps) {
     return (
         <aside className={s.toolRail} data-testid="portal-tool-rail">
@@ -45,10 +43,6 @@ export function ToolRail({
                         onClick={() => {
                             if (item.key === "toggle") {
                                 onTogglePanel();
-                                return;
-                            }
-                            if (item.key === "permission") {
-                                onOpenPermission();
                                 return;
                             }
                             if (item.panelKey) {

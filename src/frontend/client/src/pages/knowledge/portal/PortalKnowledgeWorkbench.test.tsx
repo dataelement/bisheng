@@ -1277,13 +1277,19 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(rail).queryByRole("button", { name: "外部链接" })).not.toBeInTheDocument();
     });
 
-    test("opens the new right rail panels and keeps permission on the existing dialog", async () => {
+    test("shows drawer tabs with screenshot-aligned detail fields", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
         });
         const file = makeFile("201", "后端开发.md", {
-            size: 2048,
-            updatedAt: "2026-05-20T12:30:00",
+            createdAt: "2025-12-16T16:11:12",
+            fileEncoding: "202512160001",
+            fileSource: "channel",
+            tags: [{ id: 1, name: "数据库优化" }, { id: 2, name: "性能提升" }],
+            size: 2.3 * 1024 * 1024,
+            updatedAt: "2025-12-16T16:11:12",
+            user_name: "陈亮",
+            version_no: 1,
         });
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
@@ -1304,27 +1310,61 @@ describe("PortalKnowledgeWorkbench", () => {
         const rail = await screen.findByTestId("portal-tool-rail");
         fireEvent.click(within(rail).getByRole("button", { name: "侧边栏展开和关闭" }));
         const drawer = await screen.findByTestId("portal-info-drawer");
-        expect(within(drawer).getByText("属性")).toBeInTheDocument();
-        expect(within(drawer).getByText("后端开发.md")).toBeInTheDocument();
-        expect(within(drawer).getByText("2.0 KB")).toBeInTheDocument();
+        expect(within(drawer).getByRole("tablist", { name: "文件详情" })).toBeInTheDocument();
+        expect(within(drawer).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+            "属性",
+            "时间",
+            "来源",
+            "使用",
+            "权限",
+        ]);
+        expect(within(drawer).getByRole("tab", { name: "属性" })).toHaveAttribute("aria-selected", "true");
+        expect(within(drawer).getByText("文件名")).toBeInTheDocument();
+        expect(within(drawer).getByText("后端开发")).toBeInTheDocument();
+        expect(within(drawer).queryByText("后端开发.md")).not.toBeInTheDocument();
+        expect(within(drawer).getByText("202512160001")).toBeInTheDocument();
+        expect(within(drawer).getByText("此处为中文说明占位")).toBeInTheDocument();
+        expect(within(drawer).getByText("文档")).toBeInTheDocument();
+        expect(within(drawer).getByText("2.3 MB")).toBeInTheDocument();
+        expect(within(drawer).getByText("md")).toBeInTheDocument();
+        expect(within(drawer).getByText("数据库优化")).toBeInTheDocument();
+        expect(within(drawer).getByText("性能提升")).toBeInTheDocument();
+        expect(within(drawer).getByText("1.1.0")).toBeInTheDocument();
 
         fireEvent.click(within(rail).getByRole("button", { name: "侧边栏展开和关闭" }));
         expect(screen.queryByTestId("portal-info-drawer")).not.toBeInTheDocument();
 
         fireEvent.click(within(rail).getByRole("button", { name: "时间" }));
-        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("时间");
-        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("暂未开放");
+        expect(screen.getByRole("tab", { name: "时间" })).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("创建时间");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("2025-12-16 16:11:12");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("最后修改时间");
+        expect(screen.getByTestId("portal-info-drawer")).not.toHaveTextContent("解析状态");
 
-        fireEvent.click(within(rail).getByRole("button", { name: "来源" }));
-        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("来源");
-        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("暂未开放");
+        fireEvent.click(screen.getByRole("tab", { name: "来源" }));
+        expect(screen.getByRole("tab", { name: "来源" })).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("创建人");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("最后修改人");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("陈亮");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("部门");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("产品研发中心-数智组");
+        expect(screen.getByTestId("portal-info-drawer")).not.toHaveTextContent("知识库");
+        expect(screen.getByTestId("portal-info-drawer")).not.toHaveTextContent("路径");
 
         fireEvent.click(within(rail).getByRole("button", { name: "使用" }));
-        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("使用");
-        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("暂未开放");
+        expect(screen.getByRole("tab", { name: "使用" })).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("下载次数");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("652");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("浏览次数");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("1216");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("分享次数");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("1000");
 
         fireEvent.click(within(rail).getByRole("button", { name: "权限" }));
-        expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:后端开发.md");
+        expect(screen.getByRole("tab", { name: "权限" })).toHaveAttribute("aria-selected", "true");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("当前用户角色");
+        expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("admin");
+        expect(screen.queryByTestId("space-share-dialog")).not.toBeInTheDocument();
     });
 
     test("copies the selected file encoding from the document header", async () => {
