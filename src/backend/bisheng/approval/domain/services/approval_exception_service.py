@@ -274,21 +274,40 @@ class ApprovalExceptionService:
         exception = await self._get_exception(exception_id)
         instance = await self._get_instance(exception.instance_id)
         detail = exception.detail or {}
-        current_node_order = detail.get('node_order', 0)
+
+        node_code = detail.get('node_code', '')
+        node_name = detail.get('node_name', '') or detail.get('current_node_name', '')
+        node_order = detail.get('node_order')
+        node_mode = detail.get('node_mode', 'or')
+
+        # Older exception records may lack node_code/node_order; resolve from node definitions.
+        if (node_order is None or not node_code) and instance.flow_version_id and node_name:
+            node_defs = await ApprovalScenarioRepository.list_node_definitions(
+                instance.tenant_id, instance.flow_version_id
+            )
+            matched = next((n for n in node_defs if n.node_name == node_name or n.node_code == node_code), None)
+            if matched:
+                node_code = node_code or matched.node_code
+                node_name = matched.node_name
+                node_order = matched.node_order
+                node_mode = matched.node_mode
+
+        current_node_order = node_order if node_order is not None else 0
+
         # Create a SKIPPED-status task so the node shows "已跳过" in the progress timeline
-        if detail.get('node_code') or detail.get('node_name'):
+        if node_code or node_name:
             from datetime import datetime as _dt
             await self.instance_repository.create_task(
                 ApprovalTask(
                     tenant_id=instance.tenant_id,
                     instance_id=instance.id,
                     flow_version_id=instance.flow_version_id or 0,
-                    node_code=detail.get('node_code', ''),
-                    node_name=detail.get('node_name', ''),
+                    node_code=node_code,
+                    node_name=node_name,
                     node_order=current_node_order,
                     approver_user_id=resolved_by_user_id,
                     approver_source_type='skipped',
-                    node_mode=detail.get('node_mode', 'or'),
+                    node_mode=node_mode,
                     status=ApprovalTaskStatus.SKIPPED,
                     acted_at=_dt.utcnow(),
                 )
