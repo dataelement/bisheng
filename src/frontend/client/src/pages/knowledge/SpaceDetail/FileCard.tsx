@@ -46,6 +46,8 @@ interface FileCardProps {
     versionManagementEnabled?: boolean;
     onOpenVersionManagement?: (file: KnowledgeFile) => void;
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    /** Mirrors member-management gating: creators + manage_space_relation holders. */
+    canManageMembers?: boolean;
 }
 
 export function FileCard({
@@ -73,6 +75,7 @@ export function FileCard({
     versionManagementEnabled = false,
     onOpenVersionManagement,
     onOpenVersionHistory,
+    canManageMembers = false,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -204,7 +207,7 @@ export function FileCard({
                 {`V${file.version_no}`}
             </span>
         );
-        const similarIndicator = versionManagementEnabled && file.has_similar && !file.is_multi_version && (
+        const similarIndicator = versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
             <button
                 type="button"
                 onClick={(e) => {

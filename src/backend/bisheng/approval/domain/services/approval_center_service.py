@@ -114,6 +114,30 @@ class ApprovalCenterService:
                 dept_name = depts[0].name
 
         action_logs = await ApprovalInstanceRepository.list_action_logs(instance.id)
+        all_tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
+
+        all_task_uids = list({t.approver_user_id for t in all_tasks})
+        task_user_name_map: dict[int, str] = {}
+        if all_task_uids:
+            from bisheng.user.domain.models.user import UserDao
+            task_users = await UserDao.aget_user_by_ids(all_task_uids)
+            task_user_name_map = {u.user_id: u.user_name for u in (task_users or [])}
+
+        flow_nodes: list = []
+        if instance.flow_version_id:
+            from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
+            node_defs = await ApprovalScenarioRepository.list_node_definitions(
+                instance.tenant_id, instance.flow_version_id
+            )
+            flow_nodes = [
+                {
+                    'node_code': nd.node_code,
+                    'node_name': nd.node_name,
+                    'node_order': nd.node_order,
+                    'node_mode': nd.node_mode,
+                }
+                for nd in node_defs
+            ]
 
         grant_revoked = False
         if instance.scenario_code == 'menu_access_request' and instance.status == 'executed':
@@ -140,6 +164,21 @@ class ApprovalCenterService:
             'reason': instance.reason,
             'create_time': instance.create_time,
             'update_time': task.update_time,
+            'flow_nodes': flow_nodes,
+            'tasks': [
+                {
+                    'task_id': t.id,
+                    'approver_user_id': t.approver_user_id,
+                    'approver_user_name': task_user_name_map.get(t.approver_user_id),
+                    'node_name': t.node_name,
+                    'node_order': t.node_order,
+                    'node_mode': t.node_mode,
+                    'status': t.status,
+                    'comment': t.comment,
+                    'update_time': t.update_time,
+                }
+                for t in all_tasks
+            ],
             'action_logs': [
                 {
                     'id': log.id,
@@ -382,7 +421,6 @@ class ApprovalCenterService:
                 task.acted_at = datetime.utcnow()
                 await ApprovalInstanceRepository.update_task(task)
         instance.status = ApprovalInstanceStatus.WITHDRAWN
-        instance.reason = reason or instance.reason
         await ApprovalInstanceRepository.update_instance(instance)
         await ApprovalInstanceRepository.create_action_log(
             ApprovalActionLog(
