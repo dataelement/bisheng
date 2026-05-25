@@ -119,12 +119,13 @@ class ApprovalExceptionService:
         if exception.exception_type == 'route_missing':
             await service._retry_route_missing(exception, instance, operator_user_id)
         elif exception.exception_type == 'approver_empty':
+            from bisheng.common.errcode.approval import ApprovalApproverEmptyError
             route_rule, flow_version_id, node = await service._resolve_retry_route(instance)
             handler = await service._build_handler(instance.scenario_code)
             req = service._build_gate_request(instance)
             approver_user_ids = await handler.resolve_approvers(getattr(node, 'approver_config', {}) or {}, req)
             if not approver_user_ids:
-                raise ValueError(f'no approvers resolved for exception {exception_id}')
+                raise ApprovalApproverEmptyError()
             await service.assign_approvers(
                 exception_id=exception_id,
                 approver_user_ids=approver_user_ids,
@@ -470,6 +471,7 @@ class ApprovalExceptionService:
         from bisheng.approval.domain.models.approval_instance import ApprovalOutbox, ApprovalOutboxStatus
         from bisheng.approval.domain.services.approval_gate import ApprovalGate
         from bisheng.common.errcode.approval import (
+            ApprovalApproverEmptyError,
             ApprovalRetryNoActiveFlowVersionError,
             ApprovalRetryNoFlowNodesError,
             ApprovalRetryNoFlowRouteError,
@@ -523,7 +525,7 @@ class ApprovalExceptionService:
         first_node = node_definitions[0]
         approver_user_ids = await handler.resolve_approvers(first_node.approver_config or {}, req)
         if not approver_user_ids:
-            raise ValueError(f'no approvers resolved for route_missing exception {exception.id}')
+            raise ApprovalApproverEmptyError()
 
         await self.assign_flow(
             exception_id=exception.id,
