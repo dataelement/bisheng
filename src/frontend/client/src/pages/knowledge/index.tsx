@@ -156,6 +156,8 @@ export default function Knowledge() {
         setTotal: fileManager.setTotal,
         loadFiles: fileManager.loadFiles,
         currentPage: fileManager.currentPage,
+        markPendingDeletion: fileManager.markPendingDeletion,
+        clearPendingDeletion: fileManager.clearPendingDeletion,
     });
 
     // ─── AI split-pane ──────────────────────────────────────────────────
@@ -745,6 +747,10 @@ export default function Knowledge() {
                                         isAiAssistantOpen={aiPane.showAiAssistant}
                                         onCreateSpace={handleCreateSpace}
                                         onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                                        markPendingDeletion={fileManager.markPendingDeletion}
+                                        clearPendingDeletion={fileManager.clearPendingDeletion}
+                                        setFiles={fileManager.setFiles}
+                                        setTotal={fileManager.setTotal}
                                     />
                                     </div>
                                 </div>

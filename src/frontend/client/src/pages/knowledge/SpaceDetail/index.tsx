@@ -80,6 +80,10 @@ interface KnowledgeSpaceContentProps {
     isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
+    markPendingDeletion: (ids: Array<string | number>) => void;
+    clearPendingDeletion: (ids: Array<string | number>) => void;
+    setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
+    setTotal: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export function KnowledgeSpaceContent({
@@ -112,6 +116,10 @@ export function KnowledgeSpaceContent({
     isAiAssistantOpen,
     onCreateSpace,
     onGoKnowledgeSquare,
+    markPendingDeletion,
+    clearPendingDeletion,
+    setFiles,
+    setTotal,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -792,19 +800,28 @@ export function KnowledgeSpaceContent({
 
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
+        const allIds = selectedList.map(f => f.id);
+        const removeCount = allIds.length;
+
+        // Optimistic: drop selected rows immediately + mark to suppress poll ghosts.
+        markPendingDeletion(allIds);
+        setFiles(prev => prev.filter(f => !selectedFiles.has(f.id)));
+        setTotal(prev => Math.max(0, prev - removeCount));
+        setSelectedFiles(new Set());
+        showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
 
         try {
             await batchDeleteApi(space.id, {
                 file_ids: fileIds.length ? fileIds : undefined,
                 folder_ids: folderIds.length ? folderIds : undefined,
             });
-            setSelectedFiles(new Set());
-            showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
-            // Notify parent to refresh the list
-            onDeleteFile("");
         } catch {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
+            clearPendingDeletion(allIds);
+            onDeleteFile("");
+            return;
         }
+        clearPendingDeletion(allIds);
     };
 
     const handleDelete = async (fileId: string) => {

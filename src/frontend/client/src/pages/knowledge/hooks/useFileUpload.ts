@@ -112,6 +112,8 @@ interface UseFileUploadOptions {
     setTotal: React.Dispatch<React.SetStateAction<number>>;
     loadFiles: (page?: number) => Promise<void>;
     currentPage: number;
+    markPendingDeletion: (ids: Array<string | number>) => void;
+    clearPendingDeletion: (ids: Array<string | number>) => void;
 }
 
 /**
@@ -127,6 +129,8 @@ export function useFileUpload({
     setTotal,
     loadFiles,
     currentPage,
+    markPendingDeletion,
+    clearPendingDeletion,
 }: UseFileUploadOptions) {
     const localize = useLocalize();
     const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
@@ -495,6 +499,10 @@ export function useFileUpload({
     );
 
     // ─── Delete file/folder ──────────────────────────────────────────────
+    // Optimistic: drop the row from UI immediately, fire the backend API in
+    // the background, and surface a success toast right away. Folders with
+    // many files can take a long time on the server — there's no reason to
+    // freeze the UI while that runs. On failure we roll back by re-fetching.
     const handleDeleteFile = useCallback(
         async (fileId: string) => {
             if (!activeSpace) return;
@@ -508,24 +516,33 @@ export function useFileUpload({
             const target = files.find(f => f.id === fileId);
             if (!target) return;
 
+            const isFolder = target.type === FileType.FOLDER;
+
+            // 1) Optimistically remove from UI + mark so the poll won't revive it.
+            markPendingDeletion([fileId]);
+            setFiles(prev => prev.filter(f => f.id !== fileId));
+            setTotal(prev => Math.max(0, prev - 1));
+            showToast({ message: localize("com_knowledge.deleted"), severity: NotificationSeverity.SUCCESS });
+            if (isFolder) {
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            }
+
+            // 2) Fire the backend API; on failure roll back via a reload.
             try {
-                if (target.type === FileType.FOLDER) {
+                if (isFolder) {
                     await deleteFolderApi(activeSpace.id, fileId);
                 } else {
                     await deleteFileApi(activeSpace.id, fileId);
                 }
-                setFiles(prev => prev.filter(f => f.id !== fileId));
-                setTotal(prev => Math.max(0, prev - 1));
-                if (target.type === FileType.FOLDER) {
-                    // Folder removed — sync the left tree.
-                    dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-                }
-                showToast({ message: localize("com_knowledge.deleted"), severity: NotificationSeverity.SUCCESS });
             } catch {
                 showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.ERROR });
+                clearPendingDeletion([fileId]);
+                loadFiles(currentPage);
+                return;
             }
+            clearPendingDeletion([fileId]);
         },
-        [activeSpace, currentPage, files, setFiles, loadFiles, showToast, setTotal]
+        [activeSpace, currentPage, files, setFiles, loadFiles, showToast, setTotal, markPendingDeletion, clearPendingDeletion, localize]
     );
 
     const handleEditTags = useCallback(
