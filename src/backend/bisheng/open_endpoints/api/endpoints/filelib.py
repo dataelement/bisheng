@@ -2,8 +2,8 @@ import json
 import os
 from typing import List, Literal, Optional
 
-from fastapi import (APIRouter, BackgroundTasks, Body, File, Form, HTTPException, Query, Request,
-                     UploadFile)
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query,
+                     Request, UploadFile)
 from loguru import logger
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse
@@ -13,6 +13,7 @@ from bisheng.api.services.knowledge_imp import (text_knowledge)
 from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
                                     resp_200, resp_500, ExcelRule)
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
@@ -22,7 +23,10 @@ from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, Knowledg
                                                        KnowledgeUpdate)
 from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.open_endpoints.domain.schemas.filelib import APIAddQAParam, APIAppendQAParam, QueryQAParam
+from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
+from bisheng.open_endpoints.api.dependencies import get_knowledge_space_chat_service_for_openapi
+from bisheng.open_endpoints.domain.schemas.filelib import (APIAddQAParam, APIAppendQAParam, QueryQAParam,
+                                                            RetrieveChunk, RetrieveReq, RetrieveResp)
 from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.utils.util import sync_func_to_async
@@ -360,6 +364,47 @@ def detail_qa(*, id: int):
     """ Get questions on information """
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     return resp_200(qa)
+
+
+@router.post('/retrieve')
+async def retrieve_chunks(
+        req: RetrieveReq,
+        chat_svc: KnowledgeSpaceChatService = Depends(get_knowledge_space_chat_service_for_openapi),
+):
+    """Retrieve top-k chunks across one or more knowledge bases (no LLM generation).
+
+    Designed for external retrieval-tool integrations (e.g. agents that bring
+    their own LLM). Authentication runs as the configured default operator.
+    """
+    kb_filters = None
+    if req.filters and req.filters.knowledge_base_filters:
+        kb_filters = {
+            f.knowledge_base_id: {"tags": f.tags, "tag_match_mode": f.tag_match_mode}
+            for f in req.filters.knowledge_base_filters
+        }
+
+    try:
+        results = await chat_svc.aretrieve_chunks(
+            query=req.query,
+            knowledge_base_ids=req.knowledge_base_ids,
+            kb_filters=kb_filters,
+            top_k=req.top_k,
+            max_content=req.max_content,
+        )
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+    chunks = [
+        RetrieveChunk(
+            content=doc.page_content,
+            knowledge_id=kb_id,
+            document_id=int(doc.metadata.get("document_id", 0)),
+            document_name=str(doc.metadata.get("document_name", "")),
+            chunk_index=int(doc.metadata.get("chunk_index", 0)),
+        )
+        for kb_id, doc in results
+    ]
+    return resp_200(data=RetrieveResp(chunks=chunks, total=len(chunks)))
 
 
 @router.post('/query_qa', status_code=200)
