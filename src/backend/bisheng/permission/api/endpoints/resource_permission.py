@@ -1019,11 +1019,10 @@ async def _knowledge_space_grant_department_ids(
     ids: set[int] = set()
 
     user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
-    ids.update(
-        int(row.department_id)
-        for row in user_departments or []
-        if getattr(row, 'department_id', None) is not None
-    )
+    for row in user_departments or []:
+        if getattr(row, 'department_id', None) is None:
+            continue
+        ids.update(await _department_subtree_ids(int(row.department_id)))
 
     admin_departments = await DepartmentDao.aget_user_admin_departments(login_user.user_id)
     for dept in admin_departments:
@@ -1146,7 +1145,7 @@ def _allowed_subject_types_for_space_level(space_level) -> set[str]:
     if space_level == KnowledgeSpaceLevelEnum.DEPARTMENT:
         return {'user', 'department'}
     if space_level == KnowledgeSpaceLevelEnum.TEAM:
-        return {'user', 'user_group'}
+        return {'user', 'department'}
     return {'user', 'department', 'user_group'}
 
 

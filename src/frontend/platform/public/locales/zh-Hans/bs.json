@@ -2294,7 +2294,7 @@
       "applicant_role": "申请人身份",
       "menu_key": "申请菜单",
       "space_type": "知识空间类型",
-      "space_level": "知识空间等级",
+      "space_level": "知识空间类型",
       "space_visibility": "空间可见性",
       "source_space_level": "来源知识空间类型",
       "target_space_level": "目标知识空间类型",

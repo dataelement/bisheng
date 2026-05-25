@@ -2344,7 +2344,7 @@
       "applicant_role": "Applicant Identity",
       "menu_key": "Applied Menu",
       "space_type": "Knowledge Space Type",
-      "space_level": "Knowledge Space Level",
+      "space_level": "Knowledge Space Type",
       "space_visibility": "Space Visibility",
       "source_space_level": "Source Knowledge Space Type",
       "target_space_level": "Target Knowledge Space Type",

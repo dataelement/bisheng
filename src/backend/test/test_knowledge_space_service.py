@@ -15,7 +15,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFileSizeLimitError,
     SpaceFileNotFoundError,
     SpaceFolderNotFoundError,
-    SpaceCreateTeamDeniedError,
+    SpaceInvalidScopeOwnerError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
@@ -314,7 +314,7 @@ def _make_space(
 
 
 @pytest.mark.asyncio
-async def test_create_options_do_not_allow_team_space_from_visible_public_groups():
+async def test_create_options_allow_team_space_without_user_groups():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -340,7 +340,7 @@ async def test_create_options_do_not_allow_team_space_from_visible_public_groups
     ):
         options = await svc.get_create_options()
 
-    assert options.can_create_team is False
+    assert options.can_create_team is True
     mock_visible_groups.assert_not_awaited()
 
 
@@ -377,7 +377,46 @@ async def test_create_user_groups_excludes_visible_public_groups_for_non_members
 
 
 @pytest.mark.asyncio
-async def test_team_space_create_rejects_visible_public_group_for_non_member():
+async def test_team_space_create_accepts_no_user_group_for_any_user():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
+    svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+        new_callable=AsyncMock,
+        return_value=0,
+    ), patch.object(
+        UserGroupDao,
+        'aget_user_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ) as mock_member_groups, patch.object(
+        UserGroupDao,
+        'aget_user_admin_group',
+        new_callable=AsyncMock,
+        return_value=[],
+    ) as mock_admin_groups, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+    ):
+        level, owner_type, owner_id = await svc.validate_knowledge_space_create(
+            name='团队空间',
+            space_level=KnowledgeSpaceLevelEnum.TEAM,
+        )
+
+    assert level == KnowledgeSpaceLevelEnum.TEAM
+    assert owner_type == KnowledgeSpaceOwnerTypeEnum.USER
+    assert owner_id == 7
+    mock_member_groups.assert_not_awaited()
+    mock_admin_groups.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_team_space_create_rejects_legacy_user_group_id():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -389,29 +428,11 @@ async def test_team_space_create_rejects_visible_public_group_for_non_member():
         new_callable=AsyncMock,
         return_value=0,
     ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_visible_groups',
-        new_callable=AsyncMock,
-        return_value=([SimpleNamespace(id=5, group_name='公开组')], 1),
-    ), patch.object(
-        UserGroupDao,
-        'aget_user_group',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch.object(
-        UserGroupDao,
-        'aget_user_admin_group',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_by_id',
-        new_callable=AsyncMock,
-        return_value=SimpleNamespace(id=5, group_name='公开组'),
-    ), patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
         new_callable=AsyncMock,
         return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
     ):
-        with pytest.raises(SpaceCreateTeamDeniedError):
+        with pytest.raises(SpaceInvalidScopeOwnerError):
             await svc.validate_knowledge_space_create(
                 name='团队空间',
                 space_level=KnowledgeSpaceLevelEnum.TEAM,
@@ -454,7 +475,7 @@ async def test_create_user_groups_include_member_and_admin_groups():
 
 
 @pytest.mark.asyncio
-async def test_create_team_space_writes_scope_and_default_user_group_viewer():
+async def test_create_team_space_writes_user_scope_without_default_group_grant():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -466,18 +487,6 @@ async def test_create_team_space_writes_scope_and_default_user_group_viewer():
         'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
         new_callable=AsyncMock,
         return_value=0,
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.UserGroupDao.aget_user_group',
-        new_callable=AsyncMock,
-        return_value=[SimpleNamespace(group_id=5)],
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.UserGroupDao.aget_user_admin_group',
-        new_callable=AsyncMock,
-        return_value=[],
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.GroupDao.aget_by_id',
-        new_callable=AsyncMock,
-        return_value=SimpleNamespace(id=5, group_name='项目组'),
     ), patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
         new_callable=AsyncMock,
@@ -507,19 +516,15 @@ async def test_create_team_space_writes_scope_and_default_user_group_viewer():
         result = await svc.create_knowledge_space(
             name='团队空间',
             space_level=KnowledgeSpaceLevelEnum.TEAM,
-            user_group_id=5,
         )
 
     assert result.id == 11
     mock_create_scope.assert_awaited_once()
     assert mock_create_scope.await_args.kwargs['space_id'] == 11
     assert mock_create_scope.await_args.kwargs['level'] == KnowledgeSpaceLevelEnum.TEAM
-    assert mock_create_scope.await_args.kwargs['owner_type'] == KnowledgeSpaceOwnerTypeEnum.USER_GROUP
-    assert mock_create_scope.await_args.kwargs['owner_id'] == 5
-    grant = mock_authorize.await_args.kwargs['grants'][0]
-    assert grant.subject_type == 'user_group'
-    assert grant.subject_id == 5
-    assert grant.relation == 'viewer'
+    assert mock_create_scope.await_args.kwargs['owner_type'] == KnowledgeSpaceOwnerTypeEnum.USER
+    assert mock_create_scope.await_args.kwargs['owner_id'] == 7
+    mock_authorize.assert_not_awaited()
 
 
 def _make_file(

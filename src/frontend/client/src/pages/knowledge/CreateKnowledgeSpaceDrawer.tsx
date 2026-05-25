@@ -20,7 +20,6 @@ import { useLocalize } from "~/hooks";
 import {
     getCreateSpaceDepartmentsApi,
     getCreateSpaceOptionsApi,
-    getCreateSpaceUserGroupsApi,
     getKnowledgeSpaceAutoTagVisibilityApi,
     getKnowledgeSpaceTagLibrariesApi,
     getKnowledgeSpaceTagLibraryDetailApi,
@@ -33,7 +32,6 @@ import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
 import type { SelectedSubject } from "~/api/permission";
 import { SubjectSearchDepartment, type DepartmentNode } from "~/components/permission/SubjectSearchDepartment";
-import { SubjectSearchUserGroup } from "~/components/permission/SubjectSearchUserGroup";
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
@@ -118,9 +116,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [departmentId, setDepartmentId] = useState<number | undefined>();
-    const [userGroupId, setUserGroupId] = useState<number | undefined>();
     const [departmentSelection, setDepartmentSelection] = useState<SelectedSubject[]>([]);
-    const [userGroupSelection, setUserGroupSelection] = useState<SelectedSubject[]>([]);
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
     const [autoTagMode, setAutoTagMode] = useState<AutoTagMode>("library");
     const [autoTagLibraryId, setAutoTagLibraryId] = useState<number | null>(null);
@@ -162,18 +158,6 @@ export function CreateKnowledgeSpaceDrawer({
         return result.data;
     }, [approvalCreateMode]);
 
-    const loadCreateUserGroups = useCallback(async (config?: { signal?: AbortSignal; keyword?: string }) => {
-        const result = await getCreateSpaceUserGroupsApi({
-            keyword: config?.keyword,
-            pageSize: 50,
-            signal: config?.signal,
-        });
-        return result.data.map((group) => ({
-            id: group.id,
-            group_name: group.groupName,
-        }));
-    }, []);
-
     const levelOptions = useMemo(() => ([
         {
             value: SpaceLevel.PUBLIC,
@@ -209,9 +193,7 @@ export function CreateKnowledgeSpaceDrawer({
         setPublishToSquare("yes");
         setSpaceLevel(SpaceLevel.PERSONAL);
         setDepartmentId(undefined);
-        setUserGroupId(undefined);
         setDepartmentSelection([]);
-        setUserGroupSelection([]);
         setAutoTagEnabled(false);
         setAutoTagMode("library");
         setAutoTagLibraryId(null);
@@ -227,10 +209,6 @@ export function CreateKnowledgeSpaceDrawer({
         if (value !== SpaceLevel.DEPARTMENT) {
             setDepartmentId(undefined);
             setDepartmentSelection([]);
-        }
-        if (value !== SpaceLevel.TEAM) {
-            setUserGroupId(undefined);
-            setUserGroupSelection([]);
         }
     };
 
@@ -259,7 +237,6 @@ export function CreateKnowledgeSpaceDrawer({
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
             setSpaceLevel(editingSpace.spaceLevel || SpaceLevel.PERSONAL);
             setDepartmentId(editingSpace.departmentId);
-            setUserGroupId(editingSpace.ownerType === "user_group" ? editingSpace.ownerId : undefined);
             setAutoTagEnabled(Boolean(editingSpace.autoTagEnabled));
             const editingMode: AutoTagMode = editingSpace.autoTagMode === "custom" ? "custom" : "library";
             setAutoTagMode(editingMode);
@@ -390,13 +367,6 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return;
         }
-        if (spaceLevel === SpaceLevel.TEAM && !userGroupId) {
-            showToast({
-                message: localize("com_knowledge.user_group_required"),
-                severity: NotificationSeverity.WARNING
-            });
-            return;
-        }
         // When the tenant-level feature is hidden, drop any local state that
         // might have been pre-filled in edit mode so we never submit stale flags.
         const effectiveAutoTagEnabled = autoTagFeatureVisible && autoTagEnabled;
@@ -438,7 +408,7 @@ export function CreateKnowledgeSpaceDrawer({
             publishToSquare: needPublishOption ? publishToSquare : "no",
             spaceLevel,
             departmentId: spaceLevel === SpaceLevel.DEPARTMENT ? departmentId : undefined,
-            userGroupId: spaceLevel === SpaceLevel.TEAM ? userGroupId : undefined,
+            userGroupId: undefined,
             autoTagEnabled: effectiveAutoTagEnabled,
             autoTagLibraryId: effectiveAutoTagLibraryId,
             autoTagCustomTags: effectiveAutoTagCustomTags,
@@ -574,25 +544,6 @@ export function CreateKnowledgeSpaceDrawer({
                                                 includeChildren={false}
                                                 onIncludeChildrenChange={() => undefined}
                                                 loadDepartments={loadCreateDepartments}
-                                                selectionMode="single"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                                {mode === "create" && spaceLevel === SpaceLevel.TEAM && (
-                                    <div className="space-y-2">
-                                        <Label className="text-sm text-[#1D2129] font-medium">
-                                            <span className="text-[#F53F3F] mr-1">*</span>
-                                            {localize("com_knowledge.select_user_group")}
-                                        </Label>
-                                        <div className="h-[260px]">
-                                            <SubjectSearchUserGroup
-                                                value={userGroupSelection}
-                                                onChange={(next) => {
-                                                    setUserGroupSelection(next);
-                                                    setUserGroupId(next[0]?.id);
-                                                }}
-                                                loadUserGroups={loadCreateUserGroups}
                                                 selectionMode="single"
                                             />
                                         </div>

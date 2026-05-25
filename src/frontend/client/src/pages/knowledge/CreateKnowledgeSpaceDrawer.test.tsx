@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { CreateKnowledgeSpaceDrawer } from "./CreateKnowledgeSpaceDrawer";
 import { getCreateSpaceOptionsApi, SpaceLevel } from "~/api/knowledge";
@@ -174,5 +174,36 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         await waitFor(() => {
             expect(screen.getByRole("radio", { name: "个人知识库" })).toHaveAttribute("aria-checked", "true");
         });
+    });
+
+    test("团队知识库创建不展示用户组选择且提交不带用户组", async () => {
+        const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: true,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM, onConfirm });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.queryByTestId("user-group-selector")).not.toBeInTheDocument();
+
+        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+            target: { value: "团队资料库" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            name: "团队资料库",
+            spaceLevel: SpaceLevel.TEAM,
+            userGroupId: undefined,
+        }));
     });
 });

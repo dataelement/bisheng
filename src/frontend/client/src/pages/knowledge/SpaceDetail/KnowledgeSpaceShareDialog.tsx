@@ -39,7 +39,7 @@ function getAllowedSubjectTabs(spaceLevel?: SpaceLevel) {
         return SUBJECT_TABS.filter((tab) => tab.value !== "user_group");
     }
     if (spaceLevel === SpaceLevel.TEAM) {
-        return SUBJECT_TABS.filter((tab) => tab.value !== "department");
+        return SUBJECT_TABS.filter((tab) => tab.value !== "user_group");
     }
     return SUBJECT_TABS;
 }

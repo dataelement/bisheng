@@ -161,7 +161,6 @@ async def test_knowledge_space_create_submit_requires_approval_without_creating(
             auth_type=AuthTypeEnum.PUBLIC,
             is_released=True,
             space_level=KnowledgeSpaceLevelEnum.TEAM,
-            user_group_id=7,
             reason="申请创建",
         ),
         login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
@@ -177,49 +176,56 @@ async def test_knowledge_space_create_submit_requires_approval_without_creating(
     assert gate_req.payload_snapshot["auth_type"] == AuthTypeEnum.PUBLIC.value
     assert gate_req.payload_snapshot["is_released"] is True
     assert gate_req.payload_snapshot["create_params"]["name"] == "团队资料库"
-    assert gate_req.payload_snapshot["create_params"]["user_group_id"] == 7
+    assert gate_req.payload_snapshot["create_params"]["user_group_id"] is None
     assert result["decision"] == "pending"
     assert result["created"] is False
     message_service.send_generic_approval.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_knowledge_space_create_denied_team_group_does_not_enter_approval(monkeypatch):
+async def test_knowledge_space_create_team_without_user_group_is_validated_before_approval(monkeypatch):
     from bisheng.approval.domain.schemas.shougang_approval_schema import (
         ShougangKnowledgeSpaceCreateSubmitReq,
     )
     from bisheng.approval.domain.services.shougang_approval_service import (
         ShougangApprovalService,
     )
-    from bisheng.common.errcode.knowledge_space import SpaceCreateTeamDeniedError
     from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 
     space_service = SimpleNamespace(
-        validate_knowledge_space_create=AsyncMock(side_effect=SpaceCreateTeamDeniedError()),
+        validate_knowledge_space_create=AsyncMock(return_value=None),
         create_knowledge_space=AsyncMock(),
     )
     approval_gate = _pending_approval_gate()
-    service = ShougangApprovalService(approval_gate=approval_gate)
+    message_service = SimpleNamespace(send_generic_approval=AsyncMock())
+    service = ShougangApprovalService(
+        approval_gate=approval_gate,
+        message_service=message_service,
+    )
     monkeypatch.setattr(service, "_is_create_approval_exempt", AsyncMock(return_value=False))
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+    monkeypatch.setattr(service, "_task_approver_user_ids", AsyncMock(return_value=[301]))
 
-    with pytest.raises(SpaceCreateTeamDeniedError):
-        await service.submit_knowledge_space_create(
-            req=ShougangKnowledgeSpaceCreateSubmitReq(
-                name="团队资料库",
-                auth_type=AuthTypeEnum.PUBLIC,
-                is_released=True,
-                space_level=KnowledgeSpaceLevelEnum.TEAM,
-                user_group_id=7,
-                reason="申请创建",
-            ),
-            login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
-            space_service=space_service,
-        )
+    await service.submit_knowledge_space_create(
+        req=ShougangKnowledgeSpaceCreateSubmitReq(
+            name="团队资料库",
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=True,
+            space_level=KnowledgeSpaceLevelEnum.TEAM,
+            reason="申请创建",
+        ),
+        login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
+        space_service=space_service,
+    )
 
-    space_service.validate_knowledge_space_create.assert_awaited_once()
+    validate_kwargs = space_service.validate_knowledge_space_create.await_args.kwargs
+    assert validate_kwargs["space_level"] == KnowledgeSpaceLevelEnum.TEAM.value
+    assert validate_kwargs["user_group_id"] is None
+    assert validate_kwargs["approval_request"] is True
     space_service.create_knowledge_space.assert_not_called()
-    approval_gate.request_or_pass.assert_not_called()
+    approval_gate.request_or_pass.assert_awaited_once()
+    message_service.send_generic_approval.assert_awaited_once()
 
 
 @pytest.mark.asyncio

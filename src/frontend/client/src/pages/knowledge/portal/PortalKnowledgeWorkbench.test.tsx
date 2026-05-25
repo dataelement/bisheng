@@ -590,19 +590,21 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
 
         await waitFor(() => {
-            expect(submitShougangKnowledgeSpaceCreateApprovalApi).toHaveBeenCalledWith({
-                name: "新空间",
-                description: "说明",
-                auth_type: VisibilityType.APPROVAL,
-                is_released: true,
-                space_level: SpaceLevel.TEAM,
-                department_id: undefined,
-                user_group_id: undefined,
-                auto_tag_enabled: false,
-                auto_tag_library_id: null,
-                reason: "申请创建团队知识库",
-            });
+            expect(submitShougangKnowledgeSpaceCreateApprovalApi).toHaveBeenCalledTimes(1);
         });
+        const payload = jest.mocked(submitShougangKnowledgeSpaceCreateApprovalApi).mock.calls[0][0];
+        expect(payload).toEqual({
+            name: "新空间",
+            description: "说明",
+            auth_type: VisibilityType.APPROVAL,
+            is_released: true,
+            space_level: SpaceLevel.TEAM,
+            department_id: undefined,
+            auto_tag_enabled: false,
+            auto_tag_library_id: null,
+            reason: "申请创建团队知识库",
+        });
+        expect(payload).not.toHaveProperty("user_group_id");
         expect(createSpaceApi).not.toHaveBeenCalled();
         expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "已提交申请" }));
     });

@@ -23,7 +23,6 @@ export function mapCreateFormToShougangApprovalPayload(
         is_released: form.publishToSquare === "yes",
         space_level: form.spaceLevel,
         department_id: form.departmentId,
-        user_group_id: form.userGroupId,
         auto_tag_enabled: form.autoTagEnabled,
         auto_tag_library_id: form.autoTagLibraryId,
         auto_tag_custom_tags: form.autoTagCustomTags,

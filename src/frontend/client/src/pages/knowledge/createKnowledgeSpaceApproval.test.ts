@@ -24,7 +24,6 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             joinPolicy: "review",
             publishToSquare: "yes",
             spaceLevel: SpaceLevel.TEAM,
-            userGroupId: 7,
             departmentId: undefined,
             autoTagEnabled: true,
             autoTagLibraryId: 9,
@@ -32,18 +31,19 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             reason: "申请创建团队知识库",
         });
 
-        expect(submitShougangKnowledgeSpaceCreateApprovalApi).toHaveBeenCalledWith({
+        const payload = jest.mocked(submitShougangKnowledgeSpaceCreateApprovalApi).mock.calls[0][0];
+        expect(payload).toEqual({
             name: "团队资料库",
             description: "资料说明",
             auth_type: VisibilityType.APPROVAL,
             is_released: true,
             space_level: SpaceLevel.TEAM,
             department_id: undefined,
-            user_group_id: 7,
             auto_tag_enabled: true,
             auto_tag_library_id: 9,
             auto_tag_custom_tags: ["技术"],
             reason: "申请创建团队知识库",
         });
+        expect(payload).not.toHaveProperty("user_group_id");
     });
 });

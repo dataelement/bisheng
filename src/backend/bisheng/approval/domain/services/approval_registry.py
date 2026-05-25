@@ -38,7 +38,7 @@ _CONDITION_FIELD_OPTIONS: dict[str, ApprovalPresetConditionField] = {
     ),
     'space_level': ApprovalPresetConditionField(
         field='space_level',
-        label='知识空间等级',
+        label='知识空间类型',
         type='select',
         values=_values([
             ('public', '公共'),
@@ -160,7 +160,7 @@ class ApprovalRegistry:
                 scenario_code='knowledge_space_create_request',
                 scenario_name='知识空间创建审批',
                 handler_key='knowledge_space_create_request',
-                condition_fields=['applicant_role', 'space_level', 'space_visibility'],
+                condition_fields=['applicant_role', 'space_level'],
                 approver_source_types=['direct_user', 'department_admin'],
             )
         )

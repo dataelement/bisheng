@@ -34,7 +34,6 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceInvalidScopeOwnerError,
     SpaceCreatePublicDeniedError,
     SpaceCreateDepartmentDeniedError,
-    SpaceCreateTeamDeniedError,
     SpaceNameDuplicateError,
     SpaceTenantMismatchError,
 )
@@ -508,15 +507,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return level, KnowledgeSpaceOwnerTypeEnum.DEPARTMENT, int(department_id)
 
         if level == KnowledgeSpaceLevelEnum.TEAM:
-            if user_group_id is None or department_id is not None:
+            if user_group_id is not None or department_id is not None:
                 raise SpaceInvalidScopeOwnerError()
-            group = await GroupDao.aget_by_id(int(user_group_id))
-            if group is None:
-                raise SpaceInvalidScopeOwnerError(msg='User group does not exist')
-            user_group_ids = await self._user_group_ids_for_create()
-            if int(user_group_id) not in user_group_ids:
-                raise SpaceCreateTeamDeniedError()
-            return level, KnowledgeSpaceOwnerTypeEnum.USER_GROUP, int(user_group_id)
+            return level, KnowledgeSpaceOwnerTypeEnum.USER, int(self.login_user.user_id)
 
         if level == KnowledgeSpaceLevelEnum.PERSONAL:
             if department_id is not None or user_group_id is not None:
@@ -585,13 +578,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 relation='viewer',
                 include_children=True,
             )
-        elif level == KnowledgeSpaceLevelEnum.TEAM:
-            grant = AuthorizeGrantItem(
-                subject_type='user_group',
-                subject_id=owner_id,
-                relation='viewer',
-                include_children=False,
-            )
         if grant is None:
             return
         await PermissionService.authorize(
@@ -602,7 +588,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def get_create_options(self) -> KnowledgeSpaceCreateOptionsResp:
-        user_group_ids = await self._user_group_ids_for_create()
         if self.login_user.is_admin():
             can_create_department = True
         else:
@@ -613,7 +598,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return KnowledgeSpaceCreateOptionsResp(
             can_create_public=bool(self.login_user.is_admin()),
             can_create_department=can_create_department,
-            can_create_team=bool(user_group_ids),
+            can_create_team=True,
             can_create_personal=True,
             departments=[],
             user_groups=[],

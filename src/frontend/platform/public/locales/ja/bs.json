@@ -2294,7 +2294,7 @@
       "applicant_role": "申請者の権限",
       "menu_key": "申請メニュー",
       "space_type": "ナレッジスペースタイプ",
-      "space_level": "ナレッジスペースレベル",
+      "space_level": "ナレッジスペースタイプ",
       "space_visibility": "スペース公開範囲",
       "source_space_level": "元ナレッジスペースタイプ",
       "target_space_level": "対象ナレッジスペースタイプ",
