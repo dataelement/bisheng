@@ -93,7 +93,7 @@ function TagLibraryDialog({ open, mode, initial, onOpenChange, onSaved }: TagLib
         const req =
             mode === "edit" && initial
                 ? updateKnowledgeSpaceTagLibraryApi(initial.id, payload)
-                : createKnowledgeSpaceTagLibraryApi({ ...payload, is_builtin: true });
+                : createKnowledgeSpaceTagLibraryApi({ ...payload });
         const res = await captureAndAlertRequestErrorHoc(req);
         setSaving(false);
         if (!res) return;
