@@ -180,6 +180,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [decisionComment, setDecisionComment] = useState("");
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
 
   const filteredTaskItems = useMemo(() => {
     const byStatus = taskFilter === "pending_me"
@@ -237,11 +239,21 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try {
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
-      const allIds = new Set(resp.data.map((i) => getId(i, "instance")));
-      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
-      const visibleItems = requestsFilter === "in_progress"
+      // If there's a preferred instance, derive the correct filter tab from its status so
+      // the item is actually visible in the left panel (not hidden by the current filter).
+      let targetFilter = requestsFilter;
+      if (preferredId) {
+        const prefItem = resp.data.find((i) => getId(i, "instance") === preferredId);
+        if (prefItem) {
+          const prefInProgress = IN_PROGRESS_STATUSES.has(prefItem.status ?? "");
+          targetFilter = prefInProgress ? "in_progress" : "completed";
+          if (targetFilter !== requestsFilter) setRequestsFilter(targetFilter);
+        }
+      }
+      const visibleItems = targetFilter === "in_progress"
         ? resp.data.filter((i) => IN_PROGRESS_STATUSES.has(i.status ?? ""))
         : resp.data.filter((i) => !IN_PROGRESS_STATUSES.has(i.status ?? ""));
+      const validPreferred = preferredId && resp.data.some((i) => getId(i, "instance") === preferredId) ? preferredId : null;
       const nextId = validPreferred ?? getId(visibleItems[0], "instance");
       setSelectedInstanceId(nextId);
       if (nextId) { setLoadingDetail(true); setRequestDetail(await getApprovalInstanceDetailApi(nextId)); }
@@ -296,11 +308,16 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try { await decideApprovalTaskApi(selectedTaskId, { action, comment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
     catch { toast(false); } finally { setActionLoading(false); }
   };
-  const runWithdraw = async () => {
+  const runWithdraw = () => {
+    setWithdrawReason("");
+    setWithdrawDialogOpen(true);
+  };
+  const confirmWithdraw = async () => {
     if (!selectedInstanceId) return;
+    setWithdrawDialogOpen(false);
     setActionLoading(true);
     try {
-      await withdrawApprovalInstanceApi(selectedInstanceId, {});
+      await withdrawApprovalInstanceApi(selectedInstanceId, { reason: withdrawReason.trim() || undefined });
       toast(true);
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
@@ -540,6 +557,31 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
           </div>
         </div>
       </DialogContent>
+      <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-2xl">
+          <div className="text-[16px] font-semibold text-[#1d2129]">{localize("com_approval_withdraw_dialog_title")}</div>
+          <textarea
+            rows={4}
+            value={withdrawReason}
+            onChange={(e) => setWithdrawReason(e.target.value)}
+            maxLength={500}
+            placeholder={localize("com_approval_withdraw_reason_placeholder")}
+            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+          />
+          <div className="mt-4 flex justify-end gap-3">
+            <button type="button"
+              className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
+              onClick={() => setWithdrawDialogOpen(false)}>
+              {localize("com_ui_cancel")}
+            </button>
+            <button type="button"
+              className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f7ff]"
+              onClick={confirmWithdraw}>
+              {localize("com_approval_action_withdraw")}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
@@ -719,9 +761,9 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
               );
             });
           })()}
-          {/* other action logs — skip_node is shown on the node itself */}
+          {/* other action logs — skip_node/approved/rejected are shown on the node itself */}
           {(detail.action_logs || [])
-            .filter((l) => l.action !== "submitted" && l.action !== "resubmitted" && l.action !== "skip_node")
+            .filter((l) => !["submitted", "resubmitted", "skip_node", "approved", "rejected"].includes(l.action ?? ""))
             .map((log, i, arr) => (
               <TimelineStep key={log.id ?? `l${i}`} action={log.action} operatorName={log.operator_user_name}
                 createTime={log.create_time} detail={log.detail} localize={localize} isLast={i === arr.length - 1} />
@@ -905,9 +947,9 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
               );
             });
           })()}
-          {/* other action logs (withdrawn, cancelled, etc.) — skip_node is shown on the node itself */}
+          {/* other action logs (withdrawn, cancelled, etc.) — skip_node/approved/rejected are shown on the node itself */}
           {(detail.action_logs || [])
-            .filter((l) => l.action !== "submitted" && l.action !== "resubmitted" && l.action !== "skip_node")
+            .filter((l) => !["submitted", "resubmitted", "skip_node", "approved", "rejected"].includes(l.action ?? ""))
             .map((log, i, arr) => (
               <TimelineStep key={log.id ?? `l${i}`} action={log.action} operatorName={log.operator_user_name}
                 createTime={log.create_time} detail={log.detail} localize={localize} isLast={i === arr.length - 1} />

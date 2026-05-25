@@ -86,12 +86,20 @@ def _patch_dm_type_compiler() -> None:
         def _visit_json(self, type_, **kw):
             return "CLOB"
 
+        def _visit_char(self, type_, **kw):
+            # DaMeng CHAR pads stored values to the declared length and returns
+            # the padded string to the application, unlike MySQL which strips on
+            # retrieval.  Emitting VARCHAR avoids padding in new DDL.
+            return f"VARCHAR({type_.length or 1})"
+
         DmTypeCompiler.visit_boolean = _visit_boolean
         DmTypeCompiler.visit_BOOLEAN = _visit_boolean
         # LONGTEXT / JSON are MySQL-specific; fall back to CLOB on DaMeng
         DmTypeCompiler.visit_LONGTEXT = _visit_longtext
         DmTypeCompiler.visit_JSON = _visit_json
         DmTypeCompiler.visit_json = _visit_json
+        # CHAR pads to declared length on DaMeng — use VARCHAR in DDL instead
+        DmTypeCompiler.visit_CHAR = _visit_char
 
         # Tell SQLAlchemy that DaMeng has no native JSON support so it
         # serialises Python dicts to JSON strings on the Python side.
@@ -104,8 +112,31 @@ def _patch_dm_type_compiler() -> None:
         pass  # Not on a DaMeng-capable platform (e.g., macOS dev)
 
 
+def _patch_dm_char_stripping() -> None:
+    """Patch SQLAlchemy CHAR.result_processor to strip trailing spaces on DaMeng.
+
+    DaMeng (Oracle-compatible) returns CHAR columns right-padded to the column
+    length, while MySQL silently strips on retrieval.  This patch makes DaMeng
+    behave consistently with MySQL for all existing CHAR columns without
+    requiring model changes.
+    """
+    from sqlalchemy.types import CHAR as _CHAR  # local import avoids circular refs
+
+    _orig_result_processor = _CHAR.result_processor
+
+    def _patched_result_processor(self, dialect, coltype):
+        if dialect.name == "dm":
+            def _strip(value):
+                return value.rstrip() if value is not None else value
+            return _strip
+        return _orig_result_processor(self, dialect, coltype)
+
+    _CHAR.result_processor = _patched_result_processor
+
+
 _patch_dm_ddl_compiler()
 _patch_dm_type_compiler()
+_patch_dm_char_stripping()
 
 
 # ---------------------------------------------------------------------------

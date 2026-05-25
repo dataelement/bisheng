@@ -55,6 +55,36 @@ export interface ApprovalExceptionItem {
   applicant_user_name?: string | null;
 }
 
+export interface ApprovalInstanceDetail {
+  instance_id?: number;
+  status?: string;
+  flow_nodes?: {
+    node_code?: string;
+    node_name?: string;
+    node_order?: number;
+    node_mode?: string;
+    task_id?: number;
+    status?: string;
+  }[];
+  tasks?: {
+    task_id?: number;
+    id?: number;
+    approver_user_name?: string;
+    node_name?: string;
+    node_order?: number;
+    status?: string;
+    comment?: string;
+    update_time?: string;
+  }[];
+  action_logs?: {
+    id?: number;
+    action?: string;
+    operator_user_name?: string;
+    create_time?: string;
+    detail?: Record<string, any>;
+  }[];
+}
+
 export async function listApprovalScenarioPresetsApi(): Promise<ApprovalScenarioPreset[]> {
   return await axios.get("/api/v1/approval/admin/scenario-presets");
 }
@@ -145,31 +175,6 @@ export async function listApprovalNodesApi(flowDefinitionId: number): Promise<Ap
   return await axios.get(`/api/v1/approval/admin/flows/${flowDefinitionId}/nodes`);
 }
 
-export async function createApprovalNodeApi(
-  flowDefinitionId: number,
-  data: {
-    node_name: string;
-    node_order?: number;
-    node_mode: string;
-    approver_config?: Record<string, any>;
-    extra_config?: Record<string, any>;
-  },
-): Promise<ApprovalNodeItem> {
-  return await axios.post(`/api/v1/approval/admin/flows/${flowDefinitionId}/nodes`, data);
-}
-
-export async function updateApprovalNodeApi(
-  nodeDefinitionId: number,
-  data: {
-    node_name?: string;
-    node_order?: number;
-    node_mode?: string;
-    approver_config?: Record<string, any>;
-    extra_config?: Record<string, any>;
-  },
-): Promise<ApprovalNodeItem> {
-  return await axios.put(`/api/v1/approval/admin/nodes/${nodeDefinitionId}`, data);
-}
 
 export async function deleteApprovalScenarioApi(scenarioId: number): Promise<void> {
   return await axios.delete(`/api/v1/approval/admin/scenarios/${scenarioId}`);
@@ -193,9 +198,20 @@ export async function deleteApprovalFlowApi(flowDefinitionId: number): Promise<v
   return await axios.delete(`/api/v1/approval/admin/flows/${flowDefinitionId}`);
 }
 
-export async function deleteApprovalNodeApi(nodeDefinitionId: number): Promise<void> {
-  return await axios.delete(`/api/v1/approval/admin/nodes/${nodeDefinitionId}`);
+export async function setApprovalFlowNodesApi(
+  flowDefinitionId: number,
+  nodes: {
+    node_code?: string;
+    node_name: string;
+    node_order: number;
+    node_mode: string;
+    approver_config?: Record<string, any>;
+    extra_config?: Record<string, any>;
+  }[],
+): Promise<{ flow_version_id: number; version_no: number; nodes: ApprovalNodeItem[] }> {
+  return await axios.put(`/api/v1/approval/admin/flows/${flowDefinitionId}/nodes`, { nodes });
 }
+
 
 export async function retryApprovalExceptionApi(
   exceptionId: number,
@@ -223,4 +239,8 @@ export async function applyMenuAccessApi(data: {
   reason?: string;
 }): Promise<Record<string, any>> {
   return await axios.post(`/api/v1/approval/menu-access/apply`, data);
+}
+
+export async function getApprovalInstanceDetailForAdminApi(instanceId: number): Promise<ApprovalInstanceDetail> {
+  return await axios.get(`/api/v1/approval/instances/${instanceId}`);
 }

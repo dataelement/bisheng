@@ -2013,6 +2013,8 @@
   "com_approval_action_reject": "Reject",
   "com_approval_decision_comment_placeholder": "Enter approval comment (optional; defaults to Approve / Reject)",
   "com_approval_action_withdraw": "Withdraw",
+  "com_approval_withdraw_dialog_title": "Confirm Withdrawal",
+  "com_approval_withdraw_reason_placeholder": "Enter withdrawal reason (optional)",
   "com_approval_action_revoke_grant": "Revoke Grant",
   "com_approval_loading": "Loading…",
   "com_approval_empty_list": "No records",

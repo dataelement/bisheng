@@ -1942,6 +1942,8 @@
   "com_approval_action_reject": "拒绝",
   "com_approval_decision_comment_placeholder": "请填写审批意见（可选，默认同意/驳回）",
   "com_approval_action_withdraw": "撤回申请",
+  "com_approval_withdraw_dialog_title": "确认撤回",
+  "com_approval_withdraw_reason_placeholder": "请填写撤回原因（选填）",
   "com_approval_action_revoke_grant": "撤销授权",
   "com_approval_loading": "加载中…",
   "com_approval_empty_list": "暂无记录",
