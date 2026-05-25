@@ -1936,6 +1936,8 @@
   "com_approval_action_reject": "却下",
   "com_approval_decision_comment_placeholder": "審査意見を入力してください（省略可。デフォルト：承認/却下）",
   "com_approval_action_withdraw": "申請を取り下げる",
+  "com_approval_withdraw_dialog_title": "取り下げ確認",
+  "com_approval_withdraw_reason_placeholder": "取り下げ理由を入力してください（任意）",
   "com_approval_action_revoke_grant": "許可を取り消す",
   "com_approval_loading": "読み込み中…",
   "com_approval_empty_list": "記録なし",

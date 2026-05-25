@@ -180,6 +180,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [decisionComment, setDecisionComment] = useState("");
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [withdrawReason, setWithdrawReason] = useState("");
 
   const filteredTaskItems = useMemo(() => {
     const byStatus = taskFilter === "pending_me"
@@ -296,11 +298,16 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     try { await decideApprovalTaskApi(selectedTaskId, { action, comment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
     catch { toast(false); } finally { setActionLoading(false); }
   };
-  const runWithdraw = async () => {
+  const runWithdraw = () => {
+    setWithdrawReason("");
+    setWithdrawDialogOpen(true);
+  };
+  const confirmWithdraw = async () => {
     if (!selectedInstanceId) return;
+    setWithdrawDialogOpen(false);
     setActionLoading(true);
     try {
-      await withdrawApprovalInstanceApi(selectedInstanceId, {});
+      await withdrawApprovalInstanceApi(selectedInstanceId, { reason: withdrawReason.trim() || undefined });
       toast(true);
       const resp = await listMyApprovalRequestsApi();
       setRequestItems(resp.data);
@@ -540,6 +547,31 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
           </div>
         </div>
       </DialogContent>
+      <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-2xl">
+          <div className="text-[16px] font-semibold text-[#1d2129]">{localize("com_approval_withdraw_dialog_title")}</div>
+          <textarea
+            rows={4}
+            value={withdrawReason}
+            onChange={(e) => setWithdrawReason(e.target.value)}
+            maxLength={500}
+            placeholder={localize("com_approval_withdraw_reason_placeholder")}
+            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+          />
+          <div className="mt-4 flex justify-end gap-3">
+            <button type="button"
+              className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
+              onClick={() => setWithdrawDialogOpen(false)}>
+              {localize("com_ui_cancel")}
+            </button>
+            <button type="button"
+              className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f7ff]"
+              onClick={confirmWithdraw}>
+              {localize("com_approval_action_withdraw")}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
