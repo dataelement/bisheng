@@ -791,7 +791,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
   ];
 
   const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
-    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
+    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && k !== "reason" && v !== undefined && v !== null && v !== "",
   );
 
   return (
