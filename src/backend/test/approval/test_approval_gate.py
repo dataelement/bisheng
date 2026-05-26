@@ -154,7 +154,7 @@ async def test_repository_returns_existing_duplicate_pending_instance(patched_ap
 
 
 @pytest.mark.asyncio
-async def test_repository_allows_resubmit_after_closed_instance(patched_approval_repositories):
+async def test_repository_allows_new_application_after_closed_instance(patched_approval_repositories):
     await ApprovalInstanceRepository.create_instance(
         ApprovalInstance(
             tenant_id=1,

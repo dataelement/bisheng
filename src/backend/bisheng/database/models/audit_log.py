@@ -187,7 +187,6 @@ _UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
     'approval.task.approve',
     'approval.task.reject',
     'approval.instance.withdraw',
-    'approval.instance.resubmit',
     'approval.menu_access.revoke_grant',
     'approval.exception.retry',
     'approval.exception.skip_node',

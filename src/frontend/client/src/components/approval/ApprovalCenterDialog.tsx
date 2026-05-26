@@ -6,7 +6,6 @@ import {
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
   revokeMenuAccessGrantApi,
-  resubmitApprovalInstanceApi,
   type ApprovalCenterTab,
   type ApprovalInstanceDetail,
   type ApprovalInstanceItem,
@@ -326,12 +325,6 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
       setRequestDetail(await getApprovalInstanceDetailApi(selectedInstanceId));
     } catch { toast(false); } finally { setActionLoading(false); setLoadingDetail(false); }
   };
-  const runResubmit = async () => {
-    if (!selectedInstanceId) return;
-    setActionLoading(true);
-    try { await resubmitApprovalInstanceApi(selectedInstanceId, {}); await loadRequests(selectedInstanceId); toast(true); }
-    catch { toast(false); } finally { setActionLoading(false); }
-  };
   const runRevokeGrant = async () => {
     // Approver revokes from my_tasks using the task's instance_id
     const instanceId = taskDetail?.instance_id;
@@ -343,7 +336,6 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   const isTaskPending = activeTab === "my_tasks" && taskDetail?.status === "pending";
   const isInstancePending = activeTab === "my_requests" && requestDetail?.status === "pending";
-  const canResubmit = activeTab === "my_requests" && requestDetail?.status === "rejected";
   // Only the approver (my_tasks) can revoke a granted menu permission, and only if not already revoked
   const canRevoke =
     activeTab === "my_tasks" &&
@@ -498,7 +490,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               </div>
 
               {/* Fixed footer buttons */}
-              {(isTaskPending || isInstancePending || canResubmit || canRevoke) && (
+              {(isTaskPending || isInstancePending || canRevoke) && (
                 <div className="flex flex-col gap-3 border-t border-[#f2f3f5] px-6 py-4">
                   {isTaskPending && (
                     <textarea
@@ -534,13 +526,6 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                       className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f7ff] disabled:opacity-60"
                       onClick={runWithdraw}>
                       {localize("com_approval_action_withdraw")}
-                    </button>
-                  )}
-                  {canResubmit && (
-                    <button type="button" disabled={actionLoading}
-                      className="rounded-lg bg-[#722ed1] px-4 py-2 text-[14px] text-white hover:bg-[#6327b3] disabled:opacity-60"
-                      onClick={runResubmit}>
-                      {localize("com_approval_action_resubmit")}
                     </button>
                   )}
                   {canRevoke && (
@@ -791,7 +776,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
   ];
 
   const detailEntries = Object.entries(detail.detail_snapshot ?? {}).filter(
-    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && v !== undefined && v !== null && v !== "",
+    ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && k !== "reason" && v !== undefined && v !== null && v !== "",
   );
 
   return (

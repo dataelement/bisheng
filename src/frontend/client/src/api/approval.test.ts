@@ -8,7 +8,6 @@ import {
   listMyApprovalRequestsApi,
   listMyApprovalTasksApi,
   revokeMenuAccessGrantApi,
-  resubmitApprovalInstanceApi,
   withdrawApprovalInstanceApi,
 } from "./approval";
 
@@ -115,15 +114,11 @@ describe("approval api", () => {
     });
   });
 
-  it("submits withdraw, resubmit and revoke grant actions", async () => {
+  it("submits withdraw and revoke grant actions", async () => {
     mockPost
       .mockResolvedValueOnce({
         status_code: 200,
         data: { instance_id: 21, status: "withdrawn" },
-      })
-      .mockResolvedValueOnce({
-        status_code: 200,
-        data: { instance_id: 21, status: "pending" },
       })
       .mockResolvedValueOnce({
         status_code: 200,
@@ -134,10 +129,6 @@ describe("approval api", () => {
       instance_id: 21,
       status: "withdrawn",
     });
-    await expect(resubmitApprovalInstanceApi(21, { reason: "retry" })).resolves.toEqual({
-      instance_id: 21,
-      status: "pending",
-    });
     await expect(revokeMenuAccessGrantApi(21, { reason: "cleanup" })).resolves.toEqual({
       instance_id: 21,
       revoked_keys: ["knowledge"],
@@ -146,10 +137,7 @@ describe("approval api", () => {
     expect(mockPost).toHaveBeenNthCalledWith(1, "/api/v1/approval/instances/21/withdraw", {
       reason: "cancel",
     });
-    expect(mockPost).toHaveBeenNthCalledWith(2, "/api/v1/approval/instances/21/resubmit", {
-      reason: "retry",
-    });
-    expect(mockPost).toHaveBeenNthCalledWith(3, "/api/v1/approval/menu-access/21/revoke-grant", {
+    expect(mockPost).toHaveBeenNthCalledWith(2, "/api/v1/approval/menu-access/21/revoke-grant", {
       reason: "cleanup",
     });
   });

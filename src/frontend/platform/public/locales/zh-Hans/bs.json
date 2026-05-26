@@ -1329,7 +1329,6 @@
       "approvalTaskApprove": "审批通过",
       "approvalTaskReject": "审批拒绝",
       "approvalInstanceWithdraw": "撤回审批申请",
-      "approvalInstanceResubmit": "重新提交审批申请",
       "approvalMenuAccessRevokeGrant": "撤回菜单授权",
       "approvalExceptionRetry": "重试异常流程"
     },

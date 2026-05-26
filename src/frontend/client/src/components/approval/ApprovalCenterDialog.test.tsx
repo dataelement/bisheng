@@ -1,10 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 
 import { ApprovalCenterDialog } from "./ApprovalCenterDialog";
 import {
   getApprovalInstanceDetailApi,
   listMyApprovalRequestsApi,
-  resubmitApprovalInstanceApi,
 } from "~/api/approval";
 
 jest.mock("~/hooks/useLocalize", () => ({
@@ -25,7 +24,6 @@ jest.mock("~/api/approval", () => ({
   listMyApprovalTasksApi: jest.fn(),
   decideApprovalTaskApi: jest.fn(),
   withdrawApprovalInstanceApi: jest.fn(),
-  resubmitApprovalInstanceApi: jest.fn(),
   revokeMenuAccessGrantApi: jest.fn(),
 }));
 
@@ -41,7 +39,7 @@ describe("ApprovalCenterDialog", () => {
     jest.clearAllMocks();
   });
 
-  it("shows a resubmit action for rejected requests and refreshes detail after click", async () => {
+  it("does not render a resubmit action for rejected requests", async () => {
     jest.mocked(listMyApprovalRequestsApi).mockResolvedValue({
       data: [
         {
@@ -52,22 +50,10 @@ describe("ApprovalCenterDialog", () => {
       ],
       total: 1,
     });
-    jest.mocked(getApprovalInstanceDetailApi)
-      .mockResolvedValueOnce({
-        instance_id: 21,
-        business_name: "知识库申请",
-        status: "rejected",
-        scenario_code: "knowledge_space_subscribe_request",
-      } as any)
-      .mockResolvedValueOnce({
-        instance_id: 21,
-        business_name: "知识库申请",
-        status: "pending",
-        scenario_code: "knowledge_space_subscribe_request",
-      } as any);
-    jest.mocked(resubmitApprovalInstanceApi).mockResolvedValue({
+    jest.mocked(getApprovalInstanceDetailApi).mockResolvedValue({
       instance_id: 21,
-      status: "pending",
+      business_name: "知识库申请",
+      status: "rejected",
       scenario_code: "knowledge_space_subscribe_request",
     } as any);
 
@@ -79,18 +65,9 @@ describe("ApprovalCenterDialog", () => {
       />,
     );
 
-    const resubmitButton = await screen.findByText("com_approval_action_resubmit");
-    fireEvent.click(resubmitButton);
-
     await waitFor(() => {
-      expect(resubmitApprovalInstanceApi).toHaveBeenCalledWith(21, {});
+      expect(getApprovalInstanceDetailApi).toHaveBeenCalled();
     });
-    await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith({
-        message: "com_approval_toast_success",
-        severity: "success",
-      });
-    });
-    expect(getApprovalInstanceDetailApi).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("com_approval_action_resubmit")).toBeNull();
   });
 });
