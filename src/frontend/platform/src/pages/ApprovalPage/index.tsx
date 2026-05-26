@@ -912,12 +912,12 @@ function NodeDialog({
 
 // ─── Approval progress timeline (for exception detail) ───────────────────────
 
-const NODE_BADGE_MAP: Record<string, { text: string; cls: string }> = {
-  approved:  { text: "已通过",   cls: "bg-green-50 text-green-600" },
-  rejected:  { text: "已拒绝",   cls: "bg-red-50 text-red-600" },
-  pending:   { text: "待审批",   cls: "bg-blue-50 text-blue-600" },
-  skipped:   { text: "已跳过",   cls: "bg-gray-100 text-gray-500" },
-  cancelled: { text: "已取消",   cls: "bg-gray-100 text-gray-500" },
+const NODE_BADGE_CLS: Record<string, string> = {
+  approved:  "bg-green-50 text-green-600",
+  rejected:  "bg-red-50 text-red-600",
+  pending:   "bg-blue-50 text-blue-600",
+  skipped:   "bg-gray-100 text-gray-500",
+  cancelled: "bg-gray-100 text-gray-500",
 };
 
 function taskIcon(status: string): { icon: string; cls: string } {
@@ -928,6 +928,14 @@ function taskIcon(status: string): { icon: string; cls: string } {
 }
 
 function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
+  const { t } = useTranslation("bs");
+  const nodeBadgeText: Record<string, string> = {
+    approved:  t("approvalPage.timeline_statusApproved"),
+    rejected:  t("approvalPage.timeline_statusRejected"),
+    pending:   t("approvalPage.timeline_statusPending"),
+    skipped:   t("approvalPage.timeline_statusSkipped"),
+    cancelled: t("approvalPage.timeline_statusCancelled"),
+  };
   const nodes = detail.flow_nodes && detail.flow_nodes.length > 0
     ? [...detail.flow_nodes].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0))
     : [...(detail.tasks || [])].sort((a, b) => (a.node_order ?? 0) - (b.node_order ?? 0));
@@ -948,7 +956,7 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
 
   return (
     <div className="mt-4 rounded-lg border border-border-subtle bg-gray-50 px-4 py-3 space-y-0">
-      <div className="mb-2 text-xs font-semibold text-text-secondary">审批进度</div>
+      <div className="mb-2 text-xs font-semibold text-text-secondary">{t("approvalPage.timeline_title")}</div>
 
       {/* submit / resubmit logs */}
       {submitLogs.map((log, i) => {
@@ -963,7 +971,7 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
             </div>
             <div className={`min-w-0 pt-0.5 ${isLast ? "pb-1" : "pb-3"}`}>
               <div className="text-xs font-medium text-text-primary">
-                {isSubmit ? "提交申请" : "重新提交"}
+                {isSubmit ? t("approvalPage.timeline_submitApply") : t("approvalPage.timeline_resubmit")}
               </div>
               {log.operator_user_name && (
                 <div className="text-[11px] text-text-secondary">{log.operator_user_name}</div>
@@ -998,7 +1006,8 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
           : "bg-blue-500";
         const isLast = stepIdx === totalSteps - (hasTrailingLogs ? trailingLogs.length : 0)
           && i === nodes.length - 1 && !hasTrailingLogs;
-        const badge = NODE_BADGE_MAP[s];
+        const badgeCls = NODE_BADGE_CLS[s];
+        const badgeText = nodeBadgeText[s];
 
         return (
           <div key={node.node_code ?? node.task_id ?? i} className="flex gap-2.5">
@@ -1011,38 +1020,38 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
                 <span className={`text-xs font-medium ${isNotStarted ? "text-text-secondary" : "text-text-primary"}`}>
                   {node.node_name || "--"}
                 </span>
-                {!isNotStarted && badge && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${badge.cls}`}>
-                    {badge.text}
+                {!isNotStarted && badgeCls && badgeText && (
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${badgeCls}`}>
+                    {badgeText}
                   </span>
                 )}
               </div>
               {isNotStarted && (
-                <div className="text-[11px] text-text-secondary">未到达</div>
+                <div className="text-[11px] text-text-secondary">{t("approvalPage.timeline_notArrived")}</div>
               )}
               {matchedTasks.length > 0 && (
                 <div className="mt-1.5 space-y-1">
-                  {matchedTasks.map((t) => {
-                    const ts = String(t.status || "").toLowerCase();
+                  {matchedTasks.map((task) => {
+                    const ts = String(task.status || "").toLowerCase();
                     const { icon, cls } = taskIcon(ts);
-                    const tLabel = NODE_BADGE_MAP[ts]?.text ?? ts;
+                    const tLabel = nodeBadgeText[ts] ?? ts;
                     return (
-                      <div key={t.task_id ?? t.id} className="rounded border border-border-subtle bg-white px-2.5 py-1.5">
+                      <div key={task.task_id ?? task.id} className="rounded border border-border-subtle bg-white px-2.5 py-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1">
                             <span className={`text-[11px] font-bold ${cls}`}>{icon}</span>
-                            {t.approver_user_name && (
-                              <span className="text-xs text-text-primary">{t.approver_user_name}</span>
+                            {task.approver_user_name && (
+                              <span className="text-xs text-text-primary">{task.approver_user_name}</span>
                             )}
                             <span className="text-[11px] text-text-secondary">{tLabel}</span>
                           </div>
-                          {t.update_time && ts !== "pending" && (
-                            <span className="shrink-0 text-[10px] text-text-tertiary">{formatDateTime(t.update_time)}</span>
+                          {task.update_time && ts !== "pending" && (
+                            <span className="shrink-0 text-[10px] text-text-tertiary">{formatDateTime(task.update_time)}</span>
                           )}
                         </div>
-                        {t.comment && (
+                        {task.comment && (
                           <div className="mt-1 rounded bg-gray-50 px-2 py-1 text-[11px] text-text-secondary break-all">
-                            {t.comment}
+                            {task.comment}
                           </div>
                         )}
                       </div>
@@ -1062,7 +1071,13 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
         const a = String(log.action || "").toLowerCase();
         const dotCls = a === "approved" ? "bg-green-500" : a === "rejected" ? "bg-red-500" : "bg-gray-400";
         const titleMap: Record<string, string> = {
-          withdrawn: "已撤回", cancelled: "已取消", revoked: "已撤销",
+          withdrawn: t("approvalPage.timeline_actionWithdrawn"),
+          cancelled: t("approvalPage.timeline_actionCancelled"),
+          revoked: t("approvalPage.timeline_actionRevoked"),
+          assign_approvers: t("approvalPage.timeline_actionAssignApprovers"),
+          assign_flow: t("approvalPage.timeline_actionAssignFlow"),
+          retry_execute_failed: t("approvalPage.timeline_actionRetryExecuteFailed"),
+          mark_manually_completed: t("approvalPage.timeline_actionMarkManuallyCompleted"),
         };
         const title = titleMap[a] ?? log.action ?? "--";
         return (
@@ -1090,7 +1105,7 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
       })}
 
       {nodes.length === 0 && submitLogs.length === 0 && (
-        <div className="text-xs text-text-secondary py-2">暂无进度数据</div>
+        <div className="text-xs text-text-secondary py-2">{t("approvalPage.timeline_empty")}</div>
       )}
     </div>
   );
