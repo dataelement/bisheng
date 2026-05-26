@@ -180,12 +180,14 @@ class ApprovalExceptionService:
 
         instance.status = ApprovalInstanceStatus.CANCELLED
         await service.instance_repository.update_instance(instance)
+        operator_user_name = await service._lookup_user_name(operator_user_id)
         await service.instance_repository.create_action_log(
             ApprovalActionLog(
                 tenant_id=instance.tenant_id,
                 instance_id=instance.id,
                 action='cancelled',
                 operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
                 detail={'reason': reason.strip(), 'exception_id': exception_id},
             )
         )
@@ -497,15 +499,25 @@ class ApprovalExceptionService:
         exception.resolved_action = resolved_action
         await self.instance_repository.update_exception(exception)
         instance = await self._get_instance(exception.instance_id)
+        operator_user_name = await self._lookup_user_name(resolved_by_user_id)
         await self.instance_repository.create_action_log(
             ApprovalActionLog(
                 tenant_id=instance.tenant_id,
                 instance_id=instance.id,
                 action=resolved_action,
                 operator_user_id=resolved_by_user_id,
+                operator_user_name=operator_user_name,
                 detail={'exception_id': exception.id, 'exception_type': exception.exception_type},
             )
         )
+
+    @staticmethod
+    async def _lookup_user_name(user_id: int | None) -> str | None:
+        if not user_id:
+            return None
+        from bisheng.user.domain.models.user import UserDao
+        user = await UserDao.aget_user(user_id)
+        return user.user_name if user else None
 
     async def _get_exception(self, exception_id: int):
         exception = await self.instance_repository.get_exception(exception_id)
