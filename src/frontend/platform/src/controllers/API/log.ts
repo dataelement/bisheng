@@ -94,7 +94,6 @@ const actions = [
     { name: 'log.eventTypeEnum.approvalTaskApprove', value: 'approval.task.approve' },
     { name: 'log.eventTypeEnum.approvalTaskReject', value: 'approval.task.reject' },
     { name: 'log.eventTypeEnum.approvalInstanceWithdraw', value: 'approval.instance.withdraw' },
-    { name: 'log.eventTypeEnum.approvalInstanceResubmit', value: 'approval.instance.resubmit' },
     { name: 'log.eventTypeEnum.approvalMenuAccessRevokeGrant', value: 'approval.menu_access.revoke_grant' },
     { name: 'log.eventTypeEnum.approvalExceptionRetry', value: 'approval.exception.retry' },
 ];

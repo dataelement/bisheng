@@ -194,17 +194,6 @@ export async function withdrawApprovalInstanceApi(
   return unwrapPayload(response);
 }
 
-export async function resubmitApprovalInstanceApi(
-  instanceId: number,
-  data: { reason?: string },
-): Promise<ApprovalInstanceDetail> {
-  const response = await request.post<ApiResponse<ApprovalInstanceDetail>>(
-    `/api/v1/approval/instances/${instanceId}/resubmit`,
-    data,
-  );
-  return unwrapPayload(response);
-}
-
 export async function checkMenuAccessPendingApi(menuKey: string): Promise<{ has_pending: boolean; instance_id: number | null; status: string | null }> {
   const response = await request.get<ApiResponse<{ has_pending: boolean; instance_id: number | null; status: string | null }>>(
     `/api/v1/approval/menu-access/pending-check?menu_key=${encodeURIComponent(menuKey)}`,

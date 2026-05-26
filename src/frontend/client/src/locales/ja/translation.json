@@ -421,7 +421,6 @@
   "com_menu_unavailable_apply_hint": "{{menu}} にアクセスするには、メニュー権限申請を送信してください。",
   "com_menu_unavailable_apply_success": "メニュー権限申請を送信しました",
   "com_menu_unavailable_apply_failed": "メニュー権限申請に失敗しました。後でもう一度お試しください",
-  "com_approval_action_resubmit": "再申請",
   "com_msg_source_no_permission": "権限不足のため、閲覧権限のない内容は回答から除外されています",
   "com_msg_source_reference": "参照元",
   "com_nav_admin_panel": "管理コンソール",
