@@ -38,6 +38,12 @@ const queriesEnabled = atom<boolean>({
 /** 主站会话历史抽屉（与 Root 原 navVisible 共用 localStorage key `navVisible`） */
 const chatHistoryDrawerOpen = atomWithLocalStorage<boolean>('navVisible', true);
 
+/** H5: 模块页面（频道、知识等）顶栏菜单按钮触发的系统主菜单露出状态 */
+const mobileSystemMenuOpenState = atom<boolean>({
+  key: 'mobileSystemMenuOpenState',
+  default: false,
+});
+
 export default {
   hideBannerHint,
   messageAttachmentsMap,
@@ -45,4 +51,5 @@ export default {
   chatHistoryDrawerOpen,
   chatMobileHeaderState,
   chatMobileNavHiddenState,
+  mobileSystemMenuOpenState,
 };

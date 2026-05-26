@@ -326,7 +326,7 @@ export function ArticleList({
                                         aria-label={localize("com_nav_open_sidebar")}
                                         className={mobileHeadIconBtnClassName}
                                     >
-                                        <Menu className="size-4" strokeWidth={2} />
+                                        <Outlined.SidebarMenu className="size-4" />
                                     </button>
                                 ) : null}
                                 {onCreateChannel ? (

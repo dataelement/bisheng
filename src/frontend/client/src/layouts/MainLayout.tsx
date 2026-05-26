@@ -322,9 +322,26 @@ export default function MainLayout() {
     isChannelRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：应用会话、/apps、/channel、/knowledge 都隐藏 MainLayout 左栏。
   // /apps 保留本布局内菜单按钮；/channel、/knowledge 使用各自页面的抽屉入口。
   const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute);
+  /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
+  const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
+
+  // Route change auto-closes the revealed system menu (covers nav-link clicks).
+  useEffect(() => {
+    if (systemMenuOpen) setSystemMenuOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // Leaving the mode where system-menu reveal is applicable also closes it.
+  useEffect(() => {
+    if (!isMobile || !shouldHideSidebarOnMobileAppsArea) {
+      if (systemMenuOpen) setSystemMenuOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, shouldHideSidebarOnMobileAppsArea]);
 
   useEffect(() => {
     if (!isMobile || !isAppSection) return;
@@ -397,11 +414,20 @@ export default function MainLayout() {
     <div
       className={cn(
         'relative flex w-screen bg-[#F8F8F8]',
-        isMobile ? 'min-h-[100dvh] overflow-visible' : 'h-[100dvh] overflow-hidden',
+        isMobile ? 'min-h-[100dvh] overflow-x-clip' : 'h-[100dvh] overflow-hidden',
       )}
     >
       <WorkbenchAccessGuard />
-      {shouldHideSidebarOnMobileAppsArea ? null : (
+      {shouldHideSidebarOnMobileAppsArea ? (
+        systemMenuRevealing ? (
+          <div className="absolute inset-y-0 left-0 z-30">
+            <Sidebar
+              mobileSidebarOpen={mobileSidebarOpen}
+              onCloseMobileApps={() => setMobileSidebarOpen(false)}
+            />
+          </div>
+        ) : null
+      ) : (
         <Sidebar
           mobileSidebarOpen={mobileSidebarOpen}
           onCloseMobileApps={() => setMobileSidebarOpen(false)}
@@ -432,10 +458,20 @@ export default function MainLayout() {
       ) : null}
       <main
         className={cn(
-          'relative min-w-0 flex-1 p-2',
-          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh]',
+          'relative min-w-0 flex-1',
+          isMobile ? 'min-h-[100dvh]' : 'h-[100dvh] p-2',
+          shouldHideSidebarOnMobileAppsArea && 'transition-transform duration-300 ease-out',
+          systemMenuRevealing && 'translate-x-16',
         )}
       >
+        {systemMenuRevealing ? (
+          <button
+            type="button"
+            aria-label={localize('com_nav_close_sidebar')}
+            onClick={() => setSystemMenuOpen(false)}
+            className="absolute inset-0 z-[60] cursor-default bg-transparent"
+          />
+        ) : null}
         <KeepAlive
           name={cacheKey}
           id={cacheKey}
@@ -444,11 +480,12 @@ export default function MainLayout() {
           <div
             ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
             className={cn(
-              'rounded-xl bg-white shadow-[0px_0px_20px_0px_#07225808]',
+              'bg-white shadow-[0px_0px_20px_0px_#07225808]',
+              (!isMobile || systemMenuRevealing) && 'rounded-xl',
               isMobile
                 ? innerScrollShell
-                  ? 'flex h-[calc(100dvh-16px)] min-h-0 w-full flex-col overflow-hidden'
-                  : 'h-auto min-h-[calc(100dvh-16px)] overflow-visible'
+                  ? 'flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden'
+                  : 'h-auto min-h-[100dvh] overflow-visible'
                 : innerScrollShell
                   ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
                   : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',

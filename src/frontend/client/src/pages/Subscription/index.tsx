@@ -25,8 +25,9 @@ import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import { buildCreateChannelPayload } from "./channelUtils";
 import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
-import { Menu, Plus } from "lucide-react";
-import { cn } from "~/utils";
+import { Outlined } from "bisheng-icons";
+import { useSetRecoilState } from "recoil";
+import store from "~/store";
 import { ChannelShareDialog } from "./ChannelShareDialog";
 
 const MAX_USER_CHANNELS = 10;
@@ -72,6 +73,7 @@ export default function Subscription() {
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
+    const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
     const openChannelPermissionDialog = (channel: Channel) => {
@@ -323,19 +325,19 @@ export default function Subscription() {
     // Channel count is reported by ChannelSidebar (H5 drawer) via callback; ref avoids unnecessary re-renders
     const createdChannelCountRef = useRef(0);
 
-    // PC: channel list lives in the top-title ChannelSwitcher (no left sidebar), so the page
-    // owns channel queries + auto-select-first-channel. (H5 drawer ChannelSidebar still self-manages.)
+    // Page owns channel list + auto-select on both PC and H5 so the page lands on a real channel
+    // by default. Channel switching UI is route-driven (system menu reveal on H5).
     const channelPluginEnabled = channelPluginGate === "enabled";
     const { data: createdChannelsForAuto = [], isFetched: createdAutoFetched } = useQuery({
         queryKey: ["channels", "created", SortType.RECENT_UPDATE],
         queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE }),
-        enabled: !isH5 && channelPluginEnabled,
+        enabled: channelPluginEnabled,
         placeholderData: (prev) => prev,
     });
     const { data: subscribedChannelsForAuto = [], isFetched: subscribedAutoFetched } = useQuery({
         queryKey: ["channels", "subscribed", SortType.RECENT_UPDATE],
         queryFn: () => getChannelsApi({ type: "subscribed", sortBy: SortType.RECENT_UPDATE }),
-        enabled: !isH5 && channelPluginEnabled,
+        enabled: channelPluginEnabled,
         placeholderData: (prev) => prev,
     });
 
@@ -343,9 +345,9 @@ export default function Subscription() {
         createdChannelCountRef.current = createdChannelsForAuto.length;
     }, [createdChannelsForAuto.length]);
 
-    // Auto-select first channel on PC when nothing is active (skip while a share/preview is resolving).
+    // Auto-select first channel when nothing is active (skip while a share/preview is resolving).
     useEffect(() => {
-        if (isH5 || !channelPluginEnabled) return;
+        if (!channelPluginEnabled) return;
         if (activeChannel || previewChannelId || showChannelSquare) return;
         if (!createdAutoFetched || !subscribedAutoFetched) return;
         if (createdChannelsForAuto.length > 0) {
@@ -353,7 +355,7 @@ export default function Subscription() {
         } else if (subscribedChannelsForAuto.length > 0) {
             setActiveChannel(subscribedChannelsForAuto[0]);
         }
-    }, [isH5, channelPluginEnabled, activeChannel, previewChannelId, showChannelSquare, createdAutoFetched, subscribedAutoFetched, createdChannelsForAuto, subscribedChannelsForAuto]);
+    }, [channelPluginEnabled, activeChannel, previewChannelId, showChannelSquare, createdAutoFetched, subscribedAutoFetched, createdChannelsForAuto, subscribedChannelsForAuto]);
 
     useEffect(() => {
         if (!isH5) setChannelListDrawerOpen(false);
@@ -522,7 +524,7 @@ export default function Subscription() {
                                         }
                                     })();
                                 } : undefined}
-                                onOpenChannelNav={isH5 ? () => setChannelListDrawerOpen(true) : undefined}
+                                onOpenChannelNav={isH5 ? () => setSystemMenuOpen(true) : undefined}
                                 onGoChannelSquare={handleChannelSquare}
                                 onCreateChannel={handleCreateChannel}
                                 onFullScreen={(article, ai) => {
@@ -535,24 +537,22 @@ export default function Subscription() {
                         ) : (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center">
                                 {isH5 ? (
-                                    <>
+                                    <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center px-4 pt-[env(safe-area-inset-top,0px)]">
                                         <button
                                             type="button"
                                             aria-label={localize("com_nav_open_sidebar")}
-                                            onClick={() => setChannelListDrawerOpen(true)}
-                                            className={cn("absolute left-4 top-4 z-10", mobileHeadIconBtnClassName)}
+                                            onClick={() => setSystemMenuOpen(true)}
+                                            className={mobileHeadIconBtnClassName}
                                         >
-                                            <Menu className="size-4" />
+                                            <Outlined.SidebarMenu className="size-4" />
                                         </button>
-                                        <button
-                                            type="button"
-                                            aria-label={localize("com_subscription.create")}
-                                            onClick={handleCreateChannel}
-                                            className={cn("absolute right-4 top-4 z-10", mobileHeadIconBtnClassName)}
+                                        <h1
+                                            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[24px] leading-8 text-[#212121]"
+                                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
                                         >
-                                            <Plus className="size-4" />
-                                        </button>
-                                    </>
+                                            {localize("com_subscription.subscribe")}
+                                        </h1>
+                                    </div>
                                 ) : null}
                                 <img
                                     className="size-[120px] mb-4 object-contain opacity-90"
