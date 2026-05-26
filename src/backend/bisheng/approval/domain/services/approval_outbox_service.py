@@ -3,6 +3,7 @@ from __future__ import annotations
 from inspect import isawaitable
 
 from bisheng.approval.domain.models.approval_instance import ApprovalExceptionType, ApprovalOutboxStatus
+from bisheng.database.models.audit_log import AuditLogDao
 
 
 class ApprovalOutboxService:
@@ -28,6 +29,13 @@ class ApprovalOutboxService:
             if instance is not None and instance.status not in ('executed', 'cancelled', 'rejected', 'withdrawn'):
                 instance.status = 'executed'
                 await self.instance_repository.update_instance(instance)
+            await self._write_handler_audit_log(
+                outbox=outbox,
+                instance=instance,
+                action='approval.handler.success',
+                reason=None,
+                extra_metadata={'business_result': 'success'},
+            )
             return True
 
         outbox.status = ApprovalOutboxStatus.FAILED
@@ -46,6 +54,16 @@ class ApprovalOutboxService:
                     error_summary=error_summary,
                 )
             )
+        await self._write_handler_audit_log(
+            outbox=outbox,
+            instance=instance,
+            action='approval.handler.failed',
+            reason=error_summary,
+            extra_metadata={
+                'error_stack_summary': error_summary,
+                'payload_snapshot': outbox.payload_snapshot,
+            },
+        )
         return False
 
     async def retry_outbox(self, *, outbox_id: int, executor) -> bool:
@@ -55,6 +73,43 @@ class ApprovalOutboxService:
         outbox.status = ApprovalOutboxStatus.PENDING
         await self.instance_repository.update_outbox(outbox)
         return await self.execute_outbox(outbox_id=outbox_id, executor=executor)
+
+    @staticmethod
+    async def _write_handler_audit_log(
+        *,
+        outbox,
+        instance,
+        action: str,
+        reason: str | None,
+        extra_metadata: dict | None = None,
+    ) -> None:
+        if instance is None:
+            return
+        metadata: dict = {
+            'instance_id': instance.id,
+            'scenario_code': instance.scenario_code,
+            'handler': instance.handler_key or instance.scenario_code,
+            'outbox_id': outbox.id,
+        }
+        if extra_metadata:
+            metadata.update(extra_metadata)
+        try:
+            await AuditLogDao.ainsert_v2(
+                tenant_id=instance.tenant_id,
+                operator_id=0,
+                operator_tenant_id=instance.tenant_id,
+                action=action,
+                target_type='approval_instance',
+                target_id=str(instance.id),
+                reason=reason,
+                metadata=metadata,
+                object_name=instance.business_name,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                'failed to write approval handler audit log: action=%s outbox_id=%s', action, outbox.id
+            )
 
     @staticmethod
     def _build_execute_failed_exception(*, tenant_id: int, instance_id: int, error_summary: str | None):

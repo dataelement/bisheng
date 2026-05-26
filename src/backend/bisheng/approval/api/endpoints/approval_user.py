@@ -116,6 +116,7 @@ async def check_menu_access_pending(
 @router.post('/menu-access/apply')
 async def apply_menu_access(
     req: MenuAccessApplyReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     data = await ApprovalCenterService.apply_menu_access_request(
@@ -123,6 +124,7 @@ async def apply_menu_access(
         menu_key=req.menu_key,
         menu_name=req.menu_name,
         reason=req.reason,
+        ip_address=get_request_ip(request),
     )
     return resp_200(data)
 
