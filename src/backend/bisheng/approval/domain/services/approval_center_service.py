@@ -11,24 +11,21 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTask,
     ApprovalTaskStatus,
 )
-from bisheng.common.errcode.approval import (
-    ApprovalRequestAlreadyProcessedError,
-    ApprovalRequestNotFoundError,
-    ApprovalRequestPermissionDeniedError,
-)
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
-from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateRequest
-from bisheng.approval.domain.models.approval_instance import ApprovalActionLog
-from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
-from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
-from bisheng.common.errcode.approval import ApprovalGrantNotRevokableError
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.common.errcode.approval import (
+    ApprovalGrantNotRevokableError,
+    ApprovalRequestAlreadyProcessedError,
+    ApprovalRequestNotFoundError,
+    ApprovalRequestPermissionDeniedError,
+)
 from bisheng.database.models.audit_log import AuditLogDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.services.auth import LoginUser
 
@@ -237,8 +234,8 @@ class ApprovalCenterService:
         approver_names_map: {instance_id -> comma-separated approver names}
         dept_name_map: {dept_id -> dept name}
         """
-        from bisheng.user.domain.models.user import UserDao
         from bisheng.database.models.department import DepartmentDao
+        from bisheng.user.domain.models.user import UserDao
 
         pending_tasks = await ApprovalQueryRepository.list_pending_tasks_for_instances(instance_ids)
         inst_approver_map: dict[int, list[int]] = {}
@@ -435,10 +432,14 @@ class ApprovalCenterService:
             tenant_id=instance.tenant_id,
             operator_user_id=operator_user_id,
             operator_tenant_id=instance.tenant_id,
-            action='approval.instance.withdraw',
+            action='approval.request.withdraw',
             target_id=str(instance.id),
             reason=reason,
-            metadata={'scenario_code': instance.scenario_code},
+            metadata={
+                'instance_id': instance.id,
+                'scenario_code': instance.scenario_code,
+                'handler': instance.handler_key or instance.scenario_code,
+            },
             operator_name=operator_user_name,
             object_name=instance.business_name,
             ip_address=ip_address,
@@ -510,6 +511,7 @@ class ApprovalCenterService:
         menu_key: str,
         menu_name: str,
         reason: str | None = None,
+        ip_address: str | None = None,
     ):
         db_user = await UserDao.aget_user(login_user.user_id)
         is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(login_user.user_id))
@@ -544,6 +546,7 @@ class ApprovalCenterService:
                     'tenant_id': login_user.tenant_id,
                     'applicant_user_id': login_user.user_id,
                 },
+                ip_address=ip_address,
             )
         )
 
@@ -654,9 +657,15 @@ class ApprovalCenterService:
                 operator_user_id=operator_user_id,
                 operator_tenant_id=instance.tenant_id,
                 action='approval.task.reject',
-                target_id=str(instance.id),
+                target_type='approval_task',
+                target_id=str(task.id),
                 reason=comment,
-                metadata={'task_id': task.id, 'scenario_code': instance.scenario_code},
+                metadata={
+                    'instance_id': instance.id,
+                    'task_id': task.id,
+                    'scenario_code': instance.scenario_code,
+                    'handler': instance.handler_key or instance.scenario_code,
+                },
                 operator_name=operator_user_name,
                 object_name=instance.business_name,
                 ip_address=ip_address,
@@ -698,9 +707,15 @@ class ApprovalCenterService:
             operator_user_id=operator_user_id,
             operator_tenant_id=instance.tenant_id,
             action='approval.task.approve',
-            target_id=str(instance.id),
+            target_type='approval_task',
+            target_id=str(task.id),
             reason=comment,
-            metadata={'task_id': task.id, 'scenario_code': instance.scenario_code},
+            metadata={
+                'instance_id': instance.id,
+                'task_id': task.id,
+                'scenario_code': instance.scenario_code,
+                'handler': instance.handler_key or instance.scenario_code,
+            },
             operator_name=operator_user_name,
             object_name=instance.business_name,
             ip_address=ip_address,
@@ -769,8 +784,9 @@ class ApprovalCenterService:
             return
 
         # Resolve approvers for the next node via the scenario handler
-        from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
         from types import SimpleNamespace
+
+        from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
         try:
             handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
         except KeyError:

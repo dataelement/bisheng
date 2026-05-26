@@ -183,15 +183,23 @@ _UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
     'llm.server.create',
     'llm.server.update',
     'llm.server.delete',
-    'approval.scenario.create',
+    'approval.request.submit',
     'approval.task.approve',
     'approval.task.reject',
-    'approval.instance.withdraw',
-    'approval.menu_access.revoke_grant',
+    'approval.request.withdraw',
+    'approval.route.pass',
+    'approval.handler.success',
+    'approval.handler.failed',
     'approval.exception.retry',
-    'approval.exception.skip_node',
     'approval.exception.assign_approver',
     'approval.exception.cancel',
+    'approval.flow.update',
+    'approval.scenario.toggle',
+    # Extras kept for compliance/forensics (not in PRD §9.1 surface list but
+    # already in use by admin flows).
+    'approval.scenario.create',
+    'approval.exception.skip_node',
+    'approval.menu_access.revoke_grant',
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`

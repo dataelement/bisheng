@@ -25,6 +25,7 @@ class ApprovalGateRequest(BaseModel):
     reason: str | None = None
     payload_snapshot: dict[str, Any] = Field(default_factory=dict)
     detail_snapshot: dict[str, Any] = Field(default_factory=dict)
+    ip_address: str | None = None
 
 
 class ApprovalGateResult(BaseModel):

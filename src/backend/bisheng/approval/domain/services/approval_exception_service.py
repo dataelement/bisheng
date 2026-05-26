@@ -56,11 +56,18 @@ class ApprovalExceptionService:
         if action == 'assign_approvers':
             if not approver_user_ids:
                 raise ValueError('approver_user_ids required for assign_approvers')
+            existing_task_ids = {
+                t.id for t in await service.instance_repository.list_tasks(instance.id)
+            }
             await service.assign_approvers(
                 exception_id=exception_id,
                 approver_user_ids=approver_user_ids,
                 resolved_by_user_id=operator_user_id,
             )
+            new_task_ids = [
+                t.id for t in await service.instance_repository.list_tasks(instance.id)
+                if t.id not in existing_task_ids
+            ]
             await service._write_audit_log(
                 action='approval.exception.assign_approver',
                 tenant_id=instance.tenant_id,
@@ -69,7 +76,10 @@ class ApprovalExceptionService:
                 exception_id=exception_id,
                 instance_id=instance.id,
                 exception_type=exception.exception_type,
-                extra={'approver_user_ids': approver_user_ids},
+                extra={
+                    'approver_user_ids': approver_user_ids,
+                    'task_ids': new_task_ids,
+                },
                 ip_address=ip_address,
             )
             return {'exception_id': exception_id, 'instance_id': instance.id, 'status': 'resolved'}
@@ -680,7 +690,27 @@ class ApprovalExceptionService:
         extra: dict | None = None,
         ip_address: str | None = None,
     ) -> None:
-        metadata = {'instance_id': instance_id, 'exception_type': exception_type}
+        metadata: dict[str, Any] = {
+            'instance_id': instance_id,
+            'exception_type': exception_type,
+        }
+        # Enrich with handler/retry_count/payload_snapshot from the live records
+        # so audit rows carry the full context PRD §9.1 expects.
+        try:
+            instance = await ApprovalInstanceRepository.get_instance(instance_id)
+            if instance is not None:
+                metadata['handler'] = instance.handler_key or instance.scenario_code
+                if action == 'approval.exception.cancel':
+                    metadata['payload_snapshot'] = instance.payload_snapshot
+        except Exception:
+            logger.exception('audit metadata enrichment failed: instance_id=%s', instance_id)
+        if action == 'approval.exception.retry':
+            try:
+                outboxes = await ApprovalInstanceRepository.list_outbox(instance_id)
+                if outboxes:
+                    metadata['retry_count'] = outboxes[-1].retry_count
+            except Exception:
+                logger.exception('audit retry_count lookup failed: instance_id=%s', instance_id)
         if extra:
             metadata.update(extra)
         await AuditLogDao.ainsert_v2(

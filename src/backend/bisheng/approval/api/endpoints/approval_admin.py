@@ -103,6 +103,7 @@ async def create_scenario(req: ScenarioUpsertReq, login_user: UserPayload = Depe
 async def update_scenario(
     scenario_id: int,
     req: ScenarioUpdateReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     await _ensure_admin(login_user)
@@ -111,6 +112,9 @@ async def update_scenario(
             tenant_id=login_user.tenant_id,
             scenario_id=scenario_id,
             payload=req.model_dump(exclude_none=True),
+            operator_user_id=login_user.user_id,
+            operator_user_name=login_user.user_name,
+            ip_address=get_request_ip(request),
         )
     )
 
@@ -259,6 +263,7 @@ async def get_flow_version(
 async def set_flow_nodes(
     flow_definition_id: int,
     req: NodeListReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     await _ensure_admin(login_user)
@@ -267,6 +272,9 @@ async def set_flow_nodes(
             tenant_id=login_user.tenant_id,
             flow_definition_id=flow_definition_id,
             nodes_payload=req.nodes,
+            operator_user_id=login_user.user_id,
+            operator_user_name=login_user.user_name,
+            ip_address=get_request_ip(request),
         )
     )
 
