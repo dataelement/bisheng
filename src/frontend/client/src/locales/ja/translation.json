@@ -1928,7 +1928,7 @@
   "com_approval_status_exception": "処理異常",
   "com_approval_status_executed": "承認完了",
   "com_approval_status_execute_failed": "実行失敗",
-  "com_approval_status_label": "ステータス：",
+  "com_approval_status_label": "承認ステータス：",
   "com_approval_detail_section": "申請詳細",
   "com_approval_progress_section": "承認進捗",
   "com_approval_action_approve": "承認",

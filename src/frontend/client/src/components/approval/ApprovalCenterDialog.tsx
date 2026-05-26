@@ -53,12 +53,12 @@ function formatTime(ts?: string | Date | null): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-function StatusBadge({ status, instanceStatus, localize }: { status?: string | null; instanceStatus?: string | null; localize: ReturnType<typeof useLocalize> }) {
+function StatusBadge({ status, instanceStatus, scope, localize }: { status?: string | null; instanceStatus?: string | null; scope: "task" | "instance"; localize: ReturnType<typeof useLocalize> }) {
   const s = String(status || "").toLowerCase();
   const is = String(instanceStatus || "").toLowerCase();
-  // Combine task status and instance status for display
-  const effective = s === "approved" && is === "execute_failed" ? "execute_failed" : s;
-  const MAP: Record<string, { text: string; cls: string }> = {
+  // Task scope: if my task is approved but instance execution failed, surface the failure.
+  const effective = scope === "task" && s === "approved" && is === "execute_failed" ? "execute_failed" : s;
+  const TASK_MAP: Record<string, { text: string; cls: string }> = {
     pending:        { text: localize("com_approval_task_badge_pending"),    cls: "bg-[#e8f3ff] text-[#165dff]" },
     approved:       { text: localize("com_approval_task_badge_approved"),   cls: "bg-[#e8ffea] text-[#00b42a]" },
     rejected:       { text: localize("com_approval_task_badge_rejected"),   cls: "bg-[#fff2f0] text-[#f53f3f]" },
@@ -66,10 +66,19 @@ function StatusBadge({ status, instanceStatus, localize }: { status?: string | n
     skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-[#f7f8fa] text-[#86909c]" },
     execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
     exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
-    // for instance status in my_requests
-    withdrawn:      { text: localize("com_approval_status_withdrawn"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
-    executed:       { text: localize("com_approval_badge_approved"),        cls: "bg-[#e8ffea] text-[#00b42a]" },
   };
+  const INSTANCE_MAP: Record<string, { text: string; cls: string }> = {
+    pending:        { text: localize("com_approval_status_pending"),        cls: "bg-[#e8f3ff] text-[#165dff]" },
+    approved:       { text: localize("com_approval_status_approved"),       cls: "bg-[#e8ffea] text-[#00b42a]" },
+    executed:       { text: localize("com_approval_status_approved"),       cls: "bg-[#e8ffea] text-[#00b42a]" },
+    rejected:       { text: localize("com_approval_status_rejected"),       cls: "bg-[#fff2f0] text-[#f53f3f]" },
+    withdrawn:      { text: localize("com_approval_status_withdrawn"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
+    cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
+    skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-[#f7f8fa] text-[#86909c]" },
+    execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
+    exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
+  };
+  const MAP = scope === "instance" ? INSTANCE_MAP : TASK_MAP;
   const { text, cls } = MAP[effective] ?? MAP[s] ?? { text: status ?? "--", cls: "bg-[#f7f8fa] text-[#86909c]" };
   return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", cls)}>{text}</span>;
 }
@@ -425,7 +434,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                                     {localize("com_approval_grant_revoked")}
                                   </span>
                                 )}
-                                <StatusBadge status={item.status} instanceStatus={item.instance_status} localize={localize} />
+                                <StatusBadge status={item.status} instanceStatus={item.instance_status} scope="task" localize={localize} />
                               </div>
                             </div>
                             {item.current_node_name && (
@@ -455,7 +464,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                                     {localize("com_approval_grant_revoked")}
                                   </span>
                                 )}
-                                <StatusBadge status={item.status} localize={localize} />
+                                <StatusBadge status={item.status} scope="instance" localize={localize} />
                               </div>
                             </div>
                             {(item.current_node_name || item.current_approver_names) && (
@@ -571,15 +580,15 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   );
 }
 
-function DetailHeader({ title, status, instanceStatus, serialNo, scenarioName, createTime, localize }: {
-  title?: string; status?: string; instanceStatus?: string; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>;
+function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenarioName, createTime, localize }: {
+  title?: string; status?: string; instanceStatus?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>;
 }) {
   return (
     <div className="mb-5">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 text-[#86909c]">📄</span>
         <h3 className="flex-1 text-[18px] font-semibold text-[#1d2129] leading-snug">{title || "--"}</h3>
-        <StatusBadge status={status} instanceStatus={instanceStatus} localize={localize} />
+        <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} />
       </div>
       <p className="mt-1.5 text-[13px] text-[#86909c] pl-6">
         {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
@@ -609,7 +618,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status}
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
@@ -781,7 +790,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} serialNo={serialNo}
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
         scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
