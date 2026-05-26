@@ -1,10 +1,6 @@
 import Cookies from 'js-cookie';
 import { getBysConfigApi } from '~/api/apps';
-import BookOpenIcon from '~/components/ui/icon/BookOpen';
-import GlobeIcon from '~/components/ui/icon/Globe';
-import HomeIcon from '~/components/ui/icon/Home';
-import LinkIcon from '~/components/ui/icon/Link';
-import MonitorIcon from '~/components/ui/icon/Monitor';
+import { Filled, Outlined } from 'bisheng-icons';
 import { LayoutDashboard, Menu, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
@@ -32,6 +28,8 @@ import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
+  /** Icon shown when active (e.g. the Filled variant); falls back to `icon` when omitted. */
+  activeIcon?: React.ReactNode;
   to: string;
   active: boolean;
   label: string;
@@ -40,7 +38,7 @@ interface SidebarItemProps {
   onNavigate?: () => void;
 }
 
-function SidebarItem({ icon, to, active, label, showLabel = false, onNavigate }: SidebarItemProps) {
+function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, onNavigate }: SidebarItemProps) {
   return (
     <Tooltip delayDuration={0}>
       <TooltipTrigger asChild>
@@ -51,11 +49,10 @@ function SidebarItem({ icon, to, active, label, showLabel = false, onNavigate }:
             'flex cursor-pointer rounded-lg transition-colors',
             showLabel
               ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2 hover:bg-[#f2f3f5]'
-              : 'items-center justify-center p-3 hover:bg-[#e6edfc]',
-            active && "bg-[#e6edfc]"
+              : 'items-center justify-center p-3 hover:bg-[#f2f3f5]',
           )}
         >
-          {React.cloneElement(icon as React.ReactElement, {
+          {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
             className: cn(showLabel ? 'size-4' : 'size-5', active ? "text-[#335CFF]" : "text-[#818181]"),
           })}
           {showLabel ? (
@@ -157,7 +154,8 @@ function Sidebar({
       {
         section: 'home' as const,
         to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable',
-        icon: <HomeIcon />,
+        icon: <Outlined.Home />,
+        activeIcon: <Filled.Home />,
         label: localize('com_nav_home'),
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
         closeDrawerOnNavigate: true,
@@ -166,7 +164,8 @@ function Sidebar({
       {
         section: 'knowledge' as const,
         to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
-        icon: <BookOpenIcon />,
+        icon: <Outlined.Book />,
+        activeIcon: <Filled.Book />,
         label: localize('com_knowledge.knowledge_space'),
         isActive: pathname.startsWith('/knowledge'),
         closeDrawerOnNavigate: true,
@@ -174,7 +173,8 @@ function Sidebar({
       {
         section: 'channel' as const,
         to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable',
-        icon: <LinkIcon />,
+        icon: <Outlined.Rss />,
+        activeIcon: <Filled.Rss />,
         label: localize('com_ui_channel'),
         isActive: pathname.startsWith('/channel'),
         closeDrawerOnNavigate: true,
@@ -182,7 +182,8 @@ function Sidebar({
       {
         section: 'apps' as const,
         to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable',
-        icon: <GlobeIcon />,
+        icon: <Outlined.Application />,
+        activeIcon: <Filled.Application />,
         label: localize('com_nav_app_center'),
         isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
         closeDrawerOnNavigate: true,
@@ -261,6 +262,7 @@ function Sidebar({
               key={link.section}
               to={link.to}
               icon={link.icon}
+              activeIcon={(link as { activeIcon?: React.ReactNode }).activeIcon}
               label={link.label}
               active={link.isActive}
               showLabel={showExpandedHubSidebar}
@@ -279,9 +281,9 @@ function Sidebar({
           <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
             <div
               title={localize('com_nav_admin_panel')}
-              className="rounded-lg p-3 transition-colors hover:bg-[#e6edfc]"
+              className="rounded-lg p-3 transition-colors hover:bg-[#f2f3f5]"
             >
-              <MonitorIcon className="size-5 text-[#818181]" />
+              <Outlined.DeviceDesktopExchange className="size-5 text-[#818181]" />
             </div>
           </a>
         )}
@@ -394,7 +396,7 @@ export default function MainLayout() {
   return (
     <div
       className={cn(
-        'relative flex w-screen bg-[#F9F9F9]',
+        'relative flex w-screen bg-[#F8F8F8]',
         isMobile ? 'min-h-[100dvh] overflow-visible' : 'h-[100dvh] overflow-hidden',
       )}
     >
@@ -442,7 +444,7 @@ export default function MainLayout() {
           <div
             ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
             className={cn(
-              'rounded-xl bg-white shadow-xl',
+              'rounded-xl bg-white shadow-[0px_0px_20px_0px_#07225808]',
               isMobile
                 ? innerScrollShell
                   ? 'flex h-[calc(100dvh-16px)] min-h-0 w-full flex-col overflow-hidden'
