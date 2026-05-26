@@ -2005,7 +2005,7 @@
   "com_approval_status_exception": "Processing Error",
   "com_approval_status_executed": "Approved",
   "com_approval_status_execute_failed": "Execution Failed",
-  "com_approval_status_label": "Status:",
+  "com_approval_status_label": "Approval Status:",
   "com_approval_detail_section": "Request Details",
   "com_approval_progress_section": "Approval Progress",
   "com_approval_action_approve": "Approve",

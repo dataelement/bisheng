@@ -12,6 +12,7 @@ from bisheng.approval.domain.models.approval_scenario import (
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.common.errcode.approval import ApprovalFlowInUseByRoutesError
 from bisheng.database.models.audit_log import AuditLogDao
 
 
@@ -223,6 +224,11 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f'flow not found: {flow_definition_id}')
+        referencing_routes = await ApprovalScenarioRepository.list_route_rules_by_flow_definition(
+            tenant_id, flow_definition_id
+        )
+        if referencing_routes:
+            raise ApprovalFlowInUseByRoutesError()
         await ApprovalScenarioRepository.delete_flow_definition(flow_definition_id)
 
     @classmethod

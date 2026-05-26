@@ -107,6 +107,17 @@ class ApprovalScenarioRepository:
             return await _delete_row(session, ApprovalRouteRule, route_rule_id)
 
     @classmethod
+    async def list_route_rules_by_flow_definition(
+        cls, tenant_id: int, flow_definition_id: int
+    ) -> list[ApprovalRouteRule]:
+        statement = select(ApprovalRouteRule).where(
+            ApprovalRouteRule.tenant_id == tenant_id,
+            ApprovalRouteRule.flow_definition_id == flow_definition_id,
+        )
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())
+
+    @classmethod
     async def bulk_update_route_sort_order(cls, ordered_route_ids: list[int]) -> None:
         async with get_async_db_session() as session:
             for index, route_id in enumerate(ordered_route_ids):

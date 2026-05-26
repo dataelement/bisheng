@@ -26,7 +26,10 @@ from bisheng.approval.domain.repositories.approval_query_repository import Appro
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
 from bisheng.approval.domain.services.approval_scenario_admin_service import ApprovalScenarioAdminService
-from bisheng.common.errcode.approval import ApprovalRequestPermissionDeniedError
+from bisheng.common.errcode.approval import (
+    ApprovalFlowInUseByRoutesError,
+    ApprovalRequestPermissionDeniedError,
+)
 
 
 @dataclass
@@ -331,3 +334,60 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
     assert updated_node['node_mode'] == 'and'
     assert nodes[0]['node_name'] == '更新节点'
     assert exceptions[0]['exception_type'] == 'route_missing'
+
+
+@pytest.mark.asyncio
+async def test_delete_flow_rejected_when_referenced_by_routes(monkeypatch: pytest.MonkeyPatch):
+    flow = ApprovalFlowDefinition(
+        id=3,
+        tenant_id=1,
+        scenario_id=1,
+        flow_code='menu_default',
+        flow_name='菜单默认流程',
+        is_active=True,
+    )
+    referencing_route = ApprovalRouteRule(
+        id=2,
+        tenant_id=1,
+        scenario_id=1,
+        route_name='默认流程',
+        route_type='flow',
+        sort_order=1,
+        flow_definition_id=3,
+        match_config={},
+    )
+    delete_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(ApprovalScenarioRepository, 'get_flow_definition', AsyncMock(return_value=flow))
+    monkeypatch.setattr(
+        ApprovalScenarioRepository,
+        'list_route_rules_by_flow_definition',
+        AsyncMock(return_value=[referencing_route]),
+    )
+    monkeypatch.setattr(ApprovalScenarioRepository, 'delete_flow_definition', delete_mock)
+
+    with pytest.raises(ApprovalFlowInUseByRoutesError):
+        await ApprovalScenarioAdminService.delete_flow(tenant_id=1, flow_definition_id=3)
+    delete_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_flow_succeeds_when_no_routes_reference_it(monkeypatch: pytest.MonkeyPatch):
+    flow = ApprovalFlowDefinition(
+        id=3,
+        tenant_id=1,
+        scenario_id=1,
+        flow_code='menu_default',
+        flow_name='菜单默认流程',
+        is_active=True,
+    )
+    delete_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr(ApprovalScenarioRepository, 'get_flow_definition', AsyncMock(return_value=flow))
+    monkeypatch.setattr(
+        ApprovalScenarioRepository,
+        'list_route_rules_by_flow_definition',
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(ApprovalScenarioRepository, 'delete_flow_definition', delete_mock)
+
+    await ApprovalScenarioAdminService.delete_flow(tenant_id=1, flow_definition_id=3)
+    delete_mock.assert_awaited_once_with(3)
