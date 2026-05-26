@@ -215,7 +215,7 @@ export async function applyMenuAccessApi(data: {
 
 export async function revokeMenuAccessGrantApi(
   instanceId: number,
-  data: { reason?: string },
+  data: { reason: string },
 ): Promise<Record<string, any>> {
   const response = await request.post<ApiResponse<Record<string, any>>>(
     `/api/v1/approval/menu-access/${instanceId}/revoke-grant`,
