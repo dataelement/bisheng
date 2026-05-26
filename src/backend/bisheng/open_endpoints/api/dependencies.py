@@ -6,8 +6,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.knowledge.api.dependencies import get_knowledge_document_version_repository
-from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import \
-    KnowledgeFileRepositoryImpl
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+    KnowledgeFileRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
@@ -67,6 +68,7 @@ async def get_knowledge_space_chat_service_for_openapi(
     """KnowledgeSpaceChatService bound to the configured default operator.
 
     Used by the OpenAPI surface so external systems do not need user JWTs.
+    The tenant ContextVar is seeded inside ``get_default_operator_async``.
     """
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 

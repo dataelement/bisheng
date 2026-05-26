@@ -20,6 +20,7 @@ from typing import Optional
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -139,9 +140,14 @@ async def backfill(
 
 
 async def _main(dry_run: bool, limit: Optional[int]) -> None:
-    async with get_async_db_session() as session:
-        report = await backfill(session, dry_run=dry_run, limit=limit)
-        print(report)
+    # Cross-tenant initialization: bypass auto tenant filter so we can scan
+    # every tenant's Knowledge / KnowledgeFile rows. KnowledgeDocument and
+    # KnowledgeDocumentVersion have no tenant_id column, so writes are
+    # unaffected by the bypass.
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            report = await backfill(session, dry_run=dry_run, limit=limit)
+            print(report)
 
 
 if __name__ == "__main__":

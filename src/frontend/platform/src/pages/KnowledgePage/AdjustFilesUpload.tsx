@@ -67,8 +67,8 @@ export default function AdjustFilesUpload() {
     if (!rawSplitRule) {
       return {
         knowledge_id: "",
-        separator: ["\\n\\n", "\\n"],
-        separator_rule: ["after", "after"],
+        separator: ["\\n\\n", "\\n", "。", "\\."],
+        separator_rule: ["after", "after", "after", "after"],
         chunk_size: 1000,
         chunk_overlap: 100,
         retain_images: true,
@@ -94,12 +94,12 @@ export default function AdjustFilesUpload() {
       // Format adaptation: Unify field format to avoid child component processing
       return {
         knowledge_id: parsed.knowledge_id || "", // Knowledge base ID
-        // Separator: Ensure it's an array, default double newline + single newline
-        separator: Array.isArray(parsed.separator) ? parsed.separator : ["\\n\\n", "\\n"],
+        // Separator: Ensure it's an array, default double newline + single newline + Chinese/English period
+        separator: Array.isArray(parsed.separator) ? parsed.separator : ["\\n\\n", "\\n", "。", "\\."],
         // Separator rule: Ensure consistent length with separator, default after
         separator_rule: Array.isArray(parsed.separator_rule)
           ? parsed.separator_rule
-          : ["after", "after"],
+          : ["after", "after", "after", "after"],
         // Chunk size: Convert number to string (child component uses string format), default 1000
         chunk_size: parsed.chunk_size ?? 1000,
         // Overlap size: Default 100
@@ -126,8 +126,8 @@ export default function AdjustFilesUpload() {
       console.error("split_rule parse failed:", error);
       return {
         knowledge_id: "",
-        separator: ["\\n\\n", "\\n"],
-        separator_rule: ["after", "after"],
+        separator: ["\\n\\n", "\\n", "。", "\\."],
+        separator_rule: ["after", "after", "after", "after"],
         chunk_size: 1000,
         chunk_overlap: 100,
         retain_images: true,

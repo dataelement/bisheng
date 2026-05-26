@@ -199,7 +199,7 @@ function pushBusinessRow(rows: BusinessContentRow[], label: string, value: unkno
 
 function buildDefaultBusinessContentRows(snapshot: Record<string, any>, localize: ReturnType<typeof useLocalize>): BusinessContentRow[] {
   return Object.entries(snapshot)
-    .filter(([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && hasDisplayValue(v))
+    .filter(([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && k !== "reason" && hasDisplayValue(v))
     .map(([k, v]): BusinessContentRow => [localizeFieldKey(k, localize), formatBusinessValue(v)]);
 }
 
@@ -212,7 +212,6 @@ function buildKnowledgeSpaceCreateRows(snapshot: Record<string, any>, localize: 
   pushBusinessRow(rows, localize("com_approval_field_user_group_id" as any), snapshot.user_group_id);
   pushBusinessRow(rows, localize("com_approval_field_auth_type" as any), snapshot.auth_type, (value) => localizeAuthType(value, localize));
   pushBusinessRow(rows, localize("com_approval_field_is_released" as any), snapshot.is_released, (value) => localizeBooleanValue(value, localize));
-  pushBusinessRow(rows, localize("com_approval_field_reason" as any), snapshot.reason);
   return rows;
 }
 
@@ -238,7 +237,6 @@ function buildFilePublishRows(snapshot: Record<string, any>, localize: ReturnTyp
   pushNameOrIdRow(rows, localize, "com_approval_field_source_file_name", "com_approval_field_source_file_id", snapshot.source_file_name, snapshot.source_file_id);
   pushNameOrIdRow(rows, localize, "com_approval_field_target_space_name", "com_approval_field_target_space_id", snapshot.target_space_name, snapshot.target_space_id);
   pushNameOrIdRow(rows, localize, "com_approval_field_target_document_title", "com_approval_field_target_document_id", snapshot.target_document_title, snapshot.target_document_id);
-  pushBusinessRow(rows, localize("com_approval_field_reason" as any), snapshot.reason);
   return rows;
 }
 
