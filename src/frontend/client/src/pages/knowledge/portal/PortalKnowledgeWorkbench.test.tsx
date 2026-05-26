@@ -48,6 +48,7 @@ const mockUseKnowledgeSpaceActionPermissions = jest.fn();
 const mockCheckPermission = jest.fn();
 const mockClipboardWriteText = jest.fn();
 const mockHandleUploadFile = jest.fn();
+let mockCreateSpaceConfirmResult: any;
 
 jest.mock("~/Providers", () => ({
     useToastContext: () => ({
@@ -148,16 +149,18 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
                 approvalReason:{String(Boolean(showApprovalReason))}
                 <button
                     type="button"
-                    onClick={() => onConfirm?.({
-                        name: "新空间",
-                        description: "说明",
-                        reason: "申请创建团队知识库",
-                        joinPolicy: "review",
-                        publishToSquare: "yes",
-                        spaceLevel: initialSpaceLevel,
-                        autoTagEnabled: false,
-                        autoTagLibraryId: null,
-                    })}
+                    onClick={async () => {
+                        mockCreateSpaceConfirmResult = await onConfirm?.({
+                            name: "新空间",
+                            description: "说明",
+                            reason: "申请创建团队知识库",
+                            joinPolicy: "review",
+                            publishToSquare: "yes",
+                            spaceLevel: initialSpaceLevel,
+                            autoTagEnabled: false,
+                            autoTagLibraryId: null,
+                        });
+                    }}
                 >
                     提交创建
                 </button>
@@ -350,6 +353,7 @@ function renderWorkbench() {
 describe("PortalKnowledgeWorkbench", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockCreateSpaceConfirmResult = undefined;
         Object.defineProperty(navigator, "clipboard", {
             configurable: true,
             value: {
@@ -607,6 +611,9 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(payload).not.toHaveProperty("user_group_id");
         expect(createSpaceApi).not.toHaveBeenCalled();
         expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "已提交申请" }));
+        await waitFor(() => {
+            expect(mockCreateSpaceConfirmResult).toEqual({ showSuccess: false });
+        });
     });
 
     test("shows create row under a permitted group and opens drawer with that group level", async () => {

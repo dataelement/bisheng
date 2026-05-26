@@ -82,7 +82,7 @@ vi.mock("react-i18next", () => ({
         "approvalPage.cancelExceptionAction": "取消异常",
         "approvalPage.inputApproverIds": "输入用户 ID，多个用逗号分隔",
         "approvalPage.condition.applicant_role": "申请人身份",
-        "approvalPage.condition.space_level": "知识空间等级",
+        "approvalPage.condition.space_level": "知识空间类型",
         "approvalPage.condition.space_visibility": "空间可见性",
         "approvalPage.condition.source_space_level": "来源知识空间类型",
         "approvalPage.condition.target_space_level": "目标知识空间类型",
@@ -394,14 +394,14 @@ describe("ApprovalPage", () => {
     });
   });
 
-  it("shows Shougang create space visibility as an enum condition and submits selected value", async () => {
+  it("shows Shougang create space type as an enum condition and omits visibility", async () => {
     const user = userEvent.setup();
     listApprovalScenarioPresetsApi.mockResolvedValue([
       {
         scenario_code: "knowledge_space_create_request",
         scenario_name: "知识空间创建审批",
         handler_key: "knowledge_space_create_request",
-        condition_fields: ["applicant_role", "space_level", "space_visibility"],
+        condition_fields: ["applicant_role", "space_level"],
         approver_source_types: ["direct_user", "department_admin"],
       },
     ]);
@@ -421,19 +421,19 @@ describe("ApprovalPage", () => {
     await user.click(screen.getByRole("button", { name: /新增分支/ }));
     await screen.findByText("新增条件分支");
 
-    const fieldSelect = getSelectWithOptionValue("space_visibility");
-    expect(within(fieldSelect).getByRole("option", { name: "知识空间等级" })).toHaveValue("space_level");
-    expect(within(fieldSelect).getByRole("option", { name: "空间可见性" })).toHaveValue("space_visibility");
+    const fieldSelect = getSelectWithOptionValue("space_level");
+    expect(within(fieldSelect).getByRole("option", { name: "知识空间类型" })).toHaveValue("space_level");
+    expect(within(fieldSelect).queryByRole("option", { name: "空间可见性" })).not.toBeInTheDocument();
 
-    await user.selectOptions(fieldSelect, "space_visibility");
+    await user.selectOptions(fieldSelect, "space_level");
 
-    const valueSelect = getSelectWithOptionValue("released");
-    expect(within(valueSelect).getByRole("option", { name: "发布到广场" })).toHaveValue("released");
-    expect(within(valueSelect).getByRole("option", { name: "公开" })).toHaveValue("public");
-    expect(within(valueSelect).getByRole("option", { name: "需审核" })).toHaveValue("approval");
-    expect(within(valueSelect).getByRole("option", { name: "私有" })).toHaveValue("private");
+    const valueSelect = getSelectWithOptionValue("personal");
+    expect(within(valueSelect).getByRole("option", { name: "公共" })).toHaveValue("public");
+    expect(within(valueSelect).getByRole("option", { name: "部门" })).toHaveValue("department");
+    expect(within(valueSelect).getByRole("option", { name: "团队" })).toHaveValue("team");
+    expect(within(valueSelect).getByRole("option", { name: "个人" })).toHaveValue("personal");
 
-    await user.selectOptions(valueSelect, "approval");
+    await user.selectOptions(valueSelect, "personal");
     await user.type(screen.getByPlaceholderText("如：管理员直接通过"), "需审核空间创建");
     await user.selectOptions(getSelectWithOptionValue("pass"), "pass");
     await user.click(screen.getByRole("button", { name: "保存" }));
@@ -442,7 +442,7 @@ describe("ApprovalPage", () => {
       expect(createApprovalRouteApi).toHaveBeenCalledWith(
         34,
         expect.objectContaining({
-          match_config: { field: "space_visibility", value: "approval" },
+          match_config: { field: "space_level", value: "personal" },
         }),
       );
     });

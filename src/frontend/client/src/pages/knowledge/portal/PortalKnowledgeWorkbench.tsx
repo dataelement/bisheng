@@ -1048,7 +1048,7 @@ export default function PortalKnowledgeWorkbench() {
 
             await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: "已提交申请", severity: NotificationSeverity.SUCCESS });
-            return true;
+            return { showSuccess: false };
         } catch (error) {
             const message = error instanceof Error && error.message ? error.message : "创建知识空间失败";
             showToast({ message, severity: NotificationSeverity.ERROR });

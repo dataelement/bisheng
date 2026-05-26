@@ -30,6 +30,16 @@ from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
 
 
+@pytest.fixture(autouse=True)
+def mock_approval_gate_audit_log(monkeypatch):
+    audit_log = AsyncMock()
+    monkeypatch.setattr(
+        'bisheng.approval.domain.services.approval_gate.AuditLogDao.ainsert_v2',
+        audit_log,
+    )
+    return audit_log
+
+
 @pytest_asyncio.fixture
 async def approval_db_engine():
     engine = create_async_engine(
@@ -333,7 +343,7 @@ async def test_gate_raises_disabled_error_when_scenario_disabled():
 
 
 @pytest.mark.asyncio
-async def test_gate_pass_when_route_direct_approve():
+async def test_gate_pass_when_route_direct_approve(mock_approval_gate_audit_log):
     handler = SimpleNamespace(
         build_detail=AsyncMock(return_value={'menu_name': '知识管理'}),
         build_title=AsyncMock(return_value='知识管理'),
@@ -388,6 +398,7 @@ async def test_gate_pass_when_route_direct_approve():
     instance_repository.create_exception.assert_not_awaited()
     instance_repository.create_task.assert_not_awaited()
     instance_repository.create_outbox.assert_awaited_once()
+    mock_approval_gate_audit_log.assert_awaited_once()
     gate._dispatch_outbox_task.assert_called_once_with(401)
 
 

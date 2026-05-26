@@ -46,10 +46,6 @@ def _patch_non_exempt_user(monkeypatch):
         "bisheng.approval.domain.services.shougang_approval_service.TenantService._is_tenant_admin",
         AsyncMock(return_value=False),
     )
-    monkeypatch.setattr(
-        "bisheng.approval.domain.services.shougang_approval_service.DepartmentDao.aget_user_admin_departments",
-        AsyncMock(return_value=[]),
-    )
 
 
 def _patch_exception_repository(monkeypatch, instance_id: int = 501):
@@ -475,7 +471,7 @@ async def test_tenant_admin_personal_public_space_create_skips_approval(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_department_admin_personal_public_space_create_skips_approval(monkeypatch):
+async def test_department_admin_personal_public_space_create_uses_approval_gate(monkeypatch):
     from bisheng.approval.domain.schemas.shougang_approval_schema import (
         ShougangKnowledgeSpaceCreateSubmitReq,
     )
@@ -489,13 +485,23 @@ async def test_department_admin_personal_public_space_create_skips_approval(monk
         "bisheng.approval.domain.services.shougang_approval_service.TenantService._is_tenant_admin",
         AsyncMock(return_value=False),
     )
-    monkeypatch.setattr(
-        "bisheng.approval.domain.services.shougang_approval_service.DepartmentDao.aget_user_admin_departments",
-        AsyncMock(return_value=[SimpleNamespace(id=9)]),
-    )
     space_service = _create_space_service(created_id=93, name="个人公开资料库")
-    approval_gate = _pending_approval_gate(106)
+    approval_gate = SimpleNamespace(
+        request_or_pass=AsyncMock(
+            return_value=SimpleNamespace(
+                decision=ApprovalGateDecision.PASS,
+                instance_id=106,
+                task_ids=[],
+                model_dump=lambda: {
+                    "decision": "pass",
+                    "instance_id": 106,
+                    "task_ids": [],
+                },
+            )
+        )
+    )
     service = ShougangApprovalService(approval_gate=approval_gate)
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
 
     result = await service.submit_knowledge_space_create(
         req=ShougangKnowledgeSpaceCreateSubmitReq(
@@ -508,10 +514,16 @@ async def test_department_admin_personal_public_space_create_skips_approval(monk
         space_service=space_service,
     )
 
-    approval_gate.request_or_pass.assert_not_called()
-    space_service.create_knowledge_space.assert_awaited_once()
-    assert result["created"] is True
-    assert result["space"]["id"] == 93
+    space_service.validate_knowledge_space_create.assert_awaited_once()
+    validate_kwargs = space_service.validate_knowledge_space_create.await_args.kwargs
+    assert validate_kwargs["approval_request"] is True
+    space_service.create_knowledge_space.assert_not_called()
+    approval_gate.request_or_pass.assert_awaited_once()
+    gate_req = approval_gate.request_or_pass.await_args.args[0]
+    assert gate_req.payload_snapshot["space_level"] == KnowledgeSpaceLevelEnum.PERSONAL.value
+    assert result["decision"] == "pass"
+    assert result["instance_id"] == 106
+    assert result["created"] is False
 
 
 @pytest.mark.asyncio
@@ -975,7 +987,6 @@ def test_shougang_scenarios_registered_in_default_presets():
     assert presets["knowledge_space_create_request"].condition_fields == [
         "applicant_role",
         "space_level",
-        "space_visibility",
     ]
     assert presets["knowledge_space_create_request"].approver_source_types == [
         "direct_user",
@@ -996,19 +1007,14 @@ def test_shougang_scenarios_registered_in_default_presets():
         option.field: option.model_dump()
         for option in presets["knowledge_space_create_request"].condition_field_options
     }
+    assert set(create_field_options) == {"applicant_role", "space_level"}
+    assert create_field_options["space_level"]["label"] == "知识空间类型"
     assert create_field_options["space_level"]["type"] == "select"
     assert [item["value"] for item in create_field_options["space_level"]["values"]] == [
         "public",
         "department",
         "team",
         "personal",
-    ]
-    assert create_field_options["space_visibility"]["type"] == "select"
-    assert [item["value"] for item in create_field_options["space_visibility"]["values"]] == [
-        "released",
-        "public",
-        "approval",
-        "private",
     ]
     publish_field_options = {
         option.field: option.model_dump()

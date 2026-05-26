@@ -35,7 +35,7 @@ from bisheng.approval.domain.services.shougang_approval_handler import (
     KnowledgeSpaceFilePublishApprovalHandler,
 )
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+from bisheng.database.models.department import UserDepartmentDao
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
@@ -75,7 +75,7 @@ class ShougangApprovalService:
             return True
         if await TenantService._is_tenant_admin(login_user.user_id, login_user.tenant_id):
             return True
-        return bool(await DepartmentDao.aget_user_admin_departments(login_user.user_id))
+        return False
 
     @staticmethod
     def _enum_value(value) -> Any:
