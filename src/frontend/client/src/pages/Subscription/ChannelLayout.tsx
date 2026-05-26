@@ -11,6 +11,11 @@ import { cn } from "~/utils";
 interface ChannelLayoutProps {
     channel: Channel;
     onFullScreen?: (article: Article, aiAssistant?: boolean) => void;
+    /** PC：顶部标题下拉切换频道 */
+    onChannelSelect?: (channel: Channel | null) => void;
+    /** PC：下拉内频道项管理操作 */
+    onManageMembers?: (channel: Channel) => void;
+    onChannelSettings?: (channel: Channel) => void;
     /** H5：打开左侧「我的频道」抽屉（由订阅页挂载） */
     onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
@@ -23,6 +28,9 @@ const MIN_RIGHT_WIDTH = 480;
 export function ChannelLayout({
     channel,
     onFullScreen,
+    onChannelSelect,
+    onManageMembers,
+    onChannelSettings,
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
@@ -104,6 +112,9 @@ export function ChannelLayout({
                     channel={channel}
                     onArticleSelect={handleArticleSelect}
                     selectedArticleId={selectedArticle?.id}
+                    onChannelSelect={onChannelSelect}
+                    onManageMembers={onManageMembers}
+                    onChannelSettings={onChannelSettings}
                     onOpenChannelNav={onOpenChannelNav}
                     onGoChannelSquare={onGoChannelSquare}
                     onCreateChannel={onCreateChannel}

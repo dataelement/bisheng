@@ -136,6 +136,10 @@ export interface ChannelDetailResponse {
     subscriber_count: number;
     subscription_status: string;
     article_count: number;
+    /** Unread count for the whole channel (main rules) — drives the 全部 tab badge. */
+    unread_count?: number;
+    /** Per sub-channel unread count, keyed by sub-channel name — drives sub tab badges. */
+    sub_channel_unread?: Record<string, number>;
     filter_rules?: ManagerChannelFilterRule[];
     source_infos?: Array<{
         id: string;

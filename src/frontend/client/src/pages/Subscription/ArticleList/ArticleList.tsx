@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Info, Menu, Plus } from "lucide-react";
 import {
@@ -13,10 +13,13 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useDebounce } from "~/hooks";
 import { ArticleCard } from "./ArticleCard";
+import { ChannelActionsMenu } from "./ChannelActionsMenu";
+import { ChannelSwitcher } from "./ChannelSwitcher";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
+import { Outlined } from "bisheng-icons";
 import { cn } from "~/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NotificationSeverity } from "~/common";
@@ -26,6 +29,11 @@ interface ArticleListProps {
     channel: Channel;
     onArticleSelect: (article: Article | null) => void;
     selectedArticleId?: string;
+    /** PC：顶部标题下拉切换频道（替代左侧 ChannelSidebar） */
+    onChannelSelect?: (channel: Channel | null) => void;
+    /** PC：下拉内频道项管理操作 */
+    onManageMembers?: (channel: Channel) => void;
+    onChannelSettings?: (channel: Channel) => void;
     /** H5：打开「我的频道」侧栏（订阅页抽屉） */
     onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
@@ -72,12 +80,18 @@ export function ArticleList({
     channel,
     selectedArticleId,
     onArticleSelect,
+    onChannelSelect,
+    onManageMembers,
+    onChannelSettings,
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
 }: ArticleListProps) {
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] fine-pointer:hover:bg-[#F7F8FA]";
     const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
+    // Browse mode (PC, no article selected): show a two-column card grid. Reading mode: single column.
+    const isGridMode = !selectedArticleId && !isH5;
     const [articles, setArticles] = useState<Article[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
@@ -116,9 +130,10 @@ export function ArticleList({
     }, [channelDetail?.source_infos]);
 
     const subChannels = useMemo(() => {
+        const unreadMap = channelDetail?.sub_channel_unread || {};
         return (channelDetail?.filter_rules || [])
             .filter(fr => fr.channel_type === "sub" && fr.name)
-            .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }))
+            .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name!, unread: unreadMap[fr.name!] || 0 }))
             .sort((a, b) => {
                 const getPriority = (name: string) => {
                     const ch = name.charAt(0);
@@ -288,8 +303,11 @@ export function ArticleList({
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
-            {/* header — 结构与知识空间页保持一致 */}
-            <div className="mx-auto w-full max-w-[1000px] shrink-0 px-4 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:px-2 touch-mobile:pt-0 touch-mobile:pb-3">
+            {/* header — 浏览态与下方网格等宽（全宽 + 40px 边距）；阅读态保持 max-w-[1000px] */}
+            <div className={cn(
+                "mx-auto w-full shrink-0 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:px-2 touch-mobile:pt-0 touch-mobile:pb-3",
+                isGridMode ? "max-w-none px-10" : "max-w-[1000px] px-4",
+            )}>
                 {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
                     <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
                         {/* H5 第一行：留在白卡片内；单列用更小左右边距，避免菜单/加号看起来挤在中间 */}
@@ -348,9 +366,21 @@ export function ArticleList({
                 {/* 频道名 + 信息 + 分享 */}
                 <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
-                        <h1 className="truncate text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
-                            {channelDetail?.name || channel.name}
-                        </h1>
+                        {!isH5 && onChannelSelect ? (
+                            <ChannelSwitcher
+                                activeChannelId={channel.id}
+                                channelName={channelDetail?.name || channel.name}
+                                onChannelSelect={onChannelSelect}
+                                onCreateChannel={onCreateChannel}
+                                onChannelSquare={onGoChannelSquare}
+                                onManageMembers={onManageMembers}
+                                onChannelSettings={onChannelSettings}
+                            />
+                        ) : (
+                            <h1 className="truncate text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
+                                {channelDetail?.name || channel.name}
+                            </h1>
+                        )}
                         <Tooltip>
                             <TooltipTrigger className="hidden shrink-0 cursor-pointer fine-pointer:inline-flex">
                                 <Info className="size-4 text-[#86909c] outline-none fine-pointer:hover:text-[#165dff]" />
@@ -375,12 +405,23 @@ export function ArticleList({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-3">
+                        {!isH5 && onChannelSelect ? (
+                            <ChannelActionsMenu
+                                channel={channel}
+                                onChannelSelect={onChannelSelect}
+                                onManageMembers={onManageMembers}
+                                onChannelSettings={onChannelSettings}
+                            />
+                        ) : null}
                         {canOpenChannelShare ? (
                             <CopyShareLinkButton
                                 sharePath={`/channel/share/${channel.id}`}
                                 label={localize("com_subscription.share")}
                                 successMessage={localize("com_subscription.share_link_copied")}
                                 errorMessage={localize("com_subscription.copy_failed_retry")}
+                                iconOnly
+                                aria-label={localize("com_subscription.share")}
+                                icon={<Outlined.Share className="size-4 shrink-0 text-[#4e5969]" />}
                             />
                         ) : null}
                     </div>
@@ -410,25 +451,37 @@ export function ArticleList({
                                 type="button"
                                 onClick={() => handleSubChannelChange("all")}
                                 className={cn(
-                                    "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
                                     !selectedSubChannelName
-                                        ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
-                                        : "border-transparent text-gray-800 fine-pointer:hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-transparent",
+                                        ? "border-[#335CFF] text-[#335CFF]"
+                                        : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
                                 )}
-                            >{localize("com_subscription.all")}</button>
+                            >
+                                <span>{localize("com_subscription.all")}</span>
+                                {(channelDetail?.unread_count ?? 0) > 0 && (
+                                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                        {channelDetail!.unread_count}
+                                    </span>
+                                )}
+                            </button>
                             {subChannels.map(sub => (
                                 <button
                                     type="button"
                                     key={sub.id}
                                     onClick={() => handleSubChannelChange(sub.name)}
                                     className={cn(
-                                        "rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                        "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
                                         selectedSubChannelName === sub.name
-                                            ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
-                                            : "border-transparent text-gray-800 fine-pointer:hover:bg-gray-50 touch-mobile:border-transparent touch-mobile:text-[#212121] touch-mobile:hover:bg-transparent",
+                                            ? "border-[#335CFF] text-[#335CFF]"
+                                            : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
                                     )}
                                 >
-                                    {sub.name}
+                                    <span>{sub.name}</span>
+                                    {sub.unread > 0 && (
+                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                            {sub.unread}
+                                        </span>
+                                    )}
                                 </button>
                             ))}
                         </div>
@@ -485,7 +538,12 @@ export function ArticleList({
                 onScroll={handleListScroll}
                 data-scrolling={isListScrolling ? "true" : "false"}
             >
-                <div className="mx-auto w-full min-w-0 max-w-[1000px] overflow-x-hidden px-4 touch-mobile:px-2">
+                <div className={cn(
+                    "mx-auto w-full min-w-0 overflow-x-hidden",
+                    isGridMode
+                        ? "max-w-none px-10"
+                        : "max-w-[1000px] px-4 touch-mobile:px-2",
+                )}>
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
                         <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#86909c]">
@@ -516,15 +574,18 @@ export function ArticleList({
                             emptyText={localize("com_subscription.all_messages_are_here")}
                             className=""
                         >
-                            {articles.map(article => (
-                                <ArticleCard
-                                    key={article.id}
-                                    article={article}
-                                    onSelect={handleArticleClick}
-                                    isSelected={selectedArticleId === article.id}
-                                    searchQuery={searchQuery}
-                                />
-                            ))}
+                            <div className={cn(isGridMode && "grid grid-cols-2 gap-x-6")}>
+                                {articles.map(article => (
+                                    <ArticleCard
+                                        key={article.id}
+                                        article={article}
+                                        onSelect={handleArticleClick}
+                                        isSelected={selectedArticleId === article.id}
+                                        searchQuery={searchQuery}
+                                        variant={isGridMode ? 'grid' : 'list'}
+                                    />
+                                ))}
+                            </div>
                         </InfiniteScroll>
                     )}
                 </div>

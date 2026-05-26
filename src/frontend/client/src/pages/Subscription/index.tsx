@@ -1,5 +1,5 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -12,6 +12,7 @@ import {
     createManagerChannelApi,
     updateChannelApi,
     getChannelDetailApi,
+    getChannelsApi,
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
@@ -319,8 +320,40 @@ export default function Subscription() {
 
     const bumpChannelSquareList = () => setChannelSquareRefreshKey((k) => k + 1);
 
-    // Channel count is reported by ChannelSidebar via callback; ref avoids unnecessary re-renders
+    // Channel count is reported by ChannelSidebar (H5 drawer) via callback; ref avoids unnecessary re-renders
     const createdChannelCountRef = useRef(0);
+
+    // PC: channel list lives in the top-title ChannelSwitcher (no left sidebar), so the page
+    // owns channel queries + auto-select-first-channel. (H5 drawer ChannelSidebar still self-manages.)
+    const channelPluginEnabled = channelPluginGate === "enabled";
+    const { data: createdChannelsForAuto = [], isFetched: createdAutoFetched } = useQuery({
+        queryKey: ["channels", "created", SortType.RECENT_UPDATE],
+        queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE }),
+        enabled: !isH5 && channelPluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+    const { data: subscribedChannelsForAuto = [], isFetched: subscribedAutoFetched } = useQuery({
+        queryKey: ["channels", "subscribed", SortType.RECENT_UPDATE],
+        queryFn: () => getChannelsApi({ type: "subscribed", sortBy: SortType.RECENT_UPDATE }),
+        enabled: !isH5 && channelPluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+
+    useEffect(() => {
+        createdChannelCountRef.current = createdChannelsForAuto.length;
+    }, [createdChannelsForAuto.length]);
+
+    // Auto-select first channel on PC when nothing is active (skip while a share/preview is resolving).
+    useEffect(() => {
+        if (isH5 || !channelPluginEnabled) return;
+        if (activeChannel || previewChannelId || showChannelSquare) return;
+        if (!createdAutoFetched || !subscribedAutoFetched) return;
+        if (createdChannelsForAuto.length > 0) {
+            setActiveChannel(createdChannelsForAuto[0]);
+        } else if (subscribedChannelsForAuto.length > 0) {
+            setActiveChannel(subscribedChannelsForAuto[0]);
+        }
+    }, [isH5, channelPluginEnabled, activeChannel, previewChannelId, showChannelSquare, createdAutoFetched, subscribedAutoFetched, createdChannelsForAuto, subscribedChannelsForAuto]);
 
     useEffect(() => {
         if (!isH5) setChannelListDrawerOpen(false);
@@ -422,34 +455,7 @@ export default function Subscription() {
                 </div>
             ) : (
                 <>
-                    {/* PC：左侧频道列表；H5：改抽屉叠在主内容之上（见下方 fixed） */}
-                    <div className="hidden h-full shrink-0 touch-desktop:block">
-                        <ChannelSidebar
-                            activeChannelId={activeChannel?.id}
-                            suppressAutoSelect={!!previewChannelId}
-                            onChannelSelect={handleChannelSelect}
-                            onCreateChannel={handleCreateChannel}
-                            onChannelSquare={handleChannelSquare}
-                            onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
-                            onManageMembers={(channel) => {
-                                openChannelPermissionDialog(channel);
-                            }}
-                            onChannelSettings={(channel) => {
-                                setEditingChannel(null);
-                                (async () => {
-                                    try {
-                                        const detail = await getChannelDetailApi(channel.id);
-                                        setEditingChannel({ ...channel, ...detail });
-                                    } catch {
-                                        setEditingChannel(channel);
-                                    } finally {
-                                        setShowCreateChannelDrawer(true);
-                                    }
-                                })();
-                            }}
-                        />
-                    </div>
-
+                    {/* PC：频道列表已移至顶部标题下拉（ChannelSwitcher）；H5：改抽屉叠在主内容之上（见下方 fixed） */}
                     {isH5 && channelListDrawerOpen ? (
                         <div
                             className="fixed inset-0 z-[70] flex"
@@ -501,9 +507,24 @@ export default function Subscription() {
                             <ChannelLayout
                                 key={`${activeChannel.id}-${channelRefreshToken}`}
                                 channel={activeChannel}
+                                onChannelSelect={!isH5 ? handleChannelSelect : undefined}
+                                onManageMembers={!isH5 ? (channel) => openChannelPermissionDialog(channel) : undefined}
+                                onChannelSettings={!isH5 ? (channel) => {
+                                    setEditingChannel(null);
+                                    (async () => {
+                                        try {
+                                            const detail = await getChannelDetailApi(channel.id);
+                                            setEditingChannel({ ...channel, ...detail });
+                                        } catch {
+                                            setEditingChannel(channel);
+                                        } finally {
+                                            setShowCreateChannelDrawer(true);
+                                        }
+                                    })();
+                                } : undefined}
                                 onOpenChannelNav={isH5 ? () => setChannelListDrawerOpen(true) : undefined}
-                                onGoChannelSquare={isH5 ? handleChannelSquare : undefined}
-                                onCreateChannel={isH5 ? handleCreateChannel : undefined}
+                                onGoChannelSquare={handleChannelSquare}
+                                onCreateChannel={handleCreateChannel}
                                 onFullScreen={(article, ai) => {
                                     enteredFullscreenViaAiRef.current = !!ai;
                                     setFullScreenArticle(article);

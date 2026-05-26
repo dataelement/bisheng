@@ -20,6 +20,8 @@ interface ArticleCardProps {
     searchQuery?: string;
     /** When false, hides add-to-knowledge and share (e.g. channel plaza preview drawer). */
     showArticleActions?: boolean;
+    /** 'list' = reading-mode single column (cover left); 'grid' = browse-mode two columns (thumbnail right). */
+    variant?: 'list' | 'grid';
 }
 
 export function ArticleCard({
@@ -28,6 +30,7 @@ export function ArticleCard({
     isSelected,
     searchQuery,
     showArticleActions = true,
+    variant = 'list',
 }: ArticleCardProps) {
     const localize = useLocalize();
     const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
@@ -63,6 +66,117 @@ export function ArticleCard({
         : null;
     const sensitiveViolated = article.sensitiveReview?.violated === true;
     const canViewArticle = article.sensitiveReview?.can_view !== false;
+
+    // Shared meta row (source favicon + name + separator + time)
+    const metaRow = (
+        <div className="flex items-center gap-2 text-xs text-[#999]">
+            <div className="size-4 shrink-0 overflow-hidden rounded-sm">
+                <img src={article.sourceAvatar} alt="" className="h-full w-full object-cover" />
+            </div>
+            <span className="max-w-40 truncate">{article.sourceName}</span>
+            <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
+            <span className="shrink-0">{formatTime(article.publishedAt)}</span>
+        </div>
+    );
+
+    // Browse-mode grid card: content left, 100x100 thumbnail right, single-line description.
+    if (variant === 'grid') {
+        return (
+            <>
+                <div
+                    className="group relative flex cursor-pointer gap-6 border-b border-[#EBECF0] py-5"
+                    onClick={() => onSelect(article)}
+                >
+                    {/* Left content */}
+                    <div className="flex min-w-0 flex-1 flex-col gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <h3
+                                className={cn(
+                                    "min-w-0 flex-1 truncate text-sm font-medium [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
+                                    isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
+                                    article.isRead ? "text-[#989898]" : "text-[#212121]",
+                                )}
+                            >
+                                {highlightTitle
+                                    ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
+                                    : article.title}
+                            </h3>
+                            {sensitiveViolated && (
+                                <span className="shrink-0 rounded-sm border border-[#F53F3F]/30 bg-[#F53F3F]/10 px-1.5 py-0.5 text-xs leading-4 text-[#F53F3F]">
+                                    {localize("com_subscription.sensitive_review")}
+                                </span>
+                            )}
+                        </div>
+
+                        <p
+                            className={cn(
+                                "line-clamp-1 text-sm leading-snug [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold",
+                                article.isRead ? "text-gray-400" : "text-gray-500",
+                            )}
+                        >
+                            {highlightContent
+                                ? <span dangerouslySetInnerHTML={{ __html: highlightContent }} />
+                                : article.content}
+                        </p>
+
+                        <div className="relative flex items-center justify-between">
+                            {metaRow}
+                            {showArticleActions && canViewArticle && (
+                                <div className="pointer-events-none absolute right-0 flex items-center gap-3 opacity-0 transition-opacity fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100">
+                                    {hasKnowledge && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
+                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-50 text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
+                                            title={localize("com_subscription.add_to_knowledge_space")}
+                                        >
+                                            <BookPlusIcon className="size-3.5" />
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleShare(article);
+                                            const shareText = localize("com_subscription.reading_article_share", { title: article.title, url: article.url });
+                                            copyText(shareText)
+                                                .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
+                                                .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
+                                        }}
+                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-50 text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
+                                        title={localize("com_subscription.share")}
+                                    >
+                                        <ShareOutlineIcon className="size-3.5" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right thumbnail */}
+                    {article.coverImage ? (
+                        <div className="size-[100px] shrink-0 overflow-hidden rounded">
+                            <img
+                                src={article.coverImage}
+                                alt={article.title}
+                                className="h-full w-full object-cover transition-transform duration-300 ease-in-out fine-pointer:group-hover:scale-105"
+                            />
+                        </div>
+                    ) : (
+                        <ArticleFaviconCoverPlaceholder
+                            iconUrl={article.sourceAvatar}
+                            alt={article.sourceName}
+                            className="size-[100px] rounded"
+                        />
+                    )}
+                </div>
+
+                <AddToKnowledgeModal
+                    open={showKnowledgeModal}
+                    onOpenChange={setShowKnowledgeModal}
+                    articleId={article.id}
+                />
+            </>
+        );
+    }
 
     return (
         <>

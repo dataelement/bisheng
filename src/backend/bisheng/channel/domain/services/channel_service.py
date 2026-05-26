@@ -445,6 +445,42 @@ class ChannelService:
         # Ensure no negative count just in case
         return max(0, total_count - matching_read_count)
 
+    async def _calculate_unread_for_rule_groups(
+            self,
+            channel: Channel,
+            rule_groups: List[Dict[str, Any]],
+            all_read_ids: List[str],
+    ) -> int:
+        """Unread count for an arbitrary set of filter rule groups (e.g. main, or main+sub).
+
+        Mirrors ``_calculate_unread_count`` but lets the caller pass pre-extracted rule
+        groups so it can be reused for per-sub-channel badges without changing the
+        existing main-channel calculation.
+        """
+        total_count = await self.article_es_service.count_articles(
+            source_ids=channel.source_list,
+            filter_rules=rule_groups if rule_groups else None,
+        )
+        if total_count == 0:
+            return 0
+        if not all_read_ids:
+            return total_count
+
+        chunk_size = 1000
+        tasks = []
+        for i in range(0, len(all_read_ids), chunk_size):
+            chunked_ids = all_read_ids[i:i + chunk_size]
+            tasks.append(
+                self.article_es_service.count_articles(
+                    source_ids=channel.source_list,
+                    filter_rules=rule_groups if rule_groups else None,
+                    include_article_ids=chunked_ids,
+                )
+            )
+
+        matching_read_count = sum(await asyncio.gather(*tasks)) if tasks else 0
+        return max(0, total_count - matching_read_count)
+
     @staticmethod
     def _sort_channels(items: List[ChannelItemResponse], sort_by: SortByEnum) -> List[ChannelItemResponse]:
         """
@@ -1112,6 +1148,38 @@ class ChannelService:
             filter_rules=main_rule_groups if main_rule_groups else None,
         )
 
+        # 5b. Unread counts for the current user — total (main) + per sub-channel.
+        # Drives the sub-channel tab badges on the subscription page.
+        all_read_ids: List[str] = []
+        if self.article_read_repository:
+            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
+
+        total_unread = await self._calculate_unread_for_rule_groups(
+            channel, main_rule_groups, all_read_ids
+        )
+
+        sub_channel_unread: Dict[str, int] = {}
+        seen_sub_names: set = set()
+        ordered_sub_names: List[str] = []
+        for fr in (channel.filter_rules or []):
+            if fr.get("channel_type") == "sub" and fr.get("name") and fr["name"] not in seen_sub_names:
+                seen_sub_names.add(fr["name"])
+                ordered_sub_names.append(fr["name"])
+        if ordered_sub_names:
+            sub_rule_group_lists = [
+                [*main_rule_groups, *self._extract_filter_rule_groups(
+                    channel, channel_type="sub", sub_channel_name=name,
+                )]
+                for name in ordered_sub_names
+            ]
+            sub_unread_counts = await asyncio.gather(*[
+                self._calculate_unread_for_rule_groups(channel, groups, all_read_ids)
+                for groups in sub_rule_group_lists
+            ])
+            sub_channel_unread = {
+                name: count for name, count in zip(ordered_sub_names, sub_unread_counts)
+            }
+
         # Complete info source list
         source_infos = []
         if channel.source_list:
@@ -1163,6 +1231,8 @@ class ChannelService:
             subscriber_count=subscriber_count,
             article_count=article_count,
             subscription_status=subscription_status,
+            unread_count=total_unread,
+            sub_channel_unread=sub_channel_unread,
             knowledge_sync=knowledge_sync_cfg,
         )
 
