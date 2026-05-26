@@ -568,6 +568,7 @@ class ApprovalCenterService:
         *,
         instance_id: int,
         operator_user_id: int,
+        operator_user_name: str | None = None,
         reason: str | None = None,
         ip_address: str | None = None,
     ):
@@ -585,6 +586,16 @@ class ApprovalCenterService:
         )
         if not rows:
             raise ApprovalGrantNotRevokableError()
+        await ApprovalInstanceRepository.create_action_log(
+            ApprovalActionLog(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                action='revoke_grant',
+                operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
+                detail={'reason': reason, 'menu_key': menu_key},
+            )
+        )
         await cls._write_audit_log(
             tenant_id=instance.tenant_id,
             operator_user_id=operator_user_id,
@@ -597,6 +608,7 @@ class ApprovalCenterService:
                 'menu_key': menu_key,
                 'applicant_user_id': instance.applicant_user_id,
             },
+            operator_name=operator_user_name,
             object_name=instance.business_name,
             ip_address=ip_address,
         )
