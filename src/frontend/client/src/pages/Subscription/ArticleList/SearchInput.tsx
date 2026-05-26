@@ -1,5 +1,6 @@
 import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
 import { useLocalize, useMediaQuery } from "~/hooks";
+import { cn } from "~/utils";
 
 interface SearchInputProps {
     value: string;
@@ -14,7 +15,7 @@ export function SearchInput({ value, onChange, placeholder, className }: SearchI
     // Only <=768 stays always expanded; >768 uses icon-collapsed interaction.
     const isMobileAndTablet = useMediaQuery("(max-width: 768px)");
     const shouldUseCollapsedSearch = !isMobileAndTablet;
-    const resolvedContainerClassName = shouldUseCollapsedSearch ? "min-w-0" : className;
+    const resolvedContainerClassName = cn("rounded-[6px]", shouldUseCollapsedSearch ? "min-w-0" : className);
 
     return (
         <ExpandableSearchField

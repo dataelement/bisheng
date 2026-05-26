@@ -1,6 +1,6 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Info, Menu, Plus } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
 import {
     Article,
     Channel,
@@ -10,7 +10,6 @@ import {
 } from "~/api/channels";
 import { InfiniteScroll } from "~/components/InfiniteScroll";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useDebounce } from "~/hooks";
 import { ArticleCard } from "./ArticleCard";
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
@@ -375,33 +374,28 @@ export function ArticleList({
                                 onChannelSquare={onGoChannelSquare}
                                 onManageMembers={onManageMembers}
                                 onChannelSettings={onChannelSettings}
+                                infoContent={
+                                    <div className="space-y-1.5 text-sm text-gray-800">
+                                        <div><span className="text-gray-400">{localize("com_subscription.channel_description_colon")}</span>
+                                            <p>{channelDetail?.description || channel.description || "-"}</p>
+                                        </div>
+                                        <div><span className="text-gray-400">{localize("com_subscription.creator_colon")}</span>
+                                            <p>{channelDetail?.creator_name || channel.creator || "-"}</p>
+                                        </div>
+                                        <div><span className="text-gray-400">{localize("com_subscription.subscribers_colon")}</span>
+                                            <p>{channelDetail?.subscriber_count ?? channel.subscriberCount ?? 0}</p>
+                                        </div>
+                                        <div><span className="text-gray-400">{localize("com_subscription.content_count_colon")}</span>
+                                            <p>{channelDetail?.article_count ?? channel.articleCount ?? 0}</p>
+                                        </div>
+                                    </div>
+                                }
                             />
                         ) : (
                             <h1 className="truncate text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
                                 {channelDetail?.name || channel.name}
                             </h1>
                         )}
-                        <Tooltip>
-                            <TooltipTrigger className="hidden shrink-0 cursor-pointer fine-pointer:inline-flex">
-                                <Info className="size-4 text-[#86909c] outline-none fine-pointer:hover:text-[#165dff]" />
-                            </TooltipTrigger>
-                            <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-[240px]">
-                                <div className="space-y-1.5 text-gray-800 text-sm">
-                                    <div><span className="text-gray-400">{localize("com_subscription.channel_description_colon")}</span>
-                                        <p>{channelDetail?.description || channel.description || "-"}</p>
-                                    </div>
-                                    <div><span className="text-gray-400">{localize("com_subscription.creator_colon")}</span>
-                                        <p>{channelDetail?.creator_name || channel.creator || "-"}</p>
-                                    </div>
-                                    <div><span className="text-gray-400">{localize("com_subscription.subscribers_colon")}</span>
-                                        <p>{channelDetail?.subscriber_count ?? channel.subscriberCount ?? 0}</p>
-                                    </div>
-                                    <div><span className="text-gray-400">{localize("com_subscription.content_count_colon")}</span>
-                                        <p>{channelDetail?.article_count ?? channel.articleCount ?? 0}</p>
-                                    </div>
-                                </div>
-                            </TooltipContent>
-                        </Tooltip>
                     </div>
 
                     <div className="flex shrink-0 items-center gap-3">
@@ -511,7 +505,7 @@ export function ArticleList({
                             )}
                         >
                             <MultiSourceSelect
-                                className="h-8 min-w-[140px] max-w-full shrink-0 touch-desktop:w-auto touch-desktop:min-w-[140px]"
+                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-[6px] touch-desktop:w-auto touch-desktop:min-w-[140px]"
                                 options={sourceOptions}
                                 value={selectedSources}
                                 onChange={handleSourcesChange}
@@ -521,7 +515,7 @@ export function ArticleList({
                                 type="button"
                                 onClick={handleToggleUnread}
                                 className={cn(
-                                    "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
                                         : "border-[#E5E6EB] bg-white text-gray-800 fine-pointer:hover:bg-gray-50 touch-mobile:border-[#E5E6EB] touch-mobile:bg-white touch-mobile:text-[#212121] touch-mobile:hover:bg-transparent",

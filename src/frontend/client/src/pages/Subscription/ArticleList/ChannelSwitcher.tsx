@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Channel, SortType, getChannelsApi } from "~/api/channels";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/Popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
@@ -13,6 +14,8 @@ interface ChannelSwitcherProps {
     onChannelSelect: (channel: Channel) => void;
     onCreateChannel?: () => void;
     onChannelSquare?: () => void;
+    /** Channel info shown in a tooltip when hovering the title. */
+    infoContent?: ReactNode;
 }
 
 type ChannelGroup = "created" | "subscribed";
@@ -28,13 +31,19 @@ export function ChannelSwitcher({
     onChannelSelect,
     onCreateChannel,
     onChannelSquare,
+    infoContent,
 }: ChannelSwitcherProps) {
     const localize = useLocalize();
     const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
+    const [infoOpen, setInfoOpen] = useState(false);
+    // After closing the dropdown with the pointer still over the title, suppress hover
+    // styles until the pointer leaves and re-enters (avoids sticky hover).
+    const [hoverSuppressed, setHoverSuppressed] = useState(false);
     const [group, setGroup] = useState<ChannelGroup>("created");
     const [createdSortBy, setCreatedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
     const [subscribedSortBy, setSubscribedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
+    const listRef = useRef<HTMLDivElement>(null);
 
     const { data: createdChannels = [] } = useQuery({
         queryKey: ["channels", "created", createdSortBy],
@@ -49,6 +58,27 @@ export function ChannelSwitcher({
 
     const channels = group === "created" ? createdChannels : subscribedChannels;
     const currentSort = group === "created" ? createdSortBy : subscribedSortBy;
+
+    // Reset the list scroll to the top whenever the group switches.
+    useEffect(() => {
+        listRef.current?.scrollTo({ top: 0 });
+    }, [group]);
+
+    // On open, default to the group the active channel belongs to.
+    const handleOpenChange = (next: boolean) => {
+        if (next) {
+            if (subscribedChannels.some((c) => c.id === activeChannelId)) {
+                setGroup("subscribed");
+            } else if (createdChannels.some((c) => c.id === activeChannelId)) {
+                setGroup("created");
+            }
+        } else {
+            // Closing: keep hover suppressed until the pointer leaves the title.
+            setHoverSuppressed(true);
+            setInfoOpen(false);
+        }
+        setOpen(next);
+    };
 
     const getSortText = (sortType: SortType) => {
         switch (sortType) {
@@ -72,16 +102,25 @@ export function ChannelSwitcher({
     };
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
+        <Tooltip open={Boolean(infoContent) && infoOpen && !open && !hoverSuppressed} onOpenChange={setInfoOpen}>
+            <TooltipTrigger asChild>
+            <div
+                className="group inline-flex min-w-0"
+                onMouseEnter={() => { setHoverSuppressed(false); setInfoOpen(true); }}
+                onMouseLeave={() => { setHoverSuppressed(false); setInfoOpen(false); }}
+            >
+            <Popover open={open} onOpenChange={handleOpenChange}>
             <PopoverTrigger asChild>
                 <button
                     type="button"
-                    className="flex min-w-0 items-center gap-2 rounded-md px-1 text-[32px] leading-[40px] text-[#212121] outline-none fine-pointer:hover:bg-[#F7F8FA] [font-family:'Songti_SC','STSong','SimSun',serif] font-bold"
+                    className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-[#212121] outline-none [font-family:'Songti_SC','STSong','SimSun',serif] font-bold"
                 >
                     <span className="shrink-0">{localize("com_subscription.subscribe")}</span>
                     <span className="shrink-0 text-[#C9CDD4]">·</span>
-                    <span className="truncate">{channelName}</span>
-                    <Outlined.Down className={cn("size-6 shrink-0 text-[#86909C] transition-transform", open && "rotate-180")} />
+                    <span className={cn("truncate text-[#212121] transition-colors", !open && !hoverSuppressed && "fine-pointer:group-hover:text-[#878787]")}>{channelName}</span>
+                    <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md transition-colors", !open && !hoverSuppressed && "fine-pointer:hover:bg-[#F7F8FA]")}>
+                        <Outlined.Down className={cn("size-6 text-[#86909C] transition-transform", open && "rotate-180")} />
+                    </span>
                 </button>
             </PopoverTrigger>
             <PopoverContent
@@ -94,7 +133,7 @@ export function ChannelSwitcher({
                     <button
                         type="button"
                         onClick={() => setGroup((g) => (g === "created" ? "subscribed" : "created"))}
-                        className="flex items-center gap-1 rounded-[6px] bg-[#F7F7F7] p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#EFEFEF]"
+                        className="flex items-center gap-1 rounded-[6px] p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#F7F7F7]"
                     >
                         <span>{group === "created" ? localize("com_subscription.created_by_me") : localize("com_subscription.followed_by_me")}</span>
                         <Outlined.Exchange className="size-4" />
@@ -124,7 +163,7 @@ export function ChannelSwitcher({
                 </div>
 
                 {/* Channel list */}
-                <div className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto">
+                <div ref={listRef} className="scrollbar-os flex min-h-0 w-full flex-1 flex-col overflow-y-auto">
                     {channels.length === 0 ? (
                         <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>
                     ) : (
@@ -164,6 +203,14 @@ export function ChannelSwitcher({
                     </button>
                 ) : null}
             </PopoverContent>
-        </Popover>
+            </Popover>
+            </div>
+            </TooltipTrigger>
+            {infoContent ? (
+                <TooltipContent noArrow side="bottom" align="start" className="w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-md">
+                    {infoContent}
+                </TooltipContent>
+            ) : null}
+        </Tooltip>
     );
 }

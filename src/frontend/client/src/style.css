@@ -1457,22 +1457,23 @@ button {
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
-/* Webkit scrollbar */
-::-webkit-scrollbar {
+/* Webkit scrollbar — `.scrollbar-os` opts out so the OS scrollbar setting
+   (auto-hide vs always-on) is respected instead of a forced custom scrollbar. */
+:not(.scrollbar-os)::-webkit-scrollbar {
   height: 0.1em;
   width: 0.5rem;
 }
 
-::-webkit-scrollbar-thumb {
+:not(.scrollbar-os)::-webkit-scrollbar-thumb {
   background-color: rgba(0, 0, 0, 0.1);
   border-radius: 9999px;
 }
 
-.dark ::-webkit-scrollbar-thumb {
+.dark :not(.scrollbar-os)::-webkit-scrollbar-thumb {
   background-color: hsla(0, 0%, 100%, 0.1);
 }
 
-::-webkit-scrollbar-track {
+:not(.scrollbar-os)::-webkit-scrollbar-track {
   background-color: transparent;
   border-radius: 9999px;
 }
