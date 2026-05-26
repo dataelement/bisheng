@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
@@ -21,6 +22,7 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateResult,
 )
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+from bisheng.database.models.audit_log import AuditLogDao
 
 
 async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
@@ -149,6 +151,24 @@ class ApprovalGate:
                 )
             )
             self._dispatch_outbox_task(outbox.id)
+            await AuditLogDao.ainsert_v2(
+                tenant_id=req.tenant_id,
+                operator_id=0,
+                operator_tenant_id=req.tenant_id,
+                action='approval.route.pass',
+                target_type='approval_instance',
+                target_id=str(instance.id),
+                reason=getattr(matched_route, 'route_name', None),
+                metadata={
+                    'instance_id': instance.id,
+                    'scenario_code': req.scenario_code,
+                    'route_id': getattr(matched_route, 'id', None),
+                    'route_name': getattr(matched_route, 'route_name', None),
+                    'payload_snapshot': req.payload_snapshot,
+                },
+                object_name=business_name,
+                ip_address=req.ip_address,
+            )
             return ApprovalGateResult(decision=ApprovalGateDecision.PASS, instance_id=instance.id)
 
         flow_version = await self.scenario_repository.get_active_flow_version(
@@ -232,6 +252,26 @@ class ApprovalGate:
                 operator_user_name=req.applicant_user_name,
                 detail={},
             )
+        )
+        await AuditLogDao.ainsert_v2(
+            tenant_id=req.tenant_id,
+            operator_id=req.applicant_user_id,
+            operator_tenant_id=req.tenant_id,
+            action='approval.request.submit',
+            target_type='approval_instance',
+            target_id=str(instance.id),
+            reason=req.reason,
+            metadata={
+                'instance_id': instance.id,
+                'scenario_code': req.scenario_code,
+                'handler': req.scenario_code,
+                'payload_snapshot': req.payload_snapshot,
+                'business_resource_type': req.business_resource_type,
+                'business_resource_id': req.business_resource_id,
+            },
+            operator_name=req.applicant_user_name,
+            object_name=business_name,
+            ip_address=req.ip_address,
         )
         return ApprovalGateResult(
             decision=ApprovalGateDecision.PENDING,
@@ -333,10 +373,10 @@ class ApprovalGate:
         instance_id: int,
     ) -> None:
         try:
-            from bisheng.database.constants import AdminRole
-            from bisheng.user.domain.models.user_role import UserRoleDao
             from bisheng.core.database import get_async_db_session
+            from bisheng.database.constants import AdminRole
             from bisheng.message.api.dependencies import get_message_service as _get_message_service
+            from bisheng.user.domain.models.user_role import UserRoleDao
             admin_rows = await UserRoleDao.aget_roles_user([AdminRole])
             admin_ids = [int(r.user_id) for r in admin_rows if r.user_id != applicant_user_id]
             if not admin_ids:

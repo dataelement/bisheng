@@ -84,3 +84,8 @@ class ApprovalRetryNoFlowNodesError(BaseErrorCode):
 class ApprovalFlowNotFoundError(BaseErrorCode):
     Code: int = 18116
     Msg: str = 'Approval flow not found'
+
+
+class ApprovalFlowInUseByRoutesError(BaseErrorCode):
+    Code: int = 18117
+    Msg: str = '该流程已被分支引用，请先在分支管理中解除绑定后再删除'

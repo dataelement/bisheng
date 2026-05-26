@@ -9,35 +9,35 @@ P0 rules (DDD, dual-DB, permissions, API conventions) live in `AGENTS.md`.
 
 ```bash
 # Dependencies (uv, lockfile = uv.lock, Python must be 3.10.x)
-uv sync --frozen --python .venv/bin/python
+uv sync --frozen --python uv run python
 
 # Tests
-.venv/bin/pytest test/                               # all
-.venv/bin/pytest test/<module>/test_xxx.py::test_fn  # single test
-.venv/bin/pytest test/ -k "keyword"                  # filter by keyword
-.venv/bin/pytest test/ -m "not e2e"                  # exclude e2e
+uv run pytest test/                               # all
+uv run pytest test/<module>/test_xxx.py::test_fn  # single test
+uv run pytest test/ -k "keyword"                  # filter by keyword
+uv run pytest test/ -m "not e2e"                  # exclude e2e
 # New tests go under test/<module>/ (e.g. test/approval/), not test/ root
 # asyncio_mode=auto — no @pytest.mark.asyncio needed on async functions
 
 # Format / Lint (matches PostToolUse hook)
-.venv/bin/ruff format <file_or_dir>
-.venv/bin/ruff check --fix <file_or_dir>
+uv run ruff format <file_or_dir>
+uv run ruff check --fix <file_or_dir>
 
 # Start API (port 7860; config must be a filename relative to the bisheng package dir)
 export config=config.yaml
-.venv/bin/uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 1 --no-access-log
+uv run uvicorn bisheng.main:app --host 0.0.0.0 --port 7860 --workers 1 --no-access-log
 
 # Celery (one terminal per queue)
-.venv/bin/celery -A bisheng.worker.main worker -l info -c 20  -P threads -Q knowledge_celery -n knowledge@%h
-.venv/bin/celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery  -n workflow@%h
-.venv/bin/celery -A bisheng.worker.main beat -l info
+uv run celery -A bisheng.worker.main worker -l info -c 20  -P threads -Q knowledge_celery -n knowledge@%h
+uv run celery -A bisheng.worker.main worker -l info -c 100 -P threads -Q workflow_celery  -n workflow@%h
+uv run celery -A bisheng.worker.main beat -l info
 
 # Linsight Worker (optional)
-.venv/bin/python bisheng/linsight/worker.py --worker_num 4 --max_concurrency 5
+uv run python bisheng/linsight/worker.py --worker_num 4 --max_concurrency 5
 
 # DB migration (alembic.ini in src/backend/)
-.venv/bin/alembic upgrade head
-.venv/bin/alembic revision --autogenerate -m "msg"   # autogen only reflects MySQL accurately; review DM8 compatibility manually
+uv run alembic upgrade head
+uv run alembic revision --autogenerate -m "msg"   # autogen only reflects MySQL accurately; review DM8 compatibility manually
 ```
 
 ---

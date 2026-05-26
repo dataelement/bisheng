@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, File, Request, UploadFile
 from bisheng.api.v1.schemas import resp_200
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.core.cache.utils import save_download_file, save_uploaded_file
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.utils.util import sync_func_to_async
@@ -62,6 +63,12 @@ async def upload_file(
 ):
     try:
         file_path = await save_uploaded_file(file, 'bisheng', unquote(file.filename))
+        # save_uploaded_file returns the full presigned URL prefixed with the
+        # internal minio host (http://minio:9000/...). The browser can't reach
+        # that hostname directly — strip the prefix so the frontend hits MinIO
+        # via the nginx /tmp-dir reverse proxy on the same origin.
+        minio_client = await get_minio_storage()
+        file_path = minio_client.clear_minio_share_host(file_path)
         return resp_200(
             data={
                 'filepath': file_path,

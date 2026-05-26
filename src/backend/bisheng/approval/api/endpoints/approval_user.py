@@ -93,22 +93,6 @@ async def withdraw_instance(
     return resp_200(data)
 
 
-@router.post('/instances/{instance_id}/resubmit')
-async def resubmit_instance(
-    instance_id: int,
-    req: ApprovalResubmitReq,
-    request: Request,
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-):
-    data = await ApprovalCenterService.resubmit_instance(
-        instance_id=instance_id,
-        operator_user_id=login_user.user_id,
-        reason=req.reason,
-        ip_address=get_request_ip(request),
-    )
-    return resp_200(data)
-
-
 @router.get('/menu-access/pending-check')
 async def check_menu_access_pending(
     menu_key: str,
@@ -132,6 +116,7 @@ async def check_menu_access_pending(
 @router.post('/menu-access/apply')
 async def apply_menu_access(
     req: MenuAccessApplyReq,
+    request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     data = await ApprovalCenterService.apply_menu_access_request(
@@ -139,6 +124,7 @@ async def apply_menu_access(
         menu_key=req.menu_key,
         menu_name=req.menu_name,
         reason=req.reason,
+        ip_address=get_request_ip(request),
     )
     return resp_200(data)
 
