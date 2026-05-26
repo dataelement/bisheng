@@ -41,11 +41,11 @@ class RedisClient:
             hosts = [eval(x) for x in redis_conf.pop('sentinel_hosts')]
             password = redis_conf.pop('sentinel_password', None)
             master = redis_conf.pop('sentinel_master')
-            sentinel = Sentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
-            async_sentinel = AsyncSentinel(sentinels=hosts, socket_timeout=0.1, sentinel_kwargs={'password': password})
+            sentinel = Sentinel(sentinels=hosts, socket_timeout=1, sentinel_kwargs={'password': password})
+            async_sentinel = AsyncSentinel(sentinels=hosts, socket_timeout=1, sentinel_kwargs={'password': password})
             # Get the connection of the master node
-            self.connection = sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
-            self.async_connection: AsyncRedis = async_sentinel.master_for(master, socket_timeout=0.1, **redis_conf)
+            self.connection = sentinel.master_for(master, socket_timeout=1, **redis_conf)
+            self.async_connection: AsyncRedis = async_sentinel.master_for(master, socket_timeout=1, **redis_conf)
 
         else:
             # Singleplayer Mode
