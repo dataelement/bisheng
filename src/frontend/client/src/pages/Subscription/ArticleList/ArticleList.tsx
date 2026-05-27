@@ -640,7 +640,8 @@ export function ArticleList({
                         </div>
                         )}
 
-                        <div className="flex w-auto min-w-0 flex-row flex-wrap items-center justify-end gap-3">
+                        {/* ml-auto keeps the toolbar right-aligned even when the tab row is hidden. */}
+                        <div className="ml-auto flex w-auto min-w-0 flex-row flex-wrap items-center justify-end gap-3">
                             <SearchInput
                                 key={channel.id}
                                 value={searchKey}

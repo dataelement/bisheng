@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { LogOut, Pin, PinOff } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { Channel, ChannelRole, SortType, getChannelsApi } from "~/api/channels";
 import {
@@ -20,8 +20,8 @@ interface ChannelActionsMenuProps {
     onChannelSelect: (channel: Channel | null) => void;
     onManageMembers?: (channel: Channel) => void;
     onChannelSettings?: (channel: Channel) => void;
-    /** "default" = PC labels (频道设置/成员管理/解散频道) + pin item.
-     *  "mobile" = H5 labels (编辑频道/权限管理/删除频道); pin moves to dropdown rows. */
+    /** "default" = PC labels (频道设置/成员管理/解散频道).
+     *  "mobile" = H5 labels (编辑频道/权限管理/删除频道). */
     variant?: "default" | "mobile";
     /** Mobile only: 分享 menu item — copies the share link. */
     onShare?: () => void;
@@ -33,9 +33,9 @@ interface ChannelActionsMenuProps {
 
 /**
  * Page-level (top-right ⋯) management menu for the active channel.
- * PC variant items: 频道设置 / 成员管理 / 置顶·取消置顶 / 解散频道·取消订阅.
- * Mobile variant items: 分享 / 信息源筛选 / 编辑频道 / 权限管理 / 删除频道·取消订阅
- *   (pin moves to the channel-switcher dropdown rows on mobile).
+ * PC variant items: 频道设置 / 成员管理 / 解散频道·取消订阅.
+ * Mobile variant items: 分享 / 信息源筛选 / 编辑频道 / 权限管理 / 删除频道·取消订阅.
+ * Pinning lives on the per-channel rows in the channel-switcher dropdown, not here.
  */
 export function ChannelActionsMenu({
     channel,
@@ -68,12 +68,12 @@ export function ChannelActionsMenu({
         ? "subscribed"
         : "created";
 
-    // Prefer the freshest channel record from the lists (isPinned can be stale on a deep-linked channel).
+    // Prefer the freshest channel record from the lists (role/name can be stale on a deep-linked channel).
     const liveChannel = createdChannels.find((c) => c.id === channel.id)
         || subscribedChannels.find((c) => c.id === channel.id)
         || channel;
 
-    const { handleDeleteChannel, handleUnsubscribeChannel, handlePinChannel } = useChannelActions({
+    const { handleDeleteChannel, handleUnsubscribeChannel } = useChannelActions({
         activeChannelId: channel.id,
         createdSortBy: SortType.RECENT_UPDATE,
         subscribedSortBy: SortType.RECENT_UPDATE,
@@ -138,15 +138,12 @@ export function ChannelActionsMenu({
                             : localize("com_subscription.member_management")}
                     </DropdownMenuItem>
                 ) : null}
-                {!isMobile ? (
-                    <DropdownMenuItem className={itemCls} onClick={() => handlePinChannel(liveChannel.id, !liveChannel.isPinned, type)}>
-                        {liveChannel.isPinned ? <PinOff className={iconCls} /> : <Pin className={iconCls} />}
-                        {liveChannel.isPinned ? localize("com_subscription.unpin") : localize("com_subscription.pin_channel")}
-                    </DropdownMenuItem>
+                {/* Pinning moved to the per-channel rows in the channel-switcher dropdown. */}
+                {!isMobile && ((isCreated && onChannelSettings) || (canManageMembers && onManageMembers)) ? (
+                    <DropdownMenuSeparator className="bg-[#ECECEC]" />
                 ) : null}
-                {!isMobile ? <DropdownMenuSeparator className="bg-[#ECECEC]" /> : null}
                 <DropdownMenuItem
-                    className={cn(itemCls, "text-[#F53F3F]")}
+                    className={cn(itemCls, "text-[#F53F3F] data-[highlighted]:bg-[#F53F3F]/10 data-[highlighted]:text-[#F53F3F]")}
                     onClick={async () => {
                         const ok = await confirm({
                             title: localize("com_subscription.prompt_tip"),

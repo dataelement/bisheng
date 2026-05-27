@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/Popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { useChannelActions } from "../hooks/useChannelActions";
 
 interface ChannelSwitcherProps {
     activeChannelId?: string;
@@ -55,13 +56,14 @@ export function ChannelSwitcher({
         if (openProp === undefined) setInternalOpen(next);
     };
     const [infoOpen, setInfoOpen] = useState(false);
-    // After closing the dropdown with the pointer still over the title, suppress hover
-    // styles until the pointer leaves and re-enters (avoids sticky hover).
-    const [hoverSuppressed, setHoverSuppressed] = useState(false);
     const [group, setGroup] = useState<ChannelGroup>("created");
     const [createdSortBy, setCreatedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
     const [subscribedSortBy, setSubscribedSortBy] = useState<SortType>(SortType.RECENT_UPDATE);
     const listRef = useRef<HTMLDivElement>(null);
+    const titleRef = useRef<HTMLDivElement>(null);
+    // Left floor for the dropdown: it stays centered on the arrow but never moves left of the
+    // title's left edge (= content-area left + header padding), measured when opening.
+    const [collisionLeft, setCollisionLeft] = useState(40);
 
     const { data: createdChannels = [] } = useQuery({
         queryKey: ["channels", "created", createdSortBy],
@@ -77,6 +79,15 @@ export function ChannelSwitcher({
     const channels = group === "created" ? createdChannels : subscribedChannels;
     const currentSort = group === "created" ? createdSortBy : subscribedSortBy;
 
+    const { handlePinChannel } = useChannelActions({
+        activeChannelId,
+        createdSortBy,
+        subscribedSortBy,
+        createdChannels,
+        subscribedChannels,
+        onChannelSelect: (c) => { if (c) onChannelSelect(c); },
+    });
+
     // Reset the list scroll to the top whenever the group switches.
     useEffect(() => {
         listRef.current?.scrollTo({ top: 0 });
@@ -85,14 +96,14 @@ export function ChannelSwitcher({
     // On open, default to the group the active channel belongs to.
     const handleOpenChange = (next: boolean) => {
         if (next) {
+            const left = titleRef.current?.getBoundingClientRect().left;
+            if (left != null) setCollisionLeft(Math.round(left));
             if (subscribedChannels.some((c) => c.id === activeChannelId)) {
                 setGroup("subscribed");
             } else if (createdChannels.some((c) => c.id === activeChannelId)) {
                 setGroup("created");
             }
         } else {
-            // Closing: keep hover suppressed until the pointer leaves the title.
-            setHoverSuppressed(true);
             setInfoOpen(false);
         }
         setOpen(next);
@@ -183,22 +194,33 @@ export function ChannelSwitcher({
                 channels.map((c) => {
                     const isActive = c.id === activeChannelId;
                     return (
-                        <button
-                            type="button"
+                        <div
                             key={c.id}
-                            onClick={() => handleSelect(c)}
-                            className="group flex w-full shrink-0 items-center gap-1 border-b border-dashed border-[#ececec] py-1 text-left transition-colors last:border-b-0 fine-pointer:hover:bg-[#F7F7F7]"
+                            className="group flex w-full shrink-0 items-center gap-1 border-b border-dashed border-[#ececec] py-1 transition-colors last:border-b-0 fine-pointer:hover:bg-[#F7F7F7]"
                         >
-                            <span className="flex h-10 min-w-0 flex-1 items-center px-1">
+                            <button
+                                type="button"
+                                onClick={() => handleSelect(c)}
+                                className="flex h-10 min-w-0 flex-1 items-center px-1 text-left outline-none"
+                            >
                                 <span className={cn(
                                     "max-w-full truncate py-1 text-[14px] leading-[22px] text-[#212121] [font-family:-apple-system,system-ui,'PingFang_SC','Microsoft_YaHei','Noto_Sans_CJK_SC',sans-serif]",
                                     isActive ? "border-b border-[#212121] font-semibold" : "font-normal",
                                 )}>
                                     {c.name}
                                 </span>
-                            </span>
-                            {c.isPinned && <Outlined.ToTop className="size-3 shrink-0 text-[#86909C]" />}
-                        </button>
+                            </button>
+                            {/* Pin toggle — always shown: gray when unpinned, dark gray when pinned. */}
+                            <button
+                                type="button"
+                                aria-label={c.isPinned ? localize("com_subscription.unpin") : localize("com_subscription.pin_channel")}
+                                aria-pressed={c.isPinned}
+                                onClick={() => handlePinChannel(c.id, !c.isPinned, group)}
+                                className="flex size-6 shrink-0 items-center justify-center rounded outline-none transition-colors fine-pointer:hover:bg-[#ececec]"
+                            >
+                                <Outlined.ToTop className={cn("size-3 transition-colors", c.isPinned ? "text-[#4E5969]" : "text-[#C9CDD4]")} />
+                            </button>
+                        </div>
                     );
                 })
             )}
@@ -241,53 +263,61 @@ export function ChannelSwitcher({
     }
 
     return (
-        <Tooltip open={Boolean(infoContent) && infoOpen && !open && !hoverSuppressed} onOpenChange={setInfoOpen}>
-            <TooltipTrigger asChild>
-            <div
-                className="group inline-flex min-w-0"
-                onMouseEnter={() => { setHoverSuppressed(false); setInfoOpen(true); }}
-                onMouseLeave={() => { setHoverSuppressed(false); setInfoOpen(false); }}
-            >
-            <Popover open={open} onOpenChange={handleOpenChange}>
-            <PopoverTrigger asChild>
-                <button
-                    type="button"
-                    className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-[#212121] outline-none [font-family:'Songti_SC','STSong','SimSun',serif] font-bold"
-                >
-                    <span className="shrink-0">{localize("com_subscription.subscribe")}</span>
-                    <span className="shrink-0 text-[#C9CDD4]">·</span>
-                    <span className={cn("truncate text-[#212121] transition-colors", !open && !hoverSuppressed && "fine-pointer:group-hover:text-[#878787]")}>{channelName}</span>
-                    <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md transition-colors", !open && !hoverSuppressed && "fine-pointer:hover:bg-[#F7F8FA]")}>
-                        <Outlined.Down className={cn("size-6 text-[#86909C] transition-transform", open && "rotate-180")} />
+        <div
+            ref={titleRef}
+            className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-[#212121] [font-family:'Songti_SC','STSong','SimSun',serif] font-bold"
+        >
+            <span className="shrink-0">{localize("com_subscription.subscribe")}</span>
+            <span className="shrink-0 text-[#C9CDD4]">·</span>
+            {/* Info popover is scoped to the channel name. The name is not clickable — only the
+                arrow opens the switcher menu. */}
+            <Tooltip open={Boolean(infoContent) && infoOpen && !open} onOpenChange={setInfoOpen}>
+                <TooltipTrigger asChild>
+                    <span
+                        className={cn("truncate text-[#212121] transition-colors", !open && "fine-pointer:hover:text-[#878787]")}
+                        onMouseEnter={() => setInfoOpen(true)}
+                        onMouseLeave={() => setInfoOpen(false)}
+                    >
+                        {channelName}
                     </span>
-                </button>
-            </PopoverTrigger>
-            <PopoverContent
-                align="start"
-                sideOffset={8}
-                className="flex max-h-[560px] w-[320px] flex-col gap-2 rounded-[8px] border-0 bg-white p-3 shadow-[0px_4px_20px_0px_rgba(23,0,176,0.1)]"
-            >
-                {renderSectionHeader()}
-                {renderChannelList()}
-                {onChannelSquare ? (
+                </TooltipTrigger>
+                {infoContent ? (
+                    <TooltipContent noArrow side="bottom" align="start" className="w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-md">
+                        {infoContent}
+                    </TooltipContent>
+                ) : null}
+            </Tooltip>
+            <Popover open={open} onOpenChange={handleOpenChange}>
+                <PopoverTrigger asChild>
                     <button
                         type="button"
-                        onClick={() => { onChannelSquare(); setOpen(false); }}
-                        className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[6px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+                        aria-haspopup="menu"
+                        aria-expanded={open}
+                        className={cn("flex size-8 shrink-0 items-center justify-center rounded-md outline-none transition-colors", !open && "fine-pointer:hover:bg-[#F7F8FA]")}
                     >
-                        <Outlined.BlocksAndArrows className="size-4 text-[#86909C]" />
-                        {localize("com_subscription.go_to_square")}
+                        <Outlined.Down className={cn("size-6 text-[#86909C] transition-transform", open && "rotate-180")} />
                     </button>
-                ) : null}
-            </PopoverContent>
+                </PopoverTrigger>
+                <PopoverContent
+                    align="center"
+                    sideOffset={8}
+                    collisionPadding={{ left: collisionLeft, bottom: 40 }}
+                    className="flex max-h-[var(--radix-popover-content-available-height)] w-[320px] flex-col gap-2 rounded-[8px] border-0 bg-white p-3 shadow-[0px_4px_20px_0px_rgba(23,0,176,0.1)]"
+                >
+                    {renderSectionHeader()}
+                    {renderChannelList()}
+                    {onChannelSquare ? (
+                        <button
+                            type="button"
+                            onClick={() => { onChannelSquare(); setOpen(false); }}
+                            className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[6px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+                        >
+                            <Outlined.BlocksAndArrows className="size-4 text-[#86909C]" />
+                            {localize("com_subscription.go_to_square")}
+                        </button>
+                    ) : null}
+                </PopoverContent>
             </Popover>
-            </div>
-            </TooltipTrigger>
-            {infoContent ? (
-                <TooltipContent noArrow side="bottom" align="start" className="w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-md">
-                    {infoContent}
-                </TooltipContent>
-            ) : null}
-        </Tooltip>
+        </div>
     );
 }

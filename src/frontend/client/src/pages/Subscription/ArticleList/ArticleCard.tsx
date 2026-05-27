@@ -1,12 +1,11 @@
 import { useLocalize } from "~/hooks";
-import BookPlusIcon from "~/components/ui/icon/BookPlus";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { Article } from "~/api/channels";
 import { useArticleShare } from "../hooks/useArticleShare";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { copyText } from "~/utils";
-import { AddSpaceIcon, ShareOutlineIcon } from "~/components/icons";
 import { AddToKnowledgeModal } from "../Article/AddToKnowledgeModal";
 import { ChannelQuoteIcon } from "~/components/icons/channels";
 import { useAuthContext } from "~/hooks/AuthContext";
@@ -185,10 +184,10 @@ export function ArticleCard({
                                     {hasKnowledge && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
-                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-50 text-gray-800 transition-colors hover:bg-gray-100 max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:bg-transparent max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-gray-800 transition-colors hover:bg-[#F7F8FA] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
                                             title={localize("com_subscription.add_to_knowledge_space")}
                                         >
-                                            <BookPlusIcon className="size-3.5" />
+                                            <Outlined.AddToKnowledgeBase className="size-3.5" />
                                         </button>
                                     )}
                                     <button
@@ -200,10 +199,10 @@ export function ArticleCard({
                                                 .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
                                                 .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
                                         }}
-                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-50 text-gray-800 transition-colors hover:bg-gray-100 max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:bg-transparent max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-gray-800 transition-colors hover:bg-[#F7F8FA] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
                                         title={localize("com_subscription.share")}
                                     >
-                                        <ShareOutlineIcon className="size-3.5" />
+                                        <Outlined.Share className="size-3.5" />
                                     </button>
                                 </div>
                             )}
@@ -318,10 +317,10 @@ export function ArticleCard({
                                         e.stopPropagation();
                                         setShowKnowledgeModal(true);
                                     }}
-                                    className="rounded-full bg-gray-50 flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
+                                    className="rounded-full flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors hover:bg-[#F7F8FA]"
                                     title={localize("com_subscription.add_to_knowledge_space")}
                                 >
-                                    <BookPlusIcon className="size-3.5" />
+                                    <Outlined.AddToKnowledgeBase className="size-3.5" />
                                 </button>
                             )}
                             <button
@@ -346,10 +345,10 @@ export function ArticleCard({
                                             });
                                         });
                                 }}
-                                className="rounded-full bg-gray-50 flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
+                                className="rounded-full flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors hover:bg-[#F7F8FA]"
                                 title={localize("com_subscription.share")}
                             >
-                                <ShareOutlineIcon className="size-3.5" />
+                                <Outlined.Share className="size-3.5" />
                             </button>
                         </div>
                     )}
