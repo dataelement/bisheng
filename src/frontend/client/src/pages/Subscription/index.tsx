@@ -509,9 +509,9 @@ export default function Subscription() {
                             <ChannelLayout
                                 key={`${activeChannel.id}-${channelRefreshToken}`}
                                 channel={activeChannel}
-                                onChannelSelect={!isH5 ? handleChannelSelect : undefined}
-                                onManageMembers={!isH5 ? (channel) => openChannelPermissionDialog(channel) : undefined}
-                                onChannelSettings={!isH5 ? (channel) => {
+                                onChannelSelect={handleChannelSelect}
+                                onManageMembers={(channel) => openChannelPermissionDialog(channel)}
+                                onChannelSettings={(channel) => {
                                     setEditingChannel(null);
                                     (async () => {
                                         try {
@@ -523,7 +523,7 @@ export default function Subscription() {
                                             setShowCreateChannelDrawer(true);
                                         }
                                     })();
-                                } : undefined}
+                                }}
                                 onOpenChannelNav={isH5 ? () => setSystemMenuOpen(true) : undefined}
                                 onGoChannelSquare={handleChannelSquare}
                                 onCreateChannel={handleCreateChannel}

@@ -14,16 +14,24 @@ interface ChannelSwitcherProps {
     onChannelSelect: (channel: Channel) => void;
     onCreateChannel?: () => void;
     onChannelSquare?: () => void;
-    /** Channel info shown in a tooltip when hovering the title. */
+    /** Channel info shown in a tooltip when hovering the title (PC variant only). */
     infoContent?: ReactNode;
+    /** "default" = PC top-title popover. "mobile" = H5 below-titlebar fixed panel + backdrop. */
+    variant?: "default" | "mobile";
+    /** Mobile: CSS `top` for the dropdown panel (just under the H5 title bar). */
+    mobileTopOffset?: string;
+    /** Optional controlled open state (callers can force-close, e.g. when search opens). */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }
 
 type ChannelGroup = "created" | "subscribed";
 
 /**
- * Top-title channel switcher dropdown (replaces the left ChannelSidebar on PC).
- * Switch between 我创建的 / 我关注的, create/sort, pick a channel, go to square.
- * Per-channel management lives in the page-level ChannelActionsMenu (top-right ⊙).
+ * Channel switcher — picks an active channel from "我创建的" / "我关注的".
+ * PC variant: 32px title trigger + Radix Popover.
+ * Mobile variant: 20px title trigger + fixed full-width panel anchored under the H5 title bar,
+ *   with a dimmed backdrop tap-to-close and an interactive pin toggle per row.
  */
 export function ChannelSwitcher({
     activeChannelId,
@@ -32,10 +40,20 @@ export function ChannelSwitcher({
     onCreateChannel,
     onChannelSquare,
     infoContent,
+    variant = "default",
+    mobileTopOffset,
+    open: openProp,
+    onOpenChange,
 }: ChannelSwitcherProps) {
     const localize = useLocalize();
     const queryClient = useQueryClient();
-    const [open, setOpen] = useState(false);
+    const isMobile = variant === "mobile";
+    const [internalOpen, setInternalOpen] = useState(false);
+    const open = openProp ?? internalOpen;
+    const setOpen = (next: boolean) => {
+        onOpenChange?.(next);
+        if (openProp === undefined) setInternalOpen(next);
+    };
     const [infoOpen, setInfoOpen] = useState(false);
     // After closing the dropdown with the pointer still over the title, suppress hover
     // styles until the pointer leaves and re-enters (avoids sticky hover).
@@ -101,6 +119,159 @@ export function ChannelSwitcher({
         setOpen(false);
     };
 
+    // Shared section header (group toggle + action icons).
+    const renderSectionHeader = () => (
+        <div className={cn(
+            "flex w-full shrink-0 items-center justify-between",
+            isMobile && "h-12 px-4",
+        )}>
+            <button
+                type="button"
+                onClick={() => setGroup((g) => (g === "created" ? "subscribed" : "created"))}
+                className={cn(
+                    "flex items-center gap-1 rounded-[6px] p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#F7F7F7]",
+                    isMobile && "text-[13px] text-[#86909C]",
+                )}
+            >
+                <span>
+                    {group === "created"
+                        ? localize("com_subscription.created_by_me")
+                        : localize("com_subscription.followed_by_me")}
+                </span>
+                <Outlined.Exchange className="size-4" />
+            </button>
+            <div className={cn("flex items-center px-1", isMobile ? "gap-4" : "gap-2.5")}>
+                {group === "created" && onCreateChannel ? (
+                    <button
+                        type="button"
+                        onClick={() => { onCreateChannel(); setOpen(false); }}
+                        aria-label={localize("com_subscription.create")}
+                        title={localize("com_subscription.create")}
+                        className={cn(
+                            "text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]",
+                            isMobile && "text-[#4E5969]",
+                        )}
+                    >
+                        <Outlined.Plus className={isMobile ? "size-5" : "size-4"} />
+                    </button>
+                ) : null}
+                {isMobile && group === "subscribed" && onChannelSquare ? (
+                    <button
+                        type="button"
+                        onClick={() => { onChannelSquare(); setOpen(false); }}
+                        aria-label={localize("com_subscription.go_to_channel_plaza")}
+                        title={localize("com_subscription.go_to_channel_plaza")}
+                        className="text-[#4E5969]"
+                    >
+                        <Outlined.BlocksAndArrows className="size-5" />
+                    </button>
+                ) : null}
+                <button
+                    type="button"
+                    onClick={toggleSort}
+                    aria-label={getSortText(currentSort)}
+                    title={getSortText(currentSort)}
+                    className={cn(
+                        "text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]",
+                        isMobile && "text-[#4E5969]",
+                    )}
+                >
+                    <Outlined.Sort className={isMobile ? "size-5" : "size-4"} />
+                </button>
+            </div>
+        </div>
+    );
+
+    const renderChannelList = () => (
+        <div
+            ref={listRef}
+            className={cn(
+                "scrollbar-os flex min-h-0 w-full flex-1 flex-col overflow-y-auto",
+            )}
+        >
+            {channels.length === 0 ? (
+                <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>
+            ) : (
+                channels.map((c) => {
+                    const isActive = c.id === activeChannelId;
+                    if (isMobile) {
+                        return (
+                            <button
+                                type="button"
+                                key={c.id}
+                                onClick={() => handleSelect(c)}
+                                className="flex min-h-12 w-full items-center gap-2 border-b border-[#F2F3F5] px-4 text-left last:border-b-0"
+                            >
+                                <span className={cn(
+                                    "min-w-0 flex-1 truncate text-[15px] leading-[22px] text-[#212121]",
+                                    isActive ? "font-semibold" : "font-normal",
+                                )}>
+                                    {c.name}
+                                </span>
+                                {c.isPinned ? (
+                                    <Outlined.ToTop className="size-3 shrink-0 text-[#86909C]" />
+                                ) : null}
+                            </button>
+                        );
+                    }
+                    return (
+                        <button
+                            type="button"
+                            key={c.id}
+                            onClick={() => handleSelect(c)}
+                            className="group flex w-full shrink-0 items-center gap-1 border-b border-dashed border-[#ececec] py-1 text-left transition-colors last:border-b-0 fine-pointer:hover:bg-[#F7F7F7]"
+                        >
+                            <span className="flex h-10 min-w-0 flex-1 items-center px-1">
+                                <span className={cn(
+                                    "max-w-full truncate py-1 text-[14px] leading-[22px] text-[#212121] [font-family:-apple-system,system-ui,'PingFang_SC','Microsoft_YaHei','Noto_Sans_CJK_SC',sans-serif]",
+                                    isActive ? "border-b border-[#212121] font-semibold" : "font-normal",
+                                )}>
+                                    {c.name}
+                                </span>
+                            </span>
+                            {c.isPinned && <Outlined.ToTop className="size-3 shrink-0 text-[#86909C]" />}
+                        </button>
+                    );
+                })
+            )}
+        </div>
+    );
+
+    if (isMobile) {
+        return (
+            <>
+                <button
+                    type="button"
+                    onClick={() => setOpen(!open)}
+                    aria-expanded={open}
+                    className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
+                >
+                    <span
+                        className="truncate text-[20px] leading-7 text-[#212121]"
+                        style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
+                    >
+                        {channelName}
+                    </span>
+                    <Outlined.Down className={cn(
+                        "size-5 shrink-0 text-[#86909C] transition-transform",
+                        open && "rotate-180",
+                    )} />
+                </button>
+                {open ? (
+                    <div
+                        className="fixed inset-x-0 bottom-0 z-[55] flex flex-col bg-white"
+                        style={{ top: mobileTopOffset ?? "calc(env(safe-area-inset-top, 0px) + 44px)" }}
+                        role="dialog"
+                        aria-modal="true"
+                    >
+                        {renderSectionHeader()}
+                        {renderChannelList()}
+                    </div>
+                ) : null}
+            </>
+        );
+    }
+
     return (
         <Tooltip open={Boolean(infoContent) && infoOpen && !open && !hoverSuppressed} onOpenChange={setInfoOpen}>
             <TooltipTrigger asChild>
@@ -128,70 +299,8 @@ export function ChannelSwitcher({
                 sideOffset={8}
                 className="flex max-h-[560px] w-[320px] flex-col gap-2 rounded-[8px] border-0 bg-white p-3 shadow-[0px_4px_20px_0px_rgba(23,0,176,0.1)]"
             >
-                {/* Header: group switch pill + actions */}
-                <div className="flex w-full shrink-0 items-center justify-between">
-                    <button
-                        type="button"
-                        onClick={() => setGroup((g) => (g === "created" ? "subscribed" : "created"))}
-                        className="flex items-center gap-1 rounded-[6px] p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#F7F7F7]"
-                    >
-                        <span>{group === "created" ? localize("com_subscription.created_by_me") : localize("com_subscription.followed_by_me")}</span>
-                        <Outlined.Exchange className="size-4" />
-                    </button>
-                    <div className="flex items-center gap-2.5 px-1">
-                        {group === "created" && onCreateChannel ? (
-                            <button
-                                type="button"
-                                onClick={onCreateChannel}
-                                aria-label={localize("com_subscription.create")}
-                                title={localize("com_subscription.create")}
-                                className="text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
-                            >
-                                <Outlined.Plus className="size-4" />
-                            </button>
-                        ) : null}
-                        <button
-                            type="button"
-                            onClick={toggleSort}
-                            aria-label={getSortText(currentSort)}
-                            title={getSortText(currentSort)}
-                            className="text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
-                        >
-                            <Outlined.Sort className="size-4" />
-                        </button>
-                    </div>
-                </div>
-
-                {/* Channel list */}
-                <div ref={listRef} className="scrollbar-os flex min-h-0 w-full flex-1 flex-col overflow-y-auto">
-                    {channels.length === 0 ? (
-                        <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>
-                    ) : (
-                        channels.map((c) => {
-                            const isActive = c.id === activeChannelId;
-                            return (
-                                <button
-                                    type="button"
-                                    key={c.id}
-                                    onClick={() => handleSelect(c)}
-                                    className="group flex w-full shrink-0 items-center gap-1 border-b border-dashed border-[#ececec] py-1 text-left transition-colors last:border-b-0 fine-pointer:hover:bg-[#F7F7F7]"
-                                >
-                                    <span className="flex h-10 min-w-0 flex-1 items-center px-1">
-                                        <span className={cn(
-                                            "max-w-full truncate py-1 text-[14px] leading-[22px] text-[#212121] [font-family:-apple-system,system-ui,'PingFang_SC','Microsoft_YaHei','Noto_Sans_CJK_SC',sans-serif]",
-                                            isActive ? "border-b border-[#212121] font-semibold" : "font-normal",
-                                        )}>
-                                            {c.name}
-                                        </span>
-                                    </span>
-                                    {c.isPinned && <Outlined.ToTop className="size-3 shrink-0 text-[#86909C]" />}
-                                </button>
-                            );
-                        })
-                    )}
-                </div>
-
-                {/* Footer: go to square */}
+                {renderSectionHeader()}
+                {renderChannelList()}
                 {onChannelSquare ? (
                     <button
                         type="button"

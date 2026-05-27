@@ -1,6 +1,5 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Menu, Plus } from "lucide-react";
 import {
     Article,
     Channel,
@@ -16,10 +15,9 @@ import { ChannelActionsMenu } from "./ChannelActionsMenu";
 import { ChannelSwitcher } from "./ChannelSwitcher";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
-import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
-import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
+import { CopyShareLinkButton, buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { Outlined } from "bisheng-icons";
-import { cn } from "~/utils";
+import { cn, copyText } from "~/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
@@ -86,7 +84,7 @@ export function ArticleList({
     onGoChannelSquare,
     onCreateChannel,
 }: ArticleListProps) {
-    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] fine-pointer:hover:bg-[#F7F8FA]";
+    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]";
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     // Browse mode (PC, no article selected): show a two-column card grid. Reading mode: single column.
@@ -104,6 +102,10 @@ export function ArticleList({
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const tabsScrollRef = useRef<HTMLDivElement>(null);
     const [tabsScrollShadow, setTabsScrollShadow] = useState({ left: false, right: false });
+    /** H5: title-bar channel dropdown + search input visibility; menu-triggered source filter */
+    const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false);
+    const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+    const [mobileSourceFilterOpen, setMobileSourceFilterOpen] = useState(false);
     const searchQuery = useDebounce(searchKey, 500);
     const queryClient = useQueryClient();
     const { showToast } = useToastContext();
@@ -254,6 +256,23 @@ export function ArticleList({
         setOnlyUnread(!onlyUnread);
     };
 
+    /** H5: copy share link from the page-level actions menu (mirrors CopyShareLinkButton). */
+    const handleMobileShare = useCallback(async () => {
+        const url = buildClientShareUrl(`/channel/share/${channel.id}`);
+        try {
+            await copyText(url);
+            showToast({
+                message: localize("com_subscription.share_link_copied"),
+                status: "success",
+            });
+        } catch {
+            showToast({
+                message: localize("com_subscription.copy_failed_retry"),
+                status: "error",
+            });
+        }
+    }, [channel.id, localize, showToast]);
+
     const handleListScroll = () => {
         setIsListScrolling(true);
         if (listScrollTimerRef.current) clearTimeout(listScrollTimerRef.current);
@@ -302,229 +321,328 @@ export function ArticleList({
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
-            {/* header — 浏览态与下方网格等宽（全宽 + 40px 边距）；阅读态保持 max-w-[1000px] */}
-            <div className={cn(
-                "mx-auto w-full shrink-0 pt-5 pb-4 space-y-4 touch-mobile:space-y-3 touch-mobile:px-2 touch-mobile:pt-0 touch-mobile:pb-3",
-                isGridMode ? "max-w-none px-10" : "max-w-[1000px] px-4",
-            )}>
-                {(onOpenChannelNav || onGoChannelSquare || onCreateChannel) ? (
-                    <div className="hidden touch-mobile:flex touch-mobile:flex-col touch-mobile:gap-3">
-                        {/* H5 第一行：留在白卡片内；单列用更小左右边距，避免菜单/加号看起来挤在中间 */}
-                        <div className="w-full touch-mobile:pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                            <div
-                                className={cn(
-                                    "flex h-11 min-h-11 w-full items-center",
-                                    onOpenChannelNav && onCreateChannel && "justify-between",
-                                    onOpenChannelNav && !onCreateChannel && "justify-start",
-                                    !onOpenChannelNav && onCreateChannel && "justify-end",
-                                )}
-                            >
-                                {onOpenChannelNav ? (
-                                    <button
-                                        type="button"
-                                        onClick={onOpenChannelNav}
-                                        aria-label={localize("com_nav_open_sidebar")}
-                                        className={mobileHeadIconBtnClassName}
-                                    >
-                                        <Outlined.SidebarMenu className="size-4" />
-                                    </button>
-                                ) : null}
-                                {onCreateChannel ? (
-                                    <button
-                                        type="button"
-                                        onClick={onCreateChannel}
-                                        aria-label={localize("com_subscription.create")}
-                                        className={mobileHeadIconBtnClassName}
-                                    >
-                                        <Plus className="size-4" strokeWidth={2} />
-                                    </button>
-                                ) : null}
-                            </div>
-                        </div>
-                        {/* H5 第二行：订阅 + 前往频道广场 */}
-                        <div className="flex min-w-0 items-end gap-2">
-                            <h2 className="shrink-0 text-[24px] font-semibold leading-8 text-[#335CFF]">
-                                {localize("com_subscription.subscribe")}
-                            </h2>
-                            {onGoChannelSquare ? (
+            {isH5 ? (
+                /* === H5 header === */
+                <>
+                    <div className="sticky top-0 z-30 shrink-0 bg-white pt-[env(safe-area-inset-top,0px)]">
+                        {/* Title row: hamburger | title (caret) | search | menu */}
+                        <div className="flex h-11 items-center gap-3 px-4">
+                            {onOpenChannelNav ? (
                                 <button
                                     type="button"
-                                    onClick={onGoChannelSquare}
-                                    className="inline-flex min-w-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] fine-pointer:hover:bg-[#F7F8FA]"
+                                    onClick={onOpenChannelNav}
+                                    aria-label={localize("com_nav_open_sidebar")}
+                                    className={mobileHeadIconBtnClassName}
                                 >
-                                    <ChannelBlocksArrowsIcon className="size-4 shrink-0 text-[#86909C]" />
-                                    <span className="truncate text-[12px] leading-5 font-normal text-[#212121]">
-                                        {localize("com_subscription.go_to_channel_plaza")}
-                                    </span>
+                                    <Outlined.SidebarMenu className="size-5" />
                                 </button>
-                            ) : null}
-                        </div>
-                    </div>
-                ) : null}
-
-                {/* 频道名 + 信息 + 分享 */}
-                <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
-                        {!isH5 && onChannelSelect ? (
-                            <ChannelSwitcher
-                                activeChannelId={channel.id}
-                                channelName={channelDetail?.name || channel.name}
-                                onChannelSelect={onChannelSelect}
-                                onCreateChannel={onCreateChannel}
-                                onChannelSquare={onGoChannelSquare}
-                                onManageMembers={onManageMembers}
-                                onChannelSettings={onChannelSettings}
-                                infoContent={
-                                    <div className="space-y-1.5 text-sm text-gray-800">
-                                        <div><span className="text-gray-400">{localize("com_subscription.channel_description_colon")}</span>
-                                            <p>{channelDetail?.description || channel.description || "-"}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_subscription.creator_colon")}</span>
-                                            <p>{channelDetail?.creator_name || channel.creator || "-"}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_subscription.subscribers_colon")}</span>
-                                            <p>{channelDetail?.subscriber_count ?? channel.subscriberCount ?? 0}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_subscription.content_count_colon")}</span>
-                                            <p>{channelDetail?.article_count ?? channel.articleCount ?? 0}</p>
-                                        </div>
-                                    </div>
-                                }
-                            />
-                        ) : (
-                            <h1 className="truncate text-base text-[#1d2129] touch-mobile:text-[16px] touch-mobile:leading-6">
-                                {channelDetail?.name || channel.name}
-                            </h1>
-                        )}
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-3">
-                        {!isH5 && onChannelSelect ? (
-                            <ChannelActionsMenu
-                                channel={channel}
-                                onChannelSelect={onChannelSelect}
-                                onManageMembers={onManageMembers}
-                                onChannelSettings={onChannelSettings}
-                            />
-                        ) : null}
-                        {canOpenChannelShare ? (
-                            <CopyShareLinkButton
-                                sharePath={`/channel/share/${channel.id}`}
-                                label={localize("com_subscription.share")}
-                                successMessage={localize("com_subscription.share_link_copied")}
-                                errorMessage={localize("com_subscription.copy_failed_retry")}
-                                iconOnly
-                                aria-label={localize("com_subscription.share")}
-                                icon={<Outlined.Share className="size-4 shrink-0 text-[#4e5969]" />}
-                            />
-                        ) : null}
-                    </div>
-                </div>
-
-                {/* 子频道 Tabs + 搜索/筛选 — md+ 横向；H5 纵向 */}
-                <div className="flex flex-col gap-4 touch-desktop:flex-row touch-desktop:flex-wrap touch-desktop:items-center touch-desktop:justify-between touch-desktop:gap-3">
-                    <div className="relative min-w-0">
-                        {tabsScrollShadow.left ? (
-                            <div
-                                className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-7 bg-gradient-to-r from-white from-20% to-transparent"
-                                aria-hidden
-                            />
-                        ) : null}
-                        {tabsScrollShadow.right ? (
-                            <div
-                                className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-7 bg-gradient-to-l from-white from-20% to-transparent"
-                                aria-hidden
-                            />
-                        ) : null}
-                        <div
-                            ref={tabsScrollRef}
-                            onScroll={updateTabsScrollShadow}
-                            className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
-                        >
+                            ) : (
+                                <div className="size-5 shrink-0" aria-hidden />
+                            )}
+                            {onChannelSelect ? (
+                                <ChannelSwitcher
+                                    variant="mobile"
+                                    activeChannelId={channel.id}
+                                    channelName={channelDetail?.name || channel.name}
+                                    onChannelSelect={onChannelSelect}
+                                    onCreateChannel={onCreateChannel}
+                                    onChannelSquare={onGoChannelSquare}
+                                    open={mobileDropdownOpen}
+                                    onOpenChange={(next) => {
+                                        if (next) setMobileSearchOpen(false);
+                                        setMobileDropdownOpen(next);
+                                    }}
+                                    mobileTopOffset={
+                                        mobileSearchOpen
+                                            ? "calc(env(safe-area-inset-top, 0px) + 96px)"
+                                            : "calc(env(safe-area-inset-top, 0px) + 44px)"
+                                    }
+                                />
+                            ) : (
+                                <h1
+                                    className="flex min-w-0 flex-1 items-center justify-center truncate text-[20px] leading-7 text-[#212121]"
+                                    style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
+                                >
+                                    {channelDetail?.name || channel.name}
+                                </h1>
+                            )}
                             <button
                                 type="button"
-                                onClick={() => handleSubChannelChange("all")}
-                                className={cn(
-                                    "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
-                                    !selectedSubChannelName
-                                        ? "border-[#335CFF] text-[#335CFF]"
-                                        : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
-                                )}
+                                onClick={() => {
+                                    setMobileDropdownOpen(false);
+                                    setMobileSearchOpen((o) => !o);
+                                }}
+                                aria-label={localize("com_subscription.search_articles_of_interest")}
+                                aria-pressed={mobileSearchOpen}
+                                className={mobileHeadIconBtnClassName}
                             >
-                                <span>{localize("com_subscription.all")}</span>
-                                {(channelDetail?.unread_count ?? 0) > 0 && (
-                                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
-                                        {channelDetail!.unread_count}
-                                    </span>
-                                )}
+                                <Outlined.Search className="size-5" />
                             </button>
-                            {subChannels.map(sub => (
-                                <button
-                                    type="button"
-                                    key={sub.id}
-                                    onClick={() => handleSubChannelChange(sub.name)}
-                                    className={cn(
-                                        "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
-                                        selectedSubChannelName === sub.name
-                                            ? "border-[#335CFF] text-[#335CFF]"
-                                            : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
-                                    )}
-                                >
-                                    <span>{sub.name}</span>
-                                    {sub.unread > 0 && (
-                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
-                                            {sub.unread}
-                                        </span>
-                                    )}
-                                </button>
-                            ))}
+                            {onChannelSelect ? (
+                                <ChannelActionsMenu
+                                    variant="mobile"
+                                    channel={channel}
+                                    onChannelSelect={onChannelSelect}
+                                    onManageMembers={onManageMembers}
+                                    onChannelSettings={onChannelSettings}
+                                    onShare={canOpenChannelShare ? handleMobileShare : undefined}
+                                    onOpenSourceFilter={
+                                        sourceOptions.length > 0
+                                            ? () => setMobileSourceFilterOpen(true)
+                                            : undefined
+                                    }
+                                    triggerClassName={mobileHeadIconBtnClassName}
+                                />
+                            ) : null}
                         </div>
-                    </div>
-
-                    <div
-                        className={cn(
-                            "flex w-full min-w-0 flex-col gap-2",
-                            "range-576-768:flex-row range-576-768:items-center range-576-768:gap-3",
-                            "touch-desktop:ml-0 touch-desktop:w-auto touch-desktop:flex-row touch-desktop:flex-wrap touch-desktop:items-center touch-desktop:justify-end touch-desktop:gap-3"
-                        )}
-                    >
-                        <SearchInput
-                            key={channel.id}
-                            value={searchKey}
-                            onChange={setSearchQuery}
-                            placeholder={localize("com_subscription.search_articles_of_interest")}
-                            className="min-w-0 w-full range-576-768:w-auto range-576-768:flex-1 range-576-768:basis-0 min-[1440px]:w-auto"
-                        />
-
-                        {/* H5：搜索下方一行，信息源 + 仅看未读靠左并排；576–768 与桌面同为单行 */}
-                        <div
-                            className={cn(
-                                "flex w-full min-w-0 flex-wrap items-center justify-start gap-2 lt-576:justify-end",
-                                "range-576-768:contents",
-                                "touch-desktop:flex touch-desktop:w-auto touch-desktop:min-w-0 touch-desktop:justify-end"
-                            )}
-                        >
-                            <MultiSourceSelect
-                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-[6px] touch-desktop:w-auto touch-desktop:min-w-[140px]"
-                                options={sourceOptions}
-                                value={selectedSources}
-                                onChange={handleSourcesChange}
-                            />
-
+                        {/* Toggled search input */}
+                        {mobileSearchOpen ? (
+                            <div className="px-3 pb-2">
+                                <SearchInput
+                                    key={channel.id}
+                                    value={searchKey}
+                                    onChange={setSearchQuery}
+                                    placeholder={localize("com_subscription.search_articles_of_interest")}
+                                    className="w-full"
+                                />
+                            </div>
+                        ) : null}
+                        {/* Sub-channels + 仅看未读 (single row; right-gradient hints scroll) */}
+                        <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+                            <div className="relative min-w-0 flex-1 border-b border-[#F2F3F5]">
+                                {tabsScrollShadow.left ? (
+                                    <div
+                                        className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-7 bg-gradient-to-r from-white from-20% to-transparent"
+                                        aria-hidden
+                                    />
+                                ) : null}
+                                {tabsScrollShadow.right ? (
+                                    <div
+                                        className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0)_0%,rgba(153,153,153,0.15)_100%)]"
+                                        aria-hidden
+                                    />
+                                ) : null}
+                                <div
+                                    ref={tabsScrollRef}
+                                    onScroll={updateTabsScrollShadow}
+                                    className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSubChannelChange("all")}
+                                        className={cn(
+                                            "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
+                                            !selectedSubChannelName
+                                                ? "border-[#335CFF] text-[#335CFF]"
+                                                : "border-transparent text-[#212121]",
+                                        )}
+                                    >
+                                        <span>{localize("com_subscription.all")}</span>
+                                        {(channelDetail?.unread_count ?? 0) > 0 && (
+                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                                {channelDetail!.unread_count}
+                                            </span>
+                                        )}
+                                    </button>
+                                    {subChannels.map((sub) => (
+                                        <button
+                                            type="button"
+                                            key={sub.id}
+                                            onClick={() => handleSubChannelChange(sub.name)}
+                                            className={cn(
+                                                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
+                                                selectedSubChannelName === sub.name
+                                                    ? "border-[#335CFF] text-[#335CFF]"
+                                                    : "border-transparent text-[#212121]",
+                                            )}
+                                        >
+                                            <span>{sub.name}</span>
+                                            {sub.unread > 0 && (
+                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                                    {sub.unread}
+                                                </span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <button
                                 type="button"
                                 onClick={handleToggleUnread}
                                 className={cn(
                                     "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
-                                        ? "border-primary bg-primary/20 text-primary touch-mobile:border-[#335CFF] touch-mobile:bg-[rgba(51,92,255,0.2)] touch-mobile:text-[#335CFF]"
-                                        : "border-[#E5E6EB] bg-white text-gray-800 fine-pointer:hover:bg-gray-50 touch-mobile:border-[#E5E6EB] touch-mobile:bg-white touch-mobile:text-[#212121] touch-mobile:hover:bg-transparent",
+                                        ? "border-primary bg-primary/20 text-primary"
+                                        : "border-[#E5E6EB] bg-white text-gray-800",
+                                )}
+                            >
+                                {localize("com_subscription.show_unread_only")}
+                            </button>
+                        </div>
+                    </div>
+                    {/* Hidden multi-source picker, opened from the actions menu */}
+                    {sourceOptions.length > 0 ? (
+                        <MultiSourceSelect
+                            options={sourceOptions}
+                            value={selectedSources}
+                            onChange={handleSourcesChange}
+                            open={mobileSourceFilterOpen}
+                            onOpenChange={setMobileSourceFilterOpen}
+                            hideTrigger
+                        />
+                    ) : null}
+                </>
+            ) : (
+                /* === PC header === */
+                <div className={cn(
+                    "mx-auto w-full shrink-0 pt-5 pb-4 space-y-4",
+                    isGridMode ? "max-w-none px-10" : "max-w-[1000px] px-4",
+                )}>
+                    {/* 频道名 + 信息 + 分享 */}
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+                            {onChannelSelect ? (
+                                <ChannelSwitcher
+                                    activeChannelId={channel.id}
+                                    channelName={channelDetail?.name || channel.name}
+                                    onChannelSelect={onChannelSelect}
+                                    onCreateChannel={onCreateChannel}
+                                    onChannelSquare={onGoChannelSquare}
+                                    infoContent={
+                                        <div className="space-y-1.5 text-sm text-gray-800">
+                                            <div><span className="text-gray-400">{localize("com_subscription.channel_description_colon")}</span>
+                                                <p>{channelDetail?.description || channel.description || "-"}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_subscription.creator_colon")}</span>
+                                                <p>{channelDetail?.creator_name || channel.creator || "-"}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_subscription.subscribers_colon")}</span>
+                                                <p>{channelDetail?.subscriber_count ?? channel.subscriberCount ?? 0}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_subscription.content_count_colon")}</span>
+                                                <p>{channelDetail?.article_count ?? channel.articleCount ?? 0}</p>
+                                            </div>
+                                        </div>
+                                    }
+                                />
+                            ) : (
+                                <h1 className="truncate text-base text-[#1d2129]">
+                                    {channelDetail?.name || channel.name}
+                                </h1>
+                            )}
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-3">
+                            {onChannelSelect ? (
+                                <ChannelActionsMenu
+                                    channel={channel}
+                                    onChannelSelect={onChannelSelect}
+                                    onManageMembers={onManageMembers}
+                                    onChannelSettings={onChannelSettings}
+                                />
+                            ) : null}
+                            {canOpenChannelShare ? (
+                                <CopyShareLinkButton
+                                    sharePath={`/channel/share/${channel.id}`}
+                                    label={localize("com_subscription.share")}
+                                    successMessage={localize("com_subscription.share_link_copied")}
+                                    errorMessage={localize("com_subscription.copy_failed_retry")}
+                                    iconOnly
+                                    aria-label={localize("com_subscription.share")}
+                                    icon={<Outlined.Share className="size-4 shrink-0 text-[#4e5969]" />}
+                                />
+                            ) : null}
+                        </div>
+                    </div>
+
+                    {/* 子频道 Tabs + 搜索/筛选 */}
+                    <div className="flex flex-row flex-wrap items-center justify-between gap-3">
+                        <div className="relative min-w-0">
+                            {tabsScrollShadow.left ? (
+                                <div
+                                    className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-7 bg-gradient-to-r from-white from-20% to-transparent"
+                                    aria-hidden
+                                />
+                            ) : null}
+                            {tabsScrollShadow.right ? (
+                                <div
+                                    className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-7 bg-gradient-to-l from-white from-20% to-transparent"
+                                    aria-hidden
+                                />
+                            ) : null}
+                            <div
+                                ref={tabsScrollRef}
+                                onScroll={updateTabsScrollShadow}
+                                className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
+                            >
+                                <button
+                                    type="button"
+                                    onClick={() => handleSubChannelChange("all")}
+                                    className={cn(
+                                        "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
+                                        !selectedSubChannelName
+                                            ? "border-[#335CFF] text-[#335CFF]"
+                                            : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
+                                    )}
+                                >
+                                    <span>{localize("com_subscription.all")}</span>
+                                    {(channelDetail?.unread_count ?? 0) > 0 && (
+                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                            {channelDetail!.unread_count}
+                                        </span>
+                                    )}
+                                </button>
+                                {subChannels.map(sub => (
+                                    <button
+                                        type="button"
+                                        key={sub.id}
+                                        onClick={() => handleSubChannelChange(sub.name)}
+                                        className={cn(
+                                            "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
+                                            selectedSubChannelName === sub.name
+                                                ? "border-[#335CFF] text-[#335CFF]"
+                                                : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
+                                        )}
+                                    >
+                                        <span>{sub.name}</span>
+                                        {sub.unread > 0 && (
+                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                                {sub.unread}
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex w-auto min-w-0 flex-row flex-wrap items-center justify-end gap-3">
+                            <SearchInput
+                                key={channel.id}
+                                value={searchKey}
+                                onChange={setSearchQuery}
+                                placeholder={localize("com_subscription.search_articles_of_interest")}
+                                className="min-w-0"
+                            />
+                            <MultiSourceSelect
+                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-[6px]"
+                                options={sourceOptions}
+                                value={selectedSources}
+                                onChange={handleSourcesChange}
+                            />
+                            <button
+                                type="button"
+                                onClick={handleToggleUnread}
+                                className={cn(
+                                    "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    onlyUnread
+                                        ? "border-primary bg-primary/20 text-primary"
+                                        : "border-[#E5E6EB] bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* Article list area */}
             <div
@@ -536,7 +654,7 @@ export function ArticleList({
                     "mx-auto w-full min-w-0 overflow-x-hidden",
                     isGridMode
                         ? "max-w-none px-10"
-                        : "max-w-[1000px] px-4 touch-mobile:px-2",
+                        : "max-w-[1000px] px-4",
                 )}>
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
@@ -576,7 +694,7 @@ export function ArticleList({
                                         onSelect={handleArticleClick}
                                         isSelected={selectedArticleId === article.id}
                                         searchQuery={searchQuery}
-                                        variant={isGridMode ? 'grid' : 'list'}
+                                        variant={isGridMode || isH5 ? 'grid' : 'list'}
                                     />
                                 ))}
                             </div>

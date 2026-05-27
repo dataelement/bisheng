@@ -73,22 +73,23 @@ export function ArticleCard({
             <div className="size-4 shrink-0 overflow-hidden rounded-sm">
                 <img src={article.sourceAvatar} alt="" className="h-full w-full object-cover" />
             </div>
-            <span className="max-w-40 truncate">{article.sourceName}</span>
+            <span className="max-w-40 truncate max-[767px]:text-[#212121]">{article.sourceName}</span>
             <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
             <span className="shrink-0">{formatTime(article.publishedAt)}</span>
         </div>
     );
 
     // Browse-mode grid card: content left, 100x100 thumbnail right, single-line description.
+    // Coarse-pointer (mobile) tweaks: dashed divider, always-visible action buttons w/ no bg, bumped title size.
     if (variant === 'grid') {
         return (
             <>
                 <div
-                    className="group relative flex cursor-pointer gap-6 border-b border-[#EBECF0] py-5"
+                    className="group relative flex cursor-pointer gap-6 border-b border-[#EBECF0] py-5 max-[767px]:border-dashed max-[767px]:border-[#E0E0E0] max-[767px]:py-2"
                     onClick={() => onSelect(article)}
                 >
                     {/* Left content */}
-                    <div className="flex min-w-0 flex-1 flex-col gap-3">
+                    <div className="flex min-w-0 flex-1 flex-col gap-3 max-[767px]:gap-1">
                         <div className="flex min-w-0 items-center gap-2">
                             <h3
                                 className={cn(
@@ -110,7 +111,7 @@ export function ArticleCard({
 
                         <p
                             className={cn(
-                                "line-clamp-1 text-sm leading-snug [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold",
+                                "line-clamp-1 text-sm leading-snug [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold max-[767px]:line-clamp-none max-[767px]:truncate max-[767px]:pb-5 max-[767px]:text-xs max-[767px]:text-[#595959]",
                                 article.isRead ? "text-gray-400" : "text-gray-500",
                             )}
                         >
@@ -122,11 +123,11 @@ export function ArticleCard({
                         <div className="relative flex items-center justify-between">
                             {metaRow}
                             {showArticleActions && canViewArticle && (
-                                <div className="pointer-events-none absolute right-0 flex items-center gap-3 opacity-0 transition-opacity fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100">
+                                <div className="pointer-events-none absolute right-0 flex items-center gap-3 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 max-[767px]:pointer-events-auto max-[767px]:static max-[767px]:gap-2 max-[767px]:opacity-100">
                                     {hasKnowledge && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
-                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-50 text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
+                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-50 text-gray-800 transition-colors hover:bg-gray-100 max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:bg-transparent max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
                                             title={localize("com_subscription.add_to_knowledge_space")}
                                         >
                                             <BookPlusIcon className="size-3.5" />
@@ -141,7 +142,7 @@ export function ArticleCard({
                                                 .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
                                                 .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
                                         }}
-                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-50 text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
+                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-gray-50 text-gray-800 transition-colors hover:bg-gray-100 max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:bg-transparent max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
                                         title={localize("com_subscription.share")}
                                     >
                                         <ShareOutlineIcon className="size-3.5" />
@@ -153,7 +154,7 @@ export function ArticleCard({
 
                     {/* Right thumbnail */}
                     {article.coverImage ? (
-                        <div className="size-[100px] shrink-0 overflow-hidden rounded">
+                        <div className="size-[100px] shrink-0 overflow-hidden rounded max-[767px]:size-16 max-[767px]:self-center">
                             <img
                                 src={article.coverImage}
                                 alt={article.title}
@@ -164,7 +165,7 @@ export function ArticleCard({
                         <ArticleFaviconCoverPlaceholder
                             iconUrl={article.sourceAvatar}
                             alt={article.sourceName}
-                            className="size-[100px] rounded"
+                            className="size-[100px] rounded max-[767px]:size-16 max-[767px]:self-center"
                         />
                     )}
                 </div>
@@ -183,7 +184,6 @@ export function ArticleCard({
         <div
             className={cn(
                 "group relative flex cursor-pointer gap-6 border-b border-dashed border-[#E0E0E0] py-5 last:border-none",
-                "touch-mobile:gap-4 touch-mobile:border-solid touch-mobile:border-[#E3E3E3] touch-mobile:py-4",
             )}
             style={{
                 transitionProperty: 'background-color',
@@ -216,7 +216,7 @@ export function ArticleCard({
                         <h3 className={cn(
                             "min-w-0 flex-1 truncate font-medium [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
                             isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
-                            article.isRead ? "text-[#989898]" : "text-gray-800 touch-mobile:text-[#212121] touch-mobile:font-medium",
+                            article.isRead ? "text-[#989898]" : "text-gray-800",
                         )}
                         >
                             {highlightTitle
@@ -231,11 +231,10 @@ export function ArticleCard({
                     </div>
 
                     {/* 正文预览 - 增加蓝色引号 */}
-                    <div className="relative pt-4 pl-3 touch-mobile:pt-3">
+                    <div className="relative pt-4 pl-3">
                         <ChannelQuoteIcon className="absolute left-0 top-1 mt-[-2px] h-5 w-5" />
                         <p className={cn(
                             "text-sm line-clamp-1 leading-snug [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold",
-                            "touch-mobile:line-clamp-2 touch-mobile:text-[#595959]",
                             article.isRead ? "text-gray-400" : "text-gray-500",
                         )}
                         >
@@ -247,8 +246,8 @@ export function ArticleCard({
                 </div>
 
                 {/* 3. 底部元信息 - 来源和时间 */}
-                <div className="relative mt-4 flex items-center justify-between touch-mobile:mt-3">
-                    <div className="flex items-center gap-2 text-xs text-[#999] touch-mobile:text-[#999999]">
+                <div className="relative mt-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs text-[#999]">
                         <div className="size-4 shrink-0 overflow-hidden">
                             <img
                                 src={article.sourceAvatar}
@@ -257,7 +256,7 @@ export function ArticleCard({
                             />
                         </div>
                         <span className="max-w-40 truncate">{article.sourceName}</span>
-                        <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0] touch-mobile:h-3 touch-mobile:bg-[#E5E5E5]" aria-hidden />
+                        <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
                         <span>{formatTime(article.publishedAt)}</span>
                     </div>
 
@@ -266,7 +265,7 @@ export function ArticleCard({
                             className={cn(
                                 "flex items-center gap-3 transition-opacity",
                                 // Touch / coarse pointer: actions always visible; fine pointer (incl. narrow desktop): hover on card.
-                                "coarse-pointer:static coarse-pointer:opacity-100 coarse-pointer:pointer-events-auto",
+                                "max-[767px]:static max-[767px]:opacity-100 max-[767px]:pointer-events-auto",
                                 "fine-pointer:pointer-events-none fine-pointer:absolute fine-pointer:right-0 fine-pointer:opacity-0 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100",
                             )}
                         >

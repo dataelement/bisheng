@@ -23,6 +23,11 @@ interface MultiSourceSelectProps {
     onChange: (value: string[]) => void; // 变更回调
     placeholder?: string;
     className?: string;
+    /** Controlled open state — when provided, takes precedence over internal state. */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    /** Visually hide the trigger button (still mounted so the popover can anchor). */
+    hideTrigger?: boolean;
 }
 
 export function MultiSourceSelect({
@@ -31,9 +36,17 @@ export function MultiSourceSelect({
     onChange,
     placeholder,
     className,
+    open: openProp,
+    onOpenChange,
+    hideTrigger,
 }: MultiSourceSelectProps) {
     const localize = useLocalize();
-    const [open, setOpen] = React.useState(false);
+    const [internalOpen, setInternalOpen] = React.useState(false);
+    const open = openProp ?? internalOpen;
+    const setOpen = (next: boolean) => {
+        onOpenChange?.(next);
+        if (openProp === undefined) setInternalOpen(next);
+    };
     const [isMenuScrolling, setIsMenuScrolling] = React.useState(false);
     const menuScrollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -88,8 +101,11 @@ export function MultiSourceSelect({
                     variant="outline"
                     className={cn(
                         "w-auto min-w-[160px] h-9 justify-between px-3 font-normal",
+                        hideTrigger && "pointer-events-none absolute -z-[1] size-0 min-w-0 overflow-hidden opacity-0",
                         className
                     )}
+                    aria-hidden={hideTrigger || undefined}
+                    tabIndex={hideTrigger ? -1 : undefined}
                 >
                     {renderValue()}
                     <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
