@@ -32,6 +32,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Extend role table for policy-role model (F005)."""
+    conn = op.get_bind()
+
     # 1. Add role_type column
     if not column_exists(conn, 'role', 'role_type'):
         op.add_column(
@@ -66,35 +68,44 @@ def upgrade() -> None:
     # Keep the oldest row's role_name intact; rename the rest to
     # ``<role_name>-dup-<id>`` (id is globally unique, so the new names
     # will not collide with each other). Idempotent: runs only when the
-    # target unique index is not yet present.
+    # target unique index is not yet present. SQLAlchemy expression language
+    # is used so the dedupe works on MySQL and DM8 alike — MySQL multi-table
+    # UPDATE...JOIN is not portable to DM8 (Oracle-compatible).
     if not index_exists(conn, 'role', 'uk_tenant_roletype_rolename'):
-        conn = op.get_bind()
-        conflicts = conn.execute(sa.text("""
-            SELECT tenant_id, role_type, role_name, COUNT(*) AS cnt
-            FROM role
-            GROUP BY tenant_id, role_type, role_name
-            HAVING cnt > 1
-        """)).fetchall()
+        role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+        conflicts = conn.execute(
+            sa.select(
+                role_tbl.c.tenant_id,
+                role_tbl.c.role_type,
+                role_tbl.c.role_name,
+                sa.func.count().label('cnt'),
+            )
+            .group_by(role_tbl.c.tenant_id, role_tbl.c.role_type, role_tbl.c.role_name)
+            .having(sa.func.count() > 1)
+        ).fetchall()
         for row in conflicts:
             print(
-                f'[f005] dedupe role_name collision: tenant_id={row[0]} '
-                f'role_type={row[1]!r} role_name={row[2]!r} count={row[3]}'
+                f'[f005] dedupe role_name collision: tenant_id={row.tenant_id} '
+                f'role_type={row.role_type!r} role_name={row.role_name!r} count={row.cnt}'
             )
-        if conflicts:
-            # MySQL 8.0 window functions — see docs/architecture/08-deployment.md
-            op.execute("""
-                UPDATE role AS r
-                JOIN (
-                    SELECT id,
-                           ROW_NUMBER() OVER (
-                               PARTITION BY tenant_id, role_type, role_name
-                               ORDER BY id
-                           ) AS rn
-                    FROM role
-                ) AS t ON r.id = t.id
-                SET r.role_name = CONCAT(r.role_name, '-dup-', r.id)
-                WHERE t.rn > 1
-            """)
+            # Keep the lowest id (oldest row) untouched, rename the rest.
+            dup_ids = conn.execute(
+                sa.select(role_tbl.c.id)
+                .where(
+                    role_tbl.c.tenant_id == row.tenant_id,
+                    role_tbl.c.role_type == row.role_type,
+                    role_tbl.c.role_name == row.role_name,
+                )
+                .order_by(role_tbl.c.id)
+            ).fetchall()
+            for (row_id,) in dup_ids[1:]:
+                conn.execute(
+                    sa.update(role_tbl)
+                    .where(role_tbl.c.id == row_id)
+                    .values(role_name=sa.func.concat(
+                        role_tbl.c.role_name, sa.literal(f'-dup-{row_id}')
+                    ))
+                )
 
         op.create_unique_constraint(
             'uk_tenant_roletype_rolename', 'role',
@@ -102,7 +113,12 @@ def upgrade() -> None:
         )
 
     # 5. Backfill: set built-in roles to global
-    op.execute("UPDATE role SET role_type = 'global' WHERE id IN (1, 2)")
+    role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+    conn.execute(
+        sa.update(role_tbl)
+        .where(role_tbl.c.id.in_([1, 2]))
+        .values(role_type='global')
+    )
 
     # 6. Migrate knowledge_space_file_limit into quota_config
     # Only for roles that have a positive limit set.
@@ -144,7 +160,12 @@ def downgrade() -> None:
             )
 
     # Revert built-in roles
-    op.execute("UPDATE role SET role_type = 'tenant' WHERE id IN (1, 2)")
+    role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+    conn.execute(
+        sa.update(role_tbl)
+        .where(role_tbl.c.id.in_([1, 2]))
+        .values(role_type='tenant')
+    )
 
     # Drop new unique constraint and restore old one
     op.drop_constraint('uk_tenant_roletype_rolename', 'role', type_='unique')

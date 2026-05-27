@@ -5,6 +5,39 @@ P0 rules (DDD, dual-DB, permissions, API conventions) live in `AGENTS.md`.
 
 ---
 
+## Error Handling
+
+**Never silently swallow exceptions.** `except: pass`, `except Exception: pass`, or discarding error returns without logging is forbidden. At minimum, use `logger.exception(...)` (auto-attaches traceback) and either re-raise, raise a domain error (`BaseErrorCode` subclass in `common/errcode/`), or let the middleware turn it into a 500.
+
+The only exception: the failure is **explicitly** non-critical to the main flow — best-effort cleanup, optional cache write, opportunistic telemetry, etc. In that case the swallow must be intentional, narrow (catch the specific exception, not bare `Exception`), and carry a one-line comment stating *why* it's safe to ignore.
+
+**Don't launder exceptions through `resp_500(message=str(e))`.** That returns a response shape that looks intentional while erasing the original exception type and traceback — a different flavor of silent swallow. `resp_500` is a generic response formatter, not a business-error sink: any failure the frontend may branch on belongs in a `BaseErrorCode` subclass (`raise XxxError()` or `XxxError.return_resp()`); truly internal failures should propagate.
+
+```python
+# ❌ Hides real failures, no traceback, caller can't tell anything went wrong
+try:
+    do_something()
+except Exception:
+    pass
+
+# ✅ Critical path: log + propagate
+try:
+    do_something()
+except Exception:
+    logger.exception("do_something failed")
+    raise
+
+# ✅ Best-effort path: narrow exception + reason comment
+try:
+    cache.delete(key)
+except RedisError:
+    logger.warning("cache eviction failed for %s; will expire via TTL", key)  # main flow unaffected
+```
+
+Applies equally to async code (`asyncio.gather(..., return_exceptions=True)` results must be inspected, not dropped) and Celery tasks (raise to let retry/dead-letter handle it; only swallow with an explicit reason).
+
+---
+
 ## Commands (cwd: `src/backend/`)
 
 ```bash

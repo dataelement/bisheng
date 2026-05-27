@@ -149,21 +149,40 @@ def upgrade() -> None:
             # Table may not exist in this deployment (e.g. linsight tables)
             print(f'WARNING: Failed to add tenant_id to {table_name}: {e}')
 
-    # 4. Seed default tenant
-    op.execute(
-        "INSERT IGNORE INTO tenant (id, tenant_code, tenant_name, status) "
-        "VALUES (1, 'default', 'Default Tenant', 'active')"
-    )
+    # 4. Seed default tenant.
+    # Idempotent INSERT via NOT EXISTS so both MySQL and DM8 are happy
+    # (DM8 has no INSERT IGNORE).
+    if not conn.execute(
+            sa.text("SELECT COUNT(*) FROM tenant WHERE id = 1")
+    ).scalar():
+        op.execute(
+            "INSERT INTO tenant (id, tenant_code, tenant_name, status) "
+            "VALUES (1, 'default', 'Default Tenant', 'active')"
+        )
 
-    # 5. Backfill user_tenant for all existing users
-    op.execute(
-        "INSERT INTO user_tenant (user_id, tenant_id, is_default, status) "
-        "SELECT u.user_id, 1, 1, 'active' FROM user u "
-        "WHERE NOT EXISTS ("
-        "  SELECT 1 FROM user_tenant ut "
-        "  WHERE ut.user_id = u.user_id AND ut.tenant_id = 1"
-        ")"
+    # 5. Backfill user_tenant for all existing users.
+    # `user` is a reserved keyword on DM8 (needs double quotes) and a
+    # safe-but-keyword on MySQL (typically backtick-quoted). Use SQLAlchemy
+    # reflection so the identifier is quoted correctly per dialect.
+    user_tbl = sa.Table('user', sa.MetaData(), autoload_with=conn)
+    ut_tbl = sa.Table('user_tenant', sa.MetaData(), autoload_with=conn)
+    select_users = (
+        sa.select(
+            user_tbl.c.user_id.label('user_id'),
+            sa.literal(1).label('tenant_id'),
+            sa.literal(1).label('is_default'),
+            sa.literal('active').label('status'),
+        )
+        .where(
+            ~sa.exists().where(
+                ut_tbl.c.user_id == user_tbl.c.user_id,
+                ut_tbl.c.tenant_id == 1,
+            )
+        )
     )
+    op.execute(sa.insert(ut_tbl).from_select(
+        ['user_id', 'tenant_id', 'is_default', 'status'], select_users
+    ))
 
 def downgrade() -> None:
     """Remove tenant infrastructure. WARNING: loses tenant_id>1 data context."""

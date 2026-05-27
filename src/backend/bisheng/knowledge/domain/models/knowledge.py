@@ -9,7 +9,8 @@ from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT, name_sort_clauses
+from bisheng.core.database.manager import get_database_connection
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.user.domain.models.user import UserDao
 
@@ -335,8 +336,8 @@ class KnowledgeDao(KnowledgeBase):
         elif sort_by == "update_time":
             order_clauses.append(Knowledge.update_time.desc())
         elif sort_by == "name":
-            order_clauses.append(text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'))
-            order_clauses.append(text('CONVERT(name USING gbk) ASC'))
+            db_conn = await get_database_connection()
+            order_clauses.extend(name_sort_clauses(db_conn.async_engine.dialect.name))
         if order_clauses:
             statement = statement.order_by(*order_clauses)
         async with get_async_db_session() as session:
@@ -528,8 +529,8 @@ class KnowledgeDao(KnowledgeBase):
         elif sort_by == "update_time":
             order_clauses.append(Knowledge.update_time.desc())
         elif sort_by == "name":
-            order_clauses.append(text('CASE WHEN name REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'))
-            order_clauses.append(text('CONVERT(name USING gbk) ASC'))
+            db_conn = await get_database_connection()
+            order_clauses.extend(name_sort_clauses(db_conn.async_engine.dialect.name))
         if order_clauses:
             statement = statement.order_by(*order_clauses)
         async with get_async_db_session() as session:

@@ -37,19 +37,24 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
+    """Backfill ``user.external_id = user_name`` for local accounts.
+
+    Uses SQLAlchemy expression language so ``user`` and ``delete`` (both
+    reserved words on DM8 and MySQL) are quoted per the active dialect —
+    MySQL uses backticks, DM8 uses double quotes.
+    """
     conn = op.get_bind()
     if not table_exists(conn, 'user'):
         return
-    op.execute(
-        sa.text(
-            """
-            UPDATE `user`
-            SET external_id = user_name
-            WHERE external_id IS NULL
-              AND source = 'local'
-              AND `delete` = 0
-            """
+    user_tbl = sa.Table('user', sa.MetaData(), autoload_with=conn)
+    conn.execute(
+        sa.update(user_tbl)
+        .where(
+            user_tbl.c.external_id.is_(None),
+            user_tbl.c.source == 'local',
+            user_tbl.c['delete'] == 0,
         )
+        .values(external_id=user_tbl.c.user_name)
     )
 
 def downgrade() -> None:

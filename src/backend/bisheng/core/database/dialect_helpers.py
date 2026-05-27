@@ -343,6 +343,24 @@ def get_indexes_for_column(conn, table_name: str, column_name: str) -> list[dict
         return []
 
 
+def name_sort_clauses(dialect_name: str, col: str = "name") -> list:
+    """Return ORDER BY text clauses for locale-aware name sorting.
+
+    Sorts English names before CJK, then applies locale-aware collation.
+    MySQL uses REGEXP + CONVERT(... USING gbk); DM8 uses REGEXP_LIKE + NLSSORT.
+    """
+    from sqlalchemy import text as _text
+    if dialect_name == "dm":
+        return [
+            _text(f"CASE WHEN REGEXP_LIKE({col}, '^[a-zA-Z]') THEN 0 ELSE 1 END"),
+            _text(f"NLSSORT({col}, 'NLS_SORT=SCHINESE_PINYIN_M') ASC"),
+        ]
+    return [
+        _text(f'CASE WHEN {col} REGEXP "^[a-zA-Z]" THEN 0 ELSE 1 END'),
+        _text(f"CONVERT({col} USING gbk) ASC"),
+    ]
+
+
 def get_version_num_length(conn) -> int | None:
     """Return the character length of alembic_version.version_num, or None."""
     try:
