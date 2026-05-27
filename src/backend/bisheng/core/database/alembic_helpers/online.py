@@ -18,13 +18,21 @@ def table_exists(table: str) -> bool:
     before alembic, and an upgrade where the table was created by a
     prior revision. Inlined per-migration before this helper landed —
     keep new revisions on this single source of truth.
+
+    Comparison is case-insensitive: DaMeng (DM8) returns identifiers in
+    uppercase while migration code uses lowercase names.
     """
-    return table in inspect(op.get_bind()).get_table_names()
+    needle = table.lower()
+    return needle in {n.lower() for n in inspect(op.get_bind()).get_table_names()}
 
 
 def column_exists(table: str, column: str) -> bool:
-    """True iff ``table.column`` exists. Companion to ``table_exists``."""
-    return column in {c['name'] for c in inspect(op.get_bind()).get_columns(table)}
+    """True iff ``table.column`` exists. Companion to ``table_exists``.
+
+    Case-insensitive for DaMeng compatibility (identifiers returned uppercase).
+    """
+    needle = column.lower()
+    return needle in {c['name'].lower() for c in inspect(op.get_bind()).get_columns(table)}
 
 
 def finalize_online_migration_connection(connection: Connection) -> bool:
