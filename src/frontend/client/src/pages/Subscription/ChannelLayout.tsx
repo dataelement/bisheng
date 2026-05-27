@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from "react";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import NavToggle from "~/components/Nav/NavToggle";
+import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { AiAssistantPanel } from "./AiChat/AiAssistantPanel";
 import { ArticleList } from "./ArticleList/ArticleList";
@@ -57,6 +58,13 @@ export function ChannelLayout({
         if (!article) {
             setSelectedArticle(null);
             setH5AiAssistantOpen(false);
+            return;
+        }
+
+        // H5: open the standalone article page in a new browser tab; do NOT show the inline overlay.
+        if (isH5) {
+            const url = buildClientShareUrl(`/channel/${article.channelId}/article/${article.id}`);
+            window.open(url, "_blank", "noopener,noreferrer");
             return;
         }
 

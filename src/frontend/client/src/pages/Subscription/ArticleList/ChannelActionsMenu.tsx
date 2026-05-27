@@ -86,7 +86,7 @@ export function ChannelActionsMenu({
     const canManageMembers = [ChannelRole.CREATOR, ChannelRole.ADMIN].includes(liveChannel.role);
     const isCreated = type === "created";
     const itemCls = isMobile
-        ? "flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-[14px] leading-5 text-[#212121]"
+        ? "flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-[#212121]"
         : "flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-sm text-[#212121]";
     const iconCls = "size-4 text-[#4E5969]";
 
@@ -109,7 +109,7 @@ export function ChannelActionsMenu({
             <DropdownMenuContent
                 align="end"
                 sideOffset={isMobile ? 6 : undefined}
-                className={cn("z-[120]", isMobile ? "w-[180px] p-1" : "w-[160px]")}
+                className={cn("z-[120]", isMobile ? "w-[180px] space-y-1 p-1" : "w-[160px]")}
             >
                 {isMobile && onShare ? (
                     <DropdownMenuItem className={itemCls} onClick={onShare}>
@@ -134,9 +134,7 @@ export function ChannelActionsMenu({
                 {canManageMembers && onManageMembers ? (
                     <DropdownMenuItem className={itemCls} onClick={() => onManageMembers(liveChannel)}>
                         {isMobile ? <Outlined.PeopleSafe className={iconCls} /> : <UsersRound className={iconCls} />}
-                        {isMobile
-                            ? localize("com_subscription.permission_management")
-                            : localize("com_subscription.member_management")}
+                        {localize("com_subscription.member_management")}
                     </DropdownMenuItem>
                 ) : null}
                 {!isMobile ? (
@@ -145,7 +143,7 @@ export function ChannelActionsMenu({
                         {liveChannel.isPinned ? localize("com_subscription.unpin") : localize("com_subscription.pin_channel")}
                     </DropdownMenuItem>
                 ) : null}
-                <DropdownMenuSeparator className={isMobile ? "my-1" : undefined} />
+                {!isMobile ? <DropdownMenuSeparator /> : null}
                 <DropdownMenuItem
                     className={cn(itemCls, "text-[#F53F3F]")}
                     onClick={async () => {

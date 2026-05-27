@@ -121,17 +121,11 @@ export function ChannelSwitcher({
 
     // Shared section header (group toggle + action icons).
     const renderSectionHeader = () => (
-        <div className={cn(
-            "flex w-full shrink-0 items-center justify-between",
-            isMobile && "h-12 px-4",
-        )}>
+        <div className="flex w-full shrink-0 items-center justify-between">
             <button
                 type="button"
                 onClick={() => setGroup((g) => (g === "created" ? "subscribed" : "created"))}
-                className={cn(
-                    "flex items-center gap-1 rounded-[6px] p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#F7F7F7]",
-                    isMobile && "text-[13px] text-[#86909C]",
-                )}
+                className="flex items-center gap-1 rounded-[6px] p-1 text-[12px] font-medium leading-5 text-[#999] transition-colors fine-pointer:hover:bg-[#F7F7F7]"
             >
                 <span>
                     {group === "created"
@@ -140,19 +134,16 @@ export function ChannelSwitcher({
                 </span>
                 <Outlined.Exchange className="size-4" />
             </button>
-            <div className={cn("flex items-center px-1", isMobile ? "gap-4" : "gap-2.5")}>
+            <div className="flex items-center gap-2.5 px-1">
                 {group === "created" && onCreateChannel ? (
                     <button
                         type="button"
                         onClick={() => { onCreateChannel(); setOpen(false); }}
                         aria-label={localize("com_subscription.create")}
                         title={localize("com_subscription.create")}
-                        className={cn(
-                            "text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]",
-                            isMobile && "text-[#4E5969]",
-                        )}
+                        className="text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
                     >
-                        <Outlined.Plus className={isMobile ? "size-5" : "size-4"} />
+                        <Outlined.Plus className="size-4" />
                     </button>
                 ) : null}
                 {isMobile && group === "subscribed" && onChannelSquare ? (
@@ -161,9 +152,9 @@ export function ChannelSwitcher({
                         onClick={() => { onChannelSquare(); setOpen(false); }}
                         aria-label={localize("com_subscription.go_to_channel_plaza")}
                         title={localize("com_subscription.go_to_channel_plaza")}
-                        className="text-[#4E5969]"
+                        className="text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
                     >
-                        <Outlined.BlocksAndArrows className="size-5" />
+                        <Outlined.BlocksAndArrows className="size-4" />
                     </button>
                 ) : null}
                 <button
@@ -171,12 +162,9 @@ export function ChannelSwitcher({
                     onClick={toggleSort}
                     aria-label={getSortText(currentSort)}
                     title={getSortText(currentSort)}
-                    className={cn(
-                        "text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]",
-                        isMobile && "text-[#4E5969]",
-                    )}
+                    className="text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
                 >
-                    <Outlined.Sort className={isMobile ? "size-5" : "size-4"} />
+                    <Outlined.Sort className="size-4" />
                 </button>
             </div>
         </div>
@@ -194,26 +182,6 @@ export function ChannelSwitcher({
             ) : (
                 channels.map((c) => {
                     const isActive = c.id === activeChannelId;
-                    if (isMobile) {
-                        return (
-                            <button
-                                type="button"
-                                key={c.id}
-                                onClick={() => handleSelect(c)}
-                                className="flex min-h-12 w-full items-center gap-2 border-b border-[#F2F3F5] px-4 text-left last:border-b-0"
-                            >
-                                <span className={cn(
-                                    "min-w-0 flex-1 truncate text-[15px] leading-[22px] text-[#212121]",
-                                    isActive ? "font-semibold" : "font-normal",
-                                )}>
-                                    {c.name}
-                                </span>
-                                {c.isPinned ? (
-                                    <Outlined.ToTop className="size-3 shrink-0 text-[#86909C]" />
-                                ) : null}
-                            </button>
-                        );
-                    }
                     return (
                         <button
                             type="button"
@@ -259,7 +227,7 @@ export function ChannelSwitcher({
                 </button>
                 {open ? (
                     <div
-                        className="fixed inset-x-0 bottom-0 z-[55] flex flex-col bg-white"
+                        className="fixed inset-x-0 bottom-0 z-[55] flex flex-col gap-2 bg-white p-3"
                         style={{ top: mobileTopOffset ?? "calc(env(safe-area-inset-top, 0px) + 44px)" }}
                         role="dialog"
                         aria-modal="true"

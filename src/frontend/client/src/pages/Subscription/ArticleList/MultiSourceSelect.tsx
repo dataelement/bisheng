@@ -101,7 +101,7 @@ export function MultiSourceSelect({
                     variant="outline"
                     className={cn(
                         "w-auto min-w-[160px] h-9 justify-between px-3 font-normal",
-                        hideTrigger && "pointer-events-none absolute -z-[1] size-0 min-w-0 overflow-hidden opacity-0",
+                        hideTrigger && "pointer-events-none inline-block size-0 min-w-0 overflow-hidden border-0 p-0 opacity-0",
                         className
                     )}
                     aria-hidden={hideTrigger || undefined}

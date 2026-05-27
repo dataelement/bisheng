@@ -326,7 +326,7 @@ export function ArticleList({
                 <>
                     <div className="sticky top-0 z-30 shrink-0 bg-white pt-[env(safe-area-inset-top,0px)]">
                         {/* Title row: hamburger | title (caret) | search | menu */}
-                        <div className="flex h-11 items-center gap-3 px-4">
+                        <div className="relative flex h-11 items-center gap-3 px-4">
                             {onOpenChannelNav ? (
                                 <button
                                     type="button"
@@ -388,11 +388,26 @@ export function ArticleList({
                                     onShare={canOpenChannelShare ? handleMobileShare : undefined}
                                     onOpenSourceFilter={
                                         sourceOptions.length > 0
-                                            ? () => setMobileSourceFilterOpen(true)
+                                            // Defer to next tick so the DropdownMenu fully closes before the Popover opens,
+                                            // otherwise Radix treats the same click as outside-click and dismisses the Popover.
+                                            ? () => setTimeout(() => setMobileSourceFilterOpen(true), 0)
                                             : undefined
                                     }
                                     triggerClassName={mobileHeadIconBtnClassName}
                                 />
+                            ) : null}
+                            {/* Source picker — absolute-positioned anchor at the right edge so the popover opens beneath the actions menu without consuming flex space */}
+                            {sourceOptions.length > 0 ? (
+                                <span className="pointer-events-none absolute right-4 bottom-0">
+                                    <MultiSourceSelect
+                                        options={sourceOptions}
+                                        value={selectedSources}
+                                        onChange={handleSourcesChange}
+                                        open={mobileSourceFilterOpen}
+                                        onOpenChange={setMobileSourceFilterOpen}
+                                        hideTrigger
+                                    />
+                                </span>
                             ) : null}
                         </div>
                         {/* Toggled search input */}
@@ -480,17 +495,6 @@ export function ArticleList({
                             </button>
                         </div>
                     </div>
-                    {/* Hidden multi-source picker, opened from the actions menu */}
-                    {sourceOptions.length > 0 ? (
-                        <MultiSourceSelect
-                            options={sourceOptions}
-                            value={selectedSources}
-                            onChange={handleSourcesChange}
-                            open={mobileSourceFilterOpen}
-                            onOpenChange={setMobileSourceFilterOpen}
-                            hideTrigger
-                        />
-                    ) : null}
                 </>
             ) : (
                 /* === PC header === */

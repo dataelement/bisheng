@@ -16,6 +16,7 @@ import {
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
@@ -528,10 +529,18 @@ export default function Subscription() {
                                 onGoChannelSquare={handleChannelSquare}
                                 onCreateChannel={handleCreateChannel}
                                 onFullScreen={(article, ai) => {
-                                    enteredFullscreenViaAiRef.current = !!ai;
+                                    // 全屏 button (ai === false): open the standalone article page in a new tab.
+                                    // AI assistant button (ai === true): keep the existing in-app fullscreen overlay
+                                    // so the assistant panel can dock alongside the article.
+                                    if (!ai) {
+                                        const url = buildClientShareUrl(`/channel/${article.channelId}/article/${article.id}`);
+                                        window.open(url, "_blank", "noopener,noreferrer");
+                                        return;
+                                    }
+                                    enteredFullscreenViaAiRef.current = true;
                                     setFullScreenArticle(article);
-                                    setShowAiAssistant(ai || false);
-                                    setShowFullScreenBtn(!!ai);
+                                    setShowAiAssistant(true);
+                                    setShowFullScreenBtn(true);
                                 }}
                             />
                         ) : (
