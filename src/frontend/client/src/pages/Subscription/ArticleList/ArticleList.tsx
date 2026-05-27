@@ -51,13 +51,39 @@ export function stripHtmlTags(html: string): string {
         .trim();
 }
 
+/**
+ * Strip common Markdown syntax so a content preview reads as plain prose.
+ * Article previews come back as Markdown; without this, link syntax like
+ * `[text](https://very-long-url)` leaks the raw URL into the preview and the
+ * unbreakable URL token forces `line-clamp` to wrap early, leaving the line
+ * looking half-empty. No-op for plain prose (nothing to strip).
+ */
+export function stripMarkdown(md: string): string {
+    if (!md) return "";
+    return md
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")          // images ![alt](url) -> drop
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")         // links [text](url) -> text
+        .replace(/!\[[^\]]*\]?\([^)]*$/g, "")            // truncated trailing image ![alt](url… -> drop
+        .replace(/\[([^\]]*)\]\([^)]*$/g, "$1")          // truncated trailing link [text](url… -> text
+        .replace(/!?\[[^\]]*$/g, "")                     // trailing incomplete marker ![ / ![alt / [text
+        .replace(/^\s*#{1,6}\s+/gm, "")                  // ATX heading markers
+        .replace(/^\s*>+\s?/gm, "")                      // blockquote markers
+        .replace(/^\s*[-*+]\s+/gm, "")                   // unordered list markers
+        .replace(/`{1,3}([^`]*)`{1,3}/g, "$1")           // inline code / fences
+        .replace(/[*_~]{1,3}([^*_~]+)[*_~]{1,3}/g, "$1") // bold / italic / strike
+        .replace(/https?:\/\/\S+/g, "")                  // leftover bare URLs (e.g. from truncation)
+        .replace(/\s*[-–—|·]+\s*$/g, "")                 // trailing separator left after stripping a marker
+        .replace(/\s+/g, " ")                            // collapse whitespace
+        .trim();
+}
+
 /** Map backend ArticleSearchResultItem to frontend Article */
 export function mapToArticle(item: ArticleSearchResultItem, channelId: string): Article {
     return {
         id: item.doc_id,
         title: item.title,
         url: item.source_url || "",
-        content: stripHtmlTags(item.content_preview || ""),
+        content: stripMarkdown(stripHtmlTags(item.content_preview || "")),
         content_html: item.content_html || "",
         coverImage: item.cover_image || undefined,
         sourceName: item.source_info?.source_name || "",
@@ -131,10 +157,9 @@ export function ArticleList({
     }, [channelDetail?.source_infos]);
 
     const subChannels = useMemo(() => {
-        const unreadMap = channelDetail?.sub_channel_unread || {};
         return (channelDetail?.filter_rules || [])
             .filter(fr => fr.channel_type === "sub" && fr.name)
-            .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name!, unread: unreadMap[fr.name!] || 0 }))
+            .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }))
             .sort((a, b) => {
                 const getPriority = (name: string) => {
                     const ch = name.charAt(0);
@@ -422,8 +447,10 @@ export function ArticleList({
                                 />
                             </div>
                         ) : null}
-                        {/* Sub-channels + 仅看未读 (single row; right-gradient hints scroll) */}
+                        {/* Sub-channels + 仅看未读 (single row; right-gradient hints scroll).
+                            Hide the tab strip when the channel has no sub-channels. */}
                         <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+                            {subChannels.length > 0 && (
                             <div className="relative min-w-0 flex-1 border-b border-[#F2F3F5]">
                                 {tabsScrollShadow.left ? (
                                     <div
@@ -453,9 +480,9 @@ export function ArticleList({
                                         )}
                                     >
                                         <span>{localize("com_subscription.all")}</span>
-                                        {(channelDetail?.unread_count ?? 0) > 0 && (
+                                        {channel.unreadCount > 0 && (
                                             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
-                                                {channelDetail!.unread_count}
+                                                {channel.unreadCount}
                                             </span>
                                         )}
                                     </button>
@@ -472,15 +499,11 @@ export function ArticleList({
                                             )}
                                         >
                                             <span>{sub.name}</span>
-                                            {sub.unread > 0 && (
-                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
-                                                    {sub.unread}
-                                                </span>
-                                            )}
                                         </button>
                                     ))}
                                 </div>
                             </div>
+                            )}
                             <button
                                 type="button"
                                 onClick={handleToggleUnread}
@@ -559,8 +582,10 @@ export function ArticleList({
                         </div>
                     </div>
 
-                    {/* 子频道 Tabs + 搜索/筛选 */}
+                    {/* 子频道 Tabs + 搜索/筛选. Hide the tab row when there are no sub-channels
+                        (a lone 全部 tab adds no navigation value). */}
                     <div className="flex flex-row flex-wrap items-center justify-between gap-3">
+                        {subChannels.length > 0 && (
                         <div className="relative min-w-0">
                             {tabsScrollShadow.left ? (
                                 <div
@@ -590,9 +615,9 @@ export function ArticleList({
                                     )}
                                 >
                                     <span>{localize("com_subscription.all")}</span>
-                                    {(channelDetail?.unread_count ?? 0) > 0 && (
+                                    {channel.unreadCount > 0 && (
                                         <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
-                                            {channelDetail!.unread_count}
+                                            {channel.unreadCount}
                                         </span>
                                     )}
                                 </button>
@@ -609,15 +634,11 @@ export function ArticleList({
                                         )}
                                     >
                                         <span>{sub.name}</span>
-                                        {sub.unread > 0 && (
-                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
-                                                {sub.unread}
-                                            </span>
-                                        )}
                                     </button>
                                 ))}
                             </div>
                         </div>
+                        )}
 
                         <div className="flex w-auto min-w-0 flex-row flex-wrap items-center justify-end gap-3">
                             <SearchInput
@@ -690,18 +711,92 @@ export function ArticleList({
                             emptyText={localize("com_subscription.all_messages_are_here")}
                             className=""
                         >
-                            <div className={cn(isGridMode && "grid grid-cols-2 gap-x-6")}>
-                                {articles.map(article => (
-                                    <ArticleCard
-                                        key={article.id}
-                                        article={article}
-                                        onSelect={handleArticleClick}
-                                        isSelected={selectedArticleId === article.id}
-                                        searchQuery={searchQuery}
-                                        variant={isGridMode || isH5 ? 'grid' : 'list'}
-                                    />
-                                ))}
-                            </div>
+                            {isGridMode ? (
+                                // PC browse grid: chunk into rows of 2 so the horizontal divider is
+                                // continuous full-width, while the vertical divider is per-row (inset
+                                // by my-5 so the horizontal lines break it). Columns are equal width.
+                                <div className="flex flex-col">
+                                    {(() => {
+                                        const rows = Array.from(
+                                            { length: Math.ceil(articles.length / 2) },
+                                            (_, i) => articles.slice(i * 2, i * 2 + 2),
+                                        );
+                                        return rows.map((row, rowIndex) => {
+                                            const rowDivider = rowIndex < rows.length - 1
+                                                ? "border-b border-dashed border-[#EBECF0]"
+                                                : "";
+                                            return (
+                                                <div
+                                                    key={row[0].id}
+                                                    className={cn(
+                                                        "grid gap-x-4",
+                                                        rowDivider,
+                                                        // minmax(0,1fr) keeps both columns strictly equal width.
+                                                        row[1] ? "grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)]" : "grid-cols-1",
+                                                    )}
+                                                >
+                                                    <div>
+                                                        <ArticleCard
+                                                            article={row[0]}
+                                                            onSelect={handleArticleClick}
+                                                            isSelected={selectedArticleId === row[0].id}
+                                                            searchQuery={searchQuery}
+                                                            variant="grid"
+                                                        />
+                                                    </div>
+                                                    {row[1] && (
+                                                        <>
+                                                            <div className="my-5 border-l border-dashed border-[#EBECF0]" aria-hidden />
+                                                            <div>
+                                                                <ArticleCard
+                                                                    article={row[1]}
+                                                                    onSelect={handleArticleClick}
+                                                                    isSelected={selectedArticleId === row[1].id}
+                                                                    searchQuery={searchQuery}
+                                                                    variant="grid"
+                                                                />
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            );
+                                        });
+                                    })()}
+                                </div>
+                            ) : isH5 ? (
+                                // Mobile: single column; each card carries its own dashed divider.
+                                <div>
+                                    {articles.map(article => (
+                                        <ArticleCard
+                                            key={article.id}
+                                            article={article}
+                                            onSelect={handleArticleClick}
+                                            isSelected={selectedArticleId === article.id}
+                                            searchQuery={searchQuery}
+                                            variant="grid"
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                // Reading mode (PC single column): reuse the grid card style with a
+                                // full-width dashed divider between items.
+                                <div className="flex flex-col">
+                                    {articles.map((article, i) => (
+                                        <div
+                                            key={article.id}
+                                            className={cn(i > 0 && "border-t border-dashed border-[#EBECF0]")}
+                                        >
+                                            <ArticleCard
+                                                article={article}
+                                                onSelect={handleArticleClick}
+                                                isSelected={selectedArticleId === article.id}
+                                                searchQuery={searchQuery}
+                                                variant="grid"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </InfiniteScroll>
                     )}
                 </div>

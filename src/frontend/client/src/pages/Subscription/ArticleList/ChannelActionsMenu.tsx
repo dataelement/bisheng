@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { LogOut, Pin, PinOff, Settings, UsersRound } from "lucide-react";
+import { LogOut, Pin, PinOff } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { Channel, ChannelRole, SortType, getChannelsApi } from "~/api/channels";
 import {
@@ -9,7 +9,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
-import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { useConfirm } from "~/Providers";
 import { useChannelActions } from "../hooks/useChannelActions";
 import { useLocalize } from "~/hooks";
@@ -125,7 +124,7 @@ export function ChannelActionsMenu({
                 ) : null}
                 {isCreated && onChannelSettings ? (
                     <DropdownMenuItem className={itemCls} onClick={() => onChannelSettings(liveChannel)}>
-                        {isMobile ? <Outlined.Edit className={iconCls} /> : <Settings className={iconCls} />}
+                        <Outlined.Edit className={iconCls} />
                         {isMobile
                             ? localize("com_subscription.edit_channel")
                             : localize("com_subscription.channel_settings")}
@@ -133,8 +132,10 @@ export function ChannelActionsMenu({
                 ) : null}
                 {canManageMembers && onManageMembers ? (
                     <DropdownMenuItem className={itemCls} onClick={() => onManageMembers(liveChannel)}>
-                        {isMobile ? <Outlined.PeopleSafe className={iconCls} /> : <UsersRound className={iconCls} />}
-                        {localize("com_subscription.member_management")}
+                        <Outlined.PeopleSafe className={iconCls} />
+                        {isMobile
+                            ? localize("com_subscription.permission_management")
+                            : localize("com_subscription.member_management")}
                     </DropdownMenuItem>
                 ) : null}
                 {!isMobile ? (
@@ -143,7 +144,7 @@ export function ChannelActionsMenu({
                         {liveChannel.isPinned ? localize("com_subscription.unpin") : localize("com_subscription.pin_channel")}
                     </DropdownMenuItem>
                 ) : null}
-                {!isMobile ? <DropdownMenuSeparator /> : null}
+                {!isMobile ? <DropdownMenuSeparator className="bg-[#ECECEC]" /> : null}
                 <DropdownMenuItem
                     className={cn(itemCls, "text-[#F53F3F]")}
                     onClick={async () => {
@@ -160,9 +161,9 @@ export function ChannelActionsMenu({
                         else handleUnsubscribeChannel(liveChannel.id);
                     }}
                 >
-                    {isMobile
+                    {(isMobile || isCreated)
                         ? <Outlined.Delete className="size-4 text-[#F53F3F]" />
-                        : (isCreated ? <ClosedIcon className="size-4 text-[#F53F3F]" /> : <LogOut className="size-4 text-[#F53F3F]" />)}
+                        : <LogOut className="size-4 text-[#F53F3F]" />}
                     {isCreated
                         ? (isMobile
                             ? localize("com_subscription.delete_channel")
