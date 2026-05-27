@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
-    AssociableDocumentEntry,
+    ShougangFilePublishDocumentEntry,
     SimilarCandidateEntry,
 )
 
@@ -64,7 +64,7 @@ class ShougangFilePublishSimilarCandidatesResp(BaseModel):
 
 
 class ShougangFilePublishDocumentSearchResp(BaseModel):
-    data: list[AssociableDocumentEntry] = Field(default_factory=list)
+    data: list[ShougangFilePublishDocumentEntry] = Field(default_factory=list)
     total: int = 0
 
 
@@ -73,4 +73,5 @@ class ShougangFilePublishSubmitReq(BaseModel):
     source_file_id: int = Field(..., gt=0)
     target_space_id: int = Field(..., gt=0)
     target_document_id: Optional[int] = Field(default=None, gt=0)
+    target_file_id: Optional[int] = Field(default=None, gt=0)
     reason: Optional[str] = Field(default=None, max_length=2000)

@@ -12,6 +12,7 @@ Switch off => all write methods raise 403; read methods stay available.
 from __future__ import annotations
 
 import asyncio
+from typing import Awaitable, Callable
 
 from fastapi import HTTPException, Request
 from loguru import logger
@@ -19,7 +20,8 @@ from loguru import logger
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
 )
@@ -582,6 +584,138 @@ class KnowledgeVersionService:
             ))
         return out
 
+    @staticmethod
+    def _shougang_encoding_first_three_segments(file_encoding: str | None) -> tuple[str, str, str] | None:
+        parts = [part.strip() for part in (file_encoding or "").split("-")]
+        if len(parts) < 3 or not all(parts[:3]):
+            return None
+        return parts[0], parts[1], parts[2]
+
+    async def search_shougang_publish_version_sources(
+        self,
+        knowledge_id: int,
+        keyword: str,
+        current_file_id: int,
+        *,
+        can_view_file: Callable[[int], Awaitable[bool]] | None = None,
+    ):
+        """Search target documents for Shougang publish version linking.
+
+        This is intentionally separate from the generic version-management search
+        so Shougang file-level permission filtering does not change Bisheng's
+        original version-management behavior.
+        """
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import ShougangFilePublishDocumentEntry
+
+        docs = await self.doc_repo.find_by_knowledge_id(knowledge_id)
+        current_v = await self.version_repo.find_by_knowledge_file_id(current_file_id)
+        self_doc_id = current_v.document_id if current_v else None
+
+        keyword_lower = (keyword or "").strip().lower()
+        out: list[ShougangFilePublishDocumentEntry] = []
+        versioned_file_ids: set[int] = set()
+        for doc in docs:
+            if doc.id == self_doc_id:
+                continue
+            if doc.primary_version_id is None:
+                continue
+            chain = await self.version_repo.find_by_document_id(doc.id)
+            if len(chain) != 1:
+                continue
+            primary_v = chain[0]
+            kf = await self.knowledge_file_repo.find_by_id(primary_v.knowledge_file_id)
+            if kf is None or kf.status != KnowledgeFileStatus.SUCCESS.value:
+                continue
+            versioned_file_ids.add(int(kf.id))
+            if can_view_file is not None and not await can_view_file(int(kf.id)):
+                continue
+            haystack = " ".join([
+                kf.file_name or "",
+                getattr(kf, "file_encoding", "") or "",
+            ]).lower()
+            if keyword_lower and keyword_lower not in haystack:
+                continue
+            out.append(ShougangFilePublishDocumentEntry(
+                document_id=doc.id, title=kf.file_name,
+                doc_code=getattr(kf, "file_encoding", None),
+                current_primary_version_no=primary_v.version_no,
+                primary_uploader_name=kf.user_name,
+                primary_upload_time=kf.create_time,
+            ))
+
+        if hasattr(self.knowledge_file_repo, "find_success_files_in_space"):
+            files = await self.knowledge_file_repo.find_success_files_in_space(
+                knowledge_id=knowledge_id,
+                exclude_file_id=current_file_id,
+            )
+        else:
+            files = await self.knowledge_file_repo.find_all(knowledge_id=knowledge_id)
+        for kf in files:
+            if int(kf.id) == int(current_file_id):
+                continue
+            if int(kf.id) in versioned_file_ids:
+                continue
+            if kf.file_type != FileType.FILE.value:
+                continue
+            if kf.status != KnowledgeFileStatus.SUCCESS.value:
+                continue
+            existing_version = await self.version_repo.find_by_knowledge_file_id(int(kf.id))
+            if existing_version is not None:
+                continue
+            if can_view_file is not None and not await can_view_file(int(kf.id)):
+                continue
+            haystack = " ".join([
+                kf.file_name or "",
+                getattr(kf, "file_encoding", "") or "",
+            ]).lower()
+            if keyword_lower and keyword_lower not in haystack:
+                continue
+            out.append(ShougangFilePublishDocumentEntry(
+                document_id=None,
+                target_file_id=int(kf.id),
+                title=kf.file_name,
+                doc_code=getattr(kf, "file_encoding", None),
+                current_primary_version_no=1,
+                primary_uploader_name=kf.user_name,
+                primary_upload_time=kf.create_time,
+            ))
+        return out
+
+    async def ensure_shougang_publish_document_for_file(self, knowledge_file_id: int) -> int:
+        """Create the missing V1 document chain for a Shougang publish target file."""
+        await self._require_version_management_enabled()
+
+        from bisheng.common.errcode.knowledge_space import VersionLinkTargetUnavailableError
+
+        kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
+        if (
+            kf is None
+            or kf.file_type != FileType.FILE.value
+            or kf.status != KnowledgeFileStatus.SUCCESS.value
+        ):
+            raise VersionLinkTargetUnavailableError()
+
+        existing_version = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
+        if existing_version is not None:
+            doc = await self.doc_repo.find_by_id(existing_version.document_id)
+            if doc is None:
+                raise VersionLinkTargetUnavailableError()
+            return int(existing_version.document_id)
+
+        doc = await self.doc_repo.save(KnowledgeDocument(
+            knowledge_id=int(kf.knowledge_id),
+            file_level_path=getattr(kf, "file_level_path", None),
+            level=getattr(kf, "level", 0),
+        ))
+        version = await self.version_repo.save(KnowledgeDocumentVersion(
+            document_id=int(doc.id),
+            knowledge_file_id=int(kf.id),
+            version_no=1,
+            is_primary=True,
+        ))
+        await self.doc_repo.update_primary_version_id(int(doc.id), int(version.id))
+        return int(doc.id)
+
     async def merge_source_document_into_current(
         self,
         current_knowledge_file_id: int,
@@ -785,6 +919,79 @@ class KnowledgeVersionService:
         scored: list[tuple[float, KnowledgeFile]] = []
         for candidate in candidates:
             if not candidate.simhash:
+                continue
+            sim = _similarity(kf.simhash, candidate.simhash)
+            if sim >= threshold:
+                scored.append((sim, candidate))
+        scored.sort(key=lambda item: item[0], reverse=True)
+
+        out: list[SimilarCandidateEntry] = []
+        for sim, candidate in scored[:limit]:
+            version = await self.version_repo.find_by_knowledge_file_id(candidate.id)
+            if version is None:
+                continue
+            if self_doc_id is not None and version.document_id == self_doc_id:
+                continue
+            out.append(
+                SimilarCandidateEntry(
+                    target_document_id=version.document_id,
+                    title=candidate.file_name,
+                    doc_code=getattr(candidate, "file_encoding", None),
+                    current_primary_version_no=version.version_no,
+                    similarity=sim,
+                    primary_uploader_name=getattr(candidate, "user_name", None),
+                    primary_upload_time=getattr(candidate, "create_time", None),
+                )
+            )
+        return out
+
+    async def get_shougang_publish_similar_candidates_for_file_in_space(
+        self,
+        knowledge_file_id: int,
+        target_knowledge_id: int,
+        *,
+        limit: int = 10,
+        can_view_file: Callable[[int], Awaitable[bool]] | None = None,
+    ) -> list:
+        """Return Shougang publish candidates from a target space.
+
+        Shougang matching is stricter than Bisheng's generic recommendation:
+        file_encoding COMPANY/DOCTYPE/DOMAIN must match first, then SimHash must
+        meet the configured threshold. The optional permission callback keeps
+        caller-specific file visibility out of the generic repository query.
+        """
+        from bisheng.common.utils.simhash_utils import similarity as _similarity
+        from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
+
+        kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
+        if kf is None or not kf.simhash:
+            return []
+        source_encoding_key = self._shougang_encoding_first_three_segments(
+            getattr(kf, "file_encoding", None)
+        )
+        if source_encoding_key is None:
+            return []
+
+        conf = await bisheng_settings.async_get_knowledge()
+        vmc = getattr(conf, "version_management", None)
+        threshold: float = vmc.simhash_similarity_threshold if vmc else 0.85
+
+        self_v = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
+        self_doc_id = self_v.document_id if self_v else None
+        candidates = await self.knowledge_file_repo.find_main_version_files_in_space(
+            knowledge_id=target_knowledge_id,
+            exclude_file_id=knowledge_file_id,
+        )
+
+        scored: list[tuple[float, KnowledgeFile]] = []
+        for candidate in candidates:
+            if not candidate.simhash:
+                continue
+            if self._shougang_encoding_first_three_segments(
+                getattr(candidate, "file_encoding", None)
+            ) != source_encoding_key:
+                continue
+            if can_view_file is not None and not await can_view_file(int(candidate.id)):
                 continue
             sim = _similarity(kf.simhash, candidate.simhash)
             if sim >= threshold:

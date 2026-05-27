@@ -8,6 +8,7 @@ import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from ".
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
 import { FilePublishDialog } from "../../SpaceDetail/FilePublishDialog";
 import { KnowledgeSpaceShareDialog } from "../../SpaceDetail/KnowledgeSpaceShareDialog";
+import { useVersionManagementEnabled } from "~/hooks";
 import s from "../PortalKnowledgeWorkbench.module.css";
 import { PortalAiDialog } from "./PortalAiDialog";
 import { PortalUploadDialog } from "./PortalUploadDialog";
@@ -89,6 +90,8 @@ export function PortalDialogs({
     onDuplicateSkip,
     onDuplicateOverwrite,
 }: PortalDialogsProps) {
+    const versionManagementEnabled = useVersionManagementEnabled();
+
     return (
         <>
             {activeSpace && selectedFile ? (
@@ -147,6 +150,7 @@ export function PortalDialogs({
                 open={Boolean(activeSpace && publishingFile)}
                 activeSpace={activeSpace}
                 file={publishingFile}
+                versionManagementEnabled={versionManagementEnabled}
                 onOpenChange={(open) => {
                     if (!open) onPublishingFileChange(null);
                 }}

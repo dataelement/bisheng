@@ -17,6 +17,7 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateResult,
 )
 from bisheng.approval.domain.schemas.shougang_approval_schema import (
+    ShougangFilePublishDocumentEntry,
     ShougangFilePublishDocumentSearchResp,
     ShougangFilePublishSimilarCandidatesResp,
     ShougangFilePublishSubmitReq,
@@ -35,6 +36,7 @@ from bisheng.approval.domain.services.shougang_approval_handler import (
     KnowledgeSpaceFilePublishApprovalHandler,
 )
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
 from bisheng.database.models.department import UserDepartmentDao
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -405,7 +407,17 @@ class ShougangApprovalService:
             target_space_id=target_space_id,
             space_service=space_service,
         )
-        if hasattr(version_service, 'get_similar_candidates_for_file_in_space'):
+        can_view_file = self._build_file_publish_candidate_permission_checker(
+            space_service=space_service,
+            target_space_id=target_space_id,
+        )
+        if hasattr(version_service, 'get_shougang_publish_similar_candidates_for_file_in_space'):
+            data = await version_service.get_shougang_publish_similar_candidates_for_file_in_space(
+                source_file_id,
+                target_space_id,
+                can_view_file=can_view_file,
+            )
+        elif hasattr(version_service, 'get_similar_candidates_for_file_in_space'):
             data = await version_service.get_similar_candidates_for_file_in_space(
                 source_file_id,
                 target_space_id,
@@ -428,8 +440,44 @@ class ShougangApprovalService:
             target_space_id=target_space_id,
             space_service=space_service,
         )
-        data = await version_service.search_version_sources(target_space_id, keyword, source_file_id)
-        return ShougangFilePublishDocumentSearchResp(data=data, total=len(data))
+        can_view_file = self._build_file_publish_candidate_permission_checker(
+            space_service=space_service,
+            target_space_id=target_space_id,
+        )
+        if hasattr(version_service, 'search_shougang_publish_version_sources'):
+            data = await version_service.search_shougang_publish_version_sources(
+                target_space_id,
+                keyword,
+                source_file_id,
+                can_view_file=can_view_file,
+            )
+        else:
+            data = await version_service.search_version_sources(target_space_id, keyword, source_file_id)
+        normalized = [
+            item if isinstance(item, ShougangFilePublishDocumentEntry)
+            else ShougangFilePublishDocumentEntry.model_validate(
+                item.model_dump() if hasattr(item, 'model_dump') else item
+            )
+            for item in data
+        ]
+        return ShougangFilePublishDocumentSearchResp(data=normalized, total=len(normalized))
+
+    def _build_file_publish_candidate_permission_checker(self, *, space_service, target_space_id: int):
+        async def can_view_file(file_id: int) -> bool:
+            if space_service is None:
+                return True
+            try:
+                await space_service._require_permission_id(
+                    'knowledge_file',
+                    int(file_id),
+                    'view_file',
+                    space_id=int(target_space_id),
+                )
+                return True
+            except SpacePermissionDeniedError:
+                return False
+
+        return can_view_file
 
     async def submit_file_publish(
         self,
@@ -452,18 +500,48 @@ class ShougangApprovalService:
         target_level = await self._space_level_for_payload(target_space)
 
         target_document_title = None
-        if req.target_document_id:
+        if req.target_document_id and req.target_file_id:
+            raise HTTPException(status_code=400, detail='目标文档和目标文件不能同时选择')
+        if req.target_document_id or req.target_file_id:
             if version_service is None:
                 raise HTTPException(status_code=400, detail='目标文档校验服务不可用')
-            documents = await version_service.search_version_sources(
-                req.target_space_id,
-                '',
-                req.source_file_id,
+            if hasattr(version_service, '_require_version_management_enabled'):
+                await version_service._require_version_management_enabled()
+            can_view_file = self._build_file_publish_candidate_permission_checker(
+                space_service=space_service,
+                target_space_id=req.target_space_id,
             )
-            matched_document = next(
-                (document for document in documents if document.document_id == req.target_document_id),
-                None,
-            )
+            if hasattr(version_service, 'search_shougang_publish_version_sources'):
+                documents = await version_service.search_shougang_publish_version_sources(
+                    req.target_space_id,
+                    '',
+                    req.source_file_id,
+                    can_view_file=can_view_file,
+                )
+            else:
+                documents = await version_service.search_version_sources(
+                    req.target_space_id,
+                    '',
+                    req.source_file_id,
+                )
+            if req.target_document_id:
+                matched_document = next(
+                    (
+                        document
+                        for document in documents
+                        if getattr(document, 'document_id', None) == req.target_document_id
+                    ),
+                    None,
+                )
+            else:
+                matched_document = next(
+                    (
+                        document
+                        for document in documents
+                        if getattr(document, 'target_file_id', None) == req.target_file_id
+                    ),
+                    None,
+                )
             if matched_document is None:
                 raise HTTPException(status_code=400, detail='目标文档不可用于发布')
             target_document_title = matched_document.title
@@ -495,6 +573,7 @@ class ShougangApprovalService:
                 'target_space_name': target_space.name,
                 'target_space_level': target_level,
                 'target_document_id': req.target_document_id,
+                'target_file_id': req.target_file_id,
                 'target_document_title': target_document_title,
             },
         )

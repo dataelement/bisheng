@@ -226,6 +226,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             target_space,
             user_id,
             extra_user_metadata=extra_user_metadata,
+            target_level=0,
+            target_file_level_path='',
         )
 
     async def _find_copied_file(self, instance_id: int, target_space_id: int) -> KnowledgeFile | None:
@@ -246,20 +248,33 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         source_file_id = int(payload_snapshot['source_file_id'])
         target_space_id = int(payload_snapshot['target_space_id'])
         target_document_id = payload_snapshot.get('target_document_id')
+        target_file_id = payload_snapshot.get('target_file_id')
+
+        async def resolve_target_document_id(login_user: _RuntimeLoginUser) -> int | None:
+            if target_document_id:
+                return int(target_document_id)
+            if target_file_id:
+                return await _ensure_file_publish_target_document(
+                    login_user=login_user,
+                    target_file_id=int(target_file_id),
+                )
+            return None
 
         existing_file = await self._find_copied_file(instance_id, target_space_id)
         if existing_file:
             version_result = None
-            if target_document_id:
+            login_user = _RuntimeLoginUser(
+                user_id=int(payload_snapshot['applicant_user_id']),
+                user_name=str(payload_snapshot.get('applicant_user_name') or ''),
+                tenant_id=int(payload_snapshot['tenant_id']),
+                elevated=True,
+            )
+            resolved_target_document_id = await resolve_target_document_id(login_user)
+            if resolved_target_document_id:
                 version_result = await _link_file_as_version(
-                    login_user=_RuntimeLoginUser(
-                        user_id=int(payload_snapshot['applicant_user_id']),
-                        user_name=str(payload_snapshot.get('applicant_user_name') or ''),
-                        tenant_id=int(payload_snapshot['tenant_id']),
-                        elevated=True,
-                    ),
+                    login_user=login_user,
                     knowledge_file_id=int(existing_file.id),
-                    target_document_id=int(target_document_id),
+                    target_document_id=resolved_target_document_id,
                 )
             return {
                 'file_id': int(existing_file.id),
@@ -313,11 +328,12 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         await KnowledgeDao.async_update_knowledge_update_time_by_id(target_space_id)
 
         version_result = None
-        if target_document_id:
+        resolved_target_document_id = await resolve_target_document_id(login_user)
+        if resolved_target_document_id:
             version_result = await _link_file_as_version(
                 login_user=login_user,
                 knowledge_file_id=int(copied_file.id),
-                target_document_id=int(target_document_id),
+                target_document_id=resolved_target_document_id,
             )
         return {
             'file_id': int(copied_file.id),
@@ -355,3 +371,27 @@ async def _link_file_as_version(*, login_user: _RuntimeLoginUser, knowledge_file
         )
         result = await service.link_file_to_document(knowledge_file_id, target_document_id)
         return result.model_dump()
+
+
+async def _ensure_file_publish_target_document(*, login_user: _RuntimeLoginUser, target_file_id: int) -> int:
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+        KnowledgeDocumentRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
+
+    async with get_async_db_session() as session:
+        service = KnowledgeVersionService(
+            request=_runtime_request(),
+            login_user=login_user,
+            doc_repo=KnowledgeDocumentRepositoryImpl(session),
+            version_repo=KnowledgeDocumentVersionRepositoryImpl(session),
+            knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
+        )
+        return await service.ensure_shougang_publish_document_for_file(target_file_id)

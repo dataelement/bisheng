@@ -1235,6 +1235,7 @@ export function KnowledgeSpaceContent({
                 open={Boolean(publishingFile)}
                 activeSpace={space}
                 file={publishingFile}
+                versionManagementEnabled={versionManagementEnabled}
                 onOpenChange={(open) => {
                     if (!open) setPublishingFile(null);
                 }}

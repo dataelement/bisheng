@@ -1,5 +1,6 @@
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+import sys
+from types import ModuleType, SimpleNamespace
+from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException
@@ -831,6 +832,258 @@ async def test_file_publish_query_requires_publish_permissions(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_file_publish_similar_candidates_filters_by_file_view_permission(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+    from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    service = ShougangApprovalService()
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.KnowledgeFileDao.query_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=100, knowledge_id=10)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(
+            return_value=(
+                SimpleNamespace(id=10, name="团队空间"),
+                SimpleNamespace(
+                    id=100,
+                    knowledge_id=10,
+                    file_type=FileType.FILE.value,
+                    status=KnowledgeFileStatus.SUCCESS.value,
+                ),
+                KnowledgeSpaceLevelEnum.TEAM,
+            )
+        ),
+    )
+    monkeypatch.setattr(service, "_ensure_publish_target_space", AsyncMock(return_value=SimpleNamespace(id=20)))
+
+    async def require_permission(object_type, object_id, permission_id, *, space_id=None):
+        if object_type == "knowledge_file" and object_id == 201:
+            raise SpacePermissionDeniedError()
+
+    space_service = SimpleNamespace(_require_permission_id=AsyncMock(side_effect=require_permission))
+
+    async def similar_candidates(source_file_id, target_space_id, *, can_view_file, **kwargs):
+        assert source_file_id == 100
+        assert target_space_id == 20
+        out = []
+        for target_document_id, knowledge_file_id in [(1, 200), (2, 201)]:
+            if await can_view_file(knowledge_file_id):
+                out.append(
+                    SimilarCandidateEntry(
+                        target_document_id=target_document_id,
+                        title=f"文件{knowledge_file_id}",
+                        current_primary_version_no=1,
+                        similarity=1.0,
+                    )
+                )
+        return out
+
+    version_service = SimpleNamespace(
+        get_shougang_publish_similar_candidates_for_file_in_space=AsyncMock(side_effect=similar_candidates)
+    )
+
+    result = await service.list_file_publish_similar_candidates(
+        source_file_id=100,
+        target_space_id=20,
+        version_service=version_service,
+        space_service=space_service,
+    )
+
+    assert [one.target_document_id for one in result.data] == [1]
+    space_service._require_permission_id.assert_any_await(
+        "knowledge_file",
+        200,
+        "view_file",
+        space_id=20,
+    )
+    space_service._require_permission_id.assert_any_await(
+        "knowledge_file",
+        201,
+        "view_file",
+        space_id=20,
+    )
+
+
+@pytest.mark.asyncio
+async def test_file_publish_document_search_filters_by_file_view_permission(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+    from bisheng.knowledge.domain.schemas.knowledge_version_schema import AssociableDocumentEntry
+
+    service = ShougangApprovalService()
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_service.KnowledgeFileDao.query_by_id",
+        AsyncMock(return_value=SimpleNamespace(id=100, knowledge_id=10)),
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(
+            return_value=(
+                SimpleNamespace(id=10, name="团队空间"),
+                SimpleNamespace(
+                    id=100,
+                    knowledge_id=10,
+                    file_type=FileType.FILE.value,
+                    status=KnowledgeFileStatus.SUCCESS.value,
+                ),
+                KnowledgeSpaceLevelEnum.TEAM,
+            )
+        ),
+    )
+    monkeypatch.setattr(service, "_ensure_publish_target_space", AsyncMock(return_value=SimpleNamespace(id=20)))
+
+    async def require_permission(object_type, object_id, permission_id, *, space_id=None):
+        if object_type == "knowledge_file" and object_id == 201:
+            raise SpacePermissionDeniedError()
+
+    space_service = SimpleNamespace(_require_permission_id=AsyncMock(side_effect=require_permission))
+
+    async def search_sources(target_space_id, keyword, source_file_id, *, can_view_file, **kwargs):
+        assert target_space_id == 20
+        assert keyword == "制度"
+        assert source_file_id == 100
+        out = []
+        for document_id, knowledge_file_id in [(1, 200), (2, 201)]:
+            if await can_view_file(knowledge_file_id):
+                out.append(
+                    AssociableDocumentEntry(
+                        document_id=document_id,
+                        title=f"文件{knowledge_file_id}",
+                        current_primary_version_no=1,
+                    )
+                )
+        return out
+
+    version_service = SimpleNamespace(search_shougang_publish_version_sources=AsyncMock(side_effect=search_sources))
+
+    result = await service.search_file_publish_documents(
+        source_file_id=100,
+        target_space_id=20,
+        keyword="制度",
+        version_service=version_service,
+        space_service=space_service,
+    )
+
+    assert [one.document_id for one in result.data] == [1]
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_rejects_version_link_when_version_management_disabled(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    service = ShougangApprovalService(approval_gate=SimpleNamespace(request_or_pass=AsyncMock()))
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(
+            return_value=(
+                SimpleNamespace(id=10, name="团队空间"),
+                SimpleNamespace(id=100, file_name="制度.pdf", status=KnowledgeFileStatus.SUCCESS.value),
+                KnowledgeSpaceLevelEnum.TEAM,
+            )
+        ),
+    )
+    monkeypatch.setattr(service, "_ensure_can_publish_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        service,
+        "_ensure_publish_target_space",
+        AsyncMock(return_value=SimpleNamespace(id=20, name="公共空间", space_level=KnowledgeSpaceLevelEnum.PUBLIC.value)),
+    )
+    version_service = SimpleNamespace(_require_version_management_enabled=AsyncMock(side_effect=HTTPException(400, "disabled")))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.submit_file_publish(
+            req=ShougangFilePublishSubmitReq(
+                source_space_id=10,
+                source_file_id=100,
+                target_space_id=20,
+                target_document_id=1,
+                reason="发布到公共空间",
+            ),
+            login_user=_login_user(),
+            version_service=version_service,
+        )
+
+    assert exc_info.value.status_code == 400
+    service.approval_gate.request_or_pass.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_submit_accepts_target_file_without_document(monkeypatch):
+    from bisheng.approval.domain.schemas.shougang_approval_schema import (
+        ShougangFilePublishDocumentEntry,
+        ShougangFilePublishSubmitReq,
+    )
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    approval_gate = _pending_approval_gate(701)
+    service = ShougangApprovalService(approval_gate=approval_gate)
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(
+            return_value=(
+                SimpleNamespace(id=10, name="团队空间"),
+                SimpleNamespace(id=100, file_name="制度.pdf", status=KnowledgeFileStatus.SUCCESS.value),
+                KnowledgeSpaceLevelEnum.TEAM,
+            )
+        ),
+    )
+    monkeypatch.setattr(service, "_ensure_can_publish_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        service,
+        "_ensure_publish_target_space",
+        AsyncMock(return_value=SimpleNamespace(id=20, name="公共空间", space_level=KnowledgeSpaceLevelEnum.PUBLIC.value)),
+    )
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=9))
+    monkeypatch.setattr(service, "_send_approval_message", AsyncMock(return_value=None))
+    version_service = SimpleNamespace(
+        _require_version_management_enabled=AsyncMock(return_value=None),
+        search_shougang_publish_version_sources=AsyncMock(
+            return_value=[
+                ShougangFilePublishDocumentEntry(
+                    document_id=None,
+                    target_file_id=300,
+                    title="桃新品种经济效益分析.pdf",
+                    current_primary_version_no=1,
+                )
+            ]
+        ),
+    )
+
+    await service.submit_file_publish(
+        req=ShougangFilePublishSubmitReq(
+            source_space_id=10,
+            source_file_id=100,
+            target_space_id=20,
+            target_file_id=300,
+            reason="发布到公共空间",
+        ),
+        login_user=_login_user(),
+        version_service=version_service,
+    )
+
+    approval_req = approval_gate.request_or_pass.await_args.args[0]
+    assert approval_req.payload_snapshot["target_document_id"] is None
+    assert approval_req.payload_snapshot["target_file_id"] == 300
+    assert approval_req.payload_snapshot["target_document_title"] == "桃新品种经济效益分析.pdf"
+
+
+@pytest.mark.asyncio
 async def test_create_approval_handler_is_idempotent(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceCreateApprovalHandler
 
@@ -923,6 +1176,94 @@ async def test_file_publish_handler_links_existing_file_version_once(monkeypatch
 
     assert result == {"file_id": 188, "target_space_id": 20, "version": {"document_id": 300}, "idempotent": True}
     handler._copy_file.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_file_publish_handler_builds_document_for_target_file_before_link(monkeypatch):
+    from bisheng.approval.domain.services import shougang_approval_handler as handler_mod
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    copied_file = SimpleNamespace(
+        id=188,
+        user_metadata={"shougang_portal_publish": {"approval_instance_id": 102}},
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler.KnowledgeFileDao.aget_file_by_filters",
+        AsyncMock(return_value=[copied_file]),
+    )
+    ensure_document = AsyncMock(return_value=300)
+    monkeypatch.setattr(handler_mod, "_ensure_file_publish_target_document", ensure_document, raising=False)
+    link_file = AsyncMock(return_value={"document_id": 300})
+    monkeypatch.setattr(handler_mod, "_link_file_as_version", link_file)
+    monkeypatch.setattr(handler, "_copy_file", Mock())
+
+    result = await handler.on_approved(
+        102,
+        {
+            "tenant_id": 1,
+            "applicant_user_id": 11,
+            "applicant_user_name": "申请人",
+            "source_space_id": 10,
+            "source_file_id": 100,
+            "target_space_id": 20,
+            "target_file_id": 300,
+        },
+    )
+
+    ensure_document.assert_awaited_once_with(
+        login_user=ANY,
+        target_file_id=300,
+    )
+    link_file.assert_awaited_once_with(
+        login_user=ANY,
+        knowledge_file_id=188,
+        target_document_id=300,
+    )
+    assert result == {"file_id": 188, "target_space_id": 20, "version": {"document_id": 300}, "idempotent": True}
+    handler._copy_file.assert_not_called()
+
+
+def test_file_publish_handler_copies_approved_file_to_target_root(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileStatus
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    source_file = KnowledgeFile(
+        id=100,
+        user_id=11,
+        knowledge_id=10,
+        file_name="制度.pdf",
+        status=KnowledgeFileStatus.SUCCESS.value,
+        level=2,
+        file_level_path="/301/302",
+    )
+    source_space = SimpleNamespace(id=10)
+    target_space = SimpleNamespace(id=20)
+    fake_file_worker = SimpleNamespace(copy_normal=Mock(return_value=SimpleNamespace(id=188)))
+    fake_worker_package = ModuleType("bisheng.worker.knowledge")
+    fake_worker_package.file_worker = fake_file_worker
+    monkeypatch.setitem(sys.modules, "bisheng.worker.knowledge", fake_worker_package)
+    monkeypatch.setitem(sys.modules, "bisheng.worker.knowledge.file_worker", fake_file_worker)
+
+    copied_file = handler._copy_file(
+        source_file,
+        source_space,
+        target_space,
+        user_id=11,
+        instance_id=102,
+    )
+
+    assert copied_file.id == 188
+    fake_file_worker.copy_normal.assert_called_once()
+    kwargs = fake_file_worker.copy_normal.call_args.kwargs
+    assert kwargs["target_level"] == 0
+    assert kwargs["target_file_level_path"] == ""
+    assert kwargs["extra_user_metadata"]["shougang_portal_publish"] == {
+        "approval_instance_id": 102,
+        "source_space_id": 10,
+        "source_file_id": 100,
+    }
 
 
 @pytest.mark.asyncio

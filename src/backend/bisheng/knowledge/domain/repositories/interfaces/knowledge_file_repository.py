@@ -23,3 +23,9 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         Optionally exclude one file (the one currently being scanned, to skip self-match).
         """
         ...
+
+    async def find_success_files_in_space(
+        self, knowledge_id: int, exclude_file_id: Optional[int] = None,
+    ) -> list[KnowledgeFile]:
+        """Parsed-SUCCESS physical files in a space, regardless of version document status."""
+        ...

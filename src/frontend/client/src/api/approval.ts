@@ -4,7 +4,6 @@ import {
   FileType,
   type KnowledgeFile,
   type KnowledgeSpace,
-  type SearchableDocumentEntry,
   type SimilarCandidateEntry,
   SpaceLevel,
   VisibilityType,
@@ -263,6 +262,16 @@ export interface ShougangFilePublishTargetSpace {
   owner_name?: string | null;
 }
 
+export interface ShougangFilePublishDocumentEntry {
+  document_id?: number | null;
+  target_file_id?: number | null;
+  title: string;
+  doc_code?: string | null;
+  current_primary_version_no?: number | null;
+  primary_uploader_name?: string | null;
+  primary_upload_time?: string | null;
+}
+
 export async function validateShougangKnowledgeSpaceCreateApprovalApi(
   data: Omit<ShougangKnowledgeSpaceCreateApprovalPayload, "reason">,
 ): Promise<{ approval_required: boolean }> {
@@ -313,8 +322,8 @@ export async function searchShougangFilePublishDocumentsApi(
   sourceFileId: string | number,
   targetSpaceId: string | number,
   keyword: string,
-): Promise<{ data: SearchableDocumentEntry[]; total: number }> {
-  const response = await request.get<ApiResponse<{ data: SearchableDocumentEntry[]; total: number }>>(
+): Promise<{ data: ShougangFilePublishDocumentEntry[]; total: number }> {
+  const response = await request.get<ApiResponse<{ data: ShougangFilePublishDocumentEntry[]; total: number }>>(
     "/api/v1/approval/shougang/file-publish/document-search",
     {
       params: {
@@ -324,7 +333,7 @@ export async function searchShougangFilePublishDocumentsApi(
       },
     },
   );
-  return unwrapPaged<SearchableDocumentEntry>(response);
+  return unwrapPaged<ShougangFilePublishDocumentEntry>(response);
 }
 
 export async function submitShougangFilePublishApprovalApi(data: {
@@ -332,6 +341,7 @@ export async function submitShougangFilePublishApprovalApi(data: {
   source_file_id: string | number;
   target_space_id: string | number;
   target_document_id?: number | null;
+  target_file_id?: number | null;
   reason?: string;
 }): Promise<ShougangApprovalSubmitResult> {
   const response = await request.post<ApiResponse<ShougangApprovalSubmitResult>>(

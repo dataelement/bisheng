@@ -94,6 +94,8 @@ def copy_normal(
     op_user_id: int,
     *,
     extra_user_metadata: Optional[Dict[str, Any]] = None,
+    target_level: Optional[int] = None,
+    target_file_level_path: Optional[str] = None,
 ) -> Optional[KnowledgeFile]:
     one_dict = one.model_dump()
     one_dict.pop("id")
@@ -101,6 +103,10 @@ def copy_normal(
     one_dict["user_id"] = op_user_id
     one_dict["knowledge_id"] = target_knowledge.id
     one_dict["status"] = KnowledgeFileStatus.PROCESSING.value
+    if target_level is not None:
+        one_dict["level"] = target_level
+    if target_file_level_path is not None:
+        one_dict["file_level_path"] = target_file_level_path
     if extra_user_metadata:
         one_dict["user_metadata"] = {
             **(one_dict.get("user_metadata") or {}),

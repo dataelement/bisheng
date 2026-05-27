@@ -39,10 +39,10 @@ def _build_svc(session):
 
 
 async def _seed_file_with_doc(session, fid, knowledge_id=1, simhash=None, similar_status=0,
-                               is_primary=True):
+                               is_primary=True, file_encoding=None):
     session.add(KnowledgeFile(id=fid, knowledge_id=knowledge_id, file_name=f"f{fid}.pdf",
                               file_type=1, status=2, similar_status=similar_status,
-                              simhash=simhash))
+                              simhash=simhash, file_encoding=file_encoding))
     await session.commit()
     doc = KnowledgeDocument(knowledge_id=knowledge_id)
     session.add(doc); await session.commit(); await session.refresh(doc)
@@ -54,6 +54,18 @@ async def _seed_file_with_doc(session, fid, knowledge_id=1, simhash=None, simila
         doc.primary_version_id = v.id
         session.add(doc); await session.commit()
     return doc
+
+
+async def _seed_file_without_doc(session, fid, knowledge_id=1, file_name=None, file_encoding=None):
+    session.add(KnowledgeFile(
+        id=fid,
+        knowledge_id=knowledge_id,
+        file_name=file_name or f"f{fid}.pdf",
+        file_type=1,
+        status=2,
+        file_encoding=file_encoding,
+    ))
+    await session.commit()
 
 
 @pytest.mark.asyncio
@@ -127,3 +139,128 @@ async def test_scan_no_simhash_on_target_returns_zero(enable_switch, async_db_se
     svc = _build_svc(async_db_session)
     n = await svc.scan_similar_for_file(knowledge_file_id=100)
     assert n == 0
+
+
+@pytest.mark.asyncio
+async def test_shougang_publish_candidates_require_first_three_encoding_segments(enable_switch, async_db_session):
+    async_db_session.add(Knowledge(id=1, name="source", type=3, user_id=1))
+    async_db_session.add(Knowledge(id=2, name="target", type=3, user_id=1))
+    await async_db_session.commit()
+    await _seed_file_with_doc(
+        async_db_session,
+        100,
+        knowledge_id=1,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000001",
+    )
+    matched_doc = await _seed_file_with_doc(
+        async_db_session,
+        200,
+        knowledge_id=2,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000002",
+    )
+    await _seed_file_with_doc(
+        async_db_session,
+        201,
+        knowledge_id=2,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-BG-SC-20260500000003",
+    )
+
+    svc = _build_svc(async_db_session)
+    candidates = await svc.get_shougang_publish_similar_candidates_for_file_in_space(
+        knowledge_file_id=100,
+        target_knowledge_id=2,
+        limit=10,
+    )
+
+    assert [one.target_document_id for one in candidates] == [matched_doc.id]
+
+
+@pytest.mark.asyncio
+async def test_shougang_publish_candidates_skip_files_without_encoding(enable_switch, async_db_session):
+    async_db_session.add(Knowledge(id=1, name="source", type=3, user_id=1))
+    async_db_session.add(Knowledge(id=2, name="target", type=3, user_id=1))
+    await async_db_session.commit()
+    await _seed_file_with_doc(
+        async_db_session,
+        100,
+        knowledge_id=1,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding="GF-ZD-SC-20260500000001",
+    )
+    await _seed_file_with_doc(
+        async_db_session,
+        200,
+        knowledge_id=2,
+        simhash="aaaaaaaaaaaaaaaa",
+        file_encoding=None,
+    )
+
+    svc = _build_svc(async_db_session)
+    candidates = await svc.get_shougang_publish_similar_candidates_for_file_in_space(
+        knowledge_file_id=100,
+        target_knowledge_id=2,
+    )
+
+    assert candidates == []
+
+
+@pytest.mark.asyncio
+async def test_shougang_publish_document_search_returns_target_files_without_version_document(
+    enable_switch,
+    async_db_session,
+):
+    async_db_session.add(Knowledge(id=1, name="source", type=3, user_id=1))
+    async_db_session.add(Knowledge(id=2, name="target", type=3, user_id=1))
+    await async_db_session.commit()
+    await _seed_file_without_doc(async_db_session, 100, knowledge_id=1, file_name="源文件.pdf")
+    await _seed_file_without_doc(
+        async_db_session,
+        300,
+        knowledge_id=2,
+        file_name="桃新品种经济效益分析.pdf",
+        file_encoding="SGGF-STD-PP-20260500000004",
+    )
+
+    svc = _build_svc(async_db_session)
+    entries = await svc.search_shougang_publish_version_sources(
+        knowledge_id=2,
+        keyword="桃",
+        current_file_id=100,
+    )
+
+    assert len(entries) == 1
+    assert entries[0].document_id is None
+    assert entries[0].target_file_id == 300
+    assert entries[0].title == "桃新品种经济效益分析.pdf"
+
+
+@pytest.mark.asyncio
+async def test_ensure_shougang_publish_document_for_file_creates_v1_document_chain(
+    enable_switch,
+    async_db_session,
+):
+    async_db_session.add(Knowledge(id=2, name="target", type=3, user_id=1))
+    await async_db_session.commit()
+    await _seed_file_without_doc(
+        async_db_session,
+        300,
+        knowledge_id=2,
+        file_name="桃新品种经济效益分析.pdf",
+    )
+
+    svc = _build_svc(async_db_session)
+    document_id = await svc.ensure_shougang_publish_document_for_file(300)
+    second_document_id = await svc.ensure_shougang_publish_document_for_file(300)
+
+    assert second_document_id == document_id
+    doc = await svc.doc_repo.find_by_id(document_id)
+    version = await svc.version_repo.find_by_knowledge_file_id(300)
+    docs = await svc.doc_repo.find_by_knowledge_id(2)
+    assert len(docs) == 1
+    assert version.document_id == document_id
+    assert version.version_no == 1
+    assert version.is_primary is True
+    assert doc.primary_version_id == version.id

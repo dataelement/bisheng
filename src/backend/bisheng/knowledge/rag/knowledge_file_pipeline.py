@@ -130,6 +130,10 @@ class KnowledgeFilePipeline(BaseFilePipeline):
     def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:
         abstract_transformers = self._init_content_safety_transformers()
         abstract_transformers.extend(self._init_abstract_transformers())
+        abstract_transformers.append(FileEncodingTransformer(
+            invoke_user_id=self.invoke_user_id,
+            knowledge_file=self.db_file,
+        ))
         abstract_transformers.append(SimHashTransformer(knowledge_file=self.db_file))
         abstract_transformers.append(ExtraFileTransformer(
             loader=self.loader,

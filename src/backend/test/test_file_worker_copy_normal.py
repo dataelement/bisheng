@@ -157,6 +157,45 @@ def test_copy_normal_skips_empty_bbox_object_name(monkeypatch):
     assert updated[-1].status == KnowledgeFileStatus.WAITING.value
 
 
+def test_copy_normal_can_place_copied_file_at_target_root(monkeypatch):
+    class FakeMinio:
+        bucket = 'bucket'
+
+        def object_exists_sync(self, *_args, **_kwargs):
+            return False
+
+        def copy_object_sync(self, **_kwargs):
+            return None
+
+    source_file = _make_file()
+    source_file.level = 2
+    source_file.file_level_path = '/101/102'
+    added = []
+
+    def _add_file(record):
+        record.id = 9303
+        added.append(record)
+        return record
+
+    monkeypatch.setattr(file_worker, 'get_minio_storage_sync', lambda: FakeMinio())
+    monkeypatch.setattr(file_worker.KnowledgeFileDao, 'add_file', staticmethod(_add_file))
+    monkeypatch.setattr(file_worker.KnowledgeFileDao, 'update', staticmethod(lambda record: None))
+
+    result = file_worker.copy_normal(
+        source_file,
+        _make_space(12),
+        _make_space(7),
+        7,
+        target_level=0,
+        target_file_level_path='',
+    )
+
+    assert result.id == 9303
+    assert added[0].knowledge_id == 7
+    assert added[0].level == 0
+    assert added[0].file_level_path == ''
+
+
 def test_copy_normal_enqueues_success_file_stat_sync(monkeypatch):
     class FakeMinio:
         bucket = 'bucket'

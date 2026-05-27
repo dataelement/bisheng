@@ -66,6 +66,24 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_success_files_in_space(
+        self,
+        knowledge_id: int,
+        exclude_file_id: Optional[int] = None,
+    ) -> list[KnowledgeFile]:
+        """Parsed-SUCCESS physical files in a space, including files without a version document."""
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+
+        stmt = select(KnowledgeFile).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            KnowledgeFile.file_type == 1,
+        )
+        if exclude_file_id is not None:
+            stmt = stmt.where(KnowledgeFile.id != exclude_file_id)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     # according knowledge_idAndknowledge_file_ids Dapatkanuser_metadata Data field
     async def get_user_metadata_by_knowledge_file_ids(self, knowledge_id: int, knowledge_file_ids: list[int]) -> dict[
         int | None, list[dict[str, Any]] | None]:
@@ -89,4 +107,3 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 user_metadata_dict[knowledge_file.id] = {}
 
         return user_metadata_dict
-

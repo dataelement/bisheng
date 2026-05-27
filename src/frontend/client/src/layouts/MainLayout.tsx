@@ -1,5 +1,4 @@
 import Cookies from 'js-cookie';
-import { getBysConfigApi } from '~/api/apps';
 import BookOpenIcon from '~/components/ui/icon/BookOpen';
 import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
@@ -9,7 +8,7 @@ import { LayoutDashboard, Menu, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useRecoilValue } from 'recoil';
 import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
@@ -342,13 +341,7 @@ export default function MainLayout() {
     }
   }, [isUserLoading, user, logout]);
 
-  // Load env config once on mount — makes bishengConfState available to all pages
-  const [config, setConfig] = useRecoilState(bishengConfState);
-  useEffect(() => {
-    getBysConfigApi().then((res: any) => {
-      setConfig(res.data);
-    });
-  }, []);
+  const config = useRecoilValue(bishengConfState);
 
   // System notice popup — single instance above KeepAlive so dismissal is global.
   const remoteNotice = (config as { system_notification?: string } | undefined)?.system_notification ?? '';

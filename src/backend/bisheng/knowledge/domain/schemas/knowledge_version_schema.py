@@ -36,6 +36,16 @@ class AssociableDocumentEntry(BaseModel):
     primary_upload_time: Optional[datetime] = None
 
 
+class ShougangFilePublishDocumentEntry(BaseModel):
+    document_id: Optional[int] = None
+    target_file_id: Optional[int] = None
+    title: str
+    doc_code: Optional[str] = None
+    current_primary_version_no: Optional[int] = None
+    primary_uploader_name: Optional[str] = None
+    primary_upload_time: Optional[datetime] = None
+
+
 class LinkRequest(BaseModel):
     knowledge_file_id: int  # the file being linked
     target_document_id: int

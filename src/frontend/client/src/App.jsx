@@ -1,14 +1,37 @@
 import * as RadixToast from '@radix-ui/react-toast';
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { RouterProvider } from 'react-router-dom';
-import { RecoilRoot } from 'recoil';
+import { RecoilRoot, useSetRecoilState } from 'recoil';
 import { LiveAnnouncer } from '~/a11y';
+import { getBysConfigApi } from '~/api/apps';
 import Toast from './components/ui/Toast';
 import { ScreenshotProvider, ThemeProvider, useApiErrorBoundary } from './hooks';
+import { bishengConfState } from './pages/appChat/store/atoms';
 import { ToastProvider, ConfirmProvider } from './Providers';
 import { router } from './routes';
+
+const BishengConfigBootstrap = () => {
+  const setConfig = useSetRecoilState(bishengConfState);
+
+  useEffect(() => {
+    let cancelled = false;
+    getBysConfigApi()
+      .then((res) => {
+        if (!cancelled) setConfig(res.data);
+      })
+      .catch(() => {
+        // 配置加载失败时保持默认空配置，由具体功能按关闭态降级。
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setConfig]);
+
+  return null;
+};
 
 const App = () => {
   const { setError } = useApiErrorBoundary();
@@ -31,6 +54,7 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <RecoilRoot>
+        <BishengConfigBootstrap />
         <LiveAnnouncer>
           <ThemeProvider>
             <RadixToast.Provider>
