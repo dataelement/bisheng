@@ -43,8 +43,12 @@ def get_env():
     """Get environment variable parameters"""
     uns_support = ['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'html', 'pdf', 'csv', 'wps', 'dps', 'et']
 
-    etl_for_lm_url = bisheng_settings.get_knowledge().etl4lm.url
-    if etl_for_lm_url:
+    # Image parsing depends on whichever loader_provider is selected (etl4lm /
+    # mineru / paddle_ocr) actually having a url configured — see
+    # `KnowledgeConf.image_parser_enabled`.
+    knowledge_conf = bisheng_settings.get_knowledge()
+    image_parser_enabled = knowledge_conf.image_parser_enabled
+    if image_parser_enabled:
         uns_support.extend(['png', 'jpg', 'jpeg', 'bmp'])
 
     env = {}
@@ -63,7 +67,7 @@ def get_env():
     env['pro'] = bisheng_settings.get_system_login_method().bisheng_pro
     env['dashboard_pro'] = bisheng_settings.get_system_login_method().dashboard_pro
     env['version'] = __version__
-    env['enable_etl4lm'] = bool(etl_for_lm_url)
+    env['enable_etl4lm'] = image_parser_enabled
     env['multi_tenant_enabled'] = bisheng_settings.multi_tenant.enabled
 
     # Expose knowledge-space version management flag so the client can toggle UI affordances.

@@ -376,6 +376,24 @@ class KnowledgeConf(BaseModel):
         description='Version Management Configure',
     )
 
+    @property
+    def image_parser_enabled(self) -> bool:
+        """Whether the active loader_provider can parse images (and richer PDFs).
+
+        Mirrors the loader-selection logic in `knowledge/rag/base_file_pipeline.py`:
+        an external OCR/ETL service is used only when `loader_provider` matches a
+        provider whose `url` is configured. Otherwise the pipeline falls back to
+        the local PDF loader, which does not support images.
+        """
+        provider = (self.loader_provider or '').strip()
+        if provider == 'etl4lm':
+            return bool(self.etl4lm.url)
+        if provider == 'mineru':
+            return bool(self.mineru.url)
+        if provider == 'paddle_ocr':
+            return bool(self.paddle_ocr.url)
+        return False
+
 
 class IntelligenceCenterConf(BaseModel):
     """ Intelligence Center Configure """
