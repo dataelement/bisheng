@@ -41,31 +41,34 @@ async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
 
     PRD §4.3: "同一申请人可能同时具备多个身份标签，条件匹配采用'包含即命中'"
     """
-    labels: set[str] = {'regular_user'}
+    labels: set[str] = {"regular_user"}
     try:
         from bisheng.database.constants import AdminRole
         from bisheng.user.domain.models.user_role import UserRoleDao
+
         user_roles = await UserRoleDao.aget_user_roles(user_id)
         for ur in user_roles:
             if ur.role_id == AdminRole:
-                labels.add('admin')
+                labels.add("admin")
             else:
-                labels.add(f'role_{ur.role_id}')
+                labels.add(f"role_{ur.role_id}")
     except Exception:
         pass
 
     try:
         from bisheng.database.models.department import DepartmentDao
+
         dept_admins = await DepartmentDao.aget_user_admin_departments(user_id)
         if dept_admins:
-            labels.add('dept_admin')
+            labels.add("dept_admin")
     except Exception:
         pass
 
     try:
         from bisheng.tenant.domain.services.tenant_service import TenantService
+
         if await TenantService._is_tenant_admin(user_id, tenant_id):
-            labels.add('tenant_admin')
+            labels.add("tenant_admin")
     except Exception:
         pass
 
@@ -119,7 +122,7 @@ class ApprovalGate:
                 exception_type=ApprovalExceptionType.ROUTE_MISSING,
             )
 
-        if matched_route.route_type == 'pass':
+        if matched_route.route_type == "pass":
             instance = await self.instance_repository.create_instance(
                 ApprovalInstance(
                     tenant_id=req.tenant_id,
@@ -137,7 +140,7 @@ class ApprovalGate:
                     reason=req.reason,
                     payload_snapshot=req.payload_snapshot,
                     detail_snapshot=detail_snapshot,
-                    route_rule_id=getattr(matched_route, 'id', None),
+                    route_rule_id=getattr(matched_route, "id", None),
                 )
             )
             # PASS route still needs to execute the business handler via outbox
@@ -155,16 +158,16 @@ class ApprovalGate:
                 tenant_id=req.tenant_id,
                 operator_id=0,
                 operator_tenant_id=req.tenant_id,
-                action='approval.route.pass',
-                target_type='approval_instance',
+                action="approval.route.pass",
+                target_type="approval_instance",
                 target_id=str(instance.id),
-                reason=getattr(matched_route, 'route_name', None),
+                reason=getattr(matched_route, "route_name", None),
                 metadata={
-                    'instance_id': instance.id,
-                    'scenario_code': req.scenario_code,
-                    'route_id': getattr(matched_route, 'id', None),
-                    'route_name': getattr(matched_route, 'route_name', None),
-                    'payload_snapshot': req.payload_snapshot,
+                    "instance_id": instance.id,
+                    "scenario_code": req.scenario_code,
+                    "route_id": getattr(matched_route, "id", None),
+                    "route_name": getattr(matched_route, "route_name", None),
+                    "payload_snapshot": req.payload_snapshot,
                 },
                 object_name=business_name,
                 ip_address=req.ip_address,
@@ -199,8 +202,8 @@ class ApprovalGate:
                 detail_snapshot=detail_snapshot,
                 exception_type=ApprovalExceptionType.APPROVER_EMPTY,
                 flow_version_id=flow_version.id,
-                route_rule_id=getattr(matched_route, 'id', None),
-                current_node_name=getattr(first_node, 'node_name', None),
+                route_rule_id=getattr(matched_route, "id", None),
+                current_node_name=getattr(first_node, "node_name", None),
                 node=first_node,
             )
 
@@ -218,7 +221,7 @@ class ApprovalGate:
                 applicant_user_name=req.applicant_user_name,
                 applicant_department_id=req.applicant_department_id,
                 flow_version_id=flow_version.id,
-                route_rule_id=getattr(matched_route, 'id', None),
+                route_rule_id=getattr(matched_route, "id", None),
                 status=ApprovalInstanceStatus.PENDING,
                 reason=req.reason,
                 payload_snapshot=req.payload_snapshot,
@@ -237,7 +240,7 @@ class ApprovalGate:
                     node_name=first_node.node_name,
                     node_order=first_node.node_order,
                     approver_user_id=approver_user_id,
-                    approver_source_type='resolved',
+                    approver_source_type="resolved",
                     node_mode=first_node.node_mode,
                     status=ApprovalTaskStatus.PENDING,
                 )
@@ -247,7 +250,7 @@ class ApprovalGate:
             ApprovalActionLog(
                 tenant_id=req.tenant_id,
                 instance_id=instance.id,
-                action='submitted',
+                action="submitted",
                 operator_user_id=req.applicant_user_id,
                 operator_user_name=req.applicant_user_name,
                 detail={},
@@ -257,17 +260,17 @@ class ApprovalGate:
             tenant_id=req.tenant_id,
             operator_id=req.applicant_user_id,
             operator_tenant_id=req.tenant_id,
-            action='approval.request.submit',
-            target_type='approval_instance',
+            action="approval.request.submit",
+            target_type="approval_instance",
             target_id=str(instance.id),
             reason=req.reason,
             metadata={
-                'instance_id': instance.id,
-                'scenario_code': req.scenario_code,
-                'handler': req.scenario_code,
-                'payload_snapshot': req.payload_snapshot,
-                'business_resource_type': req.business_resource_type,
-                'business_resource_id': req.business_resource_id,
+                "instance_id": instance.id,
+                "scenario_code": req.scenario_code,
+                "handler": req.scenario_code,
+                "payload_snapshot": req.payload_snapshot,
+                "business_resource_type": req.business_resource_type,
+                "business_resource_id": req.business_resource_id,
             },
             operator_name=req.applicant_user_name,
             object_name=business_name,
@@ -319,17 +322,19 @@ class ApprovalGate:
             )
         )
         exception_detail: dict[str, Any] = {
-            'scenario_code': req.scenario_code,
-            'business_key': req.business_key,
-            'current_node_name': current_node_name,
+            "scenario_code": req.scenario_code,
+            "business_key": req.business_key,
+            "current_node_name": current_node_name,
         }
         if node is not None:
-            exception_detail.update({
-                'node_code': getattr(node, 'node_code', None),
-                'node_name': getattr(node, 'node_name', None),
-                'node_order': getattr(node, 'node_order', None),
-                'node_mode': getattr(node, 'node_mode', None),
-            })
+            exception_detail.update(
+                {
+                    "node_code": getattr(node, "node_code", None),
+                    "node_name": getattr(node, "node_name", None),
+                    "node_order": getattr(node, "node_order", None),
+                    "node_mode": getattr(node, "node_mode", None),
+                }
+            )
         await self.instance_repository.create_exception(
             ApprovalException(
                 tenant_id=req.tenant_id,
@@ -337,6 +342,33 @@ class ApprovalGate:
                 exception_type=exception_type,
                 detail=exception_detail,
             )
+        )
+        # Audit the submission even when the instance lands in exception state — every
+        # instance creation must leave a trace per the approval module compliance rule.
+        await AuditLogDao.ainsert_v2(
+            tenant_id=req.tenant_id,
+            operator_id=req.applicant_user_id,
+            operator_tenant_id=req.tenant_id,
+            action="approval.request.submit",
+            target_type="approval_instance",
+            target_id=str(instance.id),
+            reason=req.reason,
+            metadata={
+                "instance_id": instance.id,
+                "scenario_code": req.scenario_code,
+                "handler": handler_key,
+                "payload_snapshot": req.payload_snapshot,
+                "business_resource_type": req.business_resource_type,
+                "business_resource_id": req.business_resource_id,
+                "instance_status": status,
+                "exception_type": exception_type,
+                "flow_version_id": flow_version_id,
+                "route_rule_id": route_rule_id,
+                "current_node_name": current_node_name,
+            },
+            operator_name=req.applicant_user_name,
+            object_name=business_name,
+            ip_address=req.ip_address,
         )
         # Notify tenant admins so they can handle the exception
         await self._notify_admins_of_exception(
@@ -356,12 +388,12 @@ class ApprovalGate:
     def _dispatch_outbox_task(outbox_id: int) -> None:
         try:
             from bisheng.worker.approval.tasks import execute_approval_outbox
+
             execute_approval_outbox.delay(outbox_id)
         except Exception:
             import logging
-            logging.getLogger(__name__).exception(
-                'failed to dispatch approval outbox task: outbox_id=%s', outbox_id
-            )
+
+            logging.getLogger(__name__).exception("failed to dispatch approval outbox task: outbox_id=%s", outbox_id)
 
     @staticmethod
     async def _notify_admins_of_exception(
@@ -377,6 +409,7 @@ class ApprovalGate:
             from bisheng.database.constants import AdminRole
             from bisheng.message.api.dependencies import get_message_service as _get_message_service
             from bisheng.user.domain.models.user_role import UserRoleDao
+
             admin_rows = await UserRoleDao.aget_roles_user([AdminRole])
             admin_ids = [int(r.user_id) for r in admin_rows if r.user_id != applicant_user_id]
             if not admin_ids:
@@ -384,13 +417,13 @@ class ApprovalGate:
             async with get_async_db_session() as session:
                 message_service = await _get_message_service(session)
                 content = [
-                    {'type': 'system_text', 'content': f'approval_exception_{exception_type}'},
+                    {"type": "system_text", "content": f"approval_exception_{exception_type}"},
                     {
-                        'type': 'business_url',
-                        'content': f'--{business_name}',
-                        'metadata': {
-                            'business_type': 'approval_instance_id',
-                            'data': {'approval_instance_id': str(instance_id)},
+                        "type": "business_url",
+                        "content": f"--{business_name}",
+                        "metadata": {
+                            "business_type": "approval_instance_id",
+                            "data": {"approval_instance_id": str(instance_id)},
                         },
                     },
                 ]
@@ -401,8 +434,9 @@ class ApprovalGate:
                 )
         except Exception:
             import logging
+
             logging.getLogger(__name__).exception(
-                'failed to notify admin of approval exception: instance_id=%s', instance_id
+                "failed to notify admin of approval exception: instance_id=%s", instance_id
             )
 
     async def _match_first_route(self, route_rules: list[Any], req: ApprovalGateRequest) -> Any | None:
@@ -428,16 +462,16 @@ class ApprovalGate:
         user_labels: frozenset[str] | None = None  # lazily resolved; shared across routes
 
         for route in route_rules:
-            if not getattr(route, 'enabled', True):
+            if not getattr(route, "enabled", True):
                 continue
-            match_config = getattr(route, 'match_config', {}) or {}
-            field = match_config.get('field', '')
+            match_config = getattr(route, "match_config", {}) or {}
+            field = match_config.get("field", "")
             if not field:
                 return route  # catch-all branch
 
-            expected = str(match_config.get('value', ''))
+            expected = str(match_config.get("value", ""))
 
-            if field == 'applicant_role':
+            if field == "applicant_role":
                 if user_labels is None:
                     user_labels = await _get_user_role_labels(req.applicant_user_id, req.tenant_id)
                 if expected in user_labels:

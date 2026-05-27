@@ -203,6 +203,7 @@ const KnowledgeListPanel = ({
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
         />
       </div>
 

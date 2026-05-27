@@ -21,10 +21,14 @@ router = APIRouter()
 async def get_config(request: Request, login_user=LoginUserDep):
     ret = await WorkStationService.get_daily_chat_config()
     linsight_config = await WorkStationService.get_linsight_config()
-    etl_for_lm_url = (await bisheng_settings.async_get_knowledge()).etl4lm.url
+    # `enable_etl4lm` historically gated the frontend on `etl4lm.url` alone, but the
+    # parse pipeline now supports mineru / paddle_ocr as alternative providers that
+    # also handle images. Use the unified image-parsing capability flag so the flag
+    # follows whichever loader_provider is actually selected and configured.
+    knowledge_conf = await bisheng_settings.async_get_knowledge()
     ret = ret.model_dump(exclude_unset=True) if ret else {}
     ret['linsightConfig'] = linsight_config.model_dump() if linsight_config else {}
-    ret['enable_etl4lm'] = bool(etl_for_lm_url)
+    ret['enable_etl4lm'] = knowledge_conf.image_parser_enabled
     linsight_invitation_code = (await bisheng_settings.aget_all_config()).get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
     ret['linsight_cache_dir'] = './'
