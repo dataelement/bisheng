@@ -1,7 +1,7 @@
 import base64
 import os
 import re
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 import requests
@@ -13,7 +13,6 @@ from bisheng.knowledge.rag.pipeline.loader.mineru import html_table_to_md
 from bisheng.knowledge.rag.pipeline.loader.utils.pdf_header_footer import filter_repeated_header_footer_blocks
 from bisheng.knowledge.rag.pipeline.types import TextBbox
 from bisheng.utils.exceptions import EtlException
-
 
 # Matches the inline HTML <table>...</table> blocks PaddleOCR emits in markdown.text.
 # DOTALL because tables may wrap across rendered "lines" (though usually single-line).
@@ -251,7 +250,20 @@ class PaddleOcrLoader(BaseBishengLoader):
                 markdown_texts.append(md_text)
         merged_text = "\n\n".join(markdown_texts)
 
-        # Build metadata: bboxes, pages, indexes, types
+        # Build metadata: bboxes, pages, indexes, types.
+        #
+        # PaddleOCR's parsing_list order does NOT match reading order in md_text:
+        # `aside_text` / `header` / `footer` blocks are emitted first, while the
+        # main `text` blocks they spatially precede in md_text come later. A naive
+        # forward `search_pos`-monotonic find therefore produces non-monotonic
+        # global indexes, breaking IntervalSearch (it uses bisect on a flattened
+        # arr that assumes sort order). Resulting chunk_bbox attribution is wrong.
+        #
+        # Fix: per page, find each block's md_text position with an
+        # occupancy-aware search (no false-positive collisions when the same
+        # token appears twice), then SORT the page's entries by start before
+        # appending to metadata. Across pages, ordering is naturally monotonic
+        # because text_offset advances.
         metadata = dict(bboxes=[], pages=[], indexes=[], types=[])
         text_offset = 0
 
@@ -259,7 +271,9 @@ class PaddleOcrLoader(BaseBishengLoader):
             md_text = self._substitute_image_urls(page_result.get("markdown", {}).get("text", ""), image_url_mapping)
             md_text = self._convert_tables_to_md(md_text)
             parsing_list = page_result.get("prunedResult", {}).get("parsing_res_list", [])
-            search_pos = 0
+
+            page_entries = []
+            used_ranges: List[Tuple[int, int]] = []
 
             for item in parsing_list:
                 if self._is_skip_block(item):
@@ -274,20 +288,56 @@ class PaddleOcrLoader(BaseBishengLoader):
                 search_token = (
                     html_table_to_md(block_content) if block_label == "table" and block_content else block_content
                 )
+                if not search_token:
+                    continue
 
-                # Find the position of search_token in this page's markdown
-                if search_token and search_token in md_text:
-                    local_start = md_text.find(search_token, search_pos)
-                    if local_start == -1:
-                        local_start = md_text.find(search_token)
-                    global_start = text_offset + local_start
-                    global_end = global_start + len(search_token)
-                    search_pos = local_start + len(search_token)
+                # Drift guard: short margin labels (`aside_text "汽车"`), page
+                # numbers (`number "2/4"`), and similar decoration blocks have
+                # block_order=None AND tokens that frequently alias substrings of
+                # body text (e.g. "汽车" appears 17× on the cover page). Without
+                # a reading-order hint we cannot disambiguate which occurrence
+                # belongs to this bbox, and naively picking the leftmost binds
+                # the decoration's bbox to an unrelated body-text position.
+                # Skip these to keep chunk_bbox attribution honest.
+                if item.get("block_order") is None and md_text.count(search_token) > 1:
+                    continue
 
-                    metadata["bboxes"].append(block_bbox)
-                    metadata["pages"].append(page_idx)
-                    metadata["indexes"].append([global_start, global_end])
-                    metadata["types"].append(self._map_block_type(block_label))
+                # Pick the leftmost occurrence that doesn't overlap a position
+                # already claimed by an earlier block on this page. Without this
+                # check, repeated content (e.g. headings reused later in the
+                # document) would collide.
+                local_start = -1
+                start = 0
+                while True:
+                    p = md_text.find(search_token, start)
+                    if p == -1:
+                        break
+                    end = p + len(search_token)
+                    if not any(p < ue and end > us for us, ue in used_ranges):
+                        local_start = p
+                        break
+                    start = p + 1
+                if local_start == -1:
+                    continue
+
+                local_end = local_start + len(search_token)
+                used_ranges.append((local_start, local_end))
+                page_entries.append(
+                    (
+                        local_start,
+                        local_end,
+                        block_bbox,
+                        self._map_block_type(block_label),
+                    )
+                )
+
+            # Sort by spatial position in md_text so indexes are monotonic.
+            page_entries.sort(key=lambda e: (e[0], e[1]))
+            for local_start, local_end, block_bbox, type_ in page_entries:
+                metadata["bboxes"].append(block_bbox)
+                metadata["pages"].append(page_idx)
+                metadata["indexes"].append([text_offset + local_start, text_offset + local_end])
+                metadata["types"].append(type_)
 
             # Update offset for next page (+2 for "\n\n" separator)
             text_offset += len(md_text) + (2 if page_idx < len(layout_results) - 1 else 0)
@@ -350,11 +400,69 @@ class PaddleOcrLoader(BaseBishengLoader):
 
         return image_url_mapping
 
+    def _normalize_bboxes_to_pdf_points(self, layout_results: List[Dict]) -> None:
+        """Convert per-page block_bbox from PaddleOCR's raster pixel space into
+        PDF point space, IN PLACE on `layout_results`.
+
+        Why: PaddleOCR rasterizes each PDF page (typically at 144 DPI, i.e. 2x
+        PDF point dimensions) and returns block_bbox in that pixel space, e.g.
+        an A4 page becomes ~1191×1684. The frontend renders bbox overlays via
+        pdf.js's `getViewport({scale: 1})` (PDF point space, ~595×842 for A4)
+        and uses `scaleState = canvas_css_width / viewport.width`. Feeding raw
+        pixel bbox there draws every box at roughly 2× the intended location,
+        visibly drifting to the lower-right of the actual text. Normalizing to
+        PDF points before persisting matches the convention etl4lm/mineru already
+        produce.
+
+        Non-PDF inputs (images) skip normalization: their bbox space IS the
+        image's pixel space, no conversion needed.
+        """
+        if self.file_extension != "pdf":
+            return
+        try:
+            import fitz  # PyMuPDF, already used by mineru loader
+        except ImportError:
+            logger.warning("PaddleOCR bbox normalization skipped: PyMuPDF (fitz) not available")
+            return
+        try:
+            pdf_doc = fitz.open(self.file_path)
+        except Exception as e:
+            logger.warning(f"PaddleOCR bbox normalization skipped: cannot open PDF {self.file_path}: {e}")
+            return
+        try:
+            for page_idx, page_result in enumerate(layout_results):
+                if page_idx >= len(pdf_doc):
+                    break
+                pruned = page_result.get("prunedResult") or {}
+                paddle_w = pruned.get("width") or 0
+                paddle_h = pruned.get("height") or 0
+                if not paddle_w or not paddle_h:
+                    continue
+                pdf_rect = pdf_doc[page_idx].rect
+                sx = pdf_rect.width / paddle_w
+                sy = pdf_rect.height / paddle_h
+                for item in pruned.get("parsing_res_list", []) or []:
+                    bbox = item.get("block_bbox")
+                    if bbox and len(bbox) >= 4:
+                        item["block_bbox"] = [
+                            bbox[0] * sx,
+                            bbox[1] * sy,
+                            bbox[2] * sx,
+                            bbox[3] * sy,
+                        ]
+        finally:
+            pdf_doc.close()
+
     def _build_documents(self, layout_results: List[Dict]) -> List[Document]:
         """Build Document list from layout results."""
         if not layout_results:
             logger.warning(f"PaddleOCR returned empty results for {self.file_name}")
             return [Document(page_content="", metadata=self.file_metadata)]
+
+        # Normalize bbox coords BEFORE any downstream consumer reads them.
+        # Both _merge_parsing_results (for metadata.bboxes) and _extract_parsing_items
+        # (for self.bbox_list via parse_bbox_list) pull from layout_results[*].prunedResult.
+        self._normalize_bboxes_to_pdf_points(layout_results)
 
         image_url_mapping: Dict[str, str] = {}
         if self.retain_images:
