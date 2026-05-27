@@ -89,13 +89,16 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
 }) {
   const a = String(action || "").toLowerCase();
   const dotCls = a === "approved" ? "bg-[#00b42a] text-white" : a === "rejected" ? "bg-[#f53f3f] text-white" :
-    a === "withdrawn" ? "bg-[#86909c] text-white" : "bg-[#165dff] text-white";
-  const icon = a === "approved" ? "✓" : a === "rejected" ? "✗" : "●";
+    a === "withdrawn" ? "bg-[#86909c] text-white" :
+    a === "revoke_grant" ? "bg-[#ff7d00] text-white" : "bg-[#165dff] text-white";
+  const icon = a === "approved" ? "✓" : a === "rejected" ? "✗" :
+    a === "revoke_grant" ? "⊘" : "●";
   const title = a === "submitted" ? localize("com_approval_step_submitted") :
     a === "resubmitted" ? localize("com_approval_action_resubmitted") :
     a === "approved" ? localize("com_approval_action_approved") :
     a === "rejected" ? localize("com_approval_action_rejected") :
     a === "withdrawn" ? localize("com_approval_action_withdrawn") :
+    a === "revoke_grant" ? localize("com_approval_action_revoke_grant_short") :
     (localize(`com_approval_action_${a}` as any, { defaultValue: a }) as string);
   const desc = a === "submitted" ? localize("com_approval_step_submitted_desc") : operatorName ?? null;
   const comment = detail?.comment || detail?.reason;
@@ -297,6 +300,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [decisionComment, setDecisionComment] = useState("");
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
   const [withdrawReason, setWithdrawReason] = useState("");
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
+  const [revokeReason, setRevokeReason] = useState("");
 
   const filteredTaskItems = useMemo(() => {
     const byStatus = taskFilter === "pending_me"
@@ -441,12 +446,25 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
       setRequestDetail(await getApprovalInstanceDetailApi(selectedInstanceId));
     } catch { toast(false); } finally { setActionLoading(false); setLoadingDetail(false); }
   };
-  const runRevokeGrant = async () => {
-    // Approver revokes from my_tasks using the task's instance_id
+  const runRevokeGrant = () => {
+    if (!taskDetail?.instance_id) return;
+    setRevokeReason("");
+    setRevokeDialogOpen(true);
+  };
+  const confirmRevokeGrant = async () => {
     const instanceId = taskDetail?.instance_id;
     if (!instanceId) return;
+    const reason = revokeReason.trim();
+    if (!reason) {
+      showToast({
+        message: localize("com_approval_revoke_reason_required"),
+        severity: NotificationSeverity.WARNING,
+      });
+      return;
+    }
+    setRevokeDialogOpen(false);
     setActionLoading(true);
-    try { await revokeMenuAccessGrantApi(instanceId, {}); await loadTasks(selectedTaskId); toast(true); }
+    try { await revokeMenuAccessGrantApi(instanceId, { reason }); await loadTasks(selectedTaskId); toast(true); }
     catch { toast(false); } finally { setActionLoading(false); }
   };
 
@@ -658,6 +676,32 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
           </div>
         </div>
       </DialogContent>
+      <Dialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
+        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-2xl">
+          <div className="text-[16px] font-semibold text-[#1d2129]">{localize("com_approval_revoke_dialog_title")}</div>
+          <textarea
+            rows={4}
+            value={revokeReason}
+            onChange={(e) => setRevokeReason(e.target.value)}
+            maxLength={500}
+            placeholder={localize("com_approval_revoke_reason_placeholder")}
+            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+          />
+          <div className="mt-4 flex justify-end gap-3">
+            <button type="button"
+              className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
+              onClick={() => setRevokeDialogOpen(false)}>
+              {localize("com_ui_cancel")}
+            </button>
+            <button type="button"
+              disabled={!revokeReason.trim()}
+              className="rounded-lg border border-[#ff7d00] px-4 py-2 text-[14px] text-[#ff7d00] hover:bg-[#fff7e8] disabled:opacity-60"
+              onClick={confirmRevokeGrant}>
+              {localize("com_approval_action_revoke_grant")}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
         <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-2xl">
           <div className="text-[16px] font-semibold text-[#1d2129]">{localize("com_approval_withdraw_dialog_title")}</div>

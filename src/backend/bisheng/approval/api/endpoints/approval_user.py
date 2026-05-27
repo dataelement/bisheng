@@ -20,6 +20,10 @@ class ApprovalResubmitReq(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class ApprovalRevokeReq(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+
 class MenuAccessApplyReq(BaseModel):
     menu_key: str
     menu_name: str
@@ -132,13 +136,14 @@ async def apply_menu_access(
 @router.post('/menu-access/{instance_id}/revoke-grant')
 async def revoke_menu_grant(
     instance_id: int,
-    req: ApprovalResubmitReq,
+    req: ApprovalRevokeReq,
     request: Request,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     data = await ApprovalCenterService.revoke_menu_grant(
         instance_id=instance_id,
         operator_user_id=login_user.user_id,
+        operator_user_name=login_user.user_name,
         reason=req.reason,
         ip_address=get_request_ip(request),
     )
