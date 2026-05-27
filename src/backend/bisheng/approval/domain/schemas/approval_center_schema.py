@@ -26,6 +26,7 @@ class ApprovalGateRequest(BaseModel):
     payload_snapshot: dict[str, Any] = Field(default_factory=dict)
     detail_snapshot: dict[str, Any] = Field(default_factory=dict)
     ip_address: str | None = None
+    duplicate_active_statuses: list[str] | None = None
 
 
 class ApprovalGateResult(BaseModel):

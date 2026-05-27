@@ -503,6 +503,65 @@ async def test_gate_returns_existing_instance_for_duplicate_business_key():
 
 
 @pytest.mark.asyncio
+async def test_gate_uses_request_duplicate_active_statuses():
+    gate = ApprovalGate(
+        registry=SimpleNamespace(get_handler=AsyncMock(return_value=SimpleNamespace(
+            build_detail=AsyncMock(return_value={}),
+            build_title=AsyncMock(return_value='文件发布'),
+        ))),
+        scenario_repository=SimpleNamespace(
+            get_scenario_by_code=AsyncMock(
+                return_value=SimpleNamespace(
+                    id=1,
+                    scenario_code='knowledge_space_file_publish_request',
+                    scenario_name='知识空间文件发布审批',
+                    enabled=True,
+                )
+            ),
+            list_route_rules=AsyncMock(
+                return_value=[SimpleNamespace(id=10, route_type='pass', match_config={}, enabled=True)]
+            ),
+        ),
+        instance_repository=SimpleNamespace(
+            find_duplicate_active_instance=AsyncMock(return_value=None),
+            create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={'id': 402})),
+            create_outbox=AsyncMock(side_effect=lambda row: row.model_copy(update={'id': 502})),
+            create_task=AsyncMock(),
+        ),
+        route_matcher=AsyncMock(return_value=SimpleNamespace(id=10, route_type='pass')),
+    )
+
+    result = await gate.request_or_pass(
+        ApprovalGateRequest(
+            tenant_id=1,
+            scenario_code='knowledge_space_file_publish_request',
+            business_key='knowledge-file-publish:file:222:target:24:user:5',
+            business_resource_type='knowledge_space_file_publish_request',
+            business_resource_id='222:24',
+            business_name='发布文件',
+            applicant_user_id=5,
+            applicant_user_name='00011',
+            duplicate_active_statuses=[
+                ApprovalInstanceStatus.PENDING,
+                ApprovalInstanceStatus.EXECUTE_FAILED,
+            ],
+        )
+    )
+
+    assert result.decision == ApprovalGateDecision.PASS
+    gate.instance_repository.find_duplicate_active_instance.assert_awaited_once_with(
+        tenant_id=1,
+        scenario_code='knowledge_space_file_publish_request',
+        business_key='knowledge-file-publish:file:222:target:24:user:5',
+        applicant_user_id=5,
+        active_statuses=[
+            ApprovalInstanceStatus.PENDING,
+            ApprovalInstanceStatus.EXECUTE_FAILED,
+        ],
+    )
+
+
+@pytest.mark.asyncio
 async def test_gate_creates_route_missing_exception():
     handler = SimpleNamespace(build_detail=AsyncMock(return_value={}), build_title=AsyncMock(return_value='频道'), resolve_approvers=AsyncMock())
     registry = SimpleNamespace(get_handler=AsyncMock(return_value=handler))

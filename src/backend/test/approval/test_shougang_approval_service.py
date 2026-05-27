@@ -677,6 +677,68 @@ async def test_file_publish_submit_requires_team_or_personal_success_file(monkey
 
 
 @pytest.mark.asyncio
+async def test_file_publish_submit_allows_retry_after_route_missing_exception(monkeypatch):
+    from bisheng.approval.domain.models.approval_instance import ApprovalInstanceStatus
+    from bisheng.approval.domain.schemas.shougang_approval_schema import ShougangFilePublishSubmitReq
+    from bisheng.approval.domain.services.shougang_approval_service import ShougangApprovalService
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
+
+    service = ShougangApprovalService(
+        approval_gate=SimpleNamespace(
+            request_or_pass=AsyncMock(
+                return_value=SimpleNamespace(
+                    decision=ApprovalGateDecision.PASS,
+                    instance_id=103,
+                    task_ids=[],
+                    model_dump=lambda: {
+                        "decision": "pass",
+                        "instance_id": 103,
+                        "task_ids": [],
+                    },
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(
+        service,
+        "_load_publish_source",
+        AsyncMock(
+            return_value=(
+                SimpleNamespace(id=82, name="有数据"),
+                SimpleNamespace(id=222, file_name="wod照片.docx", status=KnowledgeFileStatus.SUCCESS.value),
+                KnowledgeSpaceLevelEnum.PERSONAL,
+            )
+        ),
+    )
+    monkeypatch.setattr(service, "_ensure_can_publish_file", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        service,
+        "_ensure_publish_target_space",
+        AsyncMock(return_value=SimpleNamespace(id=24, name="系统", space_level=KnowledgeSpaceLevelEnum.PUBLIC.value)),
+    )
+    monkeypatch.setattr(service, "_get_primary_department_id", AsyncMock(return_value=3))
+    monkeypatch.setattr(service, "_send_approval_message", AsyncMock(return_value=None))
+
+    result = await service.submit_file_publish(
+        req=ShougangFilePublishSubmitReq(
+            source_space_id=82,
+            source_file_id=222,
+            target_space_id=24,
+            target_document_id=None,
+        ),
+        login_user=SimpleNamespace(user_id=5, user_name="00011", tenant_id=1, is_admin=lambda: False),
+    )
+
+    gate_req = service.approval_gate.request_or_pass.await_args.args[0]
+    assert gate_req.duplicate_active_statuses == [
+        ApprovalInstanceStatus.PENDING,
+        ApprovalInstanceStatus.EXECUTE_FAILED,
+    ]
+    assert result["decision"] == "pass"
+
+
+@pytest.mark.asyncio
 async def test_file_publish_creates_exception_when_scenario_disabled(monkeypatch):
     from bisheng.approval.domain.models.approval_instance import (
         ApprovalExceptionType,

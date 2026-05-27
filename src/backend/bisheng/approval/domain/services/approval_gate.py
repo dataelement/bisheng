@@ -92,6 +92,7 @@ class ApprovalGate:
             scenario_code=req.scenario_code,
             business_key=req.business_key,
             applicant_user_id=req.applicant_user_id,
+            active_statuses=req.duplicate_active_statuses,
         )
         if duplicate:
             return ApprovalGateResult(

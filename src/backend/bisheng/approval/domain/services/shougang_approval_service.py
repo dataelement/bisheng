@@ -576,6 +576,10 @@ class ShougangApprovalService:
                 'target_file_id': req.target_file_id,
                 'target_document_title': target_document_title,
             },
+            duplicate_active_statuses=[
+                ApprovalInstanceStatus.PENDING,
+                ApprovalInstanceStatus.EXECUTE_FAILED,
+            ],
         )
         result = await self._request_or_create_config_exception(
             req=approval_req,

@@ -155,7 +155,7 @@ export function FilePublishDialog({
         if (!activeSpace || !file || !targetSpaceId) return;
         setSubmitting(true);
         try {
-            await submitShougangFilePublishApprovalApi({
+            const result = await submitShougangFilePublishApprovalApi({
                 source_space_id: activeSpace.id,
                 source_file_id: file.id,
                 target_space_id: targetSpaceId,
@@ -163,6 +163,15 @@ export function FilePublishDialog({
                 target_file_id: versionTarget?.type === "file" ? versionTarget.id : null,
                 reason: reason.trim() || undefined,
             });
+            if (result?.decision === "exception") {
+                showToast({
+                    message: result.exception_type === "route_missing"
+                        ? "审批配置未匹配，请联系管理员处理后重试"
+                        : "审批提交异常，请联系管理员处理后重试",
+                    severity: NotificationSeverity.ERROR,
+                });
+                return;
+            }
             showToast({ message: "已提交发布申请", severity: NotificationSeverity.SUCCESS });
             onOpenChange(false);
         } catch (error) {

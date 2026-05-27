@@ -253,6 +253,7 @@ export interface ShougangApprovalSubmitResult {
   instance_id?: number | null;
   task_ids?: number[];
   space?: KnowledgeSpace;
+  exception_type?: string | null;
 }
 
 export interface ShougangFilePublishTargetSpace {

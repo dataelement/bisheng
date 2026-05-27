@@ -172,4 +172,39 @@ describe("FilePublishDialog", () => {
             });
         });
     });
+
+    test("审批配置异常时不关闭弹窗且不提示成功", async () => {
+        mockGetSimilarCandidates.mockResolvedValue({ data: [] });
+        const onOpenChange = jest.fn();
+        mockSubmitApproval.mockResolvedValue({
+            decision: "exception",
+            exception_type: "route_missing",
+            instance_id: 135,
+        });
+
+        render(
+            <FilePublishDialog
+                open
+                activeSpace={activeSpace}
+                file={file}
+                onOpenChange={onOpenChange}
+                versionManagementEnabled
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled());
+        fireEvent.click(screen.getByRole("button", { name: "提交申请" }));
+
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith({
+                message: "审批配置未匹配，请联系管理员处理后重试",
+                severity: "error",
+            });
+        });
+        expect(mockShowToast).not.toHaveBeenCalledWith({
+            message: "已提交发布申请",
+            severity: "success",
+        });
+        expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    });
 });

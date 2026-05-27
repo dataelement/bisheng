@@ -57,13 +57,17 @@ class ApprovalInstanceRepository:
         scenario_code: str,
         business_key: str,
         applicant_user_id: int,
+        active_statuses: list[str] | tuple[str, ...] | None = None,
     ) -> ApprovalInstance | None:
+        statuses = tuple(active_statuses) if active_statuses is not None else cls._DUPLICATE_ACTIVE_STATUSES
+        if not statuses:
+            return None
         statement = select(ApprovalInstance).where(
             ApprovalInstance.tenant_id == tenant_id,
             ApprovalInstance.scenario_code == scenario_code,
             ApprovalInstance.business_key == business_key,
             ApprovalInstance.applicant_user_id == applicant_user_id,
-            ApprovalInstance.status.in_(cls._DUPLICATE_ACTIVE_STATUSES),
+            ApprovalInstance.status.in_(statuses),
         ).order_by(ApprovalInstance.id.desc())
         async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
