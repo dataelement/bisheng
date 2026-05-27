@@ -277,6 +277,12 @@ class KnowledgeService(KnowledgeUtils):
                 preferred_ids=preferred_ids,
             )
             total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
+            # Admin / scoped-super-admin path bypasses ReBAC filtering, so seed the
+            # permission map with full perms for every returned row — otherwise
+            # aconvert_knowledge_read would emit empty permission_ids for KBs the
+            # admin did not personally create, hiding edit/delete in the UI.
+            full_perms = set(_KNOWLEDGE_LIST_PERMISSION_IDS)
+            permission_map = {int(one.id): set(full_perms) for one in res}
             logger.info(
                 '[perf][knowledge.list.dao] user_id={} permission_id={} type={} page={} limit={} total={} rows={} '
                 'took_ms={:.2f}',
