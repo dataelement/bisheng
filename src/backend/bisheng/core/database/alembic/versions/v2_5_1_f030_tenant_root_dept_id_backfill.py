@@ -47,14 +47,40 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """Backfill ``tenant.root_dept_id`` from ``department.mounted_tenant_id``.
+
+    Uses SQLAlchemy expression language so the dialect-specific multi-table
+    ``UPDATE...JOIN`` syntax is avoided — MySQL accepts it, DM8 does not.
+    """
     conn = op.get_bind()
-    result = conn.execute(sa.text(
-        'UPDATE tenant t '
-        'JOIN department d ON d.mounted_tenant_id = t.id AND d.is_tenant_root = 1 '
-        'SET t.root_dept_id = d.id '
-        'WHERE t.root_dept_id IS NULL'
-    ))
-    print(f'[F030] backfilled tenant.root_dept_id on {result.rowcount} rows')
+    tenant_tbl = sa.Table('tenant', sa.MetaData(), autoload_with=conn)
+    dept_tbl = sa.Table('department', sa.MetaData(), autoload_with=conn)
+
+    # Per active mount: pick department.id where mounted_tenant_id=tenant.id.
+    rows = conn.execute(
+        sa.select(
+            tenant_tbl.c.id.label('tenant_id'),
+            dept_tbl.c.id.label('dept_id'),
+        )
+        .where(
+            tenant_tbl.c.root_dept_id.is_(None),
+            dept_tbl.c.mounted_tenant_id == tenant_tbl.c.id,
+            dept_tbl.c.is_tenant_root == 1,
+        )
+    ).fetchall()
+
+    updated = 0
+    for row in rows:
+        result = conn.execute(
+            sa.update(tenant_tbl)
+            .where(
+                tenant_tbl.c.id == row.tenant_id,
+                tenant_tbl.c.root_dept_id.is_(None),
+            )
+            .values(root_dept_id=row.dept_id)
+        )
+        updated += result.rowcount or 0
+    print(f'[F030] backfilled tenant.root_dept_id on {updated} rows')
 
 
 def downgrade() -> None:

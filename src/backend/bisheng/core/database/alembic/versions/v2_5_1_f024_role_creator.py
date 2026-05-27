@@ -18,29 +18,57 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 def _backfill_role_creator_from_auditlog() -> None:
+    """Set ``role.create_user`` from the first ``create_role`` auditlog row.
+
+    Implemented in Python via SQLAlchemy expression language to be portable
+    across MySQL and DM8:
+      - Multi-table ``UPDATE...JOIN`` is MySQL-specific (DM8 follows Oracle).
+      - ``CAST(... AS UNSIGNED)`` is a MySQL type alias; we filter the
+        numeric-string rows in Python and rely on ``int()`` instead.
+      - ``REGEXP`` is replaced with a portable digit check ``isdigit()``.
+    """
     conn = op.get_bind()
-    conn.execute(sa.text(
-        'UPDATE role r '
-        'JOIN ('
-        '  SELECT '
-        '    CAST(t.object_id AS UNSIGNED) AS role_id, '
-        '    t.operator_id AS creator_id '
-        '  FROM ('
-        '    SELECT '
-        '      object_id, '
-        '      operator_id, '
-        '      ROW_NUMBER() OVER (PARTITION BY object_id ORDER BY create_time ASC, id ASC) AS rn '
-        '    FROM auditlog '
-        "    WHERE system_id = 'system' "
-        "      AND event_type = 'create_role' "
-        "      AND object_type = 'role_conf' "
-        "      AND object_id REGEXP '^[0-9]+$' "
-        '  ) t '
-        '  WHERE t.rn = 1'
-        ') s ON s.role_id = r.id '
-        'SET r.create_user = s.creator_id '
-        'WHERE r.create_user IS NULL'
-    ))
+    role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+    auditlog_tbl = sa.Table('auditlog', sa.MetaData(), autoload_with=conn)
+
+    # Pull the earliest create_role row per object_id.
+    rows = conn.execute(
+        sa.select(
+            auditlog_tbl.c.object_id,
+            auditlog_tbl.c.operator_id,
+            auditlog_tbl.c.create_time,
+            auditlog_tbl.c.id,
+        )
+        .where(
+            auditlog_tbl.c.system_id == 'system',
+            auditlog_tbl.c.event_type == 'create_role',
+            auditlog_tbl.c.object_type == 'role_conf',
+        )
+        .order_by(
+            auditlog_tbl.c.object_id.asc(),
+            auditlog_tbl.c.create_time.asc(),
+            auditlog_tbl.c.id.asc(),
+        )
+    ).fetchall()
+
+    creator_by_role: dict[int, int] = {}
+    for row in rows:
+        oid = row.object_id
+        if not (oid and str(oid).isdigit()):
+            continue
+        role_id = int(oid)
+        # First row wins thanks to ORDER BY; skip subsequent ones.
+        creator_by_role.setdefault(role_id, row.operator_id)
+
+    for role_id, creator_id in creator_by_role.items():
+        conn.execute(
+            sa.update(role_tbl)
+            .where(
+                role_tbl.c.id == role_id,
+                role_tbl.c.create_user.is_(None),
+            )
+            .values(create_user=creator_id)
+        )
 
 def upgrade() -> None:
     conn = op.get_bind()
