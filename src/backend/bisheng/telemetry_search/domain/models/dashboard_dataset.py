@@ -2,7 +2,8 @@ from enum import Enum
 from typing import Dict, Literal, List, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, VARCHAR, BOOLEAN, JSON
+from sqlalchemy import Column, VARCHAR, BOOLEAN
+from bisheng.core.database.dialect_helpers import JsonType
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -91,5 +92,5 @@ class DashboardDataset(SQLModelSerializable, table=True):
     is_commercial_only: bool = Field(default=False, sa_column=Column(BOOLEAN, nullable=False),
                                      description='Is Commercial Only Dataset')
 
-    schema_config: Dict = Field(..., sa_column=Column(JSON, nullable=False),
+    schema_config: Dict = Field(..., sa_column=Column(JsonType, nullable=False),
                                 description='Schema Configuration in JSON format')

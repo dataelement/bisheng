@@ -272,7 +272,6 @@ docker/office/bisheng/*.gz
 
 bisheng-sync.sh
 /deploy.sh
-!src/backend/bisheng/telemetry_search/**/*.pyc
 .omx/
 
 # Local installers / stray root files (do not commit)

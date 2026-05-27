@@ -160,7 +160,7 @@ from bisheng.share_link.domain.models.share_link import (
 )
 from bisheng.share_link.domain.repositories.implementations.share_link_repository_impl import ShareLinkRepositoryImpl
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_uuid
+from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.worker.knowledge import file_worker
 
 if TYPE_CHECKING:
@@ -5644,6 +5644,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "space_type": getattr(space, "type", ""),
                         "applicant_user_id": self.login_user.user_id,
                     },
+                    ip_address=get_request_ip(self.request) if self.request else None,
                 )
             )
             if gate_result.decision == "pass":

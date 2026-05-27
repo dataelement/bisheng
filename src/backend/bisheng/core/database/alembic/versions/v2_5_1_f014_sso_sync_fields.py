@@ -50,6 +50,8 @@ def _seed_exists() -> bool:
     return result.scalar() > 0
 
 def upgrade() -> None:
+    conn = op.get_bind()
+
     # -- department.is_deleted --
     conn = op.get_bind()
     if not column_exists(conn, 'department', 'is_deleted'):
@@ -82,39 +84,34 @@ def upgrade() -> None:
         )
 
     # -- seed row for SSO realtime logs --
+    # Use SQLAlchemy expression language so identifiers/quoting and parameter
+    # binding behave consistently on MySQL and DM8.
     if not _seed_exists():
-        conn = op.get_bind()
+        org_sync_cfg = sa.Table('org_sync_config', sa.MetaData(), autoload_with=conn)
         conn.execute(
-            sa.text(
-                'INSERT INTO org_sync_config '
-                '(id, tenant_id, provider, config_name, auth_type, auth_config, '
-                ' sync_scope, schedule_type, sync_status, status, '
-                ' create_time, update_time) '
-                'VALUES '
-                '(:id, :tenant_id, :provider, :config_name, :auth_type, :auth_config, '
-                ' :sync_scope, :schedule_type, :sync_status, :status, '
-                ' CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)'
-            ),
-            {
-                'id': SSO_SEED_CONFIG_ID,
-                'tenant_id': SSO_SEED_TENANT_ID,
-                'provider': SSO_SEED_PROVIDER,
-                'config_name': SSO_SEED_CONFIG_NAME,
-                'auth_type': 'hmac',
-                'auth_config': '',
-                'sync_scope': None,
-                'schedule_type': 'manual',
-                'sync_status': 'disabled',
-                'status': 'active',
-            },
+            sa.insert(org_sync_cfg).values(
+                id=SSO_SEED_CONFIG_ID,
+                tenant_id=SSO_SEED_TENANT_ID,
+                provider=SSO_SEED_PROVIDER,
+                config_name=SSO_SEED_CONFIG_NAME,
+                auth_type='hmac',
+                auth_config='',
+                sync_scope=None,
+                schedule_type='manual',
+                sync_status='disabled',
+                status='active',
+                create_time=sa.func.current_timestamp(),
+                update_time=sa.func.current_timestamp(),
+            )
         )
 
 def downgrade() -> None:
+    conn = op.get_bind()
+
     if _seed_exists():
-        conn = op.get_bind()
+        org_sync_cfg = sa.Table('org_sync_config', sa.MetaData(), autoload_with=conn)
         conn.execute(
-            sa.text('DELETE FROM org_sync_config WHERE id = :id'),
-            {'id': SSO_SEED_CONFIG_ID},
+            sa.delete(org_sync_cfg).where(org_sync_cfg.c.id == SSO_SEED_CONFIG_ID)
         )
 
     if index_exists(conn, 'department', 'idx_department_last_sync_ts'):

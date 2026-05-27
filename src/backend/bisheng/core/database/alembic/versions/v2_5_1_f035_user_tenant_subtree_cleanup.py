@@ -45,61 +45,71 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def _select_residue_sql(dialect: str) -> str:
-    """Build the dialect-specific SELECT for residue ``user_tenant.id`` rows.
-
-    The path-prefix match needs string concat: MySQL uses ``CONCAT(...)``,
-    SQLite uses the ``||`` operator. Postgres also supports ``||`` so it
-    falls under the SQLite branch here; production is MySQL.
-    """
-    if dialect == 'mysql':
-        prefix_expr = "CONCAT(rd.path, '%')"
-    else:
-        prefix_expr = "rd.path || '%'"
-    return f"""
-        SELECT ut.id
-        FROM user_tenant ut
-        WHERE ut.is_active = 1
-          AND NOT EXISTS (
-            SELECT 1
-            FROM user_department ud
-            JOIN department d ON d.id = ud.department_id
-            JOIN tenant t ON t.id = ut.tenant_id
-            LEFT JOIN department rd ON rd.id = t.root_dept_id
-            WHERE ud.user_id = ut.user_id
-              AND ud.is_primary = 1
-              AND (
-                (rd.path IS NOT NULL AND d.path LIKE {prefix_expr})
-                OR (rd.id IS NULL AND d.tenant_id = ut.tenant_id)
-              )
-          )
-    """
-
-
 def upgrade() -> None:
+    """Flip residue ``user_tenant.is_active`` to NULL using SQLAlchemy expression.
+
+    Implemented in the expression language so the same code path runs on
+    MySQL and DM8 (and SQLite/Postgres in tests). String concatenation for
+    the path-prefix match uses ``sa.func.concat`` which compiles to the
+    native ``CONCAT(...)`` on MySQL/DM8 and to ``||`` elsewhere.
+    """
     bind = op.get_bind()
     dialect = bind.dialect.name
-    if dialect not in ('mysql', 'sqlite', 'postgresql'):
-        # Unknown backend — skip rather than risk a partial flip. Production
-        # is MySQL; sqlite branch covers test harnesses.
+    if dialect not in ('mysql', 'dm', 'sqlite', 'postgresql'):
+        # Unknown backend — skip rather than risk a partial flip.
         return
 
-    rows = bind.execute(sa.text(_select_residue_sql(dialect))).fetchall()
-    residue_ids = [row[0] for row in rows]
+    ut_tbl = sa.Table('user_tenant', sa.MetaData(), autoload_with=bind)
+    ud_tbl = sa.Table('user_department', sa.MetaData(), autoload_with=bind)
+    dept_tbl = sa.Table('department', sa.MetaData(), autoload_with=bind)
+    tenant_tbl = sa.Table('tenant', sa.MetaData(), autoload_with=bind)
+    rd_alias = sa.orm.aliased(dept_tbl, name='rd')
+
+    primary_path_match = sa.and_(
+        rd_alias.c.path.isnot(None),
+        dept_tbl.c.path.like(sa.func.concat(rd_alias.c.path, '%')),
+    )
+    legacy_flat_match = sa.and_(
+        rd_alias.c.id.is_(None),
+        dept_tbl.c.tenant_id == ut_tbl.c.tenant_id,
+    )
+
+    exists_primary = (
+        sa.select(sa.literal(1))
+        .select_from(
+            ud_tbl
+            .join(dept_tbl, dept_tbl.c.id == ud_tbl.c.department_id)
+            .join(tenant_tbl, tenant_tbl.c.id == ut_tbl.c.tenant_id)
+            .outerjoin(rd_alias, rd_alias.c.id == tenant_tbl.c.root_dept_id)
+        )
+        .where(
+            ud_tbl.c.user_id == ut_tbl.c.user_id,
+            ud_tbl.c.is_primary == 1,
+            sa.or_(primary_path_match, legacy_flat_match),
+        )
+        .exists()
+    )
+
+    residue_rows = bind.execute(
+        sa.select(ut_tbl.c.id)
+        .where(
+            ut_tbl.c.is_active == 1,
+            ~exists_primary,
+        )
+    ).fetchall()
+    residue_ids = [row[0] for row in residue_rows]
     if not residue_ids:
         return
 
-    # Chunk the IN-list to keep individual statements within MySQL's
-    # max_allowed_packet — 1000 ids per UPDATE is comfortably small.
+    # Chunk the IN-list — 1000 ids per UPDATE is comfortably small for
+    # MySQL's max_allowed_packet and DM8's parameter limits.
     chunk_size = 1000
     for i in range(0, len(residue_ids), chunk_size):
         chunk = residue_ids[i:i + chunk_size]
         bind.execute(
-            sa.text(
-                'UPDATE user_tenant SET is_active = NULL '
-                'WHERE id IN :ids'
-            ).bindparams(sa.bindparam('ids', expanding=True)),
-            {'ids': chunk},
+            sa.update(ut_tbl)
+            .where(ut_tbl.c.id.in_(chunk))
+            .values(is_active=None)
         )
 
 

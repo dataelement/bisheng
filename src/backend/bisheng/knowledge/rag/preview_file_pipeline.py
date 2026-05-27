@@ -1,6 +1,5 @@
 import time
 from functools import cached_property
-from typing import List, Dict, Optional
 
 from langchain_core.documents import BaseDocumentTransformer
 
@@ -12,6 +11,7 @@ from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransfor
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
+from bisheng.knowledge.rag.pipeline.transformer.image_upload import ImageUploadTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
@@ -40,7 +40,7 @@ class PreviewFilePipeline(BaseFilePipeline):
             file_rule: FileProcessBase = None,
             **kwargs,
     ):
-        super(PreviewFilePipeline, self).__init__(
+        super().__init__(
             invoke_user_id,
             file_name,
             file_rule or FileProcessBase(knowledge_id=0),
@@ -56,13 +56,13 @@ class PreviewFilePipeline(BaseFilePipeline):
         # pipeline run.
         return generate_uuid()
 
-    def _get_image_object_dir(self) -> Optional[str]:
+    def _get_image_object_dir(self) -> str | None:
         return KnowledgeUtils.get_knowledge_file_image_dir(
             self._preview_doc_id, self.knowledge_id
         )
 
     @cached_property
-    def file_metadata(self) -> Dict:
+    def file_metadata(self) -> dict:
         uploader = UserDao.get_user(self.invoke_user_id)
         uploader_name = uploader.user_name if uploader else None
 
@@ -78,18 +78,24 @@ class PreviewFilePipeline(BaseFilePipeline):
             user_metadata={},
         ).model_dump(exclude_none=True)
 
-    def _init_abstract_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_abstract_transformers(self) -> list[BaseDocumentTransformer]:
         return [AbstractTransformer(self.invoke_user_id, file_metadata=self.file_metadata)]
 
-    def _init_common_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_common_transformers(self) -> list[BaseDocumentTransformer]:
         transformers = self._init_abstract_transformers()
+        preview_doc_id = generate_uuid()
         transformers.append(ExtraFileTransformer(
             loader=self.loader,
-            document_id=generate_uuid(),
+            document_id=preview_doc_id,
             knowledge_id=self.knowledge_id,
             knowledge_file=None,
-            retain_images=self.file_split_rule.retain_images == 1,
             source_file_path=self.local_file_path,
+        ))
+        transformers.append(ImageUploadTransformer(
+            loader=self.loader,
+            document_id=preview_doc_id,
+            knowledge_id=self.knowledge_id,
+            retain_images=self.file_split_rule.retain_images == 1,
         ))
         if self.should_use_ppt_page_split():
             transformers.append(DirectChunkTransformer())
@@ -107,14 +113,20 @@ class PreviewFilePipeline(BaseFilePipeline):
             transformers.append(SplitterTransformer(**self.get_splitter_kwargs()))
         return transformers
 
-    def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_excel_transformers(self) -> list[BaseDocumentTransformer]:
         transformers = self._init_abstract_transformers()
+        preview_doc_id = generate_uuid()
         transformers.append(ExtraFileTransformer(
             loader=self.loader,
-            document_id=generate_uuid(),
+            document_id=preview_doc_id,
             knowledge_id=self.knowledge_id,
             knowledge_file=None,
-            retain_images=self.file_split_rule.retain_images == 1,
             source_file_path=self.local_file_path,
+        ))
+        transformers.append(ImageUploadTransformer(
+            loader=self.loader,
+            document_id=preview_doc_id,
+            knowledge_id=self.knowledge_id,
+            retain_images=self.file_split_rule.retain_images == 1,
         ))
         return transformers

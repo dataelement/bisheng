@@ -1,6 +1,6 @@
 import base64
 import os
-from typing import List, Dict, Optional, Tuple
+import re
 
 import httpx
 import requests
@@ -8,39 +8,57 @@ from langchain_core.documents import Document
 from loguru import logger
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
-from bisheng.knowledge.rag.pipeline.loader.utils.pdf_header_footer import filter_repeated_header_footer_blocks
+from bisheng.knowledge.rag.pipeline.loader.mineru import html_table_to_md
 from bisheng.knowledge.rag.pipeline.types import TextBbox
 from bisheng.utils.exceptions import EtlException
+
+# Matches the inline HTML <table>...</table> blocks PaddleOCR emits in markdown.text.
+# DOTALL because tables may wrap across rendered "lines" (though usually single-line).
+_TABLE_HTML_RE = re.compile(r"<table[^>]*>.*?</table>", re.DOTALL | re.IGNORECASE)
 
 
 class PaddleOcrLoader(BaseBishengLoader):
     """PaddleOCR document loader for parsing documents using PaddleOCR API."""
 
-    # Mapping from PaddleOCR block labels to standard types
+    # Mapping from PaddleOCR block labels to standard types.
+    # Observed labels in production: paragraph_title, doc_title, figure_title,
+    # text, aside_text, number, table, formula, list, header, footer,
+    # image, header_image, chart, vision_footnote.
     LABEL_TYPE_MAP = {
         "paragraph_title": "Title",
+        "doc_title": "Title",
+        "figure_title": "Caption",
         "text": "text",
+        "aside_text": "text",
+        "number": "text",
         "image": "Image",
+        "header_image": "Image",
+        "chart": "Image",
         "table": "Table",
         "formula": "Formula",
         "list": "List",
         "header": "Header",
         "footer": "Footer",
+        "vision_footnote": "Footnote",
     }
 
+    # Image-class labels: when block_content is empty, the block is just a
+    # cropped figure with no extracted text — skip it from text indexing.
+    _IMAGE_LABELS = {"image", "header_image", "chart"}
+
     def __init__(
-            self,
-            url: str,
-            auth_token: Optional[str] = None,
-            headers: Optional[Dict] = None,
-            timeout: int = 120,
-            retain_images: bool = True,
-            filter_page_header_footer: bool = False,
-            request_kwargs: Optional[Dict] = None,
-            *args,
-            **kwargs,
+        self,
+        url: str,
+        auth_token: str | None = None,
+        headers: dict | None = None,
+        timeout: int = 120,
+        retain_images: bool = True,
+        filter_page_header_footer: bool = False,
+        request_kwargs: dict | None = None,
+        *args,
+        **kwargs,
     ):
-        super(PaddleOcrLoader, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.url = url.rstrip("/")
         self.auth_token = auth_token
 
@@ -65,7 +83,7 @@ class PaddleOcrLoader(BaseBishengLoader):
             return 0
         return 1
 
-    def _build_payload(self, b64_data: str) -> Dict:
+    def _build_payload(self, b64_data: str) -> dict:
         """Build API request payload."""
         return {
             "file": b64_data,
@@ -73,19 +91,17 @@ class PaddleOcrLoader(BaseBishengLoader):
             "useDocOrientationClassify": False,
             "useDocUnwarping": False,
             "useChartRecognition": False,
-            **self.request_kwargs
+            **self.request_kwargs,
         }
 
-    def _validate_response(self, result: Dict) -> Dict:
+    def _validate_response(self, result: dict) -> dict:
         """Validate API response and return result dict."""
         if result.get("errorCode", 0) != 0:
             logger.error(f"PaddleOCR API error: {result}")
-            raise EtlException(
-                f"PaddleOCR API error: {result.get('errorMsg', 'Unknown error')}"
-            )
+            raise EtlException(f"PaddleOCR API error: {result.get('errorMsg', 'Unknown error')}")
         return result.get("result", {})
 
-    def _call_api_sync(self, b64_data: str) -> Dict:
+    def _call_api_sync(self, b64_data: str) -> dict:
         """Call PaddleOCR API synchronously."""
         payload = self._build_payload(b64_data)
         try:
@@ -105,17 +121,15 @@ class PaddleOcrLoader(BaseBishengLoader):
             raise e
 
         if resp.status_code != 200:
-            raise EtlException(
-                f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}"
-            )
+            raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}")
         try:
             resp_json = resp.json()
         except (ValueError, requests.exceptions.JSONDecodeError) as e:
             logger.error(f"PaddleOCR API returned invalid JSON: {e}")
-            raise EtlException(f"PaddleOCR API returned invalid JSON response")
+            raise EtlException("PaddleOCR API returned invalid JSON response")
         return self._validate_response(resp_json)
 
-    async def _call_api_async(self, b64_data: str) -> Dict:
+    async def _call_api_async(self, b64_data: str) -> dict:
         """Call PaddleOCR API asynchronously."""
         payload = self._build_payload(b64_data)
         try:
@@ -135,35 +149,31 @@ class PaddleOcrLoader(BaseBishengLoader):
             raise e
 
         if resp.status_code != 200:
-            raise EtlException(
-                f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}"
-            )
+            raise EtlException(f"PaddleOCR API error: status={resp.status_code}, resp={resp.text}")
         try:
             resp_json = resp.json()
         except (ValueError, Exception) as e:
             logger.error(f"PaddleOCR API returned invalid JSON: {e}")
-            raise EtlException(f"PaddleOCR API returned invalid JSON response")
+            raise EtlException("PaddleOCR API returned invalid JSON response")
         return self._validate_response(resp_json)
 
     def _map_block_type(self, block_label: str) -> str:
         """Map PaddleOCR block label to standard type."""
         return self.LABEL_TYPE_MAP.get(block_label, block_label)
 
-    def _is_skip_block(self, item: Dict) -> bool:
+    def _is_skip_block(self, item: dict) -> bool:
         """Check if a block should be skipped (decorative images, empty content)."""
         block_label = item.get("block_label", "text")
-        block_order = item.get("block_order")
         if self.filter_page_header_footer and block_label in {"header", "footer"}:
             return True
-        if block_label == "image" and not item.get("block_content"):
-            return True
-        if block_order is None and block_label == "image":
+        # Image-class blocks (image / chart / header_image) with no extracted
+        # content are purely decorative crops — they contribute no text and
+        # would otherwise pollute parsing items with empty entries.
+        if block_label in self._IMAGE_LABELS and not item.get("block_content"):
             return True
         return False
 
-    def _extract_parsing_items(
-            self, layout_results: List[Dict]
-    ) -> List[Dict]:
+    def _extract_parsing_items(self, layout_results: list[dict]) -> list[dict]:
         """Extract ordered parsing items from all pages."""
         items = []
         for page_idx, page_result in enumerate(layout_results):
@@ -171,17 +181,19 @@ class PaddleOcrLoader(BaseBishengLoader):
             for item in parsing_list:
                 if self._is_skip_block(item):
                     continue
-                items.append({
-                    "text": item.get("block_content", ""),
-                    "type": self._map_block_type(item.get("block_label", "text")),
-                    "bbox": item.get("block_bbox", []),
-                    "page": page_idx,
-                    "order": item.get("block_order") or 0,
-                })
+                items.append(
+                    {
+                        "text": item.get("block_content", ""),
+                        "type": self._map_block_type(item.get("block_label", "text")),
+                        "bbox": item.get("block_bbox", []),
+                        "page": page_idx,
+                        "order": item.get("block_order") or 0,
+                    }
+                )
         return items
 
     @staticmethod
-    def _substitute_image_urls(md_text: str, image_url_mapping: Optional[Dict[str, str]]) -> str:
+    def _substitute_image_urls(md_text: str, image_url_mapping: dict[str, str] | None) -> str:
         """Replace API-returned image paths with final (MinIO) URLs.
 
         Must be applied symmetrically to both the merged text and the per-page text
@@ -193,21 +205,38 @@ class PaddleOcrLoader(BaseBishengLoader):
             md_text = md_text.replace(img_path, final_url)
         return md_text
 
+    @staticmethod
+    def _convert_tables_to_md(md_text: str) -> str:
+        """Convert PaddleOCR's inline styled HTML tables to markdown tables.
+
+        PaddleOCR's markdown.text renders tables as single-line
+        ``<table border=1 style='...'><tr><td style='...'>...</td>...</table>``
+        blobs. These contain none of the default splitter separators
+        (``\\n\\n / \\n / 。 / .``), so any table > chunk_size becomes an
+        un-splittable chunk and trips KnowledgeFileChunkMaxError. Converting
+        them to markdown table form puts ``\\n`` between rows and shrinks
+        their byte size 3-4x, letting the splitter break at row boundaries.
+        """
+        if not md_text or "<table" not in md_text.lower():
+            return md_text
+        return _TABLE_HTML_RE.sub(lambda m: html_table_to_md(m.group(0)), md_text)
+
     def _merge_parsing_results(
-            self, layout_results: List[Dict], image_url_mapping: Optional[Dict[str, str]] = None
-    ) -> Tuple[str, Dict, List[Dict]]:
+        self, layout_results: list[dict], image_url_mapping: dict[str, str] | None = None
+    ) -> tuple[str, dict, list[dict]]:
         """
         Merge parsing results from all pages.
 
         Returns:
             Tuple of (merged_text, metadata, parsing_items)
         """
-        # Collect markdown text from each page
+        # Collect markdown text from each page. Tables are converted from styled
+        # inline HTML to markdown form here (BEFORE metadata.indexes are computed)
+        # so downstream chunk_bbox alignment uses the same text the splitter sees.
         markdown_texts = []
         for page_result in layout_results:
-            md_text = self._substitute_image_urls(
-                page_result.get("markdown", {}).get("text", ""), image_url_mapping
-            )
+            md_text = self._substitute_image_urls(page_result.get("markdown", {}).get("text", ""), image_url_mapping)
+            md_text = self._convert_tables_to_md(md_text)
             if self.filter_page_header_footer and md_text:
                 parsing_list = page_result.get("prunedResult", {}).get("parsing_res_list", [])
                 for item in parsing_list:
@@ -219,37 +248,94 @@ class PaddleOcrLoader(BaseBishengLoader):
                 markdown_texts.append(md_text)
         merged_text = "\n\n".join(markdown_texts)
 
-        # Build metadata: bboxes, pages, indexes, types
+        # Build metadata: bboxes, pages, indexes, types.
+        #
+        # PaddleOCR's parsing_list order does NOT match reading order in md_text:
+        # `aside_text` / `header` / `footer` blocks are emitted first, while the
+        # main `text` blocks they spatially precede in md_text come later. A naive
+        # forward `search_pos`-monotonic find therefore produces non-monotonic
+        # global indexes, breaking IntervalSearch (it uses bisect on a flattened
+        # arr that assumes sort order). Resulting chunk_bbox attribution is wrong.
+        #
+        # Fix: per page, find each block's md_text position with an
+        # occupancy-aware search (no false-positive collisions when the same
+        # token appears twice), then SORT the page's entries by start before
+        # appending to metadata. Across pages, ordering is naturally monotonic
+        # because text_offset advances.
         metadata = dict(bboxes=[], pages=[], indexes=[], types=[])
         text_offset = 0
 
         for page_idx, page_result in enumerate(layout_results):
-            md_text = self._substitute_image_urls(
-                page_result.get("markdown", {}).get("text", ""), image_url_mapping
-            )
+            md_text = self._substitute_image_urls(page_result.get("markdown", {}).get("text", ""), image_url_mapping)
+            md_text = self._convert_tables_to_md(md_text)
             parsing_list = page_result.get("prunedResult", {}).get("parsing_res_list", [])
-            search_pos = 0
+
+            page_entries = []
+            used_ranges: list[tuple[int, int]] = []
 
             for item in parsing_list:
                 if self._is_skip_block(item):
                     continue
 
                 block_content = item.get("block_content", "")
+                block_label = item.get("block_label", "text")
                 block_bbox = item.get("block_bbox", [])
 
-                # Find the position of block_content in this page's markdown
-                if block_content and block_content in md_text:
-                    local_start = md_text.find(block_content, search_pos)
-                    if local_start == -1:
-                        local_start = md_text.find(block_content)
-                    global_start = text_offset + local_start
-                    global_end = global_start + len(block_content)
-                    search_pos = local_start + len(block_content)
+                # For table blocks, search using the converted markdown form so the
+                # offset lines up with what md_text actually contains after conversion.
+                search_token = (
+                    html_table_to_md(block_content) if block_label == "table" and block_content else block_content
+                )
+                if not search_token:
+                    continue
 
-                    metadata["bboxes"].append(block_bbox)
-                    metadata["pages"].append(page_idx)
-                    metadata["indexes"].append([global_start, global_end])
-                    metadata["types"].append(self._map_block_type(item.get("block_label", "text")))
+                # Drift guard: short margin labels (`aside_text "汽车"`), page
+                # numbers (`number "2/4"`), and similar decoration blocks have
+                # block_order=None AND tokens that frequently alias substrings of
+                # body text (e.g. "汽车" appears 17× on the cover page). Without
+                # a reading-order hint we cannot disambiguate which occurrence
+                # belongs to this bbox, and naively picking the leftmost binds
+                # the decoration's bbox to an unrelated body-text position.
+                # Skip these to keep chunk_bbox attribution honest.
+                if item.get("block_order") is None and md_text.count(search_token) > 1:
+                    continue
+
+                # Pick the leftmost occurrence that doesn't overlap a position
+                # already claimed by an earlier block on this page. Without this
+                # check, repeated content (e.g. headings reused later in the
+                # document) would collide.
+                local_start = -1
+                start = 0
+                while True:
+                    p = md_text.find(search_token, start)
+                    if p == -1:
+                        break
+                    end = p + len(search_token)
+                    if not any(p < ue and end > us for us, ue in used_ranges):
+                        local_start = p
+                        break
+                    start = p + 1
+                if local_start == -1:
+                    continue
+
+                local_end = local_start + len(search_token)
+                used_ranges.append((local_start, local_end))
+                page_entries.append(
+                    (
+                        local_start,
+                        local_end,
+                        block_bbox,
+                        self._map_block_type(block_label),
+                    )
+                )
+
+            # Sort by spatial position in md_text so indexes are monotonic.
+            page_entries.sort(key=lambda e: (e[0], e[1]))
+            for local_start, local_end, block_bbox, type_ in page_entries:
+                metadata["bboxes"].append(block_bbox)
+                metadata["pages"].append(page_idx)
+                metadata["indexes"].append([text_offset + local_start, text_offset + local_end])
+                metadata["types"].append(type_)
 
             # Update offset for next page (+2 for "\n\n" separator)
             text_offset += len(md_text) + (2 if page_idx < len(layout_results) - 1 else 0)
@@ -257,7 +343,7 @@ class PaddleOcrLoader(BaseBishengLoader):
         parsing_items = self._extract_parsing_items(layout_results)
         return merged_text, metadata, parsing_items
 
-    def parse_bbox_list(self, parsing_items: List[Dict]):
+    def parse_bbox_list(self, parsing_items: list[dict]):
         """Build bbox_list from parsing items for TextBbox."""
         if not parsing_items:
             return
@@ -271,56 +357,128 @@ class PaddleOcrLoader(BaseBishengLoader):
             except (ValueError, TypeError):
                 logger.warning(f"Invalid bbox value, skipping: {bbox}")
                 continue
-            self.bbox_list.append(TextBbox(
-                text=item.get("text", ""),
-                type=item.get("type", "text"),
-                part_id=str(idx),
-                bbox=bbox_coords,
-                page=item.get("page", 0),
-            ))
+            self.bbox_list.append(
+                TextBbox(
+                    text=item.get("text", ""),
+                    type=item.get("type", "text"),
+                    part_id=str(idx),
+                    bbox=bbox_coords,
+                    page=item.get("page", 0),
+                )
+            )
 
-    def _process_images(self, layout_results: List[Dict]) -> Dict[str, str]:
-        """Download API images, persist to MinIO when configured, return path -> final URL.
+    def _process_images(self, layout_results: list[dict]) -> dict[str, str]:
+        """Stage API-returned images under local_image_dir; bytes get uploaded
+        later by ImageUploadTransformer.
 
-        The mapping is used to substitute image references in markdown text BEFORE
-        metadata.indexes are computed, keeping chunk_bbox alignment stable through
-        the splitter.
+        Returns ``{api_image_path: final_url}`` so ``_substitute_image_urls`` can
+        rewrite the markdown text BEFORE metadata.indexes are computed.
         """
         if not self.retain_images:
             return {}
 
-        image_url_mapping = {}
-        self.local_image_dir = os.path.join(self.tmp_dir, "images")
-        os.makedirs(self.local_image_dir, exist_ok=True)
+        image_url_mapping: dict[str, str] = {}
+        self.ensure_local_image_dir()
 
         for page_result in layout_results:
-            images = page_result.get("markdown", {}).get("images", {})
-            for img_path, img_url in images.items():
+            images = page_result.get("markdown", {}).get("images", {}) or {}
+            for img_path, payload in images.items():
                 try:
-                    resp = requests.get(img_url, timeout=self.timeout)
-                    if resp.status_code == 200:
-                        safe_name = img_path.replace("/", "_")
-                        local_path = os.path.join(self.local_image_dir, safe_name)
-                        with open(local_path, "wb") as f:
-                            f.write(resp.content)
-                        image_url_mapping[img_path] = self.upload_image_to_minio(
-                            local_path, safe_name
-                        )
-                        logger.debug(f"Saved image: {local_path} -> {image_url_mapping[img_path]}")
-                except Exception as e:
-                    logger.warning(f"Failed to download image {img_path}: {e}")
+                    image_bytes = self._fetch_image_bytes(payload)
+                except Exception:
+                    logger.exception(f"paddle: failed to retrieve image {img_path}")
+                    continue
+                filename = img_path.replace("/", "_")
+                local_path = os.path.join(self.local_image_dir, filename)
+                with open(local_path, "wb") as f:
+                    f.write(image_bytes)
+                image_url_mapping[img_path] = self.build_image_url(filename)
 
         return image_url_mapping
 
-    def _build_documents(
-            self, layout_results: List[Dict]
-    ) -> List[Document]:
+    def _fetch_image_bytes(self, payload: str) -> bytes:
+        """Accept either an HTTP(S) URL or a base64 payload.
+
+        PaddleOCR PP-StructureV3 serving returns ``markdown.images`` values in
+        different shapes depending on deployment:
+          - AIStudio-hosted: presigned HTTPS URLs to BCE OSS objects;
+          - self-hosted official PaddleX serving: base64-encoded image bytes
+            (sometimes with the ``data:image/...;base64,`` prefix, sometimes raw).
+        """
+        if payload.startswith(("http://", "https://")):
+            resp = requests.get(payload, timeout=self.timeout)
+            resp.raise_for_status()
+            return resp.content
+        if payload.startswith("data:image/"):
+            _, b64 = payload.split(",", 1)
+            return base64.b64decode(b64)
+        return base64.b64decode(payload)
+
+    def _normalize_bboxes_to_pdf_points(self, layout_results: list[dict]) -> None:
+        """Convert per-page block_bbox from PaddleOCR's raster pixel space into
+        PDF point space, IN PLACE on `layout_results`.
+
+        Why: PaddleOCR rasterizes each PDF page (typically at 144 DPI, i.e. 2x
+        PDF point dimensions) and returns block_bbox in that pixel space, e.g.
+        an A4 page becomes ~1191×1684. The frontend renders bbox overlays via
+        pdf.js's `getViewport({scale: 1})` (PDF point space, ~595×842 for A4)
+        and uses `scaleState = canvas_css_width / viewport.width`. Feeding raw
+        pixel bbox there draws every box at roughly 2× the intended location,
+        visibly drifting to the lower-right of the actual text. Normalizing to
+        PDF points before persisting matches the convention etl4lm/mineru already
+        produce.
+
+        Non-PDF inputs (images) skip normalization: their bbox space IS the
+        image's pixel space, no conversion needed.
+        """
+        if self.file_extension != "pdf":
+            return
+        try:
+            import fitz  # PyMuPDF, already used by mineru loader
+        except ImportError:
+            logger.warning("PaddleOCR bbox normalization skipped: PyMuPDF (fitz) not available")
+            return
+        try:
+            pdf_doc = fitz.open(self.file_path)
+        except Exception as e:
+            logger.warning(f"PaddleOCR bbox normalization skipped: cannot open PDF {self.file_path}: {e}")
+            return
+        try:
+            for page_idx, page_result in enumerate(layout_results):
+                if page_idx >= len(pdf_doc):
+                    break
+                pruned = page_result.get("prunedResult") or {}
+                paddle_w = pruned.get("width") or 0
+                paddle_h = pruned.get("height") or 0
+                if not paddle_w or not paddle_h:
+                    continue
+                pdf_rect = pdf_doc[page_idx].rect
+                sx = pdf_rect.width / paddle_w
+                sy = pdf_rect.height / paddle_h
+                for item in pruned.get("parsing_res_list", []) or []:
+                    bbox = item.get("block_bbox")
+                    if bbox and len(bbox) >= 4:
+                        item["block_bbox"] = [
+                            bbox[0] * sx,
+                            bbox[1] * sy,
+                            bbox[2] * sx,
+                            bbox[3] * sy,
+                        ]
+        finally:
+            pdf_doc.close()
+
+    def _build_documents(self, layout_results: list[dict]) -> list[Document]:
         """Build Document list from layout results."""
         if not layout_results:
             logger.warning(f"PaddleOCR returned empty results for {self.file_name}")
             return [Document(page_content="", metadata=self.file_metadata)]
 
-        image_url_mapping: Dict[str, str] = {}
+        # Normalize bbox coords BEFORE any downstream consumer reads them.
+        # Both _merge_parsing_results (for metadata.bboxes) and _extract_parsing_items
+        # (for self.bbox_list via parse_bbox_list) pull from layout_results[*].prunedResult.
+        self._normalize_bboxes_to_pdf_points(layout_results)
+
+        image_url_mapping: dict[str, str] = {}
         if self.retain_images:
             image_url_mapping = self._process_images(layout_results)
 
@@ -328,18 +486,15 @@ class PaddleOcrLoader(BaseBishengLoader):
         self.parse_bbox_list(parsing_items)
         metadata.update(self.file_metadata)
 
-        logger.info(
-            f"PaddleOCR parsed {self.file_name}: "
-            f"{len(content)} chars, {len(self.bbox_list)} bboxes"
-        )
+        logger.info(f"PaddleOCR parsed {self.file_name}: {len(content)} chars, {len(self.bbox_list)} bboxes")
         return [Document(page_content=content, metadata=metadata)]
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         """Synchronously load and parse document using PaddleOCR API."""
         try:
             with open(self.file_path, "rb") as f:
                 b64_data = base64.b64encode(f.read()).decode("ascii")
-        except (FileNotFoundError, PermissionError, IOError) as e:
+        except (OSError, FileNotFoundError, PermissionError) as e:
             logger.error(f"Failed to read file {self.file_path}: {e}")
             raise EtlException(f"Cannot read file: {e}")
 
@@ -347,12 +502,12 @@ class PaddleOcrLoader(BaseBishengLoader):
         layout_results = api_result.get("layoutParsingResults", [])
         return self._build_documents(layout_results)
 
-    async def aload(self) -> List[Document]:
+    async def aload(self) -> list[Document]:
         """Asynchronously load and parse document using PaddleOCR API."""
         try:
             with open(self.file_path, "rb") as f:
                 b64_data = base64.b64encode(f.read()).decode("ascii")
-        except (FileNotFoundError, PermissionError, IOError) as e:
+        except (OSError, FileNotFoundError, PermissionError) as e:
             logger.error(f"Failed to read file {self.file_path}: {e}")
             raise EtlException(f"Cannot read file: {e}")
 

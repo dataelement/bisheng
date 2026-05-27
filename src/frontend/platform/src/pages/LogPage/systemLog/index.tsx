@@ -34,12 +34,14 @@ const useModules = () => {
 // already restricts which v2 rows reach the list — these helpers only need to
 // handle that whitelist plus a defensive fallback for unexpected rows.
 
-// Dotted action (`tenant.mount`, `llm.server.create`) → camelCase i18n leaf
-// key (`tenantMount`, `llmServerCreate`). i18next treats `.` as a nesting
-// separator, so the dotted form would resolve to a nested path that does
-// not exist in the locale files.
-const actionToI18nKey = (action: string): string => {
-    const [head, ...rest] = action.split('.')
+// Structured action (`tenant.mount`, `approval.exception.assign_approver`) →
+// camelCase i18n leaf key (`tenantMount`, `approvalExceptionAssignApprover`).
+// Both `.` and `_` act as word separators: i18next treats `.` as a nesting
+// separator and locale keys use camelCase throughout, so snake_case segments
+// must also be folded into the camelCase form to resolve.
+export const actionToI18nKey = (action: string): string => {
+    const [head, ...rest] = action.split(/[._]/).filter(Boolean)
+    if (!head) return action
     return head + rest.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')
 }
 

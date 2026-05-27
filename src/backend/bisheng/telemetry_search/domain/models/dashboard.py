@@ -2,10 +2,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, Dict
 
-from sqlalchemy import Column, DateTime, text, JSON
+from sqlalchemy import Column, DateTime, text
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.utils import generate_uuid
 
 
@@ -30,16 +31,16 @@ class DashboardBase(SQLModelSerializable):
     description: str = Field(default='', max_length=500, nullable=False)
     status: str = Field(default=DashboardStatus.DRAFT.value, max_length=20, nullable=False)
     dashboard_type: str = Field(default=DashboardType.CUSTOM.value, max_length=20, nullable=False)
-    layout_config: Dict = Field(default_factory=dict, sa_column=Column(JSON),
+    layout_config: Dict = Field(default_factory=dict, sa_column=Column(JsonType),
                                 description="Front-end drag-and-drop layout configuration, such as position coordinates, size")
-    style_config: Dict = Field(default_factory=dict, sa_column=Column(JSON),
+    style_config: Dict = Field(default_factory=dict, sa_column=Column(JsonType),
                                description="Front-end style configurations such as themes, colors, etc.")
 
     user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class DashboardDefault(SQLModelSerializable, table=True):
@@ -49,7 +50,7 @@ class DashboardDefault(SQLModelSerializable, table=True):
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class DashboardComponentBase(SQLModelSerializable):
@@ -57,13 +58,13 @@ class DashboardComponentBase(SQLModelSerializable):
     title: str = Field(default='', max_length=200, nullable=False)
     type: str = Field(default=DashboardType.CUSTOM.value, max_length=100, nullable=False)
     dataset_code: str = Field(default='', nullable=False, description="Dataset encoding of component association")
-    data_config: Dict = Field(default_factory=dict, sa_column=Column(JSON), description="Component data configuration, such as query conditions, etc.")
-    style_config: Dict = Field(default_factory=dict, sa_column=Column(JSON), description="Component style configuration, such as colors, fonts, etc.")
+    data_config: Dict = Field(default_factory=dict, sa_column=Column(JsonType), description="Component data configuration, such as query conditions, etc.")
+    style_config: Dict = Field(default_factory=dict, sa_column=Column(JsonType), description="Component style configuration, such as colors, fonts, etc.")
 
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')))
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 
 
 class Dashboard(DashboardBase, table=True):
