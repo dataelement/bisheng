@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 from langchain_core.documents import Document
 
@@ -12,8 +11,8 @@ from bisheng.knowledge.rag.pipeline.loader.utils.md_post_processing import post_
 
 class HierarchicalMarkdownLoader(BaseBishengLoader):
 
-    def load(self) -> List[Document]:
-        with open(self.file_path, "r", encoding="utf-8") as f:
+    def load(self) -> list[Document]:
+        with open(self.file_path, encoding="utf-8") as f:
             content = f.read()
         return list(
             parse_markdown_to_hierarchical_documents(
@@ -29,7 +28,7 @@ class HierarchicalWordLoader(BaseBishengLoader):
         super().__init__(*args, **kwargs)
         self.retain_images = retain_images
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         input_file = self.file_path
         file_name = os.path.basename(self.file_path)
 
@@ -59,8 +58,9 @@ class HierarchicalWordLoader(BaseBishengLoader):
             retain_images=self.retain_images,
         )
 
-        with open(md_file_name, "r", encoding="utf-8") as f:
+        with open(md_file_name, encoding="utf-8") as f:
             content = f.read()
+        content = self.rewrite_local_image_refs(content)
 
         return list(
             parse_markdown_to_hierarchical_documents(

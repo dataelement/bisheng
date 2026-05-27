@@ -10,7 +10,6 @@ from loguru import logger
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import html_table_to_md
-from bisheng.knowledge.rag.pipeline.loader.utils.pdf_header_footer import filter_repeated_header_footer_blocks
 from bisheng.knowledge.rag.pipeline.types import TextBbox
 from bisheng.utils.exceptions import EtlException
 
@@ -52,16 +51,16 @@ class PaddleOcrLoader(BaseBishengLoader):
     def __init__(
         self,
         url: str,
-        auth_token: Optional[str] = None,
-        headers: Optional[Dict] = None,
+        auth_token: str | None = None,
+        headers: dict | None = None,
         timeout: int = 120,
         retain_images: bool = True,
         filter_page_header_footer: bool = False,
-        request_kwargs: Optional[Dict] = None,
+        request_kwargs: dict | None = None,
         *args,
         **kwargs,
     ):
-        super(PaddleOcrLoader, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.url = url.rstrip("/")
         self.auth_token = auth_token
 
@@ -86,7 +85,7 @@ class PaddleOcrLoader(BaseBishengLoader):
             return 0
         return 1
 
-    def _build_payload(self, b64_data: str) -> Dict:
+    def _build_payload(self, b64_data: str) -> dict:
         """Build API request payload."""
         return {
             "file": b64_data,
@@ -97,14 +96,14 @@ class PaddleOcrLoader(BaseBishengLoader):
             **self.request_kwargs,
         }
 
-    def _validate_response(self, result: Dict) -> Dict:
+    def _validate_response(self, result: dict) -> dict:
         """Validate API response and return result dict."""
         if result.get("errorCode", 0) != 0:
             logger.error(f"PaddleOCR API error: {result}")
             raise EtlException(f"PaddleOCR API error: {result.get('errorMsg', 'Unknown error')}")
         return result.get("result", {})
 
-    def _call_api_sync(self, b64_data: str) -> Dict:
+    def _call_api_sync(self, b64_data: str) -> dict:
         """Call PaddleOCR API synchronously."""
         payload = self._build_payload(b64_data)
         try:
@@ -129,10 +128,10 @@ class PaddleOcrLoader(BaseBishengLoader):
             resp_json = resp.json()
         except (ValueError, requests.exceptions.JSONDecodeError) as e:
             logger.error(f"PaddleOCR API returned invalid JSON: {e}")
-            raise EtlException(f"PaddleOCR API returned invalid JSON response")
+            raise EtlException("PaddleOCR API returned invalid JSON response")
         return self._validate_response(resp_json)
 
-    async def _call_api_async(self, b64_data: str) -> Dict:
+    async def _call_api_async(self, b64_data: str) -> dict:
         """Call PaddleOCR API asynchronously."""
         payload = self._build_payload(b64_data)
         try:
@@ -157,14 +156,14 @@ class PaddleOcrLoader(BaseBishengLoader):
             resp_json = resp.json()
         except (ValueError, Exception) as e:
             logger.error(f"PaddleOCR API returned invalid JSON: {e}")
-            raise EtlException(f"PaddleOCR API returned invalid JSON response")
+            raise EtlException("PaddleOCR API returned invalid JSON response")
         return self._validate_response(resp_json)
 
     def _map_block_type(self, block_label: str) -> str:
         """Map PaddleOCR block label to standard type."""
         return self.LABEL_TYPE_MAP.get(block_label, block_label)
 
-    def _is_skip_block(self, item: Dict) -> bool:
+    def _is_skip_block(self, item: dict) -> bool:
         """Check if a block should be skipped (decorative images, empty content)."""
         block_label = item.get("block_label", "text")
         if self.filter_page_header_footer and block_label in {"header", "footer"}:
@@ -176,7 +175,7 @@ class PaddleOcrLoader(BaseBishengLoader):
             return True
         return False
 
-    def _extract_parsing_items(self, layout_results: List[Dict]) -> List[Dict]:
+    def _extract_parsing_items(self, layout_results: list[dict]) -> list[dict]:
         """Extract ordered parsing items from all pages."""
         items = []
         for page_idx, page_result in enumerate(layout_results):
@@ -196,7 +195,7 @@ class PaddleOcrLoader(BaseBishengLoader):
         return items
 
     @staticmethod
-    def _substitute_image_urls(md_text: str, image_url_mapping: Optional[Dict[str, str]]) -> str:
+    def _substitute_image_urls(md_text: str, image_url_mapping: dict[str, str] | None) -> str:
         """Replace API-returned image paths with final (MinIO) URLs.
 
         Must be applied symmetrically to both the merged text and the per-page text
@@ -225,8 +224,8 @@ class PaddleOcrLoader(BaseBishengLoader):
         return _TABLE_HTML_RE.sub(lambda m: html_table_to_md(m.group(0)), md_text)
 
     def _merge_parsing_results(
-        self, layout_results: List[Dict], image_url_mapping: Optional[Dict[str, str]] = None
-    ) -> Tuple[str, Dict, List[Dict]]:
+        self, layout_results: list[dict], image_url_mapping: dict[str, str] | None = None
+    ) -> tuple[str, dict, list[dict]]:
         """
         Merge parsing results from all pages.
 
@@ -295,7 +294,7 @@ class PaddleOcrLoader(BaseBishengLoader):
         parsing_items = self._extract_parsing_items(layout_results)
         return merged_text, metadata, parsing_items
 
-    def parse_bbox_list(self, parsing_items: List[Dict]):
+    def parse_bbox_list(self, parsing_items: list[dict]):
         """Build bbox_list from parsing items for TextBbox."""
         if not parsing_items:
             return
@@ -319,36 +318,52 @@ class PaddleOcrLoader(BaseBishengLoader):
                 )
             )
 
-    def _process_images(self, layout_results: List[Dict]) -> Dict[str, str]:
-        """Download API images, persist to MinIO when configured, return path -> final URL.
+    def _process_images(self, layout_results: list[dict]) -> dict[str, str]:
+        """Stage API-returned images under local_image_dir; bytes get uploaded
+        later by ImageUploadTransformer.
 
-        The mapping is used to substitute image references in markdown text BEFORE
-        metadata.indexes are computed, keeping chunk_bbox alignment stable through
-        the splitter.
+        Returns ``{api_image_path: final_url}`` so ``_substitute_image_urls`` can
+        rewrite the markdown text BEFORE metadata.indexes are computed.
         """
         if not self.retain_images:
             return {}
 
-        image_url_mapping = {}
-        self.local_image_dir = os.path.join(self.tmp_dir, "images")
-        os.makedirs(self.local_image_dir, exist_ok=True)
+        image_url_mapping: dict[str, str] = {}
+        self.ensure_local_image_dir()
 
         for page_result in layout_results:
-            images = page_result.get("markdown", {}).get("images", {})
-            for img_path, img_url in images.items():
+            images = page_result.get("markdown", {}).get("images", {}) or {}
+            for img_path, payload in images.items():
                 try:
-                    resp = requests.get(img_url, timeout=self.timeout)
-                    if resp.status_code == 200:
-                        safe_name = img_path.replace("/", "_")
-                        local_path = os.path.join(self.local_image_dir, safe_name)
-                        with open(local_path, "wb") as f:
-                            f.write(resp.content)
-                        image_url_mapping[img_path] = self.upload_image_to_minio(local_path, safe_name)
-                        logger.debug(f"Saved image: {local_path} -> {image_url_mapping[img_path]}")
-                except Exception as e:
-                    logger.warning(f"Failed to download image {img_path}: {e}")
+                    image_bytes = self._fetch_image_bytes(payload)
+                except Exception:
+                    logger.exception(f"paddle: failed to retrieve image {img_path}")
+                    continue
+                filename = img_path.replace("/", "_")
+                local_path = os.path.join(self.local_image_dir, filename)
+                with open(local_path, "wb") as f:
+                    f.write(image_bytes)
+                image_url_mapping[img_path] = self.build_image_url(filename)
 
         return image_url_mapping
+
+    def _fetch_image_bytes(self, payload: str) -> bytes:
+        """Accept either an HTTP(S) URL or a base64 payload.
+
+        PaddleOCR PP-StructureV3 serving returns ``markdown.images`` values in
+        different shapes depending on deployment:
+          - AIStudio-hosted: presigned HTTPS URLs to BCE OSS objects;
+          - self-hosted official PaddleX serving: base64-encoded image bytes
+            (sometimes with the ``data:image/...;base64,`` prefix, sometimes raw).
+        """
+        if payload.startswith(("http://", "https://")):
+            resp = requests.get(payload, timeout=self.timeout)
+            resp.raise_for_status()
+            return resp.content
+        if payload.startswith("data:image/"):
+            _, b64 = payload.split(",", 1)
+            return base64.b64decode(b64)
+        return base64.b64decode(payload)
 
     def _build_documents(self, layout_results: List[Dict]) -> List[Document]:
         """Build Document list from layout results."""
@@ -367,12 +382,12 @@ class PaddleOcrLoader(BaseBishengLoader):
         logger.info(f"PaddleOCR parsed {self.file_name}: {len(content)} chars, {len(self.bbox_list)} bboxes")
         return [Document(page_content=content, metadata=metadata)]
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         """Synchronously load and parse document using PaddleOCR API."""
         try:
             with open(self.file_path, "rb") as f:
                 b64_data = base64.b64encode(f.read()).decode("ascii")
-        except (FileNotFoundError, PermissionError, IOError) as e:
+        except (OSError, FileNotFoundError, PermissionError) as e:
             logger.error(f"Failed to read file {self.file_path}: {e}")
             raise EtlException(f"Cannot read file: {e}")
 
@@ -380,12 +395,12 @@ class PaddleOcrLoader(BaseBishengLoader):
         layout_results = api_result.get("layoutParsingResults", [])
         return self._build_documents(layout_results)
 
-    async def aload(self) -> List[Document]:
+    async def aload(self) -> list[Document]:
         """Asynchronously load and parse document using PaddleOCR API."""
         try:
             with open(self.file_path, "rb") as f:
                 b64_data = base64.b64encode(f.read()).decode("ascii")
-        except (FileNotFoundError, PermissionError, IOError) as e:
+        except (OSError, FileNotFoundError, PermissionError) as e:
             logger.error(f"Failed to read file {self.file_path}: {e}")
             raise EtlException(f"Cannot read file: {e}")
 
