@@ -1,5 +1,5 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import { ChevronDown, ChevronRight, MoreHorizontal, Send } from "lucide-react";
+import { ChevronDown, ChevronRight, MoreHorizontal, Send, Shield } from "lucide-react";
 import { FileStatus, type KnowledgeFile } from "~/api/knowledge";
 import LegacyFileIcon from "~/components/ui/icon/File";
 import {
@@ -30,6 +30,8 @@ interface FileTreeProps {
     onCancelCreateFolder: () => void;
     onSelectFile: (file: KnowledgeFile) => void;
     onToggleFileSelection: (file: KnowledgeFile, checked: boolean) => void;
+    permissionEntryIds: Set<string>;
+    onOpenPermission: (file: KnowledgeFile) => void;
     canShowPublishFile: (file: KnowledgeFile) => boolean;
     onPublishFile: (file: KnowledgeFile) => void;
     onToggleFolder: (node: PortalFileTreeNode) => void;
@@ -66,6 +68,8 @@ export function FileTree({
     onCancelCreateFolder,
     onSelectFile,
     onToggleFileSelection,
+    permissionEntryIds,
+    onOpenPermission,
     canShowPublishFile,
     onPublishFile,
     onToggleFolder,
@@ -77,6 +81,9 @@ export function FileTree({
         const label = statusText(file);
         const countText = isFolder(file) ? folderCountText(file) : "";
         const publishDisabled = file.status !== FileStatus.SUCCESS;
+        const showPublishAction = !isFolder(file) && canShowPublishFile(file);
+        const showPermissionAction = permissionEntryIds.has(file.id);
+        const showMoreMenu = showPublishAction || showPermissionAction;
         return (
             <div
                 key={file.id}
@@ -140,7 +147,7 @@ export function FileTree({
                 </button>
                 {countText ? <span className={s.folderCount}>{countText}</span> : null}
                 {!isFolder(file) && label ? <span className={getStatusClassName(file)}>{label}</span> : null}
-                {!isFolder(file) && canShowPublishFile(file) ? (
+                {showMoreMenu ? (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button
@@ -153,17 +160,30 @@ export function FileTree({
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className={s.actionMenu}>
-                            <DropdownMenuItem
-                                disabled={publishDisabled}
-                                onClick={(event) => {
-                                    if (publishDisabled) return;
-                                    event?.stopPropagation?.();
-                                    onPublishFile(file);
-                                }}
-                            >
-                                <Send size={14} />
-                                <span>发布</span>
-                            </DropdownMenuItem>
+                            {showPublishAction ? (
+                                <DropdownMenuItem
+                                    disabled={publishDisabled}
+                                    onClick={(event) => {
+                                        if (publishDisabled) return;
+                                        event?.stopPropagation?.();
+                                        onPublishFile(file);
+                                    }}
+                                >
+                                    <Send size={14} />
+                                    <span>发布</span>
+                                </DropdownMenuItem>
+                            ) : null}
+                            {showPermissionAction ? (
+                                <DropdownMenuItem
+                                    onClick={(event) => {
+                                        event?.stopPropagation?.();
+                                        onOpenPermission(file);
+                                    }}
+                                >
+                                    <Shield size={14} />
+                                    <span>权限管理</span>
+                                </DropdownMenuItem>
+                            ) : null}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 ) : null}

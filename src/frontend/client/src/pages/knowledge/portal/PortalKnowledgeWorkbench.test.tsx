@@ -114,8 +114,8 @@ jest.mock("~/pages/Subscription/AiChat/AiAssistantPanel", () => ({
 }));
 
 jest.mock("../SpaceDetail/KnowledgeSpaceShareDialog", () => ({
-    KnowledgeSpaceShareDialog: ({ open, resourceName }: any) => (
-        open ? <div data-testid="space-share-dialog">成员管理:{resourceName}</div> : null
+    KnowledgeSpaceShareDialog: ({ open, resourceName, resourceType }: any) => (
+        open ? <div data-testid="space-share-dialog">成员管理:{resourceType}:{resourceName}</div> : null
     ),
 }));
 
@@ -415,6 +415,8 @@ describe("PortalKnowledgeWorkbench", () => {
             task_ids: [904],
         } as any);
         mockCheckPermission.mockResolvedValue({ allowed: true });
+        const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
+        canOpenPermissionDialog.mockResolvedValue(true);
     });
 
     test("renders knowledge space groups from grouped API without recomputing joined spaces", async () => {
@@ -1177,6 +1179,59 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("shows folder permission management action only when the folder is manageable", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.MEMBER,
+        });
+        const manageableFolder = makeFile("101", "可管理目录", {
+            type: FileType.FOLDER,
+            successFileNum: 1,
+            fileNum: 7,
+        });
+        const hiddenFolder = makeFile("102", "无权限目录", {
+            type: FileType.FOLDER,
+            successFileNum: 0,
+            fileNum: 3,
+        });
+        mockCheckPermission.mockImplementation((objectType, objectId, relation, permissionId) => {
+            if (objectType === "folder" && objectId === "101" && relation === "can_read" && permissionId === "download_folder") {
+                return Promise.resolve({ allowed: true });
+            }
+            if (objectType === "folder" && objectId === "102" && relation === "can_read" && permissionId === "download_folder") {
+                return Promise.resolve({ allowed: true });
+            }
+            return Promise.resolve({ allowed: false });
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [manageableFolder, hiddenFolder],
+            total: 2,
+        } as any);
+        const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
+        canOpenPermissionDialog.mockImplementation((resourceType: string, resourceId: string) => (
+            Promise.resolve(resourceType === "folder" && resourceId === "101")
+        ));
+
+        renderWorkbench();
+
+        const manageableRow = await screen.findByTestId("file-tree-row-101");
+        const hiddenRow = screen.getByTestId("file-tree-row-102");
+
+        await waitFor(() => {
+            expect(within(manageableRow).getByRole("button", { name: "更多可管理目录操作" })).toBeInTheDocument();
+        });
+        expect(within(hiddenRow).queryByRole("button", { name: "更多无权限目录操作" })).not.toBeInTheDocument();
+
+        fireEvent.click(within(manageableRow).getByRole("button", { name: "权限管理" }));
+
+        expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:folder:可管理目录");
+    });
+
     test("renders document preview actions in Lanhu order and opens the existing portals", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
@@ -1237,7 +1292,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
 
         fireEvent.click(within(actions).getByRole("button", { name: "权限管理" }));
-        expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:后端开发.md");
+        expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:knowledge_file:后端开发.md");
     });
 
     test("shows the portal right rail only after selecting a file with the required preview entries", async () => {

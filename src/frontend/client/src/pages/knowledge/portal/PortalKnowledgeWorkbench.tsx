@@ -22,7 +22,7 @@ import {
     updateSpaceApi,
 } from "~/api/knowledge";
 import { submitShougangKnowledgeSpaceCreateApprovalApi } from "~/api/approval";
-import { checkPermission } from "~/api/permission";
+import { checkPermission, canOpenPermissionDialog } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
@@ -88,6 +88,7 @@ export default function PortalKnowledgeWorkbench() {
     const [summaryExpanded, setSummaryExpanded] = useState(false);
     const [tagModalOpen, setTagModalOpen] = useState(false);
     const [permissionOpen, setPermissionOpen] = useState(false);
+    const [permissionTarget, setPermissionTarget] = useState<KnowledgeFile | null>(null);
     const [spacePermissionOpen, setSpacePermissionOpen] = useState(false);
     const [spacePermissionDialogSpace, setSpacePermissionDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
@@ -107,6 +108,7 @@ export default function PortalKnowledgeWorkbench() {
     const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
+    const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
     const [canCreateFolder, setCanCreateFolder] = useState(false);
@@ -514,6 +516,15 @@ export default function PortalKnowledgeWorkbench() {
     }, [displayedFiles, selectedFile]);
 
     useEffect(() => {
+        if (!permissionTarget) return;
+        const exists = displayedFiles.some((file) => file.id === permissionTarget.id);
+        if (!exists) {
+            setPermissionTarget(null);
+            setPermissionOpen(false);
+        }
+    }, [displayedFiles, permissionTarget]);
+
+    useEffect(() => {
         setSummaryExpanded(false);
         setAiDialogOpen(false);
     }, [selectedFile?.id]);
@@ -562,6 +573,35 @@ export default function PortalKnowledgeWorkbench() {
             .join("|"),
         [displayedFiles],
     );
+
+    useEffect(() => {
+        const candidates = displayedFiles.filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)));
+        if (isActiveSpaceAdmin) {
+            const ids = new Set(candidates.map((file) => file.id));
+            setPermissionEntryIds(ids);
+            return;
+        }
+        if (!activeSpace || candidates.length === 0) {
+            setPermissionEntryIds(new Set());
+            return;
+        }
+        let cancelled = false;
+        const controller = new AbortController();
+        Promise.all(candidates.map(async (file) => {
+            const resourceType = file.type === FileType.FOLDER ? "folder" : "knowledge_file";
+            const allowed = await canOpenPermissionDialog(resourceType, file.id, {
+                signal: controller.signal,
+            }).catch(() => false);
+            return allowed ? file.id : null;
+        })).then((ids) => {
+            if (cancelled) return;
+            setPermissionEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+        });
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [activeSpace?.id, isActiveSpaceAdmin, permissionProbeKey]);
 
     useEffect(() => {
         const candidates = displayedFiles.filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)));
@@ -1137,6 +1177,11 @@ export default function PortalKnowledgeWorkbench() {
                 onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
                 onSelectFile={handleSelectFile}
                 onToggleFileSelection={handleToggleFileSelection}
+                permissionEntryIds={permissionEntryIds}
+                onOpenPermission={(file) => {
+                    setPermissionTarget(file);
+                    setPermissionOpen(true);
+                }}
                 canShowPublishFile={canShowPublishFile}
                 onPublishFile={setPublishingFile}
                 onToggleFolder={(node) => void handleToggleFolder(node)}
@@ -1156,7 +1201,10 @@ export default function PortalKnowledgeWorkbench() {
                     onOpenTags={() => setTagModalOpen(true)}
                     onOpenShare={() => setActivePanel("share")}
                     onDownload={() => void handleDownloadSelected()}
-                    onOpenPermission={() => setPermissionOpen(true)}
+                    onOpenPermission={() => {
+                        setPermissionTarget(selectedFile);
+                        setPermissionOpen(true);
+                    }}
                     onCopyEncoding={() => void handleCopyFileEncoding()}
                     onToggleSummary={() => {
                         setActivePanel(null);
@@ -1188,6 +1236,7 @@ export default function PortalKnowledgeWorkbench() {
             <PortalDialogs
                 activeSpace={activeSpace}
                 selectedFile={selectedFile}
+                permissionTarget={permissionTarget}
                 documentPath={documentPath}
                 tagModalOpen={tagModalOpen}
                 onTagModalOpenChange={setTagModalOpen}
@@ -1195,8 +1244,12 @@ export default function PortalKnowledgeWorkbench() {
                     setTagModalOpen(false);
                     void loadRootTree(1);
                 }}
+                permissionResourceType={permissionTarget && isFolder(permissionTarget) ? "folder" : "knowledge_file"}
                 permissionOpen={permissionOpen}
-                onPermissionOpenChange={setPermissionOpen}
+                onPermissionOpenChange={(open) => {
+                    setPermissionOpen(open);
+                    if (!open) setPermissionTarget(null);
+                }}
                 approvalDialogOpen={approvalBridge.approvalDialogOpen}
                 approvalDialogTarget={approvalBridge.approvalDialogTarget}
                 onApprovalDialogOpenChange={approvalBridge.setApprovalDialogOpen}

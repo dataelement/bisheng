@@ -9,6 +9,7 @@ import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
 import { FilePublishDialog } from "../../SpaceDetail/FilePublishDialog";
 import { KnowledgeSpaceShareDialog } from "../../SpaceDetail/KnowledgeSpaceShareDialog";
 import { useVersionManagementEnabled } from "~/hooks";
+import type { ResourceType } from "~/api/permission";
 import s from "../PortalKnowledgeWorkbench.module.css";
 import { PortalAiDialog } from "./PortalAiDialog";
 import { PortalUploadDialog } from "./PortalUploadDialog";
@@ -22,10 +23,12 @@ type DuplicateFile = {
 type PortalDialogsProps = {
     activeSpace: KnowledgeSpace | null;
     selectedFile: KnowledgeFile | null;
+    permissionTarget: KnowledgeFile | null;
     documentPath: string;
     tagModalOpen: boolean;
     onTagModalOpenChange: (open: boolean) => void;
     onTagsSaved: () => void;
+    permissionResourceType: ResourceType;
     permissionOpen: boolean;
     onPermissionOpenChange: (open: boolean) => void;
     approvalDialogOpen: boolean;
@@ -58,10 +61,12 @@ type PortalDialogsProps = {
 export function PortalDialogs({
     activeSpace,
     selectedFile,
+    permissionTarget,
     documentPath,
     tagModalOpen,
     onTagModalOpenChange,
     onTagsSaved,
+    permissionResourceType,
     permissionOpen,
     onPermissionOpenChange,
     approvalDialogOpen,
@@ -105,13 +110,13 @@ export function PortalDialogs({
                 />
             ) : null}
 
-            {activeSpace && selectedFile ? (
+            {activeSpace && permissionTarget ? (
                 <KnowledgeSpaceShareDialog
                     open={permissionOpen}
                     onOpenChange={onPermissionOpenChange}
-                    resourceType="knowledge_file"
-                    resourceId={selectedFile.id}
-                    resourceName={selectedFile.name}
+                    resourceType={permissionResourceType}
+                    resourceId={permissionTarget.id}
+                    resourceName={permissionTarget.name}
                     currentUserRole={activeSpace.role}
                     showShareTab={false}
                     showPermissionTab
