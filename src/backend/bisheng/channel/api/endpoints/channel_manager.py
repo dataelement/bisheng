@@ -152,12 +152,13 @@ async def get_channel_square(
 
 @router.post("/subscribe")
 async def subscribe_channel(
+        request: Request,
         req_param: SubscribeChannelRequest,
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         channel_service: 'ChannelService' = Depends(get_channel_service)
 ):
     """Subscribe channel request API: Handles subscription requests based on channel type (public, private, approval required)."""
-    status = await channel_service.subscribe_channel(req_param, login_user)
+    status = await channel_service.subscribe_channel(req_param, login_user, request)
     return resp_200(data=status.value)
 
 

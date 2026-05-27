@@ -808,7 +808,12 @@ class ChannelService:
 
         return ChannelSquarePageResponse(data=result_list, total=total)
 
-    async def subscribe_channel(self, req: SubscribeChannelRequest, login_user: UserPayload) -> SubscriptionStatusEnum:
+    async def subscribe_channel(
+        self,
+        req: SubscribeChannelRequest,
+        login_user: UserPayload,
+        request=None,
+    ) -> SubscriptionStatusEnum:
         """
         Subscribe to a channel (public or review).
         - Private channels cannot be subscribed to.
@@ -889,6 +894,7 @@ class ChannelService:
                         'channel_name': channel.name,
                         'applicant_user_id': login_user.user_id,
                     },
+                    ip_address=get_request_ip(request) if request else None,
                 )
             )
             if gate_result.decision == 'pass':
