@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 from langchain_core.documents import Document
 
@@ -25,7 +24,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
     def __init__(
             self,
             retain_images: bool = True,
-            header_rows: List[int] | None = None,
+            header_rows: list[int] | None = None,
             data_rows: int = 12,
             append_header: bool = True,
             *args,
@@ -37,7 +36,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
         self.data_rows = data_rows
         self.append_header = append_header
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         target_ext, loader_type = self.FORMAT_MAP.get(self.file_extension, (None, None))
         if not target_ext or not loader_type:
             raise KnowledgeFileNotSupportedError()
@@ -73,6 +72,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
             "file_metadata": self.file_metadata,
             "file_extension": file_extension,
             "tmp_dir": self.tmp_dir,
+            "image_object_dir": self.image_object_dir,
         }
         if loader_type == "word":
             return BishengWordLoader(**params, retain_images=self.retain_images)

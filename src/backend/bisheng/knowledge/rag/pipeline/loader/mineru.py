@@ -1,9 +1,8 @@
 import base64
 import json
 import os
-import re
 from html.parser import HTMLParser
-from typing import List, Dict, Any, Tuple
+from typing import Any
 from uuid import uuid4
 
 import requests
@@ -106,10 +105,10 @@ def html_table_to_md(html_str):
 
 
 class MineruLoader(BaseBishengLoader):
-    def __init__(self, url: str, timeout: int = 600, headers: Dict = None, request_kwargs: Dict = None,
+    def __init__(self, url: str, timeout: int = 600, headers: dict = None, request_kwargs: dict = None,
                  filter_page_header_footer: bool = False,
                  *args, **kwargs: Any) -> None:
-        super(MineruLoader, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.url = url
         self.timeout = timeout
@@ -120,52 +119,67 @@ class MineruLoader(BaseBishengLoader):
         self.extra = kwargs
         self.partitions = []
 
-    def _store_images_to_local(self, images_data: Dict[str, Any], doc_id: str) -> Dict[str, str]:
-        """Persist MinerU base64 images locally (and to MinIO when configured).
+    def _store_images_to_local(self, images_data: dict[str, Any], doc_id: str) -> dict[str, str]:
+        """Stage MinerU base64 images under local_image_dir; bytes get uploaded later
+        by ImageUploadTransformer.
 
-        Returns a mapping `image_name -> final_url` (MinIO URL when image_object_dir
-        is set, otherwise local path). The merge_* helpers substitute these URLs into
-        the markdown text BEFORE computing metadata.indexes, so chunk_bbox alignment
-        survives the splitter unchanged.
+        Returns a mapping ``image_name -> final URL string`` to substitute into the
+        markdown so metadata.indexes align with the post-substitution text.
         """
         if not images_data:
             return {}
 
-        image_path_mapping = {}
+        image_path_mapping: dict[str, str] = {}
         self.local_image_dir = os.path.join(self.tmp_dir, doc_id)
-        os.makedirs(os.path.dirname(self.local_image_dir), exist_ok=True)
+        os.makedirs(self.local_image_dir, exist_ok=True)
 
         for image_name, image_info in images_data.items():
+            if not (isinstance(image_info, str) and image_info.startswith("data:image/")):
+                logger.warning(
+                    f"mineru: unrecognized image payload shape for {image_name}; skipping"
+                )
+                continue
             try:
-                # 检查是否是 base64 图片数据
-                if isinstance(image_info, str) and image_info.startswith('data:image/'):
-                    # 提取 base64 数据
-                    header, base64_data = image_info.split(',', 1)
-                    # 获取图片格式
-                    format_match = re.search(r'data:image/(\w+)', header)
-                    image_format = format_match.group(1) if format_match else 'jpg'
-
-                    # 解码 base64 数据
-                    image_bytes = base64.b64decode(base64_data)
-                    saved_file_name = f"{image_name}.{image_format}"
-                    local_path = os.path.join(self.local_image_dir, saved_file_name)
-                    with open(local_path, "wb") as f:
-                        f.write(image_bytes)
-
-                    image_path_mapping[image_name] = self.upload_image_to_minio(
-                        local_path, saved_file_name
-                    )
-
-                    logger.info(
-                        f"Successfully stored image {image_name} to {image_path_mapping[image_name]}")
-
-            except Exception as e:
-                logger.error(f"Failed to store image {image_name} to local: {str(e)}")
+                _, base64_data = image_info.split(",", 1)
+                image_bytes = base64.b64decode(base64_data)
+                # image_name already carries an extension (e.g. <hash>.jpg);
+                # reuse it as-is so the local filename, the MinIO object key
+                # suffix, and the markdown image reference all line up.
+                filename = image_name
+                local_path = os.path.join(self.local_image_dir, filename)
+                with open(local_path, "wb") as f:
+                    f.write(image_bytes)
+                image_path_mapping[image_name] = self.build_image_url(filename)
+            except Exception:
+                logger.exception(f"mineru: failed to store image {image_name}")
                 continue
 
         return image_path_mapping
 
-    def _replace_image_links_in_markdown(self, markdown_content: str, image_path_mapping: Dict[str, str]) -> str:
+    @classmethod
+    def _extract_image_path(cls, block: dict) -> str | None:
+        """Recursively walk a MinerU block to find an image_path.
+
+        MinerU emits image blocks as ``{type:"image", blocks:[{type:"image_body",
+        lines:[{spans:[{image_path:"<hash>.jpg"}]}]}]}`` — the top-level
+        ``block.lines`` is empty for image blocks, the path lives one level
+        deeper. The recursion also tolerates the flat shape some MinerU
+        versions emit.
+        """
+        direct = block.get("image_path") or block.get("img_path")
+        if direct:
+            return direct
+        for line in block.get("lines", []) or []:
+            for span in line.get("spans", []) or []:
+                if span.get("image_path"):
+                    return span["image_path"]
+        for nested in block.get("blocks", []) or []:
+            found = cls._extract_image_path(nested)
+            if found:
+                return found
+        return None
+
+    def _replace_image_links_in_markdown(self, markdown_content: str, image_path_mapping: dict[str, str]) -> str:
         """Substitute relative `images/{name}` references with the final image URL.
 
         Applied per-block during merge_* so metadata.indexes reflect the final text.
@@ -179,10 +193,10 @@ class MineruLoader(BaseBishengLoader):
 
         return markdown_content
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         with open(self.file_path, "rb") as f:
             files = [("files", f)]
-            data: Dict[str, Any] = {
+            data: dict[str, Any] = {
                 "return_md": False,
                 "return_content_list": True,
                 "return_middle_json": True,
@@ -233,20 +247,22 @@ class MineruLoader(BaseBishengLoader):
 
         return [Document(page_content=content, metadata=metadata)]
 
-    def _filter_blocks(self, blocks: List[Dict]) -> List[Dict]:
+    def _filter_blocks(self, blocks: list[dict]) -> list[dict]:
         if not self.filter_page_header_footer:
             return blocks
         return filter_repeated_header_footer_blocks(blocks)
 
-    def merge_conten_list(self, content_list, image_path_mapping: Dict[str, str] = None) -> Tuple[str, Dict]:
+    def merge_conten_list(self, content_list, image_path_mapping: dict[str, str] = None) -> tuple[str, dict]:
         self.bbox_list = []
         blocks = []
         for index, one in enumerate(content_list):
             text_type = one.get("type")
             if text_type == "image":
                 img_path = one.get('img_path') or ''
-                if image_path_mapping:
-                    img_path = self._replace_image_links_in_markdown(img_path, image_path_mapping)
+                if img_path and image_path_mapping:
+                    bare_name = img_path.rsplit("/", 1)[-1]
+                    if bare_name in image_path_mapping:
+                        img_path = image_path_mapping[bare_name]
                 text = f"![image]({img_path})\n"
             elif text_type == "table":
                 table_content = one.get("table_content")
@@ -295,7 +311,7 @@ class MineruLoader(BaseBishengLoader):
             "types": types,
         }
 
-    def merge_pdf_info(self, pdf_info, image_path_mapping: Dict[str, str] = None) -> Tuple[str, Dict]:
+    def merge_pdf_info(self, pdf_info, image_path_mapping: dict[str, str] = None) -> tuple[str, dict]:
         self.bbox_list = []
         blocks = []
 
@@ -315,16 +331,14 @@ class MineruLoader(BaseBishengLoader):
                             text += content_str
                         text += "\n"
                 elif text_type == "image":
-                    img_path = block.get("image_path") or block.get("img_path")
-                    if not img_path:
-                        for line in block.get("lines", []):
-                            for span in line.get("spans", []):
-                                if "image_path" in span:
-                                    img_path = span["image_path"]
-                                    break
+                    img_path = self._extract_image_path(block)
                     if img_path:
-                        if image_path_mapping:
-                            img_path = self._replace_image_links_in_markdown(img_path, image_path_mapping)
+                        # _extract_image_path returns either a bare filename
+                        # (`<hash>.jpg`) or a relative ref (`images/<hash>.jpg`);
+                        # image_path_mapping is keyed by the bare filename.
+                        bare_name = img_path.rsplit("/", 1)[-1]
+                        if image_path_mapping and bare_name in image_path_mapping:
+                            img_path = image_path_mapping[bare_name]
                         text = f"![image]({img_path})\n"
                 elif text_type == "table":
                     html_str = ""
