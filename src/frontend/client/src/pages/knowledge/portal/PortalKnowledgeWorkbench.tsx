@@ -282,6 +282,9 @@ export default function PortalKnowledgeWorkbench() {
         () => toStatusNumbers(statusFilter),
         [statusFilter],
     );
+    const canManageSelectedFilePermission = Boolean(
+        selectedFile && (isActiveSpaceAdmin || permissionEntryIds.has(selectedFile.id)),
+    );
 
     const setRootFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
         setTreeNodes((prev) => {
@@ -1201,7 +1204,9 @@ export default function PortalKnowledgeWorkbench() {
                     onOpenTags={() => setTagModalOpen(true)}
                     onOpenShare={() => setActivePanel("share")}
                     onDownload={() => void handleDownloadSelected()}
+                    canManagePermission={canManageSelectedFilePermission}
                     onOpenPermission={() => {
+                        if (!canManageSelectedFilePermission) return;
                         setPermissionTarget(selectedFile);
                         setPermissionOpen(true);
                     }}

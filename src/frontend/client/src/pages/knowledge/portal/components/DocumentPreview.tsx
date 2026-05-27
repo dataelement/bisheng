@@ -13,6 +13,7 @@ interface DocumentPreviewProps {
     onOpenTags: () => void;
     onOpenShare: () => void;
     onDownload: () => void;
+    canManagePermission: boolean;
     onOpenPermission: () => void;
     onCopyEncoding: () => void;
     onToggleSummary: () => void;
@@ -27,6 +28,7 @@ export function DocumentPreview({
     onOpenTags,
     onOpenShare,
     onDownload,
+    canManagePermission,
     onOpenPermission,
     onCopyEncoding,
     onToggleSummary,
@@ -56,9 +58,11 @@ export function DocumentPreview({
                             <button type="button" className={s.iconAction} title="下载" aria-label="下载" onClick={onDownload}>
                                 <Download size={16} />
                             </button>
-                            <button type="button" className={s.iconAction} title="权限管理" aria-label="权限管理" onClick={onOpenPermission}>
-                                <ShieldCheck size={16} />
-                            </button>
+                            {canManagePermission ? (
+                                <button type="button" className={s.iconAction} title="权限管理" aria-label="权限管理" onClick={onOpenPermission}>
+                                    <ShieldCheck size={16} />
+                                </button>
+                            ) : null}
                             <button type="button" className={s.iconAction} title="复制" aria-label="复制" onClick={onCopyEncoding}>
                                 <Copy size={16} />
                             </button>

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { readFileSync } from "fs";
 import path from "path";
+import { RecoilRoot } from "recoil";
 import PortalKnowledgeWorkbench from "./PortalKnowledgeWorkbench";
 import {
     getShougangFilePublishSimilarCandidatesApi,
@@ -345,7 +346,9 @@ function renderWorkbench() {
 
     return render(
         <QueryClientProvider client={queryClient}>
-            <PortalKnowledgeWorkbench />
+            <RecoilRoot>
+                <PortalKnowledgeWorkbench />
+            </RecoilRoot>
         </QueryClientProvider>,
     );
 }
@@ -1293,6 +1296,38 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(within(actions).getByRole("button", { name: "权限管理" }));
         expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:knowledge_file:后端开发.md");
+    });
+
+    test("hides document preview permission action without file management permission", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.MEMBER,
+        });
+        const file = makeFile("201", "后端开发.md", {
+            fileEncoding: "RPT-PP-00000001",
+        });
+        const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
+        canOpenPermissionDialog.mockResolvedValue(false);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-201");
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
+
+        const actions = await screen.findByTestId("portal-document-actions");
+        await waitFor(() => {
+            expect(within(actions).queryByRole("button", { name: "权限管理" })).not.toBeInTheDocument();
+        });
+        expect(screen.queryByTestId("space-share-dialog")).not.toBeInTheDocument();
     });
 
     test("shows the portal right rail only after selecting a file with the required preview entries", async () => {
