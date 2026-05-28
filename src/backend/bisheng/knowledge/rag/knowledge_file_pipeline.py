@@ -16,7 +16,6 @@ from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodin
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.image_upload import ImageUploadTransformer
 from bisheng.knowledge.rag.pipeline.transformer.preview_cache import PreviewCacheTransformer
-from bisheng.knowledge.rag.pipeline.transformer.simhash import SimHashTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.thumbnail import ThumbnailTransformer
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
