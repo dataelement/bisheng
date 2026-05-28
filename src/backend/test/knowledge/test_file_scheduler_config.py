@@ -25,8 +25,17 @@ def test_fair_scheduler_lock_ttl_must_be_less_than_interval():
 
 
 def test_fair_scheduler_max_per_user_inflight_minimum_one():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as exc_info:
         FairSchedulerConf(max_per_user_inflight=0)
+    # Pydantic ge=1 constraint, not the model validator
+    assert "greater_than_equal" in str(exc_info.value) or "max_per_user_inflight" in str(exc_info.value)
+
+
+def test_fair_scheduler_user_overrides_must_be_at_least_one():
+    with pytest.raises(ValueError) as exc_info:
+        FairSchedulerConf(user_overrides={"u1": 0})
+    assert "u1" in str(exc_info.value)
+    assert "must be >= 1" in str(exc_info.value)
 
 
 def test_fair_scheduler_user_overrides_accepts_string_ids():

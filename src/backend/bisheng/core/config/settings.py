@@ -125,9 +125,7 @@ class MinioConf(BaseModel):
     cert_check: bool | None = Field(default=False, description="Whether to calibrate the certificate")
     endpoint: str | None = Field(default="127.0.0.1:9000", description="minio Service address")
     sharepoint: str | None = Field(default="127.0.0.1:9000", description="minio Public access address")
-    share_schema: bool | None = Field(
-        default=False, description="minio Whether the public access address is usedhttps"
-    )
+    share_schema: bool | None = Field(default=False, description="minio Whether the public access address is usedhttps")
     share_cert_check: bool | None = Field(
         default=False, description="minio Whether the public access address verifies the certificate"
     )
@@ -265,7 +263,7 @@ class FairSchedulerConf(BaseModel):
     reconcile_interval_seconds: int = Field(default=300, ge=30)
 
     @model_validator(mode="after")
-    def _validate(self):
+    def validate(self):
         if self.dispatch_lock_ttl_seconds >= self.dispatch_interval_seconds:
             raise ValueError("dispatch_lock_ttl_seconds must be strictly less than dispatch_interval_seconds")
         for user_id, limit in self.user_overrides.items():
