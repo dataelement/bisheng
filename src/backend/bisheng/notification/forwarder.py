@@ -81,6 +81,8 @@ def _extract_payload_fields(message) -> Tuple[str, str]:
                 applicant_name = raw[1:] if raw.startswith("@") else raw
             elif btype == "business_url" and not resource_name and isinstance(raw, str):
                 resource_name = raw[2:] if raw.startswith("--") else raw
+            elif btype == "target" and not resource_name and isinstance(raw, str):
+                resource_name = raw
     except Exception as exc:
         logger.debug("_extract_payload_fields parse error: %s", exc, exc_info=True)
     return applicant_name, resource_name

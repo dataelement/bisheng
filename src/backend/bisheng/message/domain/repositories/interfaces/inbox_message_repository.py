@@ -13,6 +13,7 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
         self,
         user_id: int,
         message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
         status: Optional[MessageStatusEnum] = None,
         keyword: Optional[str] = None,
         only_unread: bool = False,
@@ -28,6 +29,7 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
         self,
         user_id: int,
         message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
         status: Optional[MessageStatusEnum] = None,
         keyword: Optional[str] = None,
         only_unread: bool = False,
@@ -42,6 +44,8 @@ class InboxMessageRepository(BaseRepository[InboxMessage, int], ABC):
         user_id: int,
         read_message_ids: Optional[List[int]] = None,
         message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
+        exclude_action_codes: Optional[List[str]] = None,
     ) -> int:
         """Count unread messages for a specific user."""
         pass

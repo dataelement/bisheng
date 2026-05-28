@@ -137,6 +137,8 @@ build/
 ./third_party
 develop-eggs/
 config.dev.yaml
+src/backend/bisheng/config.yaml
+src/backend/data/
 downloads/
 eggs/
 .eggs/

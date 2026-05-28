@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from bisheng.notification.external._payload import (
     FORWARDABLE_ACTION_CODES,
     build_textcard,
@@ -7,10 +9,34 @@ from bisheng.notification.external._payload import (
 )
 
 
-def test_forwardable_set_has_six_codes():
+def test_forwardable_set_has_supported_station_message_codes():
     assert FORWARDABLE_ACTION_CODES == {
         "request_channel", "approved_channel", "rejected_channel",
         "request_knowledge_space", "approved_knowledge_space", "rejected_knowledge_space",
+        "request_department_knowledge_space_upload",
+        "approved_department_knowledge_space_upload",
+        "rejected_department_knowledge_space_upload",
+        "sensitive_rejected_department_knowledge_space_upload",
+        "request_menu_access",
+        "approval_task_pending",
+        "approval_task_rejected",
+        "approval_instance_approved",
+        "approval_instance_withdrawn",
+        "approval_exception_cancelled",
+        "approval_exception_route_missing",
+        "approval_exception_approver_empty",
+        "approval_execute_failed",
+        "menu_grant_revoked",
+        "assigned_channel_admin",
+        "assigned_knowledge_space_admin",
+        "revoked_channel_admin",
+        "revoked_knowledge_space_admin",
+        "removed_channel_member",
+        "removed_knowledge_space_member",
+        "channel_made_private",
+        "knowledge_space_made_private",
+        "channel_dismissed",
+        "knowledge_space_deleted",
     }
 
 

@@ -54,6 +54,15 @@ class ApprovalOutboxService:
                     error_summary=error_summary,
                 )
             )
+            from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
+
+            await ApprovalNotificationService.notify_admins(
+                tenant_id=instance.tenant_id,
+                applicant_user_id=instance.applicant_user_id,
+                action_code='approval_execute_failed',
+                business_name=instance.business_name,
+                instance_id=instance.id,
+            )
         await self._write_handler_audit_log(
             outbox=outbox,
             instance=instance,

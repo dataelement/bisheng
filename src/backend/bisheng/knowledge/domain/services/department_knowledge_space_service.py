@@ -27,6 +27,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
+    SPACE_ADMIN_REVOKED_MESSAGE,
+    SPACE_MEMBER_REMOVED_MESSAGE,
     KnowledgeSpaceInfoResp,
     KnowledgeSpaceService,
 )
@@ -249,9 +251,23 @@ class DepartmentKnowledgeSpaceService:
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
                 await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
+                if not await space_service._user_can_manage_space(user_id, space_id):
+                    await space_service._send_space_event_notification(
+                        action_code=SPACE_ADMIN_REVOKED_MESSAGE,
+                        receiver_user_ids=[user_id],
+                        space_id=space_id,
+                        navigable=True,
+                    )
                 return
             await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
             await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
+            if not await space_service._user_can_read_space(user_id, space_id):
+                await space_service._send_space_event_notification(
+                    action_code=SPACE_MEMBER_REMOVED_MESSAGE,
+                    receiver_user_ids=[user_id],
+                    space_id=space_id,
+                    navigable=False,
+                )
             return
         if existing.user_role == UserRoleEnum.ADMIN:
             return
