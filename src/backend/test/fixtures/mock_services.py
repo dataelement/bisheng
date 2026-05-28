@@ -166,6 +166,9 @@ PREMOCK_MODULES: list[str] = [
 # the real module rather than a MagicMock attribute.
 _REAL_SUBMODULES: list[str] = [
     "bisheng.worker.knowledge.scheduler",
+    # file_worker defines Celery tasks tested via .run(); must be real so that
+    # parse_knowledge_file_celery.run() invokes the actual function body.
+    "bisheng.worker.knowledge.file_worker",
 ]
 
 
@@ -188,6 +191,37 @@ def premock_import_chain() -> None:
     for mod_name in _redis_deps:
         if mod_name not in sys.modules:
             sys.modules[mod_name] = MagicMock()
+
+    # Step 1b: install a task-aware bisheng.worker.main stub so that
+    # @bisheng_celery.task on real submodules (scheduler, file_worker) produces
+    # objects with a .run attribute pointing at the original function.  This
+    # lets tests call task.run(...) to exercise the real function body.
+    if "bisheng.worker.main" not in sys.modules:
+
+        class _FakeCeleryTask:
+            """Minimal Celery-task stand-in: exposes .run(), .delay(), .apply_async()."""
+
+            def __init__(self, fn):
+                self.run = fn
+
+            def delay(self, *args, **kwargs):
+                return self.run(*args, **kwargs)
+
+            def apply_async(self, args=(), kwargs=None, queue=None, **kw):
+                return self.run(*(args or ()), **(kwargs or {}))
+
+        def _task_decorator(*deco_args, **deco_kwargs):
+            """Accept @bisheng_celery.task or @bisheng_celery.task(name=…) forms."""
+            if len(deco_args) == 1 and callable(deco_args[0]) and not deco_kwargs:
+                # bare @bisheng_celery.task
+                return _FakeCeleryTask(deco_args[0])
+            # @bisheng_celery.task(acks_late=True, …)
+            return lambda fn: _FakeCeleryTask(fn)
+
+        _worker_main_stub = MagicMock(name="bisheng.worker.main")
+        _worker_main_stub.bisheng_celery = MagicMock(name="bisheng_celery")
+        _worker_main_stub.bisheng_celery.task = _task_decorator
+        sys.modules["bisheng.worker.main"] = _worker_main_stub
 
     # Step 2: pre-load real submodules before their parent package is mocked.
     import importlib

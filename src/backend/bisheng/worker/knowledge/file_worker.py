@@ -1,19 +1,22 @@
 import json
-from typing import List
 
 from langchain_elasticsearch import ElasticsearchStore
 from loguru import logger
 from pymilvus import Collection, MilvusException
 
-from bisheng.api.services.knowledge_imp import process_file_task, delete_knowledge_file_vectors, \
-    KnowledgeUtils, delete_vector_files
+from bisheng.api.services.knowledge_imp import (
+    KnowledgeUtils,
+    delete_knowledge_file_vectors,
+    delete_vector_files,
+    process_file_task,
+)
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum, KnowledgeState
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
     KnowledgeFileDao,
@@ -45,16 +48,12 @@ def file_copy_celery(param: json) -> str:
     source_knowledge = KnowledgeDao.query_by_id(source_knowledge_id)
     target_knowledge = KnowledgeDao.query_by_id(target_id)
 
-    target_list: List[KnowledgeFile] = KnowledgeFileDao.get_file_by_condition(
-        target_id
-    )  # All files
+    target_list: list[KnowledgeFile] = KnowledgeFileDao.get_file_by_condition(target_id)  # All files
     if target_list:
         target_list = [t.md5 for t in target_list]
     while True:
         if source_knowledge.type == KnowledgeTypeEnum.NORMAL.value:
-            files = KnowledgeFileDao.get_file_by_filters(
-                source_knowledge_id, page=page_num, page_size=page_size
-            )
+            files = KnowledgeFileDao.get_file_by_filters(source_knowledge_id, page=page_num, page_size=page_size)
 
             if not files:
                 # No more documents Buatmilvus collection And es index
@@ -80,8 +79,9 @@ def file_copy_celery(param: json) -> str:
     # Recovery status
     logger.info("file_copy_celery end")
     target_knowledge.state = 1
-    KnowledgeDao.update_state(knowledge_id=source_knowledge.id, state=KnowledgeState.PUBLISHED,
-                              update_time=source_knowledge.update_time)
+    KnowledgeDao.update_state(
+        knowledge_id=source_knowledge.id, state=KnowledgeState.PUBLISHED, update_time=source_knowledge.update_time
+    )
     KnowledgeDao.update_one(target_knowledge)
     return "copy task done"
 
@@ -101,7 +101,7 @@ def copy_normal(
 
     source_file_pdf = one.id
     source_file = one.object_name
-    source_file_ext = one.object_name.split('.')[-1]
+    source_file_ext = one.object_name.split(".")[-1]
     bbox_file = one.bbox_object_name
 
     knowledge_new = KnowledgeFile(**one_dict)
@@ -115,33 +115,50 @@ def copy_normal(
 
         # Copy source file
         if minio_client.object_exists_sync(minio_client.bucket, source_file):
-            minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=source_file,
-                                          dest_object=target_source_file, dest_bucket=minio_client.bucket)
+            minio_client.copy_object_sync(
+                source_bucket=minio_client.bucket,
+                source_object=source_file,
+                dest_object=target_source_file,
+                dest_bucket=minio_client.bucket,
+            )
         knowledge_new.object_name = target_source_file
 
         # Copy GeneratedpdfDoc.
         if minio_client.object_exists_sync(minio_client.bucket, f"{source_file_pdf}"):
-            minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=f"{source_file_pdf}",
-                                          dest_object=f"{knowledge_new.id}", dest_bucket=minio_client.bucket)
+            minio_client.copy_object_sync(
+                source_bucket=minio_client.bucket,
+                source_object=f"{source_file_pdf}",
+                dest_object=f"{knowledge_new.id}",
+                dest_bucket=minio_client.bucket,
+            )
 
         # Copies:bboxDoc.
         if minio_client.object_exists_sync(object_name=bbox_file):
             target_bbox_file = KnowledgeUtils.get_knowledge_bbox_file_object_name(knowledge_new.id)
-            minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=bbox_file,
-                                          dest_object=target_bbox_file, dest_bucket=minio_client.bucket)
+            minio_client.copy_object_sync(
+                source_bucket=minio_client.bucket,
+                source_object=bbox_file,
+                dest_object=target_bbox_file,
+                dest_bucket=minio_client.bucket,
+            )
             knowledge_new.bbox_object_name = target_bbox_file
 
         preview_file = None
         target_preview_file = None
         # Copy preview file
-        if source_file_ext in ['doc', 'ppt', 'pptx']:
+        if source_file_ext in ["doc", "ppt", "pptx"]:
             preview_file = KnowledgeUtils.get_knowledge_preview_file_object_name(one.id, one.file_name)
-            target_preview_file = KnowledgeUtils.get_knowledge_preview_file_object_name(knowledge_new.id,
-                                                                                        knowledge_new.file_name)
+            target_preview_file = KnowledgeUtils.get_knowledge_preview_file_object_name(
+                knowledge_new.id, knowledge_new.file_name
+            )
         if preview_file and target_preview_file:
             if minio_client.object_exists_sync(minio_client.bucket, preview_file):
-                minio_client.copy_object_sync(source_bucket=minio_client.bucket, source_object=preview_file,
-                                              dest_object=target_preview_file, dest_bucket=minio_client.bucket)
+                minio_client.copy_object_sync(
+                    source_bucket=minio_client.bucket,
+                    source_object=preview_file,
+                    dest_object=target_preview_file,
+                    dest_bucket=minio_client.bucket,
+                )
 
     except Exception as e:
         logger.exception(f"copy_file_error file_id={knowledge_new.id}")
@@ -175,8 +192,9 @@ def copy_vector(
     # migrate vectordb
     embedding = FakeEmbeddings()
     source_col = source_konwledge.collection_name
-    source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=source_konwledge,
-                                                                        embeddings=embedding)
+    source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+        0, knowledge=source_konwledge, embeddings=embedding
+    )
     # Saat Inies Exclusion:vector
     fields = [s.name for s in source_milvus.col.schema.fields if s.name != "pk"]
     source_data = source_milvus.col.query(
@@ -189,11 +207,15 @@ def copy_vector(
     milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge, embeddings=embedding)
     # Create a new one for the first time collection
     if milvus_db.col is None:
-        new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
-                             using=source_milvus.alias,
-                             consistency_level=source_milvus.consistency_level)
-        milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge,
-                                                                        embeddings=embedding)
+        new_col = Collection(
+            name=target_knowledge.collection_name,
+            schema=source_milvus.col.schema,
+            using=source_milvus.alias,
+            consistency_level=source_milvus.consistency_level,
+        )
+        milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+            0, knowledge=target_knowledge, embeddings=embedding
+        )
 
     if milvus_db:
         insert_milvus(source_data, fields, milvus_db)
@@ -206,14 +228,17 @@ def copy_vector(
 def create_milvus_col_and_es_index(source_konwledge: Knowledge, target_knowledge: Knowledge):
     embedding = FakeEmbeddings()
     source_col = source_konwledge.collection_name
-    source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=source_konwledge,
-                                                                        embeddings=embedding)
-    milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge,
-                                                                    embeddings=embedding)
+    source_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+        0, knowledge=source_konwledge, embeddings=embedding
+    )
+    milvus_db = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(0, knowledge=target_knowledge, embeddings=embedding)
     if milvus_db.col is None and source_milvus.col is not None:
-        new_col = Collection(name=target_knowledge.collection_name, schema=source_milvus.col.schema,
-                             using=source_milvus.alias,
-                             consistency_level=source_milvus.consistency_level)
+        new_col = Collection(
+            name=target_knowledge.collection_name,
+            schema=source_milvus.col.schema,
+            using=source_milvus.alias,
+            consistency_level=source_milvus.consistency_level,
+        )
         new_col.load()
 
     # Buates index
@@ -222,7 +247,7 @@ def create_milvus_col_and_es_index(source_konwledge: Knowledge, target_knowledge
     es_db.client.indices.create(index=target_knowledge.index_name, ignore=400)
 
 
-def insert_milvus(li: List, fields: list, target: Milvus):
+def insert_milvus(li: list, fields: list, target: Milvus):
     total_count = len(li)
     batch_size = 1000
     res_list = []
@@ -237,14 +262,12 @@ def insert_milvus(li: List, fields: list, target: Milvus):
             res = target.col.insert(insert_list, timeout=100)
             res_list.extend(res.primary_keys)
         except MilvusException as e:
-            logger.error(
-                "Failed to insert batch starting at entity: %s/%s", i, total_count
-            )
+            logger.error("Failed to insert batch starting at entity: %s/%s", i, total_count)
             raise e
     logger.info("copy_done pk_size={}", len(res_list))
 
 
-def insert_es(li: List, target: ElasticsearchStore, index_name: str):
+def insert_es(li: list, target: ElasticsearchStore, index_name: str):
     from elasticsearch.helpers import bulk
 
     res_list = []
@@ -270,22 +293,43 @@ def insert_es(li: List, target: ElasticsearchStore, index_name: str):
 
 @bisheng_celery.task(acks_late=True)
 def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
-    """ Asynchronously parse one incoming successful file """
-    trace_id_var.set(f'parse_file_{file_id}')
+    """Asynchronously parse one incoming file."""
+    from bisheng.common.services.config_service import settings
+    from bisheng.worker.knowledge import scheduler as file_scheduler
+
+    trace_id_var.set(f"parse_file_{file_id}")
     logger.info(
-        f"parse_knowledge_file_celery start preview_cache_key={preview_cache_key}, callback_url={callback_url}")
+        "parse_knowledge_file_celery start preview_cache_key={}, callback_url={}",
+        preview_cache_key,
+        callback_url,
+    )
+    knowledge = None
     try:
-        # After the warehousing is successful, it is judged whether the file information still exists, and if not, it is deleted.
         knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
         logger.error("parse_knowledge_file_celery error: {}", str(e))
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not db_file and knowledge:
-            logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
-            # If it does not exist, it may have been deleted during the parsing process,
-            # and the data of the vector database needs to be deleted.
-            delete_vector_files([db_file[0].id], knowledge)
+            logger.debug("delete_knowledge_file_celery file_id={}", file_id)
+            # File was deleted during parsing; clean up the vector data.
+            # Note: original code had [db_file[0].id] here which would crash when
+            # db_file is empty — fixed to use file_id directly.
+            delete_vector_files([file_id], knowledge)
+
+        if settings.knowledge_file_worker.fair_scheduler_enabled and db_file:
+            try:
+                user_id = db_file[0].user_id
+                file_scheduler.FileScheduler().complete_file(
+                    user_id=str(user_id),
+                    file_id=str(file_id),
+                )
+                file_scheduler.trigger_dispatch_task.delay()
+            except Exception:
+                logger.exception(
+                    "file_scheduler: complete_file/trigger failed for file_id={}",
+                    file_id,
+                )
 
 
 def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):
@@ -312,28 +356,29 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
     # Get Splitting Rules
     file_rule = FileProcessBase(**json.loads(db_file.split_rule))
     logger.debug("parse_knowledge_file_celery_start", file_id)
-    process_file_task(db_knowledge,
-                      db_files=[db_file],
-                      callback_url=callback_url,
-                      preview_cache_keys=[preview_cache_key],
-                      enable_auto_tags=True)
+    process_file_task(
+        db_knowledge,
+        db_files=[db_file],
+        callback_url=callback_url,
+        preview_cache_keys=[preview_cache_key],
+        enable_auto_tags=True,
+    )
     logger.debug("parse_knowledge_file_celery_over", file_id)
     return db_knowledge
 
 
 @bisheng_celery.task(acks_late=True)
 def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
-    """ Retry parsing a file that failed to enter the repository or has a different name """
-    trace_id_var.set(f'retry_knowledge_file_{file_id}')
+    """Retry parsing a file that failed to enter the repository or has a different name"""
+    trace_id_var.set(f"retry_knowledge_file_{file_id}")
     logger.info("retry_knowledge_file_celery start file_id={}", file_id)
     try:
-        delete_knowledge_file_vectors(
-            file_ids=[file_id], clear_minio=False
-        )
+        delete_knowledge_file_vectors(file_ids=[file_id], clear_minio=False)
     except Exception as e:
         logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
-        KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.FAILED,
-                                            KnowledgeFileFailedError(exception=e).to_json_str())
+        KnowledgeFileDao.update_file_status(
+            [file_id], KnowledgeFileStatus.FAILED, KnowledgeFileFailedError(exception=e).to_json_str()
+        )
         return
     try:
         knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
@@ -348,9 +393,9 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
 
 
 @bisheng_celery.task(acks_late=True)
-def delete_knowledge_file_celery(file_ids: List[int], knowledge_id: int, clear_minio: bool = True):
-    """ Asynchronous deletion of knowledge files and their vectors """
-    trace_id_var.set(f'delete_knowledge_file_{file_ids}')
+def delete_knowledge_file_celery(file_ids: list[int], knowledge_id: int, clear_minio: bool = True):
+    """Asynchronous deletion of knowledge files and their vectors"""
+    trace_id_var.set(f"delete_knowledge_file_{file_ids}")
     logger.info("delete_knowledge_file_celery start file_ids={}", file_ids)
     try:
         knowledge = KnowledgeDao.query_by_id(knowledge_id)
