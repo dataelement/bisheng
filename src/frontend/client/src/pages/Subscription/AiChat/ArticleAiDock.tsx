@@ -193,11 +193,20 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
     const [open, setOpen] = useState(false);
     const [inputText, setInputText] = useState("");
     const isH5 = usePrefersMobileLayout();
-    const [inputFocused, setInputFocused] = useState(false);
-    /** Tracks visual viewport so the mobile-expanded panel sits above the virtual keyboard and
-     *  follows any iOS-Safari scroll that happens when the focused input is brought into view. */
+    /** Tracks visual viewport so the mobile-expanded panel sits above the virtual keyboard
+     *  and follows any iOS-Safari scroll that happens when the focused input is brought into view. */
     const [viewportHeight, setViewportHeight] = useState<number | null>(null);
     const [viewportOffsetTop, setViewportOffsetTop] = useState(0);
+    /** Drives the grey overlay. Two signals push it open/closed:
+     *   - textarea focus/blur via `DockInput.onFocusChange` — instant response on tap and
+     *     on the keyboard's "完成"/Done button (which fires blur).
+     *   - visualViewport restoring after having been shrunk — catches the keyboard's
+     *     "关闭"/dismiss button which hides the keyboard WITHOUT blurring the textarea.
+     *   We don't drive it ON from viewport alone because the keyboard animation lags the
+     *   focus event by ~250ms and we want the overlay up immediately on tap. */
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
+    const peakVvHeightRef = useRef(0);
+    const keyboardUpRef = useRef(false);
 
     useEffect(() => {
         if (!isH5 || typeof window === "undefined") return;
@@ -206,13 +215,33 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
         const sync = () => {
             setViewportHeight(vv.height);
             setViewportOffsetTop(vv.offsetTop);
+            if (vv.height > peakVvHeightRef.current) peakVvHeightRef.current = vv.height;
+            if (peakVvHeightRef.current === 0) return;
+            const ratio = vv.height / peakVvHeightRef.current;
+            if (ratio < 0.6) {
+                keyboardUpRef.current = true;
+            } else if (ratio > 0.85 && keyboardUpRef.current) {
+                keyboardUpRef.current = false;
+                setKeyboardVisible(false);
+                // Force blur the active textarea/input so the next tap re-fires the focus event.
+                // iOS WeChat WKWebView's "收起" keyboard button hides the keyboard but keeps focus
+                // on the textarea, so the next tap is a no-op (no focus change → no onFocus).
+                const active = document.activeElement;
+                if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT")) {
+                    (active as HTMLElement).blur();
+                }
+            }
         };
         sync();
         vv.addEventListener("resize", sync);
         vv.addEventListener("scroll", sync);
+        // window.resize fires when WeChat WKWebView reflows the layout after keyboard
+        // dismissal — an extra backup signal alongside visualViewport.resize.
+        window.addEventListener("resize", sync);
         return () => {
             vv.removeEventListener("resize", sync);
             vv.removeEventListener("scroll", sync);
+            window.removeEventListener("resize", sync);
         };
     }, [isH5]);
 
@@ -342,7 +371,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                     `absolute inset-0` of panel root → covers header + messages + bottom
                     padding area. Sits between content (z-auto) and the input wrapper
                     (z-[3]) so only the white input box stays untouched. */}
-                {inputFocused && (
+                {keyboardVisible && (
                     <div
                         aria-hidden
                         className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-b from-[rgba(0,0,0,0.10)] to-[rgba(0,0,0,0.45)]"
@@ -363,7 +392,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         placeholder={localize("com_subscription.ask_article_placeholder")}
                         variant="box"
                         fixedHeight={120}
-                        onFocusChange={setInputFocused}
+                        onFocusChange={setKeyboardVisible}
                     />
                 </div>
             </div>
@@ -378,7 +407,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
             {/* Mobile collapsed-state grey overlay — when the box input is focused (keyboard up).
                 Fixed full-viewport at z-[19], one tier below the dock (z-20), so the white input
                 box stays visible while the article behind gets dimmed top-to-bottom. */}
-            {isH5 && !open && inputFocused && (
+            {isH5 && !open && keyboardVisible && (
                 <div
                     aria-hidden
                     className="pointer-events-none fixed inset-0 z-[19] bg-gradient-to-b from-[rgba(0,0,0,0.10)] to-[rgba(0,0,0,0.45)]"
@@ -391,7 +420,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 // keyboard opens; only the white-fade backdrop hides while focused so the
                 // grey overlay's gradient can carry through to the input area.
                 !open && "pt-10",
-                !open && !inputFocused && "bg-gradient-to-b from-white/0 to-white",
+                !open && !keyboardVisible && "bg-gradient-to-b from-white/0 to-white",
             )}
         >
             <div
@@ -512,7 +541,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                     isStreaming={isStreaming}
                     placeholder={localize("com_subscription.ask_article_placeholder")}
                     variant={open ? "line" : "box"}
-                    onFocusChange={setInputFocused}
+                    onFocusChange={setKeyboardVisible}
                 />
             </div>
         </div>
