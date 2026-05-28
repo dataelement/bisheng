@@ -225,6 +225,46 @@ def register_tenant_filter_events() -> None:
     )
 
 
+def build_tenant_filter_clause(tenant_col):
+    """Return a WHERE clause matching the do_orm_execute event listener's logic.
+
+    The auto tenant filter in ``_on_orm_execute`` can only see tables that
+    surface through ``column_descriptions`` or ``get_final_froms`` on the
+    outer statement. SQL shapes like ``select(sub.c.id) FROM (select … FROM
+    flow UNION ALL select … FROM assistant) AS sub`` hide the inner tables
+    behind a Subquery, so the listener finds no tenant-aware table and
+    injects no filter — leaking cross-tenant data on the outer SELECT.
+
+    Use this helper at those sites: build the clause once per inner SELECT
+    and attach it manually. Keeping the resolution logic here (instead of
+    open-coding ``tenant_col == get_current_tenant_id()`` per call site)
+    ensures the manual path stays in lockstep with the event listener as
+    bypass / visible-ids / strict semantics evolve.
+
+    Returns:
+        A SQLAlchemy clause (``tenant_col == X`` or ``tenant_col.in_([…])``
+        or ``false()`` for empty visible set), or ``None`` when no filter
+        should be applied (bypass active, or ``_resolve_tenant_id`` returned
+        ``None`` — the latter only when multi_tenant is disabled and no
+        context exists). Callers should treat ``None`` as "skip this WHERE".
+    """
+    if is_tenant_filter_bypassed():
+        return None
+
+    visible = _resolve_visible_tenant_ids()
+    if visible is not None:
+        if not visible:
+            return false()
+        if len(visible) == 1:
+            return tenant_col == next(iter(visible))
+        return tenant_col.in_(sorted(visible))
+
+    tid = _resolve_tenant_id()
+    if tid is None:
+        return None
+    return tenant_col == tid
+
+
 def _get_tenant_tables_from_statement(stmt):
     """Extract SQLAlchemy Table objects that are tenant-aware from a statement.
 
