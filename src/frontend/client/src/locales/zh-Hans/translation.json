@@ -1653,6 +1653,8 @@
     "article_load_failed": "文章加载失败",
     "sensitive_review": "安全审查",
     "sensitive_review_blocked": "该文章包含违规内容，无法查看详情",
+    "sensitive_violation_prefix": "该文章包含违规内容：",
+    "sensitive_violation_empty_hits": "暂无命中词详情",
     "articles_count": "篇内容",
     "at_least_one_source": "至少需添加 1 个信息源",
     "cancel": "取消",
