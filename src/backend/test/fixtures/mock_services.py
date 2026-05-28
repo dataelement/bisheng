@@ -100,46 +100,61 @@ sys.modules["bisheng.knowledge.domain.services.knowledge_utils"] = _knowledge_ut
 # F011 adds: docstring_parser (pulled in by bisheng.utils.util when tenant_service imports),
 # fakeredis (some fixtures), and a defensive list of optional dependencies.
 for _mod in (
-    'celery', 'celery.schedules', 'celery.app', 'celery.app.task', 'celery.signals',
-    'docstring_parser',
-    'redis', 'redis.asyncio', 'redis.exceptions',
+    "celery",
+    "celery.schedules",
+    "celery.app",
+    "celery.app.task",
+    "celery.signals",
+    "docstring_parser",
+    "redis",
+    "redis.asyncio",
+    "redis.exceptions",
 ):
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
-from bisheng.core.config.multi_tenant import MultiTenantConf
+from bisheng.core.config.multi_tenant import MultiTenantConf  # noqa: E402
 
 # Union of all modules that cause circular dependency issues during test import.
 # Extracted from F001 test files: test_tenant_filter.py and test_tenant_auth.py.
 PREMOCK_MODULES: list[str] = [
     # config_service and telemetry — deepest offenders
-    'bisheng.common.services',
-    'bisheng.common.services.base',
-    'bisheng.common.services.config_service',
-    'bisheng.common.services.telemetry',
-    'bisheng.common.services.telemetry.telemetry_service',
+    "bisheng.common.services",
+    "bisheng.common.services.base",
+    "bisheng.common.services.config_service",
+    "bisheng.common.services.telemetry",
+    "bisheng.common.services.telemetry.telemetry_service",
     # database models that trigger SQLModel registration side effects
-    'bisheng.database.models.user_group',
-    'bisheng.database.models.role_access',
-    'bisheng.database.models.group',
-    'bisheng.database.models.role',
-    'bisheng.database.constants',
+    "bisheng.database.models.user_group",
+    "bisheng.database.models.role_access",
+    "bisheng.database.models.group",
+    "bisheng.database.models.role",
+    "bisheng.database.constants",
     # user domain models
-    'bisheng.user.domain.models.user_role',
-    'bisheng.user.domain.models.user',
+    "bisheng.user.domain.models.user_role",
+    "bisheng.user.domain.models.user",
     # error/exception modules
-    'bisheng.common.errcode.http_error',
-    'bisheng.common.exceptions.auth',
+    "bisheng.common.errcode.http_error",
+    "bisheng.common.exceptions.auth",
     # F011: tenant_service pulls in redis_manager/openfga on import
-    'bisheng.core.cache.redis_conn',
-    'bisheng.core.cache.redis_manager',
+    "bisheng.core.cache.redis_conn",
+    "bisheng.core.cache.redis_manager",
     # worker/celery modules — run celery setup at import time, break in test env
-    'bisheng.worker',
-    'bisheng.worker.main',
-    'bisheng.worker.knowledge',
-    'bisheng.worker.knowledge.file_worker',
-    'bisheng.worker.approval',
-    'bisheng.worker.approval.tasks',
+    "bisheng.worker",
+    "bisheng.worker.main",
+    "bisheng.worker.knowledge",
+    "bisheng.worker.knowledge.file_worker",
+    "bisheng.worker.approval",
+    "bisheng.worker.approval.tasks",
+]
+
+# Modules that must be imported for real (not mocked) even though their parent
+# package appears in PREMOCK_MODULES.  Each entry is imported and registered in
+# sys.modules BEFORE the parent package mock is installed, so subsequent
+# `from bisheng.worker.knowledge.scheduler import …` in test files resolves to
+# the real module rather than a MagicMock attribute.
+_REAL_SUBMODULES: list[str] = [
+    "bisheng.worker.knowledge.scheduler",
 ]
 
 
@@ -153,21 +168,42 @@ def premock_import_chain() -> None:
     Does NOT interfere with F001 test files that do their own pre-mocking,
     because those files mock the same modules before this function runs.
     """
+    # Step 1: install redis/cache mocks first so that real submodules that
+    # depend on redis_manager can be imported without errors.
+    _redis_deps = (
+        "bisheng.core.cache.redis_conn",
+        "bisheng.core.cache.redis_manager",
+    )
+    for mod_name in _redis_deps:
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = MagicMock()
+
+    # Step 2: pre-load real submodules before their parent package is mocked.
+    import importlib
+
+    for real_mod in _REAL_SUBMODULES:
+        if real_mod not in sys.modules:
+            try:
+                importlib.import_module(real_mod)
+            except Exception:  # pragma: no cover — defensive; log only
+                pass  # real module unavailable in this env; tests that need it will fail anyway
+
+    # Step 3: mock the remaining problematic modules (skipping already-present ones).
     for mod_name in PREMOCK_MODULES:
         if mod_name not in sys.modules:
             mock = MagicMock()
-            if mod_name == 'bisheng.common.services.config_service':
+            if mod_name == "bisheng.common.services.config_service":
                 mock.settings = _create_default_mock_settings()
-            elif mod_name == 'bisheng.database.constants':
+            elif mod_name == "bisheng.database.constants":
                 mock.AdminRole = 1
             sys.modules[mod_name] = mock
 
 
 def create_mock_settings(
     multi_tenant_enabled: bool = False,
-    jwt_secret: str = 'test-secret-key',
+    jwt_secret: str = "test-secret-key",
     jwt_expire: int = 86400,
-    jwt_iss: str = 'bisheng',
+    jwt_iss: str = "bisheng",
 ) -> MagicMock:
     """Create a configured MagicMock mimicking the global Settings object.
 
