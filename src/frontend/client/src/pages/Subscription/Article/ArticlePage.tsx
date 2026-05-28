@@ -16,6 +16,7 @@ import { useToastContext } from "~/Providers";
 import { cn, copyText } from "~/utils";
 import { mapToArticle } from "../ArticleList/ArticleList";
 import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
+import { ArticleAiDock } from "../AiChat/ArticleAiDock";
 import { ArticleDetail } from "./ArticleDetail";
 
 /**
@@ -163,7 +164,9 @@ export default function ArticlePage() {
                     "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
                 line-height: 1.7;
                 color: #333;
-                padding: 20px;
+                /* Extra bottom padding so the last paragraph isn't hidden behind the AI dock
+                   pinned to the page bottom. 160px ≈ collapsed dock + gradient + safe-area. */
+                padding: 20px 20px calc(160px + env(safe-area-inset-bottom, 0px));
                 background: #fff !important;
             }
             img { max-width: 100%; height: auto; }
@@ -243,6 +246,13 @@ export default function ArticlePage() {
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
+
+            {/* AI dock pinned to the bottom — parity with the PC article view.
+                The dock is self-contained (absolute inset-x-0 bottom-0), so dropping
+                it inside the relative container is enough; collapsed it shows a
+                floating input box with a gradient fade above, expanded it grows a
+                440px chat panel upward over the iframe content. */}
+            <ArticleAiDock articleDocId={article.id} />
 
             <AddToKnowledgeModal
                 open={showKnowledgeModal}

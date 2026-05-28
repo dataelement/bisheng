@@ -12,7 +12,7 @@ import AiChatMessages from "~/components/Chat/AiChatMessages";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { SendIcon } from "~/components/svg";
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { useGetBsConfig, useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import useChannelChat from "~/hooks/useChannelChat";
@@ -50,6 +50,8 @@ function DockInput({
     isStreaming,
     placeholder,
     variant,
+    fixedHeight,
+    onFocusChange,
 }: {
     value: string;
     onChange: (v: string) => void;
@@ -59,6 +61,10 @@ function DockInput({
     isStreaming: boolean;
     placeholder: string;
     variant: "box" | "line";
+    /** When set, force the input container to this px height (e.g. mobile-expanded = 120). */
+    fixedHeight?: number;
+    /** Forward textarea focus/blur so the panel can dim the page while typing. */
+    onFocusChange?: (focused: boolean) => void;
 }) {
     const [multiline, setMultiline] = useState(false);
     const taRef = useRef<HTMLTextAreaElement>(null);
@@ -125,6 +131,7 @@ function DockInput({
                     : "border-t border-[#EBEBEB] p-3",
                 stacked ? "flex-col gap-2" : "items-end gap-2",
             )}
+            style={fixedHeight ? { height: `${fixedHeight}px` } : undefined}
         >
             {/* Single-row only: model select sits to the left of the textarea. */}
             {!stacked && modelSelect && (
@@ -132,7 +139,7 @@ function DockInput({
             )}
 
             {/* Textarea — keyed so it stays mounted across the layout switch. */}
-            <div key="textarea" className={stacked ? "w-full" : "min-w-0 flex-1"}>
+            <div key="textarea" className={cn(stacked ? "w-full" : "min-w-0 flex-1", fixedHeight && "min-h-0 flex-1")}>
                 <TextareaAutosize
                     ref={taRef}
                     value={value}
@@ -143,10 +150,15 @@ function DockInput({
                         // oscillate (wider row re-fits to one line → infinite loop).
                         if (h > (meta?.rowHeight ?? 24) * 1.4) setMultiline(true);
                     }}
+                    onFocus={() => onFocusChange?.(true)}
+                    onBlur={() => onFocusChange?.(false)}
                     disabled={disabled}
                     placeholder={placeholder}
                     rows={1}
-                    className="m-0 block max-h-[180px] w-full resize-none bg-transparent py-1 text-sm leading-6 outline-none placeholder-[#86909c]"
+                    className={cn(
+                        "m-0 block w-full resize-none bg-transparent py-1 text-sm leading-6 outline-none placeholder-[#86909c]",
+                        fixedHeight ? "h-full max-h-full overflow-y-auto" : "max-h-[180px]",
+                    )}
                 />
             </div>
 
@@ -180,6 +192,29 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
     const [open, setOpen] = useState(false);
     const [inputText, setInputText] = useState("");
+    const isH5 = usePrefersMobileLayout();
+    const [inputFocused, setInputFocused] = useState(false);
+    /** Tracks visual viewport so the mobile-expanded panel sits above the virtual keyboard and
+     *  follows any iOS-Safari scroll that happens when the focused input is brought into view. */
+    const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+    const [viewportOffsetTop, setViewportOffsetTop] = useState(0);
+
+    useEffect(() => {
+        if (!isH5 || typeof window === "undefined") return;
+        const vv = window.visualViewport;
+        if (!vv) return;
+        const sync = () => {
+            setViewportHeight(vv.height);
+            setViewportOffsetTop(vv.offsetTop);
+        };
+        sync();
+        vv.addEventListener("resize", sync);
+        vv.addEventListener("scroll", sync);
+        return () => {
+            vv.removeEventListener("resize", sync);
+            vv.removeEventListener("scroll", sync);
+        };
+    }, [isH5]);
 
     const {
         messages,
@@ -222,14 +257,140 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
         if (ok) clearConversation();
     };
 
+    // Mobile + expanded: take over the full viewport with a stacked header/messages/input
+    // layout. Header centered title 16px, input forced to 120px, fade gradient above input,
+    // and a grey gradient overlay when the textarea is focused (keyboard-up state).
+    if (isH5 && open) {
+        const messageHeader = (
+            <div
+                className="relative flex shrink-0 items-center px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3"
+            >
+                <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
+                    {localize("com_subscription.ai_assistant")}
+                </h3>
+                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+8px)] flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-gray-400 hover:text-gray-600"
+                        onClick={handleClear}
+                        aria-label={localize("com_subscription.clear_chat")}
+                    >
+                        <Outlined.Delete className="size-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-[#86909c] hover:text-[#4e5969]"
+                        onClick={() => setOpen(false)}
+                        aria-label={localize("com_ui_collapse")}
+                    >
+                        <Outlined.DoubleDown className="size-4" />
+                    </Button>
+                </div>
+            </div>
+        );
+
+        return (
+            <div
+                className="fixed inset-x-0 top-0 z-50 flex flex-col bg-white"
+                // Pin the panel to the visual viewport. iOS Safari (and WeChat WKWebView)
+                // scrolls the *layout* viewport when an input gets focus so the keyboard
+                // doesn't cover it — but with us already filling the viewport, that scroll
+                // drags the panel upward off-screen. Compensating with `translateY(offsetTop)`
+                // keeps the panel locked to the visible region; height shrinks to the
+                // keyboard-clipped viewport height.
+                style={{
+                    height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+                    transform: `translateY(${viewportOffsetTop}px)`,
+                }}
+                role="dialog"
+                aria-modal="true"
+            >
+                {messageHeader}
+
+                {/* Messages — scrollable, with bottom fade-out. Default z-auto so it falls
+                    below the focused-state grey overlay. */}
+                <div className="relative min-h-0 flex-1">
+                    <AiChatMessages
+                        messages={messages}
+                        conversationId={conversationId}
+                        title={title}
+                        isLoading={isLoading}
+                        isStreaming={isStreaming}
+                        presetQuestions={[
+                            localize("com_subscription.summarize_article_points"),
+                            localize("com_subscription.main_conclusion"),
+                        ]}
+                        hideShare
+                        hideHeaderTitle
+                        flatMode
+                        knowledgeChatLayout
+                        contentWidthClassName="max-w-none px-4"
+                        onPresetClick={(q) => setInputText(q)}
+                        onRegenerate={regenerate}
+                    />
+                    {/* White gradient where messages meet the input — text appears to fade out. */}
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-10 bg-gradient-to-t from-white to-white/0"
+                    />
+                </div>
+
+                {/* Grey gradient overlay while the input is focused (keyboard up).
+                    `absolute inset-0` of panel root → covers header + messages + bottom
+                    padding area. Sits between content (z-auto) and the input wrapper
+                    (z-[3]) so only the white input box stays untouched. */}
+                {inputFocused && (
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-b from-[rgba(0,0,0,0.10)] to-[rgba(0,0,0,0.45)]"
+                    />
+                )}
+
+                {/* Input area — fixed 120px height. `relative z-[3]` lifts the input
+                    wrapper above the grey overlay; the wrapper has no bg, so the gradient
+                    bleeds through the bottom padding (`pb-[...]`) under the input. */}
+                <div className="relative z-[3] shrink-0 px-3 pb-[max(8px,env(safe-area-inset-bottom))]">
+                    <DockInput
+                        value={inputText}
+                        onChange={setInputText}
+                        onSend={handleSend}
+                        model={model}
+                        disabled={!modelOptions?.length}
+                        isStreaming={isStreaming}
+                        placeholder={localize("com_subscription.ask_article_placeholder")}
+                        variant="box"
+                        fixedHeight={120}
+                        onFocusChange={setInputFocused}
+                    />
+                </div>
+            </div>
+        );
+    }
+
     // Bottom-anchored dock. Collapsed: a white input box fading in from the article
     // via a gradient. Expanded: a frosted floating card (header + messages + two-row
     // input) inset 16px from the pane edges, grown upward by the grid-rows animation.
     return (
+        <>
+            {/* Mobile collapsed-state grey overlay — when the box input is focused (keyboard up).
+                Fixed full-viewport at z-[19], one tier below the dock (z-20), so the white input
+                box stays visible while the article behind gets dimmed top-to-bottom. */}
+            {isH5 && !open && inputFocused && (
+                <div
+                    aria-hidden
+                    className="pointer-events-none fixed inset-0 z-[19] bg-gradient-to-b from-[rgba(0,0,0,0.10)] to-[rgba(0,0,0,0.45)]"
+                />
+            )}
         <div
             className={cn(
-                "absolute inset-x-0 bottom-0 z-20 flex flex-col px-4 pb-4",
-                !open && "bg-gradient-to-b from-white/0 to-white pt-10",
+                "absolute inset-x-0 bottom-0 z-20 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
+                // Keep the pt-10 spacing regardless so the input doesn't jump when the
+                // keyboard opens; only the white-fade backdrop hides while focused so the
+                // grey overlay's gradient can carry through to the input area.
+                !open && "pt-10",
+                !open && !inputFocused && "bg-gradient-to-b from-white/0 to-white",
             )}
         >
             <div
@@ -347,8 +508,10 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                     isStreaming={isStreaming}
                     placeholder={localize("com_subscription.ask_article_placeholder")}
                     variant={open ? "line" : "box"}
+                    onFocusChange={setInputFocused}
                 />
             </div>
         </div>
+        </>
     );
 }
