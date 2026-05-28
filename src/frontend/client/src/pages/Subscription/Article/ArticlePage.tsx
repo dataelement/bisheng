@@ -165,9 +165,19 @@ export default function ArticlePage() {
                 line-height: 1.7;
                 color: #333;
                 /* Extra bottom padding so the last paragraph isn't hidden behind the AI dock
-                   pinned to the page bottom. 160px ≈ collapsed dock + gradient + safe-area. */
-                padding: 20px 20px calc(160px + env(safe-area-inset-bottom, 0px));
+                   pinned to the page bottom. !important to override inline styles injected
+                   by source documents (e.g. WeChat) that re-declare body padding. */
+                padding: 20px 20px calc(160px + env(safe-area-inset-bottom, 0px)) !important;
+                padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px)) !important;
                 background: #fff !important;
+            }
+            /* Source documents often wrap their content in #js_content / .rich_media_*
+               with their own padding. Zero those out, then ensure the outermost wrapper
+               also gets the dock-safe bottom space (in case body padding gets clipped). */
+            #js_content,
+            .rich_media_area_primary,
+            .rich_media_content {
+                padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px)) !important;
             }
             img { max-width: 100%; height: auto; }
             a { color: #335CFF; }

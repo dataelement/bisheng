@@ -6,6 +6,7 @@ import { useUnactivate } from 'react-activation';
 import type { ContextType } from '~/common';
 import { Banner } from '~/components/Banners';
 import { MobileNav } from '~/components/Nav';
+import { MobileAppHistoryDropdown } from '~/components/Nav/MobileAppHistoryDropdown';
 import NavToggle from '~/components/Nav/NavToggle';
 import { useAuthContext, useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { SideNav } from '~/pages/appChat/SideNav';
@@ -29,6 +30,8 @@ export default function AppRoot() {
         return savedNavVisible !== null ? JSON.parse(savedNavVisible) : true;
     });
     const [isHovering, setIsHovering] = useState(false);
+    /** H5 app-surface: title-anchored dropdown showing the app card + conversation list. */
+    const [appHistoryOpen, setAppHistoryOpen] = useState(false);
 
     const navigate = useNavigate();
     const { isAuthenticated } = useAuthContext();
@@ -162,21 +165,6 @@ export default function AppRoot() {
                         </div>
                     )}
 
-                    {/* Mobile overlay sidebar (covers content, does not push) */}
-                    {isTabletOrMobile && sidebarVisible && (
-                        <div className="fixed inset-0 z-[70] flex">
-                            <div className="relative flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
-                                <SideNav />
-                            </div>
-                            <button
-                                type="button"
-                                className="min-w-0 flex-1 bg-[rgba(86,88,105,0.55)]"
-                                aria-label="Close sidebar overlay"
-                                onClick={toggleSidebar}
-                            />
-                        </div>
-                    )}
-
                     {/* Floating toggle button - lives outside the clipped sidebar */}
                     {!isTabletOrMobile && !(isAppSurface && isAppChatCompact) && (
                         <NavToggle
@@ -215,8 +203,16 @@ export default function AppRoot() {
                                     navigateToNewChatPath={false}
                                     onNewChat={handleCreateNewAppChat}
                                     appSurfaceBackAction={handleGoBack}
+                                    appHistoryDropdownOpen={appHistoryOpen}
+                                    onToggleAppHistoryDropdown={() => setAppHistoryOpen((o) => !o)}
                                 />
                             </div>
+                        )}
+                        {isAppSurface && isAppChatCompact && (
+                            <MobileAppHistoryDropdown
+                                open={appHistoryOpen}
+                                onClose={() => setAppHistoryOpen(false)}
+                            />
                         )}
                         <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
                             <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />

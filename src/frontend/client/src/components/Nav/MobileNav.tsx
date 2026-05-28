@@ -31,6 +31,11 @@ type MobileNavProps = {
   onBack?: () => void;
   /** 应用内对话：无合并标题时与侧栏并排展示「返回」；有会话标题时返回在侧栏内，顶栏仅抽屉 */
   appSurfaceBackAction?: () => void;
+  /** App-surface: opens the app-chat history dropdown (app card + conversation list).
+   *  Caret/grey states key off `appHistoryDropdownOpen`; the dropdown itself is rendered
+   *  by AppRoot since it needs the /app/* route context for `useAppSidebar`. */
+  appHistoryDropdownOpen?: boolean;
+  onToggleAppHistoryDropdown?: () => void;
 };
 
 /**
@@ -47,6 +52,8 @@ export default function MobileNav({
   preferBackButton = false,
   onBack,
   appSurfaceBackAction,
+  appHistoryDropdownOpen = false,
+  onToggleAppHistoryDropdown,
 }: MobileNavProps) {
   const mobileHeadIconBtnClassName =
     'inline-flex size-5 shrink-0 items-center justify-center text-[#212121]';
@@ -146,7 +153,10 @@ export default function MobileNav({
             type="button"
             data-testid="mobile-header-left-action"
             aria-label={preferBackButton ? localize('com_ui_go_back') : localize('com_nav_open_sidebar')}
-            className={cn(mobileHeadIconBtnClassName, historyDropdownOpen && 'pointer-events-none text-[#C9CDD4]')}
+            className={cn(
+              mobileHeadIconBtnClassName,
+              (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-[#C9CDD4]',
+            )}
             onClick={preferBackButton ? (onBack ?? toggleSidebar) : () => { setHistoryDropdownOpen(false); setSystemMenuOpen(true); }}
           >
             {preferBackButton ? (
@@ -159,15 +169,73 @@ export default function MobileNav({
         {showWorkbenchMergedBar && chatMobileHeader ? (
           <>
             <div className="flex min-w-0 flex-1 justify-center px-1">
-              <span
-                id="app-title"
-                className="truncate text-center text-[14px] font-medium leading-[22px] text-[#212121]"
-                title={chatMobileHeader.title}
-              >
-                {chatMobileHeader.title}
-              </span>
+              {appSurfaceBackAction ? (
+                // App-surface chat: title opens the app-chat history dropdown (app card
+                // + conversation list). The dropdown itself is rendered by AppRoot which
+                // owns the /app/* route context required by `useAppSidebar`.
+                onToggleAppHistoryDropdown ? (
+                  <button
+                    type="button"
+                    id="app-title"
+                    onClick={onToggleAppHistoryDropdown}
+                    aria-expanded={appHistoryDropdownOpen}
+                    title={chatMobileHeader.title}
+                    className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
+                  >
+                    <span className="truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                      {chatMobileHeader.title}
+                    </span>
+                    <Outlined.Down
+                      className={cn(
+                        'size-4 shrink-0 text-[#86909C] transition-transform',
+                        appHistoryDropdownOpen && 'rotate-180',
+                      )}
+                    />
+                  </button>
+                ) : (
+                  <span
+                    id="app-title"
+                    className="truncate text-center text-[14px] font-medium leading-[22px] text-[#212121]"
+                    title={chatMobileHeader.title}
+                  >
+                    {chatMobileHeader.title}
+                  </span>
+                )
+              ) : (
+                // Main /c/* chat: title stays clickable after a conversation loads so the
+                // user can re-open the history dropdown and switch to another conversation.
+                <button
+                  type="button"
+                  id="app-title"
+                  onClick={() => setHistoryDropdownOpen((o) => !o)}
+                  aria-expanded={historyDropdownOpen}
+                  title={chatMobileHeader.title}
+                  className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
+                >
+                  <span className="truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                    {chatMobileHeader.title}
+                  </span>
+                  <Outlined.Down
+                    className={cn(
+                      'size-4 shrink-0 text-[#86909C] transition-transform',
+                      historyDropdownOpen && 'rotate-180',
+                    )}
+                  />
+                </button>
+              )}
             </div>
-            <div className="flex shrink-0 items-center gap-0.5">
+            <div
+              className={cn(
+                'flex shrink-0 items-center gap-0.5',
+                // Match the non-merged branch: while either history dropdown is open, dim
+                // and disable adjacent icons so the only available action is selecting/
+                // closing the list. Main-chat dropdown only applies outside app surface;
+                // app-history dropdown only applies inside app surface.
+                ((historyDropdownOpen && !appSurfaceBackAction) ||
+                  (appHistoryDropdownOpen && appSurfaceBackAction)) &&
+                  'pointer-events-none text-[#C9CDD4]',
+              )}
+            >
               {!chatMobileHeader.readOnly && !chatMobileHeader.hideShare && shareType && (
                 <ShareChat
                   type={shareType}

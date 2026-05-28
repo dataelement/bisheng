@@ -34,7 +34,15 @@ export function MobileChatHistoryDropdown({
     const localize = useLocalize();
     const { isAuthenticated } = useAuthContext();
     const [showLoading, setShowLoading] = useState(false);
-    const { pageNumber, searchQuery, searchQueryRes } = useSearchContext();
+    // SearchContext.Provider is only mounted in Root (main /c/* shell). MobileNav is also
+    // rendered in AppRoot and StandaloneChatPage where the provider is absent, so the
+    // context falls back to `{}` and destructured fields are undefined. Default them here
+    // so the dropdown stays usable (search becomes a no-op) instead of crashing on
+    // `pageNumber.toString()`.
+    const searchCtx = useSearchContext() as Partial<ReturnType<typeof useSearchContext>>;
+    const pageNumber = searchCtx?.pageNumber ?? 1;
+    const searchQuery = searchCtx?.searchQuery ?? '';
+    const searchQueryRes = searchCtx?.searchQueryRes;
     const tags: string[] = [];
 
     const { data, fetchNextPage, hasNextPage, isFetchingNextPage, refetch } =
