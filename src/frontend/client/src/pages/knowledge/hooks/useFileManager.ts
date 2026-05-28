@@ -170,6 +170,13 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             setSearchQuery("");
             setSearchTagIds([]);
             setStatusFilter([]);
+            // Clear the previous space's data immediately so the right pane doesn't keep
+            // displaying stale files (with the new space's name/header) while the next
+            // list-API call is in flight. Combined with the `loading && files.length === 0`
+            // branch in SpaceDetail, this surfaces a loading spinner during the switch.
+            setFiles([]);
+            setTotal(0);
+            setLoading(true);
 
             // If there's an unconsumed initial folder from URL, navigate there
             if (initialFolderId && consumedFolderIdRef.current !== initialFolderId) {
