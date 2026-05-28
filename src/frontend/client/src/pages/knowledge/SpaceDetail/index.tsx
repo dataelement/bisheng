@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
-import { FolderPlus } from "lucide-react";
+import { FolderPlus, Loader2 } from "lucide-react";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import {
@@ -893,7 +893,16 @@ export function KnowledgeSpaceContent({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    {displayFiles.length === 0 ? (
+                    {loading && displayFiles.length === 0 ? (
+                        // Space switching / first load: show a spinner instead of the
+                        // "no files here" empty illustration. The fileManager hook clears
+                        // `files` immediately on activeSpace change, so this branch fires
+                        // for the entire fetch window — the right pane no longer keeps
+                        // showing the previous space's contents while the API responds.
+                        <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
+                            <Loader2 className="size-8 animate-spin text-[#86909C]" />
+                        </div>
+                    ) : displayFiles.length === 0 ? (
                         <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                             <img
                                 className="size-[120px] mb-4 object-contain opacity-90"
