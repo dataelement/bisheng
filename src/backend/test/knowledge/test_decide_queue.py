@@ -2,10 +2,14 @@ from unittest.mock import patch
 
 import pytest
 
+from bisheng.core.config.settings import KnowledgeFileWorkerConf
 from bisheng.worker.knowledge.scheduler import (
+    KNOWLEDGE_QUEUE,
     decide_queue,
     needs_ocr_queue,
 )
+
+_OCR_QUEUE_DEFAULT = KnowledgeFileWorkerConf().ocr_queue
 
 
 @pytest.fixture
@@ -50,8 +54,8 @@ def test_decide_queue_disabled_returns_knowledge_celery(loader_configured):
         "bisheng.worker.knowledge.scheduler._ocr_queue_enabled",
         return_value=False,
     ):
-        assert decide_queue("a.pdf") == "knowledge_celery"
-        assert decide_queue("a.png") == "knowledge_celery"
+        assert decide_queue("a.pdf") == KNOWLEDGE_QUEUE
+        assert decide_queue("a.png") == KNOWLEDGE_QUEUE
 
 
 def test_decide_queue_enabled_routes_by_extension(loader_configured):
@@ -59,7 +63,7 @@ def test_decide_queue_enabled_routes_by_extension(loader_configured):
         "bisheng.worker.knowledge.scheduler._ocr_queue_enabled",
         return_value=True,
     ):
-        assert decide_queue("invoice.pdf") == "ocr_celery"
-        assert decide_queue("photo.PNG") == "ocr_celery"
-        assert decide_queue("notes.txt") == "knowledge_celery"
-        assert decide_queue("no_extension") == "knowledge_celery"
+        assert decide_queue("invoice.pdf") == _OCR_QUEUE_DEFAULT
+        assert decide_queue("photo.PNG") == _OCR_QUEUE_DEFAULT
+        assert decide_queue("notes.txt") == KNOWLEDGE_QUEUE
+        assert decide_queue("no_extension") == KNOWLEDGE_QUEUE

@@ -15,9 +15,12 @@ PREMOCK_MODULES below.
 Created by F000-test-infrastructure.
 """
 
+import logging
 import sys
 import types
 from unittest.mock import MagicMock
+
+_premock_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # knowledge_utils stub — must be installed BEFORE any module that imports
@@ -185,8 +188,12 @@ def premock_import_chain() -> None:
         if real_mod not in sys.modules:
             try:
                 importlib.import_module(real_mod)
-            except Exception:  # pragma: no cover — defensive; log only
-                pass  # real module unavailable in this env; tests that need it will fail anyway
+            except ImportError as exc:  # pragma: no cover — defensive
+                _premock_log.warning(
+                    "premock_import_chain: failed to pre-load %s: %s; tests that depend on it will fail",
+                    real_mod,
+                    exc,
+                )
 
     # Step 3: mock the remaining problematic modules (skipping already-present ones).
     for mod_name in PREMOCK_MODULES:

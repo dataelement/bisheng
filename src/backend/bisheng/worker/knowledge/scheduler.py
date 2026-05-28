@@ -15,19 +15,17 @@ def _ocr_queue_enabled() -> bool:
 
 
 def _loader_configured() -> bool:
-    """True when at least one external OCR/ETL service URL is set.
+    """True when the active OCR loader has a URL configured.
 
-    KnowledgeConf is DB-stored and fetched via `settings.get_knowledge()`,
-    which is cached in Redis for 100s — cheap to call per dispatch.
+    Delegates to ``KnowledgeConf.image_parser_enabled`` so we share one
+    source of truth with the actual parse pipeline in
+    ``bisheng/knowledge/rag/base_file_pipeline.py``.
     """
     try:
-        knowledge_conf = settings.get_knowledge()
+        return bool(settings.get_knowledge().image_parser_enabled)
     except Exception:
         logger.exception("file_scheduler: failed to load KnowledgeConf; treating as no OCR")
         return False
-    return bool(
-        (knowledge_conf.etl4lm.url or "") or (knowledge_conf.mineru.url or "") or (knowledge_conf.paddle_ocr.url or "")
-    )
 
 
 def _extract_ext(file_name: str) -> str:
