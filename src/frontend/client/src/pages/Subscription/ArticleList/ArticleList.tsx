@@ -349,7 +349,7 @@ export function ArticleList({
             {isH5 ? (
                 /* === H5 header === */
                 <>
-                    <div className="sticky top-0 z-30 shrink-0 bg-white pt-[env(safe-area-inset-top,0px)]">
+                    <div className="sticky top-0 z-30 shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
                         {/* Title row: hamburger | title (caret) | search | menu */}
                         <div className="relative flex h-11 items-center gap-3 px-4">
                             {/* Left group — fixed width that mirrors the right group, so the
@@ -387,8 +387,8 @@ export function ArticleList({
                                         }}
                                         mobileTopOffset={
                                             mobileSearchOpen
-                                                ? "calc(env(safe-area-inset-top, 0px) + 96px)"
-                                                : "calc(env(safe-area-inset-top, 0px) + 44px)"
+                                                ? "calc(env(safe-area-inset-top, 0px) + 104px)"
+                                                : "calc(env(safe-area-inset-top, 0px) + 52px)"
                                         }
                                     />
                                 ) : (

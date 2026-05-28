@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Menu, Plus } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Plus } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { useSetRecoilState } from "recoil";
 import { useQueryClient } from "@tanstack/react-query";
+import store from "~/store";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
 import {
@@ -53,7 +57,8 @@ export default function Knowledge() {
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [spaceListDrawerOpen, setSpaceListDrawerOpen] = useState(false);
-    const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
+    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]";
+    const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
 
     const { showToast } = useToastContext();
     const { user, isUserLoading } = useAuthContext();
@@ -615,45 +620,61 @@ export default function Knowledge() {
                 />
             </div>
 
-            {isH5 && spaceListDrawerOpen ? (
-                <div
-                    className="fixed inset-0 z-[70] flex"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label={localize("com_knowledge.knowledge_space")}
-                >
-                    <div className="relative flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
-                        <KnowledgeSpaceSidebar
-                            mobileDrawerMode
-                            onDrawerClose={() => setSpaceListDrawerOpen(false)}
-                            activeSpaceId={activeSpace?.id}
-                            onSpaceSelect={handleSpaceSelect}
-                            onCreateSpace={() => {
-                                handleCreateSpace();
-                                setSpaceListDrawerOpen(false);
-                            }}
-                            onSpaceSettings={(space) => {
-                                handleSpaceSettings(space);
-                                setSpaceListDrawerOpen(false);
-                            }}
-                            onManageMembers={(space) => {
-                                openSpacePermissionDialog(space);
-                                setSpaceListDrawerOpen(false);
-                            }}
-                            onKnowledgeSquare={() => {
-                                setShowKnowledgeSquare(true);
-                                setSpaceListDrawerOpen(false);
-                            }}
-                        />
-                    </div>
-                    <button
-                        type="button"
-                        className="min-w-0 flex-1 bg-[rgba(86,88,105,0.55)]"
-                        aria-label={localize("com_nav_close_sidebar")}
-                        onClick={() => setSpaceListDrawerOpen(false)}
-                    />
-                </div>
-            ) : null}
+            {isH5 && spaceListDrawerOpen && typeof document !== "undefined"
+                ? createPortal(
+                    <div
+                        className="fixed inset-x-0 bottom-0 z-[80] flex flex-col bg-white"
+                        style={{ top: "calc(env(safe-area-inset-top, 0px) + 52px)" }}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={localize("com_knowledge.knowledge_space")}
+                    >
+                        <div className="min-h-0 flex-1 overflow-hidden">
+                            <KnowledgeSpaceSidebar
+                                mobileDrawerMode
+                                compactMode
+                                onDrawerClose={() => setSpaceListDrawerOpen(false)}
+                                activeSpaceId={activeSpace?.id}
+                                onSpaceSelect={(space) => {
+                                    handleSpaceSelect(space);
+                                    setSpaceListDrawerOpen(false);
+                                }}
+                                onCreateSpace={() => {
+                                    handleCreateSpace();
+                                    setSpaceListDrawerOpen(false);
+                                }}
+                                onSpaceSettings={(space) => {
+                                    handleSpaceSettings(space);
+                                    setSpaceListDrawerOpen(false);
+                                }}
+                                onManageMembers={(space) => {
+                                    openSpacePermissionDialog(space);
+                                    setSpaceListDrawerOpen(false);
+                                }}
+                                onKnowledgeSquare={() => {
+                                    setShowKnowledgeSquare(true);
+                                    setSpaceListDrawerOpen(false);
+                                }}
+                            />
+                        </div>
+                        {/* Bottom action: 前往知识广场 — same style as channel dropdown's go-to-square */}
+                        <div className="shrink-0 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSpaceListDrawerOpen(false);
+                                    setShowKnowledgeSquare(true);
+                                }}
+                                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[6px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+                            >
+                                <Outlined.BlocksAndArrows className="size-4 text-[#86909C]" />
+                                {localize("com_knowledge.go_to_square")}
+                            </button>
+                        </div>
+                    </div>,
+                    document.body,
+                )
+                : null}
 
             {activeSpace ? (
                 <div ref={aiPane.splitContainerRef} className="flex h-full min-w-0 flex-1 overflow-hidden">
@@ -685,20 +706,36 @@ export default function Knowledge() {
                                     {isH5 ? (
                                         // 勿用 fixed 贴视口：会叠在 MainLayout 圆角白卡外，盖住卡片上沿圆角；放在面板流式布局内即可
                                         <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                                            <div className="flex h-11 w-full min-w-0 items-center justify-between px-4">
+                                            <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
                                                 <button
                                                     type="button"
                                                     aria-label={localize("com_nav_open_sidebar")}
-                                                    onClick={() => setSpaceListDrawerOpen(true)}
-                                                    className={mobileHeadIconBtnClassName}
+                                                    onClick={() => setSystemMenuOpen(true)}
+                                                    className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
                                                 >
-                                                    <Menu className="size-4" />
+                                                    <Outlined.SidebarMenu className="size-5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSpaceListDrawerOpen((o) => !o)}
+                                                    aria-expanded={spaceListDrawerOpen}
+                                                    className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
+                                                >
+                                                    <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                                                        {localize("com_knowledge.knowledge_space")}
+                                                    </span>
+                                                    <Outlined.Down
+                                                        className={cn(
+                                                            "size-5 shrink-0 text-[#86909C] transition-transform",
+                                                            spaceListDrawerOpen && "rotate-180",
+                                                        )}
+                                                    />
                                                 </button>
                                                 <button
                                                     type="button"
                                                     aria-label={localize("com_knowledge.create_knowledge_space")}
                                                     onClick={handleCreateSpace}
-                                                    className={mobileHeadIconBtnClassName}
+                                                    className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
                                                 >
                                                     <Plus className="size-4" />
                                                 </button>
@@ -774,20 +811,36 @@ export default function Knowledge() {
                 /* Empty state when no space is selected */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                     {isH5 ? (
-                        <div className="absolute left-0 right-0 top-4 z-10 flex h-8 items-center justify-between px-4">
+                        <div className="absolute left-0 right-0 top-4 z-10 flex h-8 items-center justify-between gap-3 px-4">
                             <button
                                 type="button"
                                 aria-label={localize("com_nav_open_sidebar")}
-                                onClick={() => setSpaceListDrawerOpen(true)}
-                                className={mobileHeadIconBtnClassName}
+                                onClick={() => setSystemMenuOpen(true)}
+                                className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
                             >
-                                <Menu className="size-4" />
+                                <Outlined.SidebarMenu className="size-5" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSpaceListDrawerOpen((o) => !o)}
+                                aria-expanded={spaceListDrawerOpen}
+                                className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
+                            >
+                                <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                                    {localize("com_knowledge.knowledge_space")}
+                                </span>
+                                <Outlined.Down
+                                    className={cn(
+                                        "size-5 shrink-0 text-[#86909C] transition-transform",
+                                        spaceListDrawerOpen && "rotate-180",
+                                    )}
+                                />
                             </button>
                             <button
                                 type="button"
                                 aria-label={localize("com_knowledge.create_knowledge_space")}
                                 onClick={handleCreateSpace}
-                                className={mobileHeadIconBtnClassName}
+                                className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
                             >
                                 <Plus className="size-4" />
                             </button>

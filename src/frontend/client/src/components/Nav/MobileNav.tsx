@@ -1,7 +1,8 @@
-import React from 'react';
-import { useRecoilValue } from 'recoil';
+import React, { useState } from 'react';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Menu, Plus, X } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useNavigate } from 'react-router-dom';
 import { QueryKeys, Constants } from '~/types/chat';
 import type { TMessage } from '~/types/chat';
@@ -10,6 +11,7 @@ import ShareChat from '~/components/Share/ShareChat';
 import { useLocalize, useNewConvo } from '~/hooks';
 import { cn } from '~/utils';
 import store from '~/store';
+import { MobileChatHistoryDropdown } from './MobileChatHistoryDropdown';
 
 const shareChatTypes = {
   1: 'skill',
@@ -47,7 +49,7 @@ export default function MobileNav({
   appSurfaceBackAction,
 }: MobileNavProps) {
   const mobileHeadIconBtnClassName =
-    'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]';
+    'inline-flex size-5 shrink-0 items-center justify-center text-[#212121]';
   const localize = useLocalize();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -55,6 +57,9 @@ export default function MobileNav({
   const conversation = useRecoilValue(store.conversationByIndex(0));
   const { title = 'New Chat' } = conversation || {};
   const chatMobileHeader = useRecoilValue(store.chatMobileHeaderState);
+  const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
+  /** H5: 标题下拉(对话列表)展开状态 */
+  const [historyDropdownOpen, setHistoryDropdownOpen] = useState(false);
   const showWorkbenchMergedBar =
     variant === 'chat' && chatMobileHeader !== null;
 
@@ -140,17 +145,14 @@ export default function MobileNav({
           <button
             type="button"
             data-testid="mobile-header-left-action"
-            aria-label={preferBackButton ? localize('com_ui_go_back') : (navVisible ? localize('com_nav_close_sidebar') : localize('com_nav_open_sidebar'))}
-            aria-expanded={preferBackButton ? undefined : navVisible}
-            className={mobileHeadIconBtnClassName}
-            onClick={preferBackButton ? (onBack ?? toggleSidebar) : toggleSidebar}
+            aria-label={preferBackButton ? localize('com_ui_go_back') : localize('com_nav_open_sidebar')}
+            className={cn(mobileHeadIconBtnClassName, historyDropdownOpen && 'pointer-events-none text-[#C9CDD4]')}
+            onClick={preferBackButton ? (onBack ?? toggleSidebar) : () => { setHistoryDropdownOpen(false); setSystemMenuOpen(true); }}
           >
             {preferBackButton ? (
               <ChevronLeft className="size-4" strokeWidth={2} />
-            ) : navVisible ? (
-              <X className="size-4" strokeWidth={2} />
             ) : (
-              <Menu className="size-4" strokeWidth={2} />
+              <Outlined.SidebarMenu className="size-5" />
             )}
           </button>
         )}
@@ -192,16 +194,28 @@ export default function MobileNav({
                 <span className="sr-only">{localize('com_ui_new_chat')}</span>
               </>
             ) : (
-              <>
-                <div className="min-w-0 flex-1" aria-hidden />
-                <span className="sr-only">{title ?? localize('com_ui_new_chat')}</span>
-              </>
+              <button
+                type="button"
+                onClick={() => setHistoryDropdownOpen((o) => !o)}
+                aria-expanded={historyDropdownOpen}
+                className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
+              >
+                <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                  {localize('com_ui_chat_list')}
+                </span>
+                <Outlined.Down
+                  className={cn(
+                    'size-5 shrink-0 text-[#86909C] transition-transform',
+                    historyDropdownOpen && 'rotate-180',
+                  )}
+                />
+              </button>
             )}
             <button
               type="button"
               data-testid="mobile-header-new-chat-button"
               aria-label={localize('com_ui_new_chat')}
-              className={mobileHeadIconBtnClassName}
+              className={cn(mobileHeadIconBtnClassName, historyDropdownOpen && 'pointer-events-none text-[#C9CDD4]')}
               onClick={handleNewChat}
             >
               <Plus className="size-4" strokeWidth={2} />
@@ -209,6 +223,11 @@ export default function MobileNav({
           </>
         )}
       </div>
+      <MobileChatHistoryDropdown
+        open={historyDropdownOpen}
+        onClose={() => setHistoryDropdownOpen(false)}
+        onNewChat={handleNewChat}
+      />
     </div>
   );
 }

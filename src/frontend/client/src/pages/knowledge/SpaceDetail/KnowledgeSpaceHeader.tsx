@@ -373,30 +373,6 @@ export function KnowledgeSpaceHeader({
     return (
         <>
             <div className="space-y-4 pt-5 pb-4 max-[767px]:space-y-3 max-[767px]:pt-4 max-[767px]:pb-3">
-                <div className="hidden max-[767px]:flex items-end gap-3 min-h-8">
-                    {currentPath.length === 0 ? (
-                        <>
-                            <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
-                                {localize("com_knowledge.knowledge_space")}
-                            </h1>
-                            {onGoKnowledgeSquare ? (
-                                <button
-                                    type="button"
-                                    onClick={onGoKnowledgeSquare}
-                                    className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
-                                >
-                                    <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
-                                    <span className="text-[12px] leading-5 font-normal text-[#212121]">
-                                        前往知识广场
-                                    </span>
-                                </button>
-                            ) : null}
-                        </>
-                    ) : (
-                        // Keep header block height stable between root and folder levels on mobile.
-                        <div aria-hidden className="h-8" />
-                    )}
-                </div>
 
                 {/* 面包屑 / 当前空间标题 */}
                 <div className="flex min-h-8 items-center justify-between gap-3">

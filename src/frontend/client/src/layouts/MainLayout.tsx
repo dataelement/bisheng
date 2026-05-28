@@ -1,7 +1,7 @@
 import Cookies from 'js-cookie';
 import { getBysConfigApi } from '~/api/apps';
 import { Filled, Outlined } from 'bisheng-icons';
-import { LayoutDashboard, Menu, X } from 'lucide-react';
+import { LayoutDashboard, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
 import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
@@ -90,8 +90,9 @@ function Sidebar({
   const isChatSection = /^\/(c|linsight)(\/|$)/.test(pathname);
   // Use includes() to tolerate possible basename prefix (e.g. "/xxx/apps")
   const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
-  /** 移动端仅在应用相关抽屉内展开主导航文案；订阅 /channel 走窄栏 w-16，避免与订阅内频道抽屉重复「菜单」 */
-  const showExpandedHubSidebar = isMobile && isAppSection;
+  /** 仅当作为 240px 应用中心抽屉(overlay=true)被挂载时,才把侧边栏展宽为带文字标签。
+   *  PC 默认和移动端「系统菜单整页右滑」露出模式都保持 w-16 窄栏(纯图标)。 */
+  const showExpandedHubSidebar = isMobile && isAppSection && overlay;
 
   // Backend returns `web_menu` but we map it into front-end user as `plugins`.
   const plugins: string[] | null = Array.isArray((user as any)?.plugins)
@@ -218,9 +219,8 @@ function Sidebar({
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
         'h-[100dvh] flex flex-col justify-between py-2 pl-2 shrink-0 bg-[rgb(227, 227, 227)]',
-        // 主站会话移动端：不展示左侧窄栏，入口在会话区顶栏与历史抽屉内
-        // 应用会话 /app/* 仍显示左侧模块栏，与 PC 一致，便于切换首页 / 应用 / 频道 / 知识
-        isChatSection && isMobile && 'hidden',
+        // Mobile chat 路由的 sidebar 显隐由 MainLayout 顶层条件渲染管理(systemMenuRevealing),
+        // 这里不再硬加 hidden,否则 systemMenu 露出时 sidebar 也被隐掉。
       )}
     >
       <div className={cn('flex flex-col', showExpandedHubSidebar ? 'gap-4 items-stretch' : 'gap-10 items-center')}>
@@ -321,11 +321,12 @@ export default function MainLayout() {
   const innerScrollShell =
     isChannelRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
+  const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
-  // 移动端：应用会话、/apps、/channel、/knowledge 都隐藏 MainLayout 左栏。
-  // /apps 保留本布局内菜单按钮；/channel、/knowledge 使用各自页面的抽屉入口。
-  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute);
+  // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话)都隐藏 MainLayout 左栏,
+  // 点页面内菜单按钮触发系统主菜单整页右滑露出。
+  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
   const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
@@ -491,12 +492,11 @@ export default function MainLayout() {
                   : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
             )}
           >
-            {/* 移动端应用中心顶栏：与首页对话 MobileNav 一致（safe-area + 8px、内层 h-11、px-4） */}
+            {/* 移动端应用中心顶栏：与频道页一致 — 菜单按钮触发系统主菜单(整页右滑) */}
             {shouldHideSidebarOnMobileAppsArea &&
               isAppsArea &&
               !isAppChatRoute &&
-              !isAppsExploreRoute &&
-              !mobileSidebarOpen ? (
+              !isAppsExploreRoute ? (
               <div
                 className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]"
               >
@@ -504,10 +504,10 @@ export default function MainLayout() {
                   <button
                     type="button"
                     aria-label={localize('com_nav_open_sidebar')}
-                    onClick={() => setMobileSidebarOpen(true)}
-                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
+                    onClick={() => setSystemMenuOpen(true)}
+                    className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
                   >
-                    <Menu className="size-4" strokeWidth={2} />
+                    <Outlined.SidebarMenu className="size-5" />
                   </button>
                   <div className="min-w-0 flex-1" aria-hidden />
                 </div>

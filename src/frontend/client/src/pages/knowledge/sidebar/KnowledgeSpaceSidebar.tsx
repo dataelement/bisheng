@@ -39,6 +39,8 @@ interface KnowledgeSpaceSidebarProps {
     mobileDrawerMode?: boolean;
     /** H5 抽屉：右上角关闭 */
     onDrawerClose?: () => void;
+    /** H5 标题下拉：跳过模块 Tabs 与顶部创建按钮,只渲染空间树形列表 */
+    compactMode?: boolean;
 }
 
 // Sort cycle: update_time → name → update_time
@@ -60,6 +62,7 @@ export function KnowledgeSpaceSidebar({
     hideExpandToggleWhenCollapsed,
     mobileDrawerMode = false,
     onDrawerClose,
+    compactMode = false,
 }: KnowledgeSpaceSidebarProps) {
     const localize = useLocalize();
     const { data: bsConfig } = useGetBsConfig();
@@ -207,7 +210,7 @@ export function KnowledgeSpaceSidebar({
                     transitionTimingFunction: 'ease-in-out'
                 }}
             >
-                {mobileDrawerMode ? (
+                {mobileDrawerMode && !compactMode ? (
                     <MobileSidebarHeaderTabs
                         logoSrc={bsConfig?.sidebarIcon?.image}
                         onClose={onDrawerClose}
@@ -217,7 +220,10 @@ export function KnowledgeSpaceSidebar({
                     />
                 ) : null}
                 {/* Top actions */}
-                <div className={collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 pt-4 pb-6" : "px-3 py-5"}>
+                <div className={cn(
+                    collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 pt-4 pb-6" : "px-3 py-5",
+                    compactMode && "hidden",
+                )}>
                     {mobileDrawerMode ? (
                         <div>
                             <Button
@@ -375,7 +381,7 @@ export function KnowledgeSpaceSidebar({
                         </div>
                     </div>
                 </div>
-                {mobileDrawerMode ? (
+                {mobileDrawerMode && !compactMode ? (
                     <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
                         <UserPopMenu variant="drawer" />
                     </div>
