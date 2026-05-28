@@ -199,16 +199,23 @@ def premock_import_chain() -> None:
     if "bisheng.worker.main" not in sys.modules:
 
         class _FakeCeleryTask:
-            """Minimal Celery-task stand-in: exposes .run(), .delay(), .apply_async()."""
+            """Minimal Celery-task stand-in: exposes .run(), .delay(), .apply_async().
+
+            .delay() and .apply_async() are intentional no-ops: existing tests expect
+            Celery dispatch calls to be side-effect-free.  Tests that need to exercise
+            the real task body invoke .run() directly.
+            """
 
             def __init__(self, fn):
                 self.run = fn
 
             def delay(self, *args, **kwargs):
-                return self.run(*args, **kwargs)
+                # No-op: existing tests must not trigger the task body via .delay().
+                return None
 
             def apply_async(self, args=(), kwargs=None, queue=None, **kw):
-                return self.run(*(args or ()), **(kwargs or {}))
+                # No-op: same rationale as .delay() above.
+                return None
 
         def _task_decorator(*deco_args, **deco_kwargs):
             """Accept @bisheng_celery.task or @bisheng_celery.task(name=…) forms."""
