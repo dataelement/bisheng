@@ -250,3 +250,40 @@ def trigger_dispatch_task() -> None:
     except Exception:
         logger.exception("trigger_dispatch_task failed")
         raise
+
+
+def enqueue_or_dispatch(
+    *,
+    user_id: int,
+    file_id: int,
+    file_name: str,
+    preview_cache_key: str | None,
+    callback_url: str | None,
+) -> None:
+    """Single dispatch entry point used by service-layer callers.
+
+    When the fair scheduler is disabled, dispatches directly via
+    ``apply_async`` using ``decide_queue(file_name)`` (which handles OCR
+    routing). When enabled, enqueues into the per-user virtual queue and
+    fires a trigger task to start a dispatch round immediately.
+    """
+    preview_cache_key = preview_cache_key or ""
+    callback_url = callback_url or ""
+
+    if not _fair_scheduler_enabled():
+        queue = decide_queue(file_name)
+        _parse_apply_async(args=[int(file_id), preview_cache_key, callback_url], queue=queue)
+        return
+
+    scheduler = FileScheduler()
+    scheduler.enqueue_file(
+        user_id=str(user_id),
+        file_id=str(file_id),
+        preview_cache_key=preview_cache_key,
+        callback_url=callback_url,
+        file_ext=_extract_ext(file_name),
+    )
+    try:
+        trigger_dispatch_task.delay()
+    except Exception:
+        logger.exception("file_scheduler: trigger_dispatch_task.delay failed; relying on Beat fallback")
