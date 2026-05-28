@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta
 
 from loguru import logger
 
 from bisheng.common.services.config_service import settings
+from bisheng.knowledge.domain.models.knowledge_file import (
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+)
 from bisheng.worker.knowledge.lua_scripts import (
     COMPLETE_FILE,
     DISPATCH_ONE,
@@ -294,21 +299,14 @@ def enqueue_or_dispatch(
 # via Celery Beat.
 # ---------------------------------------------------------------------------
 
-from datetime import datetime, timedelta  # noqa: E402  (module-level, after the guard block)
-
-from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
-    KnowledgeFileDao,
-    KnowledgeFileStatus,
+_TERMINAL_STATUSES: frozenset[int] = frozenset(
+    {
+        KnowledgeFileStatus.SUCCESS.value,
+        KnowledgeFileStatus.FAILED.value,
+        KnowledgeFileStatus.TIMEOUT.value,
+        KnowledgeFileStatus.VIOLATION.value,
+    }
 )
-
-_TERMINAL_STATUSES = {
-    KnowledgeFileStatus.SUCCESS.value,
-    KnowledgeFileStatus.FAILED.value,
-}
-# VIOLATION (if defined) is also terminal.
-_violation = getattr(KnowledgeFileStatus, "VIOLATION", None)
-if _violation is not None:
-    _TERMINAL_STATUSES.add(_violation.value)
 
 
 @bisheng_celery.task(
@@ -356,7 +354,7 @@ def reconcile_file_scheduler_task() -> None:
 
             if status == KnowledgeFileStatus.PROCESSING.value:
                 # Case 3: worker may be dead — timeout-based recovery
-                if datetime.utcnow() - row.update_time > inflight_ttl:
+                if datetime.now() - row.update_time > inflight_ttl:
                     sched.complete_file(user_id=user_id, file_id=file_id)
                     KnowledgeFileDao.update_file_status(
                         [int(file_id)],
