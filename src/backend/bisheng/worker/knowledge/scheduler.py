@@ -287,3 +287,93 @@ def enqueue_or_dispatch(
         trigger_dispatch_task.delay()
     except Exception:
         logger.exception("file_scheduler: trigger_dispatch_task.delay failed; relying on Beat fallback")
+
+
+# ---------------------------------------------------------------------------
+# Reconcile task — fixes Redis ↔ DB drift (Cases 1-4).  Runs every 5 min
+# via Celery Beat.
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timedelta  # noqa: E402  (module-level, after the guard block)
+
+from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+)
+
+_TERMINAL_STATUSES = {
+    KnowledgeFileStatus.SUCCESS.value,
+    KnowledgeFileStatus.FAILED.value,
+}
+# VIOLATION (if defined) is also terminal.
+_violation = getattr(KnowledgeFileStatus, "VIOLATION", None)
+if _violation is not None:
+    _TERMINAL_STATUSES.add(_violation.value)
+
+
+@bisheng_celery.task(
+    name="bisheng.worker.knowledge.scheduler.reconcile_file_scheduler_task",
+    acks_late=True,
+)
+def reconcile_file_scheduler_task() -> None:
+    """Reconcile Redis scheduler state with the DB. Cases 1-4 from the spec."""
+    conf = _fair_scheduler_conf()
+    inflight_ttl = timedelta(seconds=conf.inflight_ttl_seconds)
+    sched = FileScheduler()
+
+    for user_id in sched.inflight_users():
+        for file_id in sched.inflight_files(user_id=user_id):
+            rows = KnowledgeFileDao.get_file_by_ids([int(file_id)])
+            if not rows:
+                sched.complete_file(user_id=user_id, file_id=file_id)
+                logger.warning("reconcile: missing DB row, cleared inflight file_id={}", file_id)
+                continue
+            row = rows[0]
+            status = row.status
+
+            if status in _TERMINAL_STATUSES:
+                # Case 1: complete_file callback was lost
+                sched.complete_file(user_id=user_id, file_id=file_id)
+                logger.warning(
+                    "reconcile: leaked inflight (status={}) cleared for file_id={}",
+                    status,
+                    file_id,
+                )
+                continue
+
+            if status == KnowledgeFileStatus.WAITING.value:
+                # Case 2: apply_async + rollback both failed; re-enqueue
+                sched.complete_file(user_id=user_id, file_id=file_id)
+                sched.enqueue_file(
+                    user_id=user_id,
+                    file_id=file_id,
+                    preview_cache_key="",
+                    callback_url="",
+                    file_ext=_extract_ext(row.file_name),
+                )
+                logger.error("reconcile: re-enqueued orphaned file_id={}", file_id)
+                continue
+
+            if status == KnowledgeFileStatus.PROCESSING.value:
+                # Case 3: worker may be dead — timeout-based recovery
+                if datetime.utcnow() - row.update_time > inflight_ttl:
+                    sched.complete_file(user_id=user_id, file_id=file_id)
+                    KnowledgeFileDao.update_file_status(
+                        [int(file_id)],
+                        KnowledgeFileStatus.WAITING,
+                    )
+                    sched.enqueue_file(
+                        user_id=user_id,
+                        file_id=file_id,
+                        preview_cache_key="",
+                        callback_url="",
+                        file_ext=_extract_ext(row.file_name),
+                    )
+                    logger.error("reconcile: timed-out file_id={} re-enqueued", file_id)
+
+    # Case 4: drained active_users
+    for user_id in sched.active_users():
+        queue_empty = sched._conn.llen(_queue_key(user_id)) == 0
+        inflight_empty = sched._conn.scard(_inflight_key(user_id)) == 0
+        if queue_empty and inflight_empty:
+            sched._conn.srem(ACTIVE_USERS_KEY, user_id)
