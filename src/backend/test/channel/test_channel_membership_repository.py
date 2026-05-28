@@ -179,3 +179,74 @@ async def test_revoke_last_channel_membership_source_removes_visibility(async_db
         )
     ).all()
     assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_remove_channel_subscription_members_preserves_authorized_grants(async_db_session: AsyncSession):
+    repo = SpaceChannelMemberRepositoryImpl(async_db_session)
+    rows = [
+        SpaceChannelMember(
+            business_id='channel-private',
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=1,
+            user_role=UserRoleEnum.CREATOR,
+            status=MembershipStatusEnum.ACTIVE,
+            relation=ChannelRelationEnum.OWNER,
+            grant_subject_type='self',
+            grant_subject_id=1,
+            grant_binding_key='channel:channel-private:self:1:owner:-',
+        ),
+        SpaceChannelMember(
+            business_id='channel-private',
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=2,
+            user_role=UserRoleEnum.MEMBER,
+            status=MembershipStatusEnum.ACTIVE,
+            relation=ChannelRelationEnum.VIEWER,
+        ),
+        SpaceChannelMember(
+            business_id='channel-private',
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=3,
+            user_role=UserRoleEnum.MEMBER,
+            status=MembershipStatusEnum.PENDING,
+            relation=ChannelRelationEnum.VIEWER,
+        ),
+        SpaceChannelMember(
+            business_id='channel-private',
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=4,
+            user_role=UserRoleEnum.MEMBER,
+            status=MembershipStatusEnum.ACTIVE,
+            relation=ChannelRelationEnum.EDITOR,
+            grant_subject_type='user',
+            grant_subject_id=4,
+            grant_binding_key='channel:channel-private:user:4:editor:-',
+        ),
+        SpaceChannelMember(
+            business_id='channel-private',
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=5,
+            user_role=UserRoleEnum.MEMBER,
+            status=MembershipStatusEnum.ACTIVE,
+            relation=ChannelRelationEnum.VIEWER,
+            grant_subject_type='department',
+            grant_subject_id=10,
+            grant_binding_key='channel:channel-private:department:10:viewer:children',
+        ),
+    ]
+    async_db_session.add_all(rows)
+    await async_db_session.commit()
+
+    removed = await repo.remove_channel_subscription_members('channel-private')
+
+    remaining = (
+        await async_db_session.exec(
+            select(SpaceChannelMember.user_id).where(
+                SpaceChannelMember.business_id == 'channel-private',
+                SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
+            )
+        )
+    ).all()
+    assert removed == 2
+    assert sorted(remaining) == [1, 4, 5]

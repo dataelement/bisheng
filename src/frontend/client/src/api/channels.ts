@@ -194,7 +194,7 @@ export async function getChannelsApi(params: {
         subscriberCount: 0,
         articleCount: 0,
         unreadCount: item.unread_count || 0,
-        role: item.user_role as ChannelUserRole,
+        role: (item.relation || item.user_role) as ChannelUserRole,
         isPinned: item.is_pinned,
         createdAt: item.create_time,
         updatedAt: item.latest_article_update_time || item.update_time,

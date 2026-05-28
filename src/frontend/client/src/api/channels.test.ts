@@ -4,8 +4,10 @@ import {
   canEditChannelSettings,
   canManageChannelPermissions,
   ChannelRole,
+  getChannelsApi,
   getChannelGrantSubjectsUsersApi,
   getChannelPermissionsApi,
+  SortType,
 } from "./channels";
 
 jest.mock("~/api/request", () => ({
@@ -84,6 +86,42 @@ describe("channel permission APIs", () => {
         params: { keyword: "ali", page: 2, page_size: 50 },
         skip403Redirect: true,
         signal: undefined,
+      },
+    );
+  });
+
+  it("maps channel relation ahead of legacy user role", async () => {
+    mockGet.mockResolvedValue({
+      data: [
+        {
+          id: "channel-1",
+          name: "资讯频道",
+          source_list: [],
+          visibility: "public",
+          is_released: true,
+          user_role: "member",
+          relation: "editor",
+          is_pinned: false,
+          create_time: "2026-05-28T00:00:00Z",
+          latest_article_update_time: "2026-05-28T01:00:00Z",
+          unread_count: 0,
+        },
+      ],
+    });
+
+    const channels = await getChannelsApi({
+      type: "subscribed",
+      sortBy: SortType.RECENT_UPDATE,
+    });
+
+    expect(channels[0].role).toBe("editor");
+    expect(mockGet).toHaveBeenCalledWith(
+      "/api/v1/channel/manager/my_channels",
+      {
+        params: {
+          query_type: "followed",
+          sort_by: SortType.RECENT_UPDATE,
+        },
       },
     );
   });

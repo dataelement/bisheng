@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.channel.domain.models.channel import ChannelVisibilityEnum
-from bisheng.channel.domain.schemas.channel_manager_schema import CreateChannelRequest, UpdateChannelRequest
+from bisheng.channel.domain.schemas.channel_manager_schema import (
+    CreateChannelRequest,
+    MyChannelQueryRequest,
+    QueryTypeEnum,
+    SortByEnum,
+    UpdateChannelRequest,
+)
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.errcode.channel import ChannelPermissionDeniedError
 from bisheng.common.models.space_channel_member import (
@@ -208,7 +214,86 @@ async def test_editor_can_update_channel_settings():
 
 
 @pytest.mark.asyncio
-async def test_editor_switch_private_preserves_existing_owner_tuple():
+async def test_followed_channels_include_private_authorized_user_channel():
+    channel = SimpleNamespace(
+        id='channel-1',
+        name='私有频道',
+        source_list=[],
+        visibility=ChannelVisibilityEnum.PRIVATE,
+        filter_rules=[],
+        is_released=True,
+        latest_article_update_time=None,
+        create_time=None,
+    )
+    membership = SimpleNamespace(
+        business_id='channel-1',
+        status=MembershipStatusEnum.ACTIVE,
+        user_role=UserRoleEnum.MEMBER,
+        relation=ChannelRelationEnum.EDITOR,
+        grant_subject_type='user',
+        grant_subject_id=7,
+        grant_binding_key='channel:channel-1:user:7:editor:-',
+        is_pinned=False,
+        create_time=None,
+    )
+    channel_repository = SimpleNamespace(find_channels_by_ids=AsyncMock(return_value=[channel]))
+    member_repository = SimpleNamespace(find_channel_memberships=AsyncMock(return_value=[membership]))
+    service = _service(channel_repository, member_repository)
+
+    channels = await service.get_my_channels(
+        MyChannelQueryRequest(
+            query_type=QueryTypeEnum.FOLLOWED,
+            sort_by=SortByEnum.LATEST_UPDATE,
+        ),
+        _LoginUser(),
+    )
+
+    assert [item.id for item in channels] == ['channel-1']
+    assert channels[0].relation == ChannelRelationEnum.EDITOR.value
+    assert channels[0].user_role == UserRoleEnum.MEMBER.value
+
+
+@pytest.mark.asyncio
+async def test_followed_channels_include_private_organization_grant_channel():
+    channel = SimpleNamespace(
+        id='channel-2',
+        name='组织授权私有频道',
+        source_list=[],
+        visibility=ChannelVisibilityEnum.PRIVATE,
+        filter_rules=[],
+        is_released=True,
+        latest_article_update_time=None,
+        create_time=None,
+    )
+    membership = SimpleNamespace(
+        business_id='channel-2',
+        status=MembershipStatusEnum.ACTIVE,
+        user_role=UserRoleEnum.MEMBER,
+        relation=ChannelRelationEnum.VIEWER,
+        grant_subject_type='user_group',
+        grant_subject_id=12,
+        grant_binding_key='channel:channel-2:user_group:12:viewer:-',
+        is_pinned=False,
+        create_time=None,
+    )
+    channel_repository = SimpleNamespace(find_channels_by_ids=AsyncMock(return_value=[channel]))
+    member_repository = SimpleNamespace(find_channel_memberships=AsyncMock(return_value=[membership]))
+    service = _service(channel_repository, member_repository)
+
+    channels = await service.get_my_channels(
+        MyChannelQueryRequest(
+            query_type=QueryTypeEnum.FOLLOWED,
+            sort_by=SortByEnum.LATEST_UPDATE,
+        ),
+        _LoginUser(),
+    )
+
+    assert [item.id for item in channels] == ['channel-2']
+    assert channels[0].relation == ChannelRelationEnum.VIEWER.value
+
+
+@pytest.mark.asyncio
+async def test_switch_private_removes_subscription_members_without_clearing_authorized_tuples():
     channel = SimpleNamespace(
         id='channel-1',
         name='频道',
@@ -231,7 +316,7 @@ async def test_editor_switch_private_preserves_existing_owner_tuple():
     member_repository = SimpleNamespace(
         find_membership=AsyncMock(return_value=current_member),
         find_members_by_role=AsyncMock(return_value=[owner]),
-        remove_non_creator_members=AsyncMock(),
+        remove_channel_subscription_members=AsyncMock(return_value=2),
     )
     service = _service(channel_repository, member_repository)
 
@@ -252,8 +337,8 @@ async def test_editor_switch_private_preserves_existing_owner_tuple():
         )
 
     member_repository.find_members_by_role.assert_awaited_once_with('channel-1', UserRoleEnum.CREATOR)
-    member_repository.remove_non_creator_members.assert_awaited_once_with('channel-1')
-    mock_delete_tuples.assert_awaited_once_with('channel', 'channel-1')
+    member_repository.remove_channel_subscription_members.assert_awaited_once_with('channel-1')
+    mock_delete_tuples.assert_not_awaited()
     mock_write_owner.assert_awaited_once_with(1, 'channel', 'channel-1')
 
 

@@ -130,6 +130,16 @@ def _is_organization_channel_source(member) -> bool:
     return getattr(member, 'grant_subject_type', None) in {'department', 'user_group'}
 
 
+def _is_authorized_channel_source(member) -> bool:
+    return getattr(member, 'grant_subject_type', None) in {'user', 'department', 'user_group'}
+
+
+def _is_channel_subscription_source(member) -> bool:
+    if resolve_channel_relation(member) == ChannelRelationEnum.OWNER:
+        return False
+    return not _is_authorized_channel_source(member)
+
+
 class ChannelService:
     def __init__(
         self,
@@ -406,7 +416,7 @@ class ChannelService:
         # Build a map of business_id to membership for quick lookup
         membership_map = {m.business_id: m for m in memberships}
 
-        # Construct the result list, filtering out private channels for "followed" query type
+        # Construct the result list, filtering out non-authorized private channels for "followed" query type
         result: List[ChannelItemResponse] = []
         channels_to_process = []
         for channel_id, membership in membership_map.items():
@@ -414,9 +424,11 @@ class ChannelService:
             if not channel:
                 continue
 
-            # if query type is "followed", filter out private channels
             if query_data.query_type == QueryTypeEnum.FOLLOWED:
-                if channel.visibility == ChannelVisibilityEnum.PRIVATE:
+                if (
+                    channel.visibility == ChannelVisibilityEnum.PRIVATE
+                    and not _is_authorized_channel_source(membership)
+                ):
                     continue
 
             channels_to_process.append((channel, membership))
@@ -1179,7 +1191,7 @@ class ChannelService:
             new_visibility = ChannelVisibilityEnum(req.visibility)
             old_visibility = channel.visibility
             if old_visibility != new_visibility:
-                # When changing to PRIVATE, remove all non-creator members
+                # When changing to PRIVATE, remove square subscription members only.
                 if new_visibility == ChannelVisibilityEnum.PRIVATE:
                     removed_user_ids = []
                     if self.message_service:
@@ -1191,21 +1203,19 @@ class ChannelService:
                             member.user_id
                             for member in removed_members
                             if member.status == MembershipStatusEnum.ACTIVE
-                            and resolve_channel_relation(member) != ChannelRelationEnum.OWNER
+                            and _is_channel_subscription_source(member)
                         ]
                     owners = await self.space_channel_member_repository.find_members_by_role(
                         channel_id,
                         UserRoleEnum.CREATOR,
                     )
-                    await self.space_channel_member_repository.remove_non_creator_members(channel_id)
-                    # F008: Clear all FGA tuples and re-write owner only
+                    await self.space_channel_member_repository.remove_channel_subscription_members(channel_id)
                     try:
-                        await OwnerService.delete_resource_tuples("channel", channel_id)
                         for owner in owners:
                             await OwnerService.write_owner_tuple(owner.user_id, "channel", channel_id)
                     except Exception as e:
                         logger.warning(
-                            "Failed to sync FGA tuples after PRIVATE switch for channel %s: %s", channel_id, e
+                            "Failed to ensure owner FGA tuples after PRIVATE switch for channel %s: %s", channel_id, e
                         )
                     if removed_user_ids and self.message_service:
                         final_removed_user_ids = []

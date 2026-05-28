@@ -204,6 +204,23 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
                 highest_by_user[row.user_id] = row
         return list(highest_by_user.values())
 
+    async def remove_channel_subscription_members(self, channel_id: str) -> int:
+        """Remove channel square subscription rows while preserving authorization grants."""
+        query = (
+            delete(SpaceChannelMember)
+            .where(
+                SpaceChannelMember.business_id == channel_id,
+                SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
+                SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
+                (SpaceChannelMember.relation.is_(None))
+                | (SpaceChannelMember.relation != ChannelRelationEnum.OWNER),
+                SpaceChannelMember.grant_subject_type.is_(None),
+            )
+        )
+        result = await self.session.exec(query)
+        await self.session.commit()
+        return result.rowcount or 0
+
     async def remove_non_creator_members(self, channel_id: str) -> None:
         """Remove all members from a channel except the creator (hard delete)."""
         from sqlmodel import delete

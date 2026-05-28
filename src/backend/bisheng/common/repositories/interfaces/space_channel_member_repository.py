@@ -110,6 +110,11 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC)
         pass
 
     @abstractmethod
+    async def remove_channel_subscription_members(self, channel_id: str) -> int:
+        """Remove channel square subscription members while preserving authorization grants."""
+        pass
+
+    @abstractmethod
     async def remove_non_creator_members(self, channel_id: str) -> None:
         """Remove all members of a channel except the creator (hard delete)."""
         pass
