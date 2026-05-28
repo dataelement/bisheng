@@ -185,6 +185,8 @@ async def _candidate_user_ids() -> set[int]:
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.core.database import get_async_db_session
     from bisheng.database.constants import AdminRole
+    from bisheng.user.domain.models.user import User
+    from sqlalchemy import select
 
     async with get_async_db_session() as session:
         with bypass_tenant_filter():
@@ -195,9 +197,11 @@ async def _candidate_user_ids() -> set[int]:
             )
             user_ids = {int(row[0]) for row in result.fetchall()}
             try:
+                # SQLAlchemy expression so ``user`` and ``delete`` are auto-quoted
+                # per dialect (MySQL backticks; DM8 / standard double quotes).
                 users = await _session_exec(
                     session,
-                    sa_text('SELECT user_id FROM user WHERE `delete` = 0'),
+                    select(User.user_id).where(User.delete == 0),
                 )
                 user_ids.update(int(row[0]) for row in users.fetchall())
             except Exception as e:
@@ -283,12 +287,19 @@ async def _populate_candidate_users(
             ):
                 _insert_candidate_users(conn, [f'user:{row[1]}' for row in rows])
             try:
+                from bisheng.user.domain.models.user import User
+                from sqlalchemy import bindparam, select
+
                 async for rows in iter_keyset_batches(
                     session,
                     lambda last_id: (
-                        sa_text('SELECT user_id, user_id FROM user '
-                                'WHERE `delete` = 0 AND user_id > :last_id '
-                                'ORDER BY user_id LIMIT :limit'),
+                        # SQLAlchemy expression so ``user`` / ``delete`` are
+                        # auto-quoted per dialect; raw `\`delete\`` is rejected
+                        # by DM8.
+                        select(User.user_id, User.user_id)
+                        .where(User.delete == 0, User.user_id > bindparam('last_id'))
+                        .order_by(User.user_id)
+                        .limit(bindparam('limit')),
                         {'last_id': last_id},
                     ),
                     batch_size=batch_size,
