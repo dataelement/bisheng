@@ -140,7 +140,7 @@ class FileScheduler:
     def complete_file(self, *, user_id: str, file_id: str) -> None:
         self._complete(keys=[str(user_id)], args=[str(file_id)])
 
-    def get_payload(self, file_id: str) -> dict[str, str]:
+    def get_payload(self, *, file_id: str) -> dict[str, str]:
         raw = self._conn.hgetall(_payload_key(file_id))
         if not raw:
             return {}
@@ -149,7 +149,7 @@ class FileScheduler:
             for k, v in raw.items()
         }
 
-    def delete_payload(self, file_id: str) -> None:
+    def delete_payload(self, *, file_id: str) -> None:
         self._conn.delete(_payload_key(file_id))
 
     def active_users(self) -> list[str]:
@@ -160,7 +160,7 @@ class FileScheduler:
         members = self._conn.smembers(INFLIGHT_USERS_KEY)
         return [m.decode() if isinstance(m, bytes) else m for m in members]
 
-    def inflight_files(self, user_id: str) -> list[str]:
+    def inflight_files(self, *, user_id: str) -> list[str]:
         members = self._conn.smembers(_inflight_key(user_id))
         return [m.decode() if isinstance(m, bytes) else m for m in members]
 

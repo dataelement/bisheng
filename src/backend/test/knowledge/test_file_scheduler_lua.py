@@ -90,3 +90,41 @@ def test_complete_is_idempotent(scheduler, redis_conn):
     scheduler.complete_file(user_id="9", file_id="1")
     scheduler.complete_file(user_id="9", file_id="1")
     assert not redis_conn.smembers("{bisheng_fs}:inflight:9")
+
+
+def test_acquire_dispatch_lock_returns_token_only_first_caller(scheduler, redis_conn):
+    token = scheduler.acquire_dispatch_lock(ttl_seconds=10)
+    assert token is not None
+    assert isinstance(token, str)
+    # Second caller blocked.
+    assert scheduler.acquire_dispatch_lock(ttl_seconds=10) is None
+    # Stored value matches the returned token.
+    stored = redis_conn.get("{bisheng_fs}:dispatch_lock")
+    assert stored == token
+
+
+def test_release_dispatch_lock_only_releases_own_token(scheduler, redis_conn):
+    token_a = scheduler.acquire_dispatch_lock(ttl_seconds=10)
+    assert token_a is not None
+    # A different token must not release the lock.
+    scheduler.release_dispatch_lock("not_the_right_token")
+    assert redis_conn.get("{bisheng_fs}:dispatch_lock") == token_a
+    # The right token releases it.
+    scheduler.release_dispatch_lock(token_a)
+    assert redis_conn.get("{bisheng_fs}:dispatch_lock") is None
+    # And now another acquirer can take it.
+    token_b = scheduler.acquire_dispatch_lock(ttl_seconds=10)
+    assert token_b is not None
+    assert token_b != token_a
+
+
+def test_dispatch_re_adds_user_to_inflight_users(scheduler, redis_conn):
+    scheduler.enqueue_file(user_id="9", file_id="1", preview_cache_key="", callback_url="", file_ext="txt")
+    scheduler.enqueue_file(user_id="9", file_id="2", preview_cache_key="", callback_url="", file_ext="txt")
+    # Dispatch and complete the first → user transiently leaves inflight_users.
+    scheduler.dispatch_one(user_id="9", limit=5)
+    scheduler.complete_file(user_id="9", file_id="1")
+    assert not redis_conn.sismember("{bisheng_fs}:inflight_users", "9")
+    # Dispatching the second file re-adds them — reconcile must still see this user.
+    scheduler.dispatch_one(user_id="9", limit=5)
+    assert redis_conn.sismember("{bisheng_fs}:inflight_users", "9")

@@ -26,7 +26,7 @@ from unittest.mock import MagicMock
 # will then skip ``redis`` automatically, leaving it as the genuine package.
 # redis.asyncio and redis.exceptions are still mocked because they are
 # reached via bisheng.core.cache.redis_conn, which is itself pre-blocked.
-import redis as _redis_real_module  # noqa: F401  (side-effect: registers in sys.modules)
+import redis  # noqa: F401  # pre-populate sys.modules["redis"] before the MagicMock loop
 
 _premock_log = logging.getLogger(__name__)
 

@@ -50,6 +50,7 @@ if redis.call('LLEN', queue_key) == 0 then
 end
 
 redis.call('SADD', inflight_key, file_id)
+redis.call('SADD', prefix .. 'inflight_users', user_id)
 return file_id
 """
 
@@ -59,6 +60,8 @@ local user_id = KEYS[1]
 local file_id = ARGV[1]
 
 redis.call('SREM', prefix .. 'inflight:' .. user_id, file_id)
+-- RPUSH puts the file back at the tail, which is the very next position RPOP
+-- will read — preserves FIFO retry order, NOT a deprioritization.
 redis.call('RPUSH', prefix .. 'queue:' .. user_id, file_id)
 redis.call('SADD',  prefix .. 'active_users', user_id)
 return 1
