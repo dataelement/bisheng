@@ -263,19 +263,22 @@ class CeleryConf(BaseModel):
 
 
 class FairSchedulerConf(BaseModel):
-    """Fair scheduler runtime configuration."""
+    """Fair scheduler runtime configuration.
 
-    dispatch_interval_seconds: int = Field(default=30, ge=1)
-    dispatch_lock_ttl_seconds: int = Field(default=24, ge=1)
+    Beat schedule intervals (dispatch every 30 s, reconcile every 300 s) are
+    configured via ``celery_task.beat_schedule.file_scheduler_dispatch`` and
+    ``celery_task.beat_schedule.file_scheduler_reconcile`` in config.yaml.
+    The defaults are set in ``CeleryConf.validate``; operators can override
+    them without touching this model.
+    """
+
+    dispatch_lock_ttl_seconds: int = Field(default=24, ge=1, le=300)
     max_per_user_inflight: int = Field(default=1, ge=1)
     user_overrides: dict[str, int] = Field(default_factory=dict)
     inflight_ttl_seconds: int = Field(default=7200, ge=60)
-    reconcile_interval_seconds: int = Field(default=300, ge=30)
 
     @model_validator(mode="after")
     def validate(self):
-        if self.dispatch_lock_ttl_seconds >= self.dispatch_interval_seconds:
-            raise ValueError("dispatch_lock_ttl_seconds must be strictly less than dispatch_interval_seconds")
         for user_id, limit in self.user_overrides.items():
             if limit < 1:
                 raise ValueError(f"user_overrides[{user_id}] must be >= 1, got {limit}")

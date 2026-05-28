@@ -14,7 +14,16 @@ def _row(status, file_name="a.txt", user_id=1, update_time=None):
     return m
 
 
+def _patch_fair_enabled(monkeypatch):
+    """Patch _fair_scheduler_enabled to return True so the task body runs."""
+    monkeypatch.setattr(
+        "bisheng.worker.knowledge.scheduler._fair_scheduler_enabled",
+        lambda: True,
+    )
+
+
 def test_case1_done_in_db_clears_inflight(monkeypatch):
+    _patch_fair_enabled(monkeypatch)
     sched = MagicMock()
     sched.inflight_users.return_value = ["7"]
     sched.inflight_files.return_value = ["100"]
@@ -31,6 +40,7 @@ def test_case1_done_in_db_clears_inflight(monkeypatch):
 
 
 def test_case2_still_waiting_reenqueues(monkeypatch):
+    _patch_fair_enabled(monkeypatch)
     sched = MagicMock()
     sched.inflight_users.return_value = ["7"]
     sched.inflight_files.return_value = ["100"]
@@ -48,6 +58,7 @@ def test_case2_still_waiting_reenqueues(monkeypatch):
 
 
 def test_case3_processing_timeout_reenqueues(monkeypatch):
+    _patch_fair_enabled(monkeypatch)
     sched = MagicMock()
     sched.inflight_users.return_value = ["7"]
     sched.inflight_files.return_value = ["100"]
@@ -73,6 +84,7 @@ def test_case3_processing_timeout_reenqueues(monkeypatch):
 
 
 def test_case3_processing_fresh_skips(monkeypatch):
+    _patch_fair_enabled(monkeypatch)
     sched = MagicMock()
     sched.inflight_users.return_value = ["7"]
     sched.inflight_files.return_value = ["100"]
@@ -92,6 +104,7 @@ def test_case3_processing_fresh_skips(monkeypatch):
 
 
 def test_case_missing_row_clears_inflight(monkeypatch):
+    _patch_fair_enabled(monkeypatch)
     sched = MagicMock()
     sched.inflight_users.return_value = ["7"]
     sched.inflight_files.return_value = ["100"]
@@ -108,6 +121,7 @@ def test_case_missing_row_clears_inflight(monkeypatch):
 
 
 def test_case1_timeout_status_is_treated_as_terminal(monkeypatch):
+    _patch_fair_enabled(monkeypatch)
     sched = MagicMock()
     sched.inflight_users.return_value = ["7"]
     sched.inflight_files.return_value = ["100"]
@@ -126,6 +140,7 @@ def test_case1_timeout_status_is_treated_as_terminal(monkeypatch):
 
 def test_case4_drained_active_user_removed(monkeypatch):
     """If queue and inflight are both empty, user must be removed from active_users."""
+    _patch_fair_enabled(monkeypatch)
     fake_conn = MagicMock()
     fake_conn.llen.return_value = 0
     fake_conn.scard.return_value = 0
@@ -145,6 +160,7 @@ def test_case4_drained_active_user_removed(monkeypatch):
 
 
 def test_case4_user_with_queued_files_not_removed(monkeypatch):
+    _patch_fair_enabled(monkeypatch)
     fake_conn = MagicMock()
     fake_conn.llen.return_value = 3  # files still queued
     fake_conn.scard.return_value = 0
@@ -157,3 +173,15 @@ def test_case4_user_with_queued_files_not_removed(monkeypatch):
     reconcile_file_scheduler_task.run()
 
     fake_conn.srem.assert_not_called()
+
+
+def test_reconcile_task_returns_early_when_fair_disabled(monkeypatch):
+    """When fair_scheduler_enabled=False the Beat task must not instantiate FileScheduler."""
+    monkeypatch.setattr(
+        "bisheng.worker.knowledge.scheduler._fair_scheduler_enabled",
+        lambda: False,
+    )
+    scheduler_cls = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", scheduler_cls)
+    reconcile_file_scheduler_task.run()
+    scheduler_cls.assert_not_called()

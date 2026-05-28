@@ -250,6 +250,8 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
 )
 def trigger_dispatch_task() -> None:
     """Event-driven trigger called after enqueue and after complete."""
+    if not _fair_scheduler_enabled():
+        return
     try:
         run_dispatch_round()
     except Exception:
@@ -315,6 +317,8 @@ _TERMINAL_STATUSES: frozenset[int] = frozenset(
 )
 def reconcile_file_scheduler_task() -> None:
     """Reconcile Redis scheduler state with the DB. Cases 1-4 from the spec."""
+    if not _fair_scheduler_enabled():
+        return
     conf = _fair_scheduler_conf()
     inflight_ttl = timedelta(seconds=conf.inflight_ttl_seconds)
     sched = FileScheduler()

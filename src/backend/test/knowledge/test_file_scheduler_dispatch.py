@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from bisheng.worker.knowledge.scheduler import FileScheduler, run_dispatch_round
+from bisheng.worker.knowledge.scheduler import FileScheduler, run_dispatch_round, trigger_dispatch_task
 
 
 def test_run_dispatch_round_dispatches_one_file_per_active_user(monkeypatch):
@@ -95,3 +95,15 @@ def test_run_dispatch_round_missing_payload_rolls_back(monkeypatch):
     apply_async.assert_not_called()
     sched.rollback_dispatch.assert_called_once_with(user_id="a", file_id="10")
     sched.release_dispatch_lock.assert_called_once_with("tok")
+
+
+def test_trigger_dispatch_task_returns_early_when_fair_disabled(monkeypatch):
+    """When fair_scheduler_enabled=False the Beat task must not call run_dispatch_round."""
+    monkeypatch.setattr(
+        "bisheng.worker.knowledge.scheduler._fair_scheduler_enabled",
+        lambda: False,
+    )
+    run_round = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.run_dispatch_round", run_round)
+    trigger_dispatch_task.run()
+    run_round.assert_not_called()
