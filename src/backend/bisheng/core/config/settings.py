@@ -244,6 +244,16 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.information.article.sync_information_article",
                 "schedule": crontab.from_string("*/30 * * * *"),  # exec Every half hour
             }
+        if "file_scheduler_dispatch" not in self.beat_schedule:
+            self.beat_schedule["file_scheduler_dispatch"] = {
+                "task": "bisheng.worker.knowledge.scheduler.trigger_dispatch_task",
+                "schedule": 30.0,
+            }
+        if "file_scheduler_reconcile" not in self.beat_schedule:
+            self.beat_schedule["file_scheduler_reconcile"] = {
+                "task": "bisheng.worker.knowledge.scheduler.reconcile_file_scheduler_task",
+                "schedule": 300.0,
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
