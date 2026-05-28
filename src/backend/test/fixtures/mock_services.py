@@ -20,6 +20,14 @@ import sys
 import types
 from unittest.mock import MagicMock
 
+# Pre-import the real ``redis`` package so tests that need a live Redis
+# connection (e.g. test_file_scheduler_lua.py) can obtain real StrictRedis
+# instances.  The ``if _mod not in sys.modules`` guard in the mock loop below
+# will then skip ``redis`` automatically, leaving it as the genuine package.
+# redis.asyncio and redis.exceptions are still mocked because they are
+# reached via bisheng.core.cache.redis_conn, which is itself pre-blocked.
+import redis as _redis_real_module  # noqa: F401  (side-effect: registers in sys.modules)
+
 _premock_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
