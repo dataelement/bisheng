@@ -115,7 +115,7 @@ class ChannelKnowledgeSyncDao:
         with get_sync_db_session() as session:
             stmt = select(ChannelKnowledgeSync).where(
                 col(ChannelKnowledgeSync.channel_id).in_(channel_ids),
-                ChannelKnowledgeSync.is_enabled.is_(True),
+                ChannelKnowledgeSync.is_enabled == True,  # noqa: E712 — DM8 rejects `IS 1`
             )
             return list(session.exec(stmt).all())
 

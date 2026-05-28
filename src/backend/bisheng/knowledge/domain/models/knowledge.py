@@ -716,7 +716,7 @@ class KnowledgeDao(KnowledgeBase):
         """ Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
         statement = select(Knowledge).where(
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            Knowledge.is_released.is_(True),
+            Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
             Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
         )
         if keyword:
@@ -801,7 +801,7 @@ class KnowledgeDao(KnowledgeBase):
             )
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                Knowledge.is_released.is_(True),
+                Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
         )
@@ -847,7 +847,7 @@ class KnowledgeDao(KnowledgeBase):
             .select_from(Knowledge)
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                Knowledge.is_released.is_(True),
+                Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
         )
