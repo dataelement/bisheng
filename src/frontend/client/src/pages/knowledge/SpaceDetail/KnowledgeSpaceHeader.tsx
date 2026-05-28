@@ -372,179 +372,163 @@ export function KnowledgeSpaceHeader({
 
     return (
         <>
-        <div className="space-y-4 pt-5 pb-4 max-[767px]:space-y-3 max-[767px]:pt-4 max-[767px]:pb-3">
-            <div className="hidden max-[767px]:flex items-end gap-3 min-h-8">
-                {currentPath.length === 0 ? (
-                    <>
-                        <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
-                            {localize("com_knowledge.knowledge_space")}
-                        </h1>
-                        {onGoKnowledgeSquare ? (
-                            <button
-                                type="button"
-                                onClick={onGoKnowledgeSquare}
-                                className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
-                            >
-                                <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
-                                <span className="text-[12px] leading-5 font-normal text-[#212121]">
-                                    前往知识广场
-                                </span>
-                            </button>
-                        ) : null}
-                    </>
-                ) : (
-                    // Keep header block height stable between root and folder levels on mobile.
-                    <div aria-hidden className="h-8" />
-                )}
-            </div>
-
-            {/* 面包屑 / 当前空间标题 */}
-            <div className="flex min-h-8 items-center justify-between gap-3">
-                <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+            <div className="space-y-4 pt-5 pb-4 max-[767px]:space-y-3 max-[767px]:pt-4 max-[767px]:pb-3">
+                <div className="hidden max-[767px]:flex items-end gap-3 min-h-8">
                     {currentPath.length === 0 ? (
-                        <div className="flex min-w-0 flex-1 items-center gap-1">
-                            <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
-                                {space.name}
-                            </h1>
-                            {space.spaceKind === "department" && (
-                                <span className="inline-flex shrink-0 items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600">
-                                    {localize("com_knowledge.department_badge")}
-                                </span>
-                            )}
-                            {space.spaceKind === "department" && space.approvalEnabled !== undefined && (
-                                <span
-                                    className={cn(
-                                        "inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
-                                        space.approvalEnabled
-                                            ? "bg-[#E6EDFC] text-[#165DFF]"
-                                            : "bg-[#F2F3F5] text-[#4E5969]",
-                                    )}
-                                >
-                                    {space.approvalEnabled
-                                        ? localize("com_knowledge.approval_enabled_badge")
-                                        : localize("com_knowledge.approval_disabled_badge")}
-                                </span>
-                            )}
-                            <Tooltip>
-                                <TooltipTrigger className="shrink-0 cursor-pointer">
-                                    <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
-                                </TooltipTrigger>
-                                <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
-                                    <div className="space-y-1.5 text-gray-800 text-sm">
-                                        <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
-                                            <p>{space.description || "-"}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_knowledge.creator_label")}</span>
-                                            <p>{space.creator}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_knowledge.joined_count_label")}</span>
-                                            <p>{space.memberCount || 0}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_knowledge.total_files_label")}</span>
-                                            <p>{space.totalFileCount || 0}</p>
-                                        </div>
-                                    </div>
-                                </TooltipContent>
-                            </Tooltip>
-                        </div>
-                    ) : (
                         <>
-                            {/* 移动端（<768px）：返回上一级 + 当前文件夹名 */}
-                            <div className="flex min-w-0 items-center gap-2 text-[#1d2129] md:hidden">
+                            <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
+                                {localize("com_knowledge.knowledge_space")}
+                            </h1>
+                            {onGoKnowledgeSquare ? (
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        const parent = currentPath[currentPath.length - 2];
-                                        onNavigateFolder(parent?.id);
-                                    }}
-                                    aria-label={localize("com_ui_go_back")}
-                                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                    onClick={onGoKnowledgeSquare}
+                                    className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
                                 >
-                                    <ChevronLeft className="size-4" />
+                                    <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
+                                    <span className="text-[12px] leading-5 font-normal text-[#212121]">
+                                        前往知识广场
+                                    </span>
                                 </button>
-                                <span className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
-                                    {currentPath[currentPath.length - 1]?.name || space.name}
-                                </span>
-                            </div>
-                            {/* PC 端：完整文件路径（空间名 / 文件夹…） */}
-                            <div className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm text-[#1d2129] md:flex">
-                                <button
-                                    type="button"
-                                    onClick={() => onNavigateFolder(undefined)}
-                                    className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
-                                >
-                                    {space.name}
-                                </button>
-                                {currentPath.map((seg, idx) => (
-                                    <Fragment key={seg.id ?? `path-${idx}`}>
-                                        <span className="shrink-0 text-[#86909c]" aria-hidden>
-                                            /
-                                        </span>
-                                        {idx === currentPath.length - 1 ? (
-                                            <span className="min-w-0 truncate text-base font-medium text-[#1d2129]">
-                                                {seg.name}
-                                            </span>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => onNavigateFolder(seg.id)}
-                                                className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
-                                            >
-                                                {seg.name}
-                                            </button>
-                                        )}
-                                    </Fragment>
-                                ))}
-                            </div>
+                            ) : null}
                         </>
+                    ) : (
+                        // Keep header block height stable between root and folder levels on mobile.
+                        <div aria-hidden className="h-8" />
                     )}
                 </div>
 
-                {/* 右侧：AI助手和分享 */}
-                <div className="flex shrink-0 items-center gap-3">
-                    <Button
-                        variant="ghost"
-                        className="ai-btn-border-draw h-8 gap-1 rounded-[6px] px-3 font-normal hover:bg-transparent"
-                        disabled={isSearching}
-                        onClick={onToggleAiAssistant}
-                    >
-                        <span className="ai-btn-shimmer-overlay" />
-                        <AiChatIcon className="size-4" stroke={isSearching ? "#c9cdd4" : "#335cff"} />
-                        <span className={isSearching ? '' : 'text-[#000D4D]'}>{localize("com_knowledge.ai_assistant")}</span>
-                    </Button>
-
-                    {showShare && (
-                        <CopyShareLinkButton
-                            sharePath={`/knowledge/share/${space.id}`}
-                            label={localize("com_knowledge.share")}
-                            successMessage={localize("com_knowledge.share_link_copied")}
-                            errorMessage={localize("com_knowledge.copy_failed_retry")}
-                        />
-                    )}
-                </div>
-            </div>
-
-            {/* Toolbar：宽屏一行（搜索 + 视图/筛选 + 右侧操作）；窄内容区（宽度小于 TOOLBAR_COMPACT_MAX_WIDTH）两行：仅搜索，其次为视图/筛选与新增/批量 */}
-            <div ref={toolbarMeasureRef} className="w-full min-w-0">
-                {toolbarCompact ? (
-                    <div className="flex flex-col gap-3">
-                        <div className={searchFieldClassName}>
-                            <CompoundSearchInput
-                                spaceId={space.id}
-                                isRoot={currentPath.length === 0}
-                                onSearch={onSearch}
-                            />
-                        </div>
-                        <div className="max-[767px]:-mx-4 max-[767px]:sticky max-[767px]:top-0 max-[767px]:z-20 max-[767px]:bg-white max-[767px]:px-4 max-[767px]:py-2">
-                            <div className="flex min-w-0 items-center justify-between gap-2">
-                                {viewFilterSortCluster}
-                                {batchAndAddActions}
+                {/* 面包屑 / 当前空间标题 */}
+                <div className="flex min-h-8 items-center justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+                        {currentPath.length === 0 ? (
+                            <div className="flex min-w-0 flex-1 items-center gap-1">
+                                <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                    {space.name}
+                                </h1>
+                                {space.spaceKind === "department" && (
+                                    <span className="inline-flex shrink-0 items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600">
+                                        {localize("com_knowledge.department_badge")}
+                                    </span>
+                                )}
+                                {/* {space.spaceKind === "department" && space.approvalEnabled !== undefined && ( */}
+                                {space.spaceKind === "department" && space.approvalEnabled && (
+                                    <span
+                                        className={cn(
+                                            "inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
+                                            space.approvalEnabled
+                                                ? "bg-[#E6EDFC] text-[#165DFF]"
+                                                : "bg-[#F2F3F5] text-[#4E5969]",
+                                        )}
+                                    >
+                                        {space.approvalEnabled
+                                            ? localize("com_knowledge.approval_enabled_badge")
+                                            : localize("com_knowledge.approval_disabled_badge")}
+                                    </span>
+                                )}
+                                <Tooltip>
+                                    <TooltipTrigger className="shrink-0 cursor-pointer">
+                                        <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
+                                    </TooltipTrigger>
+                                    <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
+                                        <div className="space-y-1.5 text-gray-800 text-sm">
+                                            <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
+                                                <p>{space.description || "-"}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_knowledge.creator_label")}</span>
+                                                <p>{space.creator}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_knowledge.joined_count_label")}</span>
+                                                <p>{space.memberCount || 0}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_knowledge.total_files_label")}</span>
+                                                <p>{space.totalFileCount || 0}</p>
+                                            </div>
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
                             </div>
-                        </div>
+                        ) : (
+                            <>
+                                {/* 移动端（<768px）：返回上一级 + 当前文件夹名 */}
+                                <div className="flex min-w-0 items-center gap-2 text-[#1d2129] md:hidden">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const parent = currentPath[currentPath.length - 2];
+                                            onNavigateFolder(parent?.id);
+                                        }}
+                                        aria-label={localize("com_ui_go_back")}
+                                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                    >
+                                        <ChevronLeft className="size-4" />
+                                    </button>
+                                    <span className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                        {currentPath[currentPath.length - 1]?.name || space.name}
+                                    </span>
+                                </div>
+                                {/* PC 端：完整文件路径（空间名 / 文件夹…） */}
+                                <div className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm text-[#1d2129] md:flex">
+                                    <button
+                                        type="button"
+                                        onClick={() => onNavigateFolder(undefined)}
+                                        className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
+                                    >
+                                        {space.name}
+                                    </button>
+                                    {currentPath.map((seg, idx) => (
+                                        <Fragment key={seg.id ?? `path-${idx}`}>
+                                            <span className="shrink-0 text-[#86909c]" aria-hidden>
+                                                /
+                                            </span>
+                                            {idx === currentPath.length - 1 ? (
+                                                <span className="min-w-0 truncate text-base font-medium text-[#1d2129]">
+                                                    {seg.name}
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onNavigateFolder(seg.id)}
+                                                    className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
+                                                >
+                                                    {seg.name}
+                                                </button>
+                                            )}
+                                        </Fragment>
+                                    ))}
+                                </div>
+                            </>
+                        )}
                     </div>
-                ) : (
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
+
+                    {/* 右侧：AI助手和分享 */}
+                    <div className="flex shrink-0 items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            className="ai-btn-border-draw h-8 gap-1 rounded-[6px] px-3 font-normal hover:bg-transparent"
+                            disabled={isSearching}
+                            onClick={onToggleAiAssistant}
+                        >
+                            <span className="ai-btn-shimmer-overlay" />
+                            <AiChatIcon className="size-4" stroke={isSearching ? "#c9cdd4" : "#335cff"} />
+                            <span className={isSearching ? '' : 'text-[#000D4D]'}>{localize("com_knowledge.ai_assistant")}</span>
+                        </Button>
+
+                        {showShare && (
+                            <CopyShareLinkButton
+                                sharePath={`/knowledge/share/${space.id}`}
+                                label={localize("com_knowledge.share")}
+                                successMessage={localize("com_knowledge.share_link_copied")}
+                                errorMessage={localize("com_knowledge.copy_failed_retry")}
+                            />
+                        )}
+                    </div>
+                </div>
+
+                {/* Toolbar：宽屏一行（搜索 + 视图/筛选 + 右侧操作）；窄内容区（宽度小于 TOOLBAR_COMPACT_MAX_WIDTH）两行：仅搜索，其次为视图/筛选与新增/批量 */}
+                <div ref={toolbarMeasureRef} className="w-full min-w-0">
+                    {toolbarCompact ? (
+                        <div className="flex flex-col gap-3">
                             <div className={searchFieldClassName}>
                                 <CompoundSearchInput
                                     spaceId={space.id}
@@ -552,13 +536,30 @@ export function KnowledgeSpaceHeader({
                                     onSearch={onSearch}
                                 />
                             </div>
-                            {viewFilterSortCluster}
+                            <div className="max-[767px]:-mx-4 max-[767px]:sticky max-[767px]:top-0 max-[767px]:z-20 max-[767px]:bg-white max-[767px]:px-4 max-[767px]:py-2">
+                                <div className="flex min-w-0 items-center justify-between gap-2">
+                                    {viewFilterSortCluster}
+                                    {batchAndAddActions}
+                                </div>
+                            </div>
                         </div>
-                        {batchAndAddActions}
-                    </div>
-                )}
+                    ) : (
+                        <div className="flex min-w-0 items-center justify-between gap-3">
+                            <div className="flex min-w-0 flex-1 items-center gap-3">
+                                <div className={searchFieldClassName}>
+                                    <CompoundSearchInput
+                                        spaceId={space.id}
+                                        isRoot={currentPath.length === 0}
+                                        onSearch={onSearch}
+                                    />
+                                </div>
+                                {viewFilterSortCluster}
+                            </div>
+                            {batchAndAddActions}
+                        </div>
+                    )}
+                </div>
             </div>
-        </div>
         </>
     );
 }
