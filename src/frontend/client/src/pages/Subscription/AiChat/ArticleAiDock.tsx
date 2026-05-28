@@ -381,7 +381,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 {/* Input area — fixed 120px height. `relative z-[3]` lifts the input
                     wrapper above the grey overlay; the wrapper has no bg, so the gradient
                     bleeds through the bottom padding (`pb-[...]`) under the input. */}
-                <div className="relative z-[3] shrink-0 px-3 pb-[max(8px,env(safe-area-inset-bottom))]">
+                <div className="relative z-[3] shrink-0 px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
                     <DockInput
                         value={inputText}
                         onChange={setInputText}

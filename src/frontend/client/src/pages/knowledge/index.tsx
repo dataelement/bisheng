@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Plus } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState } from "recoil";
 import { useQueryClient } from "@tanstack/react-query";
@@ -735,9 +734,9 @@ export default function Knowledge() {
                                                     type="button"
                                                     aria-label={localize("com_knowledge.create_knowledge_space")}
                                                     onClick={handleCreateSpace}
-                                                    className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
+                                                    className={mobileHeadIconBtnClassName}
                                                 >
-                                                    <Plus className="size-4" />
+                                                    <Outlined.Plus className="size-5" />
                                                 </button>
                                             </div>
                                         </div>
@@ -840,9 +839,9 @@ export default function Knowledge() {
                                 type="button"
                                 aria-label={localize("com_knowledge.create_knowledge_space")}
                                 onClick={handleCreateSpace}
-                                className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
+                                className={mobileHeadIconBtnClassName}
                             >
-                                <Plus className="size-4" />
+                                <Outlined.Plus className="size-5" />
                             </button>
                         </div>
                     ) : null}

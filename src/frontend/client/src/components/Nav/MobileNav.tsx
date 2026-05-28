@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRecoilValue, useSetRecoilState } from 'recoil';
 import { useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Menu, Plus, X } from 'lucide-react';
+import { ChevronLeft, Menu, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 import { useNavigate } from 'react-router-dom';
 import { QueryKeys, Constants } from '~/types/chat';
@@ -182,7 +182,7 @@ export default function MobileNav({
                 className={mobileHeadIconBtnClassName}
                 onClick={handleNewChat}
               >
-                <Plus className="size-4" strokeWidth={2} />
+                <Outlined.Plus className="size-5" />
               </button>
             </div>
           </>
@@ -215,10 +215,10 @@ export default function MobileNav({
               type="button"
               data-testid="mobile-header-new-chat-button"
               aria-label={localize('com_ui_new_chat')}
-              className={cn(mobileHeadIconBtnClassName, historyDropdownOpen && 'pointer-events-none text-[#C9CDD4]')}
+              className={mobileHeadIconBtnClassName}
               onClick={handleNewChat}
             >
-              <Plus className="size-4" strokeWidth={2} />
+              <Outlined.Plus className="size-5" />
             </button>
           </>
         )}
