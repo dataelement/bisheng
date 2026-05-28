@@ -369,17 +369,44 @@ def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_
 
 @bisheng_celery.task(acks_late=True)
 def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
-    """Retry parsing a file that failed to enter the repository or has a different name"""
+    """Re-parse a file: clear old vectors, then either parse inline (legacy)
+    or re-enqueue through the fair scheduler (when enabled).
+    """
+    from bisheng.common.services.config_service import settings
+    from bisheng.worker.knowledge import scheduler as file_scheduler
+
     trace_id_var.set(f"retry_knowledge_file_{file_id}")
     logger.info("retry_knowledge_file_celery start file_id={}", file_id)
+
     try:
         delete_knowledge_file_vectors(file_ids=[file_id], clear_minio=False)
     except Exception as e:
         logger.exception("retry_knowledge_file_celery delete vectors error: {}", str(e))
         KnowledgeFileDao.update_file_status(
-            [file_id], KnowledgeFileStatus.FAILED, KnowledgeFileFailedError(exception=e).to_json_str()
+            [file_id],
+            KnowledgeFileStatus.FAILED,
+            KnowledgeFileFailedError(exception=e).to_json_str(),
         )
         return
+
+    if settings.knowledge_file_worker.fair_scheduler_enabled:
+        db_file = KnowledgeFileDao.get_file_by_ids([file_id])
+        if not db_file:
+            logger.warning("retry_knowledge_file_celery file_id={} disappeared", file_id)
+            return
+        row = db_file[0]
+        KnowledgeFileDao.update_file_status([file_id], KnowledgeFileStatus.WAITING)
+        file_scheduler.enqueue_or_dispatch(
+            user_id=row.user_id,
+            file_id=file_id,
+            file_name=row.file_name,
+            preview_cache_key=preview_cache_key,
+            callback_url=callback_url,
+        )
+        return
+
+    # Legacy path — parse inline as before.
+    knowledge = None
     try:
         knowledge = _parse_knowledge_file(file_id, preview_cache_key, callback_url)
     except Exception as e:
@@ -387,9 +414,8 @@ def retry_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     finally:
         db_file = KnowledgeFileDao.get_file_by_ids([file_id])
         if not db_file and knowledge:
-            logger.debug(f"delete_knowledge_file_celery file_id={file_id}")
-            # If it does not exist, it may have been deleted during the parsing process, and the data of the vector database needs to be deleted.
-            delete_vector_files([db_file[0].id], knowledge)
+            logger.debug("delete_knowledge_file_celery file_id={}", file_id)
+            delete_vector_files([file_id], knowledge)
 
 
 @bisheng_celery.task(acks_late=True)
