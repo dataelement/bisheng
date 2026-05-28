@@ -111,8 +111,11 @@ export default function apps() {
     const { message } = useToast()
     const navigate = useNavigate()
 
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: false }, (param) =>
-        getAppsApi({ ...param, permissionId: 'view_app' })
+    // Build page lists apps the user can manage. Backend treats managed=true
+    // as "filter by edit_app" (admins still see everything via the admin
+    // short-circuit). permission_id is unused server-side when managed=true.
+    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: true }, (param) =>
+        getAppsApi({ ...param })
     )
 
     // Permission management state
