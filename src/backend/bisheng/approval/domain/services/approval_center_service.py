@@ -453,6 +453,7 @@ class ApprovalCenterService:
                 action_code='approval_instance_withdrawn',
                 business_name=instance.business_name,
                 instance_id=instance.id,
+                reason=reason,
             )
         try:
             from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
@@ -612,6 +613,19 @@ class ApprovalCenterService:
             object_name=instance.business_name,
             ip_address=ip_address,
         )
+        db_user = await UserDao.aget_user(instance.applicant_user_id)
+        if db_user:
+            is_department_admin = bool(await DepartmentDao.aget_user_admin_departments(instance.applicant_user_id))
+            _, web_menu = await LoginUser.get_roles_web_menu(db_user, is_department_admin=is_department_admin)
+            if menu_key not in set(web_menu):
+                await cls._send_approval_notify(
+                    sender=operator_user_id,
+                    receiver_user_ids=[instance.applicant_user_id],
+                    action_code='menu_grant_revoked',
+                    business_name=instance.business_name,
+                    instance_id=instance.id,
+                    reason=reason,
+                )
         return {'revoked_keys': [row.menu_key for row in rows], 'instance_id': instance_id}
 
     async def decide_task(
@@ -688,6 +702,7 @@ class ApprovalCenterService:
                 action_code='approval_task_rejected',
                 business_name=instance.business_name,
                 instance_id=instance.id,
+                reason=comment,
             )
             try:
                 from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
@@ -867,10 +882,20 @@ class ApprovalCenterService:
                     },
                 )
             )
+            from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
+
+            await ApprovalNotificationService.notify_admins(
+                tenant_id=instance.tenant_id,
+                applicant_user_id=instance.applicant_user_id,
+                action_code='approval_exception_approver_empty',
+                business_name=instance.business_name,
+                instance_id=instance.id,
+            )
             return
 
+        created_tasks = []
         for approver_user_id in approvers:
-            await self.instance_repository.create_task(
+            created_task = await self.instance_repository.create_task(
                 ApprovalTask(
                     tenant_id=instance.tenant_id,
                     instance_id=instance.id,
@@ -884,9 +909,19 @@ class ApprovalCenterService:
                     status=ApprovalTaskStatus.PENDING,
                 )
             )
+            created_tasks.append(created_task)
 
         instance.current_node_name = next_node.node_name
         await self.instance_repository.update_instance(instance)
+        for task in created_tasks:
+            await self.__class__._send_approval_notify(
+                sender=instance.applicant_user_id,
+                receiver_user_ids=[task.approver_user_id],
+                action_code='approval_task_pending',
+                business_name=instance.business_name,
+                instance_id=instance.id,
+                task_id=task.id,
+            )
 
     @staticmethod
     async def _send_approval_notify(
@@ -896,35 +931,20 @@ class ApprovalCenterService:
         action_code: str,
         business_name: str,
         instance_id: int,
+        reason: str | None = None,
+        task_id: int | None = None,
     ) -> None:
-        if not receiver_user_ids:
-            return
-        try:
-            from bisheng.core.database import get_async_db_session
-            from bisheng.message.api.dependencies import get_message_service as _get_message_service
-            async with get_async_db_session() as session:
-                message_service = await _get_message_service(session)
-                content = [
-                    {'type': 'system_text', 'content': action_code},
-                    {
-                        'type': 'business_url',
-                        'content': f'--{business_name}',
-                        'metadata': {
-                            'business_type': 'approval_instance_id',
-                            'data': {'approval_instance_id': str(instance_id)},
-                        },
-                    },
-                ]
-                await message_service.send_generic_notify(
-                    sender=sender,
-                    receiver_user_ids=receiver_user_ids,
-                    content_item_list=content,
-                )
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception(
-                'failed to send approval notify: action_code=%s instance_id=%s', action_code, instance_id
-            )
+        from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
+
+        await ApprovalNotificationService.notify_users(
+            sender=sender,
+            receiver_user_ids=receiver_user_ids,
+            action_code=action_code,
+            business_name=business_name,
+            instance_id=instance_id,
+            reason=reason,
+            task_id=task_id,
+        )
 
     @staticmethod
     def _dispatch_outbox(outbox_id: int) -> None:

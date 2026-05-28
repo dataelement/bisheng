@@ -1099,7 +1099,18 @@ async def authorize_resource(
         ):
             return PermissionDeniedError.return_resp()
 
+    permission_notify_context = None
     if tuple_grants or tuple_revokes:
+        from bisheng.permission.domain.services.resource_permission_notification_service import (
+            ResourcePermissionNotificationService,
+        )
+
+        permission_notify_context = await ResourcePermissionNotificationService.build_context(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            grants=tuple_grants,
+            revokes=tuple_revokes,
+        )
         logger.info(
             'resource_authorize start actor=%s resource=%s:%s grants=%d revokes=%d',
             login_user.user_id, resource_type, resource_id, len(tuple_grants), len(tuple_revokes),
@@ -1168,6 +1179,17 @@ async def authorize_resource(
             'model_id': grant.model_id,
         }
     await _save_bindings(list(bindings_map.values()))
+
+    if permission_notify_context is not None:
+        from bisheng.permission.domain.services.resource_permission_notification_service import (
+            ResourcePermissionNotificationService,
+        )
+
+        await ResourcePermissionNotificationService.dispatch_after_authorize(
+            context=permission_notify_context,
+            operator_user_id=login_user.user_id,
+            operator_user_name=getattr(login_user, 'user_name', None),
+        )
     logger.info(
         'resource_authorize success actor=%s resource=%s:%s grants=%d revokes=%d bindings=%d',
         login_user.user_id, resource_type, resource_id, len(request.grants or []), len(request.revokes or []),
@@ -1452,7 +1474,11 @@ async def delete_relation_model(
     to_remove = [b for b in bindings if b.get('model_id') == model_id]
 
     from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+    from bisheng.permission.domain.services.resource_permission_notification_service import (
+        ResourcePermissionNotificationService,
+    )
     from bisheng.permission.domain.services.permission_service import PermissionService
+    notify_contexts = []
     try:
         for b in to_remove:
             if _is_invalid_owner_subject(b.get('subject_type'), b.get('relation')):
@@ -1462,16 +1488,25 @@ async def delete_relation_model(
                     b.get('resource_type'), b.get('resource_id'),
                 )
                 continue
+            revoke_item = AuthorizeRevokeItem(
+                subject_type=b.get('subject_type'),
+                subject_id=int(b.get('subject_id')),
+                relation=b.get('relation'),
+                include_children=bool(b.get('include_children')),
+            )
+            notify_context = await ResourcePermissionNotificationService.build_context(
+                resource_type=b.get('resource_type'),
+                resource_id=str(b.get('resource_id')),
+                grants=[],
+                revokes=[revoke_item],
+            )
+            if notify_context is not None:
+                notify_contexts.append(notify_context)
             await PermissionService.authorize(
                 object_type=b.get('resource_type'),
                 object_id=str(b.get('resource_id')),
                 grants=[],
-                revokes=[AuthorizeRevokeItem(
-                    subject_type=b.get('subject_type'),
-                    subject_id=int(b.get('subject_id')),
-                    relation=b.get('relation'),
-                    include_children=bool(b.get('include_children')),
-                )],
+                revokes=[revoke_item],
                 enforce_fga_success=True,
             )
     except Exception as e:
@@ -1482,6 +1517,12 @@ async def delete_relation_model(
     remain_bindings = [b for b in bindings if b.get('model_id') != model_id]
     await _save_relation_models(remain_models)
     await _save_bindings(remain_bindings)
+    for notify_context in notify_contexts:
+        await ResourcePermissionNotificationService.dispatch_after_authorize(
+            context=notify_context,
+            operator_user_id=login_user.user_id,
+            operator_user_name=getattr(login_user, 'user_name', None),
+        )
     return resp_200(None)
 
 

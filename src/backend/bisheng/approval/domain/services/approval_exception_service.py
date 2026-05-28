@@ -221,6 +221,7 @@ class ApprovalExceptionService:
             action_code="approval_exception_cancelled",
             business_name=instance.business_name,
             instance_id=instance.id,
+            reason=reason.strip(),
         )
         return {"exception_id": exception_id, "instance_id": instance.id, "status": "cancelled"}
 
@@ -241,7 +242,7 @@ class ApprovalExceptionService:
         instance.route_rule_id = route_rule_id
         instance.current_node_name = node.node_name
         await self.instance_repository.update_instance(instance)
-        await self._create_tasks(
+        created_tasks = await self._create_tasks(
             instance_id=instance.id,
             tenant_id=instance.tenant_id,
             flow_version_id=flow_version_id,
@@ -249,6 +250,12 @@ class ApprovalExceptionService:
             approver_user_ids=approver_user_ids,
         )
         await self._resolve_exception(exception, resolved_by_user_id, "assign_flow")
+        await self._notify_created_tasks(
+            sender=instance.applicant_user_id,
+            business_name=instance.business_name,
+            instance_id=instance.id,
+            tasks=created_tasks,
+        )
 
     async def assign_approvers(
         self,
@@ -262,7 +269,7 @@ class ApprovalExceptionService:
         instance = await self._get_instance(exception.instance_id)
         if node is None:
             node = await self._resolve_exception_node(instance, exception)
-        await self._create_tasks(
+        created_tasks = await self._create_tasks(
             instance_id=instance.id,
             tenant_id=instance.tenant_id,
             flow_version_id=instance.flow_version_id or 0,
@@ -274,6 +281,12 @@ class ApprovalExceptionService:
             instance.current_node_name = node.node_name
         await self.instance_repository.update_instance(instance)
         await self._resolve_exception(exception, resolved_by_user_id, "assign_approvers")
+        await self._notify_created_tasks(
+            sender=instance.applicant_user_id,
+            business_name=instance.business_name,
+            instance_id=instance.id,
+            tasks=created_tasks,
+        )
 
     async def _resolve_exception_node(self, instance, exception):
         """Resolve a node-like object (with node_code/node_name/node_order/node_mode) for the
@@ -442,8 +455,9 @@ class ApprovalExceptionService:
             )
             return
 
+        created_tasks = []
         for approver_user_id in approvers:
-            await self.instance_repository.create_task(
+            created_task = await self.instance_repository.create_task(
                 ApprovalTask(
                     tenant_id=instance.tenant_id,
                     instance_id=instance.id,
@@ -457,19 +471,21 @@ class ApprovalExceptionService:
                     status=ApprovalTaskStatus.PENDING,
                 )
             )
+            created_tasks.append(created_task)
 
         instance.status = ApprovalInstanceStatus.PENDING
         instance.current_node_name = next_node.node_name
         await self.instance_repository.update_instance(instance)
 
         # Notify the new approvers that they have a pending task
-        for approver_user_id in approvers:
+        for task in created_tasks:
             await self._notify_user(
                 sender=operator_user_id,
-                receiver_user_id=approver_user_id,
+                receiver_user_id=task.approver_user_id,
                 action_code="approval_task_pending",
                 business_name=instance.business_name or "",
                 instance_id=instance.id,
+                task_id=task.id,
             )
 
     async def retry_execute_failed(
@@ -520,9 +536,10 @@ class ApprovalExceptionService:
 
     async def _create_tasks(
         self, *, instance_id: int, tenant_id: int, flow_version_id: int, node, approver_user_ids: list[int]
-    ) -> None:
+    ) -> list[ApprovalTask]:
+        created_tasks = []
         for approver_user_id in approver_user_ids:
-            await self.instance_repository.create_task(
+            created_task = await self.instance_repository.create_task(
                 ApprovalTask(
                     tenant_id=tenant_id,
                     instance_id=instance_id,
@@ -535,6 +552,26 @@ class ApprovalExceptionService:
                     node_mode=node.node_mode,
                     status=ApprovalTaskStatus.PENDING,
                 )
+            )
+            created_tasks.append(created_task)
+        return created_tasks
+
+    async def _notify_created_tasks(
+        self,
+        *,
+        sender: int,
+        business_name: str,
+        instance_id: int,
+        tasks: list[ApprovalTask],
+    ) -> None:
+        for task in tasks:
+            await self._notify_user(
+                sender=sender,
+                receiver_user_id=task.approver_user_id,
+                action_code="approval_task_pending",
+                business_name=business_name or "",
+                instance_id=instance_id,
+                task_id=task.id,
             )
 
     async def mark_manually_completed(self, *, exception_id: int, resolved_by_user_id: int) -> None:
@@ -718,31 +755,20 @@ class ApprovalExceptionService:
         action_code: str,
         business_name: str,
         instance_id: int,
+        reason: str | None = None,
+        task_id: int | None = None,
     ) -> None:
-        try:
-            from bisheng.core.database import get_async_db_session
-            from bisheng.message.api.dependencies import get_message_service as _get_message_service
+        from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
 
-            async with get_async_db_session() as session:
-                message_service = await _get_message_service(session)
-                content = [
-                    {"type": "system_text", "content": action_code},
-                    {
-                        "type": "business_url",
-                        "content": f"--{business_name}",
-                        "metadata": {
-                            "business_type": "approval_instance_id",
-                            "data": {"approval_instance_id": str(instance_id)},
-                        },
-                    },
-                ]
-                await message_service.send_generic_notify(
-                    sender=sender,
-                    receiver_user_ids=[receiver_user_id],
-                    content_item_list=content,
-                )
-        except Exception:
-            logger.exception("failed to send approval notification: action_code=%s", action_code)
+        await ApprovalNotificationService.notify_user(
+            sender=sender,
+            receiver_user_id=receiver_user_id,
+            action_code=action_code,
+            business_name=business_name,
+            instance_id=instance_id,
+            reason=reason,
+            task_id=task_id,
+        )
 
     @staticmethod
     async def _write_audit_log(

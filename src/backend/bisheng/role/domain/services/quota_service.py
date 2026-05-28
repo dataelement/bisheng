@@ -82,19 +82,10 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
     # F016 T02: tenant-only resource types.
     # storage_gb: total bytes of active knowledge files; converted to GB in _count_resource.
     'storage_gb': "SELECT COALESCE(SUM(file_size), 0) FROM knowledgefile WHERE {col}=:{param} AND file_source IN ('channel','space_upload')",
-    # user_count: active users in the tenant; only meaningful when {col}='tenant_id'
-    # (user-level count returns 0 because user_tenant.user_id column is the join, not filter).
-    'user_count': (
-        "SELECT COUNT(DISTINCT ut.user_id) FROM user_tenant ut "
-        "INNER JOIN user u ON u.user_id = ut.user_id "
-        "WHERE ut.{col}=:{param} AND ut.is_active=1 AND u.delete=0"
-    ),
-    # model_tokens_monthly: F017 dependency. Table llm_token_log may not exist
-    # yet; _count_resource's try/except returns 0 on missing table (stub-safe).
-    'model_tokens_monthly': (
-        "SELECT COALESCE(SUM(total_tokens), 0) FROM llm_token_log "
-        "WHERE {col}=:{param} AND created_at >= DATE_FORMAT(NOW(), '%Y-%m-01')"
-    ),
+    # user_count and model_tokens_monthly handled outside this dict — they
+    # need cross-dialect identifier quoting (`user`, `delete` are reserved
+    # on DM8) and portable first-of-month math (no DATE_FORMAT on DM8).
+    # See _count_user_count / _count_tokens_monthly below.
 }
 
 
@@ -571,6 +562,11 @@ class QuotaService:
     @classmethod
     async def _count_resource(cls, col: str, val, resource_type: str) -> Union[int, float]:
         """Shared resource counting — used by both tenant and user counts."""
+        if resource_type == 'user_count':
+            return await cls._count_user_count(col, val)
+        if resource_type == 'model_tokens_monthly':
+            return await cls._count_tokens_monthly(col, val)
+
         from bisheng.core.database import get_async_db_session
         from sqlalchemy import text
 
@@ -596,6 +592,63 @@ class QuotaService:
                 return count
         except Exception as e:
             logger.warning('Failed to count resource %s for %s=%s: %s', resource_type, col, val, e)
+            return 0
+
+    @classmethod
+    async def _count_user_count(cls, col: str, val) -> int:
+        """Active users for tenant_id. Uses SQLAlchemy ORM so ``user`` and
+        ``delete`` (reserved on DM8 / MySQL keywords) are auto-quoted per
+        dialect — raw text() with backticks does not work on DM8.
+
+        Only ``col == 'tenant_id'`` is meaningful (per legacy template).
+        """
+        if col != 'tenant_id':
+            return 0
+        from bisheng.core.database import get_async_db_session
+        from bisheng.user.domain.models.user import User
+        from bisheng.database.models.tenant import UserTenant
+        from sqlalchemy import func, select
+
+        stmt = (
+            select(func.count(func.distinct(UserTenant.user_id)))
+            .join(User, User.user_id == UserTenant.user_id)
+            .where(
+                UserTenant.tenant_id == val,
+                UserTenant.is_active == 1,
+                User.delete == 0,
+            )
+        )
+        try:
+            async with get_async_db_session() as session:
+                return (await session.execute(stmt)).scalar() or 0
+        except Exception as e:
+            logger.warning('Failed to count user_count for %s=%s: %s', col, val, e)
+            return 0
+
+    @classmethod
+    async def _count_tokens_monthly(cls, col: str, val) -> int:
+        """Sum llm_token_log.total_tokens since the first day of the current
+        month. Computes the boundary in Python (portable across MySQL/DM8 —
+        MySQL's ``DATE_FORMAT(NOW(), '%Y-%m-01')`` is not supported on DM8).
+        """
+        from datetime import datetime
+        from bisheng.core.database import get_async_db_session
+        from sqlalchemy import text
+
+        now = datetime.now()
+        first_of_month = datetime(now.year, now.month, 1)
+        sql = (
+            "SELECT COALESCE(SUM(total_tokens), 0) FROM llm_token_log "
+            f"WHERE {col}=:id_val AND created_at >= :since"
+        )
+        try:
+            async with get_async_db_session() as session:
+                result = await session.execute(
+                    text(sql), {'id_val': val, 'since': first_of_month},
+                )
+                return result.scalar() or 0
+        except Exception as e:
+            logger.warning('Failed to count model_tokens_monthly for %s=%s: %s', col, val, e)
             return 0
 
     @classmethod

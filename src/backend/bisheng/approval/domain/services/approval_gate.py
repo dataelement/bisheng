@@ -404,40 +404,15 @@ class ApprovalGate:
         business_name: str,
         instance_id: int,
     ) -> None:
-        try:
-            from bisheng.core.database import get_async_db_session
-            from bisheng.database.constants import AdminRole
-            from bisheng.message.api.dependencies import get_message_service as _get_message_service
-            from bisheng.user.domain.models.user_role import UserRoleDao
+        from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
 
-            admin_rows = await UserRoleDao.aget_roles_user([AdminRole])
-            admin_ids = [int(r.user_id) for r in admin_rows if r.user_id != applicant_user_id]
-            if not admin_ids:
-                return
-            async with get_async_db_session() as session:
-                message_service = await _get_message_service(session)
-                content = [
-                    {"type": "system_text", "content": f"approval_exception_{exception_type}"},
-                    {
-                        "type": "business_url",
-                        "content": f"--{business_name}",
-                        "metadata": {
-                            "business_type": "approval_instance_id",
-                            "data": {"approval_instance_id": str(instance_id)},
-                        },
-                    },
-                ]
-                await message_service.send_generic_notify(
-                    sender=applicant_user_id,
-                    receiver_user_ids=admin_ids,
-                    content_item_list=content,
-                )
-        except Exception:
-            import logging
-
-            logging.getLogger(__name__).exception(
-                "failed to notify admin of approval exception: instance_id=%s", instance_id
-            )
+        await ApprovalNotificationService.notify_admins(
+            tenant_id=tenant_id,
+            applicant_user_id=applicant_user_id,
+            action_code=f"approval_exception_{exception_type}",
+            business_name=business_name,
+            instance_id=instance_id,
+        )
 
     async def _match_first_route(self, route_rules: list[Any], req: ApprovalGateRequest) -> Any | None:
         """Evaluate route conditions top-to-bottom; return the first matching enabled route.
