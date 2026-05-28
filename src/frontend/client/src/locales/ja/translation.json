@@ -1869,7 +1869,9 @@
     "member_pagination_2": "件のデータ、1ページあたり",
     "member_pagination_3": "件",
     "website_not_indexed": "サイトがまだ登録されていません。クロールしますか？",
-    "create": "作成"
+    "create": "作成",
+    "channel_permission_management": "メンバー管理",
+    "organization_grant_unsubscribe_blocked": "このチャンネルは部署/ユーザーグループ経由で付与されているため、現在購読解除できません。"
   },
   "com_permission": {
     "action_revoke": "解除",

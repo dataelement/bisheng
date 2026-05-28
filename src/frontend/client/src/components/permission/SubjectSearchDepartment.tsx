@@ -23,6 +23,7 @@ interface SubjectSearchDepartmentProps {
   onIncludeChildrenChange: (v: boolean) => void;
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
+  grantDepartmentsApi?: typeof getResourceGrantDepartments;
 }
 
 function collectExplicitDepartmentSelections(
@@ -68,6 +69,7 @@ export function SubjectSearchDepartment({
   onIncludeChildrenChange,
   onSelectionSummaryChange,
   disabledIds = [],
+  grantDepartmentsApi,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const [tree, setTree] = useState<DepartmentNode[]>([]);
@@ -80,7 +82,8 @@ export function SubjectSearchDepartment({
     const controller = new AbortController();
 
     setLoading(true);
-    getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
+    const getGrantDepartments = grantDepartmentsApi ?? getResourceGrantDepartments;
+    getGrantDepartments(resourceType, resourceId, { signal: controller.signal })
       .then((res) => {
         if (!controller.signal.aborted && res) setTree(res);
       })
@@ -89,7 +92,7 @@ export function SubjectSearchDepartment({
       });
 
     return () => controller.abort();
-  }, [resourceId, resourceType]);
+  }, [grantDepartmentsApi, resourceId, resourceType]);
 
   const selectedIds = new Set(value.map((s) => s.id));
   const selectedDepartmentsById = useMemo(

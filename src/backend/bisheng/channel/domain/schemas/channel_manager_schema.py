@@ -109,6 +109,7 @@ class ChannelItemResponse(BaseModel):
     latest_article_update_time: Optional[datetime] = Field(None, description='Channel Latest Article Update Time')
     create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
     user_role: str = Field(..., description='User Role in Channel: creator / admin / member')
+    relation: Optional[str] = Field(None, description='Channel relation: owner / manager / editor / viewer')
     is_pinned: bool = Field(default=False, description='Whether the channel is pinned by the user')
     subscribed_at: Optional[datetime] = Field(None,
                                               description='The time when the user subscribed to the channel, null if not subscribed')
@@ -139,6 +140,7 @@ class ChannelDetailResponse(BaseModel):
     subscriber_count: int = Field(default=0, description='Number of subscribers')
     article_count: int = Field(default=0, description='Total number of articles in the main channel')
     subscription_status: SubscriptionStatusEnum = Field(..., description='Current user subscription status')
+    relation: Optional[str] = Field(None, description='Current user channel relation: owner / manager / editor / viewer')
     knowledge_sync: Optional[KnowledgeSyncConfig] = Field(
         None,
         description='Knowledge space sync configuration; only populated for creators',
@@ -151,6 +153,7 @@ class ChannelMemberResponse(BaseModel):
     user_name: str = Field(..., description='User Name')
     user_avatar: Optional[str] = Field(None, description='User Avatar URL')
     user_role: str = Field(..., description='User Role in Channel: creator / admin / member')
+    relation: Optional[str] = Field(None, description='Channel relation: owner / manager / editor / viewer')
     user_groups: List[dict] = Field(default_factory=list,
                                     description='User Groups the member belongs to, each group is represented as a dict with group details')
 

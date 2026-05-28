@@ -1,4 +1,5 @@
 import request from "./request";
+import type { GrantItem, PermissionEntry, RelationModel, RevokeItem } from "./permission";
 
 // 排序方式
 export enum SortType {
@@ -12,6 +13,24 @@ export enum ChannelRole {
     CREATOR = "creator",      // 创建者
     ADMIN = "admin",          // 管理员
     MEMBER = "member"         // 普通成员
+}
+
+export type ChannelRelation = "owner" | "manager" | "editor" | "viewer";
+export type ChannelUserRole = ChannelRole | ChannelRelation;
+
+export function canEditChannelSettings(role?: ChannelUserRole | null): boolean {
+    return role === "owner"
+        || role === "manager"
+        || role === "editor"
+        || role === ChannelRole.CREATOR
+        || role === ChannelRole.ADMIN;
+}
+
+export function canManageChannelPermissions(role?: ChannelUserRole | null): boolean {
+    return role === "owner"
+        || role === "manager"
+        || role === ChannelRole.CREATOR
+        || role === ChannelRole.ADMIN;
 }
 
 // 子频道接口
@@ -31,7 +50,7 @@ export interface Channel {
     subscriberCount: number;   // 订阅人数
     articleCount: number;      // 文章数量
     unreadCount: number;       // 未读数量
-    role: ChannelRole;         // 当前用户的角色
+    role: ChannelUserRole;     // 当前用户的角色
     isPinned: boolean;         // 是否置顶
     createdAt: string;         // 创建时间
     updatedAt: string;         // 最近更新时间
@@ -116,7 +135,7 @@ export interface ChannelItemResponse {
     is_released: boolean;
     latest_article_update_time?: string;
     create_time?: string;
-    user_role: "creator" | "admin" | "member";
+    user_role: ChannelUserRole;
     is_pinned: boolean;
     subscribed_at?: string;
     unread_count?: number;
@@ -175,7 +194,7 @@ export async function getChannelsApi(params: {
         subscriberCount: 0,
         articleCount: 0,
         unreadCount: item.unread_count || 0,
-        role: item.user_role as ChannelRole,
+        role: item.user_role as ChannelUserRole,
         isPinned: item.is_pinned,
         createdAt: item.create_time,
         updatedAt: item.latest_article_update_time || item.update_time,
@@ -203,7 +222,7 @@ export async function updateChannelApi(
     channelId: string,
     data: any
 ): Promise<any> {
-    const res: any = await request.put(`/api/v1/channel/manager/${channelId}`, data, { showError: true });
+    const res: any = await request.put(`/api/v1/channel/manager/${channelId}`, data, { showError: true } as any);
     return res;
 }
 
@@ -220,7 +239,120 @@ export async function subscribeChannelApi(channelId: string): Promise<void> {
  */
 export async function unsubscribeChannelApi(channelId: string): Promise<any> {
     const res: any = await request.post(`/api/v1/channel/manager/${channelId}/unsubscribe`);
-    return res?.data ?? res;
+    return res;
+}
+
+interface ChannelPermissionRequestConfig {
+    signal?: AbortSignal;
+}
+
+export interface ChannelAuthorizePayload {
+    grants: GrantItem[];
+    revokes: RevokeItem[];
+}
+
+function withChannelPermissionRequestOptions(config?: ChannelPermissionRequestConfig) {
+    return {
+        skip403Redirect: true,
+        ...config,
+    };
+}
+
+function assertChannelPermissionSuccess(res: any) {
+    if (res && typeof res === "object" && "status_code" in res && res.status_code !== 200) {
+        throw new Error(res.status_message || `Channel permission request failed: ${res.status_code}`);
+    }
+}
+
+function unwrapChannelPermissionPayload<T>(res: any): T {
+    assertChannelPermissionSuccess(res);
+    return res && typeof res === "object" && "data" in res ? res.data : res;
+}
+
+function unwrapChannelPermissionArray<T = any>(res: any): T[] {
+    const data = unwrapChannelPermissionPayload<any>(res);
+    const rows = data?.data ?? data?.list ?? data?.records ?? data;
+    return Array.isArray(rows) ? rows : [];
+}
+
+export async function getChannelPermissionsApi(
+    channelId: string,
+    config?: ChannelPermissionRequestConfig
+): Promise<PermissionEntry[]> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/permissions`,
+        withChannelPermissionRequestOptions(config),
+    );
+    return unwrapChannelPermissionArray<PermissionEntry>(res);
+}
+
+export async function authorizeChannelApi(
+    channelId: string,
+    payload: ChannelAuthorizePayload,
+    config?: ChannelPermissionRequestConfig
+): Promise<null> {
+    const res = await request.post(
+        `/api/v1/channel/manager/${channelId}/authorize`,
+        payload,
+        withChannelPermissionRequestOptions(config),
+    );
+    return unwrapChannelPermissionPayload<null>(res);
+}
+
+export async function getChannelGrantableRelationModelsApi(
+    channelId: string,
+    config?: ChannelPermissionRequestConfig
+): Promise<RelationModel[]> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grantable-relation-models`,
+        withChannelPermissionRequestOptions(config),
+    );
+    return unwrapChannelPermissionArray<RelationModel>(res);
+}
+
+export async function getChannelGrantSubjectsUsersApi(
+    channelId: string,
+    params?: { keyword?: string; page?: number; page_size?: number },
+    config?: ChannelPermissionRequestConfig
+): Promise<{ user_id: number; user_name: string }[]> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grant-subjects/users`,
+        {
+            params: {
+                keyword: params?.keyword ?? "",
+                page: params?.page ?? 1,
+                page_size: params?.page_size ?? 2000,
+            },
+            ...withChannelPermissionRequestOptions(config),
+        },
+    );
+    return unwrapChannelPermissionArray(res);
+}
+
+export async function getChannelGrantSubjectsDepartmentsApi(
+    channelId: string,
+    config?: ChannelPermissionRequestConfig
+): Promise<any[]> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grant-subjects/departments`,
+        withChannelPermissionRequestOptions(config),
+    );
+    return unwrapChannelPermissionArray(res);
+}
+
+export async function getChannelGrantSubjectsUserGroupsApi(
+    channelId: string,
+    params?: { keyword?: string },
+    config?: ChannelPermissionRequestConfig
+): Promise<any[]> {
+    const res = await request.get(
+        `/api/v1/channel/manager/${channelId}/grant-subjects/user-groups`,
+        {
+            params: { keyword: params?.keyword ?? "" },
+            ...withChannelPermissionRequestOptions(config),
+        },
+    );
+    return unwrapChannelPermissionArray(res);
 }
 
 /**
@@ -408,7 +540,7 @@ export interface CreateManagerChannelPayload {
 export async function createManagerChannelApi(
     data: CreateManagerChannelPayload
 ): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/create`, data, { showError: true });
+    return await request.post(`/api/v1/channel/manager/create`, data, { showError: true } as any);
 }
 
 /**
@@ -522,7 +654,7 @@ export async function getChannelSquareApi(params?: {
 export async function subscribeManagerChannelApi(body: {
     channel_id: string;
 }): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/subscribe`, body, { showError: true });
+    return await request.post(`/api/v1/channel/manager/subscribe`, body, { showError: true } as any);
 }
 
 // 频道成员
@@ -530,7 +662,7 @@ export interface ChannelMember {
     user_id: number;
     user_name: string;
     avatar?: string;
-    role: "creator" | "admin" | "member";
+    role: ChannelUserRole;
     groups?: string[];
 }
 

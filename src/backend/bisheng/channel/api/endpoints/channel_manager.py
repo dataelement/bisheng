@@ -3,28 +3,29 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from bisheng.channel.api.dependencies import get_channel_service
+from bisheng.channel.api.dependencies import get_channel_authorization_service, get_channel_service
+from bisheng.channel.domain.schemas.channel_authorization_schema import ChannelAuthorizeRequest
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     AddArticlesToKnowledgeSpaceRequest,
-    CreateChannelRequest,
-    UpdateChannelRequest,
     AddInformationSourceRequest,
     CrawlWebsiteRequest,
+    CreateChannelRequest,
     MyChannelQueryRequest,
-    SetPinRequest,
-    UpdateMemberRoleRequest,
     RemoveMemberRequest,
     QueryTypeEnum,
+    SetPinRequest,
     SortByEnum,
     SubscribeChannelRequest,
+    UpdateChannelRequest,
+    UpdateMemberRoleRequest,
 )
+from bisheng.channel.domain.services.channel_authorization_service import ChannelAuthorizationService
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.schemas.api import resp_200, resp_500
-from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.common.schemas.api import resp_200
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.external.bisheng_information_client.client import BusinessType
+from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +172,71 @@ async def set_channel_pin(
     """Set channel pin status."""
     await channel_service.set_channel_pin(req_param, login_user)
     return resp_200(data=True)
+
+
+@router.get("/{channel_id}/permissions")
+async def list_channel_permissions(
+        channel_id: str,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.list_permissions(channel_id, login_user)
+    return resp_200(data=[item.model_dump() for item in result])
+
+
+@router.post("/{channel_id}/authorize")
+async def authorize_channel(
+        channel_id: str,
+        req_param: ChannelAuthorizeRequest,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.authorize_channel(channel_id, req_param, login_user)
+    return resp_200(data=result.model_dump())
+
+
+@router.get("/{channel_id}/grantable-relation-models")
+async def list_channel_grantable_relation_models(
+        channel_id: str,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.grantable_relation_models(channel_id, login_user)
+    return resp_200(data=[item.model_dump() for item in result])
+
+
+@router.get("/{channel_id}/grant-subjects/users")
+async def list_channel_grant_users(
+        channel_id: str,
+        keyword: str = Query('', description='User keyword'),
+        page: int = Query(1, ge=1, description='Page number'),
+        page_size: int = Query(2000, ge=1, le=5000, description='Page size'),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.list_grant_users(channel_id, login_user, keyword, page, page_size)
+    return resp_200(data=result)
+
+
+@router.get("/{channel_id}/grant-subjects/departments")
+async def list_channel_grant_departments(
+        channel_id: str,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.list_grant_departments(channel_id, login_user)
+    return resp_200(data=result)
+
+
+@router.get("/{channel_id}/grant-subjects/user-groups")
+async def list_channel_grant_user_groups(
+        channel_id: str,
+        keyword: str = Query('', description='User group keyword'),
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        authorization_service: ChannelAuthorizationService = Depends(get_channel_authorization_service),
+):
+    result = await authorization_service.list_grant_user_groups(channel_id, login_user, keyword)
+    return resp_200(data=result)
 
 
 @router.get("/members")

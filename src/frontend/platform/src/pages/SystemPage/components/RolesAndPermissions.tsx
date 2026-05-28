@@ -25,6 +25,7 @@ import {
   getApplicationPermissionTemplateApi,
   createRelationModelApi,
   deleteRelationModelApi,
+  getChannelPermissionTemplateApi,
   getKnowledgeLibraryPermissionTemplateApi,
   getKnowledgeSpacePermissionTemplateApi,
   getRebacSchemaApi,
@@ -47,9 +48,13 @@ type TemplateSection = { title: string; columns: { title: string; items: Templat
 const HIDDEN_RELATION_PERMISSION_IDS = new Set(["share_folder", "share_file"])
 
 const RELATION_LEVEL: Record<string, number> = {
+  viewer: 1,
   can_read: 1,
+  editor: 2,
   can_edit: 2,
+  manager: 3,
   can_manage: 3,
+  owner: 4,
   can_delete: 4,
 }
 
@@ -63,6 +68,8 @@ const MANAGE_PERMISSION_IMPLIES: Record<string, string[]> = {
   manage_kb_manager: ["manage_kb_viewer"],
   manage_tool_owner: ["manage_tool_manager", "manage_tool_viewer"],
   manage_tool_manager: ["manage_tool_viewer"],
+  manage_channel_owner: ["manage_channel_manager", "manage_channel_user"],
+  manage_channel_manager: ["manage_channel_user"],
 }
 const MODEL_LEVEL: Record<"owner" | "manager" | "editor" | "viewer", number> = {
   viewer: 1,
@@ -108,6 +115,50 @@ const filterHiddenTemplatePermissions = (section: TemplateSection): TemplateSect
 
 const filterHiddenPermissionIds = (permissionIds: string[]) =>
   permissionIds.filter((id) => !HIDDEN_RELATION_PERMISSION_IDS.has(id))
+
+const CHANNEL_OPERATION_PERMISSION_IDS = new Set([
+  "view_channel",
+  "edit_channel",
+  "delete_channel",
+])
+
+const DEPRECATED_CHANNEL_PERMISSION_IDS = new Set([
+  "create_channel",
+])
+
+const CHANNEL_MEMBER_MANAGEMENT_PERMISSION_IDS = new Set([
+  "manage_channel_owner",
+  "manage_channel_manager",
+  "manage_channel_user",
+])
+
+const groupChannelTemplatePermissions = (section: TemplateSection): TemplateSection => {
+  const items = section.columns
+    .flatMap((column) => column.items)
+    .filter((item) => !DEPRECATED_CHANNEL_PERMISSION_IDS.has(item.id))
+  const operationItems = items.filter((item) => CHANNEL_OPERATION_PERMISSION_IDS.has(item.id))
+  const memberManagementItems = items.filter((item) => CHANNEL_MEMBER_MANAGEMENT_PERMISSION_IDS.has(item.id))
+  const groupedIds = new Set([
+    ...CHANNEL_OPERATION_PERMISSION_IDS,
+    ...CHANNEL_MEMBER_MANAGEMENT_PERMISSION_IDS,
+    ...DEPRECATED_CHANNEL_PERMISSION_IDS,
+  ])
+  const remainingColumns = section.columns
+    .map((column) => ({
+      ...column,
+      items: column.items.filter((item) => !groupedIds.has(item.id)),
+    }))
+    .filter((column) => column.items.length > 0)
+
+  return {
+    ...section,
+    columns: [
+      ...(operationItems.length > 0 ? [{ title: "频道操作", items: operationItems }] : []),
+      ...(memberManagementItems.length > 0 ? [{ title: "成员权限管理", items: memberManagementItems }] : []),
+      ...remainingColumns,
+    ],
+  }
+}
 
 /** Fallback when permission template APIs are unavailable; labels are resolved via i18n by permission id. */
 const TEMPLATE_SECTIONS: TemplateSection[] = [
@@ -201,6 +252,22 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
       },
     ],
   },
+  {
+    title: "频道模块",
+    columns: [
+      {
+        title: "频道级",
+        items: [
+          { id: "view_channel", label: "", relation: "can_read" },
+          { id: "edit_channel", label: "", relation: "can_edit" },
+          { id: "delete_channel", label: "", relation: "can_delete" },
+          { id: "manage_channel_owner", label: "", relation: "owner" },
+          { id: "manage_channel_manager", label: "", relation: "owner" },
+          { id: "manage_channel_user", label: "", relation: "can_manage" },
+        ],
+      },
+    ],
+  },
 ]
 
 /** Known permission ids from backend templates; others display `item.label` from API (tests / forward compat). */
@@ -247,6 +314,12 @@ const PERMISSION_TEMPLATE_IDS = new Set<string>([
   "manage_tool_owner",
   "manage_tool_manager",
   "manage_tool_viewer",
+  "view_channel",
+  "edit_channel",
+  "delete_channel",
+  "manage_channel_owner",
+  "manage_channel_manager",
+  "manage_channel_user",
 ])
 
 const SECTION_TITLE_I18N_KEY: Readonly<Record<string, string>> = {
@@ -254,12 +327,16 @@ const SECTION_TITLE_I18N_KEY: Readonly<Record<string, string>> = {
   "应用/工作流模块": "system.permissionTemplate.sectionApplication",
   "知识库模块": "system.permissionTemplate.sectionKnowledgeLibrary",
   "工具模块": "system.permissionTemplate.sectionTool",
+  "频道模块": "system.permissionTemplate.sectionChannel",
 }
 
 const COLUMN_TITLE_I18N_KEY: Readonly<Record<string, string>> = {
   "空间级": "system.permissionTemplate.columnSpaceLevel",
   "文件夹级": "system.permissionTemplate.columnFolderLevel",
   "文件级": "system.permissionTemplate.columnFileLevel",
+  "频道级": "system.permissionTemplate.columnChannelLevel",
+  "频道操作": "system.permissionTemplate.columnChannelOperation",
+  "成员权限管理": "system.permissionTemplate.columnChannelMemberManagement",
 }
 
 function templateSectionTitle(title: string, t: (key: string) => string): string {
@@ -288,6 +365,7 @@ export default function RolesAndPermissions() {
   const [knowledgeTemplate, setKnowledgeTemplate] = useState<PermissionTemplateSection | null>(null)
   const [knowledgeLibraryTemplate, setKnowledgeLibraryTemplate] = useState<PermissionTemplateSection | null>(null)
   const [toolTemplate, setToolTemplate] = useState<PermissionTemplateSection | null>(null)
+  const [channelTemplate, setChannelTemplate] = useState<PermissionTemplateSection | null>(null)
   const [relationModels, setRelationModels] = useState<RelationModel[]>([])
   const [modelId, setModelId] = useState<string>("owner")
   const [selectedPermissionIds, setSelectedPermissionIds] = useState<string[]>([])
@@ -326,6 +404,7 @@ export default function RolesAndPermissions() {
       setKnowledgeTemplate(null)
       setKnowledgeLibraryTemplate(null)
       setToolTemplate(null)
+      setChannelTemplate(null)
       return
     }
     captureAndAlertRequestErrorHoc(getApplicationPermissionTemplateApi(), () => true).then((res) => {
@@ -340,24 +419,21 @@ export default function RolesAndPermissions() {
     captureAndAlertRequestErrorHoc(getToolPermissionTemplateApi(), () => true).then((res) => {
       if (res) setToolTemplate(res)
     })
+    captureAndAlertRequestErrorHoc(getChannelPermissionTemplateApi(), () => true).then((res) => {
+      if (res) setChannelTemplate(res)
+    })
   }, [user?.role])
 
   const templateSections = useMemo<TemplateSection[]>(() => {
-    const sections = [...TEMPLATE_SECTIONS]
-    if (knowledgeTemplate) {
-      sections[0] = knowledgeTemplate as TemplateSection
-    }
-    if (applicationTemplate) {
-      sections[1] = applicationTemplate as TemplateSection
-    }
-    if (knowledgeLibraryTemplate) {
-      sections[2] = knowledgeLibraryTemplate as TemplateSection
-    }
-    if (toolTemplate) {
-      sections.splice(3, 0, toolTemplate as TemplateSection)
-    }
+    const sections: TemplateSection[] = [
+      (knowledgeTemplate || TEMPLATE_SECTIONS[0]) as TemplateSection,
+      groupChannelTemplatePermissions((channelTemplate || TEMPLATE_SECTIONS[3]) as TemplateSection),
+      (applicationTemplate || TEMPLATE_SECTIONS[1]) as TemplateSection,
+      (knowledgeLibraryTemplate || TEMPLATE_SECTIONS[2]) as TemplateSection,
+    ]
+    if (toolTemplate) sections.push(toolTemplate as TemplateSection)
     return sections.map(filterHiddenTemplatePermissions)
-  }, [applicationTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
+  }, [applicationTemplate, channelTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
     return templateSections.flatMap((section) =>

@@ -1875,7 +1875,9 @@
     "set_article_filter_conditions": "设置文章内容筛选条件：",
     "url_already_in_queue": "该网址已存在",
     "wait_for_crawl_completion": "请等待所有爬取任务完成",
-    "website_crawl_queue": "网站爬取队列"
+    "website_crawl_queue": "网站爬取队列",
+    "channel_permission_management": "成员管理",
+    "organization_grant_unsubscribe_blocked": "本频道通过部门/用户组授权给你，暂无法取消订阅"
   },
   "com_permission": {
     "action_revoke": "撤销",

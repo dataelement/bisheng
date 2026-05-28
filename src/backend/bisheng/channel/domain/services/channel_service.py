@@ -54,19 +54,24 @@ from bisheng.common.errcode.channel import (
     ChannelCreateLimitExceededError,
     ChannelAdminLimitExceededError,
     ArticleSensitiveViolationError,
+    ChannelOrganizationGrantUnsubscribeDeniedError,
 )
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, SpaceFileNameDuplicateError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
+    ChannelRelationEnum,
     UserRoleEnum,
     SpaceChannelMemberDao,
     MembershipStatusEnum,
     REJECTED_STATUS_DISPLAY_WINDOW,
+    legacy_role_for_channel_relation,
+    resolve_channel_relation,
 )
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.permission.domain.services.owner_service import OwnerService
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -95,6 +100,34 @@ CHANNEL_ADMIN_REVOKED_MESSAGE = "revoked_channel_admin"
 CHANNEL_MEMBER_REMOVED_MESSAGE = "removed_channel_member"
 CHANNEL_MADE_PRIVATE_MESSAGE = "channel_made_private"
 CHANNEL_DISMISSED_MESSAGE = "channel_dismissed"
+
+
+def _self_channel_binding_key(channel_id: str, user_id: int, relation: ChannelRelationEnum) -> str:
+    return f'channel:{channel_id}:self:{user_id}:{relation.value}:-'
+
+
+def _member_relation_value(member) -> Optional[str]:
+    relation = resolve_channel_relation(member) if member else None
+    return relation.value if relation else None
+
+
+def _legacy_role_value_for_member(member) -> str:
+    relation = resolve_channel_relation(member)
+    if relation:
+        return legacy_role_for_channel_relation(relation).value
+    return member.user_role.value
+
+
+def _is_direct_channel_source(member, user_id: int) -> bool:
+    subject_type = getattr(member, 'grant_subject_type', None)
+    subject_id = getattr(member, 'grant_subject_id', None)
+    if subject_type is None:
+        return True
+    return subject_type in {'self', 'user'} and (subject_id is None or int(subject_id) == int(user_id))
+
+
+def _is_organization_channel_source(member) -> bool:
+    return getattr(member, 'grant_subject_type', None) in {'department', 'user_group'}
 
 
 class ChannelService:
@@ -265,6 +298,16 @@ class ChannelService:
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id,
             role=UserRoleEnum.CREATOR,
+            relation=ChannelRelationEnum.OWNER,
+            grant_subject_type='self',
+            grant_subject_id=login_user.user_id,
+            grant_relation=ChannelRelationEnum.OWNER,
+            grant_model_id=ChannelRelationEnum.OWNER.value,
+            grant_binding_key=_self_channel_binding_key(
+                str(channel_model.id),
+                login_user.user_id,
+                ChannelRelationEnum.OWNER,
+            ),
         )
 
         # F008: Write owner tuple to OpenFGA (INV-2)
@@ -394,7 +437,8 @@ class ChannelService:
                 is_released=channel.is_released,
                 latest_article_update_time=channel.latest_article_update_time,
                 create_time=channel.create_time,
-                user_role=membership.user_role.value,
+                user_role=_legacy_role_value_for_member(membership),
+                relation=_member_relation_value(membership),
                 is_pinned=membership.is_pinned,
                 subscribed_at=membership.create_time,
                 unread_count=unread_count,
@@ -553,7 +597,8 @@ class ChannelService:
                     user_id=member.user_id,
                     user_name=user_name,
                     user_avatar=await UserService.get_avatar_share_link(user.avatar) if user else None,
-                    user_role=member.user_role.value,
+                    user_role=_legacy_role_value_for_member(member),
+                    relation=_member_relation_value(member),
                     user_groups=user_groups,
                 )
             )
@@ -951,7 +996,6 @@ class ChannelService:
                 login_user=login_user,
             )
 
-        previous_status = existing_membership.status if existing_membership else None
         if existing_membership:
             existing_membership.status = status
             await self.space_channel_member_repository.update(existing_membership)
@@ -1095,23 +1139,30 @@ class ChannelService:
 
     async def update_channel(self, channel_id: str, req: UpdateChannelRequest, login_user: UserPayload):
         """
-        Update channel information (name and description).
-        Only the creator can update the channel.
+        Update channel settings.
+        Channel owner, manager, and editor can update the channel.
         """
         # 1. Verify channel existence
         channel = await self.channel_repository.find_by_id(channel_id)
         if not channel:
             raise ChannelNotFoundError()
 
-        # 2. Verify current user is the creator
+        # 2. Verify current user can edit channel settings
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not a member of this channel")
 
-        if current_membership.user_role != UserRoleEnum.CREATOR:
-            raise ChannelPermissionDeniedError(msg="Only the creator can update the channel information")
+        current_relation = resolve_channel_relation(current_membership)
+        if current_relation not in {
+                ChannelRelationEnum.OWNER,
+                ChannelRelationEnum.MANAGER,
+                ChannelRelationEnum.EDITOR,
+        }:
+            raise ChannelPermissionDeniedError(
+                msg="Only the owner, manager, or editor can update the channel information"
+            )
 
         bisheng_information_client = await get_bisheng_information_client()
 
@@ -1130,20 +1181,28 @@ class ChannelService:
             if old_visibility != new_visibility:
                 # When changing to PRIVATE, remove all non-creator members
                 if new_visibility == ChannelVisibilityEnum.PRIVATE:
-                    removed_members = await self.space_channel_member_repository.find_all(
-                        business_id=channel_id,
-                        business_type=BusinessTypeEnum.CHANNEL,
+                    removed_user_ids = []
+                    if self.message_service:
+                        removed_members = await self.space_channel_member_repository.find_all(
+                            business_id=channel_id,
+                            business_type=BusinessTypeEnum.CHANNEL,
+                        )
+                        removed_user_ids = [
+                            member.user_id
+                            for member in removed_members
+                            if member.status == MembershipStatusEnum.ACTIVE
+                            and resolve_channel_relation(member) != ChannelRelationEnum.OWNER
+                        ]
+                    owners = await self.space_channel_member_repository.find_members_by_role(
+                        channel_id,
+                        UserRoleEnum.CREATOR,
                     )
-                    removed_user_ids = [
-                        member.user_id
-                        for member in removed_members
-                        if member.status == MembershipStatusEnum.ACTIVE and member.user_role != UserRoleEnum.CREATOR
-                    ]
                     await self.space_channel_member_repository.remove_non_creator_members(channel_id)
                     # F008: Clear all FGA tuples and re-write owner only
                     try:
                         await OwnerService.delete_resource_tuples("channel", channel_id)
-                        await OwnerService.write_owner_tuple(login_user.user_id, "channel", channel_id)
+                        for owner in owners:
+                            await OwnerService.write_owner_tuple(owner.user_id, "channel", channel_id)
                     except Exception as e:
                         logger.warning(
                             "Failed to sync FGA tuples after PRIVATE switch for channel %s: %s", channel_id, e
@@ -1316,7 +1375,10 @@ class ChannelService:
         # Knowledge-sync config — only returned for the channel creator since
         # the feature is creator-only (Module D). Members don't need to see it.
         knowledge_sync_cfg: Optional[KnowledgeSyncConfig] = None
-        is_creator = current_membership is not None and current_membership.user_role == UserRoleEnum.CREATOR
+        is_creator = (
+            current_membership is not None
+            and resolve_channel_relation(current_membership) == ChannelRelationEnum.OWNER
+        )
         if is_creator:
             knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
 
@@ -1334,6 +1396,7 @@ class ChannelService:
             subscriber_count=subscriber_count,
             article_count=article_count,
             subscription_status=subscription_status,
+            relation=_member_relation_value(current_membership),
             knowledge_sync=knowledge_sync_cfg,
         )
 
@@ -1560,10 +1623,60 @@ class ChannelService:
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not subscribed to this channel")
 
-        # 2. Remove relationship
-        await self.space_channel_member_repository.delete(current_membership.id)
+        sources = await self.space_channel_member_repository.find_channel_membership_sources(
+            channel_id,
+            login_user.user_id,
+        )
+        if not sources:
+            sources = [current_membership]
+
+        direct_sources = [
+            source for source in sources
+            if _is_direct_channel_source(source, login_user.user_id)
+        ]
+        organization_sources = [
+            source for source in sources
+            if _is_organization_channel_source(source)
+        ]
+
+        if not direct_sources and organization_sources:
+            blocked_by = sorted({
+                source.grant_subject_type
+                for source in organization_sources
+                if source.grant_subject_type
+            })
+            raise ChannelOrganizationGrantUnsubscribeDeniedError(blocked_by=blocked_by)
+
+        targets = direct_sources or [current_membership]
+        for source in targets:
+            await self._remove_channel_direct_source(channel_id, source)
 
         return True
+
+    async def _remove_channel_direct_source(self, channel_id: str, source) -> None:
+        if getattr(source, 'grant_subject_type', None) == 'user' and getattr(source, 'grant_subject_id', None):
+            relation = getattr(source, 'grant_relation', None) or resolve_channel_relation(source)
+            await PermissionService.authorize(
+                object_type='channel',
+                object_id=channel_id,
+                grants=[],
+                revokes=[
+                    AuthorizeRevokeItem(
+                        subject_type='user',
+                        subject_id=int(source.grant_subject_id),
+                        relation=ChannelRelationEnum(relation).value,
+                        include_children=getattr(source, 'grant_include_children', None),
+                        model_id=getattr(source, 'grant_model_id', None),
+                    )
+                ],
+                enforce_fga_success=True,
+            )
+
+        binding_key = getattr(source, 'grant_binding_key', None)
+        if binding_key:
+            await self.space_channel_member_repository.delete_channel_membership_source(channel_id, binding_key)
+            return
+        await self.space_channel_member_repository.delete(source.id)
 
     async def search_channel_articles(
         self,
