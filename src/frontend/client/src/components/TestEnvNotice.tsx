@@ -8,7 +8,7 @@ import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 export default function TestEnvNotice() {
   const localize = useLocalize();
   const isMobile = usePrefersMobileLayout();
-  const text = localize('com_test_env_banner');
+  const text = '' // localize('com_test_env_banner');
 
   const watermarkBackground = useMemo(() => {
     // Escape characters that are not valid inside SVG/XML text nodes.
