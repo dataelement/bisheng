@@ -172,3 +172,80 @@ class FileScheduler:
 
     def release_dispatch_lock(self, token: str) -> None:
         self._release_lock_script(keys=[DISPATCH_LOCK_KEY], args=[token])
+
+
+# ---------------------------------------------------------------------------
+# Fair-dispatch helpers and Celery trigger task
+# ---------------------------------------------------------------------------
+
+from bisheng.common.services.config_service import settings as _settings  # noqa: E402
+from bisheng.worker.main import bisheng_celery  # noqa: E402
+
+
+def _fair_scheduler_conf():
+    return _settings.knowledge_file_worker.fair_scheduler
+
+
+def _fair_scheduler_enabled() -> bool:
+    return bool(_settings.knowledge_file_worker.fair_scheduler_enabled)
+
+
+def _parse_apply_async(*, args, queue):
+    """Indirection so tests can patch without importing the celery task."""
+    from bisheng.worker.knowledge.file_worker import parse_knowledge_file_celery
+
+    parse_knowledge_file_celery.apply_async(args=args, queue=queue)
+
+
+def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
+    """Dispatch up to one file per active user in a single round."""
+    conf = _fair_scheduler_conf()
+    sched = scheduler if scheduler is not None else FileScheduler()
+
+    token = sched.acquire_dispatch_lock(ttl_seconds=conf.dispatch_lock_ttl_seconds)
+    if not token:
+        return  # another worker already running a round
+    try:
+        for user_id in sched.active_users():
+            limit = conf.limit_for(user_id)
+            file_id = sched.dispatch_one(user_id=user_id, limit=limit)
+            if file_id is None:
+                continue
+            payload = sched.get_payload(file_id=file_id)
+            if not payload:
+                sched.rollback_dispatch(user_id=user_id, file_id=file_id)
+                logger.error(
+                    "file_scheduler: missing payload for file_id={}; rolled back",
+                    file_id,
+                )
+                continue
+            queue = decide_queue(payload.get("file_ext", ""))
+            try:
+                _parse_apply_async(
+                    args=[
+                        int(file_id),
+                        payload.get("preview_cache_key", ""),
+                        payload.get("callback_url", ""),
+                    ],
+                    queue=queue,
+                )
+                sched.delete_payload(file_id=file_id)
+            except Exception as exc:
+                sched.rollback_dispatch(user_id=user_id, file_id=file_id)
+                logger.exception(
+                    "file_scheduler: dispatch failed for file_id={}; rolled back: {}",
+                    file_id,
+                    exc,
+                )
+    finally:
+        sched.release_dispatch_lock(token)
+
+
+@bisheng_celery.task(name="bisheng.worker.knowledge.scheduler.trigger_dispatch_task")
+def trigger_dispatch_task() -> None:
+    """Event-driven trigger called after enqueue and after complete."""
+    try:
+        run_dispatch_round()
+    except Exception:
+        logger.exception("trigger_dispatch_task failed")
+        raise
