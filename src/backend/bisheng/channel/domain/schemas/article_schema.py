@@ -1,7 +1,7 @@
 """Article search request/response schema."""
 from __future__ import annotations
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -26,7 +26,7 @@ class ArticleSearchResultItem(BaseModel):
     doc_id: str = Field(..., description='ES document ID')
     source_type: int = Field(..., description='Source type: 0-WeChat Official Account, 1-Website')
     source_id: str = Field(..., description='Source unique identifier')
-    source_info: Optional[Dict[str, str]] = Field(None, description='Source information including name, description, etc.')
+    source_info: Optional[Dict[str, Any]] = Field(None, description='Source information including name, description, etc.')
     title: str = Field(..., description='Article title')
     content_preview: str = Field(default='', description='Truncated plain text content for search list')
     cover_image: Optional[str] = Field(None, description='Article cover image URL')
@@ -59,7 +59,7 @@ class ArticleDetailResponse(BaseModel):
     doc_id: str = Field(..., description='ES document ID')
     source_type: int = Field(..., description='Source type: 0-WeChat Official Account, 1-Website')
     source_id: str = Field(..., description='Source unique identifier')
-    source_info: Optional[Dict[str, str]] = Field(None, description='Source information including name, description, etc.')
+    source_info: Optional[Dict[str, Any]] = Field(None, description='Source information including name, description, etc.')
     title: str = Field(..., description='Article title')
     content_html: str = Field(default='', description='Article HTML content')
     cover_image: Optional[str] = Field(None, description='Article cover image URL')
