@@ -14,6 +14,7 @@ from bisheng.worker.knowledge.lua_scripts import (
     RELEASE_LOCK,
     ROLLBACK_DISPATCH,
 )
+from bisheng.worker.main import bisheng_celery
 
 KNOWLEDGE_QUEUE = "knowledge_celery"
 _IMAGE_EXTS = frozenset({"png", "jpg", "jpeg", "bmp"})
@@ -178,16 +179,13 @@ class FileScheduler:
 # Fair-dispatch helpers and Celery trigger task
 # ---------------------------------------------------------------------------
 
-from bisheng.common.services.config_service import settings as _settings  # noqa: E402
-from bisheng.worker.main import bisheng_celery  # noqa: E402
-
 
 def _fair_scheduler_conf():
-    return _settings.knowledge_file_worker.fair_scheduler
+    return settings.knowledge_file_worker.fair_scheduler
 
 
 def _fair_scheduler_enabled() -> bool:
-    return bool(_settings.knowledge_file_worker.fair_scheduler_enabled)
+    return bool(settings.knowledge_file_worker.fair_scheduler_enabled)
 
 
 def _parse_apply_async(*, args, queue):
@@ -241,7 +239,10 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
         sched.release_dispatch_lock(token)
 
 
-@bisheng_celery.task(name="bisheng.worker.knowledge.scheduler.trigger_dispatch_task")
+@bisheng_celery.task(
+    name="bisheng.worker.knowledge.scheduler.trigger_dispatch_task",
+    acks_late=True,
+)
 def trigger_dispatch_task() -> None:
     """Event-driven trigger called after enqueue and after complete."""
     try:

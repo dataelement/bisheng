@@ -60,6 +60,7 @@ def test_run_dispatch_round_rollback_on_apply_async_failure(monkeypatch):
 
     sched.rollback_dispatch.assert_called_once_with(user_id="a", file_id="10")
     sched.delete_payload.assert_not_called()
+    sched.release_dispatch_lock.assert_called_once_with("tok")
 
 
 def test_run_dispatch_round_no_lock_returns_early(monkeypatch):
@@ -93,3 +94,4 @@ def test_run_dispatch_round_missing_payload_rolls_back(monkeypatch):
 
     apply_async.assert_not_called()
     sched.rollback_dispatch.assert_called_once_with(user_id="a", file_id="10")
+    sched.release_dispatch_lock.assert_called_once_with("tok")
