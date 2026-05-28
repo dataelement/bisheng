@@ -115,10 +115,11 @@ export function AiAssistantPanel({
 
     const handleClearConversation = async () => {
         const ok = await confirm({
-            title: localize("com_subscription.prompt_tip"),
+            variant: "destructive",
+            title: localize("com_subscription.clear_chat_title"),
             description: localize("com_subscription.clear_chat_confirm"),
-            confirmText: localize("com_subscription.confirm"),
-            cancelText: localize("com_subscription.cancel"),
+            confirmText: localize("com_subscription.clear_chat_action"),
+            cancelText: localize("com_subscription.clear_chat_cancel"),
         });
         if (ok) clearConversation();
     };

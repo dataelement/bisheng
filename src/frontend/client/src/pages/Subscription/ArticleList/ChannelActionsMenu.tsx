@@ -29,6 +29,8 @@ interface ChannelActionsMenuProps {
     onOpenSourceFilter?: () => void;
     /** Optional class for the trigger button (icon-only). */
     triggerClassName?: string;
+    /** When true, the trigger is non-interactive and dimmed (e.g. while the channel switcher is open). */
+    disabled?: boolean;
 }
 
 /**
@@ -46,6 +48,7 @@ export function ChannelActionsMenu({
     onShare,
     onOpenSourceFilter,
     triggerClassName,
+    disabled,
 }: ChannelActionsMenuProps) {
     const localize = useLocalize();
     const confirm = useConfirm();
@@ -94,10 +97,12 @@ export function ChannelActionsMenu({
             <DropdownMenuTrigger asChild>
                 <button
                     type="button"
+                    disabled={disabled}
                     className={cn(
                         isMobile
                             ? "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
                             : "inline-flex size-8 items-center justify-center rounded-[6px] border border-[#EBECF0] bg-white text-[#4e5969] outline-none transition-colors fine-pointer:hover:bg-[#F7F8FA]",
+                        disabled && "pointer-events-none opacity-20",
                         triggerClassName,
                     )}
                     aria-label={localize("com_subscription.channel_settings")}
@@ -158,7 +163,7 @@ export function ChannelActionsMenu({
                         else handleUnsubscribeChannel(liveChannel.id);
                     }}
                 >
-                    {(isMobile || isCreated)
+                    {isCreated
                         ? <Outlined.Delete className="size-4 text-[#F53F3F]" />
                         : <LogOut className="size-4 text-[#F53F3F]" />}
                     {isCreated

@@ -249,10 +249,11 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
 
     const handleClear = async () => {
         const ok = await confirm({
-            title: localize("com_subscription.prompt_tip"),
+            variant: "destructive",
+            title: localize("com_subscription.clear_chat_title"),
             description: localize("com_subscription.clear_chat_confirm"),
-            confirmText: localize("com_subscription.confirm"),
-            cancelText: localize("com_subscription.cancel"),
+            confirmText: localize("com_subscription.clear_chat_action"),
+            cancelText: localize("com_subscription.clear_chat_cancel"),
         });
         if (ok) clearConversation();
     };
@@ -437,16 +438,19 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                                     {localize("com_subscription.ai_assistant")}
                                 </h3>
                                 <div className="min-w-0 flex-1" aria-hidden />
-                            <div className="flex shrink-0 items-center gap-2">
+                            <div className="flex shrink-0 items-center gap-0">
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button
                                                 variant="ghost"
-                                                className="group relative h-5 w-5 p-0.5 text-gray-400"
+                                                type="button"
+                                                size="icon"
+                                                className="size-8 shrink-0 text-gray-400 hover:text-gray-600"
                                                 onClick={handleClear}
+                                                aria-label={localize("com_subscription.clear_chat")}
                                             >
-                                                <Outlined.Delete className="size-4" />
+                                                <Outlined.Delete className="size-4 shrink-0" />
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent>
@@ -468,7 +472,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                                                 <Outlined.DoubleDown className="size-4 shrink-0" />
                                             </Button>
                                         </TooltipTrigger>
-                                        <TooltipContent side="bottom">
+                                        <TooltipContent side="top">
                                             <p>{localize("com_ui_collapse")}</p>
                                         </TooltipContent>
                                     </Tooltip>

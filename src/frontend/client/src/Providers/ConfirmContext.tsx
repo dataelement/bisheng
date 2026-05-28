@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useState } from "react"
 
-import { AlertCircle, X } from "lucide-react"
+import { AlertCircle, Trash2, X } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -51,45 +51,83 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
         resolvePromise?.(true)
     }
 
+    const isDestructive = options.variant === "destructive"
+
     return (
         <ConfirmContext.Provider value={{ confirm }}>
             {children}
             <AlertDialog open={open} onOpenChange={setOpen}>
-                <AlertDialogContent className="sm:max-w-[400px] p-6">
-                    <button
-                        onClick={handleCancel}
-                        className="absolute right-4 top-4 opacity-70 hover:opacity-100 transition-opacity"
+                {isDestructive ? (
+                    /* Destructive variant — matches the "删除操作确认" design. Screen-centered
+                       (not a mobile bottom-sheet). Mobile: centered title + full-width equal
+                       buttons. PC: left-aligned title + right-aligned hug buttons. */
+                    <AlertDialogContent
+                        onOpenAutoFocus={(e) => e.preventDefault()}
+                        className="inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-[20px] border border-[#ebebeb] p-6 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-[20px]"
                     >
-                        <X className="h-4 w-4 text-muted-foreground" />
-                    </button>
+                        <AlertDialogHeader className="w-full flex-row items-center justify-center gap-2 space-y-0 text-center sm:justify-start sm:text-left">
+                            <Trash2 className="size-5 shrink-0 text-[#f53f3f]" />
+                            <AlertDialogTitle className="text-base font-medium leading-6 text-[#f53f3f]">
+                                {options.title || "删除操作确认"}
+                            </AlertDialogTitle>
+                        </AlertDialogHeader>
 
-                    <AlertDialogHeader className="relative pt-2">
-                        <div className="absolute left-0 top-0">
-                            <AlertCircle className="h-6 w-6 text-red-500" />
-                        </div>
-                        <AlertDialogTitle className="text-center text-xl font-medium">
-                            {options.title || "提示"}
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-center py-4 text-base text-slate-600">
+                        <AlertDialogDescription className="w-full text-left text-sm leading-[22px] text-[#212121]">
                             {options.description}
                         </AlertDialogDescription>
-                    </AlertDialogHeader>
 
-                    <AlertDialogFooter className="flex flex-row justify-center gap-4 sm:justify-center">
-                        <AlertDialogCancel
+                        <AlertDialogFooter className="w-full flex-row gap-2 sm:space-x-0">
+                            <AlertDialogCancel
+                                onClick={handleCancel}
+                                className="mt-0 h-auto flex-1 rounded-[6px] border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] hover:bg-white/70 sm:mt-0 sm:flex-none"
+                            >
+                                {options.cancelText || "暂不"}
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirm}
+                                className="h-auto flex-1 rounded-[6px] bg-[#f53f3f] px-4 py-[5px] text-sm font-normal text-white hover:bg-[#f53f3f]/90 sm:flex-none"
+                            >
+                                {options.confirmText || "确认删除"}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                ) : (
+                    <AlertDialogContent className="sm:max-w-[400px] p-6">
+                        <button
                             onClick={handleCancel}
-                            className="w-28 mt-0 border-slate-200 text-slate-600"
+                            className="absolute right-4 top-4 opacity-70 hover:opacity-100 transition-opacity"
                         >
-                            {options.cancelText || "取消"}
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={handleConfirm}
-                            className={`w-28 bg-red-600 hover:bg-red-700`}
-                        >
-                            {options.confirmText || "确认"}
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
+                            <X className="h-4 w-4 text-muted-foreground" />
+                        </button>
+
+                        <AlertDialogHeader className="relative pt-2">
+                            <div className="absolute left-0 top-0">
+                                <AlertCircle className="h-6 w-6 text-red-500" />
+                            </div>
+                            <AlertDialogTitle className="text-center text-xl font-medium">
+                                {options.title || "提示"}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="text-center py-4 text-base text-slate-600">
+                                {options.description}
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        <AlertDialogFooter className="flex flex-row justify-center gap-4 sm:justify-center">
+                            <AlertDialogCancel
+                                onClick={handleCancel}
+                                className="w-28 mt-0 border-slate-200 text-slate-600"
+                            >
+                                {options.cancelText || "取消"}
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                                onClick={handleConfirm}
+                                className={`w-28 bg-red-600 hover:bg-red-700`}
+                            >
+                                {options.confirmText || "确认"}
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                )}
             </AlertDialog>
         </ConfirmContext.Provider>
     )

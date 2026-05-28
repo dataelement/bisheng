@@ -28,6 +28,12 @@ interface ChannelSwitcherProps {
 
 type ChannelGroup = "created" | "subscribed";
 
+// Serif stack for the channel-name title. Songti SC (iOS/macOS) / SimSun 宋体 (Windows) /
+// Noto Serif CJK (Android & Linux), ending in the generic `serif` keyword so any device
+// without a named family still falls back to its system serif rather than sans-serif.
+const SERIF_FONT_STACK =
+    '"Songti SC", STSong, "SimSun", "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", serif';
+
 /**
  * Channel switcher — picks an active channel from "我创建的" / "我关注的".
  * PC variant: 32px title trigger + Radix Popover.
@@ -157,17 +163,6 @@ export function ChannelSwitcher({
                         <Outlined.Plus className="size-4" />
                     </button>
                 ) : null}
-                {isMobile && group === "subscribed" && onChannelSquare ? (
-                    <button
-                        type="button"
-                        onClick={() => { onChannelSquare(); setOpen(false); }}
-                        aria-label={localize("com_subscription.go_to_channel_plaza")}
-                        title={localize("com_subscription.go_to_channel_plaza")}
-                        className="text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
-                    >
-                        <Outlined.BlocksAndArrows className="size-4" />
-                    </button>
-                ) : null}
                 <button
                     type="button"
                     onClick={toggleSort}
@@ -180,6 +175,19 @@ export function ChannelSwitcher({
             </div>
         </div>
     );
+
+    // Persistent "go to plaza" button shown at the bottom of both the PC popover and the H5 panel.
+    const renderChannelSquareButton = () =>
+        onChannelSquare ? (
+            <button
+                type="button"
+                onClick={() => { onChannelSquare(); setOpen(false); }}
+                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[6px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+            >
+                <Outlined.BlocksAndArrows className="size-4 text-[#86909C]" />
+                {localize("com_subscription.go_to_square")}
+            </button>
+        ) : null;
 
     const renderChannelList = () => (
         <div
@@ -232,13 +240,13 @@ export function ChannelSwitcher({
             <>
                 <button
                     type="button"
-                    onClick={() => setOpen(!open)}
+                    onClick={() => handleOpenChange(!open)}
                     aria-expanded={open}
                     className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
                 >
                     <span
-                        className="truncate text-[20px] leading-7 text-[#212121]"
-                        style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
+                        className="truncate text-[20px] font-bold leading-7 text-[#212121]"
+                        style={{ fontFamily: SERIF_FONT_STACK }}
                     >
                         {channelName}
                     </span>
@@ -249,13 +257,14 @@ export function ChannelSwitcher({
                 </button>
                 {open ? (
                     <div
-                        className="fixed inset-x-0 bottom-0 z-[55] flex flex-col gap-2 bg-white p-3"
+                        className="fixed inset-x-0 bottom-0 z-[55] flex flex-col gap-2 bg-white p-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]"
                         style={{ top: mobileTopOffset ?? "calc(env(safe-area-inset-top, 0px) + 44px)" }}
                         role="dialog"
                         aria-modal="true"
                     >
                         {renderSectionHeader()}
                         {renderChannelList()}
+                        {renderChannelSquareButton()}
                     </div>
                 ) : null}
             </>
@@ -265,7 +274,8 @@ export function ChannelSwitcher({
     return (
         <div
             ref={titleRef}
-            className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-[#212121] [font-family:'Songti_SC','STSong','SimSun',serif] font-bold"
+            className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-[#212121] font-bold"
+            style={{ fontFamily: SERIF_FONT_STACK }}
         >
             <span className="shrink-0">{localize("com_subscription.subscribe")}</span>
             <span className="shrink-0 text-[#C9CDD4]">·</span>
@@ -306,16 +316,7 @@ export function ChannelSwitcher({
                 >
                     {renderSectionHeader()}
                     {renderChannelList()}
-                    {onChannelSquare ? (
-                        <button
-                            type="button"
-                            onClick={() => { onChannelSquare(); setOpen(false); }}
-                            className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[6px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
-                        >
-                            <Outlined.BlocksAndArrows className="size-4 text-[#86909C]" />
-                            {localize("com_subscription.go_to_square")}
-                        </button>
-                    ) : null}
+                    {renderChannelSquareButton()}
                 </PopoverContent>
             </Popover>
         </div>

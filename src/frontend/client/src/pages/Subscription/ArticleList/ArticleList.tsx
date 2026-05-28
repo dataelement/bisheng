@@ -352,75 +352,89 @@ export function ArticleList({
                     <div className="sticky top-0 z-30 shrink-0 bg-white pt-[env(safe-area-inset-top,0px)]">
                         {/* Title row: hamburger | title (caret) | search | menu */}
                         <div className="relative flex h-11 items-center gap-3 px-4">
-                            {onOpenChannelNav ? (
+                            {/* Left group — fixed width that mirrors the right group, so the
+                                center title stays screen-centered even when truncated.
+                                76px = search(32) + gap(12) + actions(32). */}
+                            <div className="flex min-w-[76px] shrink-0 items-center justify-start">
+                                {onOpenChannelNav ? (
+                                    <button
+                                        type="button"
+                                        onClick={onOpenChannelNav}
+                                        disabled={mobileDropdownOpen}
+                                        aria-label={localize("com_nav_open_sidebar")}
+                                        className={cn(mobileHeadIconBtnClassName, mobileDropdownOpen && "pointer-events-none opacity-20")}
+                                    >
+                                        <Outlined.SidebarMenu className="size-5" />
+                                    </button>
+                                ) : (
+                                    <div className="size-5 shrink-0" aria-hidden />
+                                )}
+                            </div>
+                            {/* Center group — title grows then truncates while staying centered */}
+                            <div className="flex min-w-0 flex-1 items-center justify-center">
+                                {onChannelSelect ? (
+                                    <ChannelSwitcher
+                                        variant="mobile"
+                                        activeChannelId={channel.id}
+                                        channelName={channelDetail?.name || channel.name}
+                                        onChannelSelect={onChannelSelect}
+                                        onCreateChannel={onCreateChannel}
+                                        onChannelSquare={onGoChannelSquare}
+                                        open={mobileDropdownOpen}
+                                        onOpenChange={(next) => {
+                                            if (next) setMobileSearchOpen(false);
+                                            setMobileDropdownOpen(next);
+                                        }}
+                                        mobileTopOffset={
+                                            mobileSearchOpen
+                                                ? "calc(env(safe-area-inset-top, 0px) + 96px)"
+                                                : "calc(env(safe-area-inset-top, 0px) + 44px)"
+                                        }
+                                    />
+                                ) : (
+                                    <h1
+                                        className="flex min-w-0 flex-1 items-center justify-center truncate text-[20px] leading-7 text-[#212121]"
+                                        style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
+                                    >
+                                        {channelDetail?.name || channel.name}
+                                    </h1>
+                                )}
+                            </div>
+                            {/* Right group — same fixed width as the left group */}
+                            <div className="flex min-w-[76px] shrink-0 items-center justify-end gap-3">
                                 <button
                                     type="button"
-                                    onClick={onOpenChannelNav}
-                                    aria-label={localize("com_nav_open_sidebar")}
-                                    className={mobileHeadIconBtnClassName}
-                                >
-                                    <Outlined.SidebarMenu className="size-5" />
-                                </button>
-                            ) : (
-                                <div className="size-5 shrink-0" aria-hidden />
-                            )}
-                            {onChannelSelect ? (
-                                <ChannelSwitcher
-                                    variant="mobile"
-                                    activeChannelId={channel.id}
-                                    channelName={channelDetail?.name || channel.name}
-                                    onChannelSelect={onChannelSelect}
-                                    onCreateChannel={onCreateChannel}
-                                    onChannelSquare={onGoChannelSquare}
-                                    open={mobileDropdownOpen}
-                                    onOpenChange={(next) => {
-                                        if (next) setMobileSearchOpen(false);
-                                        setMobileDropdownOpen(next);
+                                    onClick={() => {
+                                        setMobileDropdownOpen(false);
+                                        setMobileSearchOpen((o) => !o);
                                     }}
-                                    mobileTopOffset={
-                                        mobileSearchOpen
-                                            ? "calc(env(safe-area-inset-top, 0px) + 96px)"
-                                            : "calc(env(safe-area-inset-top, 0px) + 44px)"
-                                    }
-                                />
-                            ) : (
-                                <h1
-                                    className="flex min-w-0 flex-1 items-center justify-center truncate text-[20px] leading-7 text-[#212121]"
-                                    style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
+                                    disabled={mobileDropdownOpen}
+                                    aria-label={localize("com_subscription.search_articles_of_interest")}
+                                    aria-pressed={mobileSearchOpen}
+                                    className={cn(mobileHeadIconBtnClassName, mobileDropdownOpen && "pointer-events-none opacity-20")}
                                 >
-                                    {channelDetail?.name || channel.name}
-                                </h1>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setMobileDropdownOpen(false);
-                                    setMobileSearchOpen((o) => !o);
-                                }}
-                                aria-label={localize("com_subscription.search_articles_of_interest")}
-                                aria-pressed={mobileSearchOpen}
-                                className={mobileHeadIconBtnClassName}
-                            >
-                                <Outlined.Search className="size-5" />
-                            </button>
-                            {onChannelSelect ? (
-                                <ChannelActionsMenu
-                                    variant="mobile"
-                                    channel={channel}
-                                    onChannelSelect={onChannelSelect}
-                                    onManageMembers={onManageMembers}
-                                    onChannelSettings={onChannelSettings}
-                                    onShare={canOpenChannelShare ? handleMobileShare : undefined}
-                                    onOpenSourceFilter={
-                                        sourceOptions.length > 0
-                                            // Defer to next tick so the DropdownMenu fully closes before the Popover opens,
-                                            // otherwise Radix treats the same click as outside-click and dismisses the Popover.
-                                            ? () => setTimeout(() => setMobileSourceFilterOpen(true), 0)
-                                            : undefined
-                                    }
-                                    triggerClassName={mobileHeadIconBtnClassName}
-                                />
-                            ) : null}
+                                    <Outlined.Search className="size-5" />
+                                </button>
+                                {onChannelSelect ? (
+                                    <ChannelActionsMenu
+                                        variant="mobile"
+                                        channel={channel}
+                                        onChannelSelect={onChannelSelect}
+                                        onManageMembers={onManageMembers}
+                                        onChannelSettings={onChannelSettings}
+                                        onShare={canOpenChannelShare ? handleMobileShare : undefined}
+                                        onOpenSourceFilter={
+                                            sourceOptions.length > 0
+                                                // Defer to next tick so the DropdownMenu fully closes before the Popover opens,
+                                                // otherwise Radix treats the same click as outside-click and dismisses the Popover.
+                                                ? () => setTimeout(() => setMobileSourceFilterOpen(true), 0)
+                                                : undefined
+                                        }
+                                        triggerClassName={mobileHeadIconBtnClassName}
+                                        disabled={mobileDropdownOpen}
+                                    />
+                                ) : null}
+                            </div>
                             {/* Source picker — absolute-positioned anchor at the right edge so the popover opens beneath the actions menu without consuming flex space */}
                             {sourceOptions.length > 0 ? (
                                 <span className="pointer-events-none absolute right-4 bottom-0">
@@ -508,7 +522,7 @@ export function ArticleList({
                                 type="button"
                                 onClick={handleToggleUnread}
                                 className={cn(
-                                    "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    "ml-auto shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-primary bg-primary/20 text-primary"
                                         : "border-[#E5E6EB] bg-white text-gray-800",
@@ -523,7 +537,9 @@ export function ArticleList({
                 /* === PC header === */
                 <div className={cn(
                     "mx-auto w-full shrink-0 pt-5 pb-4 space-y-4",
-                    isGridMode ? "max-w-none px-10" : "max-w-[1000px] px-4",
+                    isGridMode ? "max-w-none" : "max-w-[1000px]",
+                    // PC keeps 40px gutters whether grid or preview-open; H5 uses 16px.
+                    isH5 ? "px-4" : "px-10",
                 )}>
                     {/* 频道名 + 信息 + 分享 */}
                     <div className="flex items-center justify-between gap-3">
@@ -582,11 +598,12 @@ export function ArticleList({
                         </div>
                     </div>
 
-                    {/* 子频道 Tabs + 搜索/筛选. Hide the tab row when there are no sub-channels
-                        (a lone 全部 tab adds no navigation value). */}
-                    <div className="flex flex-row flex-wrap items-center justify-between gap-3">
+                    {/* 子频道 Tabs + 搜索/筛选. Single row on PC: tabs scroll horizontally
+                        (with edge shadows) while the toolbar stays fixed on the right. Hide
+                        the tab row when there are no sub-channels (a lone 全部 tab adds no value). */}
+                    <div className="flex flex-row items-center justify-between gap-3">
                         {subChannels.length > 0 && (
-                        <div className="relative min-w-0">
+                        <div className="relative min-w-0 flex-1">
                             {tabsScrollShadow.left ? (
                                 <div
                                     className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-7 bg-gradient-to-r from-white from-20% to-transparent"
@@ -640,8 +657,9 @@ export function ArticleList({
                         </div>
                         )}
 
-                        {/* ml-auto keeps the toolbar right-aligned even when the tab row is hidden. */}
-                        <div className="ml-auto flex w-auto min-w-0 flex-row flex-wrap items-center justify-end gap-3">
+                        {/* ml-auto keeps the toolbar right-aligned even when the tab row is hidden.
+                            shrink-0 + no wrap keeps it on one line; the tabs absorb the overflow. */}
+                        <div className="ml-auto flex shrink-0 flex-row items-center justify-end gap-3">
                             <SearchInput
                                 key={channel.id}
                                 value={searchKey}
@@ -678,9 +696,9 @@ export function ArticleList({
             >
                 <div className={cn(
                     "mx-auto w-full min-w-0 overflow-x-hidden",
-                    isGridMode
-                        ? "max-w-none px-10"
-                        : "max-w-[1000px] px-4",
+                    isGridMode ? "max-w-none" : "max-w-[1000px]",
+                    // PC keeps 40px gutters whether grid or preview-open; H5 uses 16px.
+                    isH5 ? "px-4" : "px-10",
                 )}>
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
