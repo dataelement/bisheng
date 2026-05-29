@@ -137,7 +137,7 @@ export function ArticleCard({
         return (
             <>
                 <div
-                    className="group relative flex h-full cursor-pointer gap-6 py-5 max-[767px]:border-b max-[767px]:border-dashed max-[767px]:border-[#E0E0E0] max-[767px]:py-2"
+                    className="group relative flex cursor-pointer gap-6 min-[768px]:h-[120px] min-[768px]:overflow-hidden min-[768px]:py-4 max-[767px]:h-[100px] max-[767px]:overflow-hidden max-[767px]:border-b max-[767px]:border-dashed max-[767px]:border-[#E0E0E0] max-[767px]:py-3"
                     onClick={() => onSelect(article)}
                 >
                     {/* Left content */}
@@ -145,7 +145,7 @@ export function ArticleCard({
                         <div className="flex min-w-0 items-center gap-2">
                             <h3
                                 className={cn(
-                                    "min-w-0 flex-1 truncate text-[16px] leading-[22px] font-medium [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
+                                    "min-w-0 flex-1 line-clamp-2 text-[16px] leading-[22px] font-medium max-[767px]:text-[14px] [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
                                     isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
                                     article.isRead ? "text-[#989898]" : "text-[#212121]",
                                 )}
@@ -161,30 +161,14 @@ export function ArticleCard({
                             )}
                         </div>
 
-                        {/* Fixed 36px description band on desktop (one 20px line; two would need
-                            40px) so the source row stays pinned to the bottom. Mobile keeps the
-                            upstream truncate + padding behavior. */}
-                        <div className="min-[768px]:h-9">
-                            <p
-                                className={cn(
-                                    "line-clamp-1 text-[14px] leading-[20px] [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold max-[767px]:line-clamp-none max-[767px]:truncate max-[767px]:pb-5 max-[767px]:text-xs max-[767px]:text-[#595959]",
-                                    article.isRead ? "text-gray-400" : "text-gray-500",
-                                )}
-                            >
-                                {highlightContent
-                                    ? <span dangerouslySetInnerHTML={{ __html: highlightContent }} />
-                                    : article.content}
-                            </p>
-                        </div>
-
-                        <div className="relative mt-auto flex items-center justify-between max-[767px]:mt-0">
+                        <div className="relative mt-auto flex items-center justify-between">
                             {metaRow}
                             {showArticleActions && canViewArticle && (
-                                <div className="pointer-events-none absolute right-0 flex items-center gap-3 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 max-[767px]:pointer-events-auto max-[767px]:static max-[767px]:gap-2 max-[767px]:opacity-100">
+                                <div className="absolute right-0 flex items-center gap-1 max-[767px]:static max-[767px]:gap-2">
                                     {hasKnowledge && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
-                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-gray-800 transition-colors hover:bg-[#F7F8FA] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#999] transition-colors group-hover:bg-[#f7f7f7] group-hover:text-[#212121] hover:bg-[#ECECEC] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
                                             title={localize("com_subscription.add_to_knowledge_space")}
                                         >
                                             <Outlined.AddToKnowledgeBase className="size-3.5" />
@@ -199,7 +183,7 @@ export function ArticleCard({
                                                 .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
                                                 .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
                                         }}
-                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-gray-800 transition-colors hover:bg-[#F7F8FA] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#999] transition-colors group-hover:bg-[#f7f7f7] group-hover:text-[#212121] hover:bg-[#ECECEC] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
                                         title={localize("com_subscription.share")}
                                     >
                                         <Outlined.Share className="size-3.5" />
@@ -214,7 +198,7 @@ export function ArticleCard({
                         <CoverThumbnail
                             src={article.coverImage}
                             alt={article.title}
-                            containerClassName="size-[100px] shrink-0 overflow-hidden rounded max-[767px]:size-16 max-[767px]:self-center"
+                            containerClassName="shrink-0 overflow-hidden rounded min-[768px]:size-[88px] max-[767px]:size-16 max-[767px]:self-end"
                         />
                     )}
                 </div>
@@ -317,7 +301,7 @@ export function ArticleCard({
                                         e.stopPropagation();
                                         setShowKnowledgeModal(true);
                                     }}
-                                    className="rounded-full flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors hover:bg-[#F7F8FA]"
+                                    className="rounded-full flex size-8 cursor-pointer items-center justify-center text-[#999] transition-colors group-hover:bg-[#f7f7f7] group-hover:text-[#212121] hover:bg-[#ECECEC]"
                                     title={localize("com_subscription.add_to_knowledge_space")}
                                 >
                                     <Outlined.AddToKnowledgeBase className="size-3.5" />
@@ -345,7 +329,7 @@ export function ArticleCard({
                                             });
                                         });
                                 }}
-                                className="rounded-full flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors hover:bg-[#F7F8FA]"
+                                className="rounded-full flex size-8 cursor-pointer items-center justify-center text-[#999] transition-colors group-hover:bg-[#f7f7f7] group-hover:text-[#212121] hover:bg-[#ECECEC]"
                                 title={localize("com_subscription.share")}
                             >
                                 <Outlined.Share className="size-3.5" />
