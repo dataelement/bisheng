@@ -37,19 +37,22 @@ export default function KnowledgeSelect({
     const [options, setOptions] = useState<any>([]);
     const originOptionsRef = useRef([])
 
-    const pageRef = useRef(1)
+    // F027: cursor-based pagination. `page > 1` semantics replaced by
+    // "do we have a cursor to fetch the next page?" The first call passes
+    // `cursor=null` for the first page; subsequent calls pass `next_cursor`.
+    const cursorRef = useRef<string | null>(null)
     const typeRef = useRef(type === 'qa' ? 1 : 0)
-    const reload = (page, name) => {
-        readFileLibDatabase({ page, pageSize: 60, name, type: typeRef.current, permissionId: 'use_kb' }).then(res => {
-            pageRef.current = page
+    const reload = (cursor: string | null, name: string) => {
+        readFileLibDatabase({ cursor, pageSize: 60, name, type: typeRef.current, permissionId: 'use_kb' }).then(res => {
+            cursorRef.current = res.next_cursor
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
-            setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
+            setOptions(_ops => cursor ? [..._ops, ...opts] : opts)
         })
     }
 
     useEffect(() => {
-        reload(1, '')
+        reload(null, '')
     }, [])
 
     // const handleChange = (res) => {
@@ -59,12 +62,12 @@ export default function KnowledgeSelect({
 
     // 加载更多
     const loadMore = (name) => {
-        reload(pageRef.current + 1, name)
+        if (cursorRef.current) reload(cursorRef.current, name)
     }
 
     const handleTabChange = (val) => {
         typeRef.current = val === 'qa' ? 1 : 0
-        reload(1, '')
+        reload(null, '')
         const inputDom = document.getElementById('knowledge-select')
         if (inputDom) {
             inputDom.value = ''
@@ -84,9 +87,9 @@ export default function KnowledgeSelect({
         onChange={onChange}
         onLoad={() => {
             typeRef.current = type === 'qa' ? 1 : 0
-            reload(1, '');
+            reload(null, '');
         }}
-        onSearch={(val) => reload(1, val)}
+        onSearch={(val) => reload(null, val)}
         onScrollLoad={(val) => loadMore(val)}
     >
         {children?.(reload)}

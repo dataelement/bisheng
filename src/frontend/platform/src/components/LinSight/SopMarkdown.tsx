@@ -244,7 +244,8 @@ const useSopTools = (tools) => {
     const files = []
     const { data: orgTools } = useQuery({
         queryKey: ['OrgTools'],
-        queryFn: () => readFileLibDatabase({ page: 1, pageSize: 400, type: 0, permissionId: 'use_kb' }),
+        // F027: cursor-based; pass no cursor to fetch the first (and only) page.
+        queryFn: () => readFileLibDatabase({ pageSize: 400, type: 0, permissionId: 'use_kb' }),
         select(data) {
             return data?.data;
         },

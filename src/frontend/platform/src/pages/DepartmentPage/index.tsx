@@ -198,9 +198,8 @@ export default function DepartmentPage() {
                   {selectedDept.name}
                   {selectedDept.status === "archived" ? ` ${t("bs:department.archivedTag")}` : ""}
                 </h2>
-                <span className="text-sm text-muted-foreground">
-                  {t("bs:department.memberCount")}: {selectedDept.member_count}
-                </span>
+                {/* F027 AC-14: per-department member-count badge removed; the
+                    tree-node response no longer carries this field. */}
               </div>
               <TabsList>
                 <TabsTrigger value="members">{t("bs:department.members")}</TabsTrigger>

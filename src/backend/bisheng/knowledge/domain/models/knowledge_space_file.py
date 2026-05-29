@@ -1,11 +1,53 @@
-from typing import Optional, List
+from typing import List, Optional, Sequence
 
-from sqlalchemy import func, or_, text, update
+from sqlalchemy import case, func, or_, text, update
 from sqlmodel import select, col
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, \
     FileType, FileSource
+
+
+# F027 AD-14: file extension priority for "file_type" sort order.
+# Same 15-WHEN ranking used by `SpaceFileDao.order_field_text`'s SQL CASE.
+# Files not matching any of these (folders, unknown extensions) get rank 999.
+_EXT_PRIORITIES: List[tuple] = [
+    ('pdf', 1), ('docx', 2), ('doc', 3),
+    ('xlsx', 4), ('xls', 5), ('csv', 6),
+    ('pptx', 7), ('ppt', 8),
+    ('jpg', 9), ('jpeg', 10), ('png', 11), ('bmp', 12),
+    ('md', 13), ('txt', 14), ('html', 15),
+]
+_EXT_RANK_FALLBACK = 999
+
+
+def _compute_ext_rank_python(file_name: Optional[str]) -> int:
+    """Python mirror of the SQL CASE WHEN ext_rank ladder (F027 AD-14).
+
+    Must agree exactly with ``_compute_ext_rank_case_when()`` so cursor
+    values computed in Python compare correctly against SQL-side keyset
+    expressions.
+    """
+    if not file_name:
+        return _EXT_RANK_FALLBACK
+    lowered = file_name.lower()
+    for ext, rank in _EXT_PRIORITIES:
+        if lowered.endswith('.' + ext):
+            return rank
+    return _EXT_RANK_FALLBACK
+
+
+def _compute_ext_rank_case_when():
+    """SQL-side ext_rank: SQLAlchemy ``case()`` matching ``_EXT_PRIORITIES``.
+
+    Returns a Case expression that resolves to the same integer as
+    ``_compute_ext_rank_python()`` for any given ``KnowledgeFile.file_name``.
+    """
+    whens = [
+        (func.lower(KnowledgeFile.file_name).like(f'%.{ext}'), rank)
+        for ext, rank in _EXT_PRIORITIES
+    ]
+    return case(*whens, else_=_EXT_RANK_FALLBACK)
 
 
 class SpaceFileDao(KnowledgeFileDao):
@@ -78,11 +120,16 @@ class SpaceFileDao(KnowledgeFileDao):
             page_size: int = 20,
             file_type: Optional[int] = None,
             exclude_file_ids: Optional[List[int]] = None,
+            cursor: Optional[Sequence] = None,
     ) -> List[KnowledgeFile]:
         """
         Async: List direct children (folders first, then files) under a given parent.
         When parent_id is None, returns root-level items (file_level_path == '').
-        Paginated: page is 1-indexed.
+
+        F027: when ``cursor`` is provided (4-tuple ``(file_type, ext_rank,
+        update_time, id)``), keyset WHERE is injected and the offset path is
+        skipped. ``order_field`` must be ``"file_type"`` in cursor mode
+        (other order_fields keep using OFFSET).
         """
         if parent_id is None:
             exact_path = ''
@@ -129,10 +176,40 @@ class SpaceFileDao(KnowledgeFileDao):
             select(KnowledgeFile)
             .where(*filters)
         )
-        if page and page_size:
-            statement = statement.offset((page - 1) * page_size).limit(page_size)
-        if order_field and order_sort:
-            statement = statement.order_by(text(cls.order_field_text(order_field, order_sort)))
+
+        # F027: cursor-based keyset takes precedence over OFFSET.
+        if cursor is not None and order_field == "file_type":
+            from bisheng.database.utils.keyset import build_keyset_where
+
+            order_dir_asc = (order_sort or "asc").lower() == "asc"
+            sort_cols = (
+                KnowledgeFile.file_type,
+                _compute_ext_rank_case_when(),
+                KnowledgeFile.update_time,
+                KnowledgeFile.id,
+            )
+            # Mixed direction: file_type + ext_rank follow ``order_sort``;
+            # update_time + id are always DESC (newest first within same ext).
+            descending = (
+                not order_dir_asc,
+                not order_dir_asc,
+                True,
+                True,
+            )
+            statement = statement.where(
+                build_keyset_where(sort_cols, tuple(cursor), descending=descending)
+            )
+            if page_size:
+                statement = statement.limit(page_size)
+            statement = statement.order_by(
+                text(cls.order_field_text(order_field, order_sort))
+            )
+        else:
+            if page and page_size:
+                statement = statement.offset((page - 1) * page_size).limit(page_size)
+            if order_field and order_sort:
+                statement = statement.order_by(text(cls.order_field_text(order_field, order_sort)))
+
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()

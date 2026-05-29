@@ -92,7 +92,6 @@ class DepartmentTreeNode(BaseModel):
     sort_order: int = 0
     source: str = 'local'
     status: str = 'active'
-    member_count: int = 0
     # F011 mount-state surfaced to the frontend so DepartmentSettings can
     # toggle the "mark as Child Tenant" / "unmount" button, and DepartmentTree
     # can badge mounted nodes. mounted_tenant_id is None when is_tenant_root

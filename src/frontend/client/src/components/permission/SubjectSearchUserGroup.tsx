@@ -16,6 +16,7 @@ interface SubjectSearchUserGroupProps {
   resourceType?: ResourceType;
   resourceId?: string;
   disabledIds?: number[];
+  grantUserGroupsApi?: typeof getResourceGrantUserGroups;
 }
 
 export function SubjectSearchUserGroup({
@@ -24,6 +25,7 @@ export function SubjectSearchUserGroup({
   resourceType,
   resourceId,
   disabledIds = [],
+  grantUserGroupsApi,
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -32,9 +34,10 @@ export function SubjectSearchUserGroup({
 
   useEffect(() => {
     const controller = new AbortController();
+    const getGrantUserGroups = grantUserGroupsApi ?? getResourceGrantUserGroups;
     const request =
       resourceType && resourceId
-        ? getResourceGrantUserGroups(resourceType, resourceId, undefined, { signal: controller.signal })
+        ? getGrantUserGroups(resourceType, resourceId, undefined, { signal: controller.signal })
         : getUserGroups({ signal: controller.signal });
 
     setLoading(true);
@@ -49,7 +52,7 @@ export function SubjectSearchUserGroup({
       });
 
     return () => controller.abort();
-  }, [resourceId, resourceType]);
+  }, [grantUserGroupsApi, resourceId, resourceType]);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;

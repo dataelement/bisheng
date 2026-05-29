@@ -268,13 +268,22 @@ async def list_space_children(
     order_field: str = "file_type",
     order_sort: str = "asc",
     file_status: List[int] = Query(default=None, description="文件状态列表"),
-    page: int = 1,
     page_size: int = 20,
+    cursor: Optional[str] = Query(
+        default=None,
+        description="F027 cursor-based pagination token from the previous response's "
+                    "`next_cursor`. Omit (or pass empty) to fetch the first page.",
+    ),
     file_type: Optional[int] = Query(
         default=None, description="0=DIR only, 1=FILE only, empty=both"
     ),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
+    """List space children (F027 cursor-based pagination).
+
+    Response shape (PageInfiniteCursorData): ``{data, page_size, has_more, next_cursor}``.
+    The legacy ``total`` / ``page`` fields have been removed (AC-03).
+    """
     result = await svc.list_space_children(
         space_id,
         parent_id,
@@ -282,7 +291,7 @@ async def list_space_children(
         order_field,
         order_sort,
         file_status=file_status,
-        page=page,
+        cursor=cursor,
         page_size=page_size,
         file_type=file_type,
     )

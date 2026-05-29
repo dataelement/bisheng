@@ -7,7 +7,8 @@ export interface DepartmentTreeNode {
   sort_order: number
   source: string
   status: string
-  member_count: number
+  // F027 AC-14: `member_count` removed from the tree node response. The
+  // single-department detail (DepartmentDetail) still carries it (AC-15).
   /** True iff the department is currently a Child Tenant mount point. */
   is_tenant_root: boolean
   /** Tenant.id this department mounts; null when is_tenant_root is false. */

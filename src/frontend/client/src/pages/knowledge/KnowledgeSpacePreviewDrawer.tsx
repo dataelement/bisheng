@@ -51,6 +51,10 @@ export function KnowledgeSpacePreviewDrawer({
     const [childrenPage, setChildrenPage] = useState(1);
     const [childrenTotal, setChildrenTotal] = useState(0);
     const [loadingChildrenMore, setLoadingChildrenMore] = useState(false);
+    // F027: cursor for the next page of `getSpaceChildrenApi`. null on first
+    // page (and after a parent/space switch). Backend `next_cursor` advances
+    // it as the user scrolls.
+    const preview_next_cursor_ref = useRef<string | null>(null);
     const [loadingSpace, setLoadingSpace] = useState(false);
     const [canViewApprovalContent, setCanViewApprovalContent] = useState<boolean | null>(null);
     const [parentStack, setParentStack] = useState<string[]>([]);
@@ -196,18 +200,24 @@ export function KnowledgeSpacePreviewDrawer({
         setChildrenPage(1);
         setChildrenTotal(0);
         setLoadingChildrenMore(false);
+        // F027: reset cursor so the first request after a parent/space switch
+        // fetches page 1 (cursor=null) instead of inheriting a stale token.
+        preview_next_cursor_ref.current = null;
 
         const fileStatusFilter = getPreviewFileStatusFilter(space);
         getSpaceChildrenApi({
             space_id: space.id,
             ...(currentParentId ? { parent_id: currentParentId } : {}),
-            page: 1,
+            // F027: first page = no cursor.
             page_size: 20,
             ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
         })
             .then(res => {
                 setFilesPreview(res.data);
-                setChildrenTotal(res.total);
+                // F027: derive a count surrogate from `has_more` since `total`
+                // is gone (used only to decide "load more" visibility).
+                setChildrenTotal(res.has_more ? res.data.length + 1 : res.data.length);
+                preview_next_cursor_ref.current = res.next_cursor ?? null;
             })
             .catch(() => {
                 setFilesPreview([]);
@@ -228,12 +238,17 @@ export function KnowledgeSpacePreviewDrawer({
             const res = await getSpaceChildrenApi({
                 space_id: space.id,
                 ...(currentParentId ? { parent_id: currentParentId } : {}),
-                page: nextPage,
+                // F027: page-number replaced by `cursor` from previous response.
+                cursor: preview_next_cursor_ref.current,
                 page_size: 20,
                 ...(fileStatusFilter ? { file_status: fileStatusFilter } : {}),
             });
             setFilesPreview(prev => [...prev, ...res.data]);
-            setChildrenTotal(res.total);
+            // F027: surrogate total derived from accumulated rows + has_more
+            // (1-row sentinel so the "load more" UI stays visible).
+            const newRowCount = filesPreview.length + res.data.length;
+            setChildrenTotal(res.has_more ? newRowCount + 1 : newRowCount);
+            preview_next_cursor_ref.current = res.next_cursor ?? null;
             setChildrenPage(nextPage);
         } catch {
             // ignore

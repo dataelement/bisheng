@@ -1946,7 +1946,9 @@
     "member_pagination_2": " items, ",
     "member_pagination_3": " per page",
     "website_not_indexed": "Website not in database. Do you want to crawl?",
-    "create": "Create"
+    "create": "Create",
+    "channel_permission_management": "Member Management",
+    "organization_grant_unsubscribe_blocked": "This channel was granted to you through a department/user group and cannot be unsubscribed from yet."
   },
   "com_permission": {
     "action_revoke": "Revoke",

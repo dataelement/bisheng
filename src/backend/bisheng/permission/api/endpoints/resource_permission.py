@@ -23,6 +23,10 @@ from bisheng.permission.domain.application_permission_template import (
     APPLICATION_PERMISSION_TEMPLATE,
     default_permission_ids_for_relation as default_application_permissions,
 )
+from bisheng.permission.domain.channel_permission_template import (
+    CHANNEL_PERMISSION_TEMPLATE,
+    default_permission_ids_for_relation as default_channel_permissions,
+)
 from bisheng.permission.domain.knowledge_library_permission_template import (
     KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE,
     default_permission_ids_for_relation as default_knowledge_library_permissions,
@@ -72,6 +76,11 @@ _MANAGE_PERMISSION_BY_RESOURCE_TIER = {
         'manager': 'manage_kb_manager',
         'usage': 'manage_kb_viewer',
     },
+    'channel': {
+        'owner': 'manage_channel_owner',
+        'manager': 'manage_channel_manager',
+        'usage': 'manage_channel_user',
+    },
 }
 _MANAGE_PERMISSION_BY_RESOURCE = {
     'knowledge_space': 'manage_space_relation',
@@ -91,6 +100,7 @@ _PERMISSION_TEMPLATES = (
     APPLICATION_PERMISSION_TEMPLATE,
     KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE,
     TOOL_PERMISSION_TEMPLATE,
+    CHANNEL_PERMISSION_TEMPLATE,
 )
 _RELATION_MODEL_NAME_PREFIX_PAIRS = tuple(
     (template.get('title') or '', item.get('label') or '')
@@ -421,6 +431,8 @@ def _default_permission_ids_for_relation(resource_type: str, relation: str) -> s
         return default_application_permissions(relation)
     if resource_type == 'tool':
         return default_tool_permissions(relation)
+    if resource_type == 'channel':
+        return default_channel_permissions(relation)
     if resource_type == 'knowledge_library':
         return default_knowledge_library_permissions(relation)
     if resource_type in {'knowledge_space', 'folder', 'knowledge_file'}:
@@ -1007,6 +1019,8 @@ async def authorize_resource(
     """
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
+    if resource_type == 'channel':
+        return PermissionDeniedError.return_resp()
     if any(_is_invalid_owner_subject(grant.subject_type, grant.relation) for grant in (request.grants or [])):
         return PermissionDeniedError.return_resp('部门或用户组无法成为所有者')
 
@@ -1589,3 +1603,13 @@ async def get_tool_permission_template(
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
     return resp_200(TOOL_PERMISSION_TEMPLATE)
+
+
+@router.get('/permission-templates/channel')
+async def get_channel_permission_template(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the canonical backend template for channel permissions."""
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+    return resp_200(CHANNEL_PERMISSION_TEMPLATE)

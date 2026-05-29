@@ -248,8 +248,12 @@ async def generate_sop(
     res = []
     linsight_conf = settings.get_linsight_conf()
     if session_version.org_knowledge_enabled and linsight_conf.max_knowledge_num > 0:
-        res, _ = await KnowledgeService.get_knowledge(request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
-                                                      linsight_conf.max_knowledge_num)
+        # F027: get_knowledge returns PageInfiniteCursorData; pull `.data` for the list of KBs.
+        kb_page = await KnowledgeService.get_knowledge(
+            request, login_user, KnowledgeTypeEnum.NORMAL,
+            page_size=linsight_conf.max_knowledge_num,
+        )
+        res = list(kb_page.data)
     if session_version.personal_knowledge_enabled:
         knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, None,
                                                            KnowledgeTypeEnum.PRIVATE)
@@ -1232,10 +1236,12 @@ async def integrated_execute(
                     if (linsight_session_version_model.org_knowledge_enabled and
                         linsight_conf and linsight_conf.max_knowledge_num > 0):
                         try:
-                            org_knowledge, _ = await KnowledgeService.get_knowledge(
-                                request, login_user, KnowledgeTypeEnum.NORMAL, None, 1,
-                                linsight_conf.max_knowledge_num
+                            # F027: get_knowledge returns PageInfiniteCursorData; pull `.data`.
+                            org_knowledge_page = await KnowledgeService.get_knowledge(
+                                request, login_user, KnowledgeTypeEnum.NORMAL,
+                                page_size=linsight_conf.max_knowledge_num,
                             )
+                            org_knowledge = list(org_knowledge_page.data)
                             if org_knowledge:
                                 knowledge_res.extend(org_knowledge)
                                 logger.debug(f"Get {len(org_knowledge)} organization knowledge")

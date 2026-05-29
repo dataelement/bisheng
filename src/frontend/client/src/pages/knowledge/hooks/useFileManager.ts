@@ -52,6 +52,12 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize] = useState(20);
     const [total, setTotal] = useState(0);
+    // F027: cursor-based pagination for the non-search path. `nextCursor`
+    // holds the token to fetch the next page; null/undefined means "no
+    // further pages" (or first page). The search path keeps the legacy
+    // offset+total contract because /space/{id}/search is out of F027 scope.
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(false);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
@@ -106,14 +112,26 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                     : await getSpaceChildrenApi({
                         space_id: activeSpace.id,
                         parent_id: currentFolderId,
-                        page,
+                        // F027: page-number replaced by `cursor`; page=1 sends
+                        // null (first page), page>1 sends the previously
+                        // returned next_cursor.
+                        cursor: page > 1 ? nextCursor : null,
                         page_size: pageSize,
                         order_field: sortBy || undefined,
                         order_sort: sortDirection || undefined,
                         file_status: fileStatusNums,
                     });
                 const mergedData = res.data;
-                const mergedTotal = res.total;
+                // For cursor responses there is no authoritative `total`; we
+                // derive a UI-only count from `has_more` + visible rows so
+                // existing badges still render approximate progress.
+                const mergedTotal = "total" in res
+                    ? (res as any).total
+                    : ((res as any).has_more ? mergedData.length + 1 : mergedData.length);
+                if (!("total" in res)) {
+                    setNextCursor((res as any).next_cursor ?? null);
+                    setHasMore(!!(res as any).has_more);
+                }
                 // Filter out rows that the user has optimistically deleted but
                 // whose backend deletion has not yet returned (ghosts).
                 const ignore = pendingDeletionIdsRef.current;
@@ -165,7 +183,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         return getSpaceChildrenApi({
                             space_id: activeSpace.id,
                             parent_id: lastParentId,
-                            page: 1,
+                            // F027: no `page` param; cursor=null fetches first page.
                             page_size: 100,
                         }).then((res) => {
                             const folder = res.data.find(f => f.id === initialFolderId);
@@ -297,6 +315,10 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         pageSize,
         total,
         setTotal,
+        // F027: cursor-based progress hints — the SpaceDetail page consumes
+        // `hasMore` to decide whether to render the infinite-scroll loader.
+        nextCursor,
+        hasMore,
         loading,
         searchQuery,
         searchTagIds,

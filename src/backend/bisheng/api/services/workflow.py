@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime
 from time import perf_counter
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from fastapi.encoders import jsonable_encoder
 from langchain.memory import ConversationBufferWindowMemory
@@ -37,6 +37,12 @@ from bisheng.workflow.common.node import BaseNodeData, NodeType
 from bisheng.workflow.graph.graph_state import GraphState
 from bisheng.workflow.graph.workflow import Workflow
 from bisheng.workflow.nodes.node_manage import NodeFactory
+
+
+# F027: when ReBAC fine-grained filtering shrinks a DB batch, refetch via keyset
+# to fill the requested page_size. Batch size balances DB round-trips against
+# wasted permission lookups when most rows are filtered out.
+_FLOW_PERMISSION_SCAN_BATCH_SIZE = 50
 
 
 class WorkFlowService(BaseService):
@@ -153,11 +159,12 @@ class WorkFlowService(BaseService):
     async def get_all_flows(cls, user: UserPayload, name: str, status: int, tag_id: Optional[int],
                             flow_type: Optional[int], page: int = 1, page_size: int = 10,
                             managed: bool = False, skip_pagination: bool = False, search_description: bool = False,
-                            permission_id: str = 'use_app') -> (list[dict], int):
+                            permission_id: str = 'use_app',
+                            cursor: Optional[Sequence] = None) -> Tuple[List[Dict], bool]:
         """Get all the skills (async, ReBAC + 部门管理员隐式可见 兼容)."""
         total_start = perf_counter()
         if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
-            return [], 0
+            return [], False
         scoped_super_admin = cls._is_scoped_super_admin(user)
 
         # SetujutagDapatkanidVertical
@@ -165,7 +172,7 @@ class WorkFlowService(BaseService):
         if tag_id:
             ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
             if not ret:
-                return [], 0
+                return [], False
             flow_ids = [one.resource_id for one in ret]
 
         query_page = page
@@ -194,17 +201,19 @@ class WorkFlowService(BaseService):
         # Get a list of skills visible to the user
         dao_start = perf_counter()
         if user.is_admin() and not scoped_super_admin:
-            data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None, None, None,
-                                                      query_page, query_page_size,
-                                                      search_description=search_description)
+            data, has_more = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None, None, None,
+                                                         query_page, query_page_size,
+                                                         search_description=search_description,
+                                                         cursor=cursor)
         else:
-            data, total = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None,
-                                                      None, None, query_page, query_page_size,
-                                                      search_description=search_description,
-                                                      app_type_ids=readable_type_ids)
+            data, has_more = await FlowDao.aget_all_apps(name, status, flow_ids, flow_type, None,
+                                                         None, None, query_page, query_page_size,
+                                                         search_description=search_description,
+                                                         app_type_ids=readable_type_ids,
+                                                         cursor=cursor)
         logger.info(
             '[perf][workflow.list.dao] user_id={} flow_type={} page={} page_size={} skip_pagination={} '
-            'tag_filter_count={} rows={} total={} took_ms={:.2f}',
+            'tag_filter_count={} rows={} has_more={} took_ms={:.2f}',
             user.user_id,
             flow_type,
             page,
@@ -212,7 +221,7 @@ class WorkFlowService(BaseService):
             skip_pagination,
             len(flow_ids),
             len(data),
-            total,
+            has_more,
             (perf_counter() - dao_start) * 1000,
         )
         data = cls.filter_supported_apps(data)
@@ -256,7 +265,7 @@ class WorkFlowService(BaseService):
         )
         logger.info(
             '[perf][workflow.list.total] user_id={} flow_type={} page={} page_size={} skip_pagination={} '
-            'managed={} permission_id={} rows={} total={} took_ms={:.2f}',
+            'managed={} permission_id={} rows={} has_more={} took_ms={:.2f}',
             user.user_id,
             flow_type,
             page,
@@ -265,11 +274,217 @@ class WorkFlowService(BaseService):
             managed,
             permission_id,
             len(data),
-            total,
+            has_more,
             (perf_counter() - total_start) * 1000,
         )
         # data = await cls.aenrich_apps_can_share(user, data, managed)  # because frontend not need and this cost most time
-        return data, total
+        return data, has_more
+
+    @classmethod
+    async def _scan_visible_flows_cursor(
+        cls,
+        *,
+        user: UserPayload,
+        name: Optional[str],
+        status: Optional[int],
+        flow_ids: List[str],
+        flow_type: Optional[int],
+        cursor: Optional[Sequence],
+        page_size: int,
+        managed: bool,
+        search_description: bool,
+        permission_id: str,
+        readable_type_ids: Optional[Dict[int, list[str]]],
+        is_admin_bypass: bool,
+        required_permission: str,
+    ) -> Tuple[List[Dict], bool, set[str]]:
+        """F027 cursor-paginated scan for /workflow/list: keep fetching DB
+        batches via keyset, apply ReBAC fine-grained filtering, accumulate
+        until we have ``page_size + 1`` visible items (the +1 probes
+        ``has_more``) or the DB is exhausted.
+
+        Returns ``(visible_items[:page_size], has_more, writeable_ids)`` —
+        ``writeable_ids`` aggregates across all scanned batches so the
+        ``can_write`` flag in the response stays accurate.
+        """
+        visible: List[Dict] = []
+        writeable_ids: set[str] = set()
+        batch_cursor: Optional[List] = list(cursor) if cursor else None
+
+        while True:
+            dao_start = perf_counter()
+            batch, db_has_more = await FlowDao.aget_all_apps(
+                name, status, flow_ids, flow_type, None, None, None,
+                0,  # cursor mode bypasses OFFSET
+                _FLOW_PERMISSION_SCAN_BATCH_SIZE,
+                search_description=search_description,
+                app_type_ids=readable_type_ids,
+                cursor=batch_cursor,
+            )
+            logger.info(
+                '[perf][workflow.list.dao] user_id={} flow_type={} batch_size={} rows={} db_has_more={} took_ms={:.2f}',
+                user.user_id, flow_type, _FLOW_PERMISSION_SCAN_BATCH_SIZE,
+                len(batch), db_has_more, (perf_counter() - dao_start) * 1000,
+            )
+
+            batch = cls.filter_supported_apps(batch)
+            if not batch:
+                return visible[:page_size], False, writeable_ids
+
+            if is_admin_bypass:
+                kept = batch
+            else:
+                permission_map_start = perf_counter()
+                permission_map = await ApplicationPermissionService.get_app_permission_map_async(
+                    user, batch, list(dict.fromkeys([required_permission, 'edit_app'])),
+                )
+                kept = [
+                    one for one in batch
+                    if required_permission in permission_map.get(str(one.get('id')), set())
+                ]
+                writeable_ids |= {
+                    str(app_id)
+                    for app_id, perms in permission_map.items()
+                    if 'edit_app' in perms
+                }
+                logger.info(
+                    '[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} '
+                    'permission_id={} took_ms={:.2f}',
+                    user.user_id, flow_type, len(batch), len(kept), len(writeable_ids),
+                    required_permission, (perf_counter() - permission_map_start) * 1000,
+                )
+
+            for item in kept:
+                visible.append(item)
+                if len(visible) > page_size:
+                    # Got the +1 probe — done scanning.
+                    return visible[:page_size], True, writeable_ids
+
+            if not db_has_more:
+                return visible[:page_size], False, writeable_ids
+
+            # Advance batch_cursor to the LAST DB row of this batch (not last
+            # visible) so the next batch picks up strictly after; if we used
+            # the last visible, items filtered out between them would be
+            # re-emitted on the next batch.
+            last_db = batch[-1]
+            batch_cursor = [last_db['update_time'], last_db['id']]
+
+    @classmethod
+    async def get_all_flows_envelope(
+        cls,
+        user: UserPayload,
+        name: Optional[str],
+        status: Optional[int],
+        tag_id: Optional[int],
+        flow_type: Optional[int],
+        cursor: Optional[str] = None,
+        page_size: int = 10,
+        managed: bool = False,
+        search_description: bool = False,
+        permission_id: str = 'use_app',
+    ) -> "PageInfiniteCursorData":
+        """F027 cursor envelope wrapper for ``/api/v1/workflow/list``.
+
+        Decodes the cursor, runs a fetch-until-enough scan loop (so a DB
+        batch shrunken by fine-grained ReBAC filtering is refilled from the
+        next keyset window), then wraps the result into
+        ``PageInfiniteCursorData`` with ``next_cursor`` derived from the last
+        visible row's ``(update_time, id)``.
+        """
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+        from bisheng.common.errcode.flow import AppInvalidCursorError
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        total_start = perf_counter()
+        context = "flow|sort=update_time"
+        try:
+            decoded = decode_cursor(
+                cursor,
+                expected_key_len=2,
+                expected_context=context,
+            )
+        except CursorDecodeError as exc:
+            raise AppInvalidCursorError(exception=exc)
+
+        if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
+            return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
+
+        # Tag-based prefilter: empty match short-circuits to empty page.
+        flow_ids: List[str] = []
+        if tag_id:
+            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
+            if not ret:
+                return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
+            flow_ids = [one.resource_id for one in ret]
+
+        scoped_super_admin = cls._is_scoped_super_admin(user)
+        is_admin_bypass = user.is_admin() and not scoped_super_admin
+        required_permission = 'edit_app' if managed else permission_id
+
+        readable_type_ids: Optional[Dict[int, list[str]]] = None
+        if not is_admin_bypass:
+            prefilter_start = perf_counter()
+            readable_type_ids = await cls._app_type_ids_for_permission(user, required_permission, flow_type)
+            logger.info(
+                '[perf][workflow.list.prefilter] user_id={} flow_type={} managed={} permission_id={} '
+                'workflow_ids={} assistant_ids={} took_ms={:.2f}',
+                user.user_id, flow_type, managed, required_permission,
+                len((readable_type_ids or {}).get(FlowType.WORKFLOW.value, []) or []),
+                len((readable_type_ids or {}).get(FlowType.ASSISTANT.value, []) or []),
+                (perf_counter() - prefilter_start) * 1000,
+            )
+
+        data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
+            user=user,
+            name=name,
+            status=status,
+            flow_ids=flow_ids,
+            flow_type=flow_type,
+            cursor=decoded,
+            page_size=page_size,
+            managed=managed,
+            search_description=search_description,
+            permission_id=permission_id,
+            readable_type_ids=readable_type_ids,
+            is_admin_bypass=is_admin_bypass,
+            required_permission=required_permission,
+        )
+
+        enrich_start = perf_counter()
+        data = cls.add_extra_field(
+            user, data, managed,
+            writeable_ids=None if is_admin_bypass else writeable_ids,
+        )
+        logger.info(
+            '[perf][workflow.list.enrich] user_id={} flow_type={} rows={} took_ms={:.2f}',
+            user.user_id, flow_type, len(data), (perf_counter() - enrich_start) * 1000,
+        )
+        logger.info(
+            '[perf][workflow.list.total] user_id={} flow_type={} page_size={} managed={} permission_id={} '
+            'rows={} has_more={} took_ms={:.2f}',
+            user.user_id, flow_type, page_size, managed, permission_id,
+            len(data), has_more, (perf_counter() - total_start) * 1000,
+        )
+
+        next_cursor: Optional[str] = None
+        if has_more and data:
+            last = data[-1]
+            # F027: app listing is a UNION of workflows (int id) and
+            # assistants (UUID hex string id); pass the raw id through —
+            # encode_cursor JSON-serialises either type, and the keyset
+            # WHERE compares against ``sub_query.c.id`` whose column type
+            # absorbs both via SQLAlchemy literal binding.
+            next_cursor = encode_cursor(
+                (last['update_time'], last['id']),
+                context=context,
+            )
+        return PageInfiniteCursorData(
+            data=data,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     @classmethod
     def _relation_for_app_permission(cls, permission_id: str) -> str:

@@ -316,9 +316,9 @@ function TreeNode({
           <span className="min-w-0 truncate text-sm" title={pathLabel}>
             {node.name}
           </span>
-          {node.member_count != null && (
-            <span className="shrink-0 text-xs text-muted-foreground">({node.member_count})</span>
-          )}
+          {/* F027 AC-14: per-department member-count badge removed from the
+              tree-node response; this guard is now always false-y and the
+              badge is gone. */}
           {isDisabled && disabledLabel && (
             <span className="ml-auto max-w-[8rem] shrink-0 truncate text-xs text-muted-foreground" title={disabledLabel}>{disabledLabel}</span>
           )}

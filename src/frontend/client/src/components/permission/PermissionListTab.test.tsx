@@ -33,8 +33,8 @@ jest.mock("~/components/ui/DropdownMenu", () => ({
   DropdownMenu: ({ children }: any) => <div>{children}</div>,
   DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
-  DropdownMenuItem: ({ children, onSelect }: any) => (
-    <button type="button" onClick={onSelect}>{children}</button>
+  DropdownMenuItem: ({ children, onSelect, ...props }: any) => (
+    <button type="button" onClick={onSelect} {...props}>{children}</button>
   ),
   DropdownMenuSeparator: () => <div />,
 }));
@@ -249,5 +249,49 @@ describe("Client PermissionListTab", () => {
         ],
       );
     });
+  });
+
+  it("uses an injected permission API instead of generic resource endpoints", async () => {
+    const permissionApi = {
+      getPermissions: jest.fn().mockResolvedValue([
+        {
+          subject_type: "user",
+          subject_id: 2,
+          subject_name: "Alice",
+          relation: "viewer",
+          model_id: "viewer",
+          model_name: "Viewer",
+        },
+      ]),
+      authorize: jest.fn(),
+      getGrantableRelationModels: jest.fn().mockResolvedValue([
+        {
+          id: "viewer",
+          name: "Viewer",
+          relation: "viewer",
+          permissions: [],
+          is_system: true,
+        },
+      ]),
+      getGrantDepartments: jest.fn().mockResolvedValue([]),
+    };
+
+    render(
+      <PermissionListTab
+        resourceType="channel"
+        resourceId="channel-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+        permissionApi={permissionApi as any}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    });
+    expect(permissionApi.getPermissions).toHaveBeenCalledWith("channel", "channel-1");
+    expect(permissionApi.getGrantableRelationModels).toHaveBeenCalledWith("channel", "channel-1");
+    expect(mockedGetResourcePermissions).not.toHaveBeenCalled();
+    expect(mockedGetGrantableRelationModels).not.toHaveBeenCalled();
   });
 });
