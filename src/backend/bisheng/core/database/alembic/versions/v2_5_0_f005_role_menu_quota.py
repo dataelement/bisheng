@@ -32,6 +32,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Extend role table for policy-role model (F005)."""
+    conn = op.get_bind()
+
     # 1. Add role_type column
     if not column_exists(conn, 'role', 'role_type'):
         op.add_column(
