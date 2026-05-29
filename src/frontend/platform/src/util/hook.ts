@@ -5,6 +5,150 @@ import { useTranslation } from "react-i18next";
 import cloneDeep from "lodash-es/cloneDeep";
 import { useReactFlow } from "@xyflow/react";
 
+/**
+ * F027 cursor-based infinite-scroll table hook.
+ *
+ * Mirrors the shape of {@link useTable} but drives pagination by an opaque
+ * `cursor` from the backend response (`next_cursor`) instead of `page_num`.
+ * Filter / keyword changes call `search()` which resets the cursor to null.
+ *
+ * The backend cursor envelope is `{ data, page_size, has_more, next_cursor }`
+ * (no `total`). When the backend rejects a stale cursor with one of the
+ * F027 `*InvalidCursorError` codes (10991 / 10550 / 18070), the calling
+ * component should detect the code and call `reset()`.
+ */
+export function useInfiniteCursorTable<T extends object>(
+    param: { pageSize?: number; unInitData?: boolean; cancelLoadingWhenReload?: boolean } & Record<string, any>,
+    apiFun: (
+        args: { cursor: string | null; pageSize: number; keyword: string } & Record<string, any>,
+    ) => Promise<{ data: T[]; page_size: number; has_more: boolean; next_cursor: string | null }>,
+) {
+    const pageSize = param.pageSize || 20;
+    const cancelLoadingWhenReload = param.cancelLoadingWhenReload || false;
+    const unInitRef = useRef(!!param.unInitData);
+
+    const [keyword, setKeyword] = useState("");
+    const [data, setData] = useState<T[]>([]);
+    const [cursor, setCursor] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [loaded, setLoaded] = useState(false);
+
+    // requestIdRef serialises in-flight responses; only the latest wins.
+    const requestIdRef = useRef(0);
+    const cursorRef = useRef<string | null>(null);
+    const keywordRef = useRef<string>("");
+    // Mirrors `useTable.paramRef` — arbitrary filter params (tag_id, status,
+    // type, etc.) merged from `filterData(p)` calls and forwarded into the
+    // ``apiFun`` call. Seeded from initial `param` so initial-load filters
+    // (e.g. `managed: true` for app list) flow through. Hook-config keys are
+    // stripped so they never leak into the API call.
+    const { pageSize: _hookPageSize, unInitData: _hookUnInit, cancelLoadingWhenReload: _hookSilent, ...initialApiParams } = param;
+    const paramsRef = useRef<Record<string, any>>(initialApiParams);
+
+    const loadPage = useCallback(
+        (nextCursor: string | null, append: boolean) => {
+            if (!cancelLoadingWhenReload) setLoading(true);
+            const reqId = ++requestIdRef.current;
+            cursorRef.current = nextCursor;
+            apiFun({
+                ...paramsRef.current,
+                cursor: nextCursor,
+                pageSize,
+                keyword: keywordRef.current,
+            })
+                .then((res) => {
+                    if (reqId !== requestIdRef.current) return;
+                    setData(append ? (prev) => [...prev, ...res.data] : res.data);
+                    setHasMore(!!res.has_more);
+                    setCursor(res.next_cursor ?? null);
+                    setLoading(false);
+                    setLoaded(true);
+                })
+                .catch(() => setLoading(false));
+        },
+        [apiFun, pageSize, cancelLoadingWhenReload],
+    );
+
+    // Initial load (skipped when `unInitData` was passed).
+    useEffect(() => {
+        if (unInitRef.current) {
+            unInitRef.current = false;
+            return;
+        }
+        loadPage(null, false);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const search = useCallback(
+        (kw: string) => {
+            keywordRef.current = kw;
+            setKeyword(kw);
+            loadPage(null, false);
+        },
+        [loadPage],
+    );
+
+    const loadMore = useCallback(() => {
+        console.log('[useInfiniteCursorTable] loadMore called', { loading, hasMore, cursor })
+        if (loading || !hasMore || !cursor) {
+            console.log('[useInfiniteCursorTable] loadMore BLOCKED by guard')
+            return;
+        }
+        console.log('[useInfiniteCursorTable] loadMore -> loadPage with cursor')
+        loadPage(cursor, true);
+    }, [loading, hasMore, cursor, loadPage]);
+
+    const reload = useCallback(() => {
+        loadPage(null, false);
+    }, [loadPage]);
+
+    const reset = useCallback(() => {
+        keywordRef.current = "";
+        setKeyword("");
+        loadPage(null, false);
+    }, [loadPage]);
+
+    // filterData(params) — merge filter-param object into ``paramsRef`` and
+    // reload from the first page. Matches the legacy {@link useTable}
+    // semantic so callers can swap hooks without touching their dropdown
+    // handlers (e.g. `filterData({ tag_id: id })`).
+    const filterData = useCallback(
+        (params: Record<string, any>) => {
+            paramsRef.current = { ...paramsRef.current, ...params };
+            loadPage(null, false);
+        },
+        [loadPage],
+    );
+
+    // refreshData(predicate, patch) — locate matching rows and merge `patch`
+    // into each. Mirrors the signature of {@link useTable}'s refreshData
+    // helper so existing callers can swap hooks without touching mutation
+    // call sites.
+    const refreshData = useCallback(
+        (predicate: (row: T) => boolean, patch: Partial<T>) => {
+            setData((prev) => prev.map((row) => (predicate(row) ? { ...row, ...patch } : row)));
+        },
+        [],
+    );
+
+    return {
+        data,
+        keyword,
+        loading,
+        loaded,
+        hasMore,
+        pageSize,
+        search,
+        loadMore,
+        reload,
+        reset,
+        filterData,
+        refreshData,
+        setData,
+    };
+}
+
 export function useMiniDebounce(fn, delay = 300) {
     const timer = useRef(null)
 

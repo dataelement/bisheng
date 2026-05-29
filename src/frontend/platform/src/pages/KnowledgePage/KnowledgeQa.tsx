@@ -5,7 +5,7 @@ import { Button } from "@/components/bs-ui/button";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, SearchInput, Textarea } from "@/components/bs-ui/input";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import LoadMore from "@/components/bs-comp/loadMore";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/bs-ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -15,7 +15,7 @@ import { copyQaDatabase, createFileLib, deleteFileLib, readFileLibDatabase, upda
 import { getKnowledgeModelConfig } from "@/controllers/API/finetune";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { ModelSelect } from "@/pages/ModelPage/manage/tabs/WorkbenchModel";
-import { useTable } from "@/util/hook";
+import { useInfiniteCursorTable } from "@/util/hook";
 import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Shield, Trash2 } from "lucide-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -287,9 +287,11 @@ export default function KnowledgeQa(params) {
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable(
+    // F027: cursor-based infinite scroll; no `total` / `page` anymore.
+    const { data: datalist, loading, hasMore, search, reload, loadMore } = useInfiniteCursorTable(
         { cancelLoadingWhenReload: true },
-        (param) => readFileLibDatabase({ ...param, name: param.keyword, type: 1, permissionId: 'view_kb' })
+        (param) =>
+            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, type: 1, permissionId: 'view_kb' }),
     );
     const visibleLibs = datalist;
     const hasListPermission = (el: any, permissionId: string) =>
@@ -356,18 +358,14 @@ export default function KnowledgeQa(params) {
         }
     };
 
+    // F027: persist only the tab type — the cursor token isn't restorable.
     const handleCachePage = () => {
-        window.LibPage = { page, type: 'qa' };
+        window.LibPage = { type: 'qa' };
     };
 
     useEffect(() => {
-        const _page = window.LibPage;
-        if (_page) {
-            setPage(_page.page);
-            delete window.LibPage;
-        } else {
-            setPage(1);
-        }
+        // F027: useInfiniteCursorTable auto-loads page 1; drop the marker.
+        delete window.LibPage;
     }, []);
 
     const { t } = useTranslation('knowledge');
@@ -560,19 +558,13 @@ export default function KnowledgeQa(params) {
                         ))}
                     </TableBody>
                 </Table>
+                {/* F027: infinite-scroll trigger lives INSIDE the
+                    `overflow-y-auto` scroll container. */}
+                {hasMore && <LoadMore onScrollLoad={loadMore} />}
             </div>
             <div className="bisheng-table-footer px-6 bg-background-login">
                 <div className="flex items-center gap-2">
                     <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
-                </div>
-                <div>
-                    <AutoPagination
-                        page={page}
-                        pageSize={pageSize}
-                        total={total}
-                        showTotal={true}
-                        onChange={(newPage) => setPage(newPage)}
-                    />
                 </div>
             </div>
 

@@ -116,3 +116,9 @@ class VersionLinkSourceMultiVersionError(BaseErrorCode):
 class VersionLinkSourceFileMissingError(BaseErrorCode):
     Code: int = 18064
     Msg: str = 'Source file no longer exists or has been deleted.'
+
+
+# F027: cursor-based pagination — cursor parsing/version/context/key-length failed
+class KnowledgeSpaceInvalidCursorError(BaseErrorCode):
+    Code: int = 18070
+    Msg: str = 'Invalid pagination cursor'

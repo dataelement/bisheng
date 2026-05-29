@@ -2246,17 +2246,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_sort: str,
         file_status: Optional[List[int]],
         file_type: Optional[int],
-        page: int,
         page_size: int,
+        cursor: Optional[List] = None,
         exclude_file_ids: Optional[List[int]] = None,
-    ) -> tuple[int, List[KnowledgeFile]]:
-        target_start = max(page - 1, 0) * page_size if page_size else 0
-        target_end = target_start + page_size if page_size else None
+    ) -> tuple[List[KnowledgeFile], bool]:
+        """F027 cursor-paginated scan: keep fetching batches via keyset, fold
+        through ReBAC filtering, stop once we've accumulated ``page_size + 1``
+        visible items (the +1 probes ``has_more``) or the DB is exhausted.
 
-        scan_page = 1
-        visible_total = 0
+        Returns ``(visible_page_items, has_more)`` — the visible items are
+        already truncated to ``page_size`` if ``has_more`` is True.
+        """
+        from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
+
         visible_page_items: List[KnowledgeFile] = []
         permission_context = await self._build_child_permission_context(space_id)
+        batch_cursor: Optional[List] = list(cursor) if cursor else None
 
         while True:
             batch_items = await SpaceFileDao.async_list_children(
@@ -2266,10 +2271,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 order_field=order_field,
                 order_sort=order_sort,
                 file_status=file_status,
-                page=scan_page,
+                page=0,  # cursor mode bypasses OFFSET
                 page_size=_CHILD_PERMISSION_SCAN_BATCH_SIZE,
                 file_type=file_type,
                 exclude_file_ids=exclude_file_ids,
+                cursor=batch_cursor,
             )
             if not batch_items:
                 break
@@ -2280,15 +2286,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 context=permission_context,
             )
             for item in visible_batch:
-                if target_end is None or (target_start <= visible_total < target_end):
-                    visible_page_items.append(item)
-                visible_total += 1
+                visible_page_items.append(item)
+                if len(visible_page_items) > page_size:
+                    # Got the +1 probe — done scanning.
+                    return visible_page_items[:page_size], True
+
+            # Advance batch_cursor to the LAST DB row of this batch (not last
+            # visible) so the next batch picks up strictly after; if we used
+            # the last visible, items filtered out between them would be
+            # re-emitted on the next batch.
+            last_db = batch_items[-1]
+            batch_cursor = [
+                last_db.file_type,
+                _compute_ext_rank_python(last_db.file_name),
+                last_db.update_time,
+                last_db.id,
+            ]
 
             if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
                 break
-            scan_page += 1
 
-        return visible_total, visible_page_items
+        return visible_page_items, False
 
     async def list_space_children(
         self,
@@ -2298,15 +2316,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_field: str = "file_type",
         order_sort: str = "asc",
         file_status: List[int] = None,
-        page: int = 1,
+        cursor: Optional[str] = None,
         page_size: int = 20,
         file_type: Optional[int] = None,
-    ) -> dict:
+    ) -> "PageInfiniteCursorData":
+        """F027 cursor-paginated listing of direct children under a parent folder.
+
+        Response shape (PageInfiniteCursorData): ``{data, page_size, has_more,
+        next_cursor}``. Legacy ``total`` / ``page`` fields removed (AC-03);
+        clients drive infinite-scroll via ``has_more`` + ``next_cursor``.
         """
-        Return direct children (folders first, then files) under a parent folder.
-        When parent_id is None, returns root-level items of the space.
-        Returns: {"total": int, "page": int, "page_size": int, "data": List[KnowledgeFile]}
-        """
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+        from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+        from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
+
         await self._require_read_permission(space_id)
         if parent_id:
             await self._require_folder_relation(space_id, parent_id, "can_read")
@@ -2314,12 +2338,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
         else:
             await self._require_permission_id("knowledge_space", space_id, "view_space")
 
+        context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
+        try:
+            decoded = decode_cursor(
+                cursor,
+                expected_key_len=4,
+                expected_context=context,
+            )
+        except CursorDecodeError as exc:
+            raise KnowledgeSpaceInvalidCursorError(exception=exc)
+
         # Exclude non-primary version files so only the current primary revision is visible.
         exclude_file_ids: Optional[List[int]] = None
         if self.version_repo is not None:
             exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
 
-        total, visible_page_items = await self._scan_visible_child_items(
+        visible_page_items, has_more = await self._scan_visible_child_items(
             space_id=space_id,
             parent_id=parent_id,
             file_ids=file_ids,
@@ -2327,8 +2361,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             order_sort=order_sort,
             file_status=file_status,
             file_type=file_type,
-            page=page,
             page_size=page_size,
+            cursor=decoded,
             exclude_file_ids=exclude_file_ids,
         )
 
@@ -2336,7 +2370,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._enrich_with_version_info(visible_page_items)
 
         data = await self._handle_file_folder_extra_info(visible_page_items)
-        return {"total": total, "page": page, "page_size": page_size, "data": data}
+
+        next_cursor: Optional[str] = None
+        if has_more and visible_page_items:
+            last = visible_page_items[-1]
+            next_cursor = encode_cursor(
+                (
+                    last.file_type,
+                    _compute_ext_rank_python(last.file_name),
+                    last.update_time,
+                    last.id,
+                ),
+                context=context,
+            )
+
+        return PageInfiniteCursorData(
+            data=data,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     async def search_space_children(
         self,

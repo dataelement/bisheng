@@ -231,9 +231,8 @@ export default function Departments() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold">{selectedDept.name}</h3>
-                <span className="text-sm text-muted-foreground">
-                  {t("bs:department.memberCount")}: {selectedDept.member_count}
-                </span>
+                {/* F027 AC-14: per-department member-count badge removed; the
+                    tree-node response no longer carries this field. */}
               </div>
               <TabsList>
                 <TabsTrigger value="members">{t("bs:department.members")}</TabsTrigger>

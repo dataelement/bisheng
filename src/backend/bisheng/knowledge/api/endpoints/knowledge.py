@@ -343,11 +343,21 @@ async def get_knowledge(*,
                             default=None,
                             description=('Comma-separated knowledge ids to pin to the top of the global '
                                          'sort (before sort_by). Used by workstation plus-menu so admin-'
-                                         'configured KBs surface on page 1 regardless of name.'),
+                                         'configured KBs surface on page 1 regardless of name. Ignored '
+                                         'when `cursor` is set.'),
                         ),
                         page_size: Optional[int] = 10,
-                        page_num: Optional[int] = 1):
-    """ Read all knowledge base information. """
+                        cursor: Optional[str] = Query(
+                            default=None,
+                            description='F027 cursor-based pagination token from the previous response\'s '
+                                        '`next_cursor`. Omit (or pass empty) to fetch the first page.',
+                        )):
+    """List knowledge bases with cursor-based pagination (F027).
+
+    Response shape (PageInfiniteCursorData): ``{data, page_size, has_more, next_cursor}``.
+    The legacy ``total`` field has been removed (AC-01); use ``has_more`` to drive
+    infinite-scroll loading on the client.
+    """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
     pinned: Optional[List[int]] = None
     if preferred_ids:
@@ -361,18 +371,18 @@ async def get_knowledge(*,
             except ValueError:
                 continue
         pinned = parsed or None
-    res, total = await KnowledgeService.get_knowledge(
+    result = await KnowledgeService.get_knowledge(
         request,
         login_user,
         knowledge_type,
-        name,
-        sort_by,
-        page_num,
-        page_size,
+        name=name,
+        sort_by=sort_by,
+        cursor=cursor,
+        page_size=page_size,
         permission_id=permission_id,
         preferred_ids=pinned,
     )
-    return resp_200(data={'data': res, 'total': total})
+    return resp_200(data=result)
 
 
 @router.get('/info', status_code=200)

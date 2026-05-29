@@ -24,11 +24,11 @@ import { CircleAlert, Copy, Ellipsis, LoaderCircle, Settings, Shield, Trash2 } f
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Textarea } from "../../components/bs-ui/input";
-import AutoPagination from "../../components/bs-ui/pagination/autoPagination";
+import LoadMore from "../../components/bs-comp/loadMore";
 import { userContext } from "../../contexts/userContext";
 import { copyLibDatabase, createFileLib, deleteFileLib, readFileLibDatabase, updateKnowledge } from "../../controllers/API";
 import { captureAndAlertRequestErrorHoc } from "../../controllers/request";
-import { useTable } from "../../util/hook";
+import { useInfiniteCursorTable } from "../../util/hook";
 import { useModel } from "../ModelPage/manage";
 import { ModelSelect } from "../ModelPage/manage/tabs/WorkbenchModel";
 
@@ -155,7 +155,7 @@ function CreateModal({ datalist, open, onOpenChange, onLoadEnd, mode = 'create',
         }
 
         if (mode === 'create' && !modelId) {
-            handleError(t('modelRequired', { ns: 'bs' }));
+            handleError(t('lib.selectModel', { ns: 'bs' }));
             return;
         }
 
@@ -338,8 +338,11 @@ export default function KnowledgeFile() {
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
 
-    const { page, pageSize, data: datalist, total, loading, setPage, search, reload } = useTable({ cancelLoadingWhenReload: true }, (param) =>
-        readFileLibDatabase({ ...param, name: param.keyword, permissionId: 'view_kb' })
+    // F027: cursor-based infinite scroll; no `total` / `page` anymore.
+    const { data: datalist, loading, hasMore, search, reload, loadMore } = useInfiniteCursorTable(
+        { cancelLoadingWhenReload: true },
+        (param) =>
+            readFileLibDatabase({ cursor: param.cursor, pageSize: param.pageSize, name: param.keyword, permissionId: 'view_kb' }),
     )
 
     // Permission levels for badge display
@@ -441,19 +444,19 @@ export default function KnowledgeFile() {
         }
     };
 
-    // Cache page before entering detail page, temporary solution
+    // Cache the active tab hint before entering detail; the parent's
+    // ``defaultValue`` reads ``LibPage.type`` to restore the file/qa tab.
+    // F027: ``page`` is now an opaque cursor token, not restorable, so we
+    // only persist the type marker.
     const handleCachePage = () => {
-        window.LibPage = { page, type: 'file' }
+        window.LibPage = { type: 'file' }
     }
 
     useEffect(() => {
-        const _page = window.LibPage
-        if (_page) {
-            setPage(_page.page);
-            delete window.LibPage
-        } else {
-            setPage(1);
-        }
+        // F027: ``useInfiniteCursorTable`` auto-loads page 1 on mount; we no
+        // longer try to restore a specific page on return from detail. Just
+        // drop the marker so subsequent navigations get a fresh first page.
+        delete window.LibPage;
     }, [])
 
     const { t, i18n } = useTranslation('knowledge');
@@ -685,19 +688,15 @@ export default function KnowledgeFile() {
                         ))}
                     </TableBody>
                 </Table>
+                {/* F027: infinite-scroll trigger lives INSIDE the
+                    `overflow-y-auto` scroll container so IntersectionObserver
+                    tracks in-container scroll. Outside-container placement
+                    keeps the footer always-visible and stalls pagination. */}
+                {hasMore && <LoadMore onScrollLoad={loadMore} />}
             </div>
             <div className="bisheng-table-footer px-6 bg-background-login">
                 <div className="flex items-center gap-2">
                     <p className="desc">{t('lib.libraryCollection', { ns: 'bs' })}</p>
-                </div>
-                <div>
-                    <AutoPagination
-                        page={page}
-                        pageSize={pageSize}
-                        total={total}
-                        showTotal={true}
-                        onChange={(newPage) => setPage(newPage)}
-                    />
                 </div>
             </div>
 
