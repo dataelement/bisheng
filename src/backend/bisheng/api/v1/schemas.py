@@ -516,7 +516,7 @@ class FileProcessBase(BaseModel):
         if values.get('split_mode') is None:
             values['split_mode'] = 'auto'
         if not values.get('separator', None):
-            values['separator'] = ['\n\n', '\n']
+            values['separator'] = ['\n\n', '\n', '。', '\\.']
         if not values.get('separator_rule', None):
             values['separator_rule'] = ['after' for _ in values['separator']]
         if values.get('chunk_size', None) is None:

@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 from langchain_core.documents import Document
 
@@ -11,7 +10,7 @@ from bisheng.utils import generate_uuid
 
 class BishengHtmlLoader(BaseBishengLoader):
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         converter = HTML2MarkdownConverter(
             output_dir=self.tmp_dir,
             media_download_timeout=60,
@@ -21,8 +20,9 @@ class BishengHtmlLoader(BaseBishengLoader):
             raise ValueError("convert html file to markdown, plase check server log")
         post_processing(md_file_path)
 
-        with open(md_file_path, "r", encoding="utf-8") as f:
+        with open(md_file_path, encoding="utf-8") as f:
             content = f.read()
         if os.path.exists(converter.current_image_absolute_path):
             self.local_image_dir = converter.current_image_absolute_path
+        content = self.rewrite_local_image_refs(content)
         return [Document(page_content=content, metadata=self.file_metadata.copy())]

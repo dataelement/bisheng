@@ -1,7 +1,6 @@
 import tempfile
 from abc import abstractmethod
 from functools import cached_property
-from typing import Optional, Dict
 
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
@@ -50,13 +49,13 @@ class BaseFilePipeline(BasePipeline):
     ppt_page_split_exts = {"ppt", "pptx"}
 
     def __init__(self, invoke_user_id: int, file_name: str, file_rule: FileProcessBase, **kwargs):
-        super(BaseFilePipeline, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.invoke_user_id = invoke_user_id
         self.file_name = file_name
         self.file_split_rule = file_rule
 
-        self.local_file_path: Optional[str] = getattr(self, 'local_file_path', None)
-        self.tmp_dir: Optional[str] = getattr(self, 'tmp_dir', None)
+        self.local_file_path: str | None = getattr(self, 'local_file_path', None)
+        self.tmp_dir: str | None = getattr(self, 'tmp_dir', None)
         self.loader = None
         self.transformers = None
 
@@ -80,7 +79,7 @@ class BaseFilePipeline(BasePipeline):
     def should_use_ppt_page_split(self) -> bool:
         return self.split_mode == "auto" and self.file_extension in self.ppt_page_split_exts
 
-    def get_splitter_kwargs(self) -> Dict:
+    def get_splitter_kwargs(self) -> dict:
         chunk_overlap = self.file_split_rule.chunk_overlap
         if self.split_mode == "auto" and "chunk_overlap" not in self.file_split_rule.model_fields_set:
             chunk_overlap = 0
@@ -94,7 +93,7 @@ class BaseFilePipeline(BasePipeline):
 
     @property
     @abstractmethod
-    def file_metadata(self) -> Dict:
+    def file_metadata(self) -> dict:
         pass
 
     def prepare_local_file(self):
@@ -120,7 +119,7 @@ class BaseFilePipeline(BasePipeline):
             pipeline = NormalPipeline(loader=loader, transformers=transformers, vector_store=self.vector_store)
             return pipeline.run(config)
 
-    def _get_loader_common_params(self) -> Dict:
+    def _get_loader_common_params(self) -> dict:
         return {
             "file_path": self.local_file_path,
             "file_metadata": self.file_metadata,
@@ -129,7 +128,7 @@ class BaseFilePipeline(BasePipeline):
             "image_object_dir": self._get_image_object_dir(),
         }
 
-    def _get_image_object_dir(self) -> Optional[str]:
+    def _get_image_object_dir(self) -> str | None:
         """MinIO object dir (relative to bucket) where loader uploads extracted images.
 
         Returning None keeps the loader writing local file paths and disables the
@@ -211,7 +210,7 @@ class BaseFilePipeline(BasePipeline):
             )
         elif knowledge_conf.loader_provider == ParseType.PADDLE_OCR.value and knowledge_conf.paddle_ocr.url:
             if hasattr(self, 'db_file') and self.db_file:
-                self.db_file.parse_type = ParseType.MINERU.value
+                self.db_file.parse_type = ParseType.PADDLE_OCR.value
             return PaddleOcrLoader(
                 **self._get_loader_common_params(),
                 filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,

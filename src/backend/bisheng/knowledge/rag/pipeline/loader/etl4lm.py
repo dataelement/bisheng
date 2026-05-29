@@ -1,13 +1,12 @@
 import base64
 import os
-from typing import List, Dict, Tuple
 
 import cv2
 import fitz
 import requests
-from PIL import Image
 from langchain_core.documents import Document
 from loguru import logger
+from PIL import Image
 
 from bisheng.knowledge.rag.pipeline.loader.base import BaseBishengLoader
 from bisheng.knowledge.rag.pipeline.types import TextBbox
@@ -18,7 +17,7 @@ class Etl4lmLoader(BaseBishengLoader):
     def __init__(self, url: str, ocr_sdk_url: str, enable_formular: bool = True, force_ocr: bool = True,
                  filter_page_header_footer: bool = False, start: int = 0, n: int = None, timeout: int = 60,
                  retain_images: bool = True, *args, **kwargs):
-        super(Etl4lmLoader, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.url = url
         self.ocr_sdk_url = ocr_sdk_url
         self.enable_formular = enable_formular
@@ -29,7 +28,7 @@ class Etl4lmLoader(BaseBishengLoader):
         self.timeout = timeout
         self.retain_images = retain_images
 
-    def parse_bbox_list(self, partitions: List[Dict]):
+    def parse_bbox_list(self, partitions: list[dict]):
         """Resolve BuildbboxCorrespondence with text"""
         if not partitions:
             return None
@@ -52,7 +51,7 @@ class Etl4lmLoader(BaseBishengLoader):
                     page=pages[index],
                 ))
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         b64_data = base64.b64encode(open(self.file_path, "rb").read()).decode()
         parameters = {
             "start": self.start,
@@ -96,11 +95,11 @@ class Etl4lmLoader(BaseBishengLoader):
             )
         partitions = resp["partitions"]
         if partitions:
-            logger.info(f"content_from_partitions")
+            logger.info("content_from_partitions")
             content, metadata = self.merge_partitions(partitions)
             self.parse_bbox_list(partitions)
         elif resp.get("text"):
-            logger.info(f"content_from_text")
+            logger.info("content_from_text")
             content = resp["text"]
             metadata = {
                 "bboxes": [],
@@ -119,7 +118,7 @@ class Etl4lmLoader(BaseBishengLoader):
         return [Document(page_content=content, metadata=metadata)]
 
     @staticmethod
-    def get_image_tag(results: Dict, part: Dict) -> str:
+    def get_image_tag(results: dict, part: dict) -> str:
         element_id = part.get("element_id", None)
         url = results.get(element_id, element_id)
         return f"![]({url})"
@@ -144,20 +143,20 @@ class Etl4lmLoader(BaseBishengLoader):
                 page_dict[page_id].append(item)
         return page_dict
 
-    def crop_image(self, image_file: str, item: Dict):
+    def crop_image(self, image_file: str, item: dict) -> str:
         element_id = item.get("element_id")
         bbox = item.get("bboxes")
         img = cv2.imread(image_file)
         x1, y1, x2, y2 = bbox
         cropped_img = img[y1:y2, x1:x2]
-        file_name = f"{self.local_image_dir}{os.sep}{element_id}.png"
-        cv2.imwrite(file_name, cropped_img)
-        # Upload to MinIO immediately so that the merged document text contains the
-        # final MinIO URL when metadata.indexes are computed. This keeps chunk_bbox
-        # alignment correct after the splitter runs (see bbox-misalignment fix).
-        return self.upload_image_to_minio(file_name, f"{element_id}.png")
+        filename = f"{element_id}.png"
+        local_path = os.path.join(self.local_image_dir, filename)
+        cv2.imwrite(local_path, cropped_img)
+        # Embed the eventual MinIO URL now. Bytes get uploaded later by
+        # ImageUploadTransformer (which reads them from local_image_dir).
+        return self.build_image_url(filename)
 
-    def extract_images(self, partitions: List[Dict]) -> Dict:
+    def extract_images(self, partitions: list[dict]) -> dict:
         if not self.retain_images:
             return {}
         image_parts = self.get_image_parts(partitions=partitions)
@@ -165,9 +164,8 @@ class Etl4lmLoader(BaseBishengLoader):
             return {}
 
         pdf_page_dir = os.path.join(self.tmp_dir, "pdf_page")
-        self.local_image_dir = os.path.join(self.tmp_dir, "images")
         os.makedirs(pdf_page_dir, exist_ok=True)
-        os.makedirs(self.local_image_dir, exist_ok=True)
+        self.ensure_local_image_dir()
 
         result = {}
         pdf_document = fitz.open(self.file_path)
@@ -182,7 +180,7 @@ class Etl4lmLoader(BaseBishengLoader):
                 result[item["element_id"]] = self.crop_image(pdf_page_image_path, item)
         return result
 
-    def merge_partitions(self, partitions: List[Dict]) -> Tuple[str, Dict]:
+    def merge_partitions(self, partitions: list[dict]) -> tuple[str, dict]:
         # Pre-proces sing pdf, Extracting Images
         local_image_result = self.extract_images(partitions=partitions)
         text_elem_sep = "\n"
@@ -198,6 +196,15 @@ class Etl4lmLoader(BaseBishengLoader):
             if label == "Image":
                 part["text"] = self.get_image_tag(local_image_result, part)
                 text = part["text"]
+                # API-supplied extra_data["indexes"] is computed against the
+                # original (often empty) text; rewriting the partition text
+                # would otherwise leave indexes pointing to a zero-width range
+                # in front of the inserted image tag, making the image bbox
+                # unreachable via IntervalSearch.
+                extra_data["indexes"] = [[0, len(text)]]
+                extra_data["bboxes"] = extra_data.get("bboxes", [])[:1] or [[0, 0, 0, 0]]
+                extra_data["pages"] = extra_data.get("pages", [])[:1] or [0]
+                extra_data["types"] = (extra_data.get("types", []) or ["image"])[:1]
 
             if is_first_elem:
                 f_text = text + "\n" if label == "Title" else text

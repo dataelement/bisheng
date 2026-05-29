@@ -1,46 +1,46 @@
 import json
 from functools import cached_property
-from typing import Optional, List, Dict
 
 from langchain_core.documents import BaseDocumentTransformer
 
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
+from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.base_file_pipeline import BaseFilePipeline
 from bisheng.knowledge.rag.pipeline.transformer.abstract import AbstractTransformer
 from bisheng.knowledge.rag.pipeline.transformer.content_safety import ContentSafetyTransformer
-from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.knowledge.rag.pipeline.transformer.direct_chunk import DirectChunkTransformer
 from bisheng.knowledge.rag.pipeline.transformer.extra_file import ExtraFileTransformer
+from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.knowledge.rag.pipeline.transformer.hierarchical_splitter import HierarchicalSplitterTransformer
+from bisheng.knowledge.rag.pipeline.transformer.image_upload import ImageUploadTransformer
 from bisheng.knowledge.rag.pipeline.transformer.preview_cache import PreviewCacheTransformer
 from bisheng.knowledge.rag.pipeline.transformer.splitter import SplitterTransformer
 from bisheng.knowledge.rag.pipeline.transformer.thumbnail import ThumbnailTransformer
-from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
-from bisheng.user.domain.models.user import UserDao
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
+from bisheng.user.domain.models.user import UserDao
 from bisheng.utils.file import download_minio_file
 
 
 class KnowledgeFilePipeline(BaseFilePipeline):
 
-    def __init__(self, invoke_user_id: int, db_file: KnowledgeFile, preview_cache_key: Optional[str] = None,
+    def __init__(self, invoke_user_id: int, db_file: KnowledgeFile, preview_cache_key: str | None = None,
                  no_summary: bool = False, need_thumbnail: bool = False, **kwargs):
         split_rule = FileProcessBase(knowledge_id=db_file.knowledge_id)
         if db_file.split_rule and isinstance(db_file.split_rule, str):
             split_rule = FileProcessBase(**json.loads(db_file.split_rule))
         split_rule.knowledge_id = db_file.knowledge_id
 
-        super(KnowledgeFilePipeline, self).__init__(invoke_user_id, db_file.file_name, split_rule, **kwargs)
+        super().__init__(invoke_user_id, db_file.file_name, split_rule, **kwargs)
         self.db_file = db_file
         self.preview_cache_key = preview_cache_key
         self.no_summary = no_summary
         self.need_thumbnail = need_thumbnail
 
     @cached_property
-    def file_metadata(self) -> Dict:
+    def file_metadata(self) -> dict:
         uploader = UserDao.get_user(self.invoke_user_id)
         updater = uploader = uploader.user_name if uploader else None
         if self.db_file.updater_id:
@@ -65,17 +65,17 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             calc_sha256=False
         )
 
-    def _get_image_object_dir(self) -> Optional[str]:
+    def _get_image_object_dir(self) -> str | None:
         return KnowledgeUtils.get_knowledge_file_image_dir(
             str(self.db_file.id), self.db_file.knowledge_id
         )
 
-    def _init_abstract_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_abstract_transformers(self) -> list[BaseDocumentTransformer]:
         if self.no_summary:
             return []
         return [AbstractTransformer(self.invoke_user_id, file_metadata=self.file_metadata, knowledge_file=self.db_file)]
 
-    def _init_content_safety_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_content_safety_transformers(self) -> list[BaseDocumentTransformer]:
         tenant_id = self.db_file.tenant_id or 1
         if not SensitiveWordPolicyService.is_effective(
             tenant_id=tenant_id,
@@ -84,7 +84,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             return []
         return [ContentSafetyTransformer(tenant_id=tenant_id)]
 
-    def _init_common_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_common_transformers(self) -> list[BaseDocumentTransformer]:
         abstract_transformers = self._init_content_safety_transformers()
         abstract_transformers.extend(self._init_abstract_transformers())
         # FileEncodingTransformer runs right after AbstractTransformer (in _init_abstract_transformers),
@@ -98,7 +98,12 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             document_id=str(self.db_file.id),
             knowledge_id=self.db_file.knowledge_id,
             knowledge_file=self.db_file,
-            retain_images=self.file_split_rule.retain_images == 1
+        ))
+        abstract_transformers.append(ImageUploadTransformer(
+            loader=self.loader,
+            document_id=str(self.db_file.id),
+            knowledge_id=self.db_file.knowledge_id,
+            retain_images=self.file_split_rule.retain_images == 1,
         ))
         if self.need_thumbnail:
             abstract_transformers.append(ThumbnailTransformer(
@@ -125,7 +130,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
         ))
         return abstract_transformers
 
-    def _init_excel_transformers(self) -> List[BaseDocumentTransformer]:
+    def _init_excel_transformers(self) -> list[BaseDocumentTransformer]:
         abstract_transformers = self._init_content_safety_transformers()
         abstract_transformers.extend(self._init_abstract_transformers())
         abstract_transformers.append(ExtraFileTransformer(
@@ -133,6 +138,11 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             document_id=str(self.db_file.id),
             knowledge_id=self.db_file.knowledge_id,
             knowledge_file=self.db_file,
+        ))
+        abstract_transformers.append(ImageUploadTransformer(
+            loader=self.loader,
+            document_id=str(self.db_file.id),
+            knowledge_id=self.db_file.knowledge_id,
             retain_images=self.file_split_rule.retain_images == 1,
         ))
         abstract_transformers.append(PreviewCacheTransformer(
