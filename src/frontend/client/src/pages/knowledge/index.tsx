@@ -745,10 +745,9 @@ export default function Knowledge() {
                                     <KnowledgeSpaceContent
                                         space={activeSpace}
                                         files={fileManager.files}
-                                        currentPage={fileManager.currentPage}
-                                        pageSize={fileManager.pageSize}
                                         total={fileManager.total}
-                                        onPageChange={fileManager.handlePageChange}
+                                        onLoadMore={fileManager.loadMore}
+                                        hasMore={fileManager.hasMore}
                                         loading={fileManager.loading}
                                         onSearch={fileManager.handleSearch}
                                         onFilterStatus={fileManager.setStatusFilter}

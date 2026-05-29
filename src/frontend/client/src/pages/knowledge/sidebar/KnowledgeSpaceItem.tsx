@@ -1,4 +1,5 @@
-import { Building2, ChevronDown, ChevronRight, LogOut, MoreHorizontal, Pin, PinOff, Settings, UsersRound } from "lucide-react";
+import { LogOut, Pin, PinOff, Settings, UsersRound } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace, SpaceRole, SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } from "~/api/knowledge";
@@ -24,7 +25,6 @@ import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { getFullWidthLength } from "~/utils";
 import { ChannelPinIcon } from "~/components/icons/channels";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
-import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 import { KnowledgeFolderTree, type FolderSelectPayload } from "./KnowledgeFolderTree";
 
 interface KnowledgeSpaceItemProps {
@@ -104,8 +104,8 @@ export default function KnowledgeSpaceItem({
             {/* Space row */}
             <div
                 className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
-                    ? "bg-[#E6EDFC] border-primary shadow-sm"
-                    : "border-transparent hover:bg-[#F7F7F7]"
+                    ? "bg-[#f4f4f4] border-transparent"
+                    : "border-transparent hover:bg-[#f7f7f7]"
                     }`}
                 style={{
                     transitionProperty: 'background-color',
@@ -127,18 +127,18 @@ export default function KnowledgeSpaceItem({
                             aria-label={expanded ? "Collapse folder tree" : "Expand folder tree"}
                         >
                             {expanded ? (
-                                <ChevronDown className="size-3 text-[#8D93A0]" />
+                                <Outlined.Down className="size-3.5 text-[#8D93A0]" />
                             ) : (
-                                <ChevronRight className="size-3 text-[#8D93A0]" />
+                                <Outlined.Right className="size-3.5 text-[#8D93A0]" />
                             )}
                         </button>
                     )}
 
-                    <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
+                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
                         {type === "department" ? (
-                            <Building2 className={`size-[14px] ${isActive ? "text-primary" : "text-[#86909C]"}`} />
+                            <Outlined.City className={`size-[14px] ${isActive ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         ) : (
-                            <SpaceNotebookIcon active={isActive} />
+                            <Outlined.Notebook className={`size-[14px] ${isActive ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         )}
                     </div>
 
@@ -177,7 +177,7 @@ export default function KnowledgeSpaceItem({
                                 `}
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                <MoreHorizontal className="size-4 text-[#4e5969]" />
+                                <Outlined.More className="size-4 text-[#4e5969]" />
                             </button>
                         </DropdownMenuTrigger>
 

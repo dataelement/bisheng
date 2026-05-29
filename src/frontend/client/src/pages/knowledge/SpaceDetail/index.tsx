@@ -29,7 +29,6 @@ import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
-import { PaginationBar } from "./PaginationBar";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
@@ -43,10 +42,11 @@ import { cn, getFullWidthLength } from "~/utils";
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
     files: KnowledgeFile[];
-    currentPage: number;
-    pageSize: number;
     total: number;
-    onPageChange: (page: number) => void;
+    /** Infinite scroll: load the next page (appends). */
+    onLoadMore: () => void;
+    /** Whether more pages remain to load. */
+    hasMore: boolean;
     loading: boolean;
     onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
@@ -74,10 +74,9 @@ interface KnowledgeSpaceContentProps {
 export function KnowledgeSpaceContent({
     space,
     files,
-    currentPage,
-    pageSize,
     total,
-    onPageChange,
+    onLoadMore,
+    hasMore,
     loading,
     onSearch,
     onFilterStatus,
@@ -110,6 +109,15 @@ export function KnowledgeSpaceContent({
         ...uploadingFiles,
         ...files
     ];
+
+    // Infinite scroll: trigger the next page when the scroll container nears its bottom.
+    const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        if (!hasMore || loading) return;
+        const el = e.currentTarget;
+        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 240) {
+            onLoadMore();
+        }
+    };
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
@@ -922,7 +930,7 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : (isH5 || viewMode === "card") ? (
-                        <div ref={fileListScrollRevealRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
+                        <div ref={fileListScrollRevealRef} onScroll={handleListScroll} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
                             <div
                                 ref={cardGridRef}
                                 className={cn(
@@ -965,7 +973,7 @@ export function KnowledgeSpaceContent({
                         </div>
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll border-t border-[#e5e6eb]">
+                            <div ref={tableScrollRevealRef} onScroll={handleListScroll} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
@@ -996,43 +1004,19 @@ export function KnowledgeSpaceContent({
                 </div>
             </div>
 
-            {/* Footer：与上方同宽（外层 px-4）；桌面 mt-auto；手机列表区内置底栏，随面板高度固定可见 */}
-            <div
-                className={cn(
-                    "w-full min-w-0 shrink-0 max-[767px]:pb-[env(safe-area-inset-bottom,0px)]",
-                    !isH5 && "mt-auto",
-                )}
-            >
-                <div
-                    className={cn(
-                        "flex w-full min-w-0 flex-shrink-0 flex-wrap items-center justify-between gap-y-1 py-3",
-                        isH5 && "flex-nowrap justify-end",
-                        !isH5 && "border-t border-[#e5e6eb] bg-white",
-                    )}
-                >
-                    {!isH5 && (
-                        isSearching && selectedFiles.size > 0 ? (
-                            <SelectionPathBreadcrumb
-                                spaceId={space.id}
-                                spaceName={space.name}
-                                selectedFiles={selectedFiles}
-                                displayFiles={displayFiles}
-                            />
-                        ) : (
-                            <div />
-                        )
-                    )}
-
-                    {files.length > 0 && (
-                        <PaginationBar
-                            currentPage={currentPage}
-                            pageSize={pageSize}
-                            total={total}
-                            onPageChange={onPageChange}
+            {/* Footer：仅在搜索且有选中时展示所选文件的路径面包屑（无分页器） */}
+            {!isH5 && isSearching && selectedFiles.size > 0 && (
+                <div className="mt-auto w-full min-w-0 shrink-0">
+                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white py-3">
+                        <SelectionPathBreadcrumb
+                            spaceId={space.id}
+                            spaceName={space.name}
+                            selectedFiles={selectedFiles}
+                            displayFiles={displayFiles}
                         />
-                    )}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Edit Tags Modal */}
             <EditTagsModal

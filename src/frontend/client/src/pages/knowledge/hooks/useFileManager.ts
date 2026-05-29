@@ -65,11 +65,18 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
 
     const { showToast } = useToastContext();
 
-    // ─── Load file/folder list ──────────────────────────────────────────
-    const loadFiles = useCallback(
-        async (page: number = 1): Promise<KnowledgeFile[]> => {
+    // Guards against overlapping infinite-scroll triggers (setLoading is async).
+    const loadingRef = useRef(false);
+
+    // ─── Core list fetch ────────────────────────────────────────────────
+    // `append` accumulates onto the existing list (infinite scroll); otherwise
+    // it replaces. `size` lets callers fetch several pages worth in one request
+    // (used when refreshing all already-loaded pages).
+    const fetchList = useCallback(
+        async (page: number, size: number, append: boolean): Promise<KnowledgeFile[]> => {
             if (!enabled || !activeSpace?.id) return [];
 
+            loadingRef.current = true;
             setLoading(true);
             try {
                 const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
@@ -82,7 +89,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         space_id: activeSpace.id,
                         parent_id: searchScope === "all" ? undefined : currentFolderId,
                         page,
-                        page_size: pageSize,
+                        page_size: size,
                         keyword: searchQuery || undefined,
                         tag_ids: searchTagIds.length > 0 ? searchTagIds : undefined,
                         order_field: sortBy || undefined,
@@ -93,7 +100,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         space_id: activeSpace.id,
                         parent_id: currentFolderId,
                         page,
-                        page_size: pageSize,
+                        page_size: size,
                         order_field: sortBy || undefined,
                         order_sort: sortDirection || undefined,
                         file_status: fileStatusNums,
@@ -142,19 +149,54 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         // base file list if approval data cannot be loaded.
                     }
                 }
-                setFiles(mergedData);
+                if (append) {
+                    setFiles(prev => {
+                        const seen = new Set(prev.map(f => String(f.id)));
+                        return [...prev, ...mergedData.filter(f => !seen.has(String(f.id)))];
+                    });
+                } else {
+                    setFiles(mergedData);
+                }
                 setTotal(mergedTotal);
-                setCurrentPage(page);
                 return mergedData;
             } catch {
                 showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
                 return [];
             } finally {
+                loadingRef.current = false;
                 setLoading(false);
             }
         },
-        [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast]
+        [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, showToast]
     );
+
+    // Load a single page fresh (replaces the list). Used by all reset effects.
+    const loadFiles = useCallback(
+        async (page: number = 1): Promise<KnowledgeFile[]> => {
+            const data = await fetchList(page, pageSize, false);
+            setCurrentPage(page);
+            return data;
+        },
+        [fetchList, pageSize]
+    );
+
+    const hasMore = files.length < total;
+
+    // Infinite scroll: append the next page.
+    const loadMore = useCallback(async () => {
+        if (loadingRef.current) return;
+        if (files.length >= total) return;
+        const next = currentPage + 1;
+        await fetchList(next, pageSize, true);
+        setCurrentPage(next);
+    }, [fetchList, pageSize, files.length, total, currentPage]);
+
+    // Refresh every already-loaded page in one request (keeps the accumulated
+    // list intact while updating statuses). Used by polling and refresh events.
+    const refreshLoaded = useCallback(async () => {
+        const pages = Math.max(1, currentPage);
+        await fetchList(1, pageSize * pages, false);
+    }, [fetchList, pageSize, currentPage]);
 
     // Track which initialFolderId has been consumed (value, not boolean)
     // so re-navigation to a different folder deep link works correctly.
@@ -231,10 +273,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     // ─── Auto-polling for pending files ─────────────────────────────────
     // Refresh the file list every 5s while any file on the current page
     // is still in a processing/waiting/rebuilding/uploading state.
-    const loadFilesRef = useRef(loadFiles);
-    loadFilesRef.current = loadFiles;
-    const currentPageRef = useRef(currentPage);
-    currentPageRef.current = currentPage;
+    const refreshLoadedRef = useRef(refreshLoaded);
+    refreshLoadedRef.current = refreshLoaded;
 
     useEffect(() => {
         if (!enabled || !activeSpace?.id || typeof window === "undefined") return;
@@ -242,7 +282,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             const detail = (event as CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>).detail;
             if (!detail?.spaceId) return;
             if (String(detail.spaceId) !== String(activeSpace.id)) return;
-            loadFilesRef.current(currentPageRef.current);
+            refreshLoadedRef.current();
         };
         window.addEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handleKnowledgeSpaceFilesRefresh);
         return () => {
@@ -258,7 +298,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         if (!hasPending) return;
 
         const timer = setInterval(() => {
-            loadFilesRef.current(currentPageRef.current);
+            refreshLoadedRef.current();
         }, 5000);
 
         return () => clearInterval(timer);
@@ -336,6 +376,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         currentFolderId,
         currentPath,
         loadFiles,
+        loadMore,
+        hasMore,
         handleSearch,
         handleSort,
         handlePageChange,

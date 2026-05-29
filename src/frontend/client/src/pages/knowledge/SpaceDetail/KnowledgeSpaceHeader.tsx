@@ -3,16 +3,15 @@ import {
     List,
     Upload,
     FolderPlus,
-    ChevronDown,
     ChevronLeft,
     CircleQuestionMark,
     Info,
-    FunnelIcon,
     Download,
     Tag,
     RotateCcw,
     Trash2
 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
@@ -27,15 +26,9 @@ import {
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { AiChatIcon } from "~/components/icons";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
-import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
-import { Fragment, useLayoutEffect, useRef, useState } from "react";
-import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
-
-/** 工具栏实际宽度小于此值时：搜索独占一行，第二行为视图/筛选（左）与新增/批量（右）。阈值偏大以免中等宽度仍挤在一行。 */
-const TOOLBAR_COMPACT_MAX_WIDTH = 1040;
+import { Fragment } from "react";
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -114,21 +107,6 @@ export function KnowledgeSpaceHeader({
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const isNarrow576 = useMediaQuery("(max-width: 576px)");
-    const toolbarMeasureRef = useRef<HTMLDivElement>(null);
-    const [toolbarCompact, setToolbarCompact] = useState(false);
-
-    useLayoutEffect(() => {
-        const el = toolbarMeasureRef.current;
-        if (!el) return;
-        const update = () => {
-            const w = el.getBoundingClientRect().width;
-            setToolbarCompact(w > 0 && w < TOOLBAR_COMPACT_MAX_WIDTH);
-        };
-        update();
-        const ro = new ResizeObserver(() => update());
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, []);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
@@ -140,32 +118,15 @@ export function KnowledgeSpaceHeader({
     const viewFilterSortCluster = (
         <div className="flex min-w-0 shrink-0 items-center gap-3">
             {showViewModeTabs && (
-                <div className="inline-flex h-8 shrink-0 items-stretch rounded-md border border-[#e5e6eb] bg-white p-[3px] text-sm">
-                    <button
-                        type="button"
-                        onClick={() => setViewMode("list")}
-                        className={cn(
-                            "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
-                            viewMode === "list"
-                                ? "bg-[#E6EDFC] text-[#165DFF]"
-                                : "text-[#4e5969] hover:bg-[#f2f3f5]"
-                        )}
-                    >
-                        <List className="size-4 shrink-0" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setViewMode("card")}
-                        className={cn(
-                            "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
-                            viewMode === "card"
-                                ? "bg-[#E6EDFC] text-[#165DFF]"
-                                : "text-[#4e5969] hover:bg-[#f2f3f5]"
-                        )}
-                    >
-                        <LayoutGrid className="size-4 shrink-0" />
-                    </button>
-                </div>
+                <Button
+                    variant="outline"
+                    onClick={() => setViewMode(viewMode === "list" ? "card" : "list")}
+                    className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-gray-700 hover:bg-[#f7f8fa]"
+                >
+                    {viewMode === "list"
+                        ? <LayoutGrid className="size-4 shrink-0" />
+                        : <List className="size-4 shrink-0" />}
+                </Button>
             )}
 
             {space.role !== SpaceRole.MEMBER && (
@@ -180,7 +141,7 @@ export function KnowledgeSpaceHeader({
                                     : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
                             )}
                         >
-                            <FunnelIcon className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
+                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -252,7 +213,7 @@ export function KnowledgeSpaceHeader({
                             variant="outline"
                             className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-gray-700"
                         >
-                            <SingleIconButtonSortGlyph className="size-4 shrink-0" aria-hidden />
+                            <Outlined.Sort className="size-4 shrink-0" aria-hidden />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -282,7 +243,7 @@ export function KnowledgeSpaceHeader({
                     <DropdownMenuTrigger asChild>
                         <Button size="sm" variant="outline" className="h-8 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
                             {localize("com_knowledge.batch_operation")}
-                            <ChevronDown className="ml-1 size-4" />
+                            <Outlined.Down className="ml-1 size-4" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -318,7 +279,7 @@ export function KnowledgeSpaceHeader({
                     <DropdownMenuTrigger asChild>
                         <Button size="sm" className="h-8 rounded-md px-4 font-normal" disabled={isSearching}>
                             {localize("com_knowledge.add_new")}
-                            <ChevronDown className="ml-1 size-4" />
+                            <Outlined.Down className="ml-1 size-4" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -359,23 +320,10 @@ export function KnowledgeSpaceHeader({
         </div>
     );
 
-    const searchFieldClassName = toolbarCompact
-        ? "relative min-w-0 w-full"
-        : cn(
-            "relative min-w-0 w-full transition-[width,max-width,flex-grow] duration-200 ease-out",
-            "sm:flex-none sm:w-[450px] sm:max-w-[450px] sm:shrink-0",
-            // Driven by CompoundSearchInput's data-expanded attribute (input focus
-            // OR scope DropdownMenu open) — survives Radix portal moving focus
-            // outside the search field.
-            "sm:has-[[data-expanded=true]]:flex-1 sm:has-[[data-expanded=true]]:w-auto sm:has-[[data-expanded=true]]:max-w-none sm:has-[[data-expanded=true]]:min-w-0"
-        );
-
     return (
-        <>
-            <div className="space-y-4 pt-5 pb-4 max-[767px]:space-y-3 max-[767px]:pt-4 max-[767px]:pb-3">
+        <div className="flex min-h-8 items-center justify-between gap-3 pt-5 pb-4 max-[767px]:gap-2 max-[767px]:pt-4 max-[767px]:pb-3">
 
-                {/* 面包屑 / 当前空间标题 */}
-                <div className="flex min-h-8 items-center justify-between gap-3">
+                    {/* 左侧：当前空间标题 / 面包屑 + 信息 + 分享 */}
                     <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                         {currentPath.length === 0 ? (
                             <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -423,6 +371,17 @@ export function KnowledgeSpaceHeader({
                                         </div>
                                     </TooltipContent>
                                 </Tooltip>
+                                {showShare && (
+                                    <CopyShareLinkButton
+                                        iconOnly
+                                        sharePath={`/knowledge/share/${space.id}`}
+                                        successMessage={localize("com_knowledge.share_link_copied")}
+                                        errorMessage={localize("com_knowledge.copy_failed_retry")}
+                                        className="ml-1 size-7 border-[#e5e6eb]"
+                                        icon={<Outlined.Share className="size-4 text-[#4e5969]" />}
+                                        aria-label={localize("com_knowledge.share")}
+                                    />
+                                )}
                             </div>
                         ) : (
                             <>
@@ -477,65 +436,17 @@ export function KnowledgeSpaceHeader({
                         )}
                     </div>
 
-                    {/* 右侧：AI助手和分享 */}
+                    {/* 右侧：搜索（收起为图标，点击展开）+ 视图/筛选/排序 + 批量/新增，单行排列 */}
                     <div className="flex shrink-0 items-center gap-3">
-                        <Button
-                            variant="ghost"
-                            className="ai-btn-border-draw h-8 gap-1 rounded-[6px] px-3 font-normal hover:bg-transparent"
-                            disabled={isSearching}
-                            onClick={onToggleAiAssistant}
-                        >
-                            <span className="ai-btn-shimmer-overlay" />
-                            <AiChatIcon className="size-4" stroke={isSearching ? "#c9cdd4" : "#335cff"} />
-                            <span className={isSearching ? '' : 'text-[#000D4D]'}>{localize("com_knowledge.ai_assistant")}</span>
-                        </Button>
-
-                        {showShare && (
-                            <CopyShareLinkButton
-                                sharePath={`/knowledge/share/${space.id}`}
-                                label={localize("com_knowledge.share")}
-                                successMessage={localize("com_knowledge.share_link_copied")}
-                                errorMessage={localize("com_knowledge.copy_failed_retry")}
-                            />
-                        )}
+                        <CompoundSearchInput
+                            collapsible
+                            spaceId={space.id}
+                            isRoot={currentPath.length === 0}
+                            onSearch={onSearch}
+                        />
+                        {viewFilterSortCluster}
+                        {batchAndAddActions}
                     </div>
-                </div>
-
-                {/* Toolbar：宽屏一行（搜索 + 视图/筛选 + 右侧操作）；窄内容区（宽度小于 TOOLBAR_COMPACT_MAX_WIDTH）两行：仅搜索，其次为视图/筛选与新增/批量 */}
-                <div ref={toolbarMeasureRef} className="w-full min-w-0">
-                    {toolbarCompact ? (
-                        <div className="flex flex-col gap-3">
-                            <div className={searchFieldClassName}>
-                                <CompoundSearchInput
-                                    spaceId={space.id}
-                                    isRoot={currentPath.length === 0}
-                                    onSearch={onSearch}
-                                />
-                            </div>
-                            <div className="max-[767px]:-mx-4 max-[767px]:sticky max-[767px]:top-0 max-[767px]:z-20 max-[767px]:bg-white max-[767px]:px-4 max-[767px]:py-2">
-                                <div className="flex min-w-0 items-center justify-between gap-2">
-                                    {viewFilterSortCluster}
-                                    {batchAndAddActions}
-                                </div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex min-w-0 items-center justify-between gap-3">
-                            <div className="flex min-w-0 flex-1 items-center gap-3">
-                                <div className={searchFieldClassName}>
-                                    <CompoundSearchInput
-                                        spaceId={space.id}
-                                        isRoot={currentPath.length === 0}
-                                        onSearch={onSearch}
-                                    />
-                                </div>
-                                {viewFilterSortCluster}
-                            </div>
-                            {batchAndAddActions}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </>
+        </div>
     );
 }

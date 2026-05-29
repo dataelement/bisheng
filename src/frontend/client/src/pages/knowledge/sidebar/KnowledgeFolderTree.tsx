@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { KnowledgeFolderNode, listKnowledgeFolders } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -75,8 +75,8 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
         <>
             <div
                 className={cn(
-                    "group flex cursor-pointer select-none items-center gap-1 rounded-md px-2 py-1 text-sm text-[#1d2129] transition-colors hover:bg-[#F2F3F5]",
-                    isSelected && "bg-[#E8F3FF] text-[#165DFF] hover:bg-[#E8F3FF]"
+                    "group flex cursor-pointer select-none items-center gap-1 rounded-md px-2 py-1 text-sm text-[#1d2129] transition-colors hover:bg-[#f7f7f7]",
+                    isSelected && "bg-[#f4f4f4] hover:bg-[#f4f4f4]"
                 )}
                 style={{ paddingLeft: `${8 + depth * 16}px` }}
                 onClick={() => onSelect(node)}
@@ -97,9 +97,9 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
                     {node.loading ? (
                         <span className="size-3 rounded-full border-2 border-[#8D93A0] border-t-transparent inline-block animate-spin" />
                     ) : (
-                        <ChevronRight
+                        <Outlined.Right
                             className={cn(
-                                "size-3 text-[#8D93A0] transition-transform duration-150",
+                                "size-3.5 text-[#8D93A0] transition-transform duration-150",
                                 node.expanded && "rotate-90"
                             )}
                         />
@@ -108,9 +108,9 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
 
                 {/* Folder icon */}
                 {hasExpandedChildren ? (
-                    <FolderOpen className={cn("size-4 shrink-0", isSelected ? "text-[#165DFF]" : "text-[#8D93A0]")} />
+                    <Outlined.FolderOpen className={cn("size-4 shrink-0", isSelected ? "text-[#4e5969]" : "text-[#8D93A0]")} />
                 ) : (
-                    <Folder className={cn("size-4 shrink-0", isSelected ? "text-[#165DFF]" : "text-[#8D93A0]")} />
+                    <Outlined.FolderClose className={cn("size-4 shrink-0", isSelected ? "text-[#4e5969]" : "text-[#8D93A0]")} />
                 )}
 
                 {/* Folder name */}

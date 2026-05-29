@@ -22,9 +22,11 @@ export interface CompoundSearchInputProps {
     isRoot?: boolean;
     onSearch?: (params: SearchParams) => void;
     className?: string;
+    /** Render as a single search-icon button that expands into the full field on click. */
+    collapsible?: boolean;
 }
 
-export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className }: CompoundSearchInputProps) {
+export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false }: CompoundSearchInputProps) {
     const localize = useLocalize();
     const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
@@ -77,6 +79,9 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     }, [isScopeMenuOpen]);
 
     const isSearching = selectedTags.length > 0 || keyword.trim().length > 0;
+
+    // Collapsed: show only the search icon until the user focuses it or has an active query.
+    const collapsed = collapsible && !isExpanded && !isSearching;
 
     const fireSearch = (tags: SpaceTag[], kw: string) => {
         onSearch?.({
@@ -146,11 +151,24 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     const scopeLabel = scope === 'current' ? localize("com_knowledge.current_location") : localize("com_knowledge.current_space");
 
     return (
-        <div ref={containerRef} data-expanded={isExpanded ? 'true' : 'false'} className={cn("relative w-full", className)}>
+        <div
+            ref={containerRef}
+            data-expanded={isExpanded ? 'true' : 'false'}
+            className={cn(
+                "relative",
+                collapsed
+                    ? "w-8 shrink-0"
+                    : collapsible
+                        ? "w-[min(340px,60vw)] shrink-0 sm:w-[340px]"
+                        : "w-full",
+                className
+            )}
+        >
             <div
                 className={cn(
-                    "flex flex-nowrap items-center gap-1 w-full h-8 min-h-8 max-h-8 overflow-x-auto overflow-y-hidden",
-                    "bg-white border rounded-md transition-[border-color,box-shadow] px-2 sm:px-3",
+                    "flex flex-nowrap items-center gap-1 h-8 min-h-8 max-h-8 overflow-x-auto overflow-y-hidden",
+                    "bg-white border rounded-md transition-[border-color,box-shadow]",
+                    collapsed ? "w-8 justify-center px-0 cursor-pointer" : "w-full px-2 sm:px-3",
                     isFocused ? "border-primary ring-1 ring-primary/20" : "border-[#e5e6eb] hover:border-primary/50"
                 )}
                 onClick={() => {
@@ -216,8 +234,11 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     }}
                     onKeyDown={handleKeyDown}
                     maxLength={100}
-                    placeholder={selectedTags.length === 0 ? localize("com_knowledge.search_in_current_space") : ""}
-                    className="flex-1 min-w-[50px] bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]"
+                    placeholder={collapsed ? "" : selectedTags.length === 0 ? localize("com_knowledge.search_in_current_space") : ""}
+                    className={cn(
+                        "min-w-0 bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]",
+                        collapsed ? "w-0 flex-none p-0" : "flex-1 min-w-[50px]"
+                    )}
                     onFocus={() => { if (!isFocused) refreshTags(); setIsFocused(true); }}
                 />
 

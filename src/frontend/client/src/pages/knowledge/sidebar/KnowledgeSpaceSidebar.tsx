@@ -13,7 +13,7 @@ import KnowledgeSpaceItem from "./KnowledgeSpaceItem";
 import { SectionHeader } from "./SectionHeader";
 import { useSpaceActions } from "../hooks/useSpaceActions";
 import { useLocalize } from "~/hooks";
-import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
+import { Outlined } from "bisheng-icons";
 import { cn } from "~/utils";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { UserPopMenu } from "~/layouts/UserPopMenu";
@@ -237,33 +237,12 @@ export function KnowledgeSpaceSidebar({
                         </div>
                     ) : null}
                     <div className={cn(
-                        collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4",
+                        collapsed ? "flex items-center justify-center h-7" : "",
                         mobileDrawerMode && "hidden"
                     )}>
                         {!collapsed && !mobileDrawerMode && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
                             <span className="text-[#1d2129]">{localize("com_knowledge.knowledge_space")}</span>
                         </div>}
-                        {!collapsed && (
-                            <div className="flex items-center gap-3">
-                                <Button
-                                    variant="secondary"
-                                    onClick={onCreateSpace}
-                                    className={cn(
-                                        "flex-1 h-8 gap-1 text-[13px] text-[#212121]",
-                                        mobileDrawerMode
-                                            ? "border border-[#EBECF0] bg-white hover:bg-[#F7F8FA]"
-                                            : "border-none bg-[#F7F7F7] hover:bg-[#E5E6EB]"
-                                    )}
-                                >
-                                    <Plus className="size-4" />
-                                    {localize("com_knowledge.create")}
-                                </Button>
-                                <Button variant="secondary" onClick={() => onKnowledgeSquare?.()} className="flex-1 h-8 text-[13px] text-[#212121] bg-[#F7F7F7] hover:bg-[#E5E6EB] border-none gap-1">
-                                    <ChannelBlocksArrowsIcon className="size-4" />
-                                    {localize("com_knowledge.go_to_square")}
-                                </Button>
-                            </div>
-                        )}
                     </div>
                 </div>
 
@@ -324,6 +303,8 @@ export function KnowledgeSpaceSidebar({
                                 onToggle={() => setCreatedCollapsed(!createdCollapsed)}
                                 sortText={getSortLabel(createdSortBy, localize)}
                                 onSort={() => toggleSort("created")}
+                                onAdd={onCreateSpace}
+                                addLabel={localize("com_knowledge.create")}
                             />
                             {!createdCollapsed && (
                                 <div className="space-y-1">
@@ -381,6 +362,18 @@ export function KnowledgeSpaceSidebar({
                         </div>
                     </div>
                 </div>
+                {!collapsed && !mobileDrawerMode && !compactMode && (
+                    <div className="shrink-0 border-t border-[#e5e6eb] px-3 py-3">
+                        <Button
+                            variant="secondary"
+                            onClick={() => onKnowledgeSquare?.()}
+                            className="h-8 w-full gap-1 border-none bg-[#F7F7F7] text-[13px] text-[#212121] hover:bg-[#E5E6EB]"
+                        >
+                            <Outlined.BlocksAndArrows className="size-4" />
+                            {localize("com_knowledge.go_to_square")}
+                        </Button>
+                    </div>
+                )}
                 {mobileDrawerMode && !compactMode ? (
                     <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
                         <UserPopMenu variant="drawer" />
