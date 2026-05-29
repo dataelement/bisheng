@@ -110,29 +110,40 @@ def upgrade() -> None:
     # Only for roles that have a positive limit set.
     # Use Python-level JSON processing so the query works on MySQL and DaMeng.
     if column_exists(conn, 'role', 'knowledge_space_file_limit'):
-        import json as _json
-        role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+        # Pin quota_config to JsonType so its per-dialect serialization runs.
+        # A pre-dumped JSON string must NOT be bound here: on MySQL the column
+        # is native JSON and SQLAlchemy would json.dumps it again, storing a
+        # double-encoded string that reads back as a str (not a dict).
+        role_tbl = sa.Table(
+            'role', sa.MetaData(),
+            sa.Column('quota_config', JsonType),
+            autoload_with=conn, extend_existing=True,
+        )
         rows = conn.execute(
             sa.select(role_tbl.c.id, role_tbl.c.knowledge_space_file_limit, role_tbl.c.quota_config)
             .where(role_tbl.c.knowledge_space_file_limit > 0)
         ).fetchall()
         for row in rows:
-            raw = row.quota_config
-            current = _json.loads(raw) if isinstance(raw, str) else raw
-            if current:  # already has config — skip
+            if row.quota_config:  # already has config (JsonType-decoded) — skip
                 continue
             conn.execute(
                 sa.update(role_tbl)
                 .where(role_tbl.c.id == row.id)
-                .values(quota_config=_json.dumps({'knowledge_space_file': row.knowledge_space_file_limit}))
+                .values(quota_config={'knowledge_space_file': row.knowledge_space_file_limit})
             )
 
 def downgrade() -> None:
     """Revert role table changes."""
     conn = op.get_bind()
-    # Clear migrated quota_config values using Python-level JSON check
+    # Clear migrated quota_config values using Python-level JSON check.
+    # JsonType handles per-dialect (de)serialization so quota_config decodes
+    # to a dict regardless of backend.
     import json as _json
-    role_tbl = sa.Table('role', sa.MetaData(), autoload_with=conn)
+    role_tbl = sa.Table(
+        'role', sa.MetaData(),
+        sa.Column('quota_config', JsonType),
+        autoload_with=conn, extend_existing=True,
+    )
     rows = conn.execute(
         sa.select(role_tbl.c.id, role_tbl.c.quota_config)
         .where(role_tbl.c.quota_config.isnot(None))
