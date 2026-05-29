@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import NavToggle from "~/components/Nav/NavToggle";
-import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { AiAssistantPanel } from "./AiChat/AiAssistantPanel";
 import { ArticleList } from "./ArticleList/ArticleList";
@@ -38,6 +38,7 @@ export function ChannelLayout({
 }: ChannelLayoutProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    const navigate = useNavigate();
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     /** H5：AI 助手全屏叠在文章详情上，返回时回到正文（不与正文左右分屏） */
@@ -61,10 +62,11 @@ export function ChannelLayout({
             return;
         }
 
-        // H5: open the standalone article page in a new browser tab; do NOT show the inline overlay.
+        // H5: navigate to the standalone article page in the SAME tab so the user can use the
+        // browser back button to return to the channel; ArticlePage takes care of setting
+        // document.title to the article title and restoring it on unmount.
         if (isH5) {
-            const url = buildClientShareUrl(`/channel/${article.channelId}/article/${article.id}`);
-            window.open(url, "_blank", "noopener,noreferrer");
+            navigate(`/channel/${article.channelId}/article/${article.id}`);
             return;
         }
 

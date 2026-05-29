@@ -26,7 +26,7 @@ import { ArticleDetail } from "./ArticleDetail";
  * PC: renders the full ArticleDetail layout (header + toolbar + iframe) — identical to
  *   the in-app fullscreen view, just hosted at its own URL.
  * Mobile: renders a bare iframe of the article body with a floating top-right menu
- *   (分享 / 下载 / 原网页 / 加入知识空间) that fades on scroll.
+ *   (分享 / 原网页 / 加入知识空间) that fades on scroll.
  */
 export default function ArticlePage() {
     const { channelId, articleId } = useParams<{ channelId: string; articleId: string }>();
@@ -48,6 +48,16 @@ export default function ArticlePage() {
         if (!rawArticle || !channelId) return null;
         return mapToArticle(rawArticle, channelId);
     }, [rawArticle, channelId]);
+
+    // Save the document title on first mount and restore it on unmount, so navigating back
+    // (after the H5 in-tab jump from ChannelLayout) returns the page to its original title
+    // instead of leaving "<article title>" stuck in the browser tab.
+    useEffect(() => {
+        const previousTitle = document.title;
+        return () => {
+            document.title = previousTitle;
+        };
+    }, []);
 
     useEffect(() => {
         if (article?.title) document.title = article.title;
@@ -90,21 +100,6 @@ export default function ArticlePage() {
                 status: "error",
             });
         }
-    };
-
-    const handleDownload = () => {
-        if (!article) return;
-        const safeName = (article.title || "article").replace(/[\\/:*?"<>|]/g, "_");
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(article.title || "")}</title></head><body><h1 style="font-family:sans-serif;line-height:1.4">${escapeHtml(article.title || "")}</h1>${article.content_html || ""}</body></html>`;
-        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${safeName}.html`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
     };
 
     const handleOpenOriginal = () => {
@@ -234,13 +229,6 @@ export default function ArticlePage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                             className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-[#212121]"
-                            onClick={handleDownload}
-                        >
-                            <Outlined.Download className="size-4 text-[#4E5969]" />
-                            {localize("com_subscription.download")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-[#212121]"
                             onClick={handleOpenOriginal}
                         >
                             <Outlined.Earth className="size-4 text-[#4E5969]" />
@@ -271,13 +259,4 @@ export default function ArticlePage() {
             />
         </div>
     );
-}
-
-function escapeHtml(s: string): string {
-    return s
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
 }
