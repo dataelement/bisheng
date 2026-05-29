@@ -46,14 +46,33 @@ celery_redis_url: "redis://redis:6379/2"
 #   password: encrypt(gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=)
 #   db: 10
 
+# 知识库文件解析调度策略
+knowledge_file_worker:
+  # 是否开启单独的ocr解析队列，防止ocr文件解析阻塞普通的文件解析
+  ocr_queue_enabled: false
+  # ocr解析队列celery对应的queue名称，只有在ocr_queue_enabled=true时生效。必须启动worker并指定-Q ocr_celery 才能处理ocr相关的任务，否则ocr相关的任务会一直积压在队列里无法被处理
+  ocr_queue: "ocr_celery"
+
+  # 是否开启公平调度
+  fair_scheduler_enabled: false
+  # 公平调度的配置项，只有在fair_scheduler_enabled=true时生效
+  fair_scheduler:
+    # 调度任务的分布式锁的超时时间，不能大于调度任务的执行间隔时间，否则可能出现锁还没过期但调度任务已经开始执行了，导致多个调度任务同时执行，无法达到公平调度的效果。建议设置为调度任务执行间隔时间的0.8倍以下
+    dispatch_lock_ttl_seconds: 24
+    # 一个用户在每次调度时，获取几个文件进入队列
+    max_per_user_inflight: 1
+    # 单独给某些用户配置更大的配额，key是用户id，value是每次调度时获取文件的数量。没有单独配置的用户按照max_per_user_inflight的数量调度
+    user_overrides: {"1": 3}
+    # 已经进入队列但还没有被worker执行的文件在队列里的最长时间，超过这个时间后会被认为是异常文件，调度任务会重新调度这个文件。建议设置为worker执行一个文件的最长时间的1.5倍以上
+    inflight_ttl_seconds: 7200
+
 
 celery_task:
-  # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务。注意工作流的执行只能在一个进程内！！！
+  # 对celery熟悉的用户可以自定义配置任务的路由，启动不同类型的worker处理不同类型的异步任务。注意工作流的执行必须在workflow_celery开头的进程里！！！
   task_routers:
     bisheng.worker.knowledge.*: # 知识库文件处理相关任务
       queue: knowledge_celery
-    bisheng.worker.workflow.*: # 工作流相关任务
-      queue: workflow_celery
+
 
 # 知识库的milvus和es配置  支持使用 !env ${PATH} 填写环境变量的值, 若环境变量不存在则会报错
 vector_stores:
