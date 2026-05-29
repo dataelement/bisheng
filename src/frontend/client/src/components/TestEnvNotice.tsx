@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 
-// Compliance notice shown on every client page.
-// - PC (>=768px): a faint, floating top banner (does not occupy layout space).
-// - Mobile (<768px): a tiled diagonal watermark instead, so it never covers the
-//   page title or the chat input the way a top/bottom bar would.
+// Compliance notice shown on client pages.
+// - PC (>=768px): none (the top banner was removed).
+// - Mobile (<768px): a tiled diagonal watermark, so it never covers the page title
+//   or the chat input the way a top/bottom bar would.
 export default function TestEnvNotice() {
   const localize = useLocalize();
   const isMobile = usePrefersMobileLayout();
@@ -56,11 +56,6 @@ export default function TestEnvNotice() {
     );
   }
 
-  return (
-    <div className="pointer-events-none fixed inset-x-0 top-0 z-[2000] flex justify-center">
-      <div className="mt-1 rounded-md bg-amber-500/30 px-3 py-1 text-center text-xs font-medium text-amber-900 backdrop-blur-sm dark:text-amber-100">
-        {text}
-      </div>
-    </div>
-  );
+  // PC (>=768px): banner removed — no compliance notice on desktop.
+  return null;
 }

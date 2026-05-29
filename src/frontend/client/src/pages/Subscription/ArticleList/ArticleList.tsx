@@ -237,6 +237,17 @@ export function ArticleList({
         loadArticles(1);
     }, [channel?.id, searchQuery, selectedSources, onlyUnread, selectedSubChannelName]);
 
+    // Default the source filter to "all selected" once a channel's sources have loaded.
+    // Runs once per channel; afterwards the user can freely deselect — down to the empty
+    // state, which the picker blocks on close (requires at least one source).
+    const sourcesInitializedRef = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        if (!channel || sourceOptions.length === 0) return;
+        if (sourcesInitializedRef.current === channel.id) return;
+        sourcesInitializedRef.current = channel.id;
+        setSelectedSources(sourceOptions.map(o => o.id));
+    }, [channel?.id, sourceOptions]);
+
     // Optimistically mark the article as read in local state when selected.
     // The backend already marks it read when the detail API is called.
     const handleArticleClick = useCallback((article: Article | null) => {
@@ -468,7 +479,7 @@ export function ArticleList({
                             <div className="relative min-w-0 flex-1 border-b border-[#F2F3F5]">
                                 {tabsScrollShadow.left ? (
                                     <div
-                                        className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-7 bg-gradient-to-r from-white from-20% to-transparent"
+                                        className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0.15)_0%,rgba(153,153,153,0)_100%)]"
                                         aria-hidden
                                     />
                                 ) : null}
@@ -606,13 +617,13 @@ export function ArticleList({
                         <div className="relative min-w-0 flex-1">
                             {tabsScrollShadow.left ? (
                                 <div
-                                    className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-7 bg-gradient-to-r from-white from-20% to-transparent"
+                                    className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0.15)_0%,rgba(153,153,153,0)_100%)]"
                                     aria-hidden
                                 />
                             ) : null}
                             {tabsScrollShadow.right ? (
                                 <div
-                                    className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-7 bg-gradient-to-l from-white from-20% to-transparent"
+                                    className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0)_0%,rgba(153,153,153,0.15)_100%)]"
                                     aria-hidden
                                 />
                             ) : null}
@@ -679,7 +690,7 @@ export function ArticleList({
                                 className={cn(
                                     "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
-                                        ? "border-primary bg-primary/20 text-primary"
+                                        ? "border-transparent bg-primary/20 text-primary"
                                         : "border-[#E5E6EB] bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>

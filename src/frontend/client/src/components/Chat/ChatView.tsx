@@ -404,6 +404,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         )}
                       </div>
                     )}
+                    {/* Compliance notice — the PC top banner was removed; show it here as a
+                        gray hint beneath the input. Mobile keeps the global tiled watermark. */}
+                    <div className="w-full max-w-[800px] mx-auto px-3 text-center text-xs text-gray-400 touch-mobile:hidden">
+                      {t('com_test_env_banner')}
+                    </div>
                     <DailyFeaturedApps t={t} isLingsi={isLingsi} />
                   </div>
                 )}

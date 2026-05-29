@@ -1531,6 +1531,8 @@
     "all": "すべて",
     "all_messages_are_here": "すべてのメッセージはここにあります",
     "all_sources": "すべての情報源",
+    "partial_sources": "一部の情報源",
+    "select_at_least_one_source": "情報源を少なくとも1つ選択してください",
     "applying": "申請中",
     "article_load_failed": "記事の読み込みに失敗しました",
     "sensitive_review": "安全審査",

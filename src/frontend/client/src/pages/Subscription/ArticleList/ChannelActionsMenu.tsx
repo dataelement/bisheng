@@ -6,7 +6,6 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
 import { useConfirm } from "~/Providers";
@@ -87,9 +86,7 @@ export function ChannelActionsMenu({
 
     const canManageMembers = [ChannelRole.CREATOR, ChannelRole.ADMIN].includes(liveChannel.role);
     const isCreated = type === "created";
-    const itemCls = isMobile
-        ? "flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-[#212121]"
-        : "flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-sm text-[#212121]";
+    const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] text-[#212121]";
     const iconCls = "size-4 text-[#4E5969]";
 
     return (
@@ -113,7 +110,7 @@ export function ChannelActionsMenu({
             <DropdownMenuContent
                 align="end"
                 sideOffset={isMobile ? 6 : undefined}
-                className={cn("z-[120]", isMobile ? "w-[180px] space-y-1 p-1" : "w-[160px]")}
+                className={cn("z-[120] border-none p-2 shadow-[0px_2px_8px_rgba(0,23,66,0.1)]", isMobile ? "w-[180px]" : "w-[160px]")}
             >
                 {isMobile && onShare ? (
                     <DropdownMenuItem className={itemCls} onClick={onShare}>
@@ -142,10 +139,6 @@ export function ChannelActionsMenu({
                             ? localize("com_subscription.permission_management")
                             : localize("com_subscription.member_management")}
                     </DropdownMenuItem>
-                ) : null}
-                {/* Pinning moved to the per-channel rows in the channel-switcher dropdown. */}
-                {!isMobile && ((isCreated && onChannelSettings) || (canManageMembers && onManageMembers)) ? (
-                    <DropdownMenuSeparator className="bg-[#ECECEC]" />
                 ) : null}
                 <DropdownMenuItem
                     className={cn(itemCls, "text-[#F53F3F] data-[highlighted]:bg-[#F53F3F]/10 data-[highlighted]:text-[#F53F3F]")}

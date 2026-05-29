@@ -1535,6 +1535,8 @@
     "all": "全部",
     "all_messages_are_here": "所有的消息都在这里啦",
     "all_sources": "全部信息源",
+    "partial_sources": "部分信息源",
+    "select_at_least_one_source": "请至少选择一个信息源",
     "applying": "申请中",
     "article_load_failed": "文章加载失败",
     "sensitive_review": "安全审查",

@@ -31,37 +31,115 @@ const MIN_COVER_DIMENSION = 200;
 
 const COVER_IMG_CLASS = "h-full w-full object-cover transition-transform duration-300 ease-in-out fine-pointer:group-hover:scale-105";
 
+/** Derive a site favicon URL (origin + /favicon.ico) from an article page URL. */
+function getFaviconUrl(pageUrl?: string): string {
+    if (!pageUrl) return "";
+    try {
+        return `${new URL(pageUrl, window.location.origin).origin}/favicon.ico`;
+    } catch {
+        return "";
+    }
+}
+
 interface CoverThumbnailProps {
-    src: string;
+    src?: string;
     alt: string;
+    /** Source's curated icon (source_icon) — preferred placeholder so the cover matches the
+     *  source avatar shown elsewhere on the card. */
+    fallbackIcon?: string;
+    /** Article page URL — used to derive a site-favicon placeholder when no source icon exists. */
+    fallbackUrl?: string;
     /** Wrapper sizing/rounding — differs between grid (100px) and list (88px) cards. */
     containerClassName: string;
 }
 
-/** Article cover image that hides itself when the image is a site icon/placeholder, broken, or too small. */
-function CoverThumbnail({ src, alt, containerClassName }: CoverThumbnailProps) {
-    const [valid, setValid] = useState(true);
+/**
+ * Article cover image. When the real cover is missing, broken, too small, or a site
+ * icon/placeholder, it falls back to a placeholder so every card shows a cover instead of
+ * an empty slot. The placeholder prefers the source's curated icon (so it matches the
+ * source avatar on the card), then the site favicon, and finally a globe icon. The
+ * placeholder is rendered as a crisp 32x32 mark over a blurred, enlarged copy of itself.
+ */
+function CoverThumbnail({ src, alt, fallbackIcon, fallbackUrl, containerClassName }: CoverThumbnailProps) {
+    const [coverFailed, setCoverFailed] = useState(false);
+    const [placeholderFailed, setPlaceholderFailed] = useState(false);
+
+    const placeholderSrc = fallbackIcon || getFaviconUrl(fallbackUrl);
 
     // Reset when the source changes (card instance reused for a different article).
-    useEffect(() => { setValid(true); }, [src]);
+    useEffect(() => {
+        setCoverFailed(false);
+        setPlaceholderFailed(false);
+    }, [src, placeholderSrc]);
 
-    if (!valid || JUNK_COVER_URL_PATTERN.test(src)) return null;
+    const coverUsable = !!src && !coverFailed && !JUNK_COVER_URL_PATTERN.test(src);
+
+    if (coverUsable) {
+        return (
+            <div className={containerClassName}>
+                <img
+                    src={src}
+                    alt={alt}
+                    className={COVER_IMG_CLASS}
+                    onError={() => setCoverFailed(true)}
+                    onLoad={(e) => {
+                        const img = e.currentTarget;
+                        if (img.naturalWidth < MIN_COVER_DIMENSION || img.naturalHeight < MIN_COVER_DIMENSION) {
+                            setCoverFailed(true);
+                        }
+                    }}
+                />
+            </div>
+        );
+    }
 
     return (
-        <div className={containerClassName}>
-            <img
-                src={src}
-                alt={alt}
-                className={COVER_IMG_CLASS}
-                onError={() => setValid(false)}
-                onLoad={(e) => {
-                    const img = e.currentTarget;
-                    if (img.naturalWidth < MIN_COVER_DIMENSION || img.naturalHeight < MIN_COVER_DIMENSION) {
-                        setValid(false);
-                    }
-                }}
-            />
+        <div className={cn(containerClassName, "relative flex items-center justify-center bg-white")}>
+            {placeholderSrc && !placeholderFailed ? (
+                <>
+                    {/* Backdrop: same icon scaled to fill the frame and heavily blurred, at 50%
+                        opacity so the white frame background shows through. */}
+                    <img
+                        src={placeholderSrc}
+                        alt=""
+                        aria-hidden
+                        className="absolute inset-0 h-full w-full scale-150 object-cover opacity-50 blur-lg"
+                    />
+                    {/* Foreground: crisp 32x32 icon centered on top. */}
+                    <img
+                        src={placeholderSrc}
+                        alt=""
+                        className="relative size-8 object-contain"
+                        onError={() => setPlaceholderFailed(true)}
+                    />
+                </>
+            ) : (
+                <Outlined.Earth className="size-8 text-[#C9CDD4]" />
+            )}
         </div>
+    );
+}
+
+/**
+ * Small source icon for the card meta row. Mirrors the cover fallback chain so the
+ * avatar is never blank: source's curated icon -> site favicon -> globe icon.
+ * Renders the inner element only; the caller provides the sized/clipped wrapper.
+ */
+function SourceAvatar({ src, fallbackUrl }: { src?: string; fallbackUrl?: string }) {
+    const iconSrc = src || getFaviconUrl(fallbackUrl);
+    const [failed, setFailed] = useState(false);
+    useEffect(() => { setFailed(false); }, [iconSrc]);
+
+    if (!iconSrc || failed) {
+        return <Outlined.Earth className="h-full w-full text-[#C9CDD4]" />;
+    }
+    return (
+        <img
+            src={iconSrc}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setFailed(true)}
+        />
     );
 }
 
@@ -123,7 +201,7 @@ export function ArticleCard({
     const metaRow = (
         <div className="flex items-center gap-2 text-xs text-[#999]">
             <div className="size-4 shrink-0 overflow-hidden rounded-sm">
-                <img src={article.sourceAvatar} alt="" className="h-full w-full object-cover" />
+                <SourceAvatar src={article.sourceAvatar} fallbackUrl={article.url} />
             </div>
             <span className="max-w-40 truncate max-[767px]:text-[#212121]">{article.sourceName}</span>
             <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
@@ -168,7 +246,7 @@ export function ArticleCard({
                                     {hasKnowledge && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
-                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#999] transition-colors group-hover:bg-[#f7f7f7] group-hover:text-[#212121] hover:bg-[#ECECEC] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#999] transition-colors group-hover:text-[#212121] hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
                                             title={localize("com_subscription.add_to_knowledge_space")}
                                         >
                                             <Outlined.AddToKnowledgeBase className="size-3.5" />
@@ -183,7 +261,7 @@ export function ArticleCard({
                                                 .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
                                                 .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
                                         }}
-                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#999] transition-colors group-hover:bg-[#f7f7f7] group-hover:text-[#212121] hover:bg-[#ECECEC] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#999] transition-colors group-hover:text-[#212121] hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
                                         title={localize("com_subscription.share")}
                                     >
                                         <Outlined.Share className="size-3.5" />
@@ -193,14 +271,16 @@ export function ArticleCard({
                         </div>
                     </div>
 
-                    {/* Right thumbnail — only when the article has a real cover image */}
-                    {article.coverImage && (
-                        <CoverThumbnail
-                            src={article.coverImage}
-                            alt={article.title}
-                            containerClassName="shrink-0 overflow-hidden rounded min-[768px]:size-[88px] max-[767px]:size-16 max-[767px]:self-end"
-                        />
-                    )}
+                    {/* Right thumbnail — real cover when available, otherwise a site-favicon
+                        placeholder, so every card has a cover and the action buttons keep a
+                        constant x position regardless of cover presence. */}
+                    <CoverThumbnail
+                        src={article.coverImage}
+                        fallbackIcon={article.sourceAvatar}
+                        fallbackUrl={article.url}
+                        alt={article.title}
+                        containerClassName="shrink-0 overflow-hidden rounded min-[768px]:size-[88px] max-[767px]:size-16 max-[767px]:self-end"
+                    />
                 </div>
 
                 <AddToKnowledgeModal
@@ -229,6 +309,8 @@ export function ArticleCard({
             {article.coverImage && (
                 <CoverThumbnail
                     src={article.coverImage}
+                    fallbackIcon={article.sourceAvatar}
+                    fallbackUrl={article.url}
                     alt={article.title}
                     containerClassName="size-[88px] flex-shrink-0 overflow-hidden rounded-sm"
                 />
@@ -275,11 +357,7 @@ export function ArticleCard({
                 <div className="relative mt-4 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs text-[#999]">
                         <div className="size-4 shrink-0 overflow-hidden">
-                            <img
-                                src={article.sourceAvatar}
-                                alt=""
-                                className="h-full w-full object-cover"
-                            />
+                            <SourceAvatar src={article.sourceAvatar} fallbackUrl={article.url} />
                         </div>
                         <span className="max-w-40 truncate">{article.sourceName}</span>
                         <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
@@ -301,7 +379,7 @@ export function ArticleCard({
                                         e.stopPropagation();
                                         setShowKnowledgeModal(true);
                                     }}
-                                    className="rounded-full flex size-8 cursor-pointer items-center justify-center text-[#999] transition-colors group-hover:bg-[#f7f7f7] group-hover:text-[#212121] hover:bg-[#ECECEC]"
+                                    className="rounded-full flex size-8 cursor-pointer items-center justify-center text-[#999] transition-colors group-hover:text-[#212121] hover:bg-[#f7f7f7]"
                                     title={localize("com_subscription.add_to_knowledge_space")}
                                 >
                                     <Outlined.AddToKnowledgeBase className="size-3.5" />
@@ -329,7 +407,7 @@ export function ArticleCard({
                                             });
                                         });
                                 }}
-                                className="rounded-full flex size-8 cursor-pointer items-center justify-center text-[#999] transition-colors group-hover:bg-[#f7f7f7] group-hover:text-[#212121] hover:bg-[#ECECEC]"
+                                className="rounded-full flex size-8 cursor-pointer items-center justify-center text-[#999] transition-colors group-hover:text-[#212121] hover:bg-[#f7f7f7]"
                                 title={localize("com_subscription.share")}
                             >
                                 <Outlined.Share className="size-3.5" />

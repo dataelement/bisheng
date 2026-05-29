@@ -1608,6 +1608,8 @@
     "all": "All",
     "all_messages_are_here": "All messages are here",
     "all_sources": "All sources",
+    "partial_sources": "Partial sources",
+    "select_at_least_one_source": "Please select at least one source",
     "applying": "Applying",
     "article_load_failed": "Article failed to load",
     "sensitive_review": "Safety Review",
