@@ -53,6 +53,7 @@ interface PortalInfoDrawerProps {
     activeSpace: KnowledgeSpace | null;
     selectedFile: KnowledgeFile | null;
     documentPath: string;
+    showPermissionPanel?: boolean;
     onClose: () => void;
     onCopyShareLink: () => void;
     onPanelChange: (panel: Exclude<PanelKey, "share">) => void;
@@ -62,11 +63,13 @@ export function PortalInfoDrawer({
     activePanel,
     activeSpace,
     selectedFile,
+    showPermissionPanel = true,
     onClose,
     onCopyShareLink,
     onPanelChange,
 }: PortalInfoDrawerProps) {
     if (!activePanel) return null;
+    if (!showPermissionPanel && activePanel === "permission") return null;
 
     const panelTitleMap: Record<PanelKey, string> = {
         properties: "属性",
@@ -82,6 +85,9 @@ export function PortalInfoDrawer({
     const tags = selectedFile?.tags ?? [];
     const versionText = formatVersionText(selectedFile?.version_no);
     const operatorName = selectedFile?.user_name || "-";
+    const detailTabs = showPermissionPanel
+        ? DETAIL_TABS
+        : DETAIL_TABS.filter((tab) => tab.key !== "permission");
 
     const renderDetailItem = (label: string, value: string | number | null | undefined) => (
         <div className={s.detailItem}>
@@ -102,7 +108,7 @@ export function PortalInfoDrawer({
             ) : (
                 <div className={s.drawerTabsHeader}>
                     <div className={s.drawerTabs} role="tablist" aria-label="文件详情">
-                        {DETAIL_TABS.map((tab) => (
+                        {detailTabs.map((tab) => (
                             <button
                                 type="button"
                                 key={tab.key}

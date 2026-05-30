@@ -279,12 +279,17 @@ export default function PortalKnowledgeWorkbench() {
         () => currentFolderId ? findTreeNodePath(treeNodes, currentFolderId) : [],
         [currentFolderId, treeNodes],
     );
+    const isActiveSpacePersonal = activeSpace?.spaceLevel === SpaceLevel.PERSONAL;
     const statusFilterNumbers = useMemo(
         () => toStatusNumbers(statusFilter),
         [statusFilter],
     );
     const canManageSelectedFilePermission = Boolean(
-        selectedFile && (isActiveSpaceAdmin || permissionEntryIds.has(selectedFile.id)),
+        selectedFile && !isActiveSpacePersonal && (isActiveSpaceAdmin || permissionEntryIds.has(selectedFile.id)),
+    );
+    const visiblePermissionEntryIds = useMemo(
+        () => isActiveSpacePersonal ? new Set<string>() : permissionEntryIds,
+        [isActiveSpacePersonal, permissionEntryIds],
     );
 
     const setRootFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
@@ -580,6 +585,10 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         const candidates = displayedFiles.filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)));
+        if (isActiveSpacePersonal) {
+            setPermissionEntryIds(new Set());
+            return;
+        }
         if (isActiveSpaceAdmin) {
             const ids = new Set(candidates.map((file) => file.id));
             setPermissionEntryIds(ids);
@@ -605,7 +614,14 @@ export default function PortalKnowledgeWorkbench() {
             cancelled = true;
             controller.abort();
         };
-    }, [activeSpace?.id, isActiveSpaceAdmin, permissionProbeKey]);
+    }, [activeSpace?.id, isActiveSpaceAdmin, isActiveSpacePersonal, permissionProbeKey]);
+
+    useEffect(() => {
+        if (!isActiveSpacePersonal) return;
+        setPermissionTarget(null);
+        setPermissionOpen(false);
+        setActivePanel((current) => current === "permission" ? null : current);
+    }, [isActiveSpacePersonal]);
 
     useEffect(() => {
         const candidates = displayedFiles.filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)));
@@ -1181,8 +1197,9 @@ export default function PortalKnowledgeWorkbench() {
                 onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
                 onSelectFile={handleSelectFile}
                 onToggleFileSelection={handleToggleFileSelection}
-                permissionEntryIds={permissionEntryIds}
+                permissionEntryIds={visiblePermissionEntryIds}
                 onOpenPermission={(file) => {
+                    if (isActiveSpacePersonal) return;
                     setPermissionTarget(file);
                     setPermissionOpen(true);
                 }}
@@ -1224,6 +1241,7 @@ export default function PortalKnowledgeWorkbench() {
                         activeSpace={activeSpace}
                         selectedFile={selectedFile}
                         documentPath={documentPath}
+                        showPermissionPanel={!isActiveSpacePersonal}
                         onClose={() => setActivePanel(null)}
                         onCopyShareLink={() => void copyShareLink()}
                         onPanelChange={setActivePanel}
@@ -1233,6 +1251,7 @@ export default function PortalKnowledgeWorkbench() {
                 {selectedFile ? (
                     <ToolRail
                         activePanel={activePanel}
+                        showPermissionPanel={!isActiveSpacePersonal}
                         onTogglePanel={() => setActivePanel((current) => current ? null : "properties")}
                         onOpenPanel={setActivePanel}
                     />

@@ -1232,7 +1232,8 @@ describe("PortalKnowledgeWorkbench", () => {
     });
 
     test("shows folder permission management action only when the folder is manageable", async () => {
-        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+        const teamSpace = makeSpace("team-1", "团队技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
             role: SpaceRole.MEMBER,
         });
         const manageableFolder = makeFile("101", "可管理目录", {
@@ -1257,8 +1258,8 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
-            teamSpaces: [],
-            personalSpaces: [personalSpace],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
         } as any);
         jest.mocked(getSpaceChildrenApi).mockResolvedValue({
             data: [manageableFolder, hiddenFolder],
@@ -1284,11 +1285,56 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:folder:可管理目录");
     });
 
-    test("renders document preview actions in Lanhu order and opens the existing portals", async () => {
+    test("hides file and folder permission management actions for personal spaces", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.MEMBER,
+            spaceLevel: SpaceLevel.PERSONAL,
+        });
+        const folder = makeFile("101", "个人目录", {
+            type: FileType.FOLDER,
+            successFileNum: 1,
+            fileNum: 2,
+        });
+        const file = makeFile("201", "个人文档.md");
+        const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
+        canOpenPermissionDialog.mockResolvedValue(true);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [folder, file],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        const fileRow = await screen.findByTestId("file-tree-row-201");
+
+        await act(async () => undefined);
+
+        expect(canOpenPermissionDialog).not.toHaveBeenCalled();
+        expect(within(folderRow).queryByRole("button", { name: "权限管理" })).not.toBeInTheDocument();
+        expect(within(fileRow).queryByRole("button", { name: "权限管理" })).not.toBeInTheDocument();
+
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开个人文档.md" }));
+        const actions = await screen.findByTestId("portal-document-actions");
+        expect(within(actions).queryByRole("button", { name: "权限管理" })).not.toBeInTheDocument();
+
+        const rail = await screen.findByTestId("portal-tool-rail");
+        expect(within(rail).queryByRole("button", { name: "权限" })).not.toBeInTheDocument();
+    });
+
+    test("renders document preview actions in Lanhu order and opens the existing portals", async () => {
+        const teamSpace = makeSpace("team-1", "我的技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
             role: SpaceRole.ADMIN,
         });
         const file = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
             fileEncoding: "RPT-PP-00000001",
             size: 2048,
             updatedAt: "2026-05-20T12:30:00",
@@ -1296,8 +1342,8 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
-            teamSpaces: [],
-            personalSpaces: [personalSpace],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
         } as any);
         jest.mocked(getSpaceChildrenApi).mockResolvedValue({
             data: [file],
@@ -1324,9 +1370,9 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(actions).getByRole("button", { name: "AI 对话" }));
         const aiDialog = await screen.findByTestId("portal-ai-dialog");
         expect(aiDialog).toHaveTextContent("后端开发.md");
-        expect(aiDialog).toHaveTextContent("全部知识库/个人知识库/我的技术文档/后端开发.md");
+        expect(aiDialog).toHaveTextContent("全部知识库/团队知识库/我的技术文档/后端开发.md");
         expect(aiDialog).toHaveTextContent("2.0 KB");
-        expect(within(aiDialog).getByTestId("ai-assistant-panel")).toHaveTextContent("文件AI:personal-1:201");
+        expect(within(aiDialog).getByTestId("ai-assistant-panel")).toHaveTextContent("文件AI:team-1:201");
         expect(screen.queryByTestId("portal-info-drawer")).not.toBeInTheDocument();
 
         fireEvent.click(within(aiDialog).getByRole("button", { name: "关闭AI弹窗" }));
@@ -1340,7 +1386,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(within(actions).getByRole("button", { name: "下载" }));
         await waitFor(() => {
-            expect(getFileDownloadApi).toHaveBeenCalledWith("personal-1", "201");
+            expect(getFileDownloadApi).toHaveBeenCalledWith("team-1", "201");
         });
 
         fireEvent.click(within(actions).getByRole("button", { name: "权限管理" }));
@@ -1348,10 +1394,12 @@ describe("PortalKnowledgeWorkbench", () => {
     });
 
     test("hides document preview permission action without file management permission", async () => {
-        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+        const teamSpace = makeSpace("team-1", "我的技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
             role: SpaceRole.MEMBER,
         });
         const file = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
             fileEncoding: "RPT-PP-00000001",
         });
         const { canOpenPermissionDialog } = jest.requireMock("~/api/permission");
@@ -1359,8 +1407,8 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
-            teamSpaces: [],
-            personalSpaces: [personalSpace],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
         } as any);
         jest.mocked(getSpaceChildrenApi).mockResolvedValue({
             data: [file],
@@ -1410,7 +1458,6 @@ describe("PortalKnowledgeWorkbench", () => {
             "时间",
             "来源",
             "使用",
-            "权限",
         ]);
         expect(within(rail).queryByRole("button", { name: "摘要" })).not.toBeInTheDocument();
         expect(within(rail).queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
@@ -1424,10 +1471,12 @@ describe("PortalKnowledgeWorkbench", () => {
     });
 
     test("shows drawer tabs with screenshot-aligned detail fields", async () => {
-        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+        const teamSpace = makeSpace("team-1", "我的技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
             role: SpaceRole.ADMIN,
         });
         const file = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
             createdAt: "2025-12-16T16:11:12",
             fileEncoding: "202512160001",
             fileSource: "channel",
@@ -1440,8 +1489,8 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
-            teamSpaces: [],
-            personalSpaces: [personalSpace],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
         } as any);
         jest.mocked(getSpaceChildrenApi).mockResolvedValue({
             data: [file],

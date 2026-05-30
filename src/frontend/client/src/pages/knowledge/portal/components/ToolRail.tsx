@@ -18,18 +18,24 @@ const TOOLBAR_ITEMS: Array<{
 
 interface ToolRailProps {
     activePanel: PanelKey | null;
+    showPermissionPanel?: boolean;
     onTogglePanel: () => void;
     onOpenPanel: (panel: Extract<PanelKey, "properties" | "time" | "source" | "usage" | "permission">) => void;
 }
 
 export function ToolRail({
     activePanel,
+    showPermissionPanel = true,
     onTogglePanel,
     onOpenPanel,
 }: ToolRailProps) {
+    const toolbarItems = showPermissionPanel
+        ? TOOLBAR_ITEMS
+        : TOOLBAR_ITEMS.filter((item) => item.panelKey !== "permission");
+
     return (
         <aside className={s.toolRail} data-testid="portal-tool-rail">
-            {TOOLBAR_ITEMS.map((item) => {
+            {toolbarItems.map((item) => {
                 const Icon = item.icon;
                 const active = Boolean(item.panelKey && activePanel === item.panelKey);
                 return (
