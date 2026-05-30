@@ -408,6 +408,16 @@
   "com_notifications_action_approval_exception_cancelled": "Your approval request for「{{target}}」has been cancelled",
   "com_notifications_action_approval_exception_route_missing": "Approval request has a route-missing exception, action needed:「{{target}}」",
   "com_notifications_action_approval_exception_approver_empty": "Approval request has an empty-approver exception, action needed:「{{target}}」",
+  "com_notifications_action_approval_execute_failed": "Approval for「{{target}}」passed, but the business action failed. Please handle it",
+  "com_notifications_action_menu_grant_revoked": "Revoked your access to menu「{{target}}」",
+  "com_notifications_action_revoked_channel_admin": "Removed your administrator permission for channel「{{target}}」",
+  "com_notifications_action_revoked_knowledge_space_admin": "Removed your administrator permission for knowledge space「{{target}}」",
+  "com_notifications_action_removed_channel_member": "Removed you from channel「{{target}}」",
+  "com_notifications_action_removed_knowledge_space_member": "Removed you from knowledge space「{{target}}」",
+  "com_notifications_action_channel_made_private": "Changed channel「{{target}}」to private. You can no longer access it",
+  "com_notifications_action_knowledge_space_made_private": "Changed knowledge space「{{target}}」to private. You can no longer access it",
+  "com_notifications_action_channel_dismissed": "Dismissed channel「{{target}}」",
+  "com_notifications_action_knowledge_space_deleted": "Deleted knowledge space「{{target}}」",
   "com_notifications_delete": "Delete message",
   "com_notifications_empty": "No messages yet",
   "com_notifications_empty_requests": "No requests yet",
@@ -1947,7 +1957,9 @@
     "member_pagination_2": " items, ",
     "member_pagination_3": " per page",
     "website_not_indexed": "Website not in database. Do you want to crawl?",
-    "create": "Create"
+    "create": "Create",
+    "channel_permission_management": "Member Management",
+    "organization_grant_unsubscribe_blocked": "This channel was granted to you through a department/user group and cannot be unsubscribed from yet."
   },
   "com_permission": {
     "action_revoke": "Revoke",

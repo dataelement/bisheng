@@ -168,8 +168,32 @@ export async function readFlowsFromDatabase(page: number = 1, pageSize: number =
     return { data, total };
 }
 
-/* app list */
-export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1, type, managed, status, permissionId = 'use_app' }) {
+/* app list — F027 cursor-based pagination.
+ *   request:  { cursor?, pageSize, keyword, tag_id, type, managed, status, permissionId }
+ *   response: { data, page_size, has_more, next_cursor }
+ *   The legacy `page_num` / `total` fields are gone (spec AC-02).
+ */
+export async function getAppsApi(
+    {
+        cursor,
+        pageSize = 20,
+        keyword,
+        tag_id = -1,
+        type,
+        managed,
+        status,
+        permissionId = 'use_app',
+    }: {
+        cursor?: string | null;
+        pageSize?: number;
+        keyword?: string;
+        tag_id?: number;
+        type?: 'assistant' | 'skill' | 'flow';
+        managed?: any;
+        status?: number;
+        permissionId?: string;
+    },
+): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
     const map = { assistant: 5, skill: 1, flow: 10 }
     const flowType = map[type] ? `&flow_type=${map[type]}` : ''
@@ -177,15 +201,19 @@ export async function getAppsApi({ page = 1, pageSize = 20, keyword, tag_id = -1
         ? `&managed=${managed}`
         : '';
     const statusStr = (status === 1 || status === 2) ? `&status=${status}` : ''
-    const { data, total }: { data: any[], total: number } = await axios.get(`/api/v1/workflow/list?page_num=${page}&page_size=${pageSize}&name=${keyword ?? ''}${tagIdStr}${flowType}${managedStr}${statusStr}&permission_id=${permissionId}`);
-    const newData = data.map(item => {
+    const cursorStr = cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+    const res = await axios.get(
+        `/api/v1/workflow/list?page_size=${pageSize}&name=${keyword ?? ''}${tagIdStr}${flowType}${managedStr}${statusStr}&permission_id=${permissionId}${cursorStr}`,
+    )
+    const envelope = res as any as { data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }
+    const newData = envelope.data.map((item: any) => {
         if (item.flow_type !== 5) return item
         return {
             ...item,
             version_list: item.version_list || [],
         }
     })
-    return { data: newData, total };
+    return { ...envelope, data: newData }
 }
 
 /**

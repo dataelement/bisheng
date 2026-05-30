@@ -23,6 +23,10 @@ from bisheng.permission.domain.application_permission_template import (
     APPLICATION_PERMISSION_TEMPLATE,
     default_permission_ids_for_relation as default_application_permissions,
 )
+from bisheng.permission.domain.channel_permission_template import (
+    CHANNEL_PERMISSION_TEMPLATE,
+    default_permission_ids_for_relation as default_channel_permissions,
+)
 from bisheng.permission.domain.knowledge_library_permission_template import (
     KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE,
     default_permission_ids_for_relation as default_knowledge_library_permissions,
@@ -72,6 +76,11 @@ _MANAGE_PERMISSION_BY_RESOURCE_TIER = {
         'manager': 'manage_kb_manager',
         'usage': 'manage_kb_viewer',
     },
+    'channel': {
+        'owner': 'manage_channel_owner',
+        'manager': 'manage_channel_manager',
+        'usage': 'manage_channel_user',
+    },
 }
 _MANAGE_PERMISSION_BY_RESOURCE = {
     'knowledge_space': 'manage_space_relation',
@@ -91,6 +100,7 @@ _PERMISSION_TEMPLATES = (
     APPLICATION_PERMISSION_TEMPLATE,
     KNOWLEDGE_LIBRARY_PERMISSION_TEMPLATE,
     TOOL_PERMISSION_TEMPLATE,
+    CHANNEL_PERMISSION_TEMPLATE,
 )
 _RELATION_MODEL_NAME_PREFIX_PAIRS = tuple(
     (template.get('title') or '', item.get('label') or '')
@@ -524,6 +534,8 @@ def _default_permission_ids_for_relation(resource_type: str, relation: str) -> s
         return default_application_permissions(relation)
     if resource_type == 'tool':
         return default_tool_permissions(relation)
+    if resource_type == 'channel':
+        return default_channel_permissions(relation)
     if resource_type == 'knowledge_library':
         return default_knowledge_library_permissions(relation)
     if resource_type in {'knowledge_space', 'folder', 'knowledge_file'}:
@@ -1360,6 +1372,8 @@ async def authorize_resource(
     """
     if resource_type not in VALID_RESOURCE_TYPES:
         return PermissionInvalidResourceError.return_resp()
+    if resource_type == 'channel':
+        return PermissionDeniedError.return_resp()
     if any(_is_invalid_owner_subject(grant.subject_type, grant.relation) for grant in (request.grants or [])):
         return PermissionDeniedError.return_resp()
     scope_error = await _validate_knowledge_space_authorize_scope(
@@ -1458,7 +1472,18 @@ async def authorize_resource(
         ):
             return PermissionDeniedError.return_resp()
 
+    permission_notify_context = None
     if tuple_grants or tuple_revokes:
+        from bisheng.permission.domain.services.resource_permission_notification_service import (
+            ResourcePermissionNotificationService,
+        )
+
+        permission_notify_context = await ResourcePermissionNotificationService.build_context(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            grants=tuple_grants,
+            revokes=tuple_revokes,
+        )
         logger.info(
             'resource_authorize start actor=%s resource=%s:%s grants=%d revokes=%d',
             login_user.user_id, resource_type, resource_id, len(tuple_grants), len(tuple_revokes),
@@ -1540,6 +1565,17 @@ async def authorize_resource(
             login_user.user_id, resource_type, resource_id, e,
         )
         return PermissionTupleWriteError.return_resp(data={'exception': str(e)})
+
+    if permission_notify_context is not None:
+        from bisheng.permission.domain.services.resource_permission_notification_service import (
+            ResourcePermissionNotificationService,
+        )
+
+        await ResourcePermissionNotificationService.dispatch_after_authorize(
+            context=permission_notify_context,
+            operator_user_id=login_user.user_id,
+            operator_user_name=getattr(login_user, 'user_name', None),
+        )
     logger.info(
         'resource_authorize success actor=%s resource=%s:%s grants=%d revokes=%d bindings=%d',
         login_user.user_id, resource_type, resource_id, len(request.grants or []), len(request.revokes or []),
@@ -1947,7 +1983,11 @@ async def delete_relation_model(
     to_remove = [b for b in bindings if b.get('model_id') == model_id]
 
     from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+    from bisheng.permission.domain.services.resource_permission_notification_service import (
+        ResourcePermissionNotificationService,
+    )
     from bisheng.permission.domain.services.permission_service import PermissionService
+    notify_contexts = []
     try:
         for b in to_remove:
             if _is_invalid_owner_subject(b.get('subject_type'), b.get('relation')):
@@ -1957,16 +1997,25 @@ async def delete_relation_model(
                     b.get('resource_type'), b.get('resource_id'),
                 )
                 continue
+            revoke_item = AuthorizeRevokeItem(
+                subject_type=b.get('subject_type'),
+                subject_id=int(b.get('subject_id')),
+                relation=b.get('relation'),
+                include_children=bool(b.get('include_children')),
+            )
+            notify_context = await ResourcePermissionNotificationService.build_context(
+                resource_type=b.get('resource_type'),
+                resource_id=str(b.get('resource_id')),
+                grants=[],
+                revokes=[revoke_item],
+            )
+            if notify_context is not None:
+                notify_contexts.append(notify_context)
             await PermissionService.authorize(
                 object_type=b.get('resource_type'),
                 object_id=str(b.get('resource_id')),
                 grants=[],
-                revokes=[AuthorizeRevokeItem(
-                    subject_type=b.get('subject_type'),
-                    subject_id=int(b.get('subject_id')),
-                    relation=b.get('relation'),
-                    include_children=bool(b.get('include_children')),
-                )],
+                revokes=[revoke_item],
                 enforce_fga_success=True,
             )
     except Exception as e:
@@ -1977,6 +2026,12 @@ async def delete_relation_model(
     remain_bindings = [b for b in bindings if b.get('model_id') != model_id]
     await _save_relation_models(remain_models)
     await _save_bindings(remain_bindings)
+    for notify_context in notify_contexts:
+        await ResourcePermissionNotificationService.dispatch_after_authorize(
+            context=notify_context,
+            operator_user_id=login_user.user_id,
+            operator_user_name=getattr(login_user, 'user_name', None),
+        )
     return resp_200(None)
 
 
@@ -2043,3 +2098,13 @@ async def get_tool_permission_template(
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
     return resp_200(TOOL_PERMISSION_TEMPLATE)
+
+
+@router.get('/permission-templates/channel')
+async def get_channel_permission_template(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Return the canonical backend template for channel permissions."""
+    if not login_user.is_admin():
+        return PermissionDeniedError.return_resp()
+    return resp_200(CHANNEL_PERMISSION_TEMPLATE)

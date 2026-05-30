@@ -11,6 +11,7 @@ interface SubjectSearchUserProps {
   resourceType?: ResourceType;
   resourceId?: string;
   disabledIds?: number[];
+  grantUsersApi?: typeof getResourceGrantUsers;
 }
 
 type UserRow = { user_id: number; user_name: string };
@@ -23,6 +24,7 @@ export function SubjectSearchUser({
   resourceType,
   resourceId,
   disabledIds = [],
+  grantUsersApi,
 }: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
@@ -52,7 +54,8 @@ export function SubjectSearchUser({
       signal: AbortSignal,
     ): Promise<UserRow[]> => {
       if (resourceType && resourceId) {
-        const rows = await getResourceGrantUsers(
+        const getGrantUsers = grantUsersApi ?? getResourceGrantUsers;
+        const rows = await getGrantUsers(
           resourceType,
           resourceId,
           { keyword: name, page: pageNum, page_size: PAGE_SIZE },
@@ -69,7 +72,7 @@ export function SubjectSearchUser({
       if (signal.aborted) return [];
       return res.data || [];
     },
-    [resourceId, resourceType],
+    [grantUsersApi, resourceId, resourceType],
   );
 
   const resetAndLoad = useCallback(

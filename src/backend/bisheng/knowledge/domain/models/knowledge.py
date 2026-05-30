@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Optional, Tuple, Union, Dict
+from typing import Any, List, Optional, Sequence, Tuple, Union, Dict
 
 from pydantic import BaseModel, field_validator
 from sqlalchemy import Boolean, Integer, String
@@ -334,22 +334,39 @@ class KnowledgeDao(KnowledgeBase):
                                   page: int = 0,
                                   limit: int = 10,
                                   filter_knowledge: List[int] = None,
-                                  preferred_ids: Optional[List[int]] = None) -> List[Knowledge]:
+                                  preferred_ids: Optional[List[int]] = None,
+                                  cursor: Optional[Sequence] = None) -> List[Knowledge]:
+        """List user-visible knowledge bases.
+
+        F027: when ``cursor`` is provided, the OFFSET path is bypassed and a
+        keyset WHERE predicate is injected for ``sort_by`` ∈
+        ``{create_time, update_time}``. ``preferred_ids`` pinning is ignored
+        when ``cursor`` is set (pinning is a first-page-only feature).
+        """
         statement = select(Knowledge)
 
+        # When using cursor-based keyset, suppress OFFSET inside _user_knowledge_filters.
+        page_for_filter = 0 if cursor is not None else page
         statement = cls._user_knowledge_filters(statement, user_id, knowledge_id_extra,
-                                                knowledge_type, name, page, limit,
+                                                knowledge_type, name, page_for_filter, limit,
                                                 filter_knowledge)
+        if cursor is not None:
+            # Cursor mode: append keyset WHERE and LIMIT only.
+            statement = cls._apply_keyset_where(statement, sort_by, cursor)
+            statement = statement.limit(limit)
 
         order_clauses = []
-        if preferred_ids:
+        # Pinning is a first-page-only UX; suppress it when continuing a cursor.
+        if preferred_ids and cursor is None:
             # Float pinned ids to the top of the global sort so they land on page 1
             # no matter what sort_by is, then fall back to the requested sort.
             order_clauses.append(case((Knowledge.id.in_(preferred_ids), 0), else_=1))
         if sort_by == "create_time":
             order_clauses.append(Knowledge.create_time.desc())
+            order_clauses.append(Knowledge.id.desc())  # tie-breaker for keyset
         elif sort_by == "update_time":
             order_clauses.append(Knowledge.update_time.desc())
+            order_clauses.append(Knowledge.id.desc())
         elif sort_by == "name":
             db_conn = await get_database_connection()
             order_clauses.extend(name_sort_clauses(db_conn.async_engine.dialect.name))
@@ -357,6 +374,27 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.order_by(*order_clauses)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
+
+    @classmethod
+    def _apply_keyset_where(cls, statement, sort_by: str, cursor: Sequence):
+        """F027: inject keyset WHERE for cursor continuation.
+
+        Only valid for sort_by ∈ {create_time, update_time}; name sort uses
+        pseudo-cursor (offset) per AD-15.
+        """
+        from bisheng.database.utils.keyset import build_keyset_where
+
+        if sort_by == "create_time":
+            sort_cols = (Knowledge.create_time, Knowledge.id)
+        elif sort_by == "update_time":
+            sort_cols = (Knowledge.update_time, Knowledge.id)
+        else:
+            # name sort or unknown — cursor mode is invalid; service should
+            # have routed this to the offset path. Defensive no-op.
+            return statement
+        return statement.where(
+            build_keyset_where(sort_cols, tuple(cursor), descending=True)
+        )
 
     @classmethod
     def count_user_knowledge(cls,
@@ -528,21 +566,30 @@ class KnowledgeDao(KnowledgeBase):
                                  sort_by: str = "update_time",
                                  page: int = 0,
                                  limit: int = 0,
-                                 preferred_ids: Optional[List[int]] = None) -> List[Knowledge]:
+                                 preferred_ids: Optional[List[int]] = None,
+                                 cursor: Optional[Sequence] = None) -> List[Knowledge]:
+        """Admin/scoped-super-admin path; same cursor semantics as
+        ``aget_user_knowledge`` (F027 AD-15)."""
         statement = select(Knowledge)
         statement = cls.generate_all_knowledge_filter(statement,
                                                       name=name,
                                                       knowledge_type=knowledge_type)
 
-        if page and limit:
+        if cursor is not None:
+            statement = cls._apply_keyset_where(statement, sort_by, cursor)
+            statement = statement.limit(limit)
+        elif page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+
         order_clauses = []
-        if preferred_ids:
+        if preferred_ids and cursor is None:
             order_clauses.append(case((Knowledge.id.in_(preferred_ids), 0), else_=1))
         if sort_by == "create_time":
             order_clauses.append(Knowledge.create_time.desc())
+            order_clauses.append(Knowledge.id.desc())
         elif sort_by == "update_time":
             order_clauses.append(Knowledge.update_time.desc())
+            order_clauses.append(Knowledge.id.desc())
         elif sort_by == "name":
             db_conn = await get_database_connection()
             order_clauses.extend(name_sort_clauses(db_conn.async_engine.dialect.name))

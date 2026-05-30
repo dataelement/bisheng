@@ -393,6 +393,16 @@
   "com_notifications_action_approval_exception_cancelled": "「{{target}}」の審査申請がキャンセルされました",
   "com_notifications_action_approval_exception_route_missing": "の審査申請でルート未マッチの例外が発生しました。対応が必要です:「{{target}}」",
   "com_notifications_action_approval_exception_approver_empty": "の審査申請で承認者が空の例外が発生しました。対応が必要です:「{{target}}」",
+  "com_notifications_action_approval_execute_failed": "「{{target}}」の審査は承認されましたが、業務処理に失敗しました。対応してください",
+  "com_notifications_action_menu_grant_revoked": "メニュー「{{target}}」へのアクセス権限を取り消しました",
+  "com_notifications_action_revoked_channel_admin": "チャンネル「{{target}}」の管理者権限を取り消しました",
+  "com_notifications_action_revoked_knowledge_space_admin": "ナレッジスペース「{{target}}」の管理者権限を取り消しました",
+  "com_notifications_action_removed_channel_member": "チャンネル「{{target}}」からあなたを削除しました",
+  "com_notifications_action_removed_knowledge_space_member": "ナレッジスペース「{{target}}」からあなたを削除しました",
+  "com_notifications_action_channel_made_private": "チャンネル「{{target}}」を非公開に変更しました。アクセスできなくなりました",
+  "com_notifications_action_knowledge_space_made_private": "ナレッジスペース「{{target}}」を非公開に変更しました。アクセスできなくなりました",
+  "com_notifications_action_channel_dismissed": "チャンネル「{{target}}」を解散しました",
+  "com_notifications_action_knowledge_space_deleted": "ナレッジスペース「{{target}}」を削除しました",
   "com_notifications_delete": "削除",
   "com_notifications_empty": "メッセージはありません",
   "com_notifications_empty_requests": "リクエストはありません",
@@ -1870,7 +1880,9 @@
     "member_pagination_2": "件のデータ、1ページあたり",
     "member_pagination_3": "件",
     "website_not_indexed": "サイトがまだ登録されていません。クロールしますか？",
-    "create": "作成"
+    "create": "作成",
+    "channel_permission_management": "メンバー管理",
+    "organization_grant_unsubscribe_blocked": "このチャンネルは部署/ユーザーグループ経由で付与されているため、現在購読解除できません。"
   },
   "com_permission": {
     "action_revoke": "解除",

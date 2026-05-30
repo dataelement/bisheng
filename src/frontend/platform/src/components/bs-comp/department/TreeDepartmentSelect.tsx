@@ -262,11 +262,9 @@ export function TreeDepartmentSelect({
             </span>
             <Building2 className="mr-1.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate">{node.name}</span>
-            {showMemberCount && (
-              <span className="ml-1 shrink-0 text-xs tabular-nums text-muted-foreground">
-                {node.member_count}
-              </span>
-            )}
+            {/* F027 AC-14: per-department member count removed from the tree
+                response; the `showMemberCount` prop is retained as a no-op so
+                callers don't need to change yet (clean up in a follow-up). */}
           </div>
           {hasChildren && isExpanded && (
             <div>{node.children!.map((child) => <Render key={child.id} node={child} depth={depth + 1} />)}</div>

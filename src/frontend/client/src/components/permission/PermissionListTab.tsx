@@ -57,7 +57,7 @@ function TruncatedTooltip({
   return (
     <Tooltip open={open} onOpenChange={handleOpenChange}>
       <TooltipTrigger asChild>
-        <Tag ref={ref as React.RefObject<HTMLElement>} className={className}>{children}</Tag>
+        <Tag ref={ref as React.LegacyRef<any>} className={className}>{children}</Tag>
       </TooltipTrigger>
       <TooltipContent side="top" className="z-[120] max-w-xs break-all">
         {content}
@@ -75,6 +75,13 @@ const SUBJECT_ICONS = {
 const LIST_SUBJECT_TYPES = ["user", "department", "user_group"] as const;
 type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number];
 
+export interface PermissionApiAdapter {
+  getPermissions: typeof getResourcePermissions;
+  authorize: typeof authorizeResource;
+  getGrantableRelationModels: typeof getGrantableRelationModels;
+  getGrantDepartments?: typeof getResourceGrantDepartments;
+}
+
 interface PermissionListTabProps {
   resourceType: ResourceType;
   resourceId: string;
@@ -87,6 +94,8 @@ interface PermissionListTabProps {
   // and locks the list to the given subject type.
   fixedSubjectType?: ListSubjectType;
   onPermissionChanged?: () => void;
+  permissionApi?: PermissionApiAdapter;
+  onChanged?: () => void;
 }
 
 const DEFAULT_MODELS: RelationModelOption[] = [
@@ -95,6 +104,13 @@ const DEFAULT_MODELS: RelationModelOption[] = [
   { id: "editor", name: "可编辑", relation: "editor" },
   { id: "viewer", name: "可查看", relation: "viewer" },
 ];
+
+const DEFAULT_PERMISSION_API: PermissionApiAdapter = {
+  getPermissions: getResourcePermissions,
+  authorize: authorizeResource,
+  getGrantableRelationModels,
+  getGrantDepartments: getResourceGrantDepartments,
+};
 
 export function PermissionListTab({
   resourceType,
@@ -106,10 +122,13 @@ export function PermissionListTab({
   skipGrantableModelsRequest = false,
   fixedSubjectType,
   onPermissionChanged,
+  permissionApi,
+  onChanged,
 }: PermissionListTabProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const confirm = useConfirm();
+  const activePermissionApi = permissionApi ?? DEFAULT_PERMISSION_API;
   const [entries, setEntries] = useState<PermissionEntry[]>([]);
   const [listTab, setListTab] = useState<ListSubjectType>(fixedSubjectType ?? "user");
   const [loading, setLoading] = useState(false);
@@ -126,7 +145,8 @@ export function PermissionListTab({
 
   useEffect(() => {
     const controller = new AbortController();
-    getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
+    const getGrantDepartments = activePermissionApi.getGrantDepartments ?? getResourceGrantDepartments;
+    getGrantDepartments(resourceType, resourceId, { signal: controller.signal })
       .then((res) => {
         if (!controller.signal.aborted && Array.isArray(res)) {
           setDeptPathById(buildDepartmentPathLabelMap(res));
@@ -138,20 +158,20 @@ export function PermissionListTab({
         }
       });
     return () => controller.abort();
-  }, [refreshKey, resourceId, resourceType]);
+  }, [activePermissionApi, refreshKey, resourceId, resourceType]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
-      const res = await getResourcePermissions(resourceType, resourceId);
+      const res = await activePermissionApi.getPermissions(resourceType, resourceId);
       if (res) setEntries(res);
     } catch {
       setError(true);
     } finally {
       setLoading(false);
     }
-  }, [resourceType, resourceId]);
+  }, [activePermissionApi, resourceType, resourceId]);
 
   useEffect(() => {
     loadData();
@@ -177,7 +197,7 @@ export function PermissionListTab({
       return;
     }
 
-    getGrantableRelationModels(resourceType, resourceId)
+    activePermissionApi.getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
         setUseDefaultModels(false);
         setGrantableModels(Array.isArray(res) ? res : []);
@@ -187,6 +207,7 @@ export function PermissionListTab({
         setGrantableModels([]);
       });
   }, [
+    activePermissionApi,
     prefetchedGrantableModels,
     prefetchedGrantableModelsLoaded,
     prefetchedUseDefaultModels,
@@ -285,7 +306,7 @@ export function PermissionListTab({
     if (!model || (newLevel === "owner" && entry.subject_type !== "user")) return;
     if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return;
     try {
-      await authorizeResource(
+      await activePermissionApi.authorize(
         resourceType,
         resourceId,
         [
@@ -313,6 +334,7 @@ export function PermissionListTab({
       showToast({ message: localize("com_permission.success_modify"), status: "success" });
       await loadData();
       onPermissionChanged?.();
+      onChanged?.();
     } catch {
       showToast({
         message: entry.relation === "owner"
@@ -397,7 +419,7 @@ export function PermissionListTab({
     const revokes = buildRevokeItemsForSubject(entry);
     if (revokes.length === 0) return;
     try {
-      await authorizeResource(
+      await activePermissionApi.authorize(
         resourceType,
         resourceId,
         [],
@@ -406,6 +428,7 @@ export function PermissionListTab({
       showToast({ message: localize("com_permission.success_revoke"), status: "success" });
       await loadData();
       onPermissionChanged?.();
+      onChanged?.();
     } catch {
       showToast({
         message: entry.relation === "owner"
@@ -623,6 +646,7 @@ export function PermissionListTab({
                             )}
                             {canDeleteEntrySubject && (
                               <DropdownMenuItem
+                                aria-label={localize("com_permission.remove")}
                                 className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#F53F3F] data-[highlighted]:bg-[#FFF2F0] data-[highlighted]:text-[#F53F3F]"
                                 onSelect={() => {
                                   void handleDeleteSubject(entry);

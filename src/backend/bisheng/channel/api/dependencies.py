@@ -7,6 +7,7 @@ from bisheng.channel.domain.repositories.implementations.channel_repository_impl
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
 from bisheng.channel.domain.repositories.interfaces.channel_repository import ChannelRepository
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
+from bisheng.channel.domain.services.channel_authorization_service import ChannelAuthorizationService
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.channel.domain.repositories.implementations.article_read_repository_impl import ArticleReadRepositoryImpl
@@ -70,3 +71,13 @@ async def get_channel_service(
         message_service=message_service,
     )
 
+
+async def get_channel_authorization_service(
+        session: AsyncSession = Depends(get_db_session),
+) -> ChannelAuthorizationService:
+    channel_repository = await get_channel_repository(session)
+    space_channel_member_repository = await get_space_channel_member_repository(session)
+    return ChannelAuthorizationService(
+        channel_repository=channel_repository,
+        space_channel_member_repository=space_channel_member_repository,
+    )

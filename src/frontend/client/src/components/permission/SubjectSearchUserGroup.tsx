@@ -18,6 +18,7 @@ interface SubjectSearchUserGroupProps {
   disabledIds?: number[];
   loadUserGroups?: (config?: { signal?: AbortSignal; keyword?: string }) => Promise<UserGroup[]>;
   selectionMode?: "multiple" | "single";
+  grantUserGroupsApi?: typeof getResourceGrantUserGroups;
 }
 
 export function SubjectSearchUserGroup({
@@ -28,6 +29,7 @@ export function SubjectSearchUserGroup({
   disabledIds = [],
   loadUserGroups,
   selectionMode = "multiple",
+  grantUserGroupsApi,
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -42,11 +44,11 @@ export function SubjectSearchUserGroup({
 
   useEffect(() => {
     const controller = new AbortController();
-    const request =
-      loadUserGroups
-        ? loadUserGroups({ signal: controller.signal, keyword: debouncedKeyword })
-        : resourceType && resourceId
-        ? getResourceGrantUserGroups(resourceType, resourceId, { keyword: debouncedKeyword }, { signal: controller.signal })
+    const getGrantUserGroups = grantUserGroupsApi ?? getResourceGrantUserGroups;
+    const request = loadUserGroups
+      ? loadUserGroups({ signal: controller.signal, keyword: debouncedKeyword })
+      : resourceType && resourceId
+        ? getGrantUserGroups(resourceType, resourceId, { keyword: debouncedKeyword }, { signal: controller.signal })
         : getUserGroups({ signal: controller.signal });
 
     setLoading(true);
@@ -61,7 +63,7 @@ export function SubjectSearchUserGroup({
       });
 
     return () => controller.abort();
-  }, [debouncedKeyword, loadUserGroups, resourceId, resourceType]);
+  }, [debouncedKeyword, grantUserGroupsApi, loadUserGroups, resourceId, resourceType]);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;

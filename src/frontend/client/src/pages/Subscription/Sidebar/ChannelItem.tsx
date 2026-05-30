@@ -1,7 +1,7 @@
 import { useLocalize } from "~/hooks";
 import { LogOut, MoreHorizontal, Pin, PinOff, Settings, UsersRound } from "lucide-react";
 import { useState } from "react";
-import { Channel, ChannelRole } from "~/api/channels";
+import { canEditChannelSettings, canManageChannelPermissions, type Channel } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
@@ -159,7 +159,7 @@ export default function ChannelItem({
                     </DropdownMenuTrigger>
 
                     <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {type === "created" && (
+                        {canEditChannelSettings(channel.role) && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onChannelSettings(channel)}
@@ -170,7 +170,7 @@ export default function ChannelItem({
                                 </span>
                             </DropdownMenuItem>
                         )}
-                        {[ChannelRole.CREATOR, ChannelRole.ADMIN].includes(channel.role) && (
+                        {canManageChannelPermissions(channel.role) && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers(channel)}

@@ -25,6 +25,7 @@ interface SubjectSearchDepartmentProps {
   disabledIds?: number[];
   loadDepartments?: (config?: { signal?: AbortSignal }) => Promise<DepartmentNode[]>;
   selectionMode?: "multiple" | "single";
+  grantDepartmentsApi?: typeof getResourceGrantDepartments;
 }
 
 function collectExplicitDepartmentSelections(
@@ -72,6 +73,7 @@ export function SubjectSearchDepartment({
   disabledIds = [],
   loadDepartments,
   selectionMode = "multiple",
+  grantDepartmentsApi,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const [tree, setTree] = useState<DepartmentNode[]>([]);
@@ -87,7 +89,7 @@ export function SubjectSearchDepartment({
     const request = loadDepartments
       ? loadDepartments({ signal: controller.signal })
       : resourceType && resourceId
-        ? getResourceGrantDepartments(resourceType, resourceId, { signal: controller.signal })
+        ? (grantDepartmentsApi ?? getResourceGrantDepartments)(resourceType, resourceId, { signal: controller.signal })
         : Promise.resolve([]);
 
     request
@@ -99,7 +101,7 @@ export function SubjectSearchDepartment({
       });
 
     return () => controller.abort();
-  }, [loadDepartments, resourceId, resourceType]);
+  }, [grantDepartmentsApi, loadDepartments, resourceId, resourceType]);
 
   const selectedIds = new Set(value.map((s) => s.id));
   const selectedDepartmentsById = useMemo(

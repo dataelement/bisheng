@@ -82,6 +82,7 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         self,
         user_id: int,
         message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
         status: Optional[MessageStatusEnum] = None,
         keyword: Optional[str] = None,
         only_unread: bool = False,
@@ -95,8 +96,17 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         # Filter by receiver using JSON_CONTAINS
         query = self._apply_receiver_filter(query, user_id)
 
-        if message_type is not None:
+        if message_type is not None and action_codes:
+            query = query.where(
+                or_(
+                    InboxMessage.message_type == message_type,
+                    col(InboxMessage.action_code).in_(action_codes),
+                )
+            )
+        elif message_type is not None:
             query = query.where(InboxMessage.message_type == message_type)
+        elif action_codes:
+            query = query.where(col(InboxMessage.action_code).in_(action_codes))
 
         if status is not None:
             query = query.where(InboxMessage.status == status)
@@ -125,6 +135,7 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         self,
         user_id: int,
         message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
         status: Optional[MessageStatusEnum] = None,
         keyword: Optional[str] = None,
         only_unread: bool = False,
@@ -135,8 +146,17 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
 
         query = self._apply_receiver_filter(query, user_id)
 
-        if message_type is not None:
+        if message_type is not None and action_codes:
+            query = query.where(
+                or_(
+                    InboxMessage.message_type == message_type,
+                    col(InboxMessage.action_code).in_(action_codes),
+                )
+            )
+        elif message_type is not None:
             query = query.where(InboxMessage.message_type == message_type)
+        elif action_codes:
+            query = query.where(col(InboxMessage.action_code).in_(action_codes))
 
         if status is not None:
             query = query.where(InboxMessage.status == status)
@@ -155,14 +175,33 @@ class InboxMessageRepositoryImpl(BaseRepositoryImpl[InboxMessage, int], InboxMes
         user_id: int,
         read_message_ids: Optional[List[int]] = None,
         message_type: Optional[MessageTypeEnum] = None,
+        action_codes: Optional[List[str]] = None,
+        exclude_action_codes: Optional[List[str]] = None,
     ) -> int:
         """Count unread messages for a specific user."""
         query = select(func.count()).select_from(InboxMessage)
 
         query = self._apply_receiver_filter(query, user_id)
 
-        if message_type is not None:
+        if message_type is not None and action_codes:
+            query = query.where(
+                or_(
+                    InboxMessage.message_type == message_type,
+                    col(InboxMessage.action_code).in_(action_codes),
+                )
+            )
+        elif message_type is not None:
             query = query.where(InboxMessage.message_type == message_type)
+        elif action_codes:
+            query = query.where(col(InboxMessage.action_code).in_(action_codes))
+
+        if exclude_action_codes:
+            query = query.where(
+                or_(
+                    InboxMessage.action_code.is_(None),
+                    col(InboxMessage.action_code).notin_(exclude_action_codes),
+                )
+            )
 
         # Exclude read messages
         if read_message_ids:

@@ -773,6 +773,7 @@ export default function Knowledge() {
                                         currentPage={fileManager.currentPage}
                                         pageSize={fileManager.pageSize}
                                         total={fileManager.total}
+                                        hasMore={fileManager.hasMore}
                                         onPageChange={fileManager.handlePageChange}
                                         loading={fileManager.loading}
                                         onSearch={fileManager.handleSearch}

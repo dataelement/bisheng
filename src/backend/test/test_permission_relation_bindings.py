@@ -176,6 +176,36 @@ class TestRelationModelBindings:
         mock_authorize.assert_not_awaited()
 
     @pytest.mark.asyncio
+    async def test_authorize_rejects_channel_resource_type(self, mock_admin_user):
+        from bisheng.permission.api.endpoints.resource_permission import authorize_resource
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRequest
+
+        request = AuthorizeRequest(
+            grants=[
+                AuthorizeGrantItem(
+                    subject_type='user',
+                    subject_id=2,
+                    relation='viewer',
+                    model_id='viewer',
+                ),
+            ],
+        )
+
+        with patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            resp = await authorize_resource(
+                resource_type='channel',
+                resource_id='channel-1',
+                request=request,
+                login_user=mock_admin_user,
+            )
+
+        assert resp.status_code == 19000
+        mock_authorize.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_authorize_allows_invalid_owner_revoke_as_binding_cleanup(self, mock_admin_user):
         from bisheng.permission.api.endpoints.resource_permission import authorize_resource
         from bisheng.permission.domain.schemas.permission_schema import AuthorizeRequest, AuthorizeRevokeItem

@@ -1497,23 +1497,29 @@ export async function listKnowledgeFolders(params: {
  * Get items (folders and files) under a space directory
  * If parent_id is omitted, returns root-level items
  */
+// F027: cursor-based pagination.
+//   request:  { space_id, parent_id?, cursor?, page_size, order_field, order_sort, file_status? }
+//   response: { data: KnowledgeFile[], page_size, has_more, next_cursor }
+//   The legacy `total` / `page` fields are gone (spec AC-03).
 export async function getSpaceChildrenApi(params: {
     space_id: string;
     parent_id?: string;
-    page?: number;
+    cursor?: string | null;
     page_size?: number;
     order_field?: string;
     order_sort?: string;
     file_status?: number[];
-}): Promise<{ data: KnowledgeFile[]; total: number }> {
+}): Promise<{ data: KnowledgeFile[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const { space_id, ...queryParams } = params;
-    if (!space_id) return { data: [], total: 0 };
-    const res = await request.get<ApiResponse<{ data: RawSpaceChild[]; total: number }>>(
+    if (!space_id) {
+        return { data: [], page_size: queryParams.page_size ?? 20, has_more: false, next_cursor: null };
+    }
+    const res = await request.get<ApiResponse<any>>(
         `/api/v1/knowledge/space/${space_id}/children`,
         {
             params: {
                 parent_id: queryParams.parent_id,
-                page: queryParams.page,
+                cursor: queryParams.cursor || undefined,
                 page_size: queryParams.page_size,
                 order_field: queryParams.order_field,
                 order_sort: queryParams.order_sort,
@@ -1526,7 +1532,9 @@ export async function getSpaceChildrenApi(params: {
     const list = extractList<RawSpaceChild>(payload);
     return {
         data: list.map(raw => mapChild(raw, space_id)),
-        total: Number(payload?.total ?? list.length),
+        page_size: Number(payload?.page_size ?? queryParams.page_size ?? 20),
+        has_more: !!payload?.has_more,
+        next_cursor: payload?.next_cursor ?? null,
     };
 }
 

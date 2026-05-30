@@ -102,6 +102,10 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     });
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize] = useState(20);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(false);
+    const [nextSearchPage, setNextSearchPage] = useState(0);
+    const filesRef = useRef<KnowledgeFile[]>([]);
     const [loading, setLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
@@ -153,6 +157,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     const files = hasCurrentFileState ? fileListState.files : [];
     const total = hasCurrentFileState ? fileListState.total : 0;
     const effectiveLoading = loading || Boolean(currentViewKey && !hasCurrentFileState);
+    filesRef.current = files;
 
     const setFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
         setFileListState((prev) => {
@@ -191,6 +196,10 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     }, [currentViewKey]);
 
     // ─── Load file/folder list ──────────────────────────────────────────
+    // F027 §AC-17-client-补做: page=1 replaces files (fresh load); page>1
+    // appends to existing files for infinite scroll. The default path uses
+    // `nextCursor` keyset; the search path keeps backend page-numbering and
+    // we maintain `nextSearchPage` internally to stitch successive batches.
     const loadFiles = useCallback(
         async (page: number = 1, options: LoadFilesOptions = {}): Promise<KnowledgeFile[]> => {
             if (!enabled || !activeSpace?.id || !currentViewKey) return [];
@@ -206,15 +215,22 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             }
             try {
                 const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+                const isAppending = page > 1;
                 const isMember = activeSpace.role === SpaceRole.MEMBER;
                 const fileStatusNums = statusFilter.length > 0
                     ? statusFilter.map(fileStatusToNumber)
                     : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
+
+                // Search path: backend still page-numbered; compute next page.
+                const searchPageToFetch = isSearching
+                    ? (isAppending ? nextSearchPage + 1 : 1)
+                    : 1;
+
                 const res = isSearching
                     ? await searchSpaceChildrenApi({
                         space_id: activeSpace.id,
                         parent_id: searchScope === "all" ? undefined : currentFolderId,
-                        page,
+                        page: searchPageToFetch,
                         page_size: pageSize,
                         keyword: searchQuery || undefined,
                         tag_ids: searchTagIds.length > 0 ? searchTagIds : undefined,
@@ -225,14 +241,16 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                     : await getSpaceChildrenApi({
                         space_id: activeSpace.id,
                         parent_id: currentFolderId,
-                        page,
+                        // Default path: cursor=null fetches first page; on
+                        // append we send the previously returned next_cursor.
+                        cursor: isAppending ? nextCursor : null,
                         page_size: pageSize,
                         order_field: sortBy || undefined,
                         order_sort: sortDirection || undefined,
                         file_status: fileStatusNums,
                     });
                 let mergedData = res.data;
-                let mergedTotal = res.total;
+                let mergedTotal = (res as any).total ?? res.data.length;
                 if (activeSpace.spaceKind === "department") {
                     try {
                         const approvalRes = await listApprovalRequestsApi({
@@ -257,24 +275,31 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                                 file.name.toLowerCase().includes(keyword)
                             );
                         }
-                        // Apply the same status filtering logic as the backend API
                         if (statusFilter.length > 0) {
                             approvalFiles = approvalFiles.filter(
                                 (file) => file.status !== undefined && statusFilter.includes(file.status)
                             );
                         } else if (isMember) {
-                            // Match the default API behavior for members: exclude FAILED
                             approvalFiles = approvalFiles.filter((file) => file.status !== FileStatus.FAILED);
                         }
                         const existingIds = new Set(res.data.map((file) => file.id));
                         const uniqueApprovalFiles = approvalFiles.filter((file) => !existingIds.has(file.id));
                         mergedData = [...uniqueApprovalFiles, ...res.data];
-                        mergedTotal = res.total + uniqueApprovalFiles.length;
+                        mergedTotal += uniqueApprovalFiles.length;
                     } catch {
-                        // Approval list is additive only; degrade gracefully to the
-                        // base file list if approval data cannot be loaded.
                     }
                 }
+
+                if (isSearching) {
+                    const fetchedSoFar = searchPageToFetch * pageSize;
+                    setHasMore(fetchedSoFar < mergedTotal);
+                    setNextSearchPage(searchPageToFetch);
+                } else {
+                    setNextCursor((res as any).next_cursor ?? null);
+                    setHasMore(!!(res as any).has_more);
+                    if (!isAppending) setNextSearchPage(0);
+                }
+
                 const ignore = pendingDeletionIdsRef.current;
                 const visibleData = ignore.size > 0
                     ? mergedData.filter(f => !ignore.has(String(f.id)))
@@ -290,10 +315,15 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 if (!viewStillCurrent || (!canCommitForeground && !canCommitBackground)) {
                     return [];
                 }
-                setFileListState({
-                    ownerKey: requestViewKey,
-                    files: visibleData,
-                    total: Math.max(0, mergedTotal - ghostCount),
+
+                setFileListState((prev) => {
+                    const prevFiles = isAppending && prev.ownerKey === requestViewKey ? prev.files : [];
+                    const nextFiles = isAppending ? [...prevFiles, ...visibleData] : visibleData;
+                    return {
+                        ownerKey: requestViewKey,
+                        files: nextFiles,
+                        total: Math.max(0, (isAppending ? prev.total + visibleData.length : mergedTotal) - ghostCount),
+                    };
                 });
                 setCurrentPage(page);
                 return visibleData;
@@ -323,8 +353,15 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 }
             }
         },
-        [enabled, activeSpace?.id, activeSpace?.role, activeSpace?.spaceKind, currentViewKey, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, showToast, localize]
+        [enabled, activeSpace?.id, activeSpace?.role, activeSpace?.spaceKind, currentViewKey, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, nextCursor, nextSearchPage, showToast, localize]
     );
+
+    // Derive total from accumulated files + has_more for UI progress badges.
+    // Replaces the old per-batch setTotal in loadFiles; setTotal is still
+    // exposed for optimistic deletion adjustments by callers.
+    useEffect(() => {
+        setTotal(files.length + (hasMore ? 1 : 0));
+    }, [files.length, hasMore]);
 
     // Track which initialFolderId has been consumed (value, not boolean)
     // so re-navigation to a different folder deep link works correctly.
@@ -373,7 +410,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         return getSpaceChildrenApi({
                             space_id: activeSpace.id,
                             parent_id: lastParentId,
-                            page: 1,
+                            // F027: no `page` param; cursor=null fetches first page.
                             page_size: 100,
                         }).then((res) => {
                             if (
@@ -421,10 +458,63 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     }, [enabled, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, reloadToken]);
 
     // ─── Auto-polling for pending files ─────────────────────────────────
-    // Refresh the file list every 5s while any file on the current page
-    // is still in a processing/waiting/rebuilding/uploading state.
+    // F027 §AC-17-client-补做: in infinite-scroll mode we cannot re-fetch
+    // "the current page" — that concept is gone. Instead the 5s poll now
+    // refreshes only the status/progress fields of already-loaded rows
+    // without touching the cursor chain. Rows newly returned by the API
+    // that we haven't seen (e.g. just-uploaded) get prepended to the head.
+    // Skipped during search state (search results are a frozen snapshot).
     const loadFilesRef = useRef(loadFiles);
     loadFilesRef.current = loadFiles;
+
+    const refreshLoadedStatuses = useCallback(async () => {
+        if (!enabled || !activeSpace?.id) return;
+        const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
+        if (isSearching) return;
+        const currentFiles = filesRef.current;
+        if (currentFiles.length === 0) return;
+
+        try {
+            const isMember = activeSpace.role === SpaceRole.MEMBER;
+            const fileStatusNums = statusFilter.length > 0
+                ? statusFilter.map(fileStatusToNumber)
+                : isMember ? SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED : undefined;
+            // Cap the poll fetch at 100 to bound the request — pending files
+            // (recent update_time) sit at the top under default sort anyway.
+            const fetchSize = Math.min(currentFiles.length, 100);
+            const res = await getSpaceChildrenApi({
+                space_id: activeSpace.id,
+                parent_id: currentFolderId,
+                cursor: null,
+                page_size: fetchSize,
+                order_field: sortBy || undefined,
+                order_sort: sortDirection || undefined,
+                file_status: fileStatusNums,
+            });
+
+            const updatesById = new Map<string, KnowledgeFile>();
+            res.data.forEach(f => updatesById.set(String(f.id), f));
+
+            setFiles(prev => {
+                const knownIds = new Set(prev.map(f => String(f.id)));
+                // Replace matched rows wholesale — the API returns the full
+                // refreshed row; nextCursor / accumulated tail untouched.
+                const merged = prev.map(f => updatesById.get(String(f.id)) ?? f);
+                // Prepend rows we haven't seen (likely user-uploaded since
+                // last load). Filter pending-deletion ghosts here too.
+                const ignore = pendingDeletionIdsRef.current;
+                const newRows = res.data.filter(f =>
+                    !knownIds.has(String(f.id)) && !ignore.has(String(f.id))
+                );
+                return newRows.length > 0 ? [...newRows, ...merged] : merged;
+            });
+        } catch {
+            // Silent — polling failure must not toast.
+        }
+    }, [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, statusFilter, sortBy, sortDirection, currentFolderId]);
+
+    const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
+    refreshLoadedStatusesRef.current = refreshLoadedStatuses;
 
     useEffect(() => {
         if (!enabled || !activeSpace?.id || typeof window === "undefined") return;
@@ -432,7 +522,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             const detail = (event as CustomEvent<KnowledgeSpaceFilesRefreshEventDetail>).detail;
             if (!detail?.spaceId) return;
             if (String(detail.spaceId) !== String(activeSpace.id)) return;
-            loadFilesRef.current(currentPageRef.current, { background: true });
+            loadFilesRef.current(1);
         };
         window.addEventListener(KNOWLEDGE_SPACE_FILES_REFRESH_EVENT, handleKnowledgeSpaceFilesRefresh);
         return () => {
@@ -448,7 +538,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         if (!hasPending) return;
 
         const timer = setInterval(() => {
-            loadFilesRef.current(currentPageRef.current, { background: true });
+            refreshLoadedStatusesRef.current();
         }, 5000);
 
         return () => clearInterval(timer);
@@ -529,6 +619,8 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         pageSize,
         total,
         setTotal,
+        nextCursor,
+        hasMore,
         loading: effectiveLoading,
         searchQuery,
         searchTagIds,

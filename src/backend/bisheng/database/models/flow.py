@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 
 from pydantic import field_validator
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, and_, false, func, or_, text
@@ -535,29 +535,26 @@ class FlowDao(FlowBase):
                             limit: int = 0,
                             search_description=False,
                             app_type_ids: Dict[int, List[str]] = None,
-                            ) -> (List[Dict], int):
-        """
-        Get all flow-based apps and assistants.
+                            cursor: Optional[Sequence] = None,
+                            ) -> Tuple[List[Dict], bool]:
+        """List flow-based apps and assistants (F027 cursor-paginated).
+
+        Total-count side query removed per spec AC-11; ``has_more`` is
+        detected by fetching ``limit + 1`` rows.
+
         Args:
-            name:
-            status:
-            id_list:
-            flow_type:
-            user_id:
-            id_extra:
-            id_list_not_in:
-            page:
-            limit:
+            cursor: ``(update_time, id)`` from the previous page's last visible
+                row. When set, applies keyset WHERE and ignores ``page``.
 
         Returns:
-            (List[Dict], int)
+            ``(data, has_more)`` — the list of app dicts and whether a
+            further page exists. The legacy ``(data, total)`` shape is gone.
         """
         sub_query = cls._build_apps_subquery()
 
         statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
                            sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
                            sub_query.c.status, sub_query.c.create_time, sub_query.c.update_time)
-        count_statement = select(func.count(sub_query.c.id))
         if name:
             if search_description:
                 keyword_filter = or_(
@@ -567,42 +564,54 @@ class FlowDao(FlowBase):
             else:
                 keyword_filter = sub_query.c.name.like(f'%{name}%')
             statement = statement.where(keyword_filter)
-            count_statement = count_statement.where(keyword_filter)
 
         if status is not None:
             statement = statement.where(sub_query.c.status == status)
-            count_statement = count_statement.where(sub_query.c.status == status)
         if id_list:
             statement = statement.where(sub_query.c.id.in_(id_list))
-            count_statement = count_statement.where(sub_query.c.id.in_(id_list))
         app_type_ids_filter = cls._build_app_type_ids_filter(sub_query, app_type_ids)
         if app_type_ids_filter is not None:
             statement = statement.where(app_type_ids_filter)
-            count_statement = count_statement.where(app_type_ids_filter)
         if flow_type is not None:
             statement = statement.where(sub_query.c.flow_type == flow_type)
-            count_statement = count_statement.where(sub_query.c.flow_type == flow_type)
         if user_id is not None:
             if id_extra:
                 statement = statement.where(
                     or_(sub_query.c.user_id == user_id, sub_query.c.id.in_(id_extra)))
-                count_statement = count_statement.where(
-                    or_(sub_query.c.user_id == user_id, sub_query.c.id.in_(id_extra)))
             else:
                 statement = statement.where(sub_query.c.user_id == user_id)
-                count_statement = count_statement.where(sub_query.c.user_id == user_id)
         if id_list_not_in:
             statement = statement.where(~sub_query.c.id.in_(id_list_not_in))
-            count_statement = count_statement.where(~sub_query.c.id.in_(id_list_not_in))
-        if page and limit:
-            statement = statement.offset((page - 1) * limit).limit(limit)
-        statement = statement.order_by(sub_query.c.update_time.desc())
+
+        # F027: cursor (keyset) takes precedence over OFFSET. When neither is
+        # set we return everything (skip_pagination path used by chat.py online
+        # rankings).
+        fetch_limit = (limit + 1) if limit else 0
+        if cursor is not None:
+            from bisheng.database.utils.keyset import build_keyset_where
+            statement = statement.where(
+                build_keyset_where(
+                    (sub_query.c.update_time, sub_query.c.id),
+                    tuple(cursor),
+                    descending=True,
+                )
+            )
+            if fetch_limit:
+                statement = statement.limit(fetch_limit)
+        elif page and limit:
+            statement = statement.offset((page - 1) * limit).limit(fetch_limit)
+        elif limit:
+            statement = statement.limit(fetch_limit)
+
+        statement = statement.order_by(sub_query.c.update_time.desc(), sub_query.c.id.desc())
 
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             ret = result.all()
-            total_result = await session.exec(count_statement)
-            total = total_result.first()
+
+        has_more = bool(limit) and len(ret) > limit
+        if has_more:
+            ret = ret[:limit]
         data = []
         for one in ret:
             data.append({
@@ -616,7 +625,7 @@ class FlowDao(FlowBase):
                 'create_time': one[7],
                 'update_time': one[8]
             })
-        return data, total
+        return data, has_more
 
     @classmethod
     def _build_apps_subquery(cls):
