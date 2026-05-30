@@ -128,6 +128,15 @@ class KnowledgeSpaceScopeDao(KnowledgeSpaceScopeBase):
             return result.all()
 
     @classmethod
+    async def aget_space_ids_by_level(cls, level: KnowledgeSpaceLevelEnum | str) -> List[int]:
+        level_value = getattr(level, "value", level)
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(KnowledgeSpaceScope.space_id).where(KnowledgeSpaceScope.level == str(level_value))
+            )
+            return [int(space_id) for space_id in result.all()]
+
+    @classmethod
     async def aget_map_by_space_ids(cls, space_ids: List[int]) -> Dict[int, KnowledgeSpaceScope]:
         rows = await cls.aget_by_space_ids(space_ids)
         return {int(row.space_id): row for row in rows}

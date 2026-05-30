@@ -89,6 +89,7 @@ interface CreateKnowledgeSpaceDrawerProps {
     onConfirm?: (data: CreateKnowledgeSpaceFormData) => void | boolean | CreateKnowledgeSpaceSubmitResult | Promise<boolean | void | CreateKnowledgeSpaceSubmitResult>;
     onViewSpace?: () => void;
     onManageMembers?: () => void;
+    showSuccessManageMembers?: boolean | ((spaceLevel: SpaceLevel) => boolean);
     mode?: "create" | "edit";
     editingSpace?: KnowledgeSpace | null;
     initialSpaceLevel?: SpaceLevel;
@@ -101,6 +102,7 @@ export function CreateKnowledgeSpaceDrawer({
     onConfirm,
     onViewSpace,
     onManageMembers,
+    showSuccessManageMembers = true,
     mode = "create",
     editingSpace,
     initialSpaceLevel,
@@ -437,6 +439,10 @@ export function CreateKnowledgeSpaceDrawer({
         onOpenChange(false);
     };
 
+    const shouldShowSuccessManageMembers = typeof showSuccessManageMembers === "function"
+        ? showSuccessManageMembers(spaceLevel)
+        : showSuccessManageMembers;
+
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent
@@ -480,15 +486,17 @@ export function CreateKnowledgeSpaceDrawer({
                                 >
                                     {localize("com_subscription.goto_knowledge_space")}
                                 </Button>
-                                <Button
-                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-[#165DFF] px-4 text-[14px] font-normal leading-none text-white hover:bg-[#4080FF]"
-                                    onClick={() => {
-                                        onManageMembers?.();
-                                        onOpenChange(false);
-                                    }}
-                                >
-                                    {localize("com_knowledge.member_management")}
-                                </Button>
+                                {shouldShowSuccessManageMembers ? (
+                                    <Button
+                                        className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-[#165DFF] px-4 text-[14px] font-normal leading-none text-white hover:bg-[#4080FF]"
+                                        onClick={() => {
+                                            onManageMembers?.();
+                                            onOpenChange(false);
+                                        }}
+                                    >
+                                        {localize("com_knowledge.member_management")}
+                                    </Button>
+                                ) : null}
                             </div>
                         </div>
                     </div>

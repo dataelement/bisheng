@@ -194,6 +194,7 @@ export default function PortalKnowledgeWorkbench() {
     }, []);
 
     const handleOpenSpaceMembers = useCallback((space: KnowledgeSpace) => {
+        if (space.spaceLevel === SpaceLevel.PERSONAL) return;
         setSpacePermissionDialogSpace(space);
         setSpacePermissionOpen(true);
     }, []);
@@ -1277,6 +1278,7 @@ export default function PortalKnowledgeWorkbench() {
                 onConfirmCreateSpace={handleConfirmCreateSpace}
                 editingSpace={editingSpace}
                 pendingCreateLevel={pendingCreateLevel}
+                showSuccessManageMembers={(spaceLevel) => spaceLevel !== SpaceLevel.PERSONAL}
                 onViewCreatedSpace={() => setCreateDrawerOpen(false)}
                 onManageEditingSpaceMembers={() => {
                     setCreateDrawerOpen(false);

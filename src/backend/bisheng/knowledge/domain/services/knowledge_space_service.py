@@ -796,11 +796,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 result.can_unsubscribe = await self._can_unsubscribe_space(space, member_conf)
             else:
-                if required_permission_id and required_permission_id not in permission_ids_map.get(space.id, set()):
+                effective_permission_ids = permission_ids_map.get(space.id, set())
+                if required_permission_id and required_permission_id not in effective_permission_ids:
                     continue
                 result.user_role = self._permission_level_to_space_user_role(
                     permission_levels.get(space.id),
                 )
+                if (
+                    result.user_role is None
+                    and required_permission_id == "view_space"
+                    and "view_space" in effective_permission_ids
+                ):
+                    result.user_role = UserRoleEnum.MEMBER
                 if result.user_role is None:
                     continue
                 self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
@@ -1549,11 +1556,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             object_type, object_id, space_id=space_id
         )
         lineage_binding_can_override = object_type in {"folder", "knowledge_file"}
-        permission_lineage = (
-            [item for item in lineage if item[0] != "knowledge_space"]
-            if lineage_binding_can_override
-            else lineage
-        )
         user_subject_strings = await self._get_current_user_subject_strings()
         bindings = await self._get_relation_bindings()
         binding_department_paths = await self._get_binding_department_paths(bindings)
@@ -1569,7 +1571,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             bindings=bindings,
             binding_department_paths=binding_department_paths,
             user_subject_strings=user_subject_strings,
-            lineage=permission_lineage,
+            lineage=lineage,
             nearest_binding_wins=lineage_binding_can_override,
             return_match_metadata=True,
             use_permission_level_fallback=not lineage_binding_can_override,
@@ -1639,12 +1641,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if space_id is None:
             return set()
         space = await KnowledgeDao.aquery_by_id(int(space_id))
-        if (
-            space
-            and space.type == KnowledgeTypeEnum.SPACE.value
-            and space.is_released
-            and space.auth_type == AuthTypeEnum.PUBLIC
-        ):
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            return set()
+        space_level = getattr(space, "space_level", None)
+        if space_level is None:
+            scope = await KnowledgeSpaceScopeDao.aget_by_space_id(int(space_id))
+            space_level = scope.level if scope else None
+        if getattr(space_level, "value", space_level) == KnowledgeSpaceLevelEnum.PUBLIC.value:
             return default_permission_ids_for_relation("viewer")
         return set()
 
@@ -3471,7 +3474,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for member in members
             if str(member.business_id).isdigit()
         }
-        created_ids, accessible_ids = await asyncio.gather(
+        created_ids, accessible_ids, public_space_ids = await asyncio.gather(
             KnowledgeDao.aget_knowledge_ids_created_by(
                 self.login_user.user_id,
                 KnowledgeTypeEnum.SPACE,
@@ -3482,8 +3485,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 object_type='knowledge_space',
                 login_user=self.login_user,
             ),
+            KnowledgeSpaceScopeDao.aget_space_ids_by_level(KnowledgeSpaceLevelEnum.PUBLIC),
         )
         space_ids.update(int(space_id) for space_id in created_ids)
+        space_ids.update(int(space_id) for space_id in public_space_ids)
         if accessible_ids is None:
             all_space_ids = await KnowledgeDao.aget_knowledge_ids_by_type(KnowledgeTypeEnum.SPACE)
             space_ids.update(all_space_ids)

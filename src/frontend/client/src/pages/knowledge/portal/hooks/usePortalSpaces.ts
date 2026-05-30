@@ -82,10 +82,13 @@ export function usePortalSpaces({ activeSpace, setActiveSpace }: UsePortalSpaces
         const hasPermission = (permissionId: "edit_space" | "delete_space" | "manage_space_relation") => (
             hasFullAccess || hasKnowledgeSpacePermission(spaceActionPermissions, space.id, permissionId)
         );
+        const canManageMembers = space.spaceLevel === SpaceLevel.PERSONAL
+            ? false
+            : hasPermission("manage_space_relation");
         return {
             canEditSpace: hasPermission("edit_space"),
             canDeleteSpace: hasPermission("delete_space"),
-            canManageMembers: hasPermission("manage_space_relation"),
+            canManageMembers,
         };
     }, [spaceActionPermissions]);
 

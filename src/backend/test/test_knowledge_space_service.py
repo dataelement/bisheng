@@ -299,8 +299,9 @@ def _make_space(
         auth_type: AuthTypeEnum = AuthTypeEnum.PUBLIC,
         state: int = KnowledgeState.PUBLISHED.value,
         is_released: bool = False,
+        space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.PERSONAL,
 ) -> Knowledge:
-    return Knowledge(
+    space = Knowledge(
         id=space_id,
         user_id=user_id,
         name='Knowledge Space',
@@ -311,6 +312,8 @@ def _make_space(
         is_released=is_released,
         auth_type=auth_type,
     )
+    object.__setattr__(space, 'space_level', space_level)
+    return space
 
 
 @pytest.mark.asyncio
@@ -2551,6 +2554,73 @@ class TestSpaceListings:
         assert result == []
 
     @pytest.mark.asyncio
+    async def test_get_grouped_spaces_includes_public_level_spaces_without_direct_grant(self, service):
+        public_space = _make_space(
+            space_id=9,
+            user_id=99,
+            auth_type=AuthTypeEnum.PRIVATE,
+            is_released=False,
+            space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+        )
+        public_scope = SimpleNamespace(
+            level=KnowledgeSpaceLevelEnum.PUBLIC,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT,
+            owner_id=1,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_user_space_members',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_knowledge_ids_created_by',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.list_accessible_ids',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_space_ids_by_level',
+            new_callable=AsyncMock,
+            return_value=[9],
+        ) as mock_public_space_ids, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+            new_callable=AsyncMock,
+            return_value=[public_space],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch.object(
+            service,
+            '_get_effective_permission_ids',
+            new_callable=AsyncMock,
+            return_value={'view_space'},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_map_by_space_ids',
+            new_callable=AsyncMock,
+            return_value={9: public_scope},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids',
+            new_callable=AsyncMock,
+            return_value=[SimpleNamespace(id=1, name='Root')],
+        ):
+            result = await service.get_grouped_spaces()
+
+        mock_public_space_ids.assert_awaited_once_with(KnowledgeSpaceLevelEnum.PUBLIC)
+        assert len(result.public_spaces) == 1
+        assert result.public_spaces[0].id == 9
+        assert result.public_spaces[0].user_role == UserRoleEnum.MEMBER
+        assert result.department_spaces == []
+        assert result.team_spaces == []
+        assert result.personal_spaces == []
+
+    @pytest.mark.asyncio
     async def test_format_accessible_spaces_excludes_membership_without_required_permission_id(self, service):
         member_space = _make_space(space_id=2, user_id=99, auth_type=AuthTypeEnum.PRIVATE)
         member = _make_member(
@@ -4621,6 +4691,15 @@ class TestTupleLifecycle:
 
 class TestFineGrainedPermissionRuntime:
 
+    @pytest.fixture(autouse=True)
+    def no_public_space_scope_by_default(self):
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            yield
+
     @pytest.mark.asyncio
     async def test_effective_permissions_use_bound_model_permissions(self, service):
         file_record = _make_file(file_id=120, knowledge_id=1)
@@ -4814,8 +4893,75 @@ class TestFineGrainedPermissionRuntime:
         assert permission_ids == set()
 
     @pytest.mark.asyncio
+    async def test_public_level_space_grants_viewer_permissions_without_release_or_public_auth(self, service):
+        public_level_space = _make_space(
+            space_id=1,
+            auth_type=AuthTypeEnum.PRIVATE,
+            is_released=False,
+            space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+        )
+        file_record = _make_file(file_id=120, knowledge_id=1)
+        fake_fga = _FakeReadTuplesFGA({
+            'knowledge_file:120': [],
+            'knowledge_space:1': [],
+        })
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_level_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ), patch.object(
+            service, '_get_current_user_subject_strings', new_callable=AsyncMock,
+            return_value={'user:7'},
+        ), patch.object(
+            service, '_get_relation_bindings', new_callable=AsyncMock,
+            return_value=[],
+        ), patch.object(
+            service, '_get_binding_department_paths', new_callable=AsyncMock,
+            return_value={},
+        ), patch.object(
+            service, '_get_relation_models_map', new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga',
+            return_value=fake_fga,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            permission_ids = await service._get_effective_permission_ids(
+                'knowledge_file',
+                120,
+                space_id=1,
+            )
+
+        assert {'view_space', 'view_folder', 'view_file', 'download_folder', 'download_file'} <= permission_ids
+        assert 'edit_space' not in permission_ids
+        assert 'upload_file' not in permission_ids
+        assert 'delete_space' not in permission_ids
+        assert 'manage_space_relation' not in permission_ids
+
+    @pytest.mark.asyncio
     async def test_released_public_space_grants_viewer_permissions_without_joining(self, service):
-        public_space = _make_space(space_id=1, auth_type=AuthTypeEnum.PUBLIC, is_released=True)
+        public_space = _make_space(
+            space_id=1,
+            auth_type=AuthTypeEnum.PUBLIC,
+            is_released=True,
+            space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+        )
         file_record = _make_file(file_id=120, knowledge_id=1)
         fake_fga = _FakeReadTuplesFGA({
             'knowledge_file:120': [],

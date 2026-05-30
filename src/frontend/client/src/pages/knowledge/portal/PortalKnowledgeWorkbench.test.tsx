@@ -140,14 +140,18 @@ jest.mock("~/components/ui/icon/File", () => ({
 }));
 
 jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
-    CreateKnowledgeSpaceDrawer: ({ open, initialSpaceLevel, mode = "create", editingSpace, showApprovalReason, onConfirm }: any) => {
+    CreateKnowledgeSpaceDrawer: ({ open, initialSpaceLevel, mode = "create", editingSpace, showApprovalReason, showSuccessManageMembers, onConfirm }: any) => {
         if (!open) return null;
+        const successManageMembersVisible = typeof showSuccessManageMembers === "function"
+            ? showSuccessManageMembers(initialSpaceLevel)
+            : showSuccessManageMembers !== false;
         return (
             <div data-testid="create-space-drawer">
                 mode:{mode}
                 initial:{initialSpaceLevel}
                 editing:{editingSpace?.name || ""}
                 approvalReason:{String(Boolean(showApprovalReason))}
+                successManageMembers:{String(successManageMembersVisible)}
                 <button
                     type="button"
                     onClick={async () => {
@@ -641,6 +645,23 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getByTestId("create-space-drawer")).toHaveTextContent(`initial:${SpaceLevel.PERSONAL}`);
     });
 
+    test("opens personal create drawer with success member management hidden", async () => {
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+
+        renderWorkbench();
+
+        const personalGroup = screen.getByTestId("space-group-personal");
+        fireEvent.click(await within(personalGroup).findByRole("button", { name: "新建知识库" }));
+
+        expect(screen.getByTestId("create-space-drawer")).toHaveTextContent(`initial:${SpaceLevel.PERSONAL}`);
+        expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("successManageMembers:false");
+    });
+
     test("hides create row under a group without create permission", async () => {
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: true,
@@ -730,6 +751,34 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(teamRow).getByRole("button", { name: "置顶空间" })).toBeInTheDocument();
         expect(within(teamRow).getByRole("button", { name: "删除空间" })).toBeInTheDocument();
         expect(within(teamRow).queryByRole("button", { name: "退出空间" })).not.toBeInTheDocument();
+    });
+
+    test("hides member management action for personal spaces in portal sidebar", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.CREATOR,
+            spaceLevel: SpaceLevel.PERSONAL,
+        });
+        mockUseKnowledgeSpaceActionPermissions.mockReturnValue({
+            permissions: {
+                "personal-1": ["edit_space", "manage_space_relation", "delete_space"],
+            },
+            loading: false,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+
+        renderWorkbench();
+
+        const personalRow = await screen.findByTestId("space-row-personal-1");
+        fireEvent.click(within(personalRow).getByRole("button", { name: "更多我的技术文档操作" }));
+
+        expect(within(personalRow).queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
+        expect(within(personalRow).getByRole("button", { name: "空间设置" })).toBeInTheDocument();
+        expect(within(personalRow).getByRole("button", { name: "删除空间" })).toBeInTheDocument();
     });
 
     test("opens space settings drawer with fetched space detail", async () => {

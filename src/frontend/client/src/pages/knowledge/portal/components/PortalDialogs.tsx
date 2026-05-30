@@ -4,7 +4,7 @@ import { NotificationsDialog } from "~/components/NotificationsDialog";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import type { ApprovalCenterTab } from "~/api/approval";
 import type { KnowledgeFile, KnowledgeSpace, SpaceLevel } from "~/api/knowledge";
-import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "../../CreateKnowledgeSpaceDrawer";
+import { CreateKnowledgeSpaceDrawer } from "../../CreateKnowledgeSpaceDrawer";
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
 import { FilePublishDialog } from "../../SpaceDetail/FilePublishDialog";
 import { KnowledgeSpaceShareDialog } from "../../SpaceDetail/KnowledgeSpaceShareDialog";
@@ -47,9 +47,10 @@ type PortalDialogsProps = {
     onSpacePermissionChanged: () => void | Promise<void>;
     createDrawerOpen: boolean;
     onCreateDrawerOpenChange: (open: boolean) => void;
-    onConfirmCreateSpace: (form: CreateKnowledgeSpaceFormData) => Promise<boolean>;
+    onConfirmCreateSpace: ComponentProps<typeof CreateKnowledgeSpaceDrawer>["onConfirm"];
     editingSpace: KnowledgeSpace | null;
     pendingCreateLevel: SpaceLevel;
+    showSuccessManageMembers?: boolean | ((spaceLevel: SpaceLevel) => boolean);
     onViewCreatedSpace: () => void;
     onManageEditingSpaceMembers: () => void;
     uploadDialogProps: ComponentProps<typeof PortalUploadDialog>;
@@ -88,6 +89,7 @@ export function PortalDialogs({
     onConfirmCreateSpace,
     editingSpace,
     pendingCreateLevel,
+    showSuccessManageMembers,
     onViewCreatedSpace,
     onManageEditingSpaceMembers,
     uploadDialogProps,
@@ -184,6 +186,7 @@ export function PortalDialogs({
                 editingSpace={editingSpace}
                 initialSpaceLevel={pendingCreateLevel}
                 showApprovalReason
+                showSuccessManageMembers={showSuccessManageMembers}
                 onViewSpace={onViewCreatedSpace}
                 onManageMembers={onManageEditingSpaceMembers}
             />

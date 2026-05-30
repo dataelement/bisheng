@@ -18,6 +18,9 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.department_spaces": "业务域知识库",
             "com_knowledge.team_spaces": "团队知识库",
             "com_knowledge.personal_spaces": "个人知识库",
+            "com_subscription.create_knowledge_space_success": "创建知识空间成功",
+            "com_subscription.goto_knowledge_space": "前往知识空间",
+            "com_knowledge.member_management": "成员管理",
             "com_knowledge.cancel": "取消",
             "com_knowledge.confirm_create": "确认创建",
         };
@@ -205,5 +208,34 @@ describe("CreateKnowledgeSpaceDrawer", () => {
             spaceLevel: SpaceLevel.TEAM,
             userGroupId: undefined,
         }));
+    });
+
+    test("创建成功页可隐藏成员管理入口", async () => {
+        const onConfirm = jest.fn().mockResolvedValue(true);
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: false,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+
+        renderDrawer({
+            initialSpaceLevel: SpaceLevel.PERSONAL,
+            onConfirm,
+            showSuccessManageMembers: false,
+        });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+            target: { value: "个人资料库" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+        await waitFor(() => expect(screen.getByText("创建知识空间成功")).toBeInTheDocument());
+        expect(screen.getByRole("button", { name: "前往知识空间" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
     });
 });
