@@ -41,8 +41,10 @@ import {
   type ApprovalScenarioItem,
   type ApprovalScenarioPreset,
 } from "@/controllers/API/approval";
+import { getDepartmentTreeApi } from "@/controllers/API/department";
 import { getDepartmentKnowledgeSpacesApi } from "@/controllers/API/departmentKnowledgeSpace";
 import { getManagedKnowledgeSpacesApi } from "@/controllers/API/knowledgeSpace";
+import type { DepartmentTreeNode } from "@/types/api/department";
 import { useTranslation } from "react-i18next";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -228,6 +230,9 @@ const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
     label: 'approvalPage.condition.target_space_level',
     values: SPACE_LEVEL_VALUES,
   },
+  applicant_department_id: {
+    label: 'approvalPage.condition.applicant_department_id',
+  },
   target_space_id: {
     label: 'approvalPage.condition.target_space_id',
   },
@@ -368,6 +373,22 @@ function AddScenarioDialog({
 }
 
 type TargetSpaceOption = { value: string; label: string };
+type DepartmentOption = { value: string; label: string };
+
+function flattenDepartmentOptions(nodes: DepartmentTreeNode[], parentNames: string[] = []): DepartmentOption[] {
+  return nodes.flatMap((node) => {
+    const names = [...parentNames, node.name];
+    return [
+      { value: String(node.id), label: names.join(" / ") },
+      ...flattenDepartmentOptions(node.children ?? [], names),
+    ];
+  });
+}
+
+function findDepartmentOption(options: DepartmentOption[], value?: string): DepartmentOption | undefined {
+  if (!value) return undefined;
+  return options.find((option) => option.value === value);
+}
 
 function formatTargetSpaceLabel(space: {
   name?: string | null;
@@ -412,6 +433,12 @@ function RouteDialog({
   const [targetSpacesLoading, setTargetSpacesLoading] = useState(false);
   const [targetSpacesLoadFailed, setTargetSpacesLoadFailed] = useState(false);
   const [targetSpacesLoadAttempt, setTargetSpacesLoadAttempt] = useState(0);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
+  const [departmentSearch, setDepartmentSearch] = useState("");
+  const [departmentsLoaded, setDepartmentsLoaded] = useState(false);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+  const [departmentsLoadFailed, setDepartmentsLoadFailed] = useState(false);
+  const [departmentsLoadAttempt, setDepartmentsLoadAttempt] = useState(0);
 
   useEffect(() => {
     if (open) {
@@ -427,6 +454,12 @@ function RouteDialog({
       setTargetSpacesLoadFailed(false);
       setTargetSpacesLoadAttempt(0);
       setTargetSpaces([]);
+      setDepartmentSearch("");
+      setDepartmentsLoaded(false);
+      setDepartmentsLoading(false);
+      setDepartmentsLoadFailed(false);
+      setDepartmentsLoadAttempt(0);
+      setDepartments([]);
       // Load system roles for applicant_role condition values
       getRolesApi("").then((res: any) => {
         const list = Array.isArray(res) ? res : (res?.data ?? []);
@@ -462,6 +495,11 @@ function RouteDialog({
         space.label.toLowerCase().includes(targetSpaceSearch.toLowerCase()),
       )
     : targetSpaces;
+  const filteredDepartments = departmentSearch
+    ? departments.filter((department) =>
+        department.label.toLowerCase().includes(departmentSearch.toLowerCase()),
+      )
+    : departments;
 
   useEffect(() => {
     if (!open || condField !== "target_space_id" || targetSpacesLoaded || targetSpacesLoading) return;
@@ -501,16 +539,47 @@ function RouteDialog({
     setTargetSpacesLoadAttempt((attempt) => attempt + 1);
   };
 
+  useEffect(() => {
+    if (!open || condField !== "applicant_department_id" || departmentsLoaded || departmentsLoading) return;
+
+    setDepartmentsLoading(true);
+    setDepartmentsLoadFailed(false);
+    getDepartmentTreeApi().then((tree) => {
+      setDepartments(flattenDepartmentOptions(tree ?? []));
+      setDepartmentsLoaded(true);
+    }).catch(() => {
+      setDepartments([]);
+      setDepartmentsLoadFailed(true);
+      setDepartmentsLoaded(false);
+    }).finally(() => {
+      setDepartmentsLoading(false);
+    });
+  }, [open, condField, departmentsLoaded, departmentsLoading, departmentsLoadAttempt]);
+
+  const retryLoadDepartments = () => {
+    setDepartmentsLoaded(false);
+    setDepartmentsLoadFailed(false);
+    setDepartments([]);
+    setDepartmentsLoadAttempt((attempt) => attempt + 1);
+  };
+
   const handleFieldChange = (f: string) => {
     setCondField(f);
     setCondValue(""); // reset value when field changes
     setTargetSpaceSearch("");
+    setDepartmentSearch("");
   };
 
   const targetSpaceConditionInvalid = condField === "target_space_id" && (
     targetSpacesLoading ||
     targetSpacesLoadFailed ||
     !targetSpacesLoaded ||
+    !condValue
+  );
+  const departmentConditionInvalid = condField === "applicant_department_id" && (
+    departmentsLoading ||
+    departmentsLoadFailed ||
+    !departmentsLoaded ||
     !condValue
   );
 
@@ -552,7 +621,47 @@ function RouteDialog({
               {condField && (
                 <>
                   <span className="text-xs text-text-secondary">=</span>
-                  {condField === "target_space_id" ? (
+                  {condField === "applicant_department_id" ? (
+                    <div className="flex-1 space-y-2">
+                      {departmentsLoading ? (
+                        <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
+                      ) : departmentsLoadFailed ? (
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-red-500">{t("approvalPage.departmentLoadFailed", { defaultValue: "部门加载失败" })}</p>
+                          <button
+                            type="button"
+                            onClick={retryLoadDepartments}
+                            className="text-xs text-primary hover:underline"
+                          >
+                            {t("approvalPage.retry", { defaultValue: "重试" })}
+                          </button>
+                        </div>
+                      ) : departments.length > 0 ? (
+                        <>
+                          <input
+                            value={departmentSearch}
+                            onChange={(e) => setDepartmentSearch(e.target.value)}
+                            placeholder={t("approvalPage.searchDepartment", { defaultValue: "搜索部门" })}
+                            className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                          />
+                          <select
+                            value={condValue}
+                            onChange={(e) => setCondValue(e.target.value)}
+                            className="h-9 w-full rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                          >
+                            <option value="">{t("approvalPage.pleaseSelect")}</option>
+                            {filteredDepartments.map((department) => (
+                              <option key={department.value} value={department.value}>
+                                {department.label}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      ) : (
+                        <p className="text-xs text-text-secondary">{t("approvalPage.noDepartments", { defaultValue: "暂无可用部门" })}</p>
+                      )}
+                    </div>
+                  ) : condField === "target_space_id" ? (
                     <div className="flex-1 space-y-2">
                       {targetSpacesLoading ? (
                         <p className="text-xs text-text-secondary">{t("approvalPage.loading")}</p>
@@ -679,7 +788,7 @@ function RouteDialog({
           </button>
           <button
             type="button"
-            disabled={!name.trim() || (type === "flow" && !flowId) || targetSpaceConditionInvalid}
+            disabled={!name.trim() || (type === "flow" && !flowId) || targetSpaceConditionInvalid || departmentConditionInvalid}
             onClick={() =>
               onConfirm({
                 route_name: name.trim(),
@@ -760,6 +869,7 @@ function FlowDialog({
 const APPROVER_SOURCE_OPTIONS = [
   { value: "direct_user",             labelKey: "approvalPage.approverSource.direct_user" },
   { value: "department_admin",        labelKey: "approvalPage.approverSource.department_admin" },
+  { value: "role_user",               labelKey: "approvalPage.approverSource.role_user" },
   { value: "knowledge_space_owner",   labelKey: "approvalPage.approverSource.knowledge_space_owner" },
   { value: "knowledge_space_manager", labelKey: "approvalPage.approverSource.knowledge_space_manager" },
   { value: "channel_owner",           labelKey: "approvalPage.approverSource.channel_owner" },
@@ -786,7 +896,7 @@ function NodeDialog({
   const [name, setName] = useState(initial.node_name ?? "");
   const { t } = useTranslation("bs");
   const [mode, setMode] = useState(initial.node_mode ?? "or");
-  type SourceEntry = { type: string; label: string; userIds?: number[]; userNames?: string[] };
+  type SourceEntry = { type: string; label: string; userIds?: number[]; userNames?: string[]; roleIds?: number[]; roleNames?: string[] };
   const [sources, setSources] = useState<SourceEntry[]>([]);
 
   // user picker state for direct_user source
@@ -798,6 +908,14 @@ function NodeDialog({
   const [userLoading, setUserLoading] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
+
+  // role picker state for role_user source
+  const [rolePickerOpen, setRolePickerOpen] = useState(false);
+  const [roleSearch, setRoleSearch] = useState("");
+  const [roleList, setRoleList] = useState<{ id: number; role_name: string }[]>([]);
+  const [roleLoading, setRoleLoading] = useState(false);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<number[]>([]);
+  const [selectedRoleNames, setSelectedRoleNames] = useState<string[]>([]);
 
   // Filter global list to only those allowed for the current scenario
   const effectiveSourceOptions = allowedSourceTypes
@@ -814,13 +932,22 @@ function NodeDialog({
       setName(initial.node_name ?? "");
       setMode(initial.node_mode ?? "or");
       const cfg = initial.approver_config as Record<string, unknown> | undefined;
-      const rawSources = (cfg?.sources as { type: string; user_ids?: number[]; user_names?: string[]; label?: string }[] | undefined) ?? [];
+      const rawSources = (cfg?.sources as {
+        type: string;
+        user_ids?: number[];
+        user_names?: string[];
+        role_ids?: number[];
+        role_names?: string[];
+        label?: string;
+      }[] | undefined) ?? [];
       setSources(
         rawSources.map((s) => ({
           type: s.type,
           label: getApproverLabel(s.type),
           userIds: s.user_ids,
           userNames: s.user_names,
+          roleIds: s.role_ids,
+          roleNames: s.role_names,
         })),
       );
     }
@@ -847,6 +974,18 @@ function NodeDialog({
     }, 300);
     return () => clearTimeout(timer);
   }, [userPickerOpen, userSearch]);
+
+  useEffect(() => {
+    if (!rolePickerOpen) return;
+    setRoleLoading(true);
+    getRolesApi(roleSearch)
+      .then((res: any) => {
+        const list = Array.isArray(res) ? res : (res?.data ?? []);
+        setRoleList(list);
+      })
+      .catch(() => setRoleList([]))
+      .finally(() => setRoleLoading(false));
+  }, [rolePickerOpen, roleSearch]);
 
   const handleUserListScroll = (e: React.UIEvent<HTMLDivElement>) => {
     if (!userHasMore || userLoading) return;
@@ -883,9 +1022,36 @@ function NodeDialog({
     setUserPickerOpen(false);
   };
 
+  const openRolePicker = () => {
+    const existing = sources.find((s) => s.type === "role_user");
+    setSelectedRoleIds(existing?.roleIds ?? []);
+    setSelectedRoleNames(existing?.roleNames ?? []);
+    setRoleSearch("");
+    setRoleList([]);
+    setRolePickerOpen(true);
+  };
+
+  const confirmRolePicker = () => {
+    if (!selectedRoleIds.length) return;
+    setSources((prev) => {
+      const without = prev.filter((s) => s.type !== "role_user");
+      return [...without, {
+        type: "role_user",
+        label: getApproverLabel("role_user"),
+        roleIds: selectedRoleIds,
+        roleNames: selectedRoleNames,
+      }];
+    });
+    setRolePickerOpen(false);
+  };
+
   const addSource = (type: string) => {
     if (type === "direct_user") {
       openUserPicker();
+      return;
+    }
+    if (type === "role_user") {
+      openRolePicker();
       return;
     }
     if (sources.some((s) => s.type === type)) return;
@@ -928,6 +1094,14 @@ function NodeDialog({
                       className="hover:text-primary"
                     >
                       {s.label}{s.userIds?.length ? ` (${s.userIds.length})` : ""}
+                    </button>
+                  ) : s.type === "role_user" ? (
+                    <button
+                      type="button"
+                      onClick={openRolePicker}
+                      className="hover:text-primary"
+                    >
+                      {s.label}{s.roleIds?.length ? ` (${s.roleIds.length})` : ""}
                     </button>
                   ) : (
                     s.label
@@ -988,7 +1162,9 @@ function NodeDialog({
                   sources: sources.map((s) =>
                     s.type === "direct_user"
                       ? { type: s.type, user_ids: s.userIds ?? [], user_names: s.userNames ?? [] }
-                      : { type: s.type },
+                      : s.type === "role_user"
+                        ? { type: s.type, role_ids: s.roleIds ?? [], role_names: s.roleNames ?? [] }
+                        : { type: s.type },
                   ),
                 },
               })
@@ -1069,6 +1245,77 @@ function NodeDialog({
             type="button"
             disabled={!selectedUserIds.length}
             onClick={confirmUserPicker}
+            className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
+          >
+            {t("approvalPage.save")}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    {/* Role picker for role_user source */}
+    <Dialog open={rolePickerOpen} onOpenChange={(v) => !v && setRolePickerOpen(false)}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t("approvalPage.approverSource.role_user")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <input
+            value={roleSearch}
+            onChange={(e) => setRoleSearch(e.target.value)}
+            placeholder={t("approvalPage.searchRole")}
+            className="block h-9 w-full rounded-lg border border-border-subtle bg-background-primary px-3 text-sm text-text-primary outline-none"
+          />
+          <div className="max-h-60 overflow-y-auto rounded-lg border border-border-subtle divide-y divide-border-subtle">
+            {roleList.length === 0 && !roleLoading && (
+              <div className="py-4 text-center text-xs text-text-secondary">{t("approvalPage.noRoles", { defaultValue: "暂无角色" })}</div>
+            )}
+            {roleList.map((role) => {
+              const checked = selectedRoleIds.includes(role.id);
+              return (
+                <label
+                  key={role.id}
+                  className="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      if (checked) {
+                        setSelectedRoleIds((ids) => ids.filter((id) => id !== role.id));
+                        setSelectedRoleNames((names) => names.filter((_, i) => selectedRoleIds[i] !== role.id));
+                      } else {
+                        setSelectedRoleIds((ids) => [...ids, role.id]);
+                        setSelectedRoleNames((names) => [...names, role.role_name]);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-border-subtle accent-primary"
+                  />
+                  <span className="text-sm text-text-primary">{role.role_name}</span>
+                </label>
+              );
+            })}
+            {roleLoading && (
+              <div className="py-2 text-center text-xs text-text-secondary">{t("approvalPage.loading")}</div>
+            )}
+          </div>
+          {selectedRoleIds.length > 0 && (
+            <div className="text-xs text-text-secondary">
+              {t("approvalPage.selectedRoles", { defaultValue: "已选角色" })} {selectedRoleIds.length}：{selectedRoleNames.join("、")}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={() => setRolePickerOpen(false)}
+            className="rounded-lg border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-gray-50"
+          >
+            {t("approvalPage.cancel")}
+          </button>
+          <button
+            type="button"
+            disabled={!selectedRoleIds.length}
+            onClick={confirmRolePicker}
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
           >
             {t("approvalPage.save")}
@@ -2177,8 +2424,20 @@ export default function ApprovalPage() {
                               <div className="mt-2 flex flex-wrap items-center gap-2 pl-9">
                                 {sources.map((src: any) => {
                                   const userNames: string[] = src.user_names ?? src.userNames ?? [];
+                                  const roleNames: string[] = src.role_names ?? src.roleNames ?? [];
                                   if (src.type === "direct_user" && userNames.length > 0) {
                                     return userNames.map((name: string) => (
+                                      <span
+                                        key={`${src.type}-${name}`}
+                                        className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
+                                      >
+                                        <Users size={10} className="text-text-secondary" />
+                                        {name}
+                                      </span>
+                                    ));
+                                  }
+                                  if (src.type === "role_user" && roleNames.length > 0) {
+                                    return roleNames.map((name: string) => (
                                       <span
                                         key={`${src.type}-${name}`}
                                         className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
@@ -2468,7 +2727,7 @@ export default function ApprovalPage() {
             ) : (
               <div className="space-y-3">
                 {flowPreviewDialog.nodes.map((node, idx) => {
-                  const sources: { type: string; user_names?: string[]; userNames?: string[] }[] =
+                  const sources: { type: string; user_names?: string[]; userNames?: string[]; role_names?: string[]; roleNames?: string[] }[] =
                     (node.approver_config?.sources as any[]) ?? [];
                   return (
                     <div key={node.id} className="rounded-lg border border-border-subtle p-3">
@@ -2487,8 +2746,20 @@ export default function ApprovalPage() {
                         <div className="mt-2 flex flex-wrap gap-1.5 pl-8">
                           {sources.map((src: any) => {
                             const userNames: string[] = src.user_names ?? src.userNames ?? [];
+                            const roleNames: string[] = src.role_names ?? src.roleNames ?? [];
                             if (src.type === "direct_user" && userNames.length > 0) {
                               return userNames.map((name: string) => (
+                                <span
+                                  key={`${src.type}-${name}`}
+                                  className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
+                                >
+                                  <Users size={10} className="text-text-secondary" />
+                                  {name}
+                                </span>
+                              ));
+                            }
+                            if (src.type === "role_user" && roleNames.length > 0) {
+                              return roleNames.map((name: string) => (
                                 <span
                                   key={`${src.type}-${name}`}
                                   className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"

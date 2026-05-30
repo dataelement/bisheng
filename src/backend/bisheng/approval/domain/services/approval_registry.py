@@ -80,6 +80,12 @@ _CONDITION_FIELD_OPTIONS: dict[str, ApprovalPresetConditionField] = {
             ('personal', '个人'),
         ]),
     ),
+    'applicant_department_id': ApprovalPresetConditionField(
+        field='applicant_department_id',
+        label='申请人部门',
+        type='selector',
+        selector_type='department',
+    ),
     'target_space_id': ApprovalPresetConditionField(
         field='target_space_id',
         label='目标知识空间',
@@ -92,6 +98,7 @@ _CONDITION_FIELD_OPTIONS: dict[str, ApprovalPresetConditionField] = {
 _APPROVER_SOURCE_OPTIONS: dict[str, ApprovalPresetApproverSource] = {
     'direct_user': ApprovalPresetApproverSource(source_type='direct_user', label='指定用户'),
     'department_admin': ApprovalPresetApproverSource(source_type='department_admin', label='申请人部门管理员'),
+    'role_user': ApprovalPresetApproverSource(source_type='role_user', label='指定用户角色'),
     'tenant_admin': ApprovalPresetApproverSource(source_type='tenant_admin', label='租户管理员'),
     'channel_admin': ApprovalPresetApproverSource(source_type='channel_admin', label='频道管理员'),
     'channel_owner': ApprovalPresetApproverSource(source_type='channel_owner', label='频道 Owner'),
@@ -160,8 +167,8 @@ class ApprovalRegistry:
                 scenario_code='knowledge_space_create_request',
                 scenario_name='知识空间创建审批',
                 handler_key='knowledge_space_create_request',
-                condition_fields=['applicant_role', 'space_level'],
-                approver_source_types=['direct_user', 'department_admin'],
+                condition_fields=['applicant_role', 'space_level', 'applicant_department_id'],
+                approver_source_types=['direct_user', 'department_admin', 'role_user'],
             )
         )
         registry.register_preset(

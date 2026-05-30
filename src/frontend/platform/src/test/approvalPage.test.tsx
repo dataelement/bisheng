@@ -27,6 +27,7 @@ const reorderApprovalRoutesApi = vi.fn();
 const deleteApprovalFlowApi = vi.fn();
 const getManagedKnowledgeSpacesApi = vi.fn();
 const getDepartmentKnowledgeSpacesApi = vi.fn();
+const getDepartmentTreeApi = vi.fn();
 const getRolesApi = vi.fn();
 const getUsersApi = vi.fn();
 
@@ -87,6 +88,7 @@ vi.mock("react-i18next", () => ({
         "approvalPage.condition.source_space_level": "来源知识空间类型",
         "approvalPage.condition.target_space_level": "目标知识空间类型",
         "approvalPage.condition.target_space_id": "目标知识空间",
+        "approvalPage.condition.applicant_department_id": "申请人部门",
         "approvalPage.spaceLevel.public": "公共",
         "approvalPage.spaceLevel.department": "部门",
         "approvalPage.spaceLevel.team": "团队",
@@ -97,6 +99,7 @@ vi.mock("react-i18next", () => ({
         "approvalPage.spaceVisibility.private": "私有",
         "approvalPage.approverSource.direct_user": "指定用户",
         "approvalPage.approverSource.department_admin": "申请人部门管理员",
+        "approvalPage.approverSource.role_user": "指定用户角色",
         "approvalPage.approverSource.knowledge_space_owner": "知识空间 Owner",
         "approvalPage.approverSource.knowledge_space_manager": "知识空间 Manager",
         "approvalPage.approverSource.channel_owner": "频道 Owner",
@@ -145,6 +148,10 @@ vi.mock("@/controllers/API/knowledgeSpace", () => ({
 
 vi.mock("@/controllers/API/departmentKnowledgeSpace", () => ({
   getDepartmentKnowledgeSpacesApi: (...a: any[]) => getDepartmentKnowledgeSpacesApi(...a),
+}));
+
+vi.mock("@/controllers/API/department", () => ({
+  getDepartmentTreeApi: (...a: any[]) => getDepartmentTreeApi(...a),
 }));
 
 // ── fixtures ──────────────────────────────────────────────────────────────
@@ -226,6 +233,9 @@ beforeEach(() => {
   ]);
   getDepartmentKnowledgeSpacesApi.mockResolvedValue([
     { id: 202, name: "部门空间B", space_kind: "department", department_name: "研发部" },
+  ]);
+  getDepartmentTreeApi.mockResolvedValue([
+    { id: 7, dept_id: "dept-7", name: "研发部", parent_id: null, path: "研发部", sort_order: 1, source: "local", status: "active", is_tenant_root: false, mounted_tenant_id: null, children: [] },
   ]);
 });
 
@@ -401,8 +411,8 @@ describe("ApprovalPage", () => {
         scenario_code: "knowledge_space_create_request",
         scenario_name: "知识空间创建审批",
         handler_key: "knowledge_space_create_request",
-        condition_fields: ["applicant_role", "space_level"],
-        approver_source_types: ["direct_user", "department_admin"],
+        condition_fields: ["applicant_role", "space_level", "applicant_department_id"],
+        approver_source_types: ["direct_user", "department_admin", "role_user"],
       },
     ]);
     listApprovalScenariosApi.mockResolvedValue([
@@ -423,6 +433,7 @@ describe("ApprovalPage", () => {
 
     const fieldSelect = getSelectWithOptionValue("space_level");
     expect(within(fieldSelect).getByRole("option", { name: "知识空间类型" })).toHaveValue("space_level");
+    expect(within(fieldSelect).getByRole("option", { name: "申请人部门" })).toHaveValue("applicant_department_id");
     expect(within(fieldSelect).queryByRole("option", { name: "空间可见性" })).not.toBeInTheDocument();
 
     await user.selectOptions(fieldSelect, "space_level");
@@ -443,6 +454,55 @@ describe("ApprovalPage", () => {
         34,
         expect.objectContaining({
           match_config: { field: "space_level", value: "personal" },
+        }),
+      );
+    });
+  });
+
+  it("creates a knowledge space create route with applicant department condition", async () => {
+    const user = userEvent.setup();
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        handler_key: "knowledge_space_create_request",
+        condition_fields: ["applicant_role", "space_level", "applicant_department_id"],
+        approver_source_types: ["direct_user", "department_admin", "role_user"],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 34,
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        enabled: true,
+      },
+    ]);
+    listApprovalRoutesApi.mockResolvedValue([]);
+
+    render(<ApprovalPage />);
+    await screen.findAllByText("知识空间创建审批");
+
+    await user.click(screen.getByRole("button", { name: /新增分支/ }));
+    await screen.findByText("新增条件分支");
+
+    const fieldSelect = getSelectWithOptionValue("applicant_department_id");
+    await user.selectOptions(fieldSelect, "applicant_department_id");
+
+    await waitFor(() => expect(getDepartmentTreeApi).toHaveBeenCalled());
+    const departmentSelect = getSelectWithOptionValue("7");
+    expect(within(departmentSelect).getByRole("option", { name: "研发部" })).toHaveValue("7");
+
+    await user.selectOptions(departmentSelect, "7");
+    await user.type(screen.getByPlaceholderText("如：管理员直接通过"), "研发部空间创建");
+    await user.selectOptions(getSelectWithOptionValue("pass"), "pass");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(createApprovalRouteApi).toHaveBeenCalledWith(
+        34,
+        expect.objectContaining({
+          match_config: { field: "applicant_department_id", value: "7" },
         }),
       );
     });
@@ -518,9 +578,65 @@ describe("ApprovalPage", () => {
     const sourceSelect = getSelectWithOptionValue("knowledge_space_manager");
     expect(within(sourceSelect).getByRole("option", { name: "指定用户" })).toHaveValue("direct_user");
     expect(within(sourceSelect).getByRole("option", { name: "申请人部门管理员" })).toHaveValue("department_admin");
+    expect(within(sourceSelect).queryByRole("option", { name: "指定用户角色" })).not.toBeInTheDocument();
     expect(within(sourceSelect).getByRole("option", { name: "知识空间 Owner" })).toHaveValue("knowledge_space_owner");
     expect(within(sourceSelect).getByRole("option", { name: "知识空间 Manager" })).toHaveValue("knowledge_space_manager");
     expect(within(sourceSelect).queryByRole("option", { name: "频道 Owner" })).not.toBeInTheDocument();
+  });
+
+  it("saves role_user approver source in a knowledge space create node", async () => {
+    const user = userEvent.setup();
+    getRolesApi.mockResolvedValue([{ id: 11, role_name: "知识管理员" }]);
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        handler_key: "knowledge_space_create_request",
+        condition_fields: ["applicant_role", "space_level", "applicant_department_id"],
+        approver_source_types: ["direct_user", "department_admin", "role_user"],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 34,
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        enabled: true,
+      },
+    ]);
+
+    render(<ApprovalPage />);
+    await screen.findByText("审批流程");
+
+    await user.click(screen.getByRole("button", { name: /编辑节点/ }));
+    expect(await screen.findByText(/编辑中/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /新增节点/ }));
+    expect(await screen.findByText("新增审批节点")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("如：申请人部门管理员审批"), "角色审批");
+    await user.selectOptions(getSelectWithOptionValue("role_user"), "role_user");
+    await waitFor(() => expect(getRolesApi).toHaveBeenCalledWith(""));
+    await user.click(await screen.findByText("知识管理员"));
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    expect(await screen.findByText("角色审批")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /保存更改/ }));
+
+    await waitFor(() => {
+      expect(setApprovalFlowNodesApi).toHaveBeenCalledWith(
+        12,
+        expect.arrayContaining([
+          expect.objectContaining({
+            node_name: "角色审批",
+            approver_config: {
+              sources: [{ type: "role_user", role_ids: [11], role_names: ["知识管理员"] }],
+            },
+          }),
+        ]),
+      );
+    });
   });
 
   it("opens flow dialog and creates a new flow when no flow is preselected", async () => {

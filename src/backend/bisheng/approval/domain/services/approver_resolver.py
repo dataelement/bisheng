@@ -18,6 +18,9 @@ async def resolve_approvers_from_sources(sources: list[dict], req: Any) -> list[
         Admins of the applicant's department (from ``DepartmentAdminGrantDao``).
         Falls back to an empty list when ``applicant_department_id`` is unset.
 
+    ``role_user``
+        Users who hold any role listed in ``role_ids``.
+
     ``tenant_admin``
         Users who are tenant admin of the current tenant (via ``TenantService``).
 
@@ -59,6 +62,22 @@ async def resolve_approvers_from_sources(sources: list[dict], req: Any) -> list[
                         _add(uid)
                 except Exception:
                     logger.exception('approver_resolver: failed to resolve department_admin for dept_id=%s', dept_id)
+
+        elif source_type == 'role_user':
+            role_ids: list[int] = []
+            for rid in (source.get('role_ids') or []):
+                try:
+                    role_ids.append(int(rid))
+                except (TypeError, ValueError):
+                    logger.warning('approver_resolver: invalid role_id %r in role_user source', rid)
+            if role_ids:
+                try:
+                    from bisheng.user.domain.models.user_role import UserRoleDao
+                    rows = await UserRoleDao.aget_roles_user(role_ids)
+                    for row in rows:
+                        _add(int(row.user_id))
+                except Exception:
+                    logger.exception('approver_resolver: failed to resolve role_user for role_ids=%s', role_ids)
 
         elif source_type == 'tenant_admin':
             # Resolve tenant admins via system AdminRole users.

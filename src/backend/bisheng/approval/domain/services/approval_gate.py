@@ -452,6 +452,10 @@ class ApprovalGate:
                     user_labels = await _get_user_role_labels(req.applicant_user_id, req.tenant_id)
                 if expected in user_labels:
                     return route
+            elif field == "applicant_department_id":
+                dept_id = req.applicant_department_id
+                if dept_id is not None and str(dept_id) == expected:
+                    return route
             else:
                 # Payload-based condition: compare against payload_snapshot field
                 payload_val = req.payload_snapshot.get(field)
