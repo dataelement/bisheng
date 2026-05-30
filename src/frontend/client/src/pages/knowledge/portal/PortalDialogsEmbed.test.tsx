@@ -14,12 +14,23 @@ jest.mock("~/components/approval/ApprovalCenterDialog", () => ({
 }));
 
 jest.mock("~/components/NotificationsDialog", () => ({
-    NotificationsDialog: ({ open, onOpenChange }: any) =>
+    // Mirrors the real "查看审批" button, which calls onOpenApprovalCenter AND
+    // then onOpenChange(false) in the same handler.
+    NotificationsDialog: ({ open, onOpenChange, onOpenApprovalCenter }: any) =>
         open ? (
             <div data-testid="notifications-dialog">
                 消息
                 <button data-testid="close-notifications" onClick={() => onOpenChange(false)}>
                     关闭
+                </button>
+                <button
+                    data-testid="view-approval"
+                    onClick={() => {
+                        onOpenApprovalCenter({ tab: "my_tasks" });
+                        onOpenChange(false);
+                    }}
+                >
+                    查看审批
                 </button>
             </div>
         ) : null,
@@ -44,13 +55,35 @@ describe("PortalDialogsEmbed", () => {
         expect(screen.getByTestId("notifications-dialog")).toBeInTheDocument();
     });
 
-    it("notifies the parent when the last open dialog closes", () => {
+    it("hands off from notifications to approval without hiding the overlay", () => {
+        const postSpy = jest.spyOn(window.parent, "postMessage");
+        render(<PortalDialogsEmbed />);
+        postFromParent("shougang-portal:open-notifications");
+
+        postSpy.mockClear();
+        act(() => {
+            fireEvent.click(screen.getByTestId("view-approval"));
+        });
+
+        // Approval opens, notifications closes, and the overlay stays (no close msg).
+        expect(screen.getByTestId("approval-center-dialog")).toHaveTextContent("my_tasks");
+        expect(screen.queryByTestId("notifications-dialog")).not.toBeInTheDocument();
+        expect(postSpy).not.toHaveBeenCalledWith(
+            { type: "shougang-portal:dialog-closed" },
+            "*",
+        );
+        postSpy.mockRestore();
+    });
+
+    it("notifies the parent only when the last open dialog closes", () => {
         const postSpy = jest.spyOn(window.parent, "postMessage");
         render(<PortalDialogsEmbed />);
         postFromParent("shougang-portal:open-approval-tasks");
 
         postSpy.mockClear();
-        fireEvent.click(screen.getByTestId("close-approval"));
+        act(() => {
+            fireEvent.click(screen.getByTestId("close-approval"));
+        });
 
         expect(postSpy).toHaveBeenCalledWith(
             { type: "shougang-portal:dialog-closed" },
