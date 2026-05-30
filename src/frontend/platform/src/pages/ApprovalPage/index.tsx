@@ -255,6 +255,7 @@ function conditionLabel(
   matchConfig: { field?: string; value?: string } | null | undefined,
   t: TFn,
   roleNameMap: Record<string, string> = {},
+  departmentNameMap: Record<string, string> = {},
 ): string {
   if (!matchConfig?.field) return '';
   const meta = CONDITION_FIELD_META[matchConfig.field];
@@ -268,9 +269,11 @@ function conditionLabel(
     meta?.values?.find((v) => v.value === value);
   const valLabel = staticMatch
     ? t(staticMatch.label, { defaultValue: staticMatch.value })
-    : value.startsWith('role_')
-      ? (roleNameMap[value] ?? `${t('approvalPage.systemRole', { defaultValue: '系统角色' })} #${value.slice(5)}`)
-      : value;
+    : matchConfig.field === 'applicant_department_id'
+      ? (departmentNameMap[value] ?? value)
+      : value.startsWith('role_')
+        ? (roleNameMap[value] ?? `${t('approvalPage.systemRole', { defaultValue: '系统角色' })} #${value.slice(5)}`)
+        : value;
   return `${fieldLabel} = ${valLabel}`;
 }
 
@@ -383,11 +386,6 @@ function flattenDepartmentOptions(nodes: DepartmentTreeNode[], parentNames: stri
       ...flattenDepartmentOptions(node.children ?? [], names),
     ];
   });
-}
-
-function findDepartmentOption(options: DepartmentOption[], value?: string): DepartmentOption | undefined {
-  if (!value) return undefined;
-  return options.find((option) => option.value === value);
 }
 
 function formatTargetSpaceLabel(space: {
@@ -1547,12 +1545,23 @@ export default function ApprovalPage() {
   const localIdRef = useRef(-1);
   // role_id → role_name map for condition label display
   const [pageRoleNameMap, setPageRoleNameMap] = useState<Record<string, string>>({});
+  const [pageDepartmentNameMap, setPageDepartmentNameMap] = useState<Record<string, string>>({});
   useEffect(() => {
     getRolesApi("").then((res: any) => {
       const list = Array.isArray(res) ? res : (res?.data ?? []);
       const map: Record<string, string> = {};
       list.forEach((r: any) => { if (r.id) map[`role_${r.id}`] = r.role_name || `role_${r.id}`; });
       setPageRoleNameMap(map);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    getDepartmentTreeApi().then((tree) => {
+      const map: Record<string, string> = {};
+      flattenDepartmentOptions(tree ?? []).forEach((option) => {
+        map[option.value] = option.label;
+      });
+      setPageDepartmentNameMap(map);
     }).catch(() => {});
   }, []);
 
@@ -2163,7 +2172,7 @@ export default function ApprovalPage() {
                         </div>
                       )}
                       {routes.map((route, idx) => {
-                        const matchLabel = conditionLabel(route.match_config, t, pageRoleNameMap);
+                        const matchLabel = conditionLabel(route.match_config, t, pageRoleNameMap, pageDepartmentNameMap);
                         const flowName = flows.find(
                           (f) => f.id === route.flow_definition_id,
                         )?.flow_name;

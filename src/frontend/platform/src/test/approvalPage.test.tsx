@@ -275,6 +275,39 @@ describe("ApprovalPage", () => {
     expect(listApprovalNodesApi).toHaveBeenCalledWith(12);
   });
 
+  it("shows applicant department route condition with department name", async () => {
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        handler_key: "knowledge_space_create_request",
+        condition_fields: ["applicant_role", "space_level", "applicant_department_id"],
+        approver_source_types: ["direct_user", "department_admin", "role_user"],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 34,
+        scenario_code: "knowledge_space_create_request",
+        scenario_name: "知识空间创建审批",
+        enabled: true,
+      },
+    ]);
+    listApprovalRoutesApi.mockResolvedValue([
+      {
+        ...ROUTE,
+        id: 16,
+        route_name: "研发部创建空间",
+        match_config: { field: "applicant_department_id", value: "7" },
+      },
+    ]);
+
+    render(<ApprovalPage />);
+
+    expect(await screen.findByText("研发部创建空间")).toBeInTheDocument();
+    expect(await screen.findByText("申请人部门 = 研发部")).toBeInTheDocument();
+  });
+
   it("opens add-scenario dialog and creates scenario on confirm", async () => {
     const user = userEvent.setup();
     // use a preset NOT already in scenarios so the dropdown is available
