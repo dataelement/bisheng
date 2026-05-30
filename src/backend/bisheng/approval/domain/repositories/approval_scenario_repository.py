@@ -194,7 +194,7 @@ class ApprovalScenarioRepository:
             .where(
                 ApprovalFlowVersion.tenant_id == tenant_id,
                 ApprovalFlowVersion.flow_definition_id == flow_definition_id,
-                ApprovalFlowVersion.is_active.is_(True),
+                ApprovalFlowVersion.is_active == True,  # noqa: E712 — DM8 rejects `IS 1`
             )
             .order_by(ApprovalFlowVersion.version_no.desc(), ApprovalFlowVersion.id.desc())
         )

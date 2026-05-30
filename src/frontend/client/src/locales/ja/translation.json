@@ -1660,6 +1660,8 @@
     "article_load_failed": "記事の読み込みに失敗しました",
     "sensitive_review": "安全審査",
     "sensitive_review_blocked": "この記事には違反内容が含まれているため詳細を表示できません",
+    "sensitive_violation_prefix": "この記事には違反内容が含まれています：",
+    "sensitive_violation_empty_hits": "一致した語句の詳細はありません",
     "articles_count": "件のコンテンツ",
     "at_least_one_source": "少なくとも1つの情報源を追加してください",
     "cancel": "キャンセル",

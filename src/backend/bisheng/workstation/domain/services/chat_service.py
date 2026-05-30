@@ -682,8 +682,17 @@ async def _build_knowledge_search_tool(
             if not kb_file_ids:
                 allowed[kb_id] = set()
                 continue
+            # Space KBs store file tags under SPACE_FILE; org KBs under
+            # KNOWLEDGE_FILE. get_tags_by_resource is strict on resource_type,
+            # so route per source — otherwise the LLM's tag filter silently
+            # returns zero files for org KBs.
+            resource_type = (
+                ResourceTypeEnum.SPACE_FILE
+                if kb_id in space_id_set
+                else ResourceTypeEnum.KNOWLEDGE_FILE
+            )
             tag_map = TagDao.get_tags_by_resource(
-                ResourceTypeEnum.SPACE_FILE, kb_file_ids,
+                resource_type, kb_file_ids,
             )
             wanted = set(tag_names)
             mode = (f.tag_match_mode or 'ANY').upper()
@@ -870,7 +879,15 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
                 tags_by_kb[kb.id] = []
                 continue
             try:
-                tag_map = TagDao.get_tags_by_resource(ResourceTypeEnum.SPACE_FILE, file_ids)
+                # Route by KB source: knowledge space files use SPACE_FILE,
+                # organization knowledge base files use KNOWLEDGE_FILE. Without
+                # this, tags on org-KB files never reach the prompt.
+                resource_type = (
+                    ResourceTypeEnum.SPACE_FILE
+                    if kb.id in space_id_set
+                    else ResourceTypeEnum.KNOWLEDGE_FILE
+                )
+                tag_map = TagDao.get_tags_by_resource(resource_type, file_ids)
                 seen: set[str] = set()
                 names: list[str] = []
                 for tags in tag_map.values():

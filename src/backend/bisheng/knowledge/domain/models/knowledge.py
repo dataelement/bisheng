@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, List, Optional, Tuple, Union, Dict
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Integer, String, collate
+from sqlalchemy import Boolean, Integer, String
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -766,7 +766,7 @@ class KnowledgeDao(KnowledgeBase):
         """ Async: Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square) """
         statement = select(Knowledge).where(
             Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-            Knowledge.is_released.is_(True),
+            Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
             Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value])
         )
         if keyword:
@@ -817,6 +817,8 @@ class KnowledgeDao(KnowledgeBase):
 
         rejection_cutoff = datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
 
+        kid_str = col(Knowledge.id).cast(String)
+
         # Subquery: count subscribers (status=ACTIVE) per space
         subscriber_subq = (
             select(
@@ -841,17 +843,17 @@ class KnowledgeDao(KnowledgeBase):
             )
             .outerjoin(
                 SpaceChannelMember,
-                (collate(col(Knowledge.id).cast(String), 'utf8mb4_unicode_ci') == SpaceChannelMember.business_id)
+                (kid_str == SpaceChannelMember.business_id)
                 & (SpaceChannelMember.business_type == BusinessTypeEnum.SPACE)
                 & (SpaceChannelMember.user_id == user_id),
             )
             .outerjoin(
                 subscriber_subq,
-                collate(col(Knowledge.id).cast(String), 'utf8mb4_unicode_ci') == subscriber_subq.c.business_id,
+                kid_str == subscriber_subq.c.business_id,
             )
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                Knowledge.is_released.is_(True),
+                Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
         )
@@ -897,7 +899,7 @@ class KnowledgeDao(KnowledgeBase):
             .select_from(Knowledge)
             .where(
                 Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                Knowledge.is_released.is_(True),
+                Knowledge.is_released == True,  # noqa: E712 — `IS 1` is rejected by DM8; `= 1` works on both MySQL and DM8
                 Knowledge.auth_type.in_([AuthTypeEnum.PUBLIC.value, AuthTypeEnum.APPROVAL.value]),
             )
         )

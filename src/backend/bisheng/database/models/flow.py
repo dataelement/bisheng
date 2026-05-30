@@ -14,6 +14,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import NewApplicationEve
 from bisheng.common.services import telemetry_service
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
+from bisheng.core.database.tenant_filter import build_tenant_filter_clause
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.role_access import AccessType, RoleAccess
@@ -459,12 +460,7 @@ class FlowDao(FlowBase):
                      search_description: bool = False,
                      app_type_ids: Dict[int, List[str]] = None) -> (List[Dict], int):
         """Get all flow-based apps and assistants."""
-        sub_query = select(
-            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
-            Flow.status, Flow.create_time, Flow.update_time).union_all(
-            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
-                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
-                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+        sub_query = cls._build_apps_subquery()
 
         statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
                            sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
@@ -556,12 +552,7 @@ class FlowDao(FlowBase):
         Returns:
             (List[Dict], int)
         """
-        sub_query = select(
-            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
-            Flow.status, Flow.create_time, Flow.update_time).union_all(
-            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
-                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
-                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+        sub_query = cls._build_apps_subquery()
 
         statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
                            sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
@@ -626,6 +617,36 @@ class FlowDao(FlowBase):
                 'update_time': one[8]
             })
         return data, total
+
+    @classmethod
+    def _build_apps_subquery(cls):
+        """Build the workflow+assistant ``UNION ALL`` subquery with tenant isolation.
+
+        The ``do_orm_execute`` auto-filter (see ``core/database/tenant_filter.py``)
+        only inspects the outer statement's ``column_descriptions`` /
+        ``get_final_froms``. Wrapping ``select(Flow) UNION ALL select(Assistant)``
+        in ``.subquery()`` hides both tenant-aware tables behind a Subquery, so
+        the listener finds no table to filter and the outer SELECT leaks cross
+        tenant rows. Inject the per-table tenant clause on each inner SELECT
+        before unioning so all four callers (sync/async list, time-range stats,
+        first-app) stay in lockstep with the listener's semantics.
+        """
+        flow_select = select(
+            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo,
+            Flow.user_id, Flow.status, Flow.create_time, Flow.update_time)
+        assistant_select = select(
+            Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
+            Assistant.logo, Assistant.user_id, Assistant.status,
+            Assistant.create_time, Assistant.update_time).where(Assistant.is_delete == 0)
+
+        flow_clause = build_tenant_filter_clause(Flow.tenant_id)
+        if flow_clause is not None:
+            flow_select = flow_select.where(flow_clause)
+        assistant_clause = build_tenant_filter_clause(Assistant.tenant_id)
+        if assistant_clause is not None:
+            assistant_select = assistant_select.where(assistant_clause)
+
+        return flow_select.union_all(assistant_select).subquery()
 
     @staticmethod
     def _build_app_type_ids_filter(sub_query, app_type_ids: Dict[int, List[str]] = None):
@@ -693,12 +714,7 @@ class FlowDao(FlowBase):
     @classmethod
     def get_all_app_by_time_range_sync(cls, start_time: datetime, end_time: datetime, page: int = 0,
                                        page_size: int = 0):
-        sub_query = select(
-            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
-            Flow.status, Flow.create_time, Flow.update_time).union_all(
-            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
-                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
-                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+        sub_query = cls._build_apps_subquery()
 
         statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
                            sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,
@@ -726,12 +742,7 @@ class FlowDao(FlowBase):
 
     @classmethod
     def get_first_app(cls):
-        sub_query = select(
-            Flow.id, Flow.name, Flow.description, Flow.flow_type, Flow.logo, Flow.user_id,
-            Flow.status, Flow.create_time, Flow.update_time).union_all(
-            select(Assistant.id, Assistant.name, Assistant.desc, FlowType.ASSISTANT.value,
-                   Assistant.logo, Assistant.user_id, Assistant.status, Assistant.create_time,
-                   Assistant.update_time).where(Assistant.is_delete == 0)).subquery()
+        sub_query = cls._build_apps_subquery()
 
         statement = select(sub_query.c.id, sub_query.c.name, sub_query.c.description,
                            sub_query.c.flow_type, sub_query.c.logo, sub_query.c.user_id,

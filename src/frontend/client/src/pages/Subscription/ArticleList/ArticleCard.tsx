@@ -11,6 +11,7 @@ import { AddToKnowledgeModal } from "../Article/AddToKnowledgeModal";
 import { ChannelQuoteIcon } from "~/components/icons/channels";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { ArticleFaviconCoverPlaceholder } from "./ArticleFaviconCoverPlaceholder";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { cn } from "~/utils";
 
 interface ArticleCardProps {
@@ -63,142 +64,165 @@ export function ArticleCard({
         : null;
     const sensitiveViolated = article.sensitiveReview?.violated === true;
     const canViewArticle = article.sensitiveReview?.can_view !== false;
+    const sensitiveHitWords = (article.sensitiveReview?.hits || [])
+        .map((h) => (h?.word || "").trim())
+        .filter(Boolean);
 
     return (
         <>
-        <div
-            className={cn(
-                "group relative flex cursor-pointer gap-6 border-b border-dashed border-[#E0E0E0] py-5 last:border-none",
-                "touch-mobile:gap-4 touch-mobile:border-solid touch-mobile:border-[#E3E3E3] touch-mobile:py-4",
-            )}
-            style={{
-                transitionProperty: 'background-color',
-                transitionDuration: '350ms',
-                transitionTimingFunction: 'ease-in-out'
-            }}
-            onClick={() => onSelect(article)}
-        >
-            {/* 1. 左侧封面：有配图用封面；无配图用信源 ico 双层模糊占位 */}
-            {article.coverImage ? (
-                <div className="size-[88px] flex-shrink-0 overflow-hidden rounded-sm">
-                    <img
-                        src={article.coverImage}
-                        alt={article.title}
-                        className="h-full w-full object-cover transition-transform duration-300 ease-in-out fine-pointer:group-hover:scale-105"
+            <div
+                className={cn(
+                    "group relative flex cursor-pointer gap-6 border-b border-dashed border-[#E0E0E0] py-5 last:border-none",
+                    "touch-mobile:gap-4 touch-mobile:border-solid touch-mobile:border-[#E3E3E3] touch-mobile:py-4",
+                )}
+                style={{
+                    transitionProperty: 'background-color',
+                    transitionDuration: '350ms',
+                    transitionTimingFunction: 'ease-in-out'
+                }}
+                onClick={() => onSelect(article)}
+            >
+                {/* 1. 左侧封面：有配图用封面；无配图用信源 ico 双层模糊占位 */}
+                {article.coverImage ? (
+                    <div className="size-[88px] flex-shrink-0 overflow-hidden rounded-sm">
+                        <img
+                            src={article.coverImage}
+                            alt={article.title}
+                            className="h-full w-full object-cover transition-transform duration-300 ease-in-out fine-pointer:group-hover:scale-105"
+                        />
+                    </div>
+                ) : (
+                    <ArticleFaviconCoverPlaceholder
+                        iconUrl={article.sourceAvatar}
+                        alt={article.sourceName}
                     />
-                </div>
-            ) : (
-                <ArticleFaviconCoverPlaceholder
-                    iconUrl={article.sourceAvatar}
-                    alt={article.sourceName}
-                />
-            )}
+                )}
 
-            {/* 2. 右侧内容区 */}
-            <div className="flex-1 min-w-0 flex flex-col justify-between">
-                <div>
-                    {/* 标题 - 搜索时使用 highlight HTML，非搜索时纯文本 */}
-                    <div className="flex min-w-0 items-center gap-2">
-                        <h3 className={cn(
-                            "min-w-0 flex-1 truncate font-medium [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
-                            isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
-                            article.isRead ? "text-[#989898]" : "text-gray-800 touch-mobile:text-[#212121] touch-mobile:font-medium",
-                        )}
-                        >
-                            {highlightTitle
-                                ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
-                                : article.title}
-                        </h3>
-                        {sensitiveViolated && (
-                            <span className="shrink-0 rounded-sm border border-[#F53F3F]/30 bg-[#F53F3F]/10 px-1.5 py-0.5 text-xs leading-4 text-[#F53F3F]">
-                                {localize("com_subscription.sensitive_review")}
-                            </span>
-                        )}
-                    </div>
-
-                    {/* 正文预览 - 增加蓝色引号 */}
-                    <div className="relative pt-4 pl-3 touch-mobile:pt-3">
-                        <ChannelQuoteIcon className="absolute left-0 top-1 mt-[-2px] h-5 w-5" />
-                        <p className={cn(
-                            "text-sm line-clamp-1 leading-snug [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold",
-                            "touch-mobile:line-clamp-2 touch-mobile:text-[#595959]",
-                            article.isRead ? "text-gray-400" : "text-gray-500",
-                        )}
-                        >
-                            {highlightContent
-                                ? <span dangerouslySetInnerHTML={{ __html: highlightContent }} />
-                                : article.content}
-                        </p>
-                    </div>
-                </div>
-
-                {/* 3. 底部元信息 - 来源和时间 */}
-                <div className="relative mt-4 flex items-center justify-between touch-mobile:mt-3">
-                    <div className="flex items-center gap-2 text-xs text-[#999] touch-mobile:text-[#999999]">
-                        <div className="size-4 shrink-0 overflow-hidden">
-                            <img
-                                src={article.sourceAvatar}
-                                alt=""
-                                className="h-full w-full object-cover"
-                            />
-                        </div>
-                        <span className="max-w-40 truncate">{article.sourceName}</span>
-                        <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0] touch-mobile:h-3 touch-mobile:bg-[#E5E5E5]" aria-hidden />
-                        <span>{formatTime(article.publishedAt)}</span>
-                    </div>
-
-                    {showArticleActions && canViewArticle && (
-                        <div
-                            className={cn(
-                                "flex items-center gap-3 transition-opacity",
-                                // Touch / coarse pointer: actions always visible; fine pointer (incl. narrow desktop): hover on card.
-                                "coarse-pointer:static coarse-pointer:opacity-100 coarse-pointer:pointer-events-auto",
-                                "fine-pointer:pointer-events-none fine-pointer:absolute fine-pointer:right-0 fine-pointer:opacity-0 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100",
+                {/* 2. 右侧内容区 */}
+                <div className="flex-1 min-w-0 flex flex-col justify-between">
+                    <div>
+                        {/* 标题 - 搜索时使用 highlight HTML，非搜索时纯文本 */}
+                        <div className="flex min-w-0 items-center gap-2">
+                            <h3 className={cn(
+                                "min-w-0 flex-1 truncate font-medium [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
+                                isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
+                                article.isRead ? "text-[#989898]" : "text-gray-800 touch-mobile:text-[#212121] touch-mobile:font-medium",
                             )}
-                        >
-                            {hasKnowledge && (
+                            >
+                                {highlightTitle
+                                    ? <span dangerouslySetInnerHTML={{ __html: highlightTitle }} />
+                                    : article.title}
+                            </h3>
+                            {sensitiveViolated && (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="shrink-0 rounded-sm border border-[#F53F3F]/30 bg-[#F53F3F]/10 px-1.5 py-0.5 text-xs leading-4 text-[#F53F3F]">
+                                            {localize("com_subscription.sensitive_review")}
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent
+                                        noArrow
+                                        side="top"
+                                        className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white"
+                                    >
+                                        {sensitiveHitWords.length > 0 ? (
+                                            <span className="break-words">
+                                                {localize("com_subscription.sensitive_violation_prefix")}
+                                                <span className="">
+                                                    {sensitiveHitWords.join("、")}
+                                                </span>
+                                            </span>
+                                        ) : (
+                                            localize("com_subscription.sensitive_violation_empty_hits")
+                                        )}
+                                    </TooltipContent>
+                                </Tooltip>
+                            )}
+                        </div>
+
+                        {/* 正文预览 - 增加蓝色引号 */}
+                        <div className="relative pt-4 pl-3 touch-mobile:pt-3">
+                            <ChannelQuoteIcon className="absolute left-0 top-1 mt-[-2px] h-5 w-5" />
+                            <p className={cn(
+                                "text-sm line-clamp-1 leading-snug [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-bold",
+                                "touch-mobile:line-clamp-2 touch-mobile:text-[#595959]",
+                                article.isRead ? "text-gray-400" : "text-gray-500",
+                            )}
+                            >
+                                {highlightContent
+                                    ? <span dangerouslySetInnerHTML={{ __html: highlightContent }} />
+                                    : article.content}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* 3. 底部元信息 - 来源和时间 */}
+                    <div className="relative mt-4 flex items-center justify-between touch-mobile:mt-3">
+                        <div className="flex items-center gap-2 text-xs text-[#999] touch-mobile:text-[#999999]">
+                            <div className="size-4 shrink-0 overflow-hidden">
+                                <img
+                                    src={article.sourceAvatar}
+                                    alt=""
+                                    className="h-full w-full object-cover"
+                                />
+                            </div>
+                            <span className="max-w-40 truncate">{article.sourceName}</span>
+                            <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0] touch-mobile:h-3 touch-mobile:bg-[#E5E5E5]" aria-hidden />
+                            <span>{formatTime(article.publishedAt)}</span>
+                        </div>
+
+                        {showArticleActions && canViewArticle && (
+                            <div
+                                className={cn(
+                                    "flex items-center gap-3 transition-opacity",
+                                    // Touch / coarse pointer: actions always visible; fine pointer (incl. narrow desktop): hover on card.
+                                    "coarse-pointer:static coarse-pointer:opacity-100 coarse-pointer:pointer-events-auto",
+                                    "fine-pointer:pointer-events-none fine-pointer:absolute fine-pointer:right-0 fine-pointer:opacity-0 fine-pointer:group-hover:pointer-events-auto fine-pointer:group-hover:opacity-100",
+                                )}
+                            >
+                                {hasKnowledge && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowKnowledgeModal(true);
+                                        }}
+                                        className="rounded-full bg-gray-50 flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
+                                        title={localize("com_subscription.add_to_knowledge_space")}
+                                    >
+                                        <BookPlusIcon className="size-3.5" />
+                                    </button>
+                                )}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        setShowKnowledgeModal(true);
+                                        handleShare(article);
+                                        const shareText = localize("com_subscription.reading_article_share", {
+                                            title: article.title,
+                                            url: article.url,
+                                        });
+                                        copyText(shareText)
+                                            .then(() => {
+                                                showToast({
+                                                    message: localize("com_subscription.share_link_copied"),
+                                                    severity: NotificationSeverity.SUCCESS,
+                                                });
+                                            })
+                                            .catch(() => {
+                                                showToast({
+                                                    message: localize("com_subscription.copy_failed_retry"),
+                                                    severity: NotificationSeverity.ERROR,
+                                                });
+                                            });
                                     }}
                                     className="rounded-full bg-gray-50 flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
-                                    title={localize("com_subscription.add_to_knowledge_space")}
+                                    title={localize("com_subscription.share")}
                                 >
-                                    <BookPlusIcon className="size-3.5" />
+                                    <ShareOutlineIcon className="size-3.5" />
                                 </button>
-                            )}
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleShare(article);
-                                    const shareText = localize("com_subscription.reading_article_share", {
-                                        title: article.title,
-                                        url: article.url,
-                                    });
-                                    copyText(shareText)
-                                        .then(() => {
-                                            showToast({
-                                                message: localize("com_subscription.share_link_copied"),
-                                                severity: NotificationSeverity.SUCCESS,
-                                            });
-                                        })
-                                        .catch(() => {
-                                            showToast({
-                                                message: localize("com_subscription.copy_failed_retry"),
-                                                severity: NotificationSeverity.ERROR,
-                                            });
-                                        });
-                                }}
-                                className="rounded-full bg-gray-50 flex size-8 cursor-pointer items-center justify-center text-gray-800 transition-colors fine-pointer:hover:bg-gray-100"
-                                title={localize("com_subscription.share")}
-                            >
-                                <ShareOutlineIcon className="size-3.5" />
-                            </button>
-                        </div>
-                    )}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </div>
             </div>
 
             {/* Add to Knowledge Space Modal — rendered outside the card to avoid interaction interference */}

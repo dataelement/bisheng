@@ -143,25 +143,24 @@ class SpaceFileDao(KnowledgeFileDao):
         order_text = ""
 
         if order_field == "file_type":
-            # pdf>docx>doc>>xlsx>xls>csv>pptx>ppt>jpg>png>jpeg>bmp>md>txt>html
+            # pdf>docx>doc>xlsx>xls>csv>pptx>ppt>jpg>jpeg>png>bmp>md>txt>html.
+            # Use LOWER(file_name) LIKE '%.<ext>' instead of SUBSTRING_INDEX —
+            # the latter is MySQL-specific and not supported on DM8.
+            ext_priorities = [
+                ('pdf', 1), ('docx', 2), ('doc', 3),
+                ('xlsx', 4), ('xls', 5), ('csv', 6),
+                ('pptx', 7), ('ppt', 8),
+                ('jpg', 9), ('jpeg', 10), ('png', 11), ('bmp', 12),
+                ('md', 13), ('txt', 14), ('html', 15),
+            ]
+            when_clauses = '\n                '.join(
+                f"WHEN LOWER(file_name) LIKE '%.{ext}' THEN {rank}"
+                for ext, rank in ext_priorities
+            )
             order_text += f"""
             file_type {order_sort},
-            CASE LOWER(SUBSTRING_INDEX(file_name, '.', -1))
-                WHEN 'pdf' THEN 1
-                WHEN 'docx' THEN 2
-                WHEN 'doc' THEN 3
-                WHEN 'xlsx' THEN 4
-                WHEN 'xls' THEN 5
-                WHEN 'csv' THEN 6
-                WHEN 'pptx' THEN 7
-                WHEN 'ppt' THEN 8
-                WHEN 'jpg' THEN 9
-                WHEN 'jpeg' THEN 10
-                WHEN 'png' THEN 11
-                WHEN 'bmp' THEN 12
-                WHEN 'md' THEN 13
-                WHEN 'txt' THEN 14
-                WHEN 'html' THEN 15
+            CASE
+                {when_clauses}
                 ELSE 999
             END {order_sort}
             """

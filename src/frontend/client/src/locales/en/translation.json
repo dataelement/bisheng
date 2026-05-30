@@ -1737,6 +1737,8 @@
     "article_load_failed": "Article failed to load",
     "sensitive_review": "Safety Review",
     "sensitive_review_blocked": "This article contains prohibited content and cannot be viewed",
+    "sensitive_violation_prefix": "This article contains prohibited content: ",
+    "sensitive_violation_empty_hits": "No matched word details",
     "articles_count": "articles",
     "at_least_one_source": "At least 1 source is required",
     "cancel": "Cancel",
