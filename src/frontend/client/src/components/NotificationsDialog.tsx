@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2, Check, XIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
@@ -12,6 +12,7 @@ import type { MessageItem, MessageTab } from "~/api/message";
 import {
     deleteMessageApi,
     getMessageListApi,
+    getMessageUnreadCountApi,
     markAllMessageReadApi,
     markMessageReadApi,
 } from "~/api/message";
@@ -111,6 +112,13 @@ export function NotificationsDialog({
 
     const [activeTab, setActiveTab] = useState<"all" | "request">("all");
     const [notifications, setNotifications] = useState<MessageItem[]>([]);
+    // Tab badges come from the global unread-count endpoint, NOT the currently
+    // loaded list — the list only holds the active tab's (paginated) messages,
+    // so deriving counts from it made both badges jump when switching tabs.
+    const [unreadCounts, setUnreadCounts] = useState<{ all: number; request: number }>({
+        all: 0,
+        request: 0,
+    });
     const [searchQuery, setSearchQuery] = useState("");
     const [onlyUnread, setOnlyUnread] = useState(false);
     /** Tracks row hover to toggle delete button (instead of relying on the time column hover). */
@@ -211,6 +219,7 @@ export function NotificationsDialog({
                     return;
                 }
                 markMessageReadApi([Number(id)]).catch(() => { });
+                applyReadToUnreadCounts(still);
                 setNotifications(prev => prev.map(n => String(n.id) === id ? { ...n, is_read: true } : n));
                 window.clearTimeout(notifyAutoReadTimersRef.current[id]);
                 delete notifyAutoReadTimersRef.current[id];
@@ -218,13 +227,26 @@ export function NotificationsDialog({
         }
     };
 
-    const unreadCounts = useMemo(() => {
-        const allUnread = notifications.filter(isVisuallyUnread).length;
-        const requestUnread = notifications.filter(
-            n => isApprovalMessageType(n.message_type, n.action_code) && isVisuallyUnread(n)
-        ).length;
-        return { all: allUnread, request: requestUnread };
-    }, [notifications]);
+    const refreshUnreadCounts = useCallback(async () => {
+        try {
+            const { total, approve } = await getMessageUnreadCountApi();
+            setUnreadCounts({ all: total, request: approve });
+        } catch {
+            // Badge is best-effort; keep the last known counts on transient errors.
+        }
+    }, []);
+
+    // Optimistically decrement the badges when a single message is read, so the
+    // counts stay live without an extra round-trip (and without the read/refetch
+    // race). "请求" only drops for approval-type messages.
+    const applyReadToUnreadCounts = useCallback((item?: MessageItem | null) => {
+        if (!item || item.is_read) return;
+        const isApproval = isApprovalMessageType(item.message_type, item.action_code);
+        setUnreadCounts(prev => ({
+            all: Math.max(0, prev.all - 1),
+            request: isApproval ? Math.max(0, prev.request - 1) : prev.request,
+        }));
+    }, []);
 
     const formatBadge = (n: number) => (n > 99 ? "99+" : String(n));
 
@@ -275,6 +297,12 @@ export function NotificationsDialog({
             loadNotifications(1, false);
         }
     }, [open, activeTab, onlyUnread, searchQuery]);
+
+    // Tab badges are global counts, independent of the active tab; refresh them
+    // from the authoritative endpoint whenever the dialog opens.
+    useEffect(() => {
+        if (open) void refreshUnreadCounts();
+    }, [open, refreshUnreadCounts]);
 
     useEffect(() => {
         if (!open) return;
@@ -332,6 +360,7 @@ export function NotificationsDialog({
     const handleMarkAllAsRead = async () => {
         try {
             await markAllMessageReadApi();
+            setUnreadCounts({ all: 0, request: 0 });
             setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
             showToast({ message: localize("com_notifications_toast_all_read"), severity: NotificationSeverity.SUCCESS });
         } catch {
@@ -634,6 +663,7 @@ export function NotificationsDialog({
 
     const markOneAsRead = (nid: string) => {
         markMessageReadApi([Number(nid)]).catch(() => { });
+        applyReadToUnreadCounts(notifications.find(n => String(n.id) === nid));
         setNotifications(prev => prev.map(n => String(n.id) === nid ? { ...n, is_read: true } : n));
     };
 
