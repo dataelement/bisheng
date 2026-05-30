@@ -612,6 +612,54 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
 
 
 @pytest.mark.asyncio
+async def test_shougang_portal_source_folder_paths_resolves_breadcrumb(service):
+    # Published file 100 traces back to source file 42 in space 14, nested under
+    # folders 37 (C011) -> 38 (C0001). File 88 has no publish metadata.
+    items = [
+        {
+            'id': 100,
+            'user_metadata': {
+                'shougang_portal_publish': {'source_space_id': 14, 'source_file_id': 42}
+            },
+        },
+        {'id': 88, 'user_metadata': {}},
+    ]
+    source_file = _make_file(
+        file_id=42, knowledge_id=14, file_name='霞光油桃.pdf',
+        file_level_path='/37/38', level=2,
+    )
+    folders = [
+        _make_file(file_id=37, knowledge_id=14, file_type=FileType.DIR.value,
+                   file_name='C011', file_level_path=''),
+        _make_file(file_id=38, knowledge_id=14, file_type=FileType.DIR.value,
+                   file_name='C0001', file_level_path='/37'),
+    ]
+
+    async def fake_get_files_by_ids(file_ids):
+        id_set = {int(i) for i in file_ids}
+        if 42 in id_set:
+            return [source_file]
+        return [f for f in folders if int(f.id) in id_set]
+
+    source_space = _make_space(space_id=14, user_id=7)
+    source_space.name = '管理'
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+        new_callable=AsyncMock,
+        side_effect=fake_get_files_by_ids,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[source_space],
+    ):
+        result = await service._resolve_shougang_portal_source_folder_paths(items)
+
+    assert result == {100: '管理/C011/C0001'}
+    assert 88 not in result
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
     spaces = [
         _make_space(space_id=12, user_id=7),

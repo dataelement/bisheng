@@ -2929,10 +2929,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
         enriched_items = await self._handle_file_folder_extra_info(visible_files)
+        folder_path_map = await self._resolve_shougang_portal_source_folder_paths(enriched_items)
         all_items: List[ShougangPortalFileItemResp] = []
         for item in enriched_items:
             space_id = int(item.get("knowledge_id") or 0)
             item["knowledge_name"] = space_name_map.get(space_id, str(space_id))
+            item["folder_path"] = folder_path_map.get(int(item.get("id") or 0), "")
             if self._is_shougang_portal_file_item(item, req.file_ext):
                 all_items.append(self._map_shougang_portal_file_item(space_id, item))
 
@@ -3141,6 +3143,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 or item.get("file_no")
                 or ""
             ),
+            folder_path=str(item.get("folder_path") or ""),
         )
 
     @staticmethod
@@ -4023,6 +4026,74 @@ class KnowledgeSpaceService(KnowledgeUtils):
             item._has_similar = item.similar_status == 1
 
         return items
+
+    async def _resolve_shougang_portal_source_folder_paths(self, items: List[Dict]) -> Dict[int, str]:
+        """Resolve readable source folder paths for published portal files.
+
+        Published files are flattened to the root of the public space (the
+        approval publish handler copies them with target_file_level_path=''),
+        so their own file_level_path is empty. The original folder structure
+        lives in the source (management) space and is recoverable via
+        user_metadata.shougang_portal_publish.{source_space_id, source_file_id}.
+
+        Returns a map of published file id -> "<source space>/<folder>/<folder>".
+        Files without a resolvable source (e.g. uploaded directly to the public
+        space, no publish metadata) are omitted so the caller defaults to "".
+        Folder ids in file_level_path are resolved to names in one batch query.
+        """
+        source_file_by_item: Dict[int, int] = {}
+        source_file_ids: set[int] = set()
+        for item in items:
+            metadata = item.get("user_metadata") or {}
+            publish = metadata.get("shougang_portal_publish") if isinstance(metadata, dict) else None
+            source_file_id = publish.get("source_file_id") if isinstance(publish, dict) else None
+            if not source_file_id:
+                continue
+            source_file_by_item[int(item.get("id") or 0)] = int(source_file_id)
+            source_file_ids.add(int(source_file_id))
+
+        if not source_file_ids:
+            return {}
+
+        source_files = await KnowledgeFileDao.aget_file_by_ids(list(source_file_ids))
+        source_file_map = {int(f.id): f for f in source_files}
+
+        folder_ids: set[int] = set()
+        source_space_ids: set[int] = set()
+        for source_file in source_files:
+            source_space_ids.add(int(source_file.knowledge_id))
+            folder_ids.update(
+                int(part) for part in (source_file.file_level_path or "").split("/") if part
+            )
+
+        folder_name_map: Dict[int, str] = {}
+        if folder_ids:
+            folders = await KnowledgeFileDao.aget_file_by_ids(list(folder_ids))
+            folder_name_map = {
+                int(f.id): str(f.file_name or "")
+                for f in folders
+                if int(f.file_type) == FileType.DIR.value
+            }
+
+        space_name_map: Dict[int, str] = {}
+        if source_space_ids:
+            source_spaces = await KnowledgeDao.async_get_spaces_by_ids(list(source_space_ids))
+            space_name_map = {int(s.id): str(s.name or s.id) for s in source_spaces}
+
+        result: Dict[int, str] = {}
+        for item_id, source_file_id in source_file_by_item.items():
+            source_file = source_file_map.get(source_file_id)
+            if source_file is None:
+                continue
+            segments = [
+                space_name_map.get(int(source_file.knowledge_id), str(source_file.knowledge_id))
+            ]
+            for part in (source_file.file_level_path or "").split("/"):
+                folder_name = folder_name_map.get(int(part)) if part else None
+                if folder_name:
+                    segments.append(folder_name)
+            result[item_id] = "/".join(segments)
+        return result
 
     async def _handle_file_folder_extra_info(self, res: List[KnowledgeFile]) -> List[Dict]:
         folder_ids = []

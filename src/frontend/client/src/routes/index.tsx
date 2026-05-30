@@ -26,6 +26,7 @@ import Root from './Root';
 import Knowledge from '~/pages/knowledge';
 import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
 import PortalKnowledgeWorkbench from '~/pages/knowledge/portal/PortalKnowledgeWorkbench';
+import PortalDialogsEmbed from '~/pages/knowledge/portal/PortalDialogsEmbed';
 import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
@@ -200,6 +201,9 @@ export const router = createBrowserRouter([
           { path: 'shougang-portal-admin', element: <ShougangPortalAdmin /> },
         ],
       },
+      // Chrome-less host for the portal approval/notification dialogs, embedded
+      // by the portal in a hidden iframe so the dialogs open from any page.
+      { path: 'portal-dialogs', element: <PortalDialogsEmbed />, errorElement: <RouteErrorBoundary /> },
       // Standalone chat — auth (login required, inside AuthLayout)
       { path: 'chat/flow/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="workflow" /> },
       { path: 'chat/assistant/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="assistant" /> },

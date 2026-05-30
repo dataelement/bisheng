@@ -298,6 +298,12 @@ class ShougangPortalFileItemResp(BaseModel):
     file_ext: str = ""
     file_size: str = ""
     file_encoding: str = ""
+    folder_path: str = Field(
+        default="",
+        description="Readable source folder path '<source space>/<folder>/<folder>'. "
+                    "Empty when the file has no resolvable source (e.g. uploaded "
+                    "directly to the public space without publish metadata).",
+    )
 
 
 class ShougangPortalFileSearchResp(BaseModel):
