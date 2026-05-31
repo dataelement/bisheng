@@ -103,7 +103,7 @@ class SpaceCreatePublicDeniedError(BaseErrorCode):
 
 class SpaceCreateDepartmentDeniedError(BaseErrorCode):
     Code: int = 18044
-    Msg: str = 'Only super admin or department admin can create department knowledge spaces'
+    Msg: str = 'Only super admin can create department knowledge spaces'
 
 
 class SpaceCreateTeamDeniedError(BaseErrorCode):

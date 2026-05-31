@@ -18,7 +18,9 @@ import {
     getRootFolderName,
     isHiddenName,
 } from "../../knowledgeUtils";
+import { DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS } from "../constants";
 import type {
+    PortalFileCategoryOption,
     PortalFileTreeNode,
     PortalUploadFileItem,
     PortalUploadFolderNode,
@@ -44,6 +46,7 @@ interface UsePortalUploadDialogParams {
     currentFolderNode: PortalFileTreeNode | null;
     currentPath: Array<{ id?: string; name: string }>;
     statusFilterNumbers: number[];
+    fileCategoryOptions?: PortalFileCategoryOption[];
     reloadFiles: () => Promise<void>;
     showToast: (toast: { message: string; severity: NotificationSeverity }) => void;
 }
@@ -57,6 +60,7 @@ export function usePortalUploadDialog({
     currentFolderNode,
     currentPath,
     statusFilterNumbers,
+    fileCategoryOptions = DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS,
     reloadFiles,
     showToast,
 }: UsePortalUploadDialogParams) {
@@ -74,6 +78,7 @@ export function usePortalUploadDialog({
     const [uploadImporting, setUploadImporting] = useState(false);
     const [uploadReviewRows, setUploadReviewRows] = useState<PortalUploadReviewRow[]>([]);
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
+    const [fileCategoryCode, setFileCategoryCode] = useState("");
 
     const uploadFolderOptions = useMemo(
         () => {
@@ -116,6 +121,7 @@ export function usePortalUploadDialog({
         setUploadImporting(false);
         setUploadReviewRows([]);
         setDuplicateFiles([]);
+        setFileCategoryCode("");
         if (uploadInputRef.current) {
             uploadInputRef.current.value = "";
         }
@@ -137,10 +143,18 @@ export function usePortalUploadDialog({
         setUploadLocalFolderName(null);
         setUploadReviewRows([]);
         setDuplicateFiles([]);
+        setFileCategoryCode("");
         setUploadFolderId(currentFolderId ?? null);
         setUploadFolderName(currentFolderName);
         setUploadDialogOpen(true);
     }, [activeSpace, canUploadInPortal, currentFolderId, currentFolderNode?.file.name, currentPath, setActiveSpace, uploadTargetSpace]);
+
+    useEffect(() => {
+        if (!fileCategoryCode) return;
+        if (!fileCategoryOptions.some((option) => option.code === fileCategoryCode)) {
+            setFileCategoryCode("");
+        }
+    }, [fileCategoryCode, fileCategoryOptions]);
 
     useEffect(() => {
         if (!uploadDialogOpen || !activeSpace) return;
@@ -249,6 +263,10 @@ export function usePortalUploadDialog({
         setUploadFolderName(folderName);
     }, []);
 
+    const handleSelectFileCategory = useCallback((code: string) => {
+        setFileCategoryCode(code);
+    }, []);
+
     const handleToggleUploadFolder = useCallback(async (node: PortalUploadFolderNode) => {
         const spaceId = activeSpace?.id;
         if (!spaceId) return;
@@ -337,6 +355,10 @@ export function usePortalUploadDialog({
             showToast({ message: "请先选择文件", severity: NotificationSeverity.INFO });
             return;
         }
+        if (!fileCategoryCode) {
+            showToast({ message: "请选择文件分类", severity: NotificationSeverity.INFO });
+            return;
+        }
         setUploadSubmitting(true);
         try {
             if (uploadLocalFolderName) {
@@ -374,6 +396,7 @@ export function usePortalUploadDialog({
                 const registeredFiles = await addFilesApi(activeSpace.id, {
                     file_path: filePaths,
                     parent_id: createdFolderId,
+                    file_category_code: fileCategoryCode,
                 });
                 const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
                 const createdFolderOptionId = String(createdFolder.id);
@@ -406,6 +429,7 @@ export function usePortalUploadDialog({
             const registeredFiles = await addFilesApi(activeSpace.id, {
                 file_path: filePaths,
                 parent_id: parentId !== null && Number.isFinite(parentId) ? parentId : null,
+                file_category_code: fileCategoryCode,
             });
             const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
             const rows: PortalUploadReviewRow[] = visibleRegisteredFiles.map((file) => ({
@@ -432,7 +456,7 @@ export function usePortalUploadDialog({
         } finally {
             setUploadSubmitting(false);
         }
-    }, [activeSpace, getVisibleRegisteredFiles, loadUploadReviewCandidates, showToast, uploadFiles, uploadFolderId, uploadFolderName, uploadLocalFolderName, uploadReviewRows.length]);
+    }, [activeSpace, fileCategoryCode, getVisibleRegisteredFiles, loadUploadReviewCandidates, showToast, uploadFiles, uploadFolderId, uploadFolderName, uploadLocalFolderName, uploadReviewRows.length]);
 
     const handleDuplicateSkip = useCallback(() => {
         setDuplicateFiles([]);
@@ -442,13 +466,13 @@ export function usePortalUploadDialog({
         if (!activeSpace || duplicateFiles.length === 0) return;
         const fileObjs = duplicateFiles.map((file) => file.rawObj).filter(Boolean);
         try {
-            await retryDuplicateFilesApi(activeSpace.id, fileObjs);
+            await retryDuplicateFilesApi(activeSpace.id, fileObjs, fileCategoryCode || undefined);
             await reloadFiles();
             resetUploadDialog();
         } catch {
             showToast({ message: "文件覆盖失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace, duplicateFiles, reloadFiles, resetUploadDialog, showToast]);
+    }, [activeSpace, duplicateFiles, fileCategoryCode, reloadFiles, resetUploadDialog, showToast]);
 
     const handleStartUploadImport = useCallback(async () => {
         const rows = uploadReviewRows.filter((row) => row.selected);
@@ -493,6 +517,8 @@ export function usePortalUploadDialog({
         uploadReviewRows,
         uploadFolderOptions,
         duplicateFiles,
+        fileCategoryCode,
+        fileCategoryOptions,
         setUploadDialogOpen,
         setUploadStep,
         setUploadReviewRows,
@@ -502,6 +528,7 @@ export function usePortalUploadDialog({
         handleAddUploadFolder,
         handleRemoveUploadFile,
         handleSelectUploadFolder,
+        handleSelectFileCategory,
         handleToggleUploadFolder,
         handleUploadNext,
         handleStartUploadImport,

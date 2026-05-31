@@ -11,6 +11,7 @@ import pytest
 from pydantic import BaseModel
 
 from bisheng.common.errcode.knowledge_space import (
+    SpaceCreateDepartmentDeniedError,
     SpaceFileDuplicateError,
     SpaceFileSizeLimitError,
     SpaceFileNotFoundError,
@@ -345,6 +346,63 @@ async def test_create_options_allow_team_space_without_user_groups():
 
     assert options.can_create_team is True
     mock_visible_groups.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_options_disallow_department_space_for_department_admin():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(id=9, name='业务域')],
+    ):
+        options = await svc.get_create_options()
+
+    assert options.can_create_department is False
+
+
+@pytest.mark.asyncio
+async def test_validate_department_space_create_rejects_department_admin_approval_request():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+        new_callable=AsyncMock,
+        return_value=0,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(embedding_model='embedding-1'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_id',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(id=9, status='active'),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_user_admin_departments',
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(id=9, name='业务域')],
+    ), patch.object(
+        svc,
+        '_ensure_space_name_unique_in_scope',
+        new_callable=AsyncMock,
+    ), patch.object(
+        svc,
+        '_is_auto_tag_feature_visible',
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        with pytest.raises(SpaceCreateDepartmentDeniedError):
+            await svc.validate_knowledge_space_create(
+                name='部门资料库',
+                space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+                department_id=9,
+                approval_request=True,
+            )
 
 
 @pytest.mark.asyncio

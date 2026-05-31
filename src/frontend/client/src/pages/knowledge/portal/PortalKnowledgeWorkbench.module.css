@@ -1389,6 +1389,25 @@
   font-weight: 600;
 }
 
+.uploadRequiredMark {
+  color: #d92d20;
+}
+
+.uploadSelect {
+  height: 36px;
+  border: 1px solid #dfe5ee;
+  border-radius: 5px;
+  padding: 0 12px;
+  background: #fff;
+  color: #273142;
+  font-size: 14px;
+}
+
+.uploadSelect:focus {
+  border-color: #2c76f4;
+  outline: 2px solid rgba(44, 118, 244, 0.16);
+}
+
 .uploadReadonlyInput {
   height: 36px;
   border: 1px solid #dfe5ee;

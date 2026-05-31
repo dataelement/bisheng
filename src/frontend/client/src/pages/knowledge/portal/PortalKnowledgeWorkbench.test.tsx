@@ -58,6 +58,21 @@ jest.mock("~/Providers", () => ({
     useConfirm: () => mockConfirm,
 }));
 
+jest.mock("~/hooks/queries/endpoints/queries", () => ({
+    useGetBsConfig: () => ({
+        data: {
+            shougang: {
+                file_encoding: {
+                    document_types: [
+                        { code: "RPT", label: "报告" },
+                        { code: "STD", label: "标准规范" },
+                    ],
+                },
+            },
+        },
+    }),
+}));
+
 jest.mock("~/components/ui", () => ({
     Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
     Dialog: ({ open, children }: any) => (open ? <div>{children}</div> : null),
@@ -716,6 +731,39 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByTestId("create-space-drawer")).not.toBeInTheDocument();
     });
 
+    test("disables department create action when department create permission is false", async () => {
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: true,
+            canCreateDepartment: false,
+            canCreateTeam: true,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        } as any);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+
+        renderWorkbench();
+
+        const departmentGroup = screen.getByTestId("space-group-department");
+
+        await waitFor(() => {
+            expect(within(departmentGroup).queryByRole("button", { name: "新建知识库" })).not.toBeInTheDocument();
+        });
+
+        const departmentCreateButton = screen.getByRole("button", { name: "新增业务域知识库知识空间" });
+        expect(departmentCreateButton).toBeDisabled();
+
+        fireEvent.click(departmentCreateButton);
+
+        expect(screen.queryByTestId("create-space-drawer")).not.toBeInTheDocument();
+    });
+
     test("shows permitted space menu actions without selecting the menu target", async () => {
         const publicSpace = makeSpace("public-1", "公共空间01", {
             spaceLevel: SpaceLevel.PUBLIC,
@@ -978,6 +1026,7 @@ describe("PortalKnowledgeWorkbench", () => {
                 source_file_id: "301",
                 target_space_id: "public-target",
                 target_document_id: null,
+                target_file_id: null,
                 reason: undefined,
             });
         });
@@ -1744,7 +1793,7 @@ describe("PortalKnowledgeWorkbench", () => {
         ]);
     });
 
-    test("opens upload dialog from portal upload action and shows selected files without file category", async () => {
+    test("opens upload dialog from portal upload action and shows selected files with file category", async () => {
         const personalSpace = makeSpace("personal-1", "设备部", {
             role: SpaceRole.ADMIN,
         });
@@ -1765,7 +1814,8 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const dialog = await screen.findByTestId("portal-upload-dialog");
         expect(within(dialog).getByText("上传文件")).toBeInTheDocument();
-        expect(within(dialog).queryByText("文件分类")).not.toBeInTheDocument();
+        expect(within(dialog).getByLabelText("文件分类")).toHaveDisplayValue("请选择文件分类");
+        expect(within(dialog).getByRole("option", { name: "报告" })).toHaveValue("RPT");
         expect(within(dialog).getByLabelText("目标知识库")).toHaveValue("设备部");
         expect(within(dialog).getByText("根目录")).toBeInTheDocument();
         expect(mockHandleUploadFile).not.toHaveBeenCalled();
@@ -1897,6 +1947,9 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.change(within(dialog).getByLabelText("选择文件"), {
             target: { files: [file] },
         });
+        fireEvent.change(within(dialog).getByLabelText("文件分类"), {
+            target: { value: "RPT" },
+        });
         fireEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
 
         const reviewDialog = await screen.findByTestId("portal-upload-review-dialog");
@@ -1904,6 +1957,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(addFilesApi).toHaveBeenCalledWith("personal-1", {
             file_path: ["/tmp/测试文档.pdf"],
             parent_id: null,
+            file_category_code: "RPT",
         });
         expect(getSimilarCandidatesApi).toHaveBeenCalledWith(501);
         expect(within(reviewDialog).getByText("待入库确认")).toBeInTheDocument();
@@ -1958,6 +2012,9 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
             target: { files: [rootFile] },
         });
+        fireEvent.change(within(dialog).getByLabelText("文件分类"), {
+            target: { value: "RPT" },
+        });
         fireEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
 
         const reviewDialog = await screen.findByTestId("portal-upload-review-dialog");
@@ -1969,6 +2026,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(addFilesApi).toHaveBeenCalledWith("personal-1", {
             file_path: ["/tmp/根层文档.pdf"],
             parent_id: 777,
+            file_category_code: "RPT",
         });
         expect(getSimilarCandidatesApi).toHaveBeenCalledWith(778);
         expect(within(reviewDialog).getByText("根层文档.pdf")).toBeInTheDocument();
@@ -2003,6 +2061,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.change(within(dialog).getByLabelText("选择文件夹"), {
             target: { files: [rootFile] },
+        });
+        fireEvent.change(within(dialog).getByLabelText("文件分类"), {
+            target: { value: "RPT" },
         });
         fireEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
 

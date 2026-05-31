@@ -303,12 +303,30 @@ class DailyChatConf(BaseModel):
         return n if n > 0 else 8000
 
 
+DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES = [
+    {"code": "POL", "label": "政策制度"},
+    {"code": "STD", "label": "标准规范"},
+    {"code": "PRO", "label": "流程与程序"},
+    {"code": "SPC", "label": "技术规程与诀窍"},
+    {"code": "RPT", "label": "报告"},
+    {"code": "CAS", "label": "案例"},
+    {"code": "DGN", "label": "设计资产"},
+    {"code": "PAT", "label": "专利与知识产权"},
+    {"code": "TRN", "label": "培训资源"},
+]
+
+
+def _default_shougang_file_document_types():
+    return [dict(item) for item in DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES]
+
+
 class ShougangFileEncodingConf(BaseModel):
     classify_prompt: Optional[Any] = Field(default=None)
     user_content_template: Optional[Any] = Field(default=None)
     valid_pattern: Optional[Any] = Field(default=None)
     fallback_code: Optional[Any] = Field(default=None)
     seq_cap: Optional[Any] = Field(default=None)
+    document_types: Optional[Any] = Field(default_factory=_default_shougang_file_document_types)
 
 
 class ShougangConf(BaseModel):

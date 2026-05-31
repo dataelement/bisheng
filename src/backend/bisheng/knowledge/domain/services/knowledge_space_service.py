@@ -488,7 +488,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if level == KnowledgeSpaceLevelEnum.PUBLIC:
             if department_id is not None or user_group_id is not None:
                 raise SpaceInvalidScopeOwnerError()
-            if not self.login_user.is_admin() and not approval_request:
+            if not self.login_user.is_admin():
                 raise SpaceCreatePublicDeniedError()
             return level, KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT, await self._get_tenant_root_department_id()
 
@@ -498,10 +498,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             dept = await DepartmentDao.aget_by_id(int(department_id))
             if dept is None or getattr(dept, 'status', 'active') != 'active':
                 raise SpaceInvalidScopeOwnerError(msg='Department does not exist or is archived')
-            if not self.login_user.is_admin() and not approval_request:
-                admin_department_ids = await self._admin_department_ids()
-                if int(department_id) not in admin_department_ids:
-                    raise SpaceCreateDepartmentDeniedError()
+            if not self.login_user.is_admin():
+                raise SpaceCreateDepartmentDeniedError()
             return level, KnowledgeSpaceOwnerTypeEnum.DEPARTMENT, int(department_id)
 
         if level == KnowledgeSpaceLevelEnum.TEAM:
@@ -595,16 +593,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def get_create_options(self) -> KnowledgeSpaceCreateOptionsResp:
-        if self.login_user.is_admin():
-            can_create_department = True
-        else:
-            can_create_department = bool(
-                await DepartmentDao.aget_user_admin_departments(self.login_user.user_id)
-            )
-
         return KnowledgeSpaceCreateOptionsResp(
             can_create_public=bool(self.login_user.is_admin()),
-            can_create_department=can_create_department,
+            can_create_department=bool(self.login_user.is_admin()),
             can_create_team=True,
             can_create_personal=True,
             departments=[],
@@ -4647,6 +4638,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         knowledge_id: int,
         file_path: List[str],
         parent_id: Optional[int] = None,
+        file_category_code: Optional[str] = None,
         file_source: FileSource = None,
         skip_approval: bool = False,
     ) -> List[KnowledgeSpaceFileResponse]:
@@ -4710,6 +4702,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return tmp
 
         file_split_rule = FileProcessBase(knowledge_id=knowledge_id)
+        split_rule_dict = file_split_rule.model_dump()
+        normalized_file_category_code = self.normalize_file_category_code(file_category_code)
+        if normalized_file_category_code:
+            split_rule_dict[self.file_category_code_key] = normalized_file_category_code
         process_files = []
         failed_files = []
         preview_cache_keys = []
@@ -4736,7 +4732,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     self.login_user,
                     knowledge=db_knowledge,
                     file_info=KnowledgeFileOne(file_path=one, excel_rule=ExcelRule()),
-                    split_rule=file_split_rule.model_dump(),
+                    split_rule=dict(split_rule_dict),
                     file_kwargs={
                         "level": level,
                         "file_level_path": file_level_path,
@@ -5072,6 +5068,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         db_file_retry = req_data.get("file_objs")
         if not db_file_retry:
             return []
+        file_category_code = self.normalize_file_category_code(req_data.get("file_category_code"))
+        if file_category_code:
+            for retry_file in db_file_retry:
+                retry_file["split_rule"] = self.with_file_category_code_in_split_rule(
+                    retry_file.get("split_rule"),
+                    file_category_code,
+                )
 
         id2input = {file.get("id"): file for file in db_file_retry}
         file_ids = list(id2input.keys())

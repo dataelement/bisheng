@@ -388,6 +388,7 @@ class FolderRenameReq(BaseModel):
 class FileCreateReq(BaseModel):
     file_path: List[str] = Field(..., description="File Path")
     parent_id: Optional[int] = Field(None, description="Parent Folder ID")
+    file_category_code: Optional[str] = Field(None, max_length=16, description="Selected business file category code")
 
 
 class FileRenameReq(BaseModel):

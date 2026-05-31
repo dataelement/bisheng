@@ -556,6 +556,13 @@ export type BsConfig = {
     deployment_label?: string;
     /** 门户管理后台 URL；有值则 BiSheng 工作台侧栏显示"门户配置"菜单 */
     portal_admin_url?: string;
+    file_encoding?: {
+      document_types?: Array<{
+        code: string;
+        label: string;
+      }>;
+      [key: string]: unknown;
+    };
   };
   /**
    * Knowledge-space feature flags forwarded from the YAML `knowledge_space` section.

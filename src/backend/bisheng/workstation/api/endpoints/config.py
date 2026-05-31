@@ -21,6 +21,7 @@ router = APIRouter()
 async def get_config(request: Request, login_user=LoginUserDep):
     ret = await WorkStationService.get_daily_chat_config()
     linsight_config = await WorkStationService.get_linsight_config()
+    all_config = await bisheng_settings.aget_all_config()
     # `enable_etl4lm` historically gated the frontend on `etl4lm.url` alone, but the
     # parse pipeline now supports mineru / paddle_ocr as alternative providers that
     # also handle images. Use the unified image-parsing capability flag so the flag
@@ -29,22 +30,31 @@ async def get_config(request: Request, login_user=LoginUserDep):
     ret = ret.model_dump(exclude_unset=True) if ret else {}
     ret['linsightConfig'] = linsight_config.model_dump() if linsight_config else {}
     ret['enable_etl4lm'] = knowledge_conf.image_parser_enabled
-    linsight_invitation_code = (await bisheng_settings.aget_all_config()).get('linsight_invitation_code', None)
+    linsight_invitation_code = all_config.get('linsight_invitation_code', None)
     ret['linsight_invitation_code'] = linsight_invitation_code if linsight_invitation_code else False
     ret['linsight_cache_dir'] = './'
     ret['waiting_list_url'] = (await bisheng_settings.aget_linsight_conf()).waiting_list_url
     # 首钢部署专属命名空间：整段透传给前端 (deployment_label / portal_admin_url 等),
     # 同时基于 prefix 派生 enabled 标志,供文件编码 (FileTable) 等功能门控使用。
-    shougang_raw = (await bisheng_settings.aget_all_config()).get('shougang', None)
+    shougang_raw = all_config.get('shougang', None)
+    shougang_conf = await bisheng_settings.aget_shougang_conf()
+    shougang_data = shougang_conf.model_dump()
+    file_encoding_data = shougang_data.get('file_encoding', {})
     if isinstance(shougang_raw, dict):
-        prefix = shougang_raw.get('prefix')
-        enabled = bool(prefix and str(prefix).strip())
-        ret['shougang'] = {**shougang_raw, 'enabled': enabled}
+        raw_file_encoding = shougang_raw.get('file_encoding')
+        if isinstance(raw_file_encoding, dict):
+            file_encoding_data = {**raw_file_encoding, **file_encoding_data}
+        ret['shougang'] = {
+            **shougang_raw,
+            **shougang_data,
+            'file_encoding': file_encoding_data,
+            'enabled': shougang_conf.enabled,
+        }
     else:
         ret['shougang'] = None
     # 知识空间目录树展示开关：透传给前端 sidebar (KnowledgeSpaceItem) 做门控。
     # 缺省视为 true；中粮场内部署设 false 时只展示空间、不展开文件夹树。
-    ks_raw = (await bisheng_settings.aget_all_config()).get('knowledge_space', None)
+    ks_raw = all_config.get('knowledge_space', None)
     tree_display = True
     if isinstance(ks_raw, dict):
         tree_display = bool(ks_raw.get('tree_structured_directory_display', True))

@@ -497,6 +497,7 @@ async def add_file(
         knowledge_id=space_id,
         file_path=req.file_path,
         parent_id=req.parent_id,
+        file_category_code=req.file_category_code,
     )
     return resp_200(file_record)
 

@@ -186,6 +186,14 @@ export function CreateKnowledgeSpaceDrawer({
         () => levelOptions.filter((option) => option.enabled),
         [levelOptions],
     );
+    const selectedLevelCreateEnabled = useMemo(() => {
+        if (mode !== "create") return true;
+        return Boolean(levelOptions.find((option) => option.value === spaceLevel)?.enabled);
+    }, [levelOptions, mode, spaceLevel]);
+    const shouldShowDepartmentSelector = mode === "create"
+        && spaceLevel === SpaceLevel.DEPARTMENT
+        && selectedLevelCreateEnabled;
+    const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
 
     const resetForm = () => {
         setName("");
@@ -362,7 +370,10 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return;
         }
-        if (spaceLevel === SpaceLevel.DEPARTMENT && !departmentId) {
+        if (mode === "create" && !selectedLevelCreateEnabled) {
+            return;
+        }
+        if (shouldShowDepartmentSelector && !departmentId) {
             showToast({
                 message: localize("com_knowledge.department_required"),
                 severity: NotificationSeverity.WARNING
@@ -536,7 +547,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         ))}
                                     </RadioGroup.Root>
                                 )}
-                                {mode === "create" && spaceLevel === SpaceLevel.DEPARTMENT && (
+                                {shouldShowDepartmentSelector && (
                                     <div className="space-y-2">
                                         <Label className="text-sm text-[#1D2129] font-medium">
                                             <span className="text-[#F53F3F] mr-1">*</span>
@@ -953,7 +964,7 @@ export function CreateKnowledgeSpaceDrawer({
                             >
                                 {localize("com_knowledge.cancel")}</Button>
                             <Button
-                                disabled={submitting}
+                                disabled={confirmDisabled}
                                 className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
                                 onClick={handleConfirm}
                             >

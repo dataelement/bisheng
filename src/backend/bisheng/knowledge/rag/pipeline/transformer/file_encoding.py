@@ -7,6 +7,7 @@ Example: SGGF-RPT-PP-20260500000001
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import threading
 from datetime import datetime
@@ -72,6 +73,7 @@ _async_runner = _AsyncRunner()
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
+from bisheng.core.config.settings import DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
@@ -161,6 +163,7 @@ DEFAULT_COMPANY_CODE = "SGGF"
 FALLBACK = "STD-PP"
 SEQ_CAP = 99999999
 DEFAULT_USER_CONTENT_TEMPLATE = "标题: {file_name}\n摘要: {abstract}"
+FILE_CATEGORY_CODE_KEY = "file_category_code"
 
 
 @dataclass(frozen=True)
@@ -170,6 +173,7 @@ class FileEncodingRuntimeConfig:
     valid_pattern: re.Pattern
     fallback_code: str
     seq_cap: int
+    document_type_codes: frozenset[str]
 
 
 class FileEncodingTransformer(BaseDocumentTransformer):
@@ -203,12 +207,18 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         shougang_conf = await bisheng_settings.aget_shougang_conf()
         encoding_config = self._resolve_encoding_config(shougang_conf)
         company_code = self._resolve_company_code(shougang_conf)
+        selected_document_type_code = self._resolve_selected_document_type_code(encoding_config)
 
         if self.knowledge_file.file_encoding:
             return
 
         try:
             type_business_code = await self._classify_with_llm(encoding_config)
+            type_business_code = self._apply_selected_document_type_code(
+                type_business_code,
+                selected_document_type_code,
+                encoding_config,
+            )
             seq = await self._compute_seq(encoding_config.seq_cap)
             self.knowledge_file.file_encoding = self._compose_encoding(
                 company_code, type_business_code,
@@ -224,8 +234,13 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             # encoding as long as the sequence number can be computed.
             try:
                 seq = await self._compute_seq(encoding_config.seq_cap)
+                fallback_code = self._apply_selected_document_type_code(
+                    encoding_config.fallback_code,
+                    selected_document_type_code,
+                    encoding_config,
+                )
                 self.knowledge_file.file_encoding = self._compose_encoding(
-                    company_code, encoding_config.fallback_code,
+                    company_code, fallback_code,
                     self.knowledge_file.create_time, seq,
                 )
                 logger.warning(
@@ -292,12 +307,14 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         valid_pattern = self._resolve_valid_pattern(raw_config)
         fallback_code = self._resolve_fallback_code(raw_config, valid_pattern)
         seq_cap = self._resolve_seq_cap(raw_config)
+        document_type_codes = self._resolve_document_type_codes(raw_config)
         return FileEncodingRuntimeConfig(
             classify_prompt=classify_prompt,
             user_content_template=user_content_template,
             valid_pattern=valid_pattern,
             fallback_code=fallback_code,
             seq_cap=seq_cap,
+            document_type_codes=document_type_codes,
         )
 
     def _build_classify_messages(self, encoding_config: FileEncodingRuntimeConfig) -> list[dict[str, str]]:
@@ -370,6 +387,86 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             f"invalid seq_cap config, fallback to default: {seq_cap!r}"
         )
         return SEQ_CAP
+
+    def _resolve_document_type_codes(self, raw_config: Any) -> frozenset[str]:
+        raw_document_types = self._get_config_value(raw_config, 'document_types')
+        codes: set[str] = set()
+        if isinstance(raw_document_types, list):
+            for item in raw_document_types:
+                if isinstance(item, dict):
+                    code = item.get('code')
+                else:
+                    code = getattr(item, 'code', None)
+                normalized = self._normalize_document_type_code(code)
+                if normalized:
+                    codes.add(normalized)
+        if not codes:
+            codes = {
+                self._normalize_document_type_code(item.get('code')) or ''
+                for item in DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES
+            }
+            codes.discard('')
+        return frozenset(codes)
+
+    def _resolve_selected_document_type_code(
+        self,
+        encoding_config: FileEncodingRuntimeConfig,
+    ) -> str | None:
+        split_rule = getattr(self.knowledge_file, 'split_rule', None)
+        if not split_rule:
+            return None
+        try:
+            if isinstance(split_rule, str):
+                rule_data = json.loads(split_rule)
+            elif isinstance(split_rule, dict):
+                rule_data = split_rule
+            else:
+                return None
+        except Exception as e:
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"invalid split_rule when resolving file category: {e}"
+            )
+            return None
+        selected_code = self._normalize_document_type_code(rule_data.get(FILE_CATEGORY_CODE_KEY))
+        if not selected_code:
+            return None
+        if selected_code in encoding_config.document_type_codes:
+            return selected_code
+        logger.warning(
+            f"[shougang.encoding] file_id={self.knowledge_file.id} "
+            f"invalid file category code ignored: {selected_code}"
+        )
+        return None
+
+    def _apply_selected_document_type_code(
+        self,
+        type_business_code: str,
+        selected_document_type_code: str | None,
+        encoding_config: FileEncodingRuntimeConfig,
+    ) -> str:
+        if not selected_document_type_code:
+            return type_business_code
+        parts = [part.strip() for part in (type_business_code or "").split("-", 1)]
+        if len(parts) != 2 or not parts[1]:
+            return type_business_code
+        candidate = f"{selected_document_type_code}-{parts[1]}"
+        if encoding_config.valid_pattern.match(candidate):
+            return candidate
+        logger.warning(
+            f"[shougang.encoding] file_id={self.knowledge_file.id} "
+            f"selected file category conflicts with valid_pattern: {candidate}"
+        )
+        return type_business_code
+
+    @staticmethod
+    def _normalize_document_type_code(value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        code = value.strip().upper()
+        if re.fullmatch(r"[A-Z0-9_]{1,16}", code):
+            return code
+        return None
 
     @classmethod
     def _resolve_nonempty_str(cls, raw_config: Any, key: str, default: str) -> str:

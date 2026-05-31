@@ -4,11 +4,33 @@ import {
     fileStatusToNumber,
     type KnowledgeFile,
 } from "~/api/knowledge";
-import { LEGACY_FILE_ICON_TYPE_BY_EXTENSION, type LegacyFileIconType } from "./constants";
-import type { PortalFileTreeNode, PortalUploadFolderNode } from "./types";
+import {
+    DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS,
+    LEGACY_FILE_ICON_TYPE_BY_EXTENSION,
+    type LegacyFileIconType,
+} from "./constants";
+import type { PortalFileCategoryOption, PortalFileTreeNode, PortalUploadFolderNode } from "./types";
 
 export function isFolder(file: KnowledgeFile) {
     return file.type === FileType.FOLDER;
+}
+
+export function normalizePortalFileCategoryOptions(rawOptions: unknown): PortalFileCategoryOption[] {
+    if (!Array.isArray(rawOptions)) {
+        return DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS;
+    }
+    const options = rawOptions
+        .map((item) => {
+            if (!item || typeof item !== "object") return null;
+            const rawCode = (item as any).code;
+            const rawLabel = (item as any).label;
+            const code = typeof rawCode === "string" ? rawCode.trim().toUpperCase() : "";
+            const label = typeof rawLabel === "string" ? rawLabel.trim() : "";
+            if (!code || !label) return null;
+            return { code, label };
+        })
+        .filter(Boolean) as PortalFileCategoryOption[];
+    return options.length ? options : DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS;
 }
 
 export function getPortalFileIconType(file: KnowledgeFile): LegacyFileIconType | "xlsx" {

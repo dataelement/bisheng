@@ -33,6 +33,10 @@ def _runtime_request() -> Any:
     return SimpleNamespace(headers={}, client=SimpleNamespace(host='approval-runtime'))
 
 
+def _enum_value(value):
+    return value.value if hasattr(value, 'value') else value
+
+
 async def _resolve_approvers(node_config: dict, req) -> list[int]:
     sources = node_config.get('sources') or []
     if sources:
@@ -138,6 +142,23 @@ class KnowledgeSpaceCreateApprovalHandler:
                 return space
         return None
 
+    async def _ensure_admin_only_level_applicant_is_admin(self, applicant_user_id: int, params: dict) -> None:
+        level = _enum_value(params.get('space_level'))
+        if level not in {KnowledgeSpaceLevelEnum.PUBLIC.value, KnowledgeSpaceLevelEnum.DEPARTMENT.value}:
+            return
+        from bisheng.common.errcode.knowledge_space import (
+            SpaceCreateDepartmentDeniedError,
+            SpaceCreatePublicDeniedError,
+        )
+        from bisheng.database.constants import AdminRole
+        from bisheng.user.domain.models.user_role import UserRoleDao
+
+        roles = await UserRoleDao.aget_user_roles(int(applicant_user_id))
+        if not any(int(getattr(role, 'role_id', 0)) == AdminRole for role in roles):
+            if level == KnowledgeSpaceLevelEnum.DEPARTMENT.value:
+                raise SpaceCreateDepartmentDeniedError()
+            raise SpaceCreatePublicDeniedError()
+
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -147,6 +168,7 @@ class KnowledgeSpaceCreateApprovalHandler:
             return {'space_id': int(existing_space.id), 'space_name': existing_space.name, 'idempotent': True}
 
         params = payload_snapshot.get('create_params') or {}
+        await self._ensure_admin_only_level_applicant_is_admin(applicant_user_id, params)
         login_user = _RuntimeLoginUser(
             user_id=applicant_user_id,
             user_name=str(payload_snapshot.get('applicant_user_name') or ''),

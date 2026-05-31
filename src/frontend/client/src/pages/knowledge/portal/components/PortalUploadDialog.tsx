@@ -8,7 +8,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from "~/components/ui";
-import type { PortalUploadFileItem, PortalUploadFolderNode, PortalUploadReviewRow, PortalUploadStep } from "../types";
+import type {
+    PortalFileCategoryOption,
+    PortalUploadFileItem,
+    PortalUploadFolderNode,
+    PortalUploadReviewRow,
+    PortalUploadStep,
+} from "../types";
 import { formatFileSize } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -28,11 +34,14 @@ interface PortalUploadDialogProps {
     uploadImporting: boolean;
     uploadReviewRows: PortalUploadReviewRow[];
     uploadFolderOptions: Array<{ id: string | null; name: string }>;
+    fileCategoryCode: string;
+    fileCategoryOptions: PortalFileCategoryOption[];
     onOpen: () => void;
     onClose: () => void;
     onAddUploadFiles: (files?: FileList | File[]) => void;
     onAddUploadFolder: (files?: FileList | File[]) => void;
     onRemoveUploadFile: (fileId: string) => void;
+    onSelectFileCategory: (code: string) => void;
     onSelectUploadFolder: (folderId: string | null, folderName: string) => void;
     onToggleUploadFolder: (node: PortalUploadFolderNode) => void;
     onUploadNext: () => void;
@@ -110,11 +119,14 @@ export function PortalUploadDialog({
     uploadImporting,
     uploadReviewRows,
     uploadFolderOptions,
+    fileCategoryCode,
+    fileCategoryOptions,
     onOpen,
     onClose,
     onAddUploadFiles,
     onAddUploadFolder,
     onRemoveUploadFile,
+    onSelectFileCategory,
     onSelectUploadFolder,
     onToggleUploadFolder,
     onUploadNext,
@@ -197,6 +209,27 @@ export function PortalUploadDialog({
                                     }}
                                     {...({ webkitdirectory: "", directory: "" } as any)}
                                 />
+                            </div>
+
+                            <div className={s.uploadSection}>
+                                <label className={s.uploadField}>
+                                    <span>
+                                        文件分类 <span className={s.uploadRequiredMark}>*</span>
+                                    </span>
+                                    <select
+                                        aria-label="文件分类"
+                                        className={s.uploadSelect}
+                                        value={fileCategoryCode}
+                                        onChange={(event) => onSelectFileCategory(event.currentTarget.value)}
+                                    >
+                                        <option value="">请选择文件分类</option>
+                                        {fileCategoryOptions.map((option) => (
+                                            <option key={option.code} value={option.code}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
                             </div>
 
                             <div className={s.uploadSection}>

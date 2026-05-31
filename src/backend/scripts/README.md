@@ -167,7 +167,8 @@ Scope:
 - 用户角色：非 admin 删除非普通角色，缺少普通角色时补 `DefaultRole`
 - 管理授权：非 admin 的租户管理员、部门管理员、用户组管理员、个人菜单授权
 - 知识空间资源：`knowledge_space`、`folder`、`knowledge_file` 的 OpenFGA 资源授权
-- 知识空间数据：`knowledge.user_id`、`knowledgefile.user_id/updater_id`、空间成员、空间 scope、部门空间绑定
+- 知识空间数据：`knowledge.user_id`、`knowledgefile.user_id/updater_id`、空间成员
+- 知识空间类型：保留 `knowledge_space_scope.level/owner_type/owner_id` 和 `department_knowledge_space` 绑定，不把团队、部门、公共知识库改成个人知识库
 - 分享链接：失效所有 `knowledge_space_file` active 链接
 - 重试队列：失效受影响资源和非 admin 管理授权相关的 pending `failed_tuple`
 

@@ -179,6 +179,37 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         });
     });
 
+    test("业务域入口层级无创建权限时不展示业务域选择器", async () => {
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: true,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.DEPARTMENT });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        expect(screen.queryByText("业务域知识库")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
+        });
+    });
+
+    test("业务域入口层级在权限加载完成前不展示业务域选择器", async () => {
+        jest.mocked(getCreateSpaceOptionsApi).mockReturnValue(new Promise(() => undefined) as any);
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.DEPARTMENT });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "确认创建" })).toBeDisabled();
+    });
+
     test("团队知识库创建不展示用户组选择且提交不带用户组", async () => {
         const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({

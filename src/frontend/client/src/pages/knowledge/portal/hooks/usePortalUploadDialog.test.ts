@@ -92,6 +92,7 @@ describe("usePortalUploadDialog", () => {
         const { hook } = renderUploadDialogHook();
 
         act(() => {
+            (hook.result.current as any).handleSelectFileCategory?.("RPT");
             hook.result.current.handleAddUploadFiles([
                 new File(["duplicate"], "重复.pdf", { type: "application/pdf" }),
                 new File(["new"], "新增.pdf", { type: "application/pdf" }),
@@ -119,6 +120,50 @@ describe("usePortalUploadDialog", () => {
         expect(hook.result.current.uploadReviewRows.some((row) => row.file.id === "101")).toBe(false);
     });
 
+    test("requires a file category before registering uploaded files", async () => {
+        jest.mocked(addFilesApi).mockResolvedValue([makeFile()] as any);
+        const { hook, params } = renderUploadDialogHook();
+
+        act(() => {
+            hook.result.current.handleAddUploadFiles([
+                new File(["report"], "报告.pdf", { type: "application/pdf" }),
+            ]);
+        });
+
+        await act(async () => {
+            await hook.result.current.handleUploadNext();
+        });
+
+        expect(uploadFileToServerApi).not.toHaveBeenCalled();
+        expect(addFilesApi).not.toHaveBeenCalled();
+        expect(params.showToast).toHaveBeenCalledWith({
+            message: "请选择文件分类",
+            severity: "info",
+        });
+    });
+
+    test("passes selected file category when registering uploaded files", async () => {
+        jest.mocked(addFilesApi).mockResolvedValue([makeFile()] as any);
+        const { hook } = renderUploadDialogHook();
+
+        act(() => {
+            (hook.result.current as any).handleSelectFileCategory?.("RPT");
+            hook.result.current.handleAddUploadFiles([
+                new File(["report"], "报告.pdf", { type: "application/pdf" }),
+            ]);
+        });
+
+        await act(async () => {
+            await hook.result.current.handleUploadNext();
+        });
+
+        expect(addFilesApi).toHaveBeenCalledWith("space-1", {
+            file_path: ["/tmp/uploaded.pdf"],
+            parent_id: null,
+            file_category_code: "RPT",
+        });
+    });
+
     test("keeps non-duplicate review rows when user skips duplicate files", async () => {
         const duplicateFile = makeFile({
             id: "101",
@@ -137,6 +182,7 @@ describe("usePortalUploadDialog", () => {
         const { hook } = renderUploadDialogHook();
 
         act(() => {
+            (hook.result.current as any).handleSelectFileCategory?.("RPT");
             hook.result.current.handleAddUploadFiles([
                 new File(["duplicate"], "重复.pdf", { type: "application/pdf" }),
                 new File(["new"], "新增.pdf", { type: "application/pdf" }),
@@ -174,6 +220,7 @@ describe("usePortalUploadDialog", () => {
 
         act(() => {
             hook.result.current.handleOpenUploadDialog();
+            (hook.result.current as any).handleSelectFileCategory?.("RPT");
             hook.result.current.handleAddUploadFiles([
                 new File(["duplicate"], "重复.pdf", { type: "application/pdf" }),
             ]);
@@ -194,7 +241,7 @@ describe("usePortalUploadDialog", () => {
 
         expect(retryDuplicateFilesApi).toHaveBeenCalledWith("space-1", [
             { id: "101", file_name: "重复.pdf" },
-        ]);
+        ], "RPT");
         expect(reloadFiles).toHaveBeenCalledTimes(1);
         expect(hook.result.current.duplicateFiles).toEqual([]);
         expect(hook.result.current.uploadDialogOpen).toBe(false);

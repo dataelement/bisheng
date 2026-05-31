@@ -36,6 +36,11 @@ export interface PortalFileTreeNode {
 
 export type PortalUploadStep = "select" | "review";
 
+export interface PortalFileCategoryOption {
+    code: string;
+    label: string;
+}
+
 export interface PortalUploadFileItem {
     id: string;
     file: File;

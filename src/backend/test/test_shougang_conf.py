@@ -49,6 +49,22 @@ def test_shougang_conf_ignores_invalid_file_encoding_block():
     assert conf.prefix == "GF"
 
 
+def test_shougang_file_encoding_has_default_document_types():
+    conf = ShougangConf(prefix="GF")
+
+    assert conf.file_encoding.document_types == [
+        {"code": "POL", "label": "政策制度"},
+        {"code": "STD", "label": "标准规范"},
+        {"code": "PRO", "label": "流程与程序"},
+        {"code": "SPC", "label": "技术规程与诀窍"},
+        {"code": "RPT", "label": "报告"},
+        {"code": "CAS", "label": "案例"},
+        {"code": "DGN", "label": "设计资产"},
+        {"code": "PAT", "label": "专利与知识产权"},
+        {"code": "TRN", "label": "培训资源"},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_aget_shougang_conf_returns_default_when_block_missing():
     with patch.object(ConfigService, "aget_all_config", AsyncMock(return_value={})):

@@ -96,12 +96,26 @@ class ShougangApprovalService:
         return cls._enum_value(params.get('space_level')) == KnowledgeSpaceLevelEnum.PERSONAL.value
 
     @classmethod
+    def _is_public_level_space_create(cls, params: dict) -> bool:
+        return cls._enum_value(params.get('space_level')) == KnowledgeSpaceLevelEnum.PUBLIC.value
+
+    @classmethod
+    def _is_department_level_space_create(cls, params: dict) -> bool:
+        return cls._enum_value(params.get('space_level')) == KnowledgeSpaceLevelEnum.DEPARTMENT.value
+
+    @classmethod
+    def _is_admin_only_level_space_create(cls, params: dict) -> bool:
+        return cls._is_public_level_space_create(params) or cls._is_department_level_space_create(params)
+
+    @classmethod
     def _space_visibility_for_payload(cls, params: dict) -> str:
         if bool(params.get('is_released')):
             return 'released'
         return str(cls._enum_value(params.get('auth_type')) or AuthTypeEnum.PRIVATE.value)
 
     async def _requires_create_approval(self, *, login_user, params: dict) -> bool:
+        if self._is_admin_only_level_space_create(params):
+            return False
         if self._is_private_personal_space_create(params):
             return False
         if self._is_personal_space_create(params):

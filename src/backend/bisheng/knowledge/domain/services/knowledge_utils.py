@@ -21,6 +21,44 @@ class KnowledgeUtils(BaseService):
     schema_ready_lock_ttl = 60
     schema_ready_wait_seconds = 20
     schema_ready_poll_interval = 0.5
+    file_category_code_key = "file_category_code"
+
+    @classmethod
+    def normalize_file_category_code(cls, value) -> Optional[str]:
+        if not isinstance(value, str):
+            return None
+        code = value.strip().upper()
+        if not code or len(code) > 16:
+            return None
+        return code
+
+    @classmethod
+    def with_file_category_code_in_split_rule(cls, split_rule, file_category_code: str | None) -> str:
+        normalized_code = cls.normalize_file_category_code(file_category_code)
+        rule_data = {}
+        if isinstance(split_rule, str) and split_rule.strip():
+            try:
+                parsed = json.loads(split_rule)
+                if isinstance(parsed, dict):
+                    rule_data = parsed
+            except Exception:
+                rule_data = {}
+        elif isinstance(split_rule, dict):
+            rule_data = dict(split_rule)
+        if normalized_code:
+            rule_data[cls.file_category_code_key] = normalized_code
+        return json.dumps(rule_data, ensure_ascii=False)
+
+    @classmethod
+    def get_file_category_code_from_split_rule(cls, split_rule) -> Optional[str]:
+        if isinstance(split_rule, str) and split_rule.strip():
+            try:
+                split_rule = json.loads(split_rule)
+            except Exception:
+                return None
+        if not isinstance(split_rule, dict):
+            return None
+        return cls.normalize_file_category_code(split_rule.get(cls.file_category_code_key))
 
     @classmethod
     def get_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value=None) -> str:
@@ -419,6 +457,8 @@ class KnowledgeUtils(BaseService):
             file.remark = ""
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.WAITING.value  # Parsing
+            if cls.get_file_category_code_from_split_rule(file.split_rule):
+                file.file_encoding = None
             # Content has been replaced (overwrite path) — the previous
             # similar-document marker and simhash were computed against the
             # old content and must be cleared so the new parse re-scans from

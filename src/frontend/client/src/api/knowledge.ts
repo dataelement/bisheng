@@ -1693,7 +1693,7 @@ export async function uploadFileToServerApi(
  */
 export async function addFilesApi(
     space_id: string,
-    data: { file_path: string[]; parent_id?: number | null }
+    data: { file_path: string[]; parent_id?: number | null; file_category_code?: string }
 ): Promise<KnowledgeFile[]> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
@@ -1820,9 +1820,13 @@ export async function batchDownloadApi(
  */
 export async function retryDuplicateFilesApi(
     space_id: string,
-    file_objs: any[]
+    file_objs: any[],
+    file_category_code?: string,
 ): Promise<void> {
-    await request.post(`/api/v1/knowledge/space/${space_id}/files/retry`, { file_objs });
+    await request.post(`/api/v1/knowledge/space/${space_id}/files/retry`, {
+        file_objs,
+        ...(file_category_code ? { file_category_code } : {}),
+    });
 }
 
 /**

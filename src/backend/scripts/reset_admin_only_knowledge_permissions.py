@@ -10,6 +10,8 @@
    并为 admin 写入 owner 权限。
 4. 失效知识空间文件分享链接，并使相关 pending ``failed_tuple`` 不再重试旧权限。
 
+脚本只收敛创建者和权限，不改变知识空间类型、scope 归属或部门空间绑定。
+
 默认只 dry-run 统计影响范围；只有显式传入 ``--apply`` 才会写数据库和 OpenFGA。
 
 运行方式：
@@ -33,6 +35,7 @@ from datetime import datetime
 from typing import Any, Iterable, Sequence
 
 from sqlalchemy import delete as sa_delete
+from sqlalchemy import func
 from sqlalchemy import update as sa_update
 from sqlmodel import select
 
@@ -60,12 +63,10 @@ from bisheng.database.constants import AdminRole, DefaultRole  # noqa: E402
 from bisheng.database.models.department_admin_grant import (  # noqa: E402
     DepartmentAdminGrant,
 )
+from bisheng.database.models.department import Department  # noqa: E402
 from bisheng.database.models.failed_tuple import FailedTuple  # noqa: E402
-from bisheng.database.models.tenant import ROOT_TENANT_ID, UserTenant  # noqa: E402
+from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, UserTenant  # noqa: E402
 from bisheng.database.models.user_group import UserGroup  # noqa: E402
-from bisheng.knowledge.domain.models.department_knowledge_space import (  # noqa: E402
-    DepartmentKnowledgeSpace,
-)
 from bisheng.knowledge.domain.models.knowledge import (  # noqa: E402
     Knowledge,
     KnowledgeTypeEnum,
@@ -73,11 +74,6 @@ from bisheng.knowledge.domain.models.knowledge import (  # noqa: E402
 from bisheng.knowledge.domain.models.knowledge_file import (  # noqa: E402
     FileType,
     KnowledgeFile,
-)
-from bisheng.knowledge.domain.models.knowledge_space_scope import (  # noqa: E402
-    KnowledgeSpaceLevelEnum,
-    KnowledgeSpaceOwnerTypeEnum,
-    KnowledgeSpaceScope,
 )
 from bisheng.permission.domain.schemas.tuple_operation import (  # noqa: E402
     TupleOperation,
@@ -180,12 +176,6 @@ class UserRoleResetPlan:
 
 
 @dataclass(frozen=True)
-class ScopeInsert:
-    space_id: int
-    tenant_id: int
-
-
-@dataclass(frozen=True)
 class ResetPlan:
     admin_id: int
     admin_user_name: str
@@ -201,10 +191,25 @@ class ResetPlan:
     relation_bindings_kept: tuple[dict[str, Any], ...]
     relation_bindings_removed: tuple[dict[str, Any], ...]
     admin_member_insert_space_ids: tuple[int, ...]
-    scope_inserts: tuple[ScopeInsert, ...]
     failed_tuple_ids_to_invalidate: tuple[int, ...]
     counts: dict[str, int]
     warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ApplyVerification:
+    resource_tuple_operations: int
+    management_tuple_operations: int
+    pre_recorded_failed_tuples: int
+    pending_pre_recorded_failed_tuples: int
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            'resource_tuple_operations': self.resource_tuple_operations,
+            'management_tuple_operations': self.management_tuple_operations,
+            'pre_recorded_failed_tuples': self.pre_recorded_failed_tuples,
+            'pending_pre_recorded_failed_tuples': self.pending_pre_recorded_failed_tuples,
+        }
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -412,6 +417,16 @@ def _resource_pair_from_object(object_key: str) -> tuple[str, str]:
     return object_type, object_id
 
 
+def _int_values(rows: Iterable[Any]) -> tuple[int, ...]:
+    output: set[int] = set()
+    for row in rows:
+        value = row[0] if isinstance(row, tuple) else row
+        if value is None:
+            continue
+        output.add(int(value))
+    return tuple(sorted(output))
+
+
 def _dedupe_tuple_keys(items: Iterable[FgaTupleKey]) -> list[FgaTupleKey]:
     seen: set[FgaTupleKey] = set()
     output: list[FgaTupleKey] = []
@@ -437,6 +452,41 @@ def _dedupe_operations(operations: Iterable[TupleOperation]) -> tuple[TupleOpera
         seen.add(key)
         output.append(op)
     return tuple(output)
+
+
+async def _aget_fga_client_for_script(
+    *,
+    settings_obj: Any | None = None,
+    app_context_obj: Any | None = None,
+    fga_manager_cls: Any | None = None,
+):
+    fga = await aget_fga_client()
+    if fga is not None:
+        return fga
+
+    if settings_obj is None:
+        from bisheng.common.services.config_service import settings as settings_obj
+    openfga_config = getattr(settings_obj, 'openfga', None)
+    if not bool(getattr(openfga_config, 'enabled', False)):
+        return None
+
+    if app_context_obj is None:
+        from bisheng.core.context.manager import app_context as app_context_obj
+    if fga_manager_cls is None:
+        from bisheng.core.openfga.manager import FGAManager as fga_manager_cls
+
+    try:
+        app_context_obj.get_context('openfga')
+    except KeyError:
+        app_context_obj.register_context(
+            fga_manager_cls(openfga_config=openfga_config),
+            optional=True,
+        )
+
+    try:
+        return await app_context_obj.async_get_instance('openfga')
+    except Exception:
+        return None
 
 
 async def collect_reset_plan(*, require_fga: bool) -> ResetPlan:
@@ -500,6 +550,16 @@ async def collect_reset_plan(*, require_fga: bool) -> ResetPlan:
                 for row in group_admin_rows
                 if row.group_id is not None
             ))
+            tenant_ids = _int_values((await session.exec(
+                select(Tenant.id).where(Tenant.id != ROOT_TENANT_ID)
+            )).all())
+            department_ids = _int_values((await session.exec(select(Department.id))).all())
+            user_group_ids = _int_values((await session.exec(select(UserGroup.group_id))).all())
+            management_object_keys = tuple(sorted({
+                *(f'tenant:{tenant_id}' for tenant_id in tenant_ids),
+                *(f'department:{department_id}' for department_id in department_ids),
+                *(f'user_group:{group_id}' for group_id in user_group_ids),
+            }))
 
             spaces = list((await session.exec(
                 select(Knowledge).where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
@@ -524,8 +584,6 @@ async def collect_reset_plan(*, require_fga: bool) -> ResetPlan:
                 admin_id=admin_id,
                 space_ids=knowledge_space_ids,
             )
-            scope_inserts = await _plan_scope_inserts(session, spaces)
-
             pending_failed = list((await session.exec(
                 select(FailedTuple).where(FailedTuple.status == 'pending')
             )).all())
@@ -546,7 +604,7 @@ async def collect_reset_plan(*, require_fga: bool) -> ResetPlan:
             )
 
     warnings: list[str] = []
-    fga = await aget_fga_client()
+    fga = await _aget_fga_client_for_script()
     if fga is None:
         message = 'OpenFGA client unavailable; dry-run cannot count existing FGA tuples'
         if require_fga:
@@ -556,7 +614,10 @@ async def collect_reset_plan(*, require_fga: bool) -> ResetPlan:
         existing_management_tuples: list[FgaTupleKey] = []
     else:
         existing_resource_tuples = await _read_resource_tuples(fga, resource_refs)
-        existing_management_tuples = await _read_management_tuples(fga)
+        existing_management_tuples = await _read_management_tuples(
+            fga,
+            management_object_keys,
+        )
 
     desired_resource_tuples = build_desired_resource_tuples(
         admin_id=admin_id,
@@ -587,7 +648,7 @@ async def collect_reset_plan(*, require_fga: bool) -> ResetPlan:
         'admin_role_rows_inserted': 1 if user_role_plan.admin_role_missing else 0,
         'user_group_admin_rows_demoted': len(group_admin_row_ids),
         'admin_space_member_rows_inserted': len(admin_member_insert_space_ids),
-        'knowledge_space_scope_rows_inserted': len(scope_inserts),
+        'knowledge_space_scope_rows_inserted': 0,
     })
 
     return ResetPlan(
@@ -605,7 +666,6 @@ async def collect_reset_plan(*, require_fga: bool) -> ResetPlan:
         relation_bindings_kept=tuple(relation_bindings_kept),
         relation_bindings_removed=tuple(relation_bindings_removed),
         admin_member_insert_space_ids=admin_member_insert_space_ids,
-        scope_inserts=scope_inserts,
         failed_tuple_ids_to_invalidate=failed_tuple_ids_to_invalidate,
         counts=counts,
         warnings=tuple(warnings),
@@ -659,25 +719,6 @@ async def _plan_admin_space_member_inserts(
     return tuple(sorted(set(space_ids) - existing_ids))
 
 
-async def _plan_scope_inserts(session, spaces: Sequence[Knowledge]) -> tuple[ScopeInsert, ...]:
-    if not spaces:
-        return ()
-    space_ids = [int(space.id) for space in spaces if space.id is not None]
-    existing = (await session.exec(
-        select(KnowledgeSpaceScope.space_id).where(KnowledgeSpaceScope.space_id.in_(space_ids))
-    )).all()
-    existing_ids = {int(row[0] if isinstance(row, tuple) else row) for row in existing}
-    inserts = []
-    for space in spaces:
-        if space.id is None or int(space.id) in existing_ids:
-            continue
-        inserts.append(ScopeInsert(
-            space_id=int(space.id),
-            tenant_id=int(space.tenant_id or ROOT_TENANT_ID),
-        ))
-    return tuple(inserts)
-
-
 async def _collect_db_counts(
     session,
     *,
@@ -693,6 +734,7 @@ async def _collect_db_counts(
         'non_admin_space_members_deleted': 0,
         'admin_space_member_rows_updated': 0,
         'knowledge_space_scope_rows_updated': 0,
+        'knowledge_space_scope_rows_inserted': 0,
         'department_space_bindings_deleted': 0,
         'knowledge_space_file_share_links_disabled': 0,
     }
@@ -730,12 +772,6 @@ async def _collect_db_counts(
                 SpaceChannelMember.user_id == admin_id,
             )
         )).all())
-        counts['knowledge_space_scope_rows_updated'] = len((await session.exec(
-            select(KnowledgeSpaceScope.id).where(KnowledgeSpaceScope.space_id.in_(list(space_ids)))
-        )).all())
-        counts['department_space_bindings_deleted'] = len((await session.exec(
-            select(DepartmentKnowledgeSpace.id).where(DepartmentKnowledgeSpace.space_id.in_(list(space_ids)))
-        )).all())
     return counts
 
 
@@ -747,9 +783,22 @@ async def _read_resource_tuples(fga, resources: Sequence[ResourceRef]) -> list[F
     return _dedupe_tuple_keys(output)
 
 
-async def _read_management_tuples(fga) -> list[FgaTupleKey]:
-    tuples = await fga.read_tuples(relation='admin')
-    tuples.extend(await fga.read_tuples(relation='super_admin', object='system:global'))
+async def _read_management_tuples(
+    fga,
+    object_keys: Sequence[str],
+) -> list[FgaTupleKey]:
+    tuples: list[dict[str, Any]] = []
+    for object_key in object_keys:
+        if not object_key.startswith(MANAGEMENT_ADMIN_OBJECT_PREFIXES):
+            continue
+        tuples.extend(await fga.read_tuples(
+            relation='admin',
+            object=object_key,
+        ))
+    tuples.extend(await fga.read_tuples(
+        relation='super_admin',
+        object='system:global',
+    ))
     return _dedupe_tuple_keys(FgaTupleKey.from_mapping(item) for item in tuples)
 
 
@@ -785,7 +834,7 @@ def _plan_management_tuple_operations(
     return _dedupe_operations([*delete_ops, *write_ops])
 
 
-async def apply_reset_plan(plan: ResetPlan) -> None:
+async def apply_reset_plan(plan: ResetPlan) -> ApplyVerification:
     operations = _dedupe_operations([
         *plan.resource_tuple_operations,
         *plan.management_tuple_operations,
@@ -805,7 +854,14 @@ async def apply_reset_plan(plan: ResetPlan) -> None:
             'retry the failed_tuple queue or re-run this script with --apply before treating the reset as complete.'
         ) from exc
     await _mark_reset_failed_tuples_succeeded(pre_recorded_ids)
+    pending_pre_recorded = await _count_pending_reset_failed_tuples(pre_recorded_ids)
     await _invalidate_permission_caches(plan)
+    return ApplyVerification(
+        resource_tuple_operations=len(plan.resource_tuple_operations),
+        management_tuple_operations=len(plan.management_tuple_operations),
+        pre_recorded_failed_tuples=len(pre_recorded_ids),
+        pending_pre_recorded_failed_tuples=pending_pre_recorded,
+    )
 
 
 async def _apply_db_changes(plan: ResetPlan, operations: Sequence[TupleOperation]) -> tuple[int, ...]:
@@ -813,7 +869,7 @@ async def _apply_db_changes(plan: ResetPlan, operations: Sequence[TupleOperation
     async with get_async_db_session() as session:
         with bypass_tenant_filter():
             if plan.user_role_plan.delete_role_ids:
-                await session.execute(
+                await session.exec(
                     sa_delete(UserRole).where(UserRole.id.in_(list(plan.user_role_plan.delete_role_ids)))
                 )
             for user_id, tenant_id in plan.user_role_plan.default_role_inserts:
@@ -829,15 +885,15 @@ async def _apply_db_changes(plan: ResetPlan, operations: Sequence[TupleOperation
                     tenant_id=plan.user_role_plan.admin_role_tenant_id,
                 ))
 
-            await session.execute(
+            await session.exec(
                 sa_update(UserGroup)
                 .where(UserGroup.user_id != plan.admin_id, UserGroup.is_group_admin == True)  # noqa: E712
                 .values(is_group_admin=False)
             )
-            await session.execute(
+            await session.exec(
                 sa_delete(DepartmentAdminGrant).where(DepartmentAdminGrant.user_id != plan.admin_id)
             )
-            await session.execute(
+            await session.exec(
                 sa_update(UserMenuAccess)
                 .where(
                     UserMenuAccess.user_id != plan.admin_id,
@@ -850,14 +906,14 @@ async def _apply_db_changes(plan: ResetPlan, operations: Sequence[TupleOperation
                     revoked_reason=RESET_MENU_REVOKE_REASON,
                 )
             )
-            await session.execute(
+            await session.exec(
                 sa_update(Knowledge)
                 .where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
                 .values(user_id=plan.admin_id)
             )
 
             if plan.knowledge_space_ids:
-                await session.execute(
+                await session.exec(
                     sa_update(KnowledgeFile)
                     .where(KnowledgeFile.knowledge_id.in_(list(plan.knowledge_space_ids)))
                     .values(
@@ -868,14 +924,14 @@ async def _apply_db_changes(plan: ResetPlan, operations: Sequence[TupleOperation
                     )
                 )
                 space_id_strings = [str(sid) for sid in plan.knowledge_space_ids]
-                await session.execute(
+                await session.exec(
                     sa_delete(SpaceChannelMember).where(
                         SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
                         SpaceChannelMember.business_id.in_(space_id_strings),
                         SpaceChannelMember.user_id != plan.admin_id,
                     )
                 )
-                await session.execute(
+                await session.exec(
                     sa_update(SpaceChannelMember)
                     .where(
                         SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -906,32 +962,7 @@ async def _apply_db_changes(plan: ResetPlan, operations: Sequence[TupleOperation
                         status=MembershipStatusEnum.ACTIVE,
                         membership_source='permission_reset',
                     ))
-                await session.execute(
-                    sa_update(KnowledgeSpaceScope)
-                    .where(KnowledgeSpaceScope.space_id.in_(list(plan.knowledge_space_ids)))
-                    .values(
-                        level=KnowledgeSpaceLevelEnum.PERSONAL.value,
-                        owner_type=KnowledgeSpaceOwnerTypeEnum.USER.value,
-                        owner_id=plan.admin_id,
-                        created_by=plan.admin_id,
-                    )
-                )
-                for item in plan.scope_inserts:
-                    session.add(KnowledgeSpaceScope(
-                        tenant_id=item.tenant_id,
-                        space_id=item.space_id,
-                        level=KnowledgeSpaceLevelEnum.PERSONAL,
-                        owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
-                        owner_id=plan.admin_id,
-                        created_by=plan.admin_id,
-                    ))
-                await session.execute(
-                    sa_delete(DepartmentKnowledgeSpace).where(
-                        DepartmentKnowledgeSpace.space_id.in_(list(plan.knowledge_space_ids))
-                    )
-                )
-
-            await session.execute(
+            await session.exec(
                 sa_update(ShareLink)
                 .where(
                     ShareLink.resource_type == ResourceTypeEnum.KNOWLEDGE_SPACE_FILE,
@@ -942,7 +973,7 @@ async def _apply_db_changes(plan: ResetPlan, operations: Sequence[TupleOperation
             await _save_relation_bindings(session, list(plan.relation_bindings_kept))
             pre_recorded_ids = await _pre_record_reset_failed_tuples(session, operations)
             if plan.failed_tuple_ids_to_invalidate:
-                await session.execute(
+                await session.exec(
                     sa_update(FailedTuple)
                     .where(FailedTuple.id.in_(list(plan.failed_tuple_ids_to_invalidate)))
                     .values(
@@ -980,12 +1011,26 @@ async def _mark_reset_failed_tuples_succeeded(record_ids: Sequence[int]) -> None
         return
     async with get_async_db_session() as session:
         with bypass_tenant_filter():
-            await session.execute(
+            await session.exec(
                 sa_update(FailedTuple)
                 .where(FailedTuple.id.in_(list(record_ids)))
                 .values(status='succeeded')
             )
             await session.commit()
+
+
+async def _count_pending_reset_failed_tuples(record_ids: Sequence[int]) -> int:
+    if not record_ids:
+        return 0
+    async with get_async_db_session() as session:
+        with bypass_tenant_filter():
+            return int((await session.exec(
+                select(func.count())
+                .where(
+                    FailedTuple.id.in_(list(record_ids)),
+                    FailedTuple.status == 'pending',
+                )
+            )).one())
 
 
 async def _save_relation_bindings(session, bindings: list[dict[str, Any]]) -> None:
@@ -1017,6 +1062,20 @@ async def _invalidate_permission_caches(plan: ResetPlan) -> None:
         ) from exc
 
 
+async def _close_script_contexts(
+    *,
+    close_app_context_fn=close_app_context,
+    app_context_obj: Any | None = None,
+) -> None:
+    try:
+        await close_app_context_fn()
+        if app_context_obj is None:
+            from bisheng.core.context.manager import app_context as app_context_obj
+        await app_context_obj.get_registry().async_close_all()
+    except Exception as exc:
+        print(f'[warn] failed to close script contexts cleanly: {exc}', file=sys.stderr)
+
+
 def print_report(plan: ResetPlan, *, apply: bool, as_json: bool) -> None:
     payload = {
         'mode': 'apply' if apply else 'dry-run',
@@ -1046,13 +1105,25 @@ def print_report(plan: ResetPlan, *, apply: bool, as_json: bool) -> None:
         print('Dry-run only. Re-run with --apply to execute these changes.')
 
 
+def print_apply_verification(verification: ApplyVerification, *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps({'apply_verification': verification.as_dict()}, ensure_ascii=False, indent=2))
+        return
+
+    print('Apply verification:')
+    for key, value in verification.as_dict().items():
+        print(f'- {key}: {value}')
+
+
 async def _amain(args: argparse.Namespace) -> int:
     try:
         plan = await collect_reset_plan(require_fga=args.apply)
         print_report(plan, apply=args.apply, as_json=args.json)
         if not args.apply:
             return 0
-        await apply_reset_plan(plan)
+        verification = await apply_reset_plan(plan)
+        print('')
+        print_apply_verification(verification, as_json=args.json)
         print('')
         print('[done] admin-only knowledge permission reset applied.')
         return 0
@@ -1063,7 +1134,7 @@ async def _amain(args: argparse.Namespace) -> int:
         print(f'[error] {exc}', file=sys.stderr)
         return 3
     finally:
-        await close_app_context()
+        await _close_script_contexts()
         gc.collect()
         await asyncio.sleep(0)
 

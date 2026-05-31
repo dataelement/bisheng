@@ -24,6 +24,7 @@ import {
 import { submitShougangKnowledgeSpaceCreateApprovalApi } from "~/api/approval";
 import { checkPermission, canOpenPermissionDialog } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
+import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useConfirm, useToastContext } from "~/Providers";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
 import { useFileUpload } from "../hooks/useFileUpload";
@@ -46,6 +47,7 @@ import {
     isFolder,
     isPreviewable,
     isRetryable,
+    normalizePortalFileCategoryOptions,
     resolvePreviewUrl,
     toNumericIds,
     toStatusNumbers,
@@ -66,6 +68,7 @@ export default function PortalKnowledgeWorkbench() {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
     const queryClient = useQueryClient();
+    const { data: bsConfig } = useGetBsConfig();
     const groupRefs = useRef<Record<SpaceGroupKey, HTMLDivElement | null>>({
         public: null,
         department: null,
@@ -455,6 +458,10 @@ export default function PortalKnowledgeWorkbench() {
     const isUploadTargetAdmin = uploadTargetSpace?.role === SpaceRole.CREATOR || uploadTargetSpace?.role === SpaceRole.ADMIN;
     const canUploadInPortal = Boolean(uploadTargetSpace && (isUploadTargetAdmin || canUploadFile));
     const canCreateFolderInPortal = Boolean(activeSpace && !searchMode && (isActiveSpaceAdmin || canCreateFolder));
+    const fileCategoryOptions = useMemo(
+        () => normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types),
+        [bsConfig],
+    );
     const {
         uploadInputRef,
         uploadFolderInputRef,
@@ -471,6 +478,8 @@ export default function PortalKnowledgeWorkbench() {
         uploadReviewRows,
         uploadFolderOptions,
         duplicateFiles,
+        fileCategoryCode,
+        fileCategoryOptions: resolvedFileCategoryOptions,
         setUploadDialogOpen,
         setUploadStep,
         setUploadReviewRows,
@@ -479,6 +488,7 @@ export default function PortalKnowledgeWorkbench() {
         handleAddUploadFiles,
         handleAddUploadFolder,
         handleRemoveUploadFile,
+        handleSelectFileCategory,
         handleSelectUploadFolder,
         handleToggleUploadFolder,
         handleUploadNext,
@@ -494,6 +504,7 @@ export default function PortalKnowledgeWorkbench() {
         currentFolderNode,
         currentPath,
         statusFilterNumbers,
+        fileCategoryOptions,
         reloadFiles,
         showToast,
     });
@@ -1322,11 +1333,14 @@ export default function PortalKnowledgeWorkbench() {
                     uploadImporting,
                     uploadReviewRows,
                     uploadFolderOptions,
+                    fileCategoryCode,
+                    fileCategoryOptions: resolvedFileCategoryOptions,
                     onOpen: () => setUploadDialogOpen(true),
                     onClose: resetUploadDialog,
                     onAddUploadFiles: handleAddUploadFiles,
                     onAddUploadFolder: handleAddUploadFolder,
                     onRemoveUploadFile: handleRemoveUploadFile,
+                    onSelectFileCategory: handleSelectFileCategory,
                     onSelectUploadFolder: handleSelectUploadFolder,
                     onToggleUploadFolder: (node) => void handleToggleUploadFolder(node),
                     onUploadNext: () => void handleUploadNext(),
