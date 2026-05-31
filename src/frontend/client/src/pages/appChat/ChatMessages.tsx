@@ -1,6 +1,8 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useRecoilValue } from "recoil";
 import type { CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
+import { SelectionMessagesProvider } from "~/components/Chat/MessageSelection";
+import type { SelectableMessage } from "~/hooks/useMessageSelection";
 import { useLocalize } from "~/hooks";
 import GuideWord from "./components/GuideWord";
 import InputForm from "./components/InputForm";
@@ -16,6 +18,18 @@ import MessageSystem from "./components/MessageSystem";
 import MessageUser from "./components/MessageUser";
 import { currentChatState, currentRunningState } from "./store/atoms";
 import { useMessage } from "./useMessages";
+
+// F028: only question + answer category rows are selectable. Intermediate
+// rows (tool, flow, knowledge, node_run, system, ...) stay out of the
+// selection model so the pair-group walk (question → adjacent answers)
+// finds the right neighbors. Order preserved so adjacency works.
+const _SELECTABLE_CATEGORIES = new Set([
+    "question",
+    "answer",
+    "agent_answer",
+    "output_msg",
+    "stream_msg",
+]);
 
 type ChatMessagesProps = {
     useName?: string;
@@ -42,6 +56,19 @@ export default function ChatMessages({
     const chatState = useRecoilValue(currentChatState);
     const localize = useLocalize();
 
+    // F028 selection messages — filtered to question + answer categories so
+    // ``buildPairGroup`` (array-position adjacency) walks the right
+    // neighbors. Keep the relative order from the source list.
+    const selectableMessages = useMemo<SelectableMessage[]>(() => {
+        return (messages ?? [])
+            .filter((m: any) => m?.id != null && _SELECTABLE_CATEGORIES.has(m?.category))
+            .map((m: any) => ({
+                messageId: String(m.id),
+                parentMessageId: "",
+                isCreatedByUser: m.category === "question",
+            }));
+    }, [messages]);
+
     console.log("messages :>> ", chatState, messages, guideWord);
     const thumbRef = useRef(null);
 
@@ -49,6 +76,7 @@ export default function ChatMessages({
 
 
     return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-44 px-4">
+        <SelectionMessagesProvider messages={selectableMessages}>
         {remark && <MessageRemark
             readOnly={readOnly}
             logo={logo}
@@ -152,5 +180,6 @@ export default function ChatMessages({
         )}
 
         <MessageFeedbackForm ref={thumbRef} />
+        </SelectionMessagesProvider>
     </div>
 };

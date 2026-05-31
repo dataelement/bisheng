@@ -7,7 +7,6 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
     CopyIcon,
-    Download,
     Loader2,
     RefreshCwIcon
 } from "lucide-react";
@@ -25,8 +24,8 @@ import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext } from "~/hooks";
 import { useMessageSelection } from "~/hooks/useMessageSelection";
 import {
+    ExportSelectionButton,
     MessageCheckbox,
-    useSelectionMessages,
 } from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
@@ -46,56 +45,6 @@ interface AiMessageBubbleProps {
     knowledgeChatLayout?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
-}
-
-// --- F028 export-selection trigger (AI messages only) ---
-// Reuses the same visibility rules as CopyButton via shared parent container
-// (action row only renders when ``!isStreaming && regularContent``). Reads the
-// chat's messages from the react-query cache so it doesn't need extra props.
-function ExportSelectionButton({
-    chatId,
-    messageId,
-}: {
-    chatId: string;
-    messageId: string;
-}) {
-    const { enterSelectionMode, exitSelectionMode, isActiveForChat } =
-        useMessageSelection();
-    const messages = useSelectionMessages();
-    const active = isActiveForChat(chatId);
-
-    const handleClick = useCallback(
-        (event: React.MouseEvent<HTMLButtonElement>) => {
-            event.preventDefault();
-            event.stopPropagation();
-            // Click toggles: if selection mode is already on for this chat,
-            // a second click on any answer's download icon exits the mode —
-            // matches the user's "再点关闭" expectation and gives a fast
-            // escape hatch without forcing the user to find the × button.
-            if (active) {
-                exitSelectionMode();
-            } else {
-                enterSelectionMode(chatId, messageId, messages);
-            }
-        },
-        [active, chatId, messageId, messages, enterSelectionMode, exitSelectionMode],
-    );
-
-    return (
-        <button
-            type="button"
-            onClick={handleClick}
-            className={cn(
-                "flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]",
-                active && "bg-[#F0F0F0] text-[#1677ff]",
-            )}
-            title={active ? "退出选择" : "导出"}
-            aria-label={active ? "退出选择" : "导出"}
-            aria-pressed={active}
-        >
-            <Download size={14} className={cn(active ? "text-[#1677ff]" : "text-[#818181]")} />
-        </button>
-    );
 }
 
 // --- Copy button with feedback ---

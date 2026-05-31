@@ -166,6 +166,8 @@ export interface UseMessageSelectionApi {
     toggleMessage: (messageId: string, messages: readonly SelectableMessage[]) => void;
     /** Activate "select every message in this chat (incl. future loads)". */
     selectAll: () => void;
+    /** Toggle the global-select-all intent on/off explicitly. */
+    setGlobalSelectAll: (on: boolean) => void;
     /** Activate "select every message at or after this anchor". */
     selectAllBelow: (anchorMessageId: string) => void;
     /** Test whether a given message id is currently selected. */
@@ -243,6 +245,32 @@ export function useMessageSelection(): UseMessageSelectionApi {
         });
     }, [setState]);
 
+    const setGlobalSelectAll = useCallback(
+        (on: boolean) => {
+            setState((prev) => {
+                if (!prev.active) return prev;
+                if (on) {
+                    return {
+                        ...prev,
+                        globalSelectAllOn: true,
+                        selectAllBelowAnchor: null,
+                        selectedIds: new Set(),
+                    };
+                }
+                // Off: clear everything — the user explicitly asked to
+                // un-select. Keeping any partial state here would surprise
+                // them ("I unticked 全选, why is half still selected?").
+                return {
+                    ...prev,
+                    globalSelectAllOn: false,
+                    selectAllBelowAnchor: null,
+                    selectedIds: new Set(),
+                };
+            });
+        },
+        [setState],
+    );
+
     const selectAllBelow = useCallback(
         (anchorMessageId: string) => {
             setState((prev) => {
@@ -284,6 +312,7 @@ export function useMessageSelection(): UseMessageSelectionApi {
             exitSelectionMode,
             toggleMessage,
             selectAll,
+            setGlobalSelectAll,
             selectAllBelow,
             isSelected,
             getSelectedIds,
@@ -291,8 +320,8 @@ export function useMessageSelection(): UseMessageSelectionApi {
         }),
         [
             state, isActiveForChat, enterSelectionMode, exitSelectionMode,
-            toggleMessage, selectAll, selectAllBelow, isSelected,
-            getSelectedIds, isOverLimit,
+            toggleMessage, selectAll, setGlobalSelectAll, selectAllBelow,
+            isSelected, getSelectedIds, isOverLimit,
         ],
     );
 }

@@ -66,7 +66,7 @@ export function MessageSelectionToolbar({
     const { showToast } = useToastContext();
     const {
         state,
-        selectAll,
+        setGlobalSelectAll,
         exitSelectionMode,
         getSelectedIds,
         isOverLimit,
@@ -155,16 +155,13 @@ export function MessageSelectionToolbar({
                 isMobile && 'gap-3 px-3 py-2',
             )}
         >
-            {/* select all toggle */}
+            {/* select all toggle — bidirectional: unticking clears the
+                global flag AND any explicit picks (per user feedback "全选
+                之后不能取消"). */}
             <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm">
                 <Checkbox
                     checked={selectAllChecked}
-                    onCheckedChange={(v) => {
-                        if (v) selectAll();
-                        // Note: unticking 全选 doesn't clear selection — user
-                        // can still keep their explicit picks. To clear all,
-                        // use the close button.
-                    }}
+                    onCheckedChange={(v) => setGlobalSelectAll(v === true)}
                 />
                 <span>{localize('workstation.messageExport.selectAll')}</span>
             </label>

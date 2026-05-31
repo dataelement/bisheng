@@ -1,11 +1,14 @@
 import { RefreshCw, Search, SquarePen } from "lucide-react";
 import { useMemo } from "react";
 import { useRecoilState } from "recoil";
+import { useParams } from "react-router-dom";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { formatStrTime } from "~/utils";
 import { bishengConfState } from "../store/atoms";
 import { emitAreaTextEvent, EVENT_TYPE } from "../useAreaText";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
+import { MessageCheckbox } from "~/components/Chat/MessageSelection";
+import { useMessageSelection } from "~/hooks/useMessageSelection";
 
 export default function MessageUser({ useName, data, showButton, disabledSearch = false, readOnly }) {
     // const avatar = useMemo(() => {
@@ -35,7 +38,23 @@ export default function MessageUser({ useName, data, showButton, disabledSearch 
         window.open(config?.dialog_quick_search + encodeURIComponent(msg))
     }
 
-    return <div className="flex w-full py-2">
+    // F028: per-message selection checkbox at the left margin while
+    // selection mode is active for the current chat. chatId comes from the
+    // URL (``/app/:cid/:fid/:type``).
+    const { conversationId: chatIdFromUrl } = useParams();
+    const chatId = chatIdFromUrl || "";
+    const messageId = String(data.id ?? "");
+    const { isActiveForChat } = useMessageSelection();
+    const showCheckbox = !!chatId && isActiveForChat(chatId);
+
+    return <div className="flex w-full py-2 items-start gap-2">
+        {showCheckbox && messageId && (
+            <MessageCheckbox
+                chatId={chatId}
+                messageId={messageId}
+                className="mt-2 ml-2 shrink-0"
+            />
+        )}
         <div className="w-fit group min-h-8 max-w-[90%]">
             <div className="flex justify-start items-center gap-2 ml-4">
                 {/* <div className={`text-right group-hover:opacity-100 opacity-0`}>

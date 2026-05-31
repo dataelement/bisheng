@@ -11,6 +11,8 @@
  *   } from '~/components/Chat/MessageSelection';
  */
 
+export { ExportSelectionButton } from './ExportSelectionButton';
+export type { ExportSelectionButtonProps } from './ExportSelectionButton';
 export { MessageCheckbox } from './MessageCheckbox';
 export { MessageSelectionToolbar } from './MessageSelectionToolbar';
 export type { MessageSelectionToolbarProps } from './MessageSelectionToolbar';
