@@ -2094,5 +2094,27 @@
   "com_approval_task_badge_rejected": "Rejected",
   "com_approval_section_business_content": "Business Content",
   "com_approval_search_placeholder": "Search applicant, scenario or file",
-  "com_ui_close": "Close"
+  "com_ui_close": "Close",
+  "workstation": {
+    "messageExport": {
+      "entry": "Export",
+      "exportAsWord": "Export as Word",
+      "exportAsPdf": "Export as PDF",
+      "exportAsMarkdown": "Export as Markdown",
+      "exportAsTxt": "Export as TXT",
+      "exportToLocal": "Export to local",
+      "selectExportFormat": "Choose export format",
+      "importToKnowledge": "Import to Knowledge Space",
+      "selectAll": "Select all",
+      "selectAllBelow": "Select all below",
+      "cancel": "Cancel",
+      "noSelection": "Please select messages first",
+      "batchLimit": "You can select up to 200 messages at a time",
+      "importSuccess": "Imported successfully, file is being parsed",
+      "permissionDenied": "No permission to import into this knowledge space",
+      "spaceNotFound": "Knowledge space not found or deleted",
+      "folderNotFound": "Folder not found or deleted",
+      "renderFailed": "Failed to generate file, please try again"
+    }
+  }
 }

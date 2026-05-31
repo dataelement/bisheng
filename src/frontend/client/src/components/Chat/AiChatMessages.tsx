@@ -11,6 +11,7 @@ import { Button } from "~/components";
 import type { CitationReferencesDesktopPayload } from "./Messages/Content/CitationReferencesDrawer";
 import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
+import { SelectionMessagesProvider } from "./MessageSelection";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
@@ -325,6 +326,10 @@ export default function AiChatMessages({
                         contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
                     )}
                 >
+                    {/* F028: surface the live messages list to selection-aware children
+                        (MessageCheckbox / ExportSelectionButton inside AiMessageBubble)
+                        without modifying useAiChat or prop-drilling. */}
+                    <SelectionMessagesProvider messages={messages}>
                     {flatMode ? (
                         /* Flat mode: render messages as a simple list */
                         messages.map((message, idx) => {
@@ -363,6 +368,7 @@ export default function AiChatMessages({
                         )
                     )}
                     <div ref={endRef} className="h-0 shrink-0" />
+                    </SelectionMessagesProvider>
                 </div>
             </div>
             {/* Scroll to bottom button */}

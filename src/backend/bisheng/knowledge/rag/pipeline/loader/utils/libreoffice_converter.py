@@ -33,7 +33,7 @@ def get_libreoffice_path():
     return None
 
 
-def _convert_file_extension(input_path, convert_extension, output_dir=None, except_file_ext=None):
+def _convert_file_extension(input_path, convert_extension, output_dir=None, except_file_ext=None, timeout=180):
     if not os.path.isabs(input_path):
         input_path = os.path.abspath(input_path)
     if not os.path.exists(input_path):
@@ -78,8 +78,8 @@ def _convert_file_extension(input_path, convert_extension, output_dir=None, exce
             ]
             logger.debug(f"Executing command: {' '.join(command)}")
             process = subprocess.run(
-                command, check=True, capture_output=True, text=True, timeout=180
-            )  # 120 seconds timeout
+                command, check=True, capture_output=True, text=True, timeout=timeout
+            )
         logger.debug(f"LibreOffice STDOUT: {process.stdout}")
         if process.stderr:  # LibreOffice sometimes logger.debugs info to stderr even on success
             logger.debug(f"LibreOffice STDERR: {process.stderr}")
@@ -173,6 +173,25 @@ def convert_ppt_to_pptx(input_path, output_dir=None):
         logger.debug(f"Error: {input_path} is not a .ppt file.")
         return False
     return _convert_file_extension(input_path, "pptx", output_dir, except_file_ext="pptx")
+
+
+def convert_docx_to_pdf(input_path, output_dir=None, timeout=180):
+    """
+    Converts a .docx file to PDF using LibreOffice headless mode.
+
+    Args:
+        input_path (str): Path to the .docx file.
+        output_dir (str, optional): Directory to save the PDF. Defaults to the
+            same directory as the input file.
+        timeout (int): Subprocess timeout in seconds. F028 callers pass 30s
+            (spec §10); legacy callers keep the original 180s default.
+    """
+    if not input_path.lower().endswith(".docx"):
+        logger.debug(f"Error: {input_path} is not a .docx file.")
+        return False
+    return _convert_file_extension(
+        input_path, "pdf", output_dir, except_file_ext="pdf", timeout=timeout,
+    )
 
 
 if __name__ == "__main__":

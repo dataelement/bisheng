@@ -137,6 +137,32 @@ async def delete_space(
 # ──────────────────────────── Space Listings ───────────────────────────────────
 
 
+@router.get("/uploadable")
+async def list_uploadable_spaces(
+    keyword: Optional[str] = Query(default=None, description='substring filter on space name'),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """F028: list knowledge spaces where the user has ``upload_file`` permission.
+
+    Powers the ``AddToKnowledgeModal`` data source for the workstation
+    conversation-export flow. Returns a flat list (no cursor pagination —
+    INV-6 豁免, see spec §3): per-user uploadable spaces typically number
+    in the dozens. Body returns ``{"data": [{"id", "name", "icon", "description"}]}``.
+    """
+    spaces = await svc.list_uploadable_spaces(keyword=keyword)
+    return resp_200({
+        'data': [
+            {
+                'id': s.id,
+                'name': s.name or '',
+                'icon': None,
+                'description': s.description,
+            }
+            for s in spaces
+        ]
+    })
+
+
 @router.get("/mine")
 async def get_my_created_spaces(
     order_by: str = "update_time",

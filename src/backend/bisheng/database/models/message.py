@@ -348,6 +348,38 @@ class ChatMessageDao(MessageBase):
             return result.first()
 
     @classmethod
+    async def aget_messages_by_ids(
+        cls,
+        message_ids: List[int],
+        user_id: int,
+        chat_id: str,
+    ) -> List[ChatMessage]:
+        """Bulk fetch ChatMessage rows by id list, fenced by (user_id, chat_id).
+
+        Used by F028 conversation export/import. The (user_id, chat_id)
+        compound predicate is the anti-IDOR guard: even if callers pass an
+        attacker-supplied message_id list, rows owned by another user or
+        living in another chat session never come back.
+
+        Ordering: ascending by primary key so the caller sees a chronologically
+        stable list (chat_message.id is monotonic per-session in practice).
+        """
+        if not message_ids:
+            return []
+        statement = (
+            select(ChatMessage)
+            .where(
+                ChatMessage.id.in_(message_ids),
+                ChatMessage.user_id == user_id,
+                ChatMessage.chat_id == chat_id,
+            )
+            .order_by(ChatMessage.id.asc())
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return list(result.all())
+
+    @classmethod
     def update_message(cls, message_id: int, user_id: int, message: str):
         with get_sync_db_session() as session:
             statement = update(ChatMessage).where(ChatMessage.id == message_id).where(

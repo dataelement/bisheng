@@ -2017,5 +2017,27 @@
   "com_approval_task_badge_rejected": "却下",
   "com_approval_section_business_content": "業務内容",
   "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
-  "com_ui_close": "閉じる"
+  "com_ui_close": "閉じる",
+  "workstation": {
+    "messageExport": {
+      "entry": "エクスポート",
+      "exportAsWord": "Word でエクスポート",
+      "exportAsPdf": "PDF でエクスポート",
+      "exportAsMarkdown": "Markdown でエクスポート",
+      "exportAsTxt": "TXT でエクスポート",
+      "exportToLocal": "ローカルに保存",
+      "selectExportFormat": "エクスポート形式を選択",
+      "importToKnowledge": "ナレッジスペースに保存",
+      "selectAll": "全選択",
+      "selectAllBelow": "以下のメッセージを全選択",
+      "cancel": "キャンセル",
+      "noSelection": "先にメッセージを選択してください",
+      "batchLimit": "一度に選択できるメッセージは最大 200 件です",
+      "importSuccess": "保存しました、ファイルを解析中です",
+      "permissionDenied": "このナレッジスペースへの保存権限がありません",
+      "spaceNotFound": "ナレッジスペースが見つかりません/削除されました",
+      "folderNotFound": "フォルダが見つかりません/削除されました",
+      "renderFailed": "ファイル生成に失敗しました。再度お試しください"
+    }
+  }
 }

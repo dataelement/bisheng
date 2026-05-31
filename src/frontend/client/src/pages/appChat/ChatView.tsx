@@ -4,7 +4,27 @@ import { useRecoilState, useRecoilValue } from "recoil";
 import AppAvator from "~/components/Avator";
 import HeaderTitle from "~/components/Chat/HeaderTitle";
 import { useCitationReferencePanel } from "~/components/Chat/Messages/Content/useCitationReferencePanel";
+import {
+    ExportFormatSheet,
+    MessageSelectionToolbar,
+} from "~/components/Chat/MessageSelection";
 import { useAuthContext, useLocalize } from "~/hooks";
+import {
+    useExitSelectionOnChatChange,
+    useMessageSelection,
+    type SelectableMessage,
+} from "~/hooks/useMessageSelection";
+import usePrefersMobileLayout from "~/hooks/usePrefersMobileLayout";
+import { NotificationSeverity } from "~/common";
+import { useToastContext } from "~/Providers";
+import {
+    importMessagesToKnowledgeApi,
+    listUploadableSpacesApi,
+} from "~/api/messageExport";
+import {
+    AddToKnowledgeModal,
+    type AddToKnowledgeSelection,
+} from "~/pages/Subscription/Article/AddToKnowledgeModal";
 import ChatInput from "./ChatInput";
 import ChatMessages from "./ChatMessages";
 import { ChatEmptyState } from "./components/ChatEmptyState";
@@ -14,6 +34,17 @@ import { currentChatState, currentRunningState } from "./store/atoms";
 import useChatHelpers from "./useChatHelpers";
 import { useWebSocket } from "./useWebsocket";
 import { generateUUID } from "~/utils";
+
+// Same selectable-category set as ChatMessages.tsx. Duplicated here because
+// the toolbar's ``messages`` prop drives ``getSelectedIds`` and needs the
+// same filtered, position-stable list.
+const _SELECTABLE_CATEGORIES = new Set([
+    "question",
+    "answer",
+    "agent_answer",
+    "output_msg",
+    "stream_msg",
+]);
 
 export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }) {
     const { user } = useAuthContext();
@@ -50,6 +81,65 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
 
     const messages = chatState?.messages || [];
     const hasMessages = messages.length > 0;
+
+    // ── F028 selection mode wiring (mirrors workstation ChatView) ──
+    useExitSelectionOnChatChange(cid);
+    const {
+        state: selectionState,
+        getSelectedIds,
+        exitSelectionMode,
+    } = useMessageSelection();
+    const isH5 = usePrefersMobileLayout();
+    const { showToast } = useToastContext();
+    const [exportSheetOpen, setExportSheetOpen] = useState(false);
+    const [importModalOpen, setImportModalOpen] = useState(false);
+
+    const selectableMessages = useMemo<SelectableMessage[]>(
+        () =>
+            messages
+                .filter(
+                    (m: any) => m?.id != null && _SELECTABLE_CATEGORIES.has(m?.category),
+                )
+                .map((m: any) => ({
+                    messageId: String(m.id),
+                    parentMessageId: "",
+                    isCreatedByUser: m.category === "question",
+                })),
+        [messages],
+    );
+
+    const handleImportSelect = useCallback(
+        async (selection: AddToKnowledgeSelection) => {
+            if (!cid) return;
+            const ids = getSelectedIds(selectableMessages);
+            const messageIds = ids
+                .map((s) => Number.parseInt(s, 10))
+                .filter((n) => Number.isFinite(n));
+            if (!messageIds.length) return;
+            try {
+                const resp = await importMessagesToKnowledgeApi({
+                    chatId: cid,
+                    messageIds,
+                    knowledgeSpaceId: Number(selection.knowledgeSpaceId),
+                    parentId: selection.folderId ? Number(selection.folderId) : null,
+                });
+                showToast({
+                    message:
+                        localize("workstation.messageExport.importSuccess") +
+                        (resp.dup_renamed ? ` (${resp.target_filename})` : ""),
+                    severity: NotificationSeverity.SUCCESS,
+                });
+                setImportModalOpen(false);
+                exitSelectionMode();
+            } catch {
+                showToast({
+                    message: localize("workstation.messageExport.renderFailed"),
+                    severity: NotificationSeverity.ERROR,
+                });
+            }
+        },
+        [cid, selectableMessages, getSelectedIds, showToast, localize, exitSelectionMode],
+    );
     const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
     const activeConversation = useMemo(
         () => conversations.find((item) => item.id === cid),
@@ -114,5 +204,30 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                 </div>
             )}
         </div>
+
+        {/* F028 conversation export overlay layer */}
+        {cid && selectionState.active && selectionState.chatId === cid && (
+            <>
+                <MessageSelectionToolbar
+                    chatId={cid}
+                    messages={selectableMessages}
+                    onExportToLocal={isH5 ? () => setExportSheetOpen(true) : undefined}
+                    onImportToKnowledge={() => setImportModalOpen(true)}
+                />
+                <ExportFormatSheet
+                    open={exportSheetOpen}
+                    onOpenChange={setExportSheetOpen}
+                    chatId={cid}
+                    messages={selectableMessages}
+                />
+                <AddToKnowledgeModal
+                    open={importModalOpen}
+                    onOpenChange={setImportModalOpen}
+                    mode="channel_sync"
+                    dataSourceApi={listUploadableSpacesApi}
+                    onSyncSelect={handleImportSelect}
+                />
+            </>
+        )}
     </div>
 };

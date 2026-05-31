@@ -1660,6 +1660,69 @@ class KnowledgeSpaceService(KnowledgeUtils):
             required_permission_id="view_space",
         )
 
+    async def list_uploadable_spaces(
+        self,
+        *,
+        keyword: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[Knowledge]:
+        """List knowledge spaces where the current user has ``upload_file`` permission.
+
+        Used by F028 (workstation conversation export → import to knowledge
+        space) to populate the target picker. The ``upload_file`` permission
+        is granted by the ``can_edit`` OpenFGA relation per the knowledge_space
+        permission template, so we list_objects against ``can_edit`` and let
+        OpenFGA's role inheritance (owner/manager ⊃ editor) cover higher tiers.
+
+        Behavior:
+        - Admin (`list_accessible_ids` returns None) → list all SPACE-type
+          knowledge in the current tenant, ordered by update_time DESC.
+        - Normal user → ReBAC list ∪ creator-owned spaces, intersected with
+          SPACE type, ordered by update_time DESC.
+        - ``keyword`` does substring (case-insensitive) match against name.
+        - ``limit`` caps the result size (default 200); INV-6 cursor pagination
+          is deliberately skipped per spec §3 — typical user has <100 such
+          spaces.
+        """
+        accessible_ids = await PermissionService.list_accessible_ids(
+            user_id=self.login_user.user_id,
+            relation='can_edit',
+            object_type='knowledge_space',
+            login_user=self.login_user,
+        )
+
+        if accessible_ids is None:
+            # Admin path: tenant filter is auto-injected by the multi-tenant
+            # SQLAlchemy event; we just constrain by resource type + order.
+            async with get_async_db_session() as session:
+                stmt = (
+                    select(Knowledge)
+                    .where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
+                    .order_by(Knowledge.update_time.desc())
+                    .limit(limit)
+                )
+                spaces = list((await session.exec(stmt)).all())
+        else:
+            creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
+                self.login_user.user_id, KnowledgeTypeEnum.SPACE,
+            )
+            ids = set(creator_ids) | {
+                int(sid) for sid in accessible_ids if str(sid).isdigit()
+            }
+            if not ids:
+                return []
+            spaces = await KnowledgeDao.aget_list_by_ids(list(ids))
+            spaces = [s for s in spaces if s.type == KnowledgeTypeEnum.SPACE.value]
+            spaces.sort(
+                key=lambda s: s.update_time or datetime.min, reverse=True,
+            )
+            spaces = spaces[:limit]
+
+        if keyword:
+            kw = keyword.lower()
+            spaces = [s for s in spaces if s.name and kw in s.name.lower()]
+        return spaces
+
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
 

@@ -1,9 +1,15 @@
 import { CheckIcon, ChevronDown, Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import { ChatMessageType } from "~/@types/chat";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
+import {
+    ExportSelectionButton,
+    MessageCheckbox,
+} from "~/components/Chat/MessageSelection";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
+import { useMessageSelection } from "~/hooks/useMessageSelection";
 import { cn, copyText, formatStrTime } from "~/utils";
 import ChatFile from "./ChatFile";
 import MessageButtons from "./MessageButtons";
@@ -96,7 +102,24 @@ export default function MessageBs({
         copyText(messageRef.current)
     }
 
-    return <div className="bisheng-message flex w-full py-2">
+    // F028: selection-mode integration. chatId lives in the URL
+    // (``/app/:cid/:fid/:type``). The download icon goes into the
+    // MessageButtons children slot; the round checkbox sits at the left
+    // margin of the bubble row.
+    const { conversationId: chatIdFromUrl } = useParams();
+    const chatId = chatIdFromUrl || "";
+    const messageId = String(data.id ?? "");
+    const { isActiveForChat } = useMessageSelection();
+    const showCheckbox = !!chatId && isActiveForChat(chatId);
+
+    return <div className="bisheng-message flex w-full py-2 items-start gap-2">
+        {showCheckbox && messageId && (
+            <MessageCheckbox
+                chatId={chatId}
+                messageId={messageId}
+                className="mt-2 ml-2 shrink-0"
+            />
+        )}
         <div className="w-fit group max-w-[90%]">
             <ReasoningLog loading={!data.end && (data.reasoning_log || reasoningLog)} msg={data.reasoning_log || reasoningLog} />
             {!(data.reasoning_log && !message && !data.files.length) && <>
@@ -156,6 +179,9 @@ export default function MessageBs({
                         onCopy={handleCopyMessage}
                     >
                         <span className="text-slate-400 text-sm pt-0.5">{formatStrTime(data.create_time, 'MM 月 dd 日 HH:mm')}</span>
+                        {chatId && messageId && (
+                            <ExportSelectionButton chatId={chatId} messageId={messageId} />
+                        )}
                     </MessageButtons>}
                 </div>
             }

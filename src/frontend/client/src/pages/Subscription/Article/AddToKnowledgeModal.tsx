@@ -43,6 +43,12 @@ export interface AddToKnowledgeSelection {
     folderPath: string | null;
 }
 
+/** Minimal space record consumed by the picker tree. */
+export interface AddToKnowledgeSpaceSummary {
+    id: string;
+    name: string;
+}
+
 interface AddToKnowledgeModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -60,6 +66,14 @@ interface AddToKnowledgeModalProps {
      * 创建/编辑频道抽屉传入：H5 下将选择器 portal 到该节点内，与「创建频道」形成下钻层级，而非再叠一层全屏 Dialog。
      */
     channelSyncPortalHostRef?: RefObject<HTMLDivElement | null>;
+    /**
+     * F028: optional custom space-list loader. When provided, overrides the
+     * mode-based default (getMineSpacesApi / getManagedSpacesApi). Used by
+     * the workstation conversation-export flow to feed in the user's
+     * upload_file-eligible spaces. Original article / channel_sync callers
+     * leave this undefined and keep their existing behavior.
+     */
+    dataSourceApi?: () => Promise<AddToKnowledgeSpaceSummary[]>;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -289,6 +303,7 @@ export function AddToKnowledgeModal({
     mode = "article",
     onSyncSelect,
     channelSyncPortalHostRef,
+    dataSourceApi,
 }: AddToKnowledgeModalProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -415,12 +430,14 @@ export function AddToKnowledgeModal({
     useEffect(() => {
         if (!open) return;
         setSpacesLoading(true);
-        // v2.5 Module D: channel_sync mode must only show spaces the current
-        // user created (TC-015/TC-037), ordered the same way as the "我创建的"
-        // sidebar (TC-017: order_by=update_time). Article mode keeps the
-        // original managed-scope behaviour so existing callers are untouched.
-        const loader =
-            mode === "channel_sync"
+        // F028: dataSourceApi (if provided by the workstation conversation-
+        // export flow) takes precedence. Otherwise fall back to the mode-
+        // based default — channel_sync uses "我创建的" (TC-015/TC-037,
+        // order_by=update_time per TC-017); article keeps managed scope so
+        // existing callers are untouched.
+        const loader = dataSourceApi
+            ? dataSourceApi()
+            : mode === "channel_sync"
                 ? getMineSpacesApi({ order_by: "update_time" })
                 : getManagedSpacesApi();
         loader

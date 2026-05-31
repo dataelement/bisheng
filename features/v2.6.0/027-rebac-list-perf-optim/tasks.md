@@ -393,6 +393,53 @@
 
 ---
 
+### 阶段 8：F027 收尾（AC-17 client SpaceDetail 真切无限滚动）
+
+> T020 只把 client hook + 接口层切到 cursor，UI 仍用 `<PaginationBar>` 页码翻页；
+> 且 `cursor: page > 1 ? nextCursor : null` 跳页/回退会拿错数据。
+> 补 T024/T025/T026 把 UI 真切到 LoadMore + IntersectionObserver。详见「实际偏差记录」§AC-17-client-补做。
+
+- [x] **T024**: client `useFileManager.ts` hook 改造为「append + cursor 链 + 搜索 page 拼接」✅ 2026-05-29
+  **文件**: `src/frontend/client/src/pages/knowledge/hooks/useFileManager.ts`
+  **逻辑**:
+  - `loadFiles(page=1)` 行为分支：
+    - `page=1` 默认 / 搜索：替换 `files`（同现状）；
+    - `page>1` 默认路径：用 `nextCursor` 拉下一页 → **append** 到 `files`；更新新的 `nextCursor` / `has_more`；
+    - `page>1` 搜索路径：hook 内部维护 `nextSearchPage`，调 `searchSpaceChildrenApi page=N` → append。
+  - `total` 从 page-size 估算改为 `files.length + (has_more ? 1 : 0)`，纯 UI 进度提示。
+  - `selectedFiles` Set 跨批保留；只在切 space / 切 folder / 改 search / sort / filter 时清空。
+  - 5s 自动刷新改为「只刷状态」：`getSpaceChildrenApi cursor=null page_size=files.length` 拉一批，按 id merge `status / progress / 错误信息` 字段；`nextCursor` 不动；新出现在前的 row（用户新上传）append 到 `files` 头部；本地有但回包没有的**不删**。
+  - 现有 ghost 删除 / `creatingFolder` / `uploadingFiles` spread 在 `displayFiles` 头部 — 不动。
+  **覆盖 AC**: AC-17（工作台部分）
+  **依赖**: T020 已完成
+
+- [x] **T025**: client `SpaceDetail/index.tsx` UI 切到 LoadMore + IntersectionObserver ✅ 2026-05-29 (新增 `SpaceDetail/LoadMore.tsx`;parent `pages/knowledge/index.tsx` 传 `hasMore` prop)
+  **文件**: `src/frontend/client/src/pages/knowledge/SpaceDetail/index.tsx`
+  **逻辑**:
+  - 移除 `<PaginationBar>` import 与渲染；`PaginationBar.tsx` 文件保留（其它地方可能复用）。
+  - card 视图 grid 末尾 / list 视图 table 末尾各插一个 `<LoadMore>` sentinel：
+    - IntersectionObserver，root 走 DOM 找最近 `overflow-y: auto` 祖先（参考 platform `src/frontend/platform/src/components/bs-comp/loadMore/index.tsx` 的实现）；
+    - 触发时调 `onPageChange(currentPage + 1)`，prop 接口不动；
+    - 加载中显示 spinner；`has_more=false` 时不渲染或显示「没有更多」。
+  - sentinel 必须在 scroll container 内部（否则容器内滚动观察不到），不能放在固定底栏。
+  **覆盖 AC**: AC-17, AC-18（工作台部分）
+  **依赖**: T024
+
+- [x] **T026**: 单元 + 静态测试覆盖 client SpaceDetail 无限滚动 ✅ 2026-05-29 (17/17 PASS,`src/pages/knowledge/hooks/useFileManager.test.ts`;hook 关键路径 + UI 不再 import PaginationBar + LoadMore IntersectionObserver 都覆盖)
+  **文件**:
+  - `src/frontend/client/src/pages/knowledge/hooks/useFileManager.test.ts`（新）
+  - `src/frontend/client/src/test/spaceDetailInfiniteScroll.static.test.ts`（新）
+  **逻辑**:
+  - 单元：mock `getSpaceChildrenApi`，断言：
+    - `loadFiles(1)` 不传 cursor，`setFiles` 完全替换；
+    - `loadFiles(2)` 传上一次的 nextCursor，`setFiles` 收到「老 + 新」拼接；
+    - 5s 轮询调用不改变 `nextCursor`，回包里的 status 覆盖现有 file 的 status 字段（按 id merge）。
+  - 静态：AST 扫描 `SpaceDetail/index.tsx` 不再 import `PaginationBar`。
+  **覆盖 AC**: AC-17, AC-18
+  **依赖**: T024, T025
+
+---
+
 ## 实际偏差记录
 
 > 实现过程中如与 spec 不符，必须在此追加条目。
@@ -456,6 +503,15 @@
 ### §T023：ReBAC 静态验证 grep 结果
 （待 T023 完成后填写）
 
+### §AC-17-client-补做：client SpaceDetail UI 未真切无限滚动
+
+**日期发现**: 2026-05-29
+**现象**: T020 把 client hook (`useFileManager.ts`) + 接口层切到 cursor envelope，但 `SpaceDetail/index.tsx` 仍渲染 `<PaginationBar>`，且 hook 内 `cursor: page > 1 ? nextCursor : null` 仅对「下一页」语义正确 —— 跳到第 5 页只会拿到第 2 页起点的 cursor，重复拿到第 2 页数据；回上一页无 cursor 历史，回退失败。
+**与 spec 偏差**: spec §2.3 AC-17 已明确「工作台『知识空间文件列表』」要切真无限滚动，T020 范围理解偏窄、只覆盖了接口对接层。
+**根因**: T020 任务描述「接口对接 cursor envelope」被实施者解读为「最小修复」，UI 改造被推迟但未单独立 task 跟踪。
+**补做范围**: T024（hook 改 append + 5s 轮询只刷状态）+ T025（UI 去 PaginationBar、切 LoadMore + IntersectionObserver）+ T026（单元 + 静态测试）。默认列表与搜索路径**都切**；后端不动（搜索接口保持 page，hook 内部拼接）。
+**用户决策时间**: 2026-05-29，brainstorming session 内确认。
+
 ### 其他偏差
 （如发现 spec 描述与代码现状有冲突、AC 描述需要修正、文件路径迁移等，逐条追加）
 
@@ -471,8 +527,9 @@
 阶段 5 前端 Platform : T016 T017 T018 T019                         (4)
 阶段 6 前端 Client   : T020                                        (1)
 阶段 7 集成回归      : T021 T022 T023                              (3)
+阶段 8 F027 收尾     : T024 → T025 → T026                          (3)
 ─────────────────────────────────────────────────────────────────
-合计                 :                                            23
+合计                 :                                            26
 ```
 
 依赖图（关键路径）:
@@ -480,7 +537,7 @@
 ```
 T001──┬─→ T006 ──→ T008 ──→ T009 ──→ T016 ──┬─→ T022
       │           T010 ──→ T011 ──→ T017 ──┤
-      │           T012 ──→ T013 ──→ T020 ──┤
+      │           T012 ──→ T013 ──→ T020 ──┤──→ T024 ──→ T025 ──→ T026
 T002──┘                                    │
                   T014 ──→ T015 ──→ T019 ──┘
                                             T021 (依赖 T009/T011/T013)
