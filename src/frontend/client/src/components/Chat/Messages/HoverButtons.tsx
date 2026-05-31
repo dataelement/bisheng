@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useRecoilState } from "recoil";
+import { useQueryClient } from "@tanstack/react-query";
+import { Download } from "lucide-react";
 import {
   CheckMark,
   Clipboard,
@@ -12,7 +14,9 @@ import type {
   TConversation,
   TMessage,
 } from "~/types/chat";
+import { QueryKeys } from "~/types/chat";
 import { useGenerationsByLatest, useLocalize } from "~/hooks";
+import { useMessageSelection } from "~/hooks/useMessageSelection";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -50,6 +54,8 @@ export default function HoverButtons({
   activeCitationMessageId,
 }: THoverButtons) {
   const localize = useLocalize();
+  const queryClient = useQueryClient();
+  const { enterSelectionMode } = useMessageSelection();
   const { endpoint: _endpoint, endpointType } = conversation ?? {};
   const endpoint = endpointType ?? _endpoint;
   const [isCopied, setIsCopied] = useState(false);
@@ -195,6 +201,27 @@ export default function HoverButtons({
           <Clipboard size="19" />
         )}
       </button>
+      {/* F028: export entry. AI messages only. Reuses copy button's
+          visibility rules so streaming hides this icon the same way it
+          hides copy (spec AC-07 / AD-13). */}
+      {!isCreatedByUser && conversation?.conversationId && (
+        <button
+          className={cn(
+            "ml-0 flex items-center gap-1.5 rounded-md p-1 text-xs hover:bg-gray-100 hover:text-gray-500 focus:opacity-100 dark:text-gray-400/70 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 fine-pointer:group-hover:visible fine-pointer:group-[.final-completion]:visible",
+            !isLast ? "fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100" : ""
+          )}
+          type="button"
+          title={localize("workstation.messageExport.entry")}
+          onClick={() => {
+            const chatId = conversation.conversationId!;
+            const messages =
+              queryClient.getQueryData<TMessage[]>([QueryKeys.messages, chatId]) ?? [];
+            enterSelectionMode(chatId, message.messageId, messages);
+          }}
+        >
+          <Download size="19" />
+        </button>
+      )}
       {renderRegenerate()}
       {/* <Fork
         isLast={isLast}

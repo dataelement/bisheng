@@ -2023,5 +2023,27 @@
   "com_approval_task_badge_rejected": "已拒绝",
   "com_approval_section_business_content": "业务内容",
   "com_approval_search_placeholder": "搜索申请人、场景或文件",
-  "com_ui_close": "关闭"
+  "com_ui_close": "关闭",
+  "workstation": {
+    "messageExport": {
+      "entry": "导出",
+      "exportAsWord": "导出为 Word",
+      "exportAsPdf": "导出为 PDF",
+      "exportAsMarkdown": "导出为 Markdown",
+      "exportAsTxt": "导出为 TXT",
+      "exportToLocal": "导出到本地",
+      "selectExportFormat": "选择导出文件",
+      "importToKnowledge": "导入到知识空间",
+      "selectAll": "全选",
+      "selectAllBelow": "全选以下消息",
+      "cancel": "取消",
+      "noSelection": "请先选择消息",
+      "batchLimit": "单次最多选中 200 条消息",
+      "importSuccess": "导入成功，文件正在解析中",
+      "permissionDenied": "暂无权限导入到该知识空间",
+      "spaceNotFound": "知识空间不存在或已删除",
+      "folderNotFound": "文件夹不存在或已删除",
+      "renderFailed": "文件生成失败，请稍后重试"
+    }
+  }
 }

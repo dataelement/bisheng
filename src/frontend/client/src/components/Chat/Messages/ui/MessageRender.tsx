@@ -5,11 +5,13 @@ import type { TMessageIcon, TMessageProps } from '~/common';
 import MessageContent from '~/components/Chat/Messages/Content/MessageContent';
 import HoverButtons from '~/components/Chat/Messages/HoverButtons';
 import MessageIcon from '~/components/Chat/Messages/MessageIcon';
+import { MessageCheckbox } from '~/components/Chat/MessageSelection';
 import SiblingSwitch from '~/components/Chat/Messages/SiblingSwitch';
 import SubRow from '~/components/Chat/Messages/SubRow';
 import PlaceholderRow from '~/components/Chat/Messages/ui/PlaceholderRow';
 import { Plugin } from '~/components/Messages/Content';
 import { useMessageActions } from '~/hooks';
+import { useMessageSelection } from '~/hooks/useMessageSelection';
 import { MessageContext } from '~/Providers';
 import store from '~/store';
 import { cn, logger } from '~/utils';
@@ -60,6 +62,13 @@ const MessageRender = memo(
     });
     const fontSize = useRecoilValue(store.fontSize);
     const maximizeChatSpace = useRecoilValue(store.maximizeChatSpace);
+    // F028: show the per-message selection checkbox while selection mode is
+    // active for this conversation. The checkbox is purely presentational —
+    // toggling logic lives in useMessageSelection.
+    const { isActiveForChat } = useMessageSelection();
+    const showSelectionCheckbox =
+      msg != null && !!conversation?.conversationId &&
+      isActiveForChat(conversation.conversationId);
     const handleRegenerateMessage = useCallback(() => regenerateMessage(), [regenerateMessage]);
     const { isCreatedByUser, error, unfinished } = msg ?? {};
     const hasNoChildren = !(msg?.children?.length ?? 0);
@@ -144,6 +153,14 @@ const MessageRender = memo(
       >
         {isLatestCard === true && (
           <div className="absolute right-0 top-0 m-2 h-3 w-3 rounded-full bg-text-primary"></div>
+        )}
+        {/* F028 selection checkbox — left of avatar; visible only in selection mode */}
+        {showSelectionCheckbox && conversation?.conversationId && msg && (
+          <MessageCheckbox
+            chatId={conversation.conversationId}
+            messageId={msg.messageId}
+            className="mr-2 mt-1 self-start"
+          />
         )}
         {/* 消息头像 */}
         <div className="relative flex flex-shrink-0 flex-col items-end">
