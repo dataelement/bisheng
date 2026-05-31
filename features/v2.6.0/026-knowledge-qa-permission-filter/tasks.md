@@ -11,7 +11,7 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 经 `/sdd-review spec` 14 项检查 + 7 项修复 + citations/resolve 范围调整，2026-05-29 通过 |
 | tasks.md | ✅ 已拆解 | 经 `/sdd-review tasks` 21 项检查，Round 1 修复 4 处 medium ISSUE（AC-21/22 覆盖、T003 dependencies.py、T010 拆分、AC 范围写法），Round 2 LGTM，2026-05-29 通过 |
-| 实现 | 🔲 未开始 | 0 / 12 完成 |
+| 实现 | 🟡 进行中 | 3 / 12 完成（T001-T003 已提交至 `feat/2.6.0/knowledge-space`，已 ff-merge 到 `feat/2.6.0-beta3`）|
 
 ---
 
@@ -36,7 +36,7 @@
 
 ### 基础设施（无测试配对）
 
-- [ ] **T001**: 配置常量 + release-contract 登记
+- [x] **T001**: 配置常量 + release-contract 登记（commit `c2bf1e4ab`）
   **文件**:
   - `src/backend/bisheng/core/config/settings.py`（新增 `KnowledgeQAFilterConf` 配置块挂在 `Settings` 顶层为可选块）
   - `features/v2.6.0/release-contract.md`（① 表 1 追加 F026 行，标注"不引入新领域对象、仅读取/调用现有对象"；② 表 2 追加 INV-6 完整三列定义（spec §9 已给出）；③ 表 3 追加 F026 行，依赖列填 "—"；④ 变更历史登记本次新增）
@@ -49,7 +49,7 @@
 
 ### 后端 Domain Service — KnowledgeFileVisibilityService（Test-First 配对）
 
-- [ ] **T002**: KnowledgeFileVisibilityService 单元测试
+- [x] **T002**: KnowledgeFileVisibilityService 单元测试（commit `2f1bd6197`，12 tests，TDD red 阶段）
   **文件**: `src/backend/test/knowledge/test_knowledge_file_visibility_service.py`
   **逻辑**: 测试 3 个方法的全部分支，mock OpenFGA（`mock_openfga`）+ 用 `monkeypatch.setattr` 桩掉 `FineGrainedPermissionService.get_effective_permission_ids_async`：
   - `is_space_visible`：① 有 `view_space` → True；② 无 → False；③ admin 短路 → True
@@ -64,7 +64,7 @@
   **基础设施**: `mock_openfga` 已在 conftest；`test/knowledge/` 目录已存在
   **依赖**: T001
 
-- [ ] **T003**: KnowledgeFileVisibilityService 实现 + FastAPI 依赖工厂
+- [x] **T003**: KnowledgeFileVisibilityService 实现 + FastAPI 依赖工厂（commit `98942f52c`，arch-guard 通过）
   **文件**:
   - `src/backend/bisheng/knowledge/domain/services/knowledge_file_visibility_service.py`（新建）
   - `src/backend/bisheng/knowledge/api/dependencies.py`（修改：新增 `get_knowledge_file_visibility_service(request: Request, login_user: UserPayload = Depends(UserPayload.get_login_user)) -> KnowledgeFileVisibilityService` 工厂函数，供 T005/T007/T009 endpoints 与下游 service 通过 Depends 拿实例）
