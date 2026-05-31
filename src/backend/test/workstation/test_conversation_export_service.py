@@ -391,3 +391,115 @@ def test_build_turns_query_without_answer():
     assert turns[0].answers == []
     # Sender name falls back to flow_name when no answer
     assert turns[0].sender_name == 'Workstation'
+
+
+# Issue: real workstation/workflow data wraps the user query in JSON envelopes
+# rather than storing plain text. The renderer must unwrap before passing to
+# Markdown, otherwise the export shows ``{"query": "..."}`` literally.
+
+def test_build_turns_unwraps_daily_mode_query_envelope():
+    """日常模式：``{"query": "...", "files": []}`` → 渲染为 query 字段内容。"""
+    session = _make_session(flow_type=FlowType.WORKSTATION.value)
+    msgs = [
+        _make_chat_message(
+            1, 'question',
+            json.dumps({'query': '今天天气', 'files': []}, ensure_ascii=False),
+        ),
+        _make_chat_message(2, 'answer', '北京晴', sender='M'),
+    ]
+    turns = ConversationExportService._build_turns(msgs, session, user_name='Admin')
+    assert turns[0].user_query == '今天天气'
+
+
+def test_build_turns_unwraps_workflow_input_envelope():
+    """工作流：``{"data": {...}, "input": "..."}`` → 渲染为 input 字段内容。"""
+    session = _make_session(flow_type=FlowType.WORKFLOW.value, flow_name='搬家助手')
+    msgs = [
+        _make_chat_message(
+            1, 'question',
+            json.dumps(
+                {'data': {'chatId': 'fc569', 'id': '265f9', 'type': 5},
+                 'input': '引导问题1：如何根据物品数量和类型制定详细的搬家计划？'},
+                ensure_ascii=False,
+            ),
+        ),
+        _make_chat_message(2, 'answer', '答复', sender='M'),
+    ]
+    turns = ConversationExportService._build_turns(msgs, session, user_name='Admin')
+    assert turns[0].user_query == '引导问题1：如何根据物品数量和类型制定详细的搬家计划？'
+
+
+def test_build_turns_unwraps_query_then_strips_citations():
+    """JSON 拆出来的 query 文本仍要走角标剥除（边界场景：user 问的内容也可能含角标，少见但理论上可能）。"""
+    session = _make_session()
+    payload = json.dumps(
+        {'query': '问' + 'x' + '题', 'files': []},
+        ensure_ascii=False,
+    )
+    msgs = [
+        _make_chat_message(1, 'question', payload),
+        _make_chat_message(2, 'answer', '答', sender='M'),
+    ]
+    turns = ConversationExportService._build_turns(msgs, session, user_name='Admin')
+    assert turns[0].user_query == '问题'
+
+
+# Issue: agent_answer with empty ``msg`` but text content sitting in
+# ``events`` (v2.5 agent-native format per chat_helpers.py:218-273). Previously
+# such answers exported as empty turns.
+
+def test_build_turns_agent_answer_falls_back_to_events_text():
+    """``msg`` 为空时, 末尾 ``events`` 中的 text 块作为答复内容。"""
+    session = _make_session(flow_type=FlowType.ASSISTANT.value, flow_name='Bot')
+    payload = json.dumps({
+        'msg': '',
+        'events': [
+            {'type': 'thinking', 'content': '思考...'},
+            {'type': 'text', 'content': '最终答复正文'},
+        ],
+    }, ensure_ascii=False)
+    msgs = [
+        _make_chat_message(1, 'question', 'q'),
+        _make_chat_message(2, 'agent_answer', payload, parent_msg_id=1),
+    ]
+    turns = ConversationExportService._build_turns(msgs, session, user_name='Admin')
+    assert turns[0].answers == ['最终答复正文']
+
+
+def test_build_turns_agent_answer_workflow_text_output_captured():
+    """工作流 OUTPUT 节点 ``output_type=text`` 也要被收进答复正文 (不只是占位)。"""
+    session = _make_session(flow_type=FlowType.WORKFLOW.value, flow_name='流')
+    payload = json.dumps({
+        'msg': '',
+        'events': [
+            {'type': 'output', 'output_type': 'text', 'content': '工作流文本输出'},
+            {'type': 'output', 'output_type': 'form'},  # 非 text → 占位
+        ],
+    }, ensure_ascii=False)
+    msgs = [
+        _make_chat_message(1, 'question', 'q'),
+        _make_chat_message(2, 'agent_answer', payload, parent_msg_id=1),
+    ]
+    turns = ConversationExportService._build_turns(msgs, session, user_name='Admin')
+    text = turns[0].answers[0]
+    assert '工作流文本输出' in text
+    assert '[交互组件：form]' in text
+
+
+def test_build_turns_agent_answer_strips_citations_from_events_text():
+    """从 events 拿出来的 text 也要剥角标 (而不只剥 msg 字段)。"""
+    session = _make_session(flow_type=FlowType.ASSISTANT.value, flow_name='Bot')
+    payload = json.dumps({
+        'msg': '',
+        'events': [
+            {'type': 'text', 'content': '答 ' + 'knowledgesearch_28624655:4' + ' 完'},
+        ],
+    }, ensure_ascii=False)
+    msgs = [
+        _make_chat_message(1, 'question', 'q'),
+        _make_chat_message(2, 'agent_answer', payload, parent_msg_id=1),
+    ]
+    turns = ConversationExportService._build_turns(msgs, session, user_name='Admin')
+    assert '' not in turns[0].answers[0]
+    assert 'knowledgesearch' not in turns[0].answers[0]
+    assert turns[0].answers[0] == '答  完'
