@@ -1,9 +1,10 @@
-from typing import Any, Type, List, Optional
+import asyncio
+from typing import Any, List, Optional, Type
 
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.documents import Document, BaseDocumentCompressor
+from langchain_core.documents import BaseDocumentCompressor, Document
 from langchain_core.language_models import BaseChatModel
-from langchain_core.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
@@ -60,7 +61,7 @@ class KnowledgeRetrieverTool(BaseTool):
     async def _arun(self, query: str, **kwargs: Any) -> List[Document]:
         milvus_docs, es_docs = [], []
         if self.vector_retriever:
-            milvus_docs = await self.vector_retriever.ainvoke(query)
+            milvus_docs = await asyncio.to_thread(self.vector_retriever.invoke, query)
         if self.elastic_retriever:
             es_docs = await self.elastic_retriever.ainvoke(query)
 
