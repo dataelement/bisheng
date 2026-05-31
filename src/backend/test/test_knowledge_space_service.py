@@ -2850,6 +2850,10 @@ class TestSpaceListings:
             service, '_get_effective_permission_ids', new_callable=AsyncMock,
             return_value={'view_space'},
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
+            new_callable=AsyncMock,
+            return_value={2: 5},
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
             new_callable=AsyncMock,
             return_value=[],
@@ -2861,6 +2865,7 @@ class TestSpaceListings:
         assert result[0].user_role == UserRoleEnum.ADMIN
         assert result[0].subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
         assert result[0].is_followed is True
+        assert result[0].file_num == 5
 
     @pytest.mark.asyncio
     async def test_get_my_followed_spaces_excludes_direct_grant_without_view_space(self, service):
@@ -2939,6 +2944,10 @@ class TestSpaceListings:
             new_callable=AsyncMock,
             return_value={'view_space'},
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
+            new_callable=AsyncMock,
+            return_value={9: 7},
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
             new_callable=AsyncMock,
             return_value=[],
@@ -2957,6 +2966,7 @@ class TestSpaceListings:
         assert len(result.public_spaces) == 1
         assert result.public_spaces[0].id == 9
         assert result.public_spaces[0].user_role == UserRoleEnum.MEMBER
+        assert result.public_spaces[0].file_num == 7
         assert result.department_spaces == []
         assert result.team_spaces == []
         assert result.personal_spaces == []
@@ -3037,6 +3047,10 @@ class TestSpaceListings:
             service, '_get_effective_permission_ids', new_callable=AsyncMock,
             return_value={'manage_space_relation'},
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch',
+            new_callable=AsyncMock,
+            return_value={3: 4},
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids',
             new_callable=AsyncMock,
             return_value=[],
@@ -3047,6 +3061,7 @@ class TestSpaceListings:
         assert result[0].id == 3
         assert result[0].user_role == UserRoleEnum.ADMIN
         assert result[0].subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
+        assert result[0].file_num == 4
 
 
 class TestKnowledgeSquareListing:

@@ -817,7 +817,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else:
                 normal_spaces.append(result)
 
-        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
+        ordered_spaces = pinned_spaces + normal_spaces
+        if ordered_spaces:
+            file_count_map = await KnowledgeFileDao.async_count_success_files_batch(
+                [space.id for space in ordered_spaces]
+            )
+            for space in ordered_spaces:
+                space.file_num = int(file_count_map.get(space.id, 0) or 0)
+
+        return await self._decorate_department_metadata(ordered_spaces)
 
     async def _require_write_permission(self, space_id: int) -> None:
         """
