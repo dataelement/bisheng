@@ -11,14 +11,12 @@
  * together) lives in useMessageSelection.
  */
 
-import { useQueryClient } from '@tanstack/react-query';
-import type { TMessage } from '~/types/chat';
-import { QueryKeys } from '~/types/chat';
 import { useMessageSelection } from '~/hooks/useMessageSelection';
+import { useSelectionMessages } from './SelectionMessagesContext';
 import { cn } from '~/utils';
 
 interface MessageCheckboxProps {
-    /** The chat this message belongs to (drives the react-query cache lookup). */
+    /** The chat this message belongs to (currently unused — Context-scoped). */
     chatId: string;
     /** The message this checkbox toggles. */
     messageId: string;
@@ -26,10 +24,9 @@ interface MessageCheckboxProps {
     className?: string;
 }
 
-export function MessageCheckbox({ chatId, messageId, className }: MessageCheckboxProps) {
+export function MessageCheckbox({ messageId, className }: MessageCheckboxProps) {
     const { isSelected, toggleMessage } = useMessageSelection();
-    const queryClient = useQueryClient();
-    const messages = queryClient.getQueryData<TMessage[]>([QueryKeys.messages, chatId]) ?? [];
+    const messages = useSelectionMessages();
     const checked = isSelected(messageId, messages);
 
     return (

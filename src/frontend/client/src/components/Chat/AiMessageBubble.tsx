@@ -7,6 +7,7 @@ import {
     ChevronLeftIcon,
     ChevronRightIcon,
     CopyIcon,
+    Download,
     Loader2,
     RefreshCwIcon
 } from "lucide-react";
@@ -22,6 +23,11 @@ import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useAuthContext } from "~/hooks";
+import { useMessageSelection } from "~/hooks/useMessageSelection";
+import {
+    MessageCheckbox,
+    useSelectionMessages,
+} from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
 import Image from "~/components/Chat/Messages/Content/Image";
@@ -40,6 +46,42 @@ interface AiMessageBubbleProps {
     knowledgeChatLayout?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
+}
+
+// --- F028 export-selection trigger (AI messages only) ---
+// Reuses the same visibility rules as CopyButton via shared parent container
+// (action row only renders when ``!isStreaming && regularContent``). Reads the
+// chat's messages from the react-query cache so it doesn't need extra props.
+function ExportSelectionButton({
+    chatId,
+    messageId,
+}: {
+    chatId: string;
+    messageId: string;
+}) {
+    const { enterSelectionMode } = useMessageSelection();
+    const messages = useSelectionMessages();
+
+    const handleClick = useCallback(
+        (event: React.MouseEvent<HTMLButtonElement>) => {
+            event.preventDefault();
+            event.stopPropagation();
+            enterSelectionMode(chatId, messageId, messages);
+        },
+        [chatId, messageId, messages, enterSelectionMode],
+    );
+
+    return (
+        <button
+            type="button"
+            onClick={handleClick}
+            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+            title="导出"
+            aria-label="导出"
+        >
+            <Download size={14} className="text-[#818181]" />
+        </button>
+    );
 }
 
 // --- Copy button with feedback ---
@@ -279,6 +321,14 @@ function UserBubble({
 }) {
     const { user } = useAuthContext();
 
+    // F028: render selection checkbox at the left margin when selection mode
+    // is active for this conversation. ``mr-auto`` keeps the user bubble
+    // right-aligned regardless of whether the checkbox is mounted.
+    const { isActiveForChat } = useMessageSelection();
+    const showCheckbox =
+        !!message.conversationId &&
+        isActiveForChat(message.conversationId);
+
     // Pull out the optional `:::tag {...}:::` chip prefix
     const { tag, bodyText } = useMemo(
         () => parseUserMessageText(message.text || ""),
@@ -286,7 +336,14 @@ function UserBubble({
     );
 
     return (
-        <div className={cn("flex justify-end py-3", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+        <div className={cn("flex justify-end py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+            {showCheckbox && message.conversationId && (
+                <MessageCheckbox
+                    chatId={message.conversationId}
+                    messageId={message.messageId}
+                    className="mr-auto mt-2 shrink-0"
+                />
+            )}
             <div className={cn("min-w-0", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Render uploaded files if any */}
                 {message.files && message.files.length > 0 && (
@@ -473,8 +530,21 @@ function AssistantBubble({
         !regularContent &&
         !(Array.isArray(message.events) && message.events.length > 0);
 
+    // F028: per-message selection checkbox.
+    const { isActiveForChat } = useMessageSelection();
+    const showCheckbox =
+        !!message.conversationId &&
+        isActiveForChat(message.conversationId);
+
     return (
-        <div className={cn("flex justify-start py-3", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+        <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+            {showCheckbox && message.conversationId && (
+                <MessageCheckbox
+                    chatId={message.conversationId}
+                    messageId={message.messageId}
+                    className="mt-2 shrink-0"
+                />
+            )}
             <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
                 {/* Avatar + name kept but hidden via style only */}
                 <div className="hidden gap-3">
@@ -577,7 +647,12 @@ function AssistantBubble({
                             actionButtons={
                                 <>
                                     <CopyButton text={regularContent} />
-
+                                    {message.conversationId && message.messageId && (
+                                        <ExportSelectionButton
+                                            chatId={message.conversationId}
+                                            messageId={message.messageId}
+                                        />
+                                    )}
                                     <TextToSpeechButton
                                         className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
                                         messageId={message.messageId || ""}
