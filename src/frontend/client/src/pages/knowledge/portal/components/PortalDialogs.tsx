@@ -196,7 +196,7 @@ export function PortalDialogs({
             <Dialog open={duplicateFiles.length > 0} onOpenChange={(open) => !open && onDuplicateSkip()}>
                 <DialogContent className="sm:max-w-[460px]" onPointerDownOutside={(event) => event.preventDefault()}>
                     <DialogHeader>
-                        <DialogTitle>发现重名文件</DialogTitle>
+                        <DialogTitle>发现重复文件</DialogTitle>
                     </DialogHeader>
                     <ul className={s.dialogList}>
                         {duplicateFiles.map((entry) => (

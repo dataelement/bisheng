@@ -533,6 +533,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             created_by=int(self.login_user.user_id),
         )
 
+    @staticmethod
+    def _normalize_space_name(name: str) -> str:
+        return name.strip()
+
     async def _ensure_space_name_unique_in_scope(
         self,
         *,
@@ -543,14 +547,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         exclude_id: Optional[int] = None,
         tenant_id: Optional[int] = None,
     ) -> None:
-        existing_space = await KnowledgeDao.async_get_space_by_scope_name(
-            tenant_id=int(tenant_id or self.login_user.tenant_id),
-            level=level,
-            owner_type=owner_type,
-            owner_id=owner_id,
-            name=name,
-            exclude_id=exclude_id,
-        )
+        normalized_name = self._normalize_space_name(name)
+        level = self._normalize_space_level(level)
+        if level == KnowledgeSpaceLevelEnum.PERSONAL:
+            existing_space = await KnowledgeDao.async_get_personal_space_by_owner_name(
+                owner_id=owner_id,
+                name=normalized_name,
+                exclude_id=exclude_id,
+            )
+        else:
+            existing_space = await KnowledgeDao.async_get_non_personal_space_by_name(
+                name=normalized_name,
+                exclude_id=exclude_id,
+            )
         if existing_space:
             raise SpaceNameDuplicateError()
 
@@ -1811,6 +1820,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         skip_user_limit: bool = False,
         approval_request: bool = False,
     ) -> tuple[KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum, int]:
+        name = self._normalize_space_name(name)
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
                 self.login_user.user_id,
@@ -1875,6 +1885,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> Knowledge:
         """Create a new knowledge space (max 200 per user)."""
 
+        name = self._normalize_space_name(name)
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
                 self.login_user.user_id,
@@ -3270,22 +3281,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
         old_auth_type = space.auth_type
-        name_changed = name is not None and name != space.name
+        normalized_name = self._normalize_space_name(name) if name is not None else None
+        name_changed = normalized_name is not None and normalized_name != space.name
 
         if name_changed:
             scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
             if scope is None:
                 raise SpaceInvalidScopeOwnerError(msg='Knowledge space scope does not exist')
             await self._ensure_space_name_unique_in_scope(
-                name=name,
+                name=normalized_name,
                 level=scope.level,
                 owner_type=scope.owner_type,
                 owner_id=int(scope.owner_id),
                 exclude_id=space_id,
                 tenant_id=int(scope.tenant_id or space.tenant_id or self.login_user.tenant_id),
             )
-        if name is not None:
-            space.name = name
+        if normalized_name is not None:
+            space.name = normalized_name
         if description is not None:
             space.description = description
         if icon is not None:

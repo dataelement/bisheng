@@ -29,6 +29,15 @@ import {
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
+import {
+    extractDuplicateFileEntries,
+    type DuplicateFileEntry,
+} from "./duplicateFiles";
+
+export {
+    extractDuplicateFileEntries,
+    type DuplicateFileEntry,
+} from "./duplicateFiles";
 
 /**
  * Resolve a human-friendly reason from an upload error.
@@ -52,39 +61,12 @@ function resolveUploadErrorReason(err: any): string {
     return "";
 }
 
-/** A duplicate file entry detected from addFiles response (status === 3) */
-export interface DuplicateFileEntry {
-    fileId: string;
-    fileName: string;
-    oldFileLevelPath: string;
-    /** Raw object from addFiles response, passed to retry API as-is */
-    rawObj: any;
-}
-
 const PENDING_REGISTERED_FILE_STATUSES = new Set<FileStatus>([
     FileStatus.UPLOADING,
     FileStatus.WAITING,
     FileStatus.PROCESSING,
     FileStatus.REBUILDING,
 ]);
-
-export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): DuplicateFileEntry[] {
-    // Backend marks duplicates by setting `old_file_level_path` to a string (possibly empty
-    // when the existing file lives at the space root). Real parse failures leave the field
-    // unset (None → undefined). Use type check, not truthiness, to keep root-level duplicates.
-    return registeredFiles
-        .filter((file) => (
-            file.status === FileStatus.FAILED &&
-            typeof file.oldFileLevelPath === "string" &&
-            Boolean((file as any)._raw)
-        ))
-        .map((file) => ({
-            fileId: file.id,
-            fileName: file.name,
-            oldFileLevelPath: file.oldFileLevelPath || "",
-            rawObj: (file as any)._raw,
-        }));
-}
 
 export function mergeVisibleRegisteredFiles(
     existingFiles: KnowledgeFile[],

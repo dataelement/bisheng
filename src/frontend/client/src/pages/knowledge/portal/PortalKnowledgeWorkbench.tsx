@@ -470,6 +470,7 @@ export default function PortalKnowledgeWorkbench() {
         uploadImporting,
         uploadReviewRows,
         uploadFolderOptions,
+        duplicateFiles,
         setUploadDialogOpen,
         setUploadStep,
         setUploadReviewRows,
@@ -482,6 +483,8 @@ export default function PortalKnowledgeWorkbench() {
         handleToggleUploadFolder,
         handleUploadNext,
         handleStartUploadImport,
+        handleDuplicateSkip,
+        handleDuplicateOverwrite,
     } = usePortalUploadDialog({
         activeSpace,
         setActiveSpace,
@@ -1331,9 +1334,9 @@ export default function PortalKnowledgeWorkbench() {
                     onBackToSelect: () => setUploadStep("select"),
                     onStartUploadImport: () => void handleStartUploadImport(),
                 }}
-                duplicateFiles={fileUpload.duplicateFiles}
-                onDuplicateSkip={fileUpload.handleDuplicateSkip}
-                onDuplicateOverwrite={fileUpload.handleDuplicateOverwrite}
+                duplicateFiles={duplicateFiles}
+                onDuplicateSkip={handleDuplicateSkip}
+                onDuplicateOverwrite={handleDuplicateOverwrite}
             />
         </div>
     );

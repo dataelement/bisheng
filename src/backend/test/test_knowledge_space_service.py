@@ -2296,7 +2296,7 @@ class TestGetSpaceInfo:
 class TestCreateSpace:
 
     @pytest.mark.asyncio
-    async def test_create_rejects_duplicate_personal_space_name_in_same_scope(self, service):
+    async def test_create_personal_rejects_duplicate_name_for_same_user(self, service):
         duplicate_space = _make_space(
             space_id=22,
             user_id=service.login_user.user_id,
@@ -2315,10 +2315,19 @@ class TestCreateSpace:
             new_callable=AsyncMock,
             return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_scope_name',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_personal_space_by_owner_name',
             new_callable=AsyncMock,
             return_value=duplicate_space,
             create=True,
+        ) as mock_get_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
+            new_callable=AsyncMock,
+            return_value=None,
+            create=True,
+        ) as mock_get_global, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._is_auto_tag_feature_visible',
+            new_callable=AsyncMock,
+            return_value=False,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
             return_value=created_space,
@@ -2342,13 +2351,24 @@ class TestCreateSpace:
             new_callable=AsyncMock,
         ):
             with pytest.raises(Exception) as exc_info:
-                await service.create_knowledge_space(name='重复空间')
+                await service.create_knowledge_space(name='  重复空间  ')
 
         assert exc_info.value.__class__.__name__ == 'SpaceNameDuplicateError'
+        mock_get_personal.assert_awaited_once_with(
+            owner_id=service.login_user.user_id,
+            name='重复空间',
+            exclude_id=None,
+        )
+        mock_get_global.assert_not_awaited()
         mock_create_knowledge_base.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_create_allows_space_name_when_scope_has_no_duplicate(self, service):
+    async def test_create_personal_allows_name_used_by_non_personal_space(self, service):
+        non_personal_space = _make_space(
+            space_id=22,
+            user_id=999,
+            space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+        )
         created_space = _make_space(
             space_id=23,
             user_id=service.login_user.user_id,
@@ -2363,10 +2383,25 @@ class TestCreateSpace:
             new_callable=AsyncMock,
             return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_scope_name',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_personal_space_by_owner_name',
             new_callable=AsyncMock,
             return_value=None,
-        ) as mock_get_by_scope_name, patch(
+            create=True,
+        ) as mock_get_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_non_personal_space_by_name',
+            new_callable=AsyncMock,
+            return_value=non_personal_space,
+            create=True,
+        ) as mock_get_non_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
+            new_callable=AsyncMock,
+            return_value=non_personal_space,
+            create=True,
+        ) as mock_get_global, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._is_auto_tag_feature_visible',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
             return_value=created_space,
         ) as mock_create_knowledge_base, patch(
@@ -2388,18 +2423,218 @@ class TestCreateSpace:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
             new_callable=AsyncMock,
         ):
-            result = await service.create_knowledge_space(name='同名但不同范围可用')
+            result = await service.create_knowledge_space(name='重复空间')
 
         assert result.id == 23
         mock_create_knowledge_base.assert_called_once()
-        mock_get_by_scope_name.assert_awaited_once_with(
-            tenant_id=service.login_user.tenant_id,
-            level=KnowledgeSpaceLevelEnum.PERSONAL,
-            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+        mock_get_personal.assert_awaited_once_with(
             owner_id=service.login_user.user_id,
-            name='同名但不同范围可用',
+            name='重复空间',
             exclude_id=None,
         )
+        mock_get_non_personal.assert_not_awaited()
+        mock_get_global.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_create_personal_allows_name_used_by_other_user_personal_space(self, service):
+        other_user_personal_space = _make_space(
+            space_id=22,
+            user_id=999,
+        )
+        created_space = _make_space(
+            space_id=23,
+            user_id=service.login_user.user_id,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_personal_space_by_owner_name',
+            new_callable=AsyncMock,
+            return_value=None,
+            create=True,
+        ) as mock_get_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
+            new_callable=AsyncMock,
+            return_value=other_user_personal_space,
+            create=True,
+        ) as mock_get_global, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._is_auto_tag_feature_visible',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            return_value=created_space,
+        ) as mock_create_knowledge_base, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.tenant.domain.services.resource_share_service.ResourceShareService.share_on_create',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
+            new_callable=AsyncMock,
+        ):
+            result = await service.create_knowledge_space(name='重复空间')
+
+        assert result.id == 23
+        mock_create_knowledge_base.assert_called_once()
+        mock_get_personal.assert_awaited_once_with(
+            owner_id=service.login_user.user_id,
+            name='重复空间',
+            exclude_id=None,
+        )
+        mock_get_global.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_create_non_personal_rejects_duplicate_name_across_non_personal_spaces(self, service):
+        duplicate_space = _make_space(
+            space_id=22,
+            user_id=999,
+            space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        )
+        created_space = _make_space(
+            space_id=23,
+            user_id=service.login_user.user_id,
+            space_level=KnowledgeSpaceLevelEnum.TEAM,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_non_personal_space_by_name',
+            new_callable=AsyncMock,
+            return_value=duplicate_space,
+            create=True,
+        ) as mock_get_non_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
+            new_callable=AsyncMock,
+            return_value=None,
+            create=True,
+        ) as mock_get_global, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._is_auto_tag_feature_visible',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            return_value=created_space,
+        ) as mock_create_knowledge_base, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.tenant.domain.services.resource_share_service.ResourceShareService.share_on_create',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
+            new_callable=AsyncMock,
+        ):
+            with pytest.raises(Exception) as exc_info:
+                await service.create_knowledge_space(
+                    name='重复空间',
+                    space_level=KnowledgeSpaceLevelEnum.TEAM,
+                )
+
+        assert exc_info.value.__class__.__name__ == 'SpaceNameDuplicateError'
+        mock_get_non_personal.assert_awaited_once_with(name='重复空间', exclude_id=None)
+        mock_get_global.assert_not_awaited()
+        mock_create_knowledge_base.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_non_personal_allows_name_used_only_by_personal_space(self, service):
+        personal_space = _make_space(
+            space_id=22,
+            user_id=999,
+            space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+        )
+        created_space = _make_space(
+            space_id=23,
+            user_id=service.login_user.user_id,
+            space_level=KnowledgeSpaceLevelEnum.TEAM,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+            new_callable=AsyncMock,
+            return_value=0,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_non_personal_space_by_name',
+            new_callable=AsyncMock,
+            return_value=None,
+            create=True,
+        ) as mock_get_non_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
+            new_callable=AsyncMock,
+            return_value=personal_space,
+            create=True,
+        ) as mock_get_global, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService._is_auto_tag_feature_visible',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+            return_value=created_space,
+        ) as mock_create_knowledge_base, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.tenant.domain.services.resource_share_service.ResourceShareService.share_on_create',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
+            new_callable=AsyncMock,
+        ):
+            result = await service.create_knowledge_space(
+                name='重复空间',
+                space_level=KnowledgeSpaceLevelEnum.TEAM,
+            )
+
+        assert result.id == 23
+        mock_create_knowledge_base.assert_called_once()
+        mock_get_non_personal.assert_awaited_once_with(name='重复空间', exclude_id=None)
+        mock_get_global.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_create_limit_count_excludes_department_spaces(self, service):
@@ -2971,9 +3206,10 @@ class TestManagePermissionBoundaries:
             new_callable=AsyncMock,
             return_value=scope,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_scope_name',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_personal_space_by_owner_name',
             new_callable=AsyncMock,
             return_value=None,
+            create=True,
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
@@ -2990,7 +3226,7 @@ class TestManagePermissionBoundaries:
         mock_enqueue.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
-    async def test_update_space_rejects_duplicate_name_in_same_scope(self, service):
+    async def test_update_personal_rejects_duplicate_name_for_same_user(self, service):
         existing_space = _make_space(
             space_id=1,
             user_id=service.login_user.user_id,
@@ -3019,19 +3255,153 @@ class TestManagePermissionBoundaries:
             new_callable=AsyncMock,
             return_value=scope,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_scope_name',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_personal_space_by_owner_name',
             new_callable=AsyncMock,
             return_value=duplicate_space,
             create=True,
-        ), patch(
+        ) as mock_get_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
+            new_callable=AsyncMock,
+            return_value=None,
+            create=True,
+        ) as mock_get_global, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
-        ) as mock_update_space:
+        ) as mock_update_space, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_space_rename_stat_async',
+            new_callable=AsyncMock,
+        ):
             with pytest.raises(Exception) as exc_info:
                 await service.update_knowledge_space(1, name='重复空间')
 
         assert exc_info.value.__class__.__name__ == 'SpaceNameDuplicateError'
+        mock_get_personal.assert_awaited_once_with(
+            owner_id=service.login_user.user_id,
+            name='重复空间',
+            exclude_id=1,
+        )
+        mock_get_global.assert_not_awaited()
         mock_update_space.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_non_personal_rejects_duplicate_name_across_non_personal_spaces(self, service):
+        existing_space = _make_space(
+            space_id=1,
+            user_id=service.login_user.user_id,
+            space_level=KnowledgeSpaceLevelEnum.TEAM,
+        )
+        existing_space.name = '原空间'
+        duplicate_space = _make_space(
+            space_id=2,
+            user_id=999,
+            space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+        )
+        duplicate_space.name = '重复空间'
+        scope = SimpleNamespace(
+            tenant_id=service.login_user.tenant_id,
+            level=KnowledgeSpaceLevelEnum.TEAM,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+            owner_id=service.login_user.user_id,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=existing_space,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+            new_callable=AsyncMock,
+            return_value=scope,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_non_personal_space_by_name',
+            new_callable=AsyncMock,
+            return_value=duplicate_space,
+            create=True,
+        ) as mock_get_non_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
+            new_callable=AsyncMock,
+            return_value=None,
+            create=True,
+        ) as mock_get_global, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
+            new_callable=AsyncMock,
+        ) as mock_update_space, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_space_rename_stat_async',
+            new_callable=AsyncMock,
+        ):
+            with pytest.raises(Exception) as exc_info:
+                await service.update_knowledge_space(1, name='重复空间')
+
+        assert exc_info.value.__class__.__name__ == 'SpaceNameDuplicateError'
+        mock_get_non_personal.assert_awaited_once_with(name='重复空间', exclude_id=1)
+        mock_get_global.assert_not_awaited()
+        mock_update_space.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_personal_allows_name_used_by_non_personal_space(self, service):
+        existing_space = _make_space(
+            space_id=1,
+            user_id=service.login_user.user_id,
+        )
+        existing_space.name = '原空间'
+        non_personal_space = _make_space(
+            space_id=2,
+            user_id=999,
+            space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+        )
+        non_personal_space.name = '重复空间'
+        scope = SimpleNamespace(
+            tenant_id=service.login_user.tenant_id,
+            level=KnowledgeSpaceLevelEnum.PERSONAL,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+            owner_id=service.login_user.user_id,
+        )
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=existing_space,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.aget_by_space_id',
+            new_callable=AsyncMock,
+            return_value=scope,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_personal_space_by_owner_name',
+            new_callable=AsyncMock,
+            return_value=None,
+            create=True,
+        ) as mock_get_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_non_personal_space_by_name',
+            new_callable=AsyncMock,
+            return_value=non_personal_space,
+            create=True,
+        ) as mock_get_non_personal, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
+            new_callable=AsyncMock,
+            return_value=non_personal_space,
+            create=True,
+        ) as mock_get_global, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
+            new_callable=AsyncMock,
+            return_value=existing_space,
+        ) as mock_update_space, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_space_rename_stat_async',
+            new_callable=AsyncMock,
+        ):
+            await service.update_knowledge_space(1, name='重复空间')
+
+        mock_get_personal.assert_awaited_once_with(
+            owner_id=service.login_user.user_id,
+            name='重复空间',
+            exclude_id=1,
+        )
+        mock_get_non_personal.assert_not_awaited()
+        mock_get_global.assert_not_awaited()
+        mock_update_space.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_update_space_keeps_same_name_without_duplicate_lookup(self, service):
@@ -3048,16 +3418,17 @@ class TestManagePermissionBoundaries:
         ), patch.object(
             service, '_require_permission_id', new_callable=AsyncMock,
         ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_scope_name',
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_by_name',
             new_callable=AsyncMock,
-        ) as mock_get_by_scope_name, patch(
+            create=True,
+        ) as mock_get_by_name, patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
             new_callable=AsyncMock,
             return_value=existing_space,
         ) as mock_update_space:
             await service.update_knowledge_space(1, name='原空间')
 
-        mock_get_by_scope_name.assert_not_awaited()
+        mock_get_by_name.assert_not_awaited()
         mock_update_space.assert_awaited_once()
 
 

@@ -5,8 +5,8 @@ import {
     getSimilarCandidatesApi,
     linkAsNewVersionApi,
     listKnowledgeFolders,
+    retryDuplicateFilesApi,
     uploadFileToServerApi,
-    type FileStatus,
     type KnowledgeSpace,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -30,6 +30,10 @@ import {
     flattenUploadFolders,
     updateUploadFolderNode,
 } from "../utils";
+import {
+    extractDuplicateFileEntries,
+    type DuplicateFileEntry,
+} from "../../hooks/duplicateFiles";
 
 interface UsePortalUploadDialogParams {
     activeSpace: KnowledgeSpace | null;
@@ -69,6 +73,7 @@ export function usePortalUploadDialog({
     const [uploadSubmitting, setUploadSubmitting] = useState(false);
     const [uploadImporting, setUploadImporting] = useState(false);
     const [uploadReviewRows, setUploadReviewRows] = useState<PortalUploadReviewRow[]>([]);
+    const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
 
     const uploadFolderOptions = useMemo(
         () => {
@@ -110,6 +115,7 @@ export function usePortalUploadDialog({
         setUploadSubmitting(false);
         setUploadImporting(false);
         setUploadReviewRows([]);
+        setDuplicateFiles([]);
         if (uploadInputRef.current) {
             uploadInputRef.current.value = "";
         }
@@ -130,6 +136,7 @@ export function usePortalUploadDialog({
         setUploadFiles([]);
         setUploadLocalFolderName(null);
         setUploadReviewRows([]);
+        setDuplicateFiles([]);
         setUploadFolderId(currentFolderId ?? null);
         setUploadFolderName(currentFolderName);
         setUploadDialogOpen(true);
@@ -313,6 +320,13 @@ export function usePortalUploadDialog({
         });
     }, [showToast]);
 
+    const getVisibleRegisteredFiles = useCallback((registeredFiles: Awaited<ReturnType<typeof addFilesApi>>) => {
+        const dupes = extractDuplicateFileEntries(registeredFiles);
+        setDuplicateFiles(dupes);
+        const duplicateIds = new Set(dupes.map((file) => String(file.fileId)));
+        return registeredFiles.filter((file) => !duplicateIds.has(String(file.id)));
+    }, []);
+
     const handleUploadNext = useCallback(async () => {
         if (uploadReviewRows.length) {
             setUploadStep("review");
@@ -361,8 +375,9 @@ export function usePortalUploadDialog({
                     file_path: filePaths,
                     parent_id: createdFolderId,
                 });
+                const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
                 const createdFolderOptionId = String(createdFolder.id);
-                const rows: PortalUploadReviewRow[] = registeredFiles.map((file) => ({
+                const rows: PortalUploadReviewRow[] = visibleRegisteredFiles.map((file) => ({
                     file,
                     selected: true,
                     recommendedFolderId: createdFolderOptionId,
@@ -374,6 +389,9 @@ export function usePortalUploadDialog({
                     candidateError: false,
                     selectedTargetDocumentId: null,
                 }));
+                if (!rows.length) {
+                    return;
+                }
                 setUploadReviewRows(rows);
                 setUploadStep("review");
                 loadUploadReviewCandidates(rows);
@@ -389,7 +407,8 @@ export function usePortalUploadDialog({
                 file_path: filePaths,
                 parent_id: parentId !== null && Number.isFinite(parentId) ? parentId : null,
             });
-            const rows: PortalUploadReviewRow[] = registeredFiles.map((file) => ({
+            const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
+            const rows: PortalUploadReviewRow[] = visibleRegisteredFiles.map((file) => ({
                 file,
                 selected: true,
                 recommendedFolderId: uploadFolderId,
@@ -401,6 +420,9 @@ export function usePortalUploadDialog({
                 candidateError: false,
                 selectedTargetDocumentId: null,
             }));
+            if (!rows.length) {
+                return;
+            }
             setUploadReviewRows(rows);
             setUploadStep("review");
             loadUploadReviewCandidates(rows);
@@ -410,7 +432,23 @@ export function usePortalUploadDialog({
         } finally {
             setUploadSubmitting(false);
         }
-    }, [activeSpace, loadUploadReviewCandidates, showToast, uploadFiles, uploadFolderId, uploadFolderName, uploadLocalFolderName, uploadReviewRows.length]);
+    }, [activeSpace, getVisibleRegisteredFiles, loadUploadReviewCandidates, showToast, uploadFiles, uploadFolderId, uploadFolderName, uploadLocalFolderName, uploadReviewRows.length]);
+
+    const handleDuplicateSkip = useCallback(() => {
+        setDuplicateFiles([]);
+    }, []);
+
+    const handleDuplicateOverwrite = useCallback(async () => {
+        if (!activeSpace || duplicateFiles.length === 0) return;
+        const fileObjs = duplicateFiles.map((file) => file.rawObj).filter(Boolean);
+        try {
+            await retryDuplicateFilesApi(activeSpace.id, fileObjs);
+            await reloadFiles();
+            resetUploadDialog();
+        } catch {
+            showToast({ message: "文件覆盖失败", severity: NotificationSeverity.ERROR });
+        }
+    }, [activeSpace, duplicateFiles, reloadFiles, resetUploadDialog, showToast]);
 
     const handleStartUploadImport = useCallback(async () => {
         const rows = uploadReviewRows.filter((row) => row.selected);
@@ -454,6 +492,7 @@ export function usePortalUploadDialog({
         uploadImporting,
         uploadReviewRows,
         uploadFolderOptions,
+        duplicateFiles,
         setUploadDialogOpen,
         setUploadStep,
         setUploadReviewRows,
@@ -466,5 +505,7 @@ export function usePortalUploadDialog({
         handleToggleUploadFolder,
         handleUploadNext,
         handleStartUploadImport,
+        handleDuplicateSkip,
+        handleDuplicateOverwrite,
     };
 }

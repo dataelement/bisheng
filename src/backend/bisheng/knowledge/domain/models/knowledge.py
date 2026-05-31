@@ -672,6 +672,76 @@ class KnowledgeDao(KnowledgeBase):
             return result.first()
 
     @classmethod
+    async def async_get_personal_space_by_owner_name(
+            cls,
+            *,
+            owner_id: int,
+            name: str,
+            exclude_id: Optional[int] = None) -> Optional[Knowledge]:
+        """Query a personal knowledge space by owner and display name."""
+        from bisheng.knowledge.domain.models.knowledge_space_scope import (
+            KnowledgeSpaceLevelEnum,
+            KnowledgeSpaceOwnerTypeEnum,
+            KnowledgeSpaceScope,
+        )
+
+        normalized_name = name.strip()
+        statement = (
+            select(Knowledge)
+            .join(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
+            .where(
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                func.trim(Knowledge.name) == normalized_name,
+                KnowledgeSpaceScope.level == KnowledgeSpaceLevelEnum.PERSONAL.value,
+                KnowledgeSpaceScope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER.value,
+                KnowledgeSpaceScope.owner_id == int(owner_id),
+            )
+        )
+        if exclude_id is not None:
+            statement = statement.where(Knowledge.id != int(exclude_id))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            for space in result.all():
+                if space.name.strip() == normalized_name:
+                    return space
+            return None
+
+    @classmethod
+    async def async_get_non_personal_space_by_name(
+            cls,
+            *,
+            name: str,
+            exclude_id: Optional[int] = None) -> Optional[Knowledge]:
+        """Query a public, department, or team knowledge space by display name."""
+        from bisheng.knowledge.domain.models.knowledge_space_scope import (
+            KnowledgeSpaceLevelEnum,
+            KnowledgeSpaceScope,
+        )
+
+        normalized_name = name.strip()
+        statement = (
+            select(Knowledge)
+            .join(KnowledgeSpaceScope, Knowledge.id == KnowledgeSpaceScope.space_id)
+            .where(
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+                func.trim(Knowledge.name) == normalized_name,
+                KnowledgeSpaceScope.level.in_([
+                    KnowledgeSpaceLevelEnum.PUBLIC.value,
+                    KnowledgeSpaceLevelEnum.DEPARTMENT.value,
+                    KnowledgeSpaceLevelEnum.TEAM.value,
+                ]),
+            )
+        )
+        if exclude_id is not None:
+            statement = statement.where(Knowledge.id != int(exclude_id))
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            for space in result.all():
+                if space.name.strip() == normalized_name:
+                    return space
+            return None
+
+    @classmethod
     def delete_knowledge(cls, knowledge_id: int, only_clear: bool = False):
         """
         Delete or empty the knowledge base

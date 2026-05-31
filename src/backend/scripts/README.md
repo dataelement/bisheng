@@ -144,3 +144,36 @@ The 3rd argument can be omitted if one of these environment variables is set:
 - `OPENFGA_TUPLE_DB_URL`
 - `OPENFGA_DATASTORE_URL`
 - `OPENFGA_DATASTORE_URI`
+
+### `reset_admin_only_knowledge_permissions.py`
+
+高风险权限重置脚本：校验唯一可用 `admin` 用户后，将非 admin 用户收敛为普通用户，撤销非 admin 的租户/部门/用户组/个人菜单管理授权；删除知识空间、文件夹、文件的非 admin 资源授权，并把创建者和 owner 权限重置到 admin。
+
+默认 dry-run，只输出影响范围；执行写入必须显式传入 `--apply`。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reset_admin_only_knowledge_permissions.py
+PYTHONPATH=./ .venv/bin/python scripts/reset_admin_only_knowledge_permissions.py --json
+PYTHONPATH=./ .venv/bin/python scripts/reset_admin_only_knowledge_permissions.py --apply
+
+bash scripts/reset_admin_only_knowledge_permissions.sh
+bash scripts/reset_admin_only_knowledge_permissions.sh --apply
+```
+
+Scope:
+
+- 用户角色：非 admin 删除非普通角色，缺少普通角色时补 `DefaultRole`
+- 管理授权：非 admin 的租户管理员、部门管理员、用户组管理员、个人菜单授权
+- 知识空间资源：`knowledge_space`、`folder`、`knowledge_file` 的 OpenFGA 资源授权
+- 知识空间数据：`knowledge.user_id`、`knowledgefile.user_id/updater_id`、空间成员、空间 scope、部门空间绑定
+- 分享链接：失效所有 `knowledge_space_file` active 链接
+- 重试队列：失效受影响资源和非 admin 管理授权相关的 pending `failed_tuple`
+
+Failure handling:
+
+- `--apply` 会先提交数据库收敛结果，并在同一事务中为本次 OpenFGA 操作预写 pending `failed_tuple`。
+- 如果 OpenFGA 写入失败，脚本会以非 0 退出；此时数据库变更已经提交，预写的 `failed_tuple` 会保持 pending。运维必须先处理 retry 队列或重新执行 `--apply`，确认 OpenFGA 旧权限已清除后，才能认为重置完成。
+- 如果脚本输出 OpenFGA 不可用，`--apply` 会在写数据库前中止。
+- 如果 `permission_relation_model_bindings_v1` 配置不是合法 JSON list，脚本会中止，避免把损坏配置覆盖为空。
