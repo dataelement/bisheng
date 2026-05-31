@@ -893,6 +893,127 @@ class WorkStationService(BaseService):
         )
         return res, total
 
+    # ------------------------------------------------------------------
+    # F026 helpers — view_file filter for the workstation chat retrieval.
+    # Spec: features/v2.6.0/026-knowledge-qa-permission-filter/spec.md §7.2b
+    # ------------------------------------------------------------------
+
+    @classmethod
+    async def _filter_visible_space_kb_ids(
+        cls,
+        *,
+        login_user: UserPayload,
+        space_bucket,
+        org_bucket,
+    ) -> dict:
+        """Stage 1: drop space_bucket kb_ids the user lacks view_space on.
+
+        org_bucket kb_ids are passed through untouched (AC-14). Returns a
+        dict ``{space_kb_ids, org_kb_ids, skipped_kb_ids}`` so the caller
+        can both proceed and emit a structured skip log.
+        """
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+            KnowledgeFileVisibilityService,
+        )
+
+        space_ids = [int(x) for x in (space_bucket or [])]
+        org_ids = [int(x) for x in (org_bucket or [])]
+        if not space_ids:
+            return {
+                "space_kb_ids": [],
+                "org_kb_ids": org_ids,
+                "skipped_kb_ids": [],
+            }
+
+        visibility = KnowledgeFileVisibilityService(
+            request=None, login_user=login_user
+        )
+
+        kept: list[int] = []
+        skipped: list[int] = []
+        for kb_id in space_ids:
+            try:
+                visible = await visibility.is_space_visible(kb_id)
+            except Exception as exc:
+                # Treat unexpected probe failure as not-visible — fail closed.
+                logger.warning(
+                    "[queryChunksFromDB] is_space_visible probe failed "
+                    "for kb_id=%s reason=%s",
+                    kb_id,
+                    exc,
+                )
+                visible = False
+            if visible:
+                kept.append(kb_id)
+            else:
+                skipped.append(kb_id)
+                logger.info(
+                    "[queryChunksFromDB] skipped_kb_id=%s reason=no_view_space",
+                    kb_id,
+                )
+
+        return {
+            "space_kb_ids": kept,
+            "org_kb_ids": org_ids,
+            "skipped_kb_ids": skipped,
+        }
+
+    @classmethod
+    async def _post_filter_kb_docs_by_view_file(
+        cls,
+        *,
+        login_user: UserPayload,
+        kb_id,
+        docs,
+        is_space_bucket: bool = True,
+    ) -> list:
+        """Stage 3: drop docs whose document_id fails the view_file check.
+
+        Returns the docs unchanged when:
+        - the input is empty,
+        - the login_user is admin (short-circuit), or
+        - the kb belongs to the org bucket (AC-14, legacy knowledge_library).
+
+        Otherwise resolves the unique document_id set via
+        ``KnowledgeFileVisibilityService.post_filter_visible_files`` and
+        retains only chunks whose file_id survived.
+        """
+        if not docs:
+            return []
+        if not is_space_bucket:
+            return docs
+        if login_user.is_admin():
+            return docs
+
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+            KnowledgeFileVisibilityService,
+        )
+
+        visibility = KnowledgeFileVisibilityService(
+            request=None, login_user=login_user
+        )
+        unique_file_ids = set()
+        for d in docs:
+            meta = getattr(d, "metadata", {}) or {}
+            doc_id = meta.get("document_id")
+            if doc_id is None:
+                continue
+            try:
+                unique_file_ids.add(int(doc_id))
+            except (TypeError, ValueError):
+                continue
+        if not unique_file_ids:
+            return []
+        permitted = await visibility.post_filter_visible_files(
+            int(kb_id), unique_file_ids
+        )
+        return [
+            d
+            for d in docs
+            if int((getattr(d, "metadata", {}) or {}).get("document_id", -1))
+            in permitted
+        ]
+
     @classmethod
     async def queryChunksFromDB(
         cls,
@@ -911,9 +1032,17 @@ class WorkStationService(BaseService):
         """
         failures: list[dict] = []
         try:
+            # F026 Stage 1: drop space-bucket kb_ids the user lacks view_space on.
+            visibility_filter = await cls._filter_visible_space_kb_ids(
+                login_user=login_user,
+                space_bucket=use_knowledge_param.knowledge_space_ids,
+                org_bucket=use_knowledge_param.organization_knowledge_ids,
+            )
+            space_kb_id_set = {int(x) for x in visibility_filter["space_kb_ids"]}
+
             knowledge_ids = []
-            if use_knowledge_param.organization_knowledge_ids:
-                knowledge_ids.extend(use_knowledge_param.organization_knowledge_ids)
+            if visibility_filter["org_kb_ids"]:
+                knowledge_ids.extend(visibility_filter["org_kb_ids"])
 
             knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
                 invoke_user_id=login_user.user_id,
@@ -922,7 +1051,7 @@ class WorkStationService(BaseService):
             )
             knowledge_space_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
                 invoke_user_id=login_user.user_id,
-                knowledge_ids=use_knowledge_param.knowledge_space_ids,
+                knowledge_ids=visibility_filter["space_kb_ids"],
                 check_auth=False,
             )
             knowledge_vector_list.update(knowledge_space_list)
@@ -979,12 +1108,39 @@ class WorkStationService(BaseService):
                         sort_by_source_and_index=True,
                     )
                     kb_docs = await per_kb_tool.ainvoke({'query': question})
-                    docs_count = len(kb_docs) if kb_docs else 0
-                    if kb_docs:
-                        finally_docs.extend(kb_docs)
+                    pre_filter_count = len(kb_docs) if kb_docs else 0
+
+                    # F026 Stage 3: post-filter docs by view_file when the KB
+                    # belongs to the space bucket; org-bucket KBs pass through.
+                    kb_id_int = (
+                        int(kb_id)
+                        if isinstance(kb_id, (int, str)) and str(kb_id).isdigit()
+                        else None
+                    )
+                    is_space_bucket = (
+                        kb_id_int is not None and kb_id_int in space_kb_id_set
+                    )
+                    kb_docs = await cls._post_filter_kb_docs_by_view_file(
+                        login_user=login_user,
+                        kb_id=kb_id_int if kb_id_int is not None else 0,
+                        docs=kb_docs or [],
+                        is_space_bucket=is_space_bucket,
+                    )
+                    docs_count = len(kb_docs)
+                    dropped = pre_filter_count - docs_count
+                    if not kb_docs:
+                        logger.info(
+                            f'[queryChunksFromDB] kb={kb_id} post-filter-empty '
+                            f'pre_filter_candidate_size={pre_filter_count} '
+                            f'post_filter_dropped_count={dropped}'
+                        )
+                        continue
+                    finally_docs.extend(kb_docs)
                     kb_succeed.append(kb_id)
                     logger.info(
-                        f'[queryChunksFromDB] kb={kb_id} ok docs={docs_count}'
+                        f'[queryChunksFromDB] kb={kb_id} ok docs={docs_count} '
+                        f'pre_filter_candidate_size={pre_filter_count} '
+                        f'post_filter_dropped_count={dropped}'
                     )
                 except Exception as exc:
                     err_msg = str(exc) or exc.__class__.__name__
