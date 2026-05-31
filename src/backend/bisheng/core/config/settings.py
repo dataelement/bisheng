@@ -236,6 +236,60 @@ class CeleryConf(BaseModel):
         return self
 
 
+class KnowledgeQAFilterConf(BaseModel):
+    """Knowledge space AI Q&A retrieval permission filter (F026).
+
+    Controls the two-layer view_file permission filter shared by chat_folder
+    (KnowledgeSpaceChatService), queryChunksFromDB (WorkStationService) and
+    citation source resolve (CitationResolveService). See
+    features/v2.6.0/026-knowledge-qa-permission-filter/spec.md §4 (AD-02/03/08).
+    """
+
+    index_filter_threshold: int = Field(
+        default=5000,
+        ge=1,
+        description=(
+            "AD-02 threshold. When the user's visible-or-excluded file count for the "
+            "queried space is at or below this value, the index-layer filter switches "
+            "to an IN / NOT-IN clause; otherwise it falls back to post-filter only."
+        ),
+    )
+    retrieval_initial_multiplier: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "AD-03 first attempt. Initial recall fetches top_k * this multiplier so "
+            "result-layer view_file post-filter can still leave at least top_k chunks."
+        ),
+    )
+    retrieval_expansion_multiplier: int = Field(
+        default=10,
+        ge=1,
+        description=(
+            "AD-03 capped expansion. When the first attempt fails to fill top_k, a "
+            "single retry recalls top_k * this multiplier; no further expansion."
+        ),
+    )
+    fine_grained_concurrency: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description=(
+            "AD-08 concurrency. Semaphore limit when resolving view_file per file "
+            "via FineGrainedPermissionService; mirrors KnowledgeSpaceService's "
+            "_CHILD_PERMISSION_CHECK_CONCURRENCY default."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate(self):
+        if self.retrieval_expansion_multiplier < self.retrieval_initial_multiplier:
+            raise ValueError(
+                "retrieval_expansion_multiplier must be >= retrieval_initial_multiplier"
+            )
+        return self
+
+
 class LinsightConf(BaseModel):
     """ Inspiration Configuration """
     debug: bool = Field(default=False, description='Whether to opendebugMode')
@@ -477,6 +531,7 @@ class Settings(BaseModel):
     object_storage: ObjectStore = ObjectStore()
     workflow_conf: WorkflowConf = WorkflowConf()
     celery_task: CeleryConf = CeleryConf()
+    knowledge_qa_filter: KnowledgeQAFilterConf = KnowledgeQAFilterConf()
     cookie_conf: CookieConf = CookieConf()
     telemetry_elasticsearch: ElasticsearchConf = ElasticsearchConf()
 
