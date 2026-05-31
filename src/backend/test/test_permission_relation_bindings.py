@@ -552,6 +552,143 @@ class TestRelationModelBindings:
         assert result[2].model_id == 'editor'
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize('resource_type', ['knowledge_space', 'folder', 'knowledge_file'])
+    async def test_knowledge_department_include_children_hides_inherited_child_rows(self, resource_type):
+        from bisheng.permission.api.endpoints.resource_permission import (
+            _apply_binding_metadata_to_permissions,
+        )
+        from bisheng.permission.domain.schemas.permission_schema import ResourcePermissionItem
+
+        permissions = [
+            ResourcePermissionItem(
+                subject_type='department',
+                subject_id=3,
+                subject_name='默认组织',
+                relation='viewer',
+                include_children=False,
+            ),
+            ResourcePermissionItem(
+                subject_type='department',
+                subject_id=4,
+                subject_name='默认组织/测试',
+                relation='viewer',
+                include_children=False,
+            ),
+        ]
+        bindings = [
+            {
+                'key': f'{resource_type}:9:department:3:viewer:1',
+                'resource_type': resource_type,
+                'resource_id': '9',
+                'subject_type': 'department',
+                'subject_id': 3,
+                'relation': 'viewer',
+                'include_children': True,
+                'model_id': 'viewer',
+            },
+        ]
+
+        with patch(
+            'bisheng.database.models.department.DepartmentDao.aget_by_id',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=3, path='1.3'),
+        ), patch(
+            'bisheng.database.models.department.DepartmentDao.aget_subtree_ids',
+            new_callable=AsyncMock,
+            return_value=[3, 4],
+        ):
+            result = await _apply_binding_metadata_to_permissions(
+                permissions,
+                bindings,
+                {'viewer': {'name': '可查看'}},
+            )
+
+        assert [(item.subject_type, item.subject_id) for item in result] == [
+            ('department', 3),
+        ]
+        assert result[0].include_children is True
+        assert result[0].model_id == 'viewer'
+
+    @pytest.mark.asyncio
+    async def test_knowledge_department_include_children_keeps_explicit_child_binding(self):
+        from bisheng.permission.api.endpoints.resource_permission import (
+            _apply_binding_metadata_to_permissions,
+        )
+        from bisheng.permission.domain.schemas.permission_schema import ResourcePermissionItem
+
+        permissions = [
+            ResourcePermissionItem(
+                subject_type='department',
+                subject_id=3,
+                subject_name='默认组织',
+                relation='viewer',
+                include_children=False,
+            ),
+            ResourcePermissionItem(
+                subject_type='department',
+                subject_id=4,
+                subject_name='默认组织/测试',
+                relation='viewer',
+                include_children=False,
+            ),
+            ResourcePermissionItem(
+                subject_type='department',
+                subject_id=4,
+                subject_name='默认组织/测试',
+                relation='editor',
+                include_children=False,
+            ),
+        ]
+        bindings = [
+            {
+                'key': 'folder:9:department:3:viewer:1',
+                'resource_type': 'folder',
+                'resource_id': '9',
+                'subject_type': 'department',
+                'subject_id': 3,
+                'relation': 'viewer',
+                'include_children': True,
+                'model_id': 'viewer',
+            },
+            {
+                'key': 'folder:9:department:4:editor:0',
+                'resource_type': 'folder',
+                'resource_id': '9',
+                'subject_type': 'department',
+                'subject_id': 4,
+                'relation': 'editor',
+                'include_children': False,
+                'model_id': 'editor',
+            },
+        ]
+
+        with patch(
+            'bisheng.database.models.department.DepartmentDao.aget_by_id',
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(id=3, path='1.3'),
+        ), patch(
+            'bisheng.database.models.department.DepartmentDao.aget_subtree_ids',
+            new_callable=AsyncMock,
+            return_value=[3, 4],
+        ):
+            result = await _apply_binding_metadata_to_permissions(
+                permissions,
+                bindings,
+                {
+                    'viewer': {'name': '可查看'},
+                    'editor': {'name': '可编辑'},
+                },
+            )
+
+        assert [(item.subject_type, item.subject_id, item.relation) for item in result] == [
+            ('department', 3, 'viewer'),
+            ('department', 4, 'editor'),
+        ]
+        assert result[0].include_children is True
+        assert result[1].include_children is False
+        assert result[1].model_id == 'editor'
+
+    @pytest.mark.asyncio
     async def test_department_include_children_revoke_cleans_exact_and_subtree_bindings(self, mock_admin_user):
         from bisheng.permission.api.endpoints.resource_permission import authorize_resource
         from bisheng.permission.domain.schemas.permission_schema import AuthorizeRequest, AuthorizeRevokeItem

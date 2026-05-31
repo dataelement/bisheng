@@ -122,7 +122,7 @@ class StatefulWorker:
         return assigned_node
 
     def find_task_node_sync(self, hash_key: str) -> str | None:
-        self.update_alive_nodes()
+        self.update_alive_nodes_sync()
 
         # Get the node bound to the key
         bound_node = self._find_bound_node_sync(hash_key)

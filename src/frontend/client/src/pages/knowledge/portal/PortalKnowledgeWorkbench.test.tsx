@@ -40,6 +40,7 @@ import {
     pinSpaceApi,
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
+    updateFileEncoding,
     uploadFileToServerApi,
 } from "~/api/knowledge";
 
@@ -80,6 +81,7 @@ jest.mock("~/components/ui", () => ({
     DialogFooter: ({ children }: any) => <div>{children}</div>,
     DialogHeader: ({ children }: any) => <div>{children}</div>,
     DialogTitle: ({ children }: any) => <div>{children}</div>,
+    Input: (props: any) => <input {...props} />,
 }));
 
 jest.mock("~/components/ui/DropdownMenu", () => ({
@@ -304,6 +306,7 @@ jest.mock("~/api/knowledge", () => ({
     batchRetryApi: jest.fn(),
     getFileDownloadApi: jest.fn(),
     getFilePreviewApi: jest.fn(),
+    updateFileEncoding: jest.fn(),
     fileStatusToNumber: jest.fn((status) => {
         const map: Record<string, number> = {
             processing: 1,
@@ -403,6 +406,9 @@ describe("PortalKnowledgeWorkbench", () => {
             preview_url: "/preview.md",
             original_url: "/origin.md",
         } as any);
+        jest.mocked(updateFileEncoding).mockResolvedValue(makeFile("201", "后端开发.md", {
+            fileEncoding: "RPT-PP-00000001",
+        }) as any);
         jest.mocked(getFileDownloadApi).mockResolvedValue({
             preview_url: "/preview.md",
             original_url: "/origin.md",
@@ -1609,6 +1615,106 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("当前用户角色");
         expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("admin");
         expect(screen.queryByTestId("space-share-dialog")).not.toBeInTheDocument();
+    });
+
+    test("edits the selected file encoding from the portal property drawer when file edit permission exists", async () => {
+        const teamSpace = makeSpace("team-1", "我的技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
+            role: SpaceRole.MEMBER,
+        });
+        const file = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
+            fileEncoding: "RPT-PP-00000001",
+        });
+        const nextEncoding = "SGGF-STD-PP-20260500000005";
+        mockCheckPermission.mockResolvedValue({ allowed: true });
+        jest.mocked(updateFileEncoding).mockResolvedValue({
+            ...file,
+            fileEncoding: nextEncoding,
+        } as any);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-201");
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
+
+        const rail = await screen.findByTestId("portal-tool-rail");
+        fireEvent.click(within(rail).getByRole("button", { name: "侧边栏展开和关闭" }));
+        const drawer = await screen.findByTestId("portal-info-drawer");
+
+        const editButton = await within(drawer).findByRole("button", { name: "编辑文件编码" });
+        fireEvent.click(editButton);
+
+        fireEvent.change(screen.getByDisplayValue("RPT-PP-00000001"), {
+            target: { value: nextEncoding },
+        });
+        fireEvent.click(screen.getByRole("button", { name: /保存|Save|com_knowledge\.save/ }));
+
+        await waitFor(() => {
+            expect(updateFileEncoding).toHaveBeenCalledWith("team-1", "201", nextEncoding);
+        });
+        await waitFor(() => {
+            expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent(nextEncoding);
+        });
+        expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
+            message: "编码更新成功",
+        }));
+    });
+
+    test("keeps the portal property drawer file encoding read-only without file edit permission", async () => {
+        const teamSpace = makeSpace("team-1", "我的技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
+            role: SpaceRole.MEMBER,
+        });
+        const file = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
+            fileEncoding: "RPT-PP-00000001",
+        });
+        mockCheckPermission.mockImplementation((_objectType, _objectId, _relation, permissionId) => (
+            Promise.resolve({ allowed: permissionId !== "rename_file" })
+        ));
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-201");
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
+
+        const rail = await screen.findByTestId("portal-tool-rail");
+        fireEvent.click(within(rail).getByRole("button", { name: "侧边栏展开和关闭" }));
+        const drawer = await screen.findByTestId("portal-info-drawer");
+
+        await waitFor(() => {
+            expect(mockCheckPermission).toHaveBeenCalledWith(
+                "knowledge_file",
+                "201",
+                "can_edit",
+                "rename_file",
+                expect.any(Object),
+            );
+        });
+        expect(within(drawer).getByText("RPT-PP-00000001")).toBeInTheDocument();
+        expect(within(drawer).queryByRole("button", { name: "编辑文件编码" })).not.toBeInTheDocument();
+        expect(updateFileEncoding).not.toHaveBeenCalled();
     });
 
     test("copies the selected file encoding from the document header", async () => {

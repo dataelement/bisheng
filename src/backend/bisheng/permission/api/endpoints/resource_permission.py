@@ -87,6 +87,7 @@ _MANAGE_PERMISSION_BY_RESOURCE = {
     'folder': 'manage_folder_relation',
     'knowledge_file': 'manage_file_relation',
 }
+_KNOWLEDGE_PERMISSION_RESOURCE_TYPES = {'knowledge_space', 'folder', 'knowledge_file'}
 _PERMISSION_LEVEL_TO_RELATION = {
     PermissionLevel.owner.value: 'owner',
     PermissionLevel.can_manage.value: 'manager',
@@ -452,12 +453,18 @@ async def _apply_binding_metadata_to_permissions(
     """Overlay persisted UI binding metadata onto raw FGA tuple rows.
 
     Department grants with include_children=True are written as one tuple per
-    subtree department. The permission list should expose those concrete rows
-    while copying the original parent binding's relation-model metadata to the
-    generated child department rows.
+    subtree department. Knowledge-space resources list only explicit
+    department bindings; other resources keep the legacy expanded list while
+    copying the original parent binding's relation-model metadata to child
+    department rows.
     """
     if not bindings:
         return permissions
+
+    collapse_inherited_department_rows = any(
+        binding.get('resource_type') in _KNOWLEDGE_PERMISSION_RESOURCE_TYPES
+        for binding in bindings
+    )
 
     item_map = {
         (p.subject_type, int(p.subject_id), p.relation): p
@@ -506,6 +513,9 @@ async def _apply_binding_metadata_to_permissions(
             for dept_id in subtree_ids:
                 child_key = ('department', int(dept_id), relation)
                 if child_key == key or child_key in bound_keys:
+                    continue
+                if collapse_inherited_department_rows:
+                    item_map.pop(child_key, None)
                     continue
                 child_item = item_map.get(child_key)
                 if child_item is None:

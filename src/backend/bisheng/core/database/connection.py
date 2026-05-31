@@ -1,12 +1,12 @@
 """Database Connection Management Module"""
+import asyncio
 import logging
 from contextlib import asynccontextmanager, contextmanager
-from typing import Optional, Dict, Any, Generator
+from typing import Any, Dict, Generator, Optional
 
-from sqlalchemy import create_engine, Engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.ext.asyncio import async_sessionmaker
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel
@@ -47,6 +47,7 @@ class DatabaseConnectionManager:
 
         self._engine: Optional[Engine] = None
         self._async_engine: Optional[AsyncEngine] = None
+        self._async_engines: Dict[Any, AsyncEngine] = {}
         self._async_session_maker: Optional[async_sessionmaker] = None
 
     def _convert_to_async_url(self, url: str) -> str:
@@ -134,23 +135,35 @@ class DatabaseConnectionManager:
     @property
     def async_engine(self) -> AsyncEngine:
         """Get Asynchronous Database Engine"""
-        if self._async_engine is None:
-            config = self._get_default_engine_config()
-            config.update(self.engine_kwargs)
-
-            # Remove Synchronization Engine Specific Configuration
-            config.pop('poolclass', None)
-
-            if 'mysql+aiomysql' in self.async_database_url:
-                _patch_aiomysql_pre_ping()
-
-            self._async_engine = create_async_engine(
-                self.async_database_url,
-                **config
-            )
-            logger.debug(f"Created async database engine for {self.async_database_url}")
-
+        loop_key = self._current_async_engine_key()
+        if loop_key not in self._async_engines:
+            self._async_engines[loop_key] = self._create_async_engine()
+        self._async_engine = self._async_engines[loop_key]
         return self._async_engine
+
+    @staticmethod
+    def _current_async_engine_key() -> Any:
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return None
+
+    def _create_async_engine(self) -> AsyncEngine:
+        config = self._get_default_engine_config()
+        config.update(self.engine_kwargs)
+
+        # Remove Synchronization Engine Specific Configuration
+        config.pop('poolclass', None)
+
+        if 'mysql+aiomysql' in self.async_database_url:
+            _patch_aiomysql_pre_ping()
+
+        async_engine = create_async_engine(
+            self.async_database_url,
+            **config
+        )
+        logger.debug(f"Created async database engine for {self.async_database_url}")
+        return async_engine
 
     @contextmanager
     def create_session(self) -> Generator[Session, Any, None]:
@@ -327,9 +340,13 @@ class DatabaseConnectionManager:
 
     async def close(self):
         """Close database connection"""
-        if self._async_engine:
-            await self._async_engine.dispose()
-            logger.debug("Async database engine disposed")
+        if self._async_engines:
+            async_engines = list(dict.fromkeys(self._async_engines.values()))
+            for async_engine in async_engines:
+                await async_engine.dispose()
+            self._async_engines.clear()
+            self._async_engine = None
+            logger.debug("Async database engines disposed")
 
     def close_sync(self):
         """Synchronously close database connections"""

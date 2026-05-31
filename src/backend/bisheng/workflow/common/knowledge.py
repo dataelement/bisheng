@@ -279,18 +279,16 @@ class RagUtils(BaseNode):
             self.init_file_retriever()
 
     def _fetch_non_primary_file_ids(self, knowledge_ids: List[int]) -> List[int]:
-        """Best-effort sync fetch of non-primary file ids for the given knowledges.
-
-        Workflow runs in sync Celery worker context, so asyncio.run() is safe.
-        Failures degrade gracefully — version filter is excluded but retrieval still works.
-        """
+        """Best-effort sync fetch of non-primary file ids for the given knowledges."""
         if not knowledge_ids:
             return []
         import asyncio
+
         from bisheng.core.database import get_async_db_session
         from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
             KnowledgeDocumentVersionRepositoryImpl,
         )
+        from bisheng.worker._asyncio_utils import run_async_task
 
         async def _fetch():
             async with get_async_db_session() as session:
@@ -298,7 +296,17 @@ class RagUtils(BaseNode):
                 return await repo.find_non_primary_file_ids_by_knowledge_ids(knowledge_ids)
 
         try:
-            return asyncio.run(_fetch())
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            logger.warning(
+                "version filter skipped: already in async context", exc_info=True
+            )
+            return []
+
+        try:
+            return run_async_task(_fetch)
         except RuntimeError:
             logger.warning(
                 "version filter skipped: already in async context", exc_info=True

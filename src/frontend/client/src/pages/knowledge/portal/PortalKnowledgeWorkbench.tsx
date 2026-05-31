@@ -19,6 +19,7 @@ import {
     pinSpaceApi,
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
+    updateFileEncoding,
     updateSpaceApi,
 } from "~/api/knowledge";
 import { submitShougangKnowledgeSpaceCreateApprovalApi } from "~/api/approval";
@@ -54,6 +55,7 @@ import {
     updateTreeNode,
 } from "./utils";
 import { DocumentPreview } from "./components/DocumentPreview";
+import { EditEncodingModal } from "../SpaceDetail/EditEncodingModal";
 import { FilePane } from "./components/FilePane";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalInfoDrawer } from "./components/PortalInfoDrawer";
@@ -112,8 +114,10 @@ export default function PortalKnowledgeWorkbench() {
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
+    const [canEditSelectedFileEncoding, setCanEditSelectedFileEncoding] = useState(false);
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
+    const [editingEncodingFile, setEditingEncodingFile] = useState<KnowledgeFile | null>(null);
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
@@ -295,6 +299,42 @@ export default function PortalKnowledgeWorkbench() {
         [isActiveSpacePersonal, permissionEntryIds],
     );
 
+    useEffect(() => {
+        const file = selectedFile;
+        if (!activeSpace || !file || isFolder(file) || file.isCreating) {
+            setCanEditSelectedFileEncoding(false);
+            return;
+        }
+        if (isActiveSpaceAdmin) {
+            setCanEditSelectedFileEncoding(true);
+            return;
+        }
+
+        let cancelled = false;
+        const controller = new AbortController();
+        setCanEditSelectedFileEncoding(false);
+        checkPermission(
+            "knowledge_file",
+            file.id,
+            "can_edit",
+            "rename_file",
+            { signal: controller.signal },
+        ).then((result) => {
+            if (!cancelled) {
+                setCanEditSelectedFileEncoding(Boolean(result?.allowed));
+            }
+        }).catch(() => {
+            if (!cancelled) {
+                setCanEditSelectedFileEncoding(false);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [activeSpace?.id, isActiveSpaceAdmin, selectedFile?.id, selectedFile?.type, selectedFile?.isCreating]);
+
     const setRootFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
         setTreeNodes((prev) => {
             const currentFiles = prev.map((node) => node.file);
@@ -325,6 +365,15 @@ export default function PortalKnowledgeWorkbench() {
             };
         }));
     }, [currentFolderId, setRootFiles]);
+
+    const patchFileById = useCallback((fileId: string, updater: (file: KnowledgeFile) => KnowledgeFile) => {
+        setTreeNodes((prev) => updateTreeNode(prev, fileId, (node) => ({
+            ...node,
+            file: updater(node.file),
+        })));
+        setSearchResults((prev) => prev.map((file) => file.id === fileId ? updater(file) : file));
+        setSelectedFile((prev) => prev?.id === fileId ? updater(prev) : prev);
+    }, []);
 
     const loadRootTree = useCallback(async (page = 1, append = false, spaceId = activeSpace?.id) => {
         if (!spaceId) {
@@ -1069,6 +1118,31 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [selectedFile?.fileEncoding, showToast]);
 
+    const handleSubmitFileEncoding = useCallback(async (newEncoding: string) => {
+        const target = editingEncodingFile;
+        if (!activeSpace || !target) return;
+        if (selectedFile?.id !== target.id || !canEditSelectedFileEncoding) return;
+
+        try {
+            await updateFileEncoding(String(target.spaceId || activeSpace.id), target.id, newEncoding);
+            patchFileById(target.id, (file) => ({
+                ...file,
+                fileEncoding: newEncoding,
+            }));
+            showToast({ message: "编码更新成功", severity: NotificationSeverity.SUCCESS });
+        } catch (error) {
+            showToast({ message: "编码更新失败", severity: NotificationSeverity.ERROR });
+            throw error;
+        }
+    }, [
+        activeSpace,
+        canEditSelectedFileEncoding,
+        editingEncodingFile,
+        patchFileById,
+        selectedFile?.id,
+        showToast,
+    ]);
+
     const canShowPublishFile = useCallback((file: KnowledgeFile) => {
         return Boolean(
             activeSpace
@@ -1256,8 +1330,13 @@ export default function PortalKnowledgeWorkbench() {
                         selectedFile={selectedFile}
                         documentPath={documentPath}
                         showPermissionPanel={!isActiveSpacePersonal}
+                        canEditEncoding={canEditSelectedFileEncoding}
                         onClose={() => setActivePanel(null)}
                         onCopyShareLink={() => void copyShareLink()}
+                        onEditEncoding={() => {
+                            if (!canEditSelectedFileEncoding) return;
+                            setEditingEncodingFile(selectedFile);
+                        }}
                         onPanelChange={setActivePanel}
                     />
                 ) : null}
@@ -1351,6 +1430,12 @@ export default function PortalKnowledgeWorkbench() {
                 duplicateFiles={duplicateFiles}
                 onDuplicateSkip={handleDuplicateSkip}
                 onDuplicateOverwrite={handleDuplicateOverwrite}
+            />
+            <EditEncodingModal
+                file={editingEncodingFile}
+                open={Boolean(editingEncodingFile)}
+                onClose={() => setEditingEncodingFile(null)}
+                onSubmit={handleSubmitFileEncoding}
             />
         </div>
     );

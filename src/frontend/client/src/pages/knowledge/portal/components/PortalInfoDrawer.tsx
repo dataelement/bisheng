@@ -1,4 +1,4 @@
-import { Copy, X } from "lucide-react";
+import { Copy, PencilLine, X } from "lucide-react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import type { PanelKey } from "../types";
 import { formatFileSize } from "../utils";
@@ -54,8 +54,10 @@ interface PortalInfoDrawerProps {
     selectedFile: KnowledgeFile | null;
     documentPath: string;
     showPermissionPanel?: boolean;
+    canEditEncoding?: boolean;
     onClose: () => void;
     onCopyShareLink: () => void;
+    onEditEncoding?: () => void;
     onPanelChange: (panel: Exclude<PanelKey, "share">) => void;
 }
 
@@ -64,8 +66,10 @@ export function PortalInfoDrawer({
     activeSpace,
     selectedFile,
     showPermissionPanel = true,
+    canEditEncoding = false,
     onClose,
     onCopyShareLink,
+    onEditEncoding,
     onPanelChange,
 }: PortalInfoDrawerProps) {
     if (!activePanel) return null;
@@ -93,6 +97,26 @@ export function PortalInfoDrawer({
         <div className={s.detailItem}>
             <span className={s.detailLabel}>{label}</span>
             <span className={s.detailValue}>{value === undefined || value === null || value === "" ? "-" : value}</span>
+        </div>
+    );
+
+    const renderFileEncodingItem = () => (
+        <div className={s.detailItem}>
+            <span className={s.detailLabel}>文件编码</span>
+            <span className={s.detailValueRow}>
+                <span className={s.detailValue}>{selectedFile?.fileEncoding || "-"}</span>
+                {selectedFile && canEditEncoding ? (
+                    <button
+                        type="button"
+                        className={s.detailEditButton}
+                        title="编辑文件编码"
+                        aria-label="编辑文件编码"
+                        onClick={onEditEncoding}
+                    >
+                        <PencilLine size={14} />
+                    </button>
+                ) : null}
+            </span>
         </div>
     );
 
@@ -137,7 +161,7 @@ export function PortalInfoDrawer({
                         className={s.detailList}
                     >
                         {renderDetailItem("文件名", getDisplayFileName(selectedFile))}
-                        {renderDetailItem("文件编码", selectedFile?.fileEncoding)}
+                        {renderFileEncodingItem()}
                         {renderDetailItem("编码说明", selectedFile?.fileEncoding ? "此处为中文说明占位" : "-")}
                         {renderDetailItem("文件类型", fileTypeText)}
                         {renderDetailItem("大小", selectedFile ? formatFileSize(selectedFile.size) : "-")}

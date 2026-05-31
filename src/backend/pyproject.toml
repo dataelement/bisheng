@@ -92,6 +92,7 @@ dependencies = [
     "json-repair>=0.55.0",
     "arxiv>=2.4.0",
     "simhash>=2.1.2",
+    "croniter>=6.2.2",
 ]
 
 [project.optional-dependencies]

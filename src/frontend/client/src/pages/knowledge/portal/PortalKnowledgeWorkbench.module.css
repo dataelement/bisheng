@@ -1167,6 +1167,31 @@
   line-height: 22px;
 }
 
+.detailValueRow {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.detailEditButton {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #165dff;
+  cursor: pointer;
+}
+
+.detailEditButton:hover {
+  background: #eef4ff;
+}
+
 .tagList {
   display: flex;
   flex-wrap: wrap;

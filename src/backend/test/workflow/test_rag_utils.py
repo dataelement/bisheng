@@ -4,10 +4,11 @@ Strategy A: narrow unit tests — construct a minimal RagUtils-like object (bypa
 BaseNode machinery) with hand-set attributes, mock dependencies, and assert the
 search_kwargs passed to MultiRetriever contain the expected Milvus expr / ES filter.
 
-Strategy B: asyncio.run wrapper smoke test for _fetch_non_primary_file_ids.
+Strategy B: worker async-loop wrapper smoke test for _fetch_non_primary_file_ids.
 """
 from __future__ import annotations
 
+import sys
 import types
 from typing import Dict, List, Optional
 from unittest.mock import MagicMock, patch
@@ -56,6 +57,20 @@ def _make_knowledge_info(
     if with_es:
         info["es"] = MagicMock(name=f"es_{knowledge_id}")
     return info
+
+
+def _install_fake_worker_asyncio_utils(monkeypatch, run_async_task):
+    import bisheng
+
+    worker_mod = types.ModuleType("bisheng.worker")
+    worker_mod.__path__ = []
+    asyncio_utils_mod = types.ModuleType("bisheng.worker._asyncio_utils")
+    asyncio_utils_mod.run_async_task = run_async_task
+    worker_mod._asyncio_utils = asyncio_utils_mod
+
+    monkeypatch.setattr(bisheng, "worker", worker_mod, raising=False)
+    monkeypatch.setitem(sys.modules, "bisheng.worker", worker_mod)
+    monkeypatch.setitem(sys.modules, "bisheng.worker._asyncio_utils", asyncio_utils_mod)
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +343,7 @@ class TestInitKnowledgeRetrieverEmptyList:
 
 
 # ---------------------------------------------------------------------------
-# Strategy B — asyncio.run wrapper smoke test
+# Strategy B — worker async-loop wrapper smoke test
 # ---------------------------------------------------------------------------
 
 class TestFetchNonPrimaryFileIds:
@@ -340,23 +355,42 @@ class TestFetchNonPrimaryFileIds:
         result = obj._fetch_non_primary_file_ids([])
         assert result == []
 
-    def test_exception_returns_empty(self):
-        """Any exception from asyncio.run returns [] (best-effort, generic Exception path)."""
+    def test_uses_worker_async_loop_runner(self, monkeypatch):
+        """Celery workflow code must not create a temporary asyncio.run loop."""
         obj = _make_rag_utils(knowledge_vector_list={})
 
-        # get_async_db_session is imported locally inside _fetch_non_primary_file_ids,
-        # so we cannot patch it at the module level. Instead, simulate the failure by
-        # patching asyncio.run to raise a generic Exception.
-        with patch("asyncio.run", side_effect=Exception("simulated DB failure")):
+        def _fake_run_async_task(coro_factory):
+            assert callable(coro_factory)
+            return [10, 20]
+
+        _install_fake_worker_asyncio_utils(monkeypatch, _fake_run_async_task)
+
+        with patch("asyncio.run", side_effect=AssertionError("asyncio.run must not be used")):
             result = obj._fetch_non_primary_file_ids([1, 2, 3])
+        assert result == [10, 20]
+
+    def test_exception_returns_empty(self, monkeypatch):
+        """Any worker async-loop runner exception returns [] as a best-effort fallback."""
+        obj = _make_rag_utils(knowledge_vector_list={})
+
+        def _raise(_coro_factory):
+            raise Exception("simulated DB failure")
+
+        _install_fake_worker_asyncio_utils(monkeypatch, _raise)
+
+        result = obj._fetch_non_primary_file_ids([1, 2, 3])
         assert result == []
 
-    def test_runtime_error_returns_empty(self):
+    def test_runtime_error_returns_empty(self, monkeypatch):
         """RuntimeError (already-running event loop) returns [] gracefully."""
         obj = _make_rag_utils(knowledge_vector_list={})
 
-        with patch("asyncio.run", side_effect=RuntimeError("event loop already running")):
-            result = obj._fetch_non_primary_file_ids([1, 2, 3])
+        def _raise(_coro_factory):
+            raise RuntimeError("event loop already running")
+
+        _install_fake_worker_asyncio_utils(monkeypatch, _raise)
+
+        result = obj._fetch_non_primary_file_ids([1, 2, 3])
         assert result == []
 
 
