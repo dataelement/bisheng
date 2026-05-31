@@ -251,7 +251,7 @@ class ConversationExportService:
             turns.append(
                 ConversationTurn(
                     user_name=user_name,
-                    user_query=cls._strip_citations(q.message or ''),
+                    user_query=cls._strip_citations(cls._extract_query_text(q)),
                     sender_name=sender_name,
                     answers=answer_texts,
                 )
@@ -265,6 +265,37 @@ class ConversationExportService:
     @staticmethod
     def _is_query(m: ChatMessage) -> bool:
         return (m.category or '').lower() == 'question'
+
+    @staticmethod
+    def _extract_query_text(m: ChatMessage) -> str:
+        """Pull the user-facing text out of a ``question`` ChatMessage.
+
+        The frontend wraps user input in different JSON envelopes depending on
+        the chat surface, so the raw ``message`` column is rarely a plain
+        string:
+
+        - daily mode (workstation) : ``{"query": "<text>", "files": [...]}``
+        - app chat / workflow      : ``{"data": {...}, "input": "<text>"}``
+        - legacy / plain           : just the raw string
+
+        Returns the unwrapped text. If the envelope shape is unknown but the
+        row is valid JSON, we fall back to the raw string to avoid silently
+        dropping content (better to render a JSON-y line than an empty turn).
+        """
+        raw = m.message or ''
+        if not raw:
+            return ''
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return raw
+        if not isinstance(data, dict):
+            return raw
+        for key in ('query', 'input'):
+            value = data.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return raw
 
     @staticmethod
     def _parse_parent_msg_id(m: ChatMessage) -> Optional[int]:
@@ -311,6 +342,13 @@ class ConversationExportService:
 
             msg = data.get('msg') or ''
             events = data.get('events') or []
+
+            # The v2.5 agent-native format may keep the final answer text only
+            # in ``events`` (last item with type ``text``) and leave ``msg``
+            # empty. Fall through to events to recover that case, and also
+            # capture text from workflow OUTPUT nodes whose ``output_type``
+            # is ``text``.
+            text_chunks: list[str] = []
             placeholders: list[str] = []
             for e in events:
                 if not isinstance(e, dict):
@@ -319,15 +357,29 @@ class ConversationExportService:
                 # Drop reasoning / tool interactions.
                 if etype in {'thinking', 'tool_call', 'tool_result'}:
                     continue
-                # Workflow non-text output blocks (forms, buttons, file cards).
+                if etype == 'text':
+                    content = e.get('content') or ''
+                    if content:
+                        text_chunks.append(content)
+                    continue
                 if etype == 'output':
                     output_kind = (e.get('output_type') or e.get('kind') or '').lower()
-                    if output_kind and output_kind != 'text':
+                    if output_kind == 'text':
+                        content = (
+                            e.get('content')
+                            or (e.get('data') or {}).get('content')
+                            or (e.get('data') or {}).get('text')
+                            or ''
+                        )
+                        if isinstance(content, str) and content:
+                            text_chunks.append(content)
+                    elif output_kind:
                         placeholders.append(f'[交互组件：{output_kind}]')
 
+            body = msg if msg.strip() else '\n\n'.join(text_chunks)
             if placeholders:
-                msg = (msg or '').rstrip() + '\n\n' + '\n\n'.join(placeholders)
-            return msg
+                body = (body or '').rstrip() + '\n\n' + '\n\n'.join(placeholders)
+            return body
 
         # agent_tool_call / agent_thinking / unknown -> drop
         return ''
