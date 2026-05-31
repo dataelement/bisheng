@@ -52,26 +52,41 @@ export function buildPairGroup(
     targetId: string,
     messages: readonly SelectableMessage[],
 ): string[] {
-    const byId = new Map<string, SelectableMessage>();
-    for (const m of messages) byId.set(m.messageId, m);
-    const target = byId.get(targetId);
-    if (!target) return [targetId];
+    // Pair group = one query plus every assistant answer that follows it
+    // before the next query, derived from array order (assumed chronological).
+    //
+    // Why not by ``parentMessageId``: in the workstation chat the runtime
+    // ChatMessage always carries ``parentMessageId === ""`` (the field is
+    // populated server-side only for forked LibreChat-style branches). Pair-
+    // ing therefore has to come from positional adjacency, which is also
+    // what the user actually sees on screen — answers stacked right under
+    // their question.
+    const targetIdx = messages.findIndex((m) => m.messageId === targetId);
+    if (targetIdx === -1) return [targetId];
+    const target = messages[targetIdx];
 
-    // Identify the anchor query: target is a query → itself; target is an
-    // answer → its parent. parentMessageId may be null/undefined/missing for
-    // legacy rows, in which case there is no pair to walk.
-    const queryId = target.isCreatedByUser
-        ? target.messageId
-        : target.parentMessageId ?? null;
-    if (!queryId || !byId.has(queryId)) {
-        return [targetId];
+    let queryIdx: number;
+    if (target.isCreatedByUser) {
+        queryIdx = targetIdx;
+    } else {
+        // Walk backwards to the nearest preceding user message — that's the
+        // question this answer (and its regenerate siblings) belongs to.
+        queryIdx = -1;
+        for (let i = targetIdx - 1; i >= 0; i--) {
+            if (messages[i].isCreatedByUser) {
+                queryIdx = i;
+                break;
+            }
+        }
+        // Orphan answer with no preceding query (legacy / corrupt data):
+        // treat as its own single-member group instead of guessing.
+        if (queryIdx === -1) return [targetId];
     }
 
-    const group: string[] = [queryId];
-    for (const m of messages) {
-        if (!m.isCreatedByUser && m.parentMessageId === queryId) {
-            group.push(m.messageId);
-        }
+    const group: string[] = [messages[queryIdx].messageId];
+    for (let i = queryIdx + 1; i < messages.length; i++) {
+        if (messages[i].isCreatedByUser) break;
+        group.push(messages[i].messageId);
     }
     return group;
 }

@@ -59,27 +59,41 @@ function ExportSelectionButton({
     chatId: string;
     messageId: string;
 }) {
-    const { enterSelectionMode } = useMessageSelection();
+    const { enterSelectionMode, exitSelectionMode, isActiveForChat } =
+        useMessageSelection();
     const messages = useSelectionMessages();
+    const active = isActiveForChat(chatId);
 
     const handleClick = useCallback(
         (event: React.MouseEvent<HTMLButtonElement>) => {
             event.preventDefault();
             event.stopPropagation();
-            enterSelectionMode(chatId, messageId, messages);
+            // Click toggles: if selection mode is already on for this chat,
+            // a second click on any answer's download icon exits the mode —
+            // matches the user's "再点关闭" expectation and gives a fast
+            // escape hatch without forcing the user to find the × button.
+            if (active) {
+                exitSelectionMode();
+            } else {
+                enterSelectionMode(chatId, messageId, messages);
+            }
         },
-        [chatId, messageId, messages, enterSelectionMode],
+        [active, chatId, messageId, messages, enterSelectionMode, exitSelectionMode],
     );
 
     return (
         <button
             type="button"
             onClick={handleClick}
-            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
-            title="导出"
-            aria-label="导出"
+            className={cn(
+                "flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]",
+                active && "bg-[#F0F0F0] text-[#1677ff]",
+            )}
+            title={active ? "退出选择" : "导出"}
+            aria-label={active ? "退出选择" : "导出"}
+            aria-pressed={active}
         >
-            <Download size={14} className="text-[#818181]" />
+            <Download size={14} className={cn(active ? "text-[#1677ff]" : "text-[#818181]")} />
         </button>
     );
 }
