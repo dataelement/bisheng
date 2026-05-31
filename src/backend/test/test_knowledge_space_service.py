@@ -957,6 +957,7 @@ async def test_shougang_portal_favorite_copy_thread_has_event_loop(service):
     with patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.file_worker.copy_normal',
         side_effect=_copy_requires_event_loop,
+        create=True,
     ):
         result = await asyncio.to_thread(
             service._copy_shougang_portal_favorite_file,
@@ -967,6 +968,40 @@ async def test_shougang_portal_favorite_copy_thread_has_event_loop(service):
         )
 
     assert result.id == 100
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_favorite_copies_to_personal_space_root(service):
+    source_space = _make_space(space_id=12, user_id=99)
+    target_space = _make_space(space_id=7, user_id=service.login_user.user_id)
+    source_file = _make_file(
+        file_id=1580,
+        knowledge_id=12,
+        file_name='迁移指南.pdf',
+        file_level_path='/88/99',
+        level=2,
+    )
+    copied_file = _make_file(file_id=100, knowledge_id=7, file_name='迁移指南.pdf')
+    metadata = {'shougang_portal_favorite': {'source_file_id': 1580}}
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.file_worker.copy_normal',
+        return_value=copied_file,
+        create=True,
+    ) as mock_copy:
+        result = service._copy_shougang_portal_favorite_file(
+            source_file,
+            source_space,
+            target_space,
+            metadata,
+        )
+
+    assert result.id == 100
+    assert mock_copy.call_args.kwargs == {
+        'extra_user_metadata': metadata,
+        'target_level': 0,
+        'target_file_level_path': '',
+    }
 
 
 @pytest.mark.asyncio

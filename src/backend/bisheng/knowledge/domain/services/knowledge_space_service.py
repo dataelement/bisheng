@@ -2108,6 +2108,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 target_space,
                 self.login_user.user_id,
                 extra_user_metadata=extra_user_metadata,
+                target_level=0,
+                target_file_level_path='',
             )
         finally:
             if loop is not None:
