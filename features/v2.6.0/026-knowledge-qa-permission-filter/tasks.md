@@ -11,7 +11,7 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 经 `/sdd-review spec` 14 项检查 + 7 项修复 + citations/resolve 范围调整，2026-05-29 通过 |
 | tasks.md | ✅ 已拆解 | 经 `/sdd-review tasks` 21 项检查，Round 1 修复 4 处 medium ISSUE（AC-21/22 覆盖、T003 dependencies.py、T010 拆分、AC 范围写法），Round 2 LGTM，2026-05-29 通过 |
-| 实现 | 🟡 进行中 | 3 / 12 完成（T001-T003 已提交至 `feat/2.6.0/knowledge-space`，已 ff-merge 到 `feat/2.6.0-beta3`）|
+| 实现 | ✅ 全部完成（代码） | 12 / 12 完成；E2E 报告模板待人工执行（[e2e-report.md](./e2e-report.md)）|
 
 ---
 
@@ -86,7 +86,7 @@
 
 ### 后端 Domain Service — KnowledgeSpaceChatService 改造（Test-First 配对）
 
-- [ ] **T004**: chat_folder + chat_single_file + space_rag 集成测试
+- [x] **T004**: chat_folder + chat_single_file + space_rag 集成测试（commit `f274a1fa0`，7 tests）
   **文件**: `src/backend/test/knowledge/test_knowledge_space_chat_service_visibility.py`（新建，与现有 `test_knowledge_space_chat_service_retrieve.py` 并列）
   **逻辑**: 使用 conftest 的 `async_db_session` + monkeypatch 桩掉 retriever 工具的 `KnowledgeRetrieverTool.ainvoke`，验证：
   - 整空间问答（folder_id=0）：① 无 view_space → 抛 `SpacePermissionDeniedError`（AC-01）；② 部分文件可见 → `source_documents` 仅含可见 file_id（AC-02）；③ 空可见集 → 空 `finally_docs` + 不报错（AC-03）；④ 模拟权限收回后第二轮调用走新权限（AC-04）
@@ -109,7 +109,7 @@
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05, AC-06, AC-07, AC-08, AC-09, AC-26, AC-27
   **依赖**: T003
 
-- [ ] **T005**: KnowledgeSpaceChatService 实现
+- [x] **T005**: KnowledgeSpaceChatService 实现（commit `f274a1fa0`，`_retrieve_and_filter` + `_render_rag_response` + chat_folder 重接线）
   **文件**: `src/backend/bisheng/knowledge/domain/services/knowledge_space_chat_service.py`（修改）
   **逻辑**:
   - 拆分 `_build_folder_search_kwargs` → `_compute_candidate_file_ids(knowledge_id, folder_id, tags) -> Optional[List[int]]`（保留原 candidate 计算逻辑）
@@ -124,7 +124,7 @@
 
 ### 后端 Domain Service — WorkStationService 改造（Test-First 配对）
 
-- [ ] **T006**: queryChunksFromDB 集成测试
+- [x] **T006**: queryChunksFromDB 集成测试（commit `a924fab12`，8 tests）
   **文件**: `src/backend/test/workstation/test_query_chunks_visibility.py`（新建 `test/workstation/` 目录）
   **逻辑**: 用 `async_db_session` + monkeypatch 桩掉 `MultiRetriever` 与 `KnowledgeRetrieverTool.ainvoke`：
   - 单个 space_bucket KB 无 view_space → 该 KB 不进入 retriever 调用、不出现在 `kb_succeed`；INFO 日志含 `skipped_kb_id=X reason=no_view_space`（AC-11）
@@ -139,7 +139,7 @@
   **覆盖 AC**: AC-11, AC-12, AC-13, AC-14
   **依赖**: T003
 
-- [ ] **T007**: WorkStationService.queryChunksFromDB 实现
+- [x] **T007**: WorkStationService.queryChunksFromDB 实现（commit `a924fab12`，Stage 1 + Stage 3）
   **文件**: `src/backend/bisheng/workstation/domain/services/workstation_service.py`（修改）
   **逻辑**: 按 spec §7.2b 表格逐项落地：
   - 进入循环前对 `space_bucket` 的每个 kb_id 调 `KnowledgeFileVisibilityService.is_space_visible(kb_id)`；不通过则 `continue` + INFO 日志（AC-11）
@@ -154,7 +154,7 @@
 
 ### 后端 Domain Service — CitationResolveService 改造（Test-First 配对）
 
-- [ ] **T008**: CitationResolveService 单元测试
+- [x] **T008**: CitationResolveService 单元测试（commit `d55bdfbb6`，9 tests）
   **文件**: `src/backend/test/citation/test_citation_resolve_visibility.py`（新建 `test/citation/` 目录）
   **逻辑**: 用 fixture 构造 `CitationRegistryItemSchema` 列表（混合 RAG + web 类型）+ monkeypatch `KnowledgeFileVisibilityService.post_filter_visible_files`：
   - 登录用户 + 所有 RAG citation 的 documentId 均通过精滤 → 所有 items 原样返回（含 URL/bbox）（AC-15）
@@ -175,7 +175,7 @@
   **覆盖 AC**: AC-15, AC-16, AC-17, AC-18, AC-19, AC-20
   **依赖**: T003
 
-- [ ] **T009**: CitationResolveService 实现
+- [x] **T009**: CitationResolveService 实现（commit `d55bdfbb6`，删除 `_has_file_access`，新增 `_filter_visible_rag_items`；arch-guard RULE-8 VIOLATION 消除）
   **文件**:
   - `src/backend/bisheng/citation/domain/services/citation_resolve_service.py`（修改）
   - `src/backend/bisheng/citation/api/dependencies.py`（修改：构造时注入 `KnowledgeFileVisibilityService`）
@@ -196,7 +196,7 @@
 
 ### 前端 Platform（手动验证）
 
-- [ ] **T010**: Platform i18n key 补齐 + "无可见内容" UI 联调
+- [x] **T010**: Platform i18n key 补齐 + "无可见内容" UI 联调（commit `83d346fab`，3 文件 zh/en/ja `qa.noVisibleContent`）
   **文件**:
   - `src/frontend/platform/public/locales/en-US/knowledge.json`
   - `src/frontend/platform/public/locales/zh-Hans/knowledge.json`
@@ -214,7 +214,7 @@
 
 ### 前端 Client（手动验证）
 
-- [ ] **T011**: Client i18n key 补齐 + 工作台联调
+- [x] **T011**: Client i18n key 补齐 + 工作台联调（commit `83d346fab`，3 文件 `knowledge_qa_noVisibleContent`）
   **文件**:
   - `src/frontend/client/src/locales/en/translation.json`
   - `src/frontend/client/src/locales/zh-Hans/translation.json`
@@ -228,7 +228,7 @@
 
 ### E2E + 手动回归
 
-- [ ] **T012**: 全链路 E2E + 手动回归 + arch-guard 校验
+- [x] **T012**: 全链路 E2E + 手动回归 + arch-guard 校验（代码侧：arch-guard 6 文件全部 rc=0；E2E 模板 [e2e-report.md](./e2e-report.md) 待人工执行 → 填回结果）
   **文件**: 无（验证型任务，仅产出 E2E 报告）
   **逻辑**:
   - **回归验证 KB 下拉框**（Platform + Client）：以 `view_space` 不全的测试账号登录，确认 `GET /api/v1/knowledge/space/{mine,managed,joined,department}` 仅返回有 `view_space` 的空间，前端 KB 选择器中无权空间不显示（覆盖 AC-10）
