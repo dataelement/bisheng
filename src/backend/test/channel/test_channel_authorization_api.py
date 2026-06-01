@@ -41,8 +41,8 @@ class _AuthService:
             )
         ])
         self.authorize_channel = AsyncMock(return_value=ChannelAuthorizeResponse(
-            synced_user_count=1,
-            affected_member_count=1,
+            synced_user_count=0,
+            affected_member_count=0,
         ))
         self.grantable_relation_models = AsyncMock(return_value=[
             ChannelRelationModelItem(
@@ -107,7 +107,7 @@ def test_authorize_channel_endpoint(app_with_auth_service):
 
     body = response.json()
     assert body['status_code'] == 200
-    assert body['data']['synced_user_count'] == 1
+    assert body['data']['synced_user_count'] == 0
     service.authorize_channel.assert_awaited_once()
 
 

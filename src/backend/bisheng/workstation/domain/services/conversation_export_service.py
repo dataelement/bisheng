@@ -92,10 +92,31 @@ _IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 # markers were lost — e.g. the answer was assembled from streamed chunks that
 # split a marker pair, or the front-end rendered ``U+E200`` as the literal
 # ``"200"`` glyph (PUA fallback). Stripped after the well-formed marker pass.
+# Literal backslash-escape forms of the PUA citation markers — e.g. the
+# 6-character string ```` (backslash + ``u`` + ``e200``) — which leak
+# through any layer that JSON-encoded a marker character as text instead of
+# preserving the raw code point. Word/PDF rendered this verbatim previously.
+_LITERAL_PUA_ESCAPE_PATTERN = re.compile(r'\\u[eE]20[012]')
+
+
+# Emoji / pictograph characters that the bundled docker fonts
+# (``WenQuanYi Zen Hei`` + ``Liberation Sans``) do not cover. When a docx
+# contains these and is opened in Word the missing glyphs render as tofu
+# boxes; the LibreOffice docx→pdf hop inherits the same. We replace them
+# with `●` before docx/pdf rendering — markdown and txt keep the originals.
+_EMOJI_PATTERN = re.compile(
+    '['
+    '\U0001F300-\U0001FAFF'  # symbols, emoticons, pictographs, ext, transport
+    '\U00002600-\U000027BF'  # misc symbols + dingbats (★ ✓ ✗ ❌ …)
+    '\U00002B00-\U00002BFF'  # misc symbols & arrows (⭐ ▶ ◀ …)
+    '\U00002300-\U000023FF'  # misc technical (⏰ ⌛ …)
+    ']'
+)
+
 _BARE_CITATION_KEY_PATTERN = re.compile(
-    r'(?:||)*\s*'
+    r'(?:||)*[ \t]*'
     r'(?:knowledgesearch|websearch)_[0-9a-fA-F]+:\d+'
-    r'\s*(?:||)*'
+    r'[ \t]*(?:||)*'
 )
 
 # Subprocess timeouts (spec §10 non-functional)
@@ -415,6 +436,7 @@ class ConversationExportService:
             return text
         text = _CITATION_PATTERN.sub('', text)
         text = text.translate(_LONE_MARKER_TABLE)
+        text = _LITERAL_PUA_ESCAPE_PATTERN.sub('', text)
         return _BARE_CITATION_KEY_PATTERN.sub('', text)
 
     # ----------------------------------------------------------------------
@@ -472,6 +494,26 @@ class ConversationExportService:
 
         return str(importlib.resources.files(_assets_pkg) / 'conversation_export_template.docx')
 
+    @staticmethod
+    def _replace_emoji_for_office(markdown: str) -> str:
+        """Replace emoji / pictograph code points with the CJK bullet `●`.
+
+        Office-side fonts shipped in the bisheng-backend Docker image
+        (``WenQuanYi Zen Hei`` + ``Liberation Sans/Mono``) lack the
+        supplementary-plane emoji ranges. Without substitution Word renders
+        these as tofu boxes (often falling back to a Japanese face the
+        front-end calls ``MS Gothic``) and the LibreOffice docx→pdf hop
+        inherits the same artefact. ``●`` is present in every CJK font and
+        keeps the "list item / highlight" visual cue.
+
+        Applied only on the docx/pdf path; the markdown/txt renderers keep
+        the originals so downstream renderers with full emoji fonts (e.g.
+        a user-side Markdown viewer) still see the source text intact.
+        """
+        if not markdown:
+            return markdown
+        return _EMOJI_PATTERN.sub('●', markdown)
+
     @classmethod
     def _render_docx(cls, markdown: str) -> bytes:
         """Convert Markdown to docx bytes via pypandoc + reference template.
@@ -479,14 +521,23 @@ class ConversationExportService:
         pypandoc's binary-format output requires writing to a temp file (it
         cannot return bytes directly for docx). Temp dir is auto-cleaned.
         """
+        markdown = cls._replace_emoji_for_office(markdown)
         template = cls._get_template_path()
         with tempfile.TemporaryDirectory(prefix='conv_export_docx_') as tmpdir:
             out_path = os.path.join(tmpdir, 'out.docx')
             try:
+                # Use the GFM-flavored markdown reader with two extensions:
+                #   - lists_without_preceding_blankline: model output rarely
+                #     puts a blank line before a list; without this pandoc
+                #     attaches the list to the previous paragraph and the
+                #     resulting docx renders every list item on one line.
+                #   - hard_line_breaks: preserve in-paragraph line breaks
+                #     (common in agent-native streamed text) instead of
+                #     collapsing them into spaces.
                 pypandoc.convert_text(
                     markdown,
                     'docx',
-                    format='markdown',
+                    format='markdown+lists_without_preceding_blankline+hard_line_breaks',
                     outputfile=out_path,
                     extra_args=['--reference-doc=' + template],
                 )
@@ -497,37 +548,110 @@ class ConversationExportService:
                 )
             return Path(out_path).read_bytes()
 
-    @classmethod
-    def _render_pdf(cls, markdown: str) -> bytes:
-        """Convert Markdown → docx → pdf, returning pdf bytes.
+    # ----------------------------------------------------------------------
+    # PDF rendering via headless Chromium (Playwright)
+    # ----------------------------------------------------------------------
+    #
+    # Previously we rendered docx with pandoc then converted to PDF with
+    # LibreOffice. That path was brittle: LibreOffice mangled pandoc-emitted
+    # tables (cells collapsed into separate one-line paragraphs), lists, and
+    # heading alignment. Even pre-rasterising the LibreOffice output didn't
+    # help — the source PDF was already wrong.
+    #
+    # Chromium's print path is a battle-tested HTML-to-PDF engine: tables,
+    # CSS, web fonts, page breaks are all reliable. We render Markdown to
+    # HTML with python-markdown (extensions: tables, fenced code, definition
+    # lists, code highlighting via inline styles) and hand the HTML to
+    # Chromium via Playwright. Playwright + the matching chromium binary are
+    # already part of the bisheng-backend image.
 
-        Two subprocess hops: pypandoc (pandoc binary) then soffice. We isolate
-        every temp artifact in a single TemporaryDirectory; failure of either
-        hop maps to ``ConversationExportRenderFailedError`` (12064) with a
-        renderer-tagged message for triage.
+    _PDF_CSS = """
+    @page { size: A4; margin: 2cm; }
+    html { font-size: 11pt; }
+    body {
+        font-family: "WenQuanYi Zen Hei", "Noto Sans CJK SC",
+                     "Liberation Sans", "DejaVu Sans", sans-serif;
+        line-height: 1.65;
+        color: #1f1f1f;
+        margin: 0;
+    }
+    h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; margin: 1.1em 0 0.4em; }
+    h1 { font-size: 1.55em; }
+    h2 { font-size: 1.30em; border-bottom: 1px solid #e0e0e0; padding-bottom: 0.2em; }
+    h3 { font-size: 1.13em; }
+    p  { margin: 0.45em 0; }
+    ul, ol { padding-left: 1.5em; margin: 0.4em 0; }
+    li { margin: 0.18em 0; }
+    table { border-collapse: collapse; width: 100%; margin: 0.7em 0;
+            font-size: 0.95em; }
+    th, td { border: 1px solid #bbb; padding: 6px 9px;
+             text-align: left; vertical-align: top; }
+    th { background: #f3f3f3; font-weight: 600; }
+    pre { background: #f6f6f6; padding: 9px 12px; border-radius: 4px;
+          overflow-x: auto; }
+    code { font-family: "Liberation Mono", "DejaVu Sans Mono", monospace;
+           font-size: 0.92em; }
+    pre code { background: none; padding: 0; }
+    blockquote { border-left: 3px solid #bbb; padding: 0.05em 0.9em;
+                 margin: 0.6em 0; color: #555; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 1em 0; }
+    img { max-width: 100%; }
+    a { color: #2962ff; text-decoration: none; }
+    strong { font-weight: 600; }
+    """
+
+    @classmethod
+    def _markdown_to_html(cls, markdown_text: str) -> str:
+        """Render markdown to a standalone HTML document string."""
+        # Local import: python-markdown isn't needed elsewhere in the service.
+        import markdown as md_lib
+
+        body = md_lib.markdown(
+            markdown_text,
+            extensions=['extra', 'tables', 'fenced_code', 'sane_lists', 'nl2br'],
+            output_format='html5',
+        )
+        return (
+            '<!DOCTYPE html>'
+            '<html lang="zh-CN"><head><meta charset="utf-8">'
+            f'<style>{cls._PDF_CSS}</style>'
+            f'</head><body>{body}</body></html>'
+        )
+
+    @classmethod
+    async def _render_pdf(cls, markdown: str) -> bytes:
+        """Render Markdown → PDF via headless Chromium (Playwright).
+
+        Chromium gets the rendering it does best: HTML+CSS. Tables, lists,
+        page breaks and CJK fonts all behave correctly because we declare
+        the same font stack the docker image guarantees.
         """
-        docx_bytes = cls._render_docx(markdown)
-        with tempfile.TemporaryDirectory(prefix='conv_export_pdf_') as tmpdir:
-            docx_path = os.path.join(tmpdir, 'in.docx')
-            Path(docx_path).write_bytes(docx_bytes)
-            try:
-                pdf_path = convert_docx_to_pdf(
-                    docx_path,
-                    output_dir=tmpdir,
-                    timeout=_LIBREOFFICE_TIMEOUT_SECONDS,
+        # Local import — heavy startup, only needed on the PDF path.
+        from playwright.async_api import async_playwright
+
+        html = cls._markdown_to_html(markdown)
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    args=['--no-sandbox', '--disable-dev-shm-usage'],
                 )
-            except subprocess.TimeoutExpired:
-                logger.exception('LibreOffice docx->pdf timed out')
-                raise ConversationExportRenderFailedError(msg='LibreOffice 转 PDF 超时')
-            except Exception as e:
-                # Helper currently catches its own subprocess errors and returns
-                # False/None, so this path is defensive — but if internals ever
-                # propagate we still want a clean mapping rather than a 500.
-                logger.exception('LibreOffice docx->pdf raised')
-                raise ConversationExportRenderFailedError(msg=f'LibreOffice 转换失败: {e}')
-            if not pdf_path or not os.path.isfile(pdf_path):
-                raise ConversationExportRenderFailedError(msg='LibreOffice 未生成 PDF')
-            return Path(pdf_path).read_bytes()
+                try:
+                    page = await browser.new_page()
+                    # ``domcontentloaded`` is enough — we have no external
+                    # network resources to wait for (pre-fetched images are
+                    # embedded as data URLs by an earlier step).
+                    await page.set_content(html, wait_until='domcontentloaded')
+                    return await page.pdf(
+                        format='A4',
+                        margin={'top': '2cm', 'right': '2cm',
+                                'bottom': '2cm', 'left': '2cm'},
+                        print_background=True,
+                    )
+                finally:
+                    await browser.close()
+        except Exception as e:
+            logger.exception('Chromium PDF rendering failed')
+            raise ConversationExportRenderFailedError(msg=f'PDF 渲染失败: {e}')
 
     @classmethod
     def _render_txt(cls, markdown: str) -> bytes:

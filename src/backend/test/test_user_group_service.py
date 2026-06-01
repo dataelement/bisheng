@@ -201,3 +201,48 @@ class TestListGroups:
 
         assert result == {'data': [{'id': 1}, {'id': 2}], 'total': 2}
         mock_group_dao.aget_all_groups.assert_awaited_once_with(1, 20, '')
+
+
+class TestDeleteGroupDecoupled:
+    """Deleting a group no longer migrates resources or cascades role removal,
+    since resources and roles are decoupled from user groups."""
+
+    @pytest.mark.asyncio
+    async def test_delete_group_only_runs_residual_side_effects(self, mock_group_owner):
+        from bisheng.user_group.domain.services.user_group_service import UserGroupService
+
+        group = SimpleNamespace(id=42, create_user=mock_group_owner.user_id)
+
+        with patch(
+            'bisheng.user_group.domain.services.user_group_service.GroupDao',
+        ) as mock_group_dao, patch(
+            'bisheng.user_group.domain.services.user_group_service.GroupChangeHandler',
+        ) as mock_change_handler, patch(
+            'bisheng.user_group.domain.services.user_group_service._ensure_delete_group',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.user_group.domain.services.user_group_service.purge_user_group_residual_sync',
+        ) as mock_purge, patch(
+            'bisheng.permission.domain.services.owner_service.OwnerService',
+        ) as mock_owner, patch(
+            'bisheng.permission.domain.services.legacy_rbac_sync_service.LegacyRBACSyncService',
+        ) as mock_rbac:
+            mock_group_dao.aget_by_id = AsyncMock(return_value=group)
+            mock_group_dao.adelete = AsyncMock()
+            mock_change_handler.on_deleted.return_value = ['del-op']
+            mock_change_handler.execute_async = AsyncMock()
+            mock_owner.delete_resource_tuples = AsyncMock()
+            mock_rbac.cleanup_user_group_subject_tuples = AsyncMock()
+            mock_rbac.sync_role_deleted = AsyncMock()
+
+            await UserGroupService.adelete_group(42, mock_group_owner)
+
+        # Residual side effects (admin cleanup + gateway notify) run via the
+        # shared sync helper; the group row is deleted.
+        mock_purge.assert_called_once_with(42)
+        mock_group_dao.adelete.assert_awaited_once_with(42)
+        # No role cascade on group deletion.
+        mock_rbac.sync_role_deleted.assert_not_awaited()
+        # Own tuples are still cleaned up.
+        mock_owner.delete_resource_tuples.assert_awaited_once_with('user_group', '42')
+        mock_rbac.cleanup_user_group_subject_tuples.assert_awaited_once_with(42)

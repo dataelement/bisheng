@@ -57,7 +57,7 @@ from typing import Optional
 
 from sqlalchemy import Column, DateTime, String, text
 from sqlmodel import Field
-
+from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.common.models.base import SQLModelSerializable
 
 
@@ -69,15 +69,10 @@ class NewEntity(SQLModelSerializable, table=True):
     name: str = Field(sa_column=Column(String(255), nullable=False))
     # ... 业务字段
 
-    create_time: Optional[datetime] = Field(
-        sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
-    )
-    update_time: Optional[datetime] = Field(
-        sa_column=Column(
-            DateTime, nullable=False,
-            server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"),
-        )
-    )
+    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
+    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
+        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
 ```
 
 ### Domain 模型 / DTO

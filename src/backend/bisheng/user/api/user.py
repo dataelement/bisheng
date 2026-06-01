@@ -24,7 +24,7 @@ from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import DepartmentDao, UserDepartment
-from bisheng.database.models.group import DefaultGroup, GroupDao
+from bisheng.database.models.group import GroupDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.mark_task import MarkTaskDao
 from bisheng.database.models.role import Role, RoleCreate, RoleDao, RoleUpdate
@@ -92,7 +92,7 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
                 await LegacyRBACSyncService.sync_user_auth_created(
                     user_exist.user_id,
                     [user.default_roleid or DefaultRole],
-                    member_group_ids=[user.default_groupid or DefaultGroup],
+                    member_group_ids=[user.default_groupid] if user.default_groupid else None,
                 )
         if 1 == user_exist.delete:
             raise UserForbiddenError.http_exception()

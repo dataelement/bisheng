@@ -70,8 +70,9 @@ def _service(actor_relation: ChannelRelationEnum, sync_service=None) -> ChannelA
 
 
 @pytest.mark.asyncio
-async def test_owner_can_grant_user_owner_manager_editor_viewer():
-    service = _service(ChannelRelationEnum.OWNER)
+async def test_owner_grant_writes_permission_tuple_without_membership_sync():
+    sync_service = _SyncService()
+    service = _service(ChannelRelationEnum.OWNER, sync_service)
     request = ChannelAuthorizeRequest(grants=[
         ChannelGrantItem(subject_type='user', subject_id=11, relation=ChannelRelationEnum.OWNER),
         ChannelGrantItem(subject_type='user', subject_id=12, relation=ChannelRelationEnum.MANAGER),
@@ -91,7 +92,9 @@ async def test_owner_can_grant_user_owner_manager_editor_viewer():
 
     assert mock_authorize.await_count == 1
     assert len(mock_authorize.await_args.kwargs['grants']) == 4
-    assert result.synced_user_count == 4
+    assert result.synced_user_count == 0
+    assert result.affected_member_count == 0
+    assert sync_service.grants == []
 
 
 @pytest.mark.asyncio
@@ -161,13 +164,14 @@ async def test_fga_failure_does_not_sync_membership():
 
 
 @pytest.mark.asyncio
-async def test_membership_sync_failure_compensates_fga_grant_and_cleans_source():
+async def test_membership_sync_service_is_not_called_for_permission_grants():
     class FailingSync(_SyncService):
         async def sync_grant(self, **kwargs):
             self.grants.append(kwargs)
             raise RuntimeError('sync failed')
 
-    service = _service(ChannelRelationEnum.OWNER, FailingSync())
+    sync_service = FailingSync()
+    service = _service(ChannelRelationEnum.OWNER, sync_service)
     request = ChannelAuthorizeRequest(grants=[
         ChannelGrantItem(subject_type='user', subject_id=11, relation=ChannelRelationEnum.VIEWER),
     ])
@@ -180,22 +184,18 @@ async def test_membership_sync_failure_compensates_fga_grant_and_cleans_source()
         '_get_bindings',
         new_callable=AsyncMock,
         return_value=[{'key': 'existing', 'resource_type': 'channel'}],
-    ), patch.object(
-        service,
-        '_save_bindings',
-        new_callable=AsyncMock,
-    ) as mock_save_bindings:
-        with pytest.raises(ChannelAuthorizationSyncError):
-            await service.authorize_channel('channel-1', request, _User())
+        ), patch.object(
+            service,
+            '_save_bindings',
+            new_callable=AsyncMock,
+        ):
+            result = await service.authorize_channel('channel-1', request, _User())
 
-    assert mock_authorize.await_count == 2
-    compensation_call = mock_authorize.await_args_list[1].kwargs
-    assert compensation_call['grants'] == []
-    assert compensation_call['revokes'][0].subject_id == 11
-    assert service.space_channel_member_repository.deleted_binding_keys == [
-        ('channel-1', 'channel:channel-1:user:11:viewer:-'),
-    ]
-    assert mock_save_bindings.await_args_list[-1].args[0] == [{'key': 'existing', 'resource_type': 'channel'}]
+    assert mock_authorize.await_count == 1
+    assert result.synced_user_count == 0
+    assert result.affected_member_count == 0
+    assert sync_service.grants == []
+    assert service.space_channel_member_repository.deleted_binding_keys == []
 
 
 @pytest.mark.asyncio

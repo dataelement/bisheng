@@ -36,14 +36,6 @@ ACCESS_TYPE_TO_FGA: dict[int, tuple[str, str]] = {
     12: ('dashboard', 'editor'),
 }
 
-GROUP_RESOURCE_TYPE_TO_FGA: dict[int, tuple[str, ...]] = {
-    1: ('knowledge_library', 'knowledge_space'),
-    3: ('assistant',),
-    4: ('tool',),
-    5: ('workflow',),
-    6: ('dashboard',),
-}
-
 RELATION_PRIORITY = {
     'viewer': 1,
     'editor': 2,
@@ -214,34 +206,6 @@ class LegacyRBACSyncService:
             return
 
         await cls._apply_signature_diff(actual, desired)
-
-    @classmethod
-    async def sync_group_resource_move(
-        cls,
-        old_group_id: int,
-        new_group_id: int,
-        resource_type: int,
-        resource_id: str,
-    ) -> None:
-        """Move legacy groupresource manager tuples between group admins."""
-        object_types = GROUP_RESOURCE_TYPE_TO_FGA.get(int(resource_type), ())
-        if not object_types:
-            return
-        operations: list[TupleOperation] = []
-        for object_type in object_types:
-            operations.append(TupleOperation(
-                action='delete',
-                user=f'user_group:{old_group_id}#admin',
-                relation='manager',
-                object=f'{object_type}:{resource_id}',
-            ))
-            operations.append(TupleOperation(
-                action='write',
-                user=f'user_group:{new_group_id}#admin',
-                relation='manager',
-                object=f'{object_type}:{resource_id}',
-            ))
-        await cls._write_operations(operations, [])
 
     @classmethod
     async def cleanup_user_group_subject_tuples(cls, group_id: int) -> None:

@@ -42,7 +42,7 @@ jest.mock("~/components/icons/SpaceNotebookIcon", () => ({
     SpaceNotebookIcon: () => <span data-testid="notebook-icon" />,
 }));
 
-const createChannel = (role: Channel["role"]): Channel => ({
+const createChannel = (role: Channel["role"], permissionIds?: string[]): Channel => ({
     id: "channel-1",
     name: "资讯频道",
     creator: "owner",
@@ -55,11 +55,16 @@ const createChannel = (role: Channel["role"]): Channel => ({
     createdAt: "2026-05-28T00:00:00Z",
     updatedAt: "2026-05-28T00:00:00Z",
     subChannels: [],
+    permissionIds,
 });
 
-function renderChannelItem(role: Channel["role"], type: "created" | "subscribed" = "subscribed") {
+function renderChannelItem(
+    role: Channel["role"],
+    type: "created" | "subscribed" = "subscribed",
+    permissionIds?: string[],
+) {
     const props = {
-        channel: createChannel(role),
+        channel: createChannel(role, permissionIds),
         isActive: false,
         type,
         onSelect: jest.fn(),
@@ -97,6 +102,18 @@ describe("ChannelItem relation actions", () => {
         await user.click(menuTrigger as HTMLButtonElement);
 
         expect(screen.queryByText("频道设置")).not.toBeInTheDocument();
+        expect(screen.queryByText("成员管理")).not.toBeInTheDocument();
+    });
+
+    it("hides member management when manager model no longer grants it", async () => {
+        const user = userEvent.setup();
+        const { container } = renderChannelItem("manager", "subscribed", ["view_channel", "edit_channel"]);
+        const menuTrigger = container.querySelector("button");
+
+        expect(menuTrigger).not.toBeNull();
+        await user.click(menuTrigger as HTMLButtonElement);
+
+        expect(await screen.findByText("频道设置")).toBeInTheDocument();
         expect(screen.queryByText("成员管理")).not.toBeInTheDocument();
     });
 

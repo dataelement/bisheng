@@ -70,6 +70,11 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.message.domain.services.notification_content import build_notify_content
+from bisheng.permission.domain.channel_permission_template import (
+    default_permission_ids_for_relation as default_channel_permission_ids_for_relation,
+    relation_from_channel_permission_ids,
+)
+from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
 from bisheng.permission.domain.services.permission_service import PermissionService
@@ -140,6 +145,36 @@ def _is_channel_subscription_source(member) -> bool:
     return not _is_authorized_channel_source(member)
 
 
+def _sorted_channel_permission_ids(permission_ids: set[str]) -> list[str]:
+    return sorted(permission_ids)
+
+
+def _business_member_permission_ids(member) -> set[str]:
+    if not member or _is_authorized_channel_source(member):
+        return set()
+    relation = resolve_channel_relation(member)
+    if relation is None:
+        return set()
+    return default_channel_permission_ids_for_relation(relation.value)
+
+
+def _effective_relation_value(permission_ids: set[str], member) -> str | None:
+    relation = relation_from_channel_permission_ids(permission_ids)
+    if relation:
+        return relation
+    if member and not _is_authorized_channel_source(member):
+        return _member_relation_value(member)
+    return None
+
+
+def _legacy_role_value_for_relation(relation: str | None, member=None) -> str:
+    if relation:
+        return legacy_role_for_channel_relation(ChannelRelationEnum(relation)).value
+    if member and not _is_authorized_channel_source(member):
+        return _legacy_role_value_for_member(member)
+    return UserRoleEnum.MEMBER.value
+
+
 class ChannelService:
     def __init__(
         self,
@@ -158,6 +193,26 @@ class ChannelService:
         self.article_read_repository = article_read_repository
         self.message_service = message_service
         self.approval_gate = approval_gate
+
+    async def _get_channel_permission_ids(
+        self,
+        channel_id: str,
+        login_user: UserPayload,
+        membership=None,
+    ) -> set[str]:
+        try:
+            permission_ids = set(
+                await FineGrainedPermissionService.get_effective_permission_ids_async(
+                    login_user,
+                    'channel',
+                    channel_id,
+                )
+            )
+        except Exception:
+            logger.exception('failed to resolve channel permission ids: channel_id=%s', channel_id)
+            permission_ids = set()
+        permission_ids.update(_business_member_permission_ids(membership))
+        return permission_ids
 
     @staticmethod
     def _resolve_subscription_status(
@@ -400,11 +455,24 @@ class ChannelService:
             user_id=login_user.user_id, roles=roles, statuses=[MembershipStatusEnum.ACTIVE]
         )
 
-        if not memberships:
-            return []
+        accessible_ids: list[str] = []
+        if query_data.query_type == QueryTypeEnum.FOLLOWED:
+            listed_ids = await PermissionService.list_accessible_ids(
+                user_id=login_user.user_id,
+                relation='can_read',
+                object_type='channel',
+                login_user=login_user,
+            )
+            if listed_ids is not None:
+                accessible_ids = [str(channel_id) for channel_id in listed_ids]
 
         # Batch query channels by IDs
-        channel_ids = [m.business_id for m in memberships]
+        channel_ids = list(dict.fromkeys([
+            *(m.business_id for m in memberships),
+            *accessible_ids,
+        ]))
+        if not channel_ids:
+            return []
         channels = await self.channel_repository.find_channels_by_ids(channel_ids)
         channel_map = {ch.id: ch for ch in channels}
 
@@ -415,32 +483,57 @@ class ChannelService:
 
         # Build a map of business_id to membership for quick lookup
         membership_map = {m.business_id: m for m in memberships}
+        permission_id_results = await asyncio.gather(
+            *[
+                self._get_channel_permission_ids(
+                    channel.id,
+                    login_user,
+                    membership_map.get(channel.id),
+                )
+                for channel in channels
+            ]
+        )
+        permission_ids_map = {
+            channel.id: permission_ids
+            for channel, permission_ids in zip(channels, permission_id_results)
+        }
 
         # Construct the result list, filtering out non-authorized private channels for "followed" query type
         result: List[ChannelItemResponse] = []
         channels_to_process = []
-        for channel_id, membership in membership_map.items():
+        for channel_id in channel_ids:
             channel = channel_map.get(channel_id)
             if not channel:
                 continue
+            membership = membership_map.get(channel_id)
+            permission_ids = permission_ids_map.get(channel_id, set())
 
             if query_data.query_type == QueryTypeEnum.FOLLOWED:
+                if getattr(channel, 'user_id', None) == login_user.user_id:
+                    continue
+                has_view_permission = 'view_channel' in permission_ids
+                has_business_membership = bool(membership and not _is_authorized_channel_source(membership))
+                if not has_business_membership and not has_view_permission:
+                    continue
+                if membership and _is_authorized_channel_source(membership) and not has_view_permission:
+                    continue
                 if (
                     channel.visibility == ChannelVisibilityEnum.PRIVATE
-                    and not _is_authorized_channel_source(membership)
+                    and not has_view_permission
                 ):
                     continue
 
-            channels_to_process.append((channel, membership))
+            channels_to_process.append((channel, membership, permission_ids))
 
         # Concurrently calculate unread counts for all applicable channels
         unread_counts = []
         if channels_to_process:
             unread_counts = await asyncio.gather(
-                *[self._calculate_unread_count(channel, all_read_ids) for channel, _ in channels_to_process]
+                *[self._calculate_unread_count(channel, all_read_ids) for channel, _, _ in channels_to_process]
             )
 
-        for (channel, membership), unread_count in zip(channels_to_process, unread_counts):
+        for (channel, membership, permission_ids), unread_count in zip(channels_to_process, unread_counts):
+            relation = _effective_relation_value(permission_ids, membership)
             item = ChannelItemResponse(
                 id=channel.id,
                 name=channel.name,
@@ -449,10 +542,11 @@ class ChannelService:
                 is_released=channel.is_released,
                 latest_article_update_time=channel.latest_article_update_time,
                 create_time=channel.create_time,
-                user_role=_legacy_role_value_for_member(membership),
-                relation=_member_relation_value(membership),
-                is_pinned=membership.is_pinned,
-                subscribed_at=membership.create_time,
+                user_role=_legacy_role_value_for_relation(relation, membership),
+                relation=relation,
+                permission_ids=_sorted_channel_permission_ids(permission_ids),
+                is_pinned=bool(membership and membership.is_pinned),
+                subscribed_at=membership.create_time if membership else None,
                 unread_count=unread_count,
             )
             result.append(item)
@@ -1332,9 +1426,14 @@ class ChannelService:
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
+        permission_ids = await self._get_channel_permission_ids(
+            channel_id,
+            login_user,
+            current_membership,
+        )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
-            if channel.visibility == ChannelVisibilityEnum.PRIVATE:
+            if channel.visibility == ChannelVisibilityEnum.PRIVATE and 'view_channel' not in permission_ids:
                 raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
 
         # 3. Get Creator Name
@@ -1394,6 +1493,8 @@ class ChannelService:
         if is_creator:
             knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
 
+        relation = _effective_relation_value(permission_ids, current_membership)
+
         return ChannelDetailResponse(
             id=channel.id,
             name=channel.name,
@@ -1408,7 +1509,8 @@ class ChannelService:
             subscriber_count=subscriber_count,
             article_count=article_count,
             subscription_status=subscription_status,
-            relation=_member_relation_value(current_membership),
+            relation=relation,
+            permission_ids=_sorted_channel_permission_ids(permission_ids),
             knowledge_sync=knowledge_sync_cfg,
         )
 

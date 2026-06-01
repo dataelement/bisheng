@@ -28,45 +28,23 @@ logger = logging.getLogger(__name__)
 AdminRole = 1
 
 
-def _sync_user_group_delete_side_effects(group_id: int) -> list[tuple[int, int, str]]:
-    """与 RoleGroupService.delete_group_hook 对齐：资源授权迁移、组资源/组角色清理、网关 Redis 通知。"""
+def purge_user_group_residual_sync(group_id: int) -> None:
+    """删组的同步残留副作用：清理组管理员行 + 推送网关 `delete_group` 通知。
+
+    资源与角色均已与用户组解耦，删组不再迁移资源、不清理 group_resource，
+    也不级联删除角色。新旧两套删组路径共用此函数以避免重复实现。
+    """
     import json
 
     from bisheng.core.cache.redis_manager import get_redis_client_sync
-    from bisheng.database.models.group import GroupDao
-    from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-    from bisheng.database.models.role import RoleDao
     from bisheng.database.models.user_group import UserGroupDao
 
-    all_resource = GroupResourceDao.get_group_all_resource(group_id)
-    fallback_gid = None
-    for g in GroupDao.get_all_group():
-        if g.id != group_id:
-            fallback_gid = g.id
-            break
-    need_move_resource = []
-    moved_resources = []
-    for one in all_resource:
-        resource_groups = GroupResourceDao.get_resource_group(
-            ResourceTypeEnum(one.type), one.third_id,
-        )
-        if len(resource_groups) > 1:
-            continue
-        if fallback_gid is not None:
-            moved_resources.append((int(fallback_gid), int(one.type), str(one.third_id)))
-            one.group_id = str(fallback_gid)
-            need_move_resource.append(one)
-    if need_move_resource:
-        GroupResourceDao.update_group_resource(need_move_resource)
-    GroupResourceDao.delete_group_resource_by_group_id(group_id)
-    RoleDao.delete_role_by_group_id(group_id)
     UserGroupDao.delete_group_all_admin(group_id)
 
     delete_message = json.dumps({'id': group_id})
     redis_client = get_redis_client_sync()
     redis_client.rpush('delete_group', delete_message, expiration=86400)
     redis_client.publish('delete_group', delete_message)
-    return moved_resources
 
 
 def _is_admin(login_user) -> bool:
@@ -338,20 +316,10 @@ class UserGroupService:
         from bisheng.permission.domain.services.legacy_rbac_sync_service import (
             LegacyRBACSyncService,
         )
-        from bisheng.database.models.role import RoleDao
 
         await OwnerService.delete_resource_tuples('user_group', str(group_id))
         await LegacyRBACSyncService.cleanup_user_group_subject_tuples(group_id)
-        for role in RoleDao.get_role_by_groups([group_id], '', 0, 0):
-            await LegacyRBACSyncService.sync_role_deleted(role.id)
-        moved_resources = _sync_user_group_delete_side_effects(group_id)
-        for fallback_gid, resource_type, third_id in moved_resources:
-            await LegacyRBACSyncService.sync_group_resource_move(
-                group_id,
-                fallback_gid,
-                resource_type,
-                third_id,
-            )
+        purge_user_group_residual_sync(group_id)
 
         await GroupDao.adelete(group_id)
 

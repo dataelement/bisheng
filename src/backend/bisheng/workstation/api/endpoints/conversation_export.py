@@ -124,7 +124,7 @@ async def _run_export(
         file_bytes = ConversationExportService._render_docx(markdown)
         ext = 'docx'
     elif fmt == ExportFormat.PDF:
-        file_bytes = ConversationExportService._render_pdf(markdown)
+        file_bytes = await ConversationExportService._render_pdf(markdown)
         ext = 'pdf'
     elif fmt == ExportFormat.MARKDOWN:
         file_bytes = markdown.encode('utf-8')

@@ -98,6 +98,42 @@ def _configure_style(
     _set_cjk_font(style.element, ZH_FONT if not mono else MONO_FONT)
 
 
+def _set_doc_defaults(doc) -> None:
+    """Write ``<w:docDefaults><w:rPrDefault>`` so EVERY style inherits our font.
+
+    Without this, paragraphs whose style we did not explicitly configure
+    (e.g. pandoc-emitted ``List Paragraph`` / ``Quote`` / inferred table-cell
+    styles) fall through to Word's hard-coded East-Asian default — observed
+    as ``MS Gothic`` (Japanese), which is not present on Linux. Setting the
+    rPr default at the document level catches every code path uniformly.
+    """
+    styles_element = doc.styles.element
+    doc_defaults = styles_element.find(qn("w:docDefaults"))
+    if doc_defaults is None:
+        doc_defaults = styles_element.makeelement(qn("w:docDefaults"), {})
+        # docDefaults must precede the <w:style> children to be valid OOXML.
+        styles_element.insert(0, doc_defaults)
+
+    r_pr_default = doc_defaults.find(qn("w:rPrDefault"))
+    if r_pr_default is None:
+        r_pr_default = doc_defaults.makeelement(qn("w:rPrDefault"), {})
+        doc_defaults.append(r_pr_default)
+
+    r_pr = r_pr_default.find(qn("w:rPr"))
+    if r_pr is None:
+        r_pr = r_pr_default.makeelement(qn("w:rPr"), {})
+        r_pr_default.append(r_pr)
+
+    for existing in r_pr.findall(qn("w:rFonts")):
+        r_pr.remove(existing)
+    r_fonts = r_pr.makeelement(qn("w:rFonts"), {})
+    r_fonts.set(qn("w:ascii"), EN_FONT)
+    r_fonts.set(qn("w:hAnsi"), EN_FONT)
+    r_fonts.set(qn("w:eastAsia"), ZH_FONT)
+    r_fonts.set(qn("w:cs"), EN_FONT)
+    r_pr.append(r_fonts)
+
+
 def _set_page_size_a4(section) -> None:
     """A4 portrait, 2.5cm margins all around."""
     section.page_height = Cm(29.7)
@@ -122,6 +158,12 @@ def build_template(output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     doc = Document()
+
+    # Document-level font defaults — must come BEFORE any style tweaks so
+    # styles that don't override rFonts inherit these. Without this, pandoc-
+    # emitted List/Quote/table styles fall back to MS Gothic on Word and to
+    # tofu boxes on LibreOffice without the right Asian font.
+    _set_doc_defaults(doc)
 
     # Page setup
     for section in doc.sections:
