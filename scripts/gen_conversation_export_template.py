@@ -40,12 +40,23 @@ DEFAULT_OUTPUT = (
     / "conversation_export_template.docx"
 )
 
-# Microsoft YaHei is the PRD-preferred Chinese face on Windows. On the
-# bisheng-backend Docker image we have fonts-wqy-zenhei (文泉驿正黑);
-# pandoc / LibreOffice fall back automatically when YaHei is not installed.
-ZH_FONT = "Microsoft YaHei"
-EN_FONT = "Calibri"
-MONO_FONT = "Consolas"
+# Font stack rationale:
+# - LibreOffice (which renders the PDF inside the bisheng-backend Docker
+#   image) does NOT replicate Word's automatic "fall back to a CJK face when
+#   the declared font has no glyph" behaviour. If the docx declares Microsoft
+#   YaHei / Calibri / Consolas — fonts that ship with Windows but not with
+#   the Linux image — CJK glyphs render as tofu boxes, line spacing breaks
+#   and tables collapse. So we declare fonts that the image actually has.
+# - ``WenQuanYi Zen Hei`` is provided by the ``fonts-wqy-zenhei`` Debian
+#   package baked into the bisheng-backend image; it has full CJK coverage.
+# - ``Liberation Sans`` / ``Liberation Mono`` ship with LibreOffice itself,
+#   so they are guaranteed available wherever PDF rendering runs and look
+#   nearly identical to Calibri / Consolas.
+# - Real Word users opening the docx will not have these exact faces but
+#   Word's own font substitution handles that gracefully.
+ZH_FONT = "WenQuanYi Zen Hei"
+EN_FONT = "Liberation Sans"
+MONO_FONT = "Liberation Mono"
 
 
 # --- Helpers ---------------------------------------------------------------

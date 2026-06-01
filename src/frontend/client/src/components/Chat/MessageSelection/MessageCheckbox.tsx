@@ -13,7 +13,7 @@
 
 import { useMessageSelection } from '~/hooks/useMessageSelection';
 import { useSelectionMessages } from './SelectionMessagesContext';
-import { cn } from '~/utils';
+import { Checkbox } from '~/components/ui/Checkbox';
 
 interface MessageCheckboxProps {
     /** The chat this message belongs to (currently unused — Context-scoped). */
@@ -30,39 +30,14 @@ export function MessageCheckbox({ messageId, className }: MessageCheckboxProps) 
     const checked = isSelected(messageId, messages);
 
     return (
-        <button
-            type="button"
-            role="checkbox"
-            aria-checked={checked}
-            onClick={(e) => {
-                // Don't bubble into the message bubble's own click handlers
-                // (regenerate, copy, etc.) — selection is the dominant intent
-                // while selection mode is active.
-                e.stopPropagation();
-                toggleMessage(messageId, messages);
-            }}
-            className={cn(
-                'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                checked
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border bg-background hover:border-primary/60',
-                className,
-            )}
-        >
-            {checked && (
-                <svg
-                    viewBox="0 0 12 12"
-                    className="h-3 w-3"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                >
-                    <polyline points="2.5 6.5 5 9 9.5 3.5" />
-                </svg>
-            )}
-        </button>
+        <Checkbox
+            checked={checked}
+            // Don't bubble into the message bubble's own click handlers
+            // (regenerate, copy, etc.) — selection is the dominant intent
+            // while selection mode is active.
+            onClick={(event) => event.stopPropagation()}
+            onCheckedChange={() => toggleMessage(messageId, messages)}
+            className={className}
+        />
     );
 }
