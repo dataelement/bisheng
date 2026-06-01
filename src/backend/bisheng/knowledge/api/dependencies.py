@@ -135,6 +135,24 @@ async def get_knowledge_space_chat_service(
     return service
 
 
+async def get_knowledge_file_visibility_service(
+        request: Request,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+        version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
+) -> 'KnowledgeFileVisibilityService':
+    """Get KnowledgeFileVisibilityService instance (F029).
+
+    Bound to the current request and login user; shared by chat_folder,
+    queryChunksFromDB and CitationResolveService for view_file filtering.
+    """
+    from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+        KnowledgeFileVisibilityService as _SvcClass,
+    )
+    service = _SvcClass(request=request, login_user=login_user)
+    service.version_repo = version_repo
+    return service
+
+
 async def get_knowledge_version_service(
         request: Request,
         login_user: UserPayload = Depends(UserPayload.get_login_user),

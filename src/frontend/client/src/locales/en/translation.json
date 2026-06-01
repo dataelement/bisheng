@@ -2095,6 +2095,7 @@
   "com_approval_section_business_content": "Business Content",
   "com_approval_search_placeholder": "Search applicant, scenario or file",
   "com_ui_close": "Close",
+  "knowledge_qa_noVisibleContent": "No relevant content found in resources accessible to you.",
   "workstation": {
     "messageExport": {
       "entry": "Export",

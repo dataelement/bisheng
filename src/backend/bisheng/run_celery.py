@@ -1,12 +1,33 @@
+import os
+
 from bisheng.worker.main import bisheng_celery
 
-if __name__ == '__main__':
-    bisheng_celery.start(
-        argv=['worker', '-l', 'info', '-c', '20', '-P', 'threads', '-Q', 'knowledge_celery,workflow_celery,celery'])
+_QUEUES = {
+    "all": "ocr_celery,knowledge_celery,workflow_celery,celery",
+    "ocr": "ocr_celery",
+    "file": "knowledge_celery,workflow_celery,celery",
+}
 
-    # bisheng_celery.worker_main(
-    #     argv=["worker", "--loglevel=info", "--logfile=./logs/celery.log", '--pool=threads', '--concurrency=4',"-Q=workflow_celery"])
-    # worker.main(celery_app)
-    # celery -A run_celery.celery_app worker -l info -c 16
-    # celery -A run_celery.celery_app beat # Schedule cron job Rilis
-    # celery -A run_celery.celery_app worker -l info -P gevent # Scheduling Execution Tasks
+
+def main() -> None:
+    mode = os.environ.get("BISHENG_CELERY_MODE", "all")
+    if mode not in _QUEUES:
+        raise ValueError(f"BISHENG_CELERY_MODE={mode!r} is invalid; expected one of {sorted(_QUEUES)}")
+    concurrency = os.environ.get("BISHENG_CELERY_CONCURRENCY", "20")
+    bisheng_celery.start(
+        argv=[
+            "worker",
+            "-l",
+            "info",
+            "-c",
+            concurrency,
+            "-P",
+            "threads",
+            "-Q",
+            _QUEUES[mode],
+        ]
+    )
+
+
+if __name__ == "__main__":
+    main()

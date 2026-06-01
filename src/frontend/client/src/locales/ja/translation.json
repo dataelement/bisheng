@@ -2018,6 +2018,7 @@
   "com_approval_section_business_content": "業務内容",
   "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
   "com_ui_close": "閉じる",
+  "knowledge_qa_noVisibleContent": "アクセス権限のあるリソースに該当する内容が見つかりませんでした。",
   "workstation": {
     "messageExport": {
       "entry": "エクスポート",
