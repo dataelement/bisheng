@@ -5,6 +5,7 @@ import {
   type KnowledgeFile,
   type KnowledgeSpace,
   type SimilarCandidateEntry,
+  type BusinessDomainCode,
   SpaceLevel,
   VisibilityType,
 } from "./knowledge";
@@ -244,6 +245,7 @@ export interface ShougangKnowledgeSpaceCreateApprovalPayload {
   auto_tag_enabled?: boolean;
   auto_tag_library_id?: number | null;
   auto_tag_custom_tags?: string[] | null;
+  business_domain_codes?: BusinessDomainCode[];
   reason?: string;
 }
 

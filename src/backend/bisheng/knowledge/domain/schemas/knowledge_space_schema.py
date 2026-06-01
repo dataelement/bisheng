@@ -6,6 +6,9 @@ from pydantic import BaseModel, Field, ConfigDict
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
+from bisheng.knowledge.domain.models.knowledge_space_business_domain import (
+    KnowledgeSpaceBusinessDomainCodeEnum,
+)
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
@@ -36,6 +39,10 @@ class KnowledgeSpaceCreateReq(BaseModel):
     )
     user_group_id: Optional[int] = Field(
         None, description="User group id for team spaces"
+    )
+    business_domain_codes: List[KnowledgeSpaceBusinessDomainCodeEnum] = Field(
+        default_factory=list,
+        description="Business domain codes for team spaces",
     )
     auto_tag_enabled: bool = Field(
         default=False, description="Whether uploaded files participate in auto tagging"
@@ -106,6 +113,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     owner_id: Optional[int] = Field(default=None, description="Scope owner id")
     owner_name: Optional[str] = Field(
         default=None, description="Scope owner display name"
+    )
+    business_domain_codes: List[KnowledgeSpaceBusinessDomainCodeEnum] = Field(
+        default_factory=list,
+        description="Business domain codes for team spaces",
     )
     auto_tag_mode: Literal["library", "custom"] = Field(
         default="library",

@@ -122,6 +122,7 @@ class KnowledgeSpaceCreateApprovalHandler:
             'space_level': params.get('space_level'),
             'department_id': params.get('department_id'),
             'user_group_id': params.get('user_group_id'),
+            'business_domain_codes': params.get('business_domain_codes') or [],
             'auth_type': params.get('auth_type'),
             'is_released': params.get('is_released'),
             'reason': req.reason,

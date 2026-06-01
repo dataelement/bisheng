@@ -26,6 +26,7 @@ export function mapCreateFormToShougangApprovalPayload(
         auto_tag_enabled: form.autoTagEnabled,
         auto_tag_library_id: form.autoTagLibraryId,
         auto_tag_custom_tags: form.autoTagCustomTags,
+        business_domain_codes: form.businessDomainCodes,
         reason: form.reason,
     };
 }

@@ -16,6 +16,8 @@ from sqlmodel import select
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
 from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – kept for type hints
 from bisheng.common.errcode.knowledge_space import (
+    SpaceBusinessDomainInvalidError,
+    SpaceBusinessDomainRequiredError,
     SpaceLimitError,
     SpaceNotFoundError,
     SpaceFolderNotFoundError,
@@ -84,6 +86,10 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
+)
+from bisheng.knowledge.domain.models.knowledge_space_business_domain import (
+    KnowledgeSpaceBusinessDomainCodeEnum,
+    KnowledgeSpaceBusinessDomainDao,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
@@ -333,6 +339,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return KnowledgeSpaceLevelEnum(str(level))
         except ValueError:
             raise SpaceInvalidLevelError()
+
+    @staticmethod
+    def _normalize_business_domain_codes(
+        codes: list[KnowledgeSpaceBusinessDomainCodeEnum | str] | None,
+    ) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw_code in codes or []:
+            value = getattr(raw_code, 'value', raw_code)
+            try:
+                code = KnowledgeSpaceBusinessDomainCodeEnum(str(value)).value
+            except ValueError:
+                raise SpaceBusinessDomainInvalidError()
+            if code not in seen:
+                normalized.append(code)
+                seen.add(code)
+        return normalized
+
+    def _resolve_business_domain_codes_on_create(
+        self,
+        *,
+        level: KnowledgeSpaceLevelEnum,
+        business_domain_codes: list[KnowledgeSpaceBusinessDomainCodeEnum | str] | None,
+    ) -> list[str]:
+        normalized = self._normalize_business_domain_codes(business_domain_codes)
+        if level == KnowledgeSpaceLevelEnum.TEAM and not normalized:
+            raise SpaceBusinessDomainRequiredError()
+        if level != KnowledgeSpaceLevelEnum.TEAM:
+            return []
+        return normalized
 
     async def _admin_department_ids(self) -> set[int]:
         departments = await DepartmentDao.aget_user_admin_departments(self.login_user.user_id)
@@ -1813,6 +1849,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_level: KnowledgeSpaceLevelEnum | str | None = KnowledgeSpaceLevelEnum.PERSONAL,
         department_id: Optional[int] = None,
         user_group_id: Optional[int] = None,
+        business_domain_codes: list[KnowledgeSpaceBusinessDomainCodeEnum | str] | None = None,
         auto_tag_enabled: bool = False,
         auto_tag_library_id: Optional[int] = None,
         auto_tag_custom_tags: Optional[List[str]] = None,
@@ -1837,6 +1874,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             department_id=department_id,
             user_group_id=user_group_id,
             approval_request=approval_request,
+        )
+        self._resolve_business_domain_codes_on_create(
+            level=level,
+            business_domain_codes=business_domain_codes,
         )
         await self._ensure_space_name_unique_in_scope(
             name=name,
@@ -1877,6 +1918,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_level: KnowledgeSpaceLevelEnum | str | None = KnowledgeSpaceLevelEnum.PERSONAL,
         department_id: Optional[int] = None,
         user_group_id: Optional[int] = None,
+        business_domain_codes: list[KnowledgeSpaceBusinessDomainCodeEnum | str] | None = None,
         auto_tag_enabled: bool = False,
         auto_tag_library_id: Optional[int] = None,
         auto_tag_custom_tags: Optional[List[str]] = None,
@@ -1901,6 +1943,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_level=space_level,
             department_id=department_id,
             user_group_id=user_group_id,
+        )
+        resolved_business_domain_codes = self._resolve_business_domain_codes_on_create(
+            level=level,
+            business_domain_codes=business_domain_codes,
         )
         await self._ensure_space_name_unique_in_scope(
             name=name,
@@ -1976,6 +2022,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_type=owner_type,
             owner_id=owner_id,
         )
+        if resolved_business_domain_codes:
+            await KnowledgeSpaceBusinessDomainDao.areplace_for_space(
+                tenant_id=int(self.login_user.tenant_id),
+                space_id=int(knowledge_space.id),
+                domain_codes=resolved_business_domain_codes,
+                created_by=int(self.login_user.user_id),
+            )
         await self._grant_default_scope_permissions(
             level=level,
             owner_id=owner_id,

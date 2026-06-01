@@ -214,7 +214,7 @@ export function PortalUploadDialog({
                             <div className={s.uploadSection}>
                                 <label className={s.uploadField}>
                                     <span>
-                                        文件分类 <span className={s.uploadRequiredMark}>*</span>
+                                        文件分类
                                     </span>
                                     <select
                                         aria-label="文件分类"

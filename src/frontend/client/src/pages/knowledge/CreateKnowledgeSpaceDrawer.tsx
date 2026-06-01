@@ -25,6 +25,7 @@ import {
     getKnowledgeSpaceTagLibraryDetailApi,
     SpaceLevel,
     VisibilityType,
+    type BusinessDomainCode,
     type KnowledgeSpace,
     type KnowledgeSpaceTagLibraryListItem,
 } from "~/api/knowledge";
@@ -37,6 +38,21 @@ const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
 const MAX_AUTO_TAG_CUSTOM_TAGS = 200;
 const AUTO_TAG_PREVIEW_LIMIT = 20;
+const BUSINESS_DOMAIN_OPTIONS: Array<{ code: BusinessDomainCode; label: string }> = [
+    { code: "PP", label: "生产" },
+    { code: "QM", label: "质量" },
+    { code: "PM", label: "设备" },
+    { code: "EM", label: "能源" },
+    { code: "SA", label: "安全" },
+    { code: "EN", label: "环保" },
+    { code: "IM", label: "投资" },
+    { code: "RD", label: "研发" },
+    { code: "MM", label: "采购" },
+    { code: "SD", label: "营销" },
+    { code: "FI", label: "财务" },
+    { code: "HR", label: "人力" },
+    { code: "IT", label: "信息" },
+];
 
 type AutoTagMode = "library" | "custom";
 
@@ -73,6 +89,7 @@ export interface CreateKnowledgeSpaceFormData {
     spaceLevel: SpaceLevel;
     departmentId?: number;
     userGroupId?: number;
+    businessDomainCodes: BusinessDomainCode[];
     autoTagEnabled: boolean;
     autoTagLibraryId: number | null;
     /** Custom tag list when the user picks the "Custom Tags" tab; null when in library mode. */
@@ -119,6 +136,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [departmentId, setDepartmentId] = useState<number | undefined>();
     const [departmentSelection, setDepartmentSelection] = useState<SelectedSubject[]>([]);
+    const [businessDomainCodes, setBusinessDomainCodes] = useState<BusinessDomainCode[]>([]);
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
     const [autoTagMode, setAutoTagMode] = useState<AutoTagMode>("library");
     const [autoTagLibraryId, setAutoTagLibraryId] = useState<number | null>(null);
@@ -193,6 +211,9 @@ export function CreateKnowledgeSpaceDrawer({
     const shouldShowDepartmentSelector = mode === "create"
         && spaceLevel === SpaceLevel.DEPARTMENT
         && selectedLevelCreateEnabled;
+    const shouldShowBusinessDomainSelector = mode === "create"
+        && spaceLevel === SpaceLevel.TEAM
+        && selectedLevelCreateEnabled;
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
 
     const resetForm = () => {
@@ -204,6 +225,7 @@ export function CreateKnowledgeSpaceDrawer({
         setSpaceLevel(SpaceLevel.PERSONAL);
         setDepartmentId(undefined);
         setDepartmentSelection([]);
+        setBusinessDomainCodes([]);
         setAutoTagEnabled(false);
         setAutoTagMode("library");
         setAutoTagLibraryId(null);
@@ -220,6 +242,18 @@ export function CreateKnowledgeSpaceDrawer({
             setDepartmentId(undefined);
             setDepartmentSelection([]);
         }
+        if (value !== SpaceLevel.TEAM) {
+            setBusinessDomainCodes([]);
+        }
+    };
+
+    const handleBusinessDomainChange = (code: BusinessDomainCode, checked: boolean) => {
+        setBusinessDomainCodes((prev) => {
+            if (checked) {
+                return prev.includes(code) ? prev : [...prev, code];
+            }
+            return prev.filter((item) => item !== code);
+        });
     };
 
     // Pre-fill form in edit mode
@@ -380,6 +414,13 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return;
         }
+        if (shouldShowBusinessDomainSelector && businessDomainCodes.length === 0) {
+            showToast({
+                message: "请选择业务域类型",
+                severity: NotificationSeverity.WARNING
+            });
+            return;
+        }
         // When the tenant-level feature is hidden, drop any local state that
         // might have been pre-filled in edit mode so we never submit stale flags.
         const effectiveAutoTagEnabled = autoTagFeatureVisible && autoTagEnabled;
@@ -422,6 +463,7 @@ export function CreateKnowledgeSpaceDrawer({
             spaceLevel,
             departmentId: spaceLevel === SpaceLevel.DEPARTMENT ? departmentId : undefined,
             userGroupId: undefined,
+            businessDomainCodes: spaceLevel === SpaceLevel.TEAM ? businessDomainCodes : [],
             autoTagEnabled: effectiveAutoTagEnabled,
             autoTagLibraryId: effectiveAutoTagLibraryId,
             autoTagCustomTags: effectiveAutoTagCustomTags,
@@ -565,6 +607,38 @@ export function CreateKnowledgeSpaceDrawer({
                                                 loadDepartments={loadCreateDepartments}
                                                 selectionMode="single"
                                             />
+                                        </div>
+                                    </div>
+                                )}
+                                {shouldShowBusinessDomainSelector && (
+                                    <div className="space-y-2">
+                                        <Label className="text-sm text-[#1D2129] font-medium">
+                                            <span className="text-[#F53F3F] mr-1">*</span>
+                                            业务域类型
+                                        </Label>
+                                        <div className="grid grid-cols-3 gap-2 touch-mobile:grid-cols-2">
+                                            {BUSINESS_DOMAIN_OPTIONS.map((option) => {
+                                                const checked = businessDomainCodes.includes(option.code);
+                                                return (
+                                                    <label
+                                                        key={option.code}
+                                                        className={cn(
+                                                            "flex h-8 cursor-pointer items-center gap-2 rounded-[6px] border px-3 text-[14px]",
+                                                            checked
+                                                                ? "border-[#165DFF] bg-[#E8F3FF] text-[#165DFF]"
+                                                                : "border-[#E5E6EB] bg-white text-[#212121]",
+                                                        )}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            className="h-4 w-4"
+                                                            checked={checked}
+                                                            onChange={(event) => handleBusinessDomainChange(option.code, event.target.checked)}
+                                                        />
+                                                        <span>{option.label} {option.code}</span>
+                                                    </label>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 )}

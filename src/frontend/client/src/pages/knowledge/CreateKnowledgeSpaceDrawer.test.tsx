@@ -227,10 +227,15 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
         expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
         expect(screen.queryByTestId("user-group-selector")).not.toBeInTheDocument();
+        expect(screen.getByText("业务域类型")).toBeInTheDocument();
+        expect(screen.getByRole("checkbox", { name: "生产 PP" })).toBeInTheDocument();
+        expect(screen.getByRole("checkbox", { name: "质量 QM" })).toBeInTheDocument();
 
         fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
             target: { value: "团队资料库" },
         });
+        fireEvent.click(screen.getByRole("checkbox", { name: "生产 PP" }));
+        fireEvent.click(screen.getByRole("checkbox", { name: "质量 QM" }));
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
@@ -238,7 +243,48 @@ describe("CreateKnowledgeSpaceDrawer", () => {
             name: "团队资料库",
             spaceLevel: SpaceLevel.TEAM,
             userGroupId: undefined,
+            businessDomainCodes: ["PP", "QM"],
         }));
+    });
+
+    test("团队知识库创建未选择业务域时阻止提交", async () => {
+        const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: true,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.TEAM, onConfirm });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+            target: { value: "团队资料库" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+        await waitFor(() => expect(onConfirm).not.toHaveBeenCalled());
+    });
+
+    test("个人知识库创建不展示业务域类型", async () => {
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: true,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.PERSONAL });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        expect(screen.queryByText("业务域类型")).not.toBeInTheDocument();
     });
 
     test("创建成功页可隐藏成员管理入口", async () => {

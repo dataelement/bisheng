@@ -179,6 +179,7 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
                             joinPolicy: "review",
                             publishToSquare: "yes",
                             spaceLevel: initialSpaceLevel,
+                            businessDomainCodes: initialSpaceLevel === "team" ? ["PP"] : [],
                             autoTagEnabled: false,
                             autoTagLibraryId: null,
                         });
@@ -634,6 +635,7 @@ describe("PortalKnowledgeWorkbench", () => {
             is_released: true,
             space_level: SpaceLevel.TEAM,
             department_id: undefined,
+            business_domain_codes: ["PP"],
             auto_tag_enabled: false,
             auto_tag_library_id: null,
             reason: "申请创建团队知识库",
@@ -1899,7 +1901,7 @@ describe("PortalKnowledgeWorkbench", () => {
         ]);
     });
 
-    test("opens upload dialog from portal upload action and shows selected files with file category", async () => {
+    test("opens upload dialog from portal upload action and shows selected files with optional file category", async () => {
         const personalSpace = makeSpace("personal-1", "设备部", {
             role: SpaceRole.ADMIN,
         });
@@ -1921,6 +1923,7 @@ describe("PortalKnowledgeWorkbench", () => {
         const dialog = await screen.findByTestId("portal-upload-dialog");
         expect(within(dialog).getByText("上传文件")).toBeInTheDocument();
         expect(within(dialog).getByLabelText("文件分类")).toHaveDisplayValue("请选择文件分类");
+        expect(within(dialog).queryByText("*")).not.toBeInTheDocument();
         expect(within(dialog).getByRole("option", { name: "报告" })).toHaveValue("RPT");
         expect(within(dialog).getByLabelText("目标知识库")).toHaveValue("设备部");
         expect(within(dialog).getByText("根目录")).toBeInTheDocument();
@@ -2053,9 +2056,6 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.change(within(dialog).getByLabelText("选择文件"), {
             target: { files: [file] },
         });
-        fireEvent.change(within(dialog).getByLabelText("文件分类"), {
-            target: { value: "RPT" },
-        });
         fireEvent.click(within(dialog).getByRole("button", { name: "下一步" }));
 
         const reviewDialog = await screen.findByTestId("portal-upload-review-dialog");
@@ -2063,7 +2063,6 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(addFilesApi).toHaveBeenCalledWith("personal-1", {
             file_path: ["/tmp/测试文档.pdf"],
             parent_id: null,
-            file_category_code: "RPT",
         });
         expect(getSimilarCandidatesApi).toHaveBeenCalledWith(501);
         expect(within(reviewDialog).getByText("待入库确认")).toBeInTheDocument();

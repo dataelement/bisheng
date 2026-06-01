@@ -128,6 +128,21 @@ export enum SpaceLevel {
     PERSONAL = "personal",
 }
 
+export type BusinessDomainCode =
+    | "PP"
+    | "QM"
+    | "PM"
+    | "EM"
+    | "SA"
+    | "EN"
+    | "IM"
+    | "RD"
+    | "MM"
+    | "SD"
+    | "FI"
+    | "HR"
+    | "IT";
+
 export type SpaceOwnerType =
     | "tenant_root_department"
     | "department"
@@ -1130,6 +1145,7 @@ export async function createSpaceApi(data: {
     auto_tag_enabled?: boolean;
     auto_tag_library_id?: number | null;
     auto_tag_custom_tags?: string[] | null;
+    business_domain_codes?: BusinessDomainCode[];
 }): Promise<KnowledgeSpace> {
     const res: any = await request.post(`/api/v1/knowledge/space`, data);
     const statusCode = res?.status_code ?? res?.code ?? 200;

@@ -355,10 +355,7 @@ export function usePortalUploadDialog({
             showToast({ message: "请先选择文件", severity: NotificationSeverity.INFO });
             return;
         }
-        if (!fileCategoryCode) {
-            showToast({ message: "请选择文件分类", severity: NotificationSeverity.INFO });
-            return;
-        }
+        const fileCategoryPayload = fileCategoryCode ? { file_category_code: fileCategoryCode } : {};
         setUploadSubmitting(true);
         try {
             if (uploadLocalFolderName) {
@@ -396,7 +393,7 @@ export function usePortalUploadDialog({
                 const registeredFiles = await addFilesApi(activeSpace.id, {
                     file_path: filePaths,
                     parent_id: createdFolderId,
-                    file_category_code: fileCategoryCode,
+                    ...fileCategoryPayload,
                 });
                 const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
                 const createdFolderOptionId = String(createdFolder.id);
@@ -429,7 +426,7 @@ export function usePortalUploadDialog({
             const registeredFiles = await addFilesApi(activeSpace.id, {
                 file_path: filePaths,
                 parent_id: parentId !== null && Number.isFinite(parentId) ? parentId : null,
-                file_category_code: fileCategoryCode,
+                ...fileCategoryPayload,
             });
             const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
             const rows: PortalUploadReviewRow[] = visibleRegisteredFiles.map((file) => ({

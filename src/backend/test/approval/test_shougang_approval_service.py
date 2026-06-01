@@ -169,6 +169,7 @@ async def test_knowledge_space_create_submit_requires_approval_without_creating(
             auth_type=AuthTypeEnum.PUBLIC,
             is_released=True,
             space_level=KnowledgeSpaceLevelEnum.TEAM,
+            business_domain_codes=["PP", "QM"],
             reason="申请创建",
         ),
         login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
@@ -183,8 +184,10 @@ async def test_knowledge_space_create_submit_requires_approval_without_creating(
     assert gate_req.payload_snapshot["space_level"] == KnowledgeSpaceLevelEnum.TEAM.value
     assert gate_req.payload_snapshot["auth_type"] == AuthTypeEnum.PUBLIC.value
     assert gate_req.payload_snapshot["is_released"] is True
+    assert gate_req.payload_snapshot["business_domain_codes"] == ["PP", "QM"]
     assert gate_req.payload_snapshot["create_params"]["name"] == "团队资料库"
     assert gate_req.payload_snapshot["create_params"]["user_group_id"] is None
+    assert gate_req.payload_snapshot["create_params"]["business_domain_codes"] == ["PP", "QM"]
     assert result["decision"] == "pending"
     assert result["created"] is False
     message_service.send_generic_approval.assert_awaited_once()
@@ -221,6 +224,7 @@ async def test_knowledge_space_create_team_without_user_group_is_validated_befor
             auth_type=AuthTypeEnum.PUBLIC,
             is_released=True,
             space_level=KnowledgeSpaceLevelEnum.TEAM,
+            business_domain_codes=["PP"],
             reason="申请创建",
         ),
         login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
@@ -230,6 +234,7 @@ async def test_knowledge_space_create_team_without_user_group_is_validated_befor
     validate_kwargs = space_service.validate_knowledge_space_create.await_args.kwargs
     assert validate_kwargs["space_level"] == KnowledgeSpaceLevelEnum.TEAM.value
     assert validate_kwargs["user_group_id"] is None
+    assert validate_kwargs["business_domain_codes"] == ["PP"]
     assert validate_kwargs["approval_request"] is True
     space_service.create_knowledge_space.assert_not_called()
     approval_gate.request_or_pass.assert_awaited_once()
@@ -271,6 +276,7 @@ async def test_knowledge_space_create_creates_exception_when_scenario_disabled(m
             is_released=True,
             space_level=KnowledgeSpaceLevelEnum.TEAM,
             user_group_id=7,
+            business_domain_codes=["PP"],
             reason="申请创建",
         ),
         login_user=SimpleNamespace(user_id=11, user_name="申请人", tenant_id=1, is_admin=lambda: False),
@@ -292,6 +298,7 @@ async def test_knowledge_space_create_creates_exception_when_scenario_disabled(m
     assert saved_instance.business_name == "新建知识库：团队资料库"
     assert saved_instance.applicant_user_id == 11
     assert saved_instance.payload_snapshot["create_params"]["name"] == "团队资料库"
+    assert saved_instance.payload_snapshot["business_domain_codes"] == ["PP"]
     assert saved_instance.detail_snapshot["type"] == "knowledge_space_create"
     assert saved_instance.detail_snapshot["name"] == "团队资料库"
     saved_exception = create_exception.await_args.args[0]

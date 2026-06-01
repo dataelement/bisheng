@@ -3,6 +3,7 @@ import {
     FileStatus,
     FileType,
     addFilesApi,
+    createFolderApi,
     getSimilarCandidatesApi,
     listKnowledgeFolders,
     retryDuplicateFilesApi,
@@ -72,6 +73,7 @@ describe("usePortalUploadDialog", () => {
         jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/uploaded.pdf" } as any);
         jest.mocked(getSimilarCandidatesApi).mockResolvedValue([] as any);
         jest.mocked(listKnowledgeFolders).mockResolvedValue({ items: [], total: 0 } as any);
+        jest.mocked(createFolderApi).mockResolvedValue({ id: 1, name: "研发资料" } as any);
     });
 
     test("separates duplicate files from review rows when upload contains mixed results", async () => {
@@ -120,9 +122,9 @@ describe("usePortalUploadDialog", () => {
         expect(hook.result.current.uploadReviewRows.some((row) => row.file.id === "101")).toBe(false);
     });
 
-    test("requires a file category before registering uploaded files", async () => {
+    test("registers uploaded files without file category when none is selected", async () => {
         jest.mocked(addFilesApi).mockResolvedValue([makeFile()] as any);
-        const { hook, params } = renderUploadDialogHook();
+        const { hook } = renderUploadDialogHook();
 
         act(() => {
             hook.result.current.handleAddUploadFiles([
@@ -134,11 +136,35 @@ describe("usePortalUploadDialog", () => {
             await hook.result.current.handleUploadNext();
         });
 
-        expect(uploadFileToServerApi).not.toHaveBeenCalled();
-        expect(addFilesApi).not.toHaveBeenCalled();
-        expect(params.showToast).toHaveBeenCalledWith({
-            message: "请选择文件分类",
-            severity: "info",
+        expect(uploadFileToServerApi).toHaveBeenCalledTimes(1);
+        expect(addFilesApi).toHaveBeenCalledWith("space-1", {
+            file_path: ["/tmp/uploaded.pdf"],
+            parent_id: null,
+        });
+    });
+
+    test("registers uploaded folder files without file category when none is selected", async () => {
+        jest.mocked(addFilesApi).mockResolvedValue([makeFile()] as any);
+        const { hook } = renderUploadDialogHook();
+        const rootFile = new File(["report"], "报告.pdf", { type: "application/pdf" });
+        Object.defineProperty(rootFile, "webkitRelativePath", { value: "研发资料/报告.pdf" });
+
+        act(() => {
+            hook.result.current.handleAddUploadFolder([rootFile]);
+        });
+
+        await act(async () => {
+            await hook.result.current.handleUploadNext();
+        });
+
+        expect(createFolderApi).toHaveBeenCalledWith("space-1", {
+            name: "研发资料",
+            parent_id: null,
+        });
+        expect(uploadFileToServerApi).toHaveBeenCalledWith("space-1", rootFile, "报告.pdf");
+        expect(addFilesApi).toHaveBeenCalledWith("space-1", {
+            file_path: ["/tmp/uploaded.pdf"],
+            parent_id: 1,
         });
     });
 
