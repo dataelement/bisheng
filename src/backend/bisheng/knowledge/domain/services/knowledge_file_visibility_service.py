@@ -206,9 +206,22 @@ class KnowledgeFileVisibilityService:
 
         Admin short-circuits to the input set.
         Empty input short-circuits before building the permission context.
-        Otherwise the per-file effective-permission resolution runs with a
-        bounded semaphore (``fine_grained_concurrency``) and a shared
-        tuple_cache for OpenFGA reads.
+        Otherwise the per-file effective-permission resolution delegates to
+        ``KnowledgeSpaceService._get_child_item_effective_permission_ids``
+        — the same primitive the listing UI uses — guaranteeing the chat
+        path and the listing path agree on what is visible (INV-6 in
+        features/v2.6.0/release-contract.md).
+
+        The delegated call applies:
+        - per-item lineage walk (file → ancestor folders → space)
+        - ``nearest_binding_wins=True`` semantics so file-level revokes are
+          honoured against space-membership defaults
+        - membership default permissions when no lineage binding matched
+        - public-space viewer defaults
+
+        Without those parameters earlier revisions of this method would
+        return the union of all bindings, letting revoked files leak past
+        the filter — exactly the bug the user reported.
         """
         file_id_set: Set[int] = {int(x) for x in file_ids}
         if not file_id_set:
@@ -217,47 +230,33 @@ class KnowledgeFileVisibilityService:
         if self.login_user.is_admin():
             return file_id_set
 
-        from bisheng.permission.domain.services.fine_grained_permission_service import (
-            FineGrainedPermissionService,
-        )
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+
+        items = await KnowledgeFileDao.aget_file_by_ids(list(file_id_set))
+        if not items:
+            return set()
 
         space_svc = self._space_service()
         context = await space_svc._build_child_permission_context(space_id)
         semaphore = asyncio.Semaphore(self._config().fine_grained_concurrency)
 
-        async def resolve(file_id: int) -> Optional[int]:
+        async def resolve(item) -> Optional[int]:
             async with semaphore:
                 try:
-                    effective = (
-                        await FineGrainedPermissionService.get_effective_permission_ids_async(
-                            self.login_user,
-                            "knowledge_file",
-                            file_id,
-                            models=context.get("models"),
-                            bindings=context.get("bindings"),
-                            binding_department_paths=context.get(
-                                "binding_department_paths"
-                            ),
-                            user_subject_strings=context.get(
-                                "user_subject_strings"
-                            ),
-                            tuple_cache=context.get("tuple_cache"),
-                            tuple_department_paths=context.get(
-                                "tuple_department_paths"
-                            ),
-                        )
+                    effective = await space_svc._get_child_item_effective_permission_ids(
+                        item, space_id=space_id, context=context
                     )
                 except Exception:
                     logger.exception(
                         "post_filter_visible_files: fine-grained resolution failed for "
                         "file_id=%s space_id=%s",
-                        file_id,
+                        item.id,
                         space_id,
                     )
                     return None
-            return file_id if "view_file" in effective else None
+            return int(item.id) if "view_file" in effective else None
 
-        results = await asyncio.gather(*(resolve(fid) for fid in file_id_set))
+        results = await asyncio.gather(*(resolve(item) for item in items))
         return {fid for fid in results if fid is not None}
 
     # ------------------------------------------------------------------

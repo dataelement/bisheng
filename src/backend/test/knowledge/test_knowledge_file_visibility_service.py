@@ -265,26 +265,33 @@ async def test_build_index_prefilter_intersects_candidate_ids(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _patch_effective_permissions(monkeypatch, allowed_file_ids: set[int]):
-    """Patch FineGrainedPermissionService.get_effective_permission_ids_async
-    so it returns {'view_file'} for ids in ``allowed_file_ids``, else set().
+def _patch_effective_permissions(
+    monkeypatch,
+    space_svc_mock,
+    allowed_file_ids: set[int],
+):
+    """Wire the mock KnowledgeSpaceService so its
+    ``_get_child_item_effective_permission_ids`` returns ``{'view_file'}``
+    for ids in ``allowed_file_ids`` and ``set()`` elsewhere; also patch
+    ``KnowledgeFileDao.aget_file_by_ids`` (real class) to yield synthetic
+    KnowledgeFile-like items with ``id`` + ``file_type`` attributes.
     """
-    from bisheng.permission.domain.services import fine_grained_permission_service
+    from bisheng.knowledge.domain.models import knowledge_file as kf_module
 
-    async def fake(
-        cls,
-        login_user,  # noqa: ARG001
-        object_type,  # noqa: ARG001
-        object_id,
-        *args,
-        **kwargs,
-    ):
-        return {"view_file"} if int(object_id) in allowed_file_ids else set()
+    async def fake_aget(cls, file_ids):  # noqa: ARG001
+        return [MagicMock(id=int(fid), file_type=1) for fid in file_ids]
 
     monkeypatch.setattr(
-        fine_grained_permission_service.FineGrainedPermissionService,
-        "get_effective_permission_ids_async",
-        classmethod(fake),
+        kf_module.KnowledgeFileDao,
+        "aget_file_by_ids",
+        classmethod(fake_aget),
+    )
+
+    async def fake_effective(item, *, space_id, context):  # noqa: ARG001
+        return {"view_file"} if int(item.id) in allowed_file_ids else set()
+
+    space_svc_mock._get_child_item_effective_permission_ids = AsyncMock(
+        side_effect=fake_effective
     )
 
 
@@ -300,7 +307,7 @@ async def test_post_filter_visible_files_keeps_only_permitted(monkeypatch):
 
     inputs = set(range(1, 31))
     allowed = {3, 7, 11, 13, 17, 19, 23, 25, 27, 29}  # 10 ids
-    _patch_effective_permissions(monkeypatch, allowed)
+    _patch_effective_permissions(monkeypatch, space_svc_mock, allowed)
 
     result = await svc.post_filter_visible_files(space_id=10, file_ids=inputs)
 
@@ -346,8 +353,42 @@ async def test_post_filter_visible_files_concurrent_load_completes(monkeypatch):
 
     inputs = set(range(1, 51))
     allowed = {i for i in inputs if i % 2 == 0}  # 25 ids
-    _patch_effective_permissions(monkeypatch, allowed)
+    _patch_effective_permissions(monkeypatch, space_svc_mock, allowed)
 
     result = await svc.post_filter_visible_files(space_id=10, file_ids=inputs)
 
     assert result == allowed
+
+
+@pytest.mark.asyncio
+async def test_post_filter_visible_files_regression_revoke_overrides_membership(monkeypatch):
+    """Regression: ensure file-level revoke wins over space-membership default.
+
+    Reproduces the production bug where a user with space-membership view_file
+    saw revoked files leak into AI Q&A retrieval because the old impl
+    omitted ``nearest_binding_wins=True`` + the membership/public defaults
+    when calling ``FineGrainedPermissionService``. Delegating to
+    ``KnowledgeSpaceService._get_child_item_effective_permission_ids``
+    restores the same semantics the listing UI uses (INV-6).
+    """
+    svc = _make_service()
+    space_svc_mock = MagicMock()
+    space_svc_mock._build_child_permission_context = AsyncMock(
+        return_value={"models": {}, "bindings": [], "tuple_cache": {}}
+    )
+    monkeypatch.setattr(svc, "_space_service", lambda: space_svc_mock)
+
+    # 5 files in the space; admin revoked view_file on {1, 2, 3, 4} via per-file
+    # bindings. Only file 5 keeps the membership default. The delegated
+    # _get_child_item_effective_permission_ids returns {'view_file'} only for 5.
+    _patch_effective_permissions(monkeypatch, space_svc_mock, {5})
+
+    result = await svc.post_filter_visible_files(
+        space_id=3565, file_ids={1, 2, 3, 4, 5}
+    )
+
+    assert result == {5}, (
+        "Expected only the non-revoked file to survive; got "
+        f"{sorted(result)} — the canonical lineage + nearest_binding_wins "
+        "semantics are not being applied."
+    )
