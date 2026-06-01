@@ -124,7 +124,7 @@ def test_export_pdf_returns_file_stream(monkeypatch):
     def _fake_render_markdown(turns):
         return '**Admin：**\n\n你好\n'
 
-    def _fake_render_pdf(md):
+    async def _fake_render_pdf(md):
         return b'%PDF-1.4\nfake pdf bytes\n%%EOF'
 
     monkeypatch.setattr(svc_mod.ConversationExportService, '_load_and_validate_messages', classmethod(lambda cls, **kw: _fake_load(**kw)))
@@ -272,7 +272,7 @@ def test_export_render_failed_surfaces_as_12064(monkeypatch):
     async def _fake_load(*, chat_id, message_ids, user_id):
         return [], _stub_session()
 
-    def _boom_pdf(md):
+    async def _boom_pdf(md):
         raise ConversationExportRenderFailedError(msg='soffice 超时')
 
     monkeypatch.setattr(svc_mod.ConversationExportService, '_load_and_validate_messages', classmethod(lambda cls, **kw: _fake_load(**kw)))

@@ -112,37 +112,77 @@ def test_render_docx_pypandoc_failure_maps_to_12064(monkeypatch):
     assert 'pandoc' in str(exc.value).lower() or '12064' or True  # message contains hint
 
 
-# --- _render_pdf (MOCK libreoffice) ----------------------------------------
+# --- _render_pdf (MOCK Chromium / Playwright) ------------------------------
 
 
-def test_render_pdf_via_libreoffice(monkeypatch):
-    """AC-11: docx → pdf 链路, 输出文件头是 `%PDF`。LibreOffice 被 mock。"""
-    def _fake_convert_docx_to_pdf(input_path, output_dir, timeout):
-        # Write a minimal-but-valid PDF magic-prefixed file to simulate soffice.
-        out = Path(output_dir) / (Path(input_path).stem + '.pdf')
-        out.write_bytes(b'%PDF-1.4\n%fake pdf body\n%%EOF\n')
-        return str(out)
+def _install_fake_playwright(monkeypatch, *, pdf_bytes=b'%PDF-1.4 fake pdf\n%%EOF\n',
+                              raise_on='none'):
+    """Install a fake ``playwright.async_api`` module exposing the minimum
+    surface ``_render_pdf`` needs. ``raise_on`` may be 'launch', 'pdf' or
+    'none' to simulate failure points.
+    """
+    import sys
+    import types
 
-    monkeypatch.setattr(svc_mod, 'convert_docx_to_pdf', _fake_convert_docx_to_pdf)
-    bytes_out = ConversationExportService._render_pdf('# title\n\nbody')
+    class _FakePage:
+        async def set_content(self, html, wait_until='domcontentloaded'):
+            self._html = html
+
+        async def pdf(self, **kwargs):
+            if raise_on == 'pdf':
+                raise RuntimeError('chromium pdf failed')
+            return pdf_bytes
+
+    class _FakeBrowser:
+        async def new_page(self):
+            return _FakePage()
+
+        async def close(self):
+            pass
+
+    class _FakeChromium:
+        async def launch(self, **kwargs):
+            if raise_on == 'launch':
+                raise RuntimeError('chromium launch failed')
+            return _FakeBrowser()
+
+    class _FakePlaywrightCtx:
+        chromium = _FakeChromium()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+    def _async_playwright():
+        return _FakePlaywrightCtx()
+
+    fake_mod = types.ModuleType('playwright.async_api')
+    fake_mod.async_playwright = _async_playwright
+    monkeypatch.setitem(sys.modules, 'playwright', types.ModuleType('playwright'))
+    monkeypatch.setitem(sys.modules, 'playwright.async_api', fake_mod)
+
+
+async def test_render_pdf_via_chromium(monkeypatch):
+    """AC-11: markdown → chromium → pdf 链路, 输出文件头是 `%PDF`。"""
+    _install_fake_playwright(monkeypatch)
+    bytes_out = await ConversationExportService._render_pdf('# title\n\nbody')
     assert bytes_out[:4] == b'%PDF'
 
 
-def test_render_pdf_timeout_maps_to_12064(monkeypatch):
-    """AC-30: LibreOffice subprocess.TimeoutExpired → 12064。"""
-    def _timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd='soffice', timeout=30)
-
-    monkeypatch.setattr(svc_mod, 'convert_docx_to_pdf', _timeout)
+async def test_render_pdf_launch_failure_maps_to_12064(monkeypatch):
+    """Chromium launch failure → 12064。"""
+    _install_fake_playwright(monkeypatch, raise_on='launch')
     with pytest.raises(ConversationExportRenderFailedError):
-        ConversationExportService._render_pdf('# title')
+        await ConversationExportService._render_pdf('# title')
 
 
-def test_render_pdf_helper_returns_none_maps_to_12064(monkeypatch):
-    """libreoffice helper 内部捕获了所有 exception 然后返 None — 也要映射到 12064。"""
-    monkeypatch.setattr(svc_mod, 'convert_docx_to_pdf', lambda *a, **kw: None)
+async def test_render_pdf_pdf_call_failure_maps_to_12064(monkeypatch):
+    """page.pdf() failure → 12064。"""
+    _install_fake_playwright(monkeypatch, raise_on='pdf')
     with pytest.raises(ConversationExportRenderFailedError):
-        ConversationExportService._render_pdf('# title')
+        await ConversationExportService._render_pdf('# title')
 
 
 # --- _render_txt -----------------------------------------------------------
