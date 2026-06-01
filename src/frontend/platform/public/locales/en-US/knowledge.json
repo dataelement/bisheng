@@ -450,5 +450,8 @@
   "segemnt": "as a segment",
   "setSeparately": "Set separately for each table",
   "split": "Split",
-  "successMsg": "File uploaded successfully"
+  "successMsg": "File uploaded successfully",
+  "qa": {
+    "noVisibleContent": "No relevant content found in resources accessible to you."
+  }
 }

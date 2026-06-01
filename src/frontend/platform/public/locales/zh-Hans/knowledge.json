@@ -450,5 +450,8 @@
   "noTags": "暂无标签",
   "noTagsSelected": "未选择标签",
   "tagOperationRequiresCompletedFiles": "仅已完成文件支持添加标签",
-  "splitMethodTooltip": "按规则优先级决定优先切分位置（可拖拽调整）；支持自定义正则，并选择在匹配内容前/后切分。"
+  "splitMethodTooltip": "按规则优先级决定优先切分位置（可拖拽调整）；支持自定义正则，并选择在匹配内容前/后切分。",
+  "qa": {
+    "noVisibleContent": "未在你有权访问的内容中找到相关信息"
+  }
 }
