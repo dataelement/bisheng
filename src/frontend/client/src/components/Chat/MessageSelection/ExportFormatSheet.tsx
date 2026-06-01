@@ -7,8 +7,8 @@
  * to track open/close and the message list.
  */
 
-import { useCallback, useState } from 'react';
-import { FileText, FileType2 } from 'lucide-react';
+import { useCallback, useState, type ComponentType } from 'react';
+import { Outlined } from 'bisheng-icons';
 import {
     type ExportFormat,
     exportMessagesApi,
@@ -53,11 +53,17 @@ export function ExportFormatSheet({
     const { getSelectedIds, isOverLimit } = useMessageSelection();
     const [busy, setBusy] = useState<ExportFormat | null>(null);
 
-    const options: Array<{ format: ExportFormat; labelKey: string; icon: typeof FileText }> = [
-        { format: 'docx', labelKey: 'workstation.messageExport.exportAsWord', icon: FileText },
-        { format: 'pdf', labelKey: 'workstation.messageExport.exportAsPdf', icon: FileText },
-        { format: 'md', labelKey: 'workstation.messageExport.exportAsMarkdown', icon: FileType2 },
-        { format: 'txt', labelKey: 'workstation.messageExport.exportAsTxt', icon: FileText },
+    type FormatOption = {
+        format: ExportFormat;
+        labelKey: string;
+        icon: ComponentType<{ size?: number; className?: string }>;
+        iconColor: string;
+    };
+    const options: FormatOption[] = [
+        { format: 'docx', labelKey: 'workstation.messageExport.exportAsWord', icon: Outlined.FileWord, iconColor: 'text-[#2F6CF6]' },
+        { format: 'pdf', labelKey: 'workstation.messageExport.exportAsPdf', icon: Outlined.FilePdf, iconColor: 'text-[#E84B3C]' },
+        { format: 'md', labelKey: 'workstation.messageExport.exportAsMarkdown', icon: Outlined.FileEditing, iconColor: 'text-[#F58A1F]' },
+        { format: 'txt', labelKey: 'workstation.messageExport.exportAsTxt', icon: Outlined.FileTxt, iconColor: 'text-[#5C6680]' },
     ];
 
     const handle = useCallback(
@@ -100,23 +106,25 @@ export function ExportFormatSheet({
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="bottom" className="rounded-t-xl">
-                <SheetHeader>
-                    <SheetTitle>{localize('workstation.messageExport.selectExportFormat')}</SheetTitle>
+            <SheetContent side="bottom" className="rounded-t-2xl px-4 pb-6 pt-3">
+                <SheetHeader className="pb-2">
+                    <SheetTitle className="text-center text-sm font-medium text-muted-foreground">
+                        {localize('workstation.messageExport.selectExportFormat')}
+                    </SheetTitle>
                 </SheetHeader>
-                <div className="flex flex-col">
-                    {options.map(({ format, labelKey, icon: Icon }) => (
+                <div className="flex flex-col gap-1.5">
+                    {options.map(({ format, labelKey, icon: Icon, iconColor }) => (
                         <button
                             key={format}
                             type="button"
                             disabled={busy !== null}
                             onClick={() => handle(format)}
                             className={cn(
-                                'flex items-center gap-3 border-b border-border px-4 py-4 text-left text-base',
-                                'hover:bg-muted disabled:opacity-50',
+                                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm',
+                                'hover:bg-muted active:bg-muted disabled:opacity-50',
                             )}
                         >
-                            <Icon className="h-5 w-5 text-muted-foreground" />
+                            <Icon size={18} className={iconColor} />
                             <span className="flex-1">{localize(labelKey)}</span>
                             {busy === format && (
                                 <span className="text-xs text-muted-foreground">…</span>

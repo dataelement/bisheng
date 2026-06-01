@@ -12,8 +12,9 @@
  * toolbar stays presentational and easy to unit-test.
  */
 
-import { useCallback, useState } from 'react';
-import { Download, FileText, FileType2, Library, X } from 'lucide-react';
+import { useCallback, useState, type ComponentType } from 'react';
+import { Download, X } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import {
     type ExportFormat,
     exportMessagesApi,
@@ -138,11 +139,17 @@ export function MessageSelectionToolbar({
     // ─── Render ────────────────────────────────────────────────────────
 
     const selectAllChecked = state.globalSelectAllOn;
-    const formatButtons: Array<{ format: ExportFormat; labelKey: string; icon: typeof FileText }> = [
-        { format: 'docx', labelKey: 'workstation.messageExport.exportAsWord', icon: FileText },
-        { format: 'pdf', labelKey: 'workstation.messageExport.exportAsPdf', icon: FileText },
-        { format: 'md', labelKey: 'workstation.messageExport.exportAsMarkdown', icon: FileType2 },
-        { format: 'txt', labelKey: 'workstation.messageExport.exportAsTxt', icon: FileText },
+    type FormatButton = {
+        format: ExportFormat;
+        labelKey: string;
+        icon: ComponentType<{ size?: number; className?: string }>;
+        iconColor: string;
+    };
+    const formatButtons: FormatButton[] = [
+        { format: 'docx', labelKey: 'workstation.messageExport.exportAsWord', icon: Outlined.FileWord, iconColor: 'text-[#2F6CF6]' },
+        { format: 'pdf', labelKey: 'workstation.messageExport.exportAsPdf', icon: Outlined.FilePdf, iconColor: 'text-[#E84B3C]' },
+        { format: 'md', labelKey: 'workstation.messageExport.exportAsMarkdown', icon: Outlined.FileEditing, iconColor: 'text-[#F58A1F]' },
+        { format: 'txt', labelKey: 'workstation.messageExport.exportAsTxt', icon: Outlined.FileTxt, iconColor: 'text-[#5C6680]' },
     ];
 
     return (
@@ -150,48 +157,59 @@ export function MessageSelectionToolbar({
             role="toolbar"
             aria-label={localize('workstation.messageExport.entry')}
             className={cn(
-                'fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background shadow-lg',
-                'flex items-center gap-2 px-4 py-3',
-                isMobile && 'gap-3 px-3 py-2',
+                // In-place card that replaces the chat input while selection is active.
+                'w-full rounded-xl border border-border bg-background shadow-lg',
+                'flex flex-wrap items-center gap-1.5 pl-[10px] pr-4 py-2',
+                isMobile && 'gap-1.5 pr-3',
             )}
         >
             {/* select all toggle — bidirectional: unticking clears the
                 global flag AND any explicit picks (per user feedback "全选
-                之后不能取消"). */}
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm">
+                之后不能取消"). Same shadcn Checkbox as the per-message
+                checkbox so they line up visually. */}
+            <label
+                className="flex shrink-0 cursor-pointer items-center gap-2 text-sm"
+                title={localize('workstation.messageExport.selectAll')}
+            >
                 <Checkbox
                     checked={selectAllChecked}
                     onCheckedChange={(v) => setGlobalSelectAll(v === true)}
                 />
-                <span>{localize('workstation.messageExport.selectAll')}</span>
+                <span className="hidden min-[400px]:inline">{localize('workstation.messageExport.selectAll')}</span>
             </label>
 
             {/* spacer pushes action buttons to the right */}
             <div className="flex-1" />
 
-            {/* action buttons */}
+            {/* action buttons — text labels collapse to icons below `lg`. */}
             {isMobile ? (
                 <Button
                     variant="outline"
                     size="sm"
                     onClick={onExportToLocal}
-                    className="gap-1.5"
+                    className="h-7 gap-1 px-2 text-xs"
+                    title={localize('workstation.messageExport.exportToLocal')}
+                    aria-label={localize('workstation.messageExport.exportToLocal')}
                 >
-                    <Download className="h-4 w-4" />
-                    {localize('workstation.messageExport.exportToLocal')}
+                    <Download className="h-3.5 w-3.5" />
+                    <span className="hidden min-[400px]:inline">
+                        {localize('workstation.messageExport.exportToLocal')}
+                    </span>
                 </Button>
             ) : (
-                formatButtons.map(({ format, labelKey, icon: Icon }) => (
+                formatButtons.map(({ format, labelKey, icon: Icon, iconColor }) => (
                     <Button
                         key={format}
                         variant="outline"
                         size="sm"
                         disabled={exporting !== null}
                         onClick={() => handleExport(format)}
-                        className="gap-1.5"
+                        className="h-7 gap-1 px-2 text-xs"
+                        title={localize(labelKey)}
+                        aria-label={localize(labelKey)}
                     >
-                        <Icon className="h-4 w-4" />
-                        {localize(labelKey)}
+                        <Icon size={14} className={iconColor} />
+                        <span className="hidden min-[400px]:inline">{localize(labelKey)}</span>
                     </Button>
                 ))
             )}
@@ -200,19 +218,23 @@ export function MessageSelectionToolbar({
                 variant="default"
                 size="sm"
                 onClick={handleImport}
-                className="gap-1.5"
+                className="h-7 gap-1 px-2 text-xs"
+                title={localize('workstation.messageExport.importToKnowledge')}
+                aria-label={localize('workstation.messageExport.importToKnowledge')}
             >
-                <Library className="h-4 w-4" />
-                {localize('workstation.messageExport.importToKnowledge')}
+                <Outlined.AddToKnowledgeBase size={14} />
+                <span className="hidden min-[400px]:inline">
+                    {localize('workstation.messageExport.importToKnowledge')}
+                </span>
             </Button>
 
             <button
                 type="button"
                 onClick={exitSelectionMode}
                 aria-label={localize('workstation.messageExport.cancel')}
-                className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-                <X className="h-4 w-4" />
+                <X className="h-3.5 w-3.5" />
             </button>
         </div>
     );

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Dict, List, Set
 
 CHANNEL_PERMISSION_TEMPLATE: dict = {
@@ -60,6 +61,19 @@ def channel_template_permissions() -> List[dict]:
 def default_permission_ids_for_relation(relation: str) -> Set[str]:
     normalized = _COMPUTED_TO_MODEL_RELATION.get(relation, relation)
     return set(_DEFAULT_PERMISSION_IDS_BY_RELATION.get(normalized, set()))
+
+
+def relation_from_channel_permission_ids(permission_ids: Iterable[str]) -> str | None:
+    ids = set(permission_ids or [])
+    if {'delete_channel', 'manage_channel_owner', 'manage_channel_manager'} & ids:
+        return 'owner'
+    if 'manage_channel_user' in ids:
+        return 'manager'
+    if 'edit_channel' in ids:
+        return 'editor'
+    if 'view_channel' in ids:
+        return 'viewer'
+    return None
 
 
 def validate_channel_grant_subject(subject_type: str, relation: str) -> bool:

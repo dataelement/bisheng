@@ -349,8 +349,20 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         />
                       </div>
 
-                      {/* Input area — moved inside the left column to be independent of sidebar */}
+                      {/* Input area — moved inside the left column to be independent of sidebar.
+                          When F028 selection mode is active, the input is replaced by the
+                          selection toolbar at 100% width. */}
                       {!shareToken && (
+                        activeConvoId && selectionState.active && selectionState.chatId === activeConvoId ? (
+                          <div className="w-full max-w-[800px] mx-auto touch-mobile:max-w-full py-1.5 shrink-0">
+                            <MessageSelectionToolbar
+                              chatId={activeConvoId}
+                              messages={messages}
+                              onExportToLocal={isH5 ? () => setExportSheetOpen(true) : undefined}
+                              onImportToKnowledge={() => setImportModalOpen(true)}
+                            />
+                          </div>
+                        ) : (
                         <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-3">
                           {isLingsi ? (
                             <LinsightChatInput
@@ -397,6 +409,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             />
                           )}
                         </div>
+                        )
                       )}
                     </div>
 
@@ -482,15 +495,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         {/* Invitation Code */}
         <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
 
-        {/* F028: workstation conversation export / import overlay layer */}
+        {/* F028: portal-style sheets/modals (the floating toolbar lives next to the input) */}
         {activeConvoId && selectionState.active && selectionState.chatId === activeConvoId && (
           <>
-            <MessageSelectionToolbar
-              chatId={activeConvoId}
-              messages={messages}
-              onExportToLocal={isH5 ? () => setExportSheetOpen(true) : undefined}
-              onImportToKnowledge={() => setImportModalOpen(true)}
-            />
             <ExportFormatSheet
               open={exportSheetOpen}
               onOpenChange={setExportSheetOpen}

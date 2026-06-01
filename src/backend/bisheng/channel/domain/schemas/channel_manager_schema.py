@@ -110,6 +110,7 @@ class ChannelItemResponse(BaseModel):
     create_time: Optional[datetime] = Field(None, description='Channel Creation Time')
     user_role: str = Field(..., description='User Role in Channel: creator / admin / member')
     relation: Optional[str] = Field(None, description='Channel relation: owner / manager / editor / viewer')
+    permission_ids: list[str] = Field(default_factory=list, description='Effective channel permission IDs')
     is_pinned: bool = Field(default=False, description='Whether the channel is pinned by the user')
     subscribed_at: Optional[datetime] = Field(None,
                                               description='The time when the user subscribed to the channel, null if not subscribed')
@@ -141,6 +142,7 @@ class ChannelDetailResponse(BaseModel):
     article_count: int = Field(default=0, description='Total number of articles in the main channel')
     subscription_status: SubscriptionStatusEnum = Field(..., description='Current user subscription status')
     relation: Optional[str] = Field(None, description='Current user channel relation: owner / manager / editor / viewer')
+    permission_ids: list[str] = Field(default_factory=list, description='Effective channel permission IDs')
     knowledge_sync: Optional[KnowledgeSyncConfig] = Field(
         None,
         description='Knowledge space sync configuration; only populated for creators',

@@ -18,7 +18,26 @@ export enum ChannelRole {
 export type ChannelRelation = "owner" | "manager" | "editor" | "viewer";
 export type ChannelUserRole = ChannelRole | ChannelRelation;
 
-export function canEditChannelSettings(role?: ChannelUserRole | null): boolean {
+export type ChannelPermissionId =
+    | "view_channel"
+    | "edit_channel"
+    | "delete_channel"
+    | "manage_channel_owner"
+    | "manage_channel_manager"
+    | "manage_channel_user"
+    | string;
+
+function hasPermissionIds(permissionIds?: ChannelPermissionId[] | null): permissionIds is ChannelPermissionId[] {
+    return Array.isArray(permissionIds);
+}
+
+export function canEditChannelSettings(
+    role?: ChannelUserRole | null,
+    permissionIds?: ChannelPermissionId[] | null,
+): boolean {
+    if (hasPermissionIds(permissionIds)) {
+        return permissionIds.includes("edit_channel");
+    }
     return role === "owner"
         || role === "manager"
         || role === "editor"
@@ -26,7 +45,17 @@ export function canEditChannelSettings(role?: ChannelUserRole | null): boolean {
         || role === ChannelRole.ADMIN;
 }
 
-export function canManageChannelPermissions(role?: ChannelUserRole | null): boolean {
+export function canManageChannelPermissions(
+    role?: ChannelUserRole | null,
+    permissionIds?: ChannelPermissionId[] | null,
+): boolean {
+    if (hasPermissionIds(permissionIds)) {
+        return permissionIds.some((permissionId) => (
+            permissionId === "manage_channel_user"
+            || permissionId === "manage_channel_manager"
+            || permissionId === "manage_channel_owner"
+        ));
+    }
     return role === "owner"
         || role === "manager"
         || role === ChannelRole.CREATOR
@@ -51,6 +80,7 @@ export interface Channel {
     articleCount: number;      // 文章数量
     unreadCount: number;       // 未读数量
     role: ChannelUserRole;     // 当前用户的角色
+    permissionIds?: ChannelPermissionId[]; // 当前用户的频道权限项
     isPinned: boolean;         // 是否置顶
     createdAt: string;         // 创建时间
     updatedAt: string;         // 最近更新时间
@@ -136,6 +166,7 @@ export interface ChannelItemResponse {
     latest_article_update_time?: string;
     create_time?: string;
     user_role: ChannelUserRole;
+    permission_ids?: ChannelPermissionId[];
     is_pinned: boolean;
     subscribed_at?: string;
     unread_count?: number;
@@ -154,6 +185,8 @@ export interface ChannelDetailResponse {
     creator_name: string;
     subscriber_count: number;
     subscription_status: string;
+    relation?: ChannelRelation | null;
+    permission_ids?: ChannelPermissionId[];
     article_count: number;
     filter_rules?: ManagerChannelFilterRule[];
     source_infos?: Array<{
@@ -195,6 +228,7 @@ export async function getChannelsApi(params: {
         articleCount: 0,
         unreadCount: item.unread_count || 0,
         role: (item.relation || item.user_role) as ChannelUserRole,
+        permissionIds: Array.isArray(item.permission_ids) ? item.permission_ids : [],
         isPinned: item.is_pinned,
         createdAt: item.create_time,
         updatedAt: item.latest_article_update_time || item.update_time,

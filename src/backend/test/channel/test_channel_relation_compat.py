@@ -240,17 +240,109 @@ async def test_followed_channels_include_private_authorized_user_channel():
     member_repository = SimpleNamespace(find_channel_memberships=AsyncMock(return_value=[membership]))
     service = _service(channel_repository, member_repository)
 
-    channels = await service.get_my_channels(
-        MyChannelQueryRequest(
-            query_type=QueryTypeEnum.FOLLOWED,
-            sort_by=SortByEnum.LATEST_UPDATE,
-        ),
-        _LoginUser(),
-    )
+    with patch(
+        'bisheng.channel.domain.services.channel_service.PermissionService.list_accessible_ids',
+        new=AsyncMock(return_value=['channel-1']),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+        new=AsyncMock(return_value={'view_channel', 'edit_channel'}),
+    ):
+        channels = await service.get_my_channels(
+            MyChannelQueryRequest(
+                query_type=QueryTypeEnum.FOLLOWED,
+                sort_by=SortByEnum.LATEST_UPDATE,
+            ),
+            _LoginUser(),
+        )
 
     assert [item.id for item in channels] == ['channel-1']
     assert channels[0].relation == ChannelRelationEnum.EDITOR.value
     assert channels[0].user_role == UserRoleEnum.MEMBER.value
+
+
+@pytest.mark.asyncio
+async def test_followed_channels_include_rebac_channel_without_membership():
+    channel = SimpleNamespace(
+        id='channel-3',
+        name='授权频道',
+        source_list=[],
+        visibility=ChannelVisibilityEnum.PRIVATE,
+        filter_rules=[],
+        is_released=True,
+        latest_article_update_time=None,
+        create_time=None,
+        user_id=99,
+    )
+    channel_repository = SimpleNamespace(find_channels_by_ids=AsyncMock(return_value=[channel]))
+    member_repository = SimpleNamespace(find_channel_memberships=AsyncMock(return_value=[]))
+    service = _service(channel_repository, member_repository)
+
+    with patch(
+        'bisheng.channel.domain.services.channel_service.PermissionService.list_accessible_ids',
+        new=AsyncMock(return_value=['channel-3']),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+        new=AsyncMock(return_value={'view_channel', 'edit_channel'}),
+    ):
+        channels = await service.get_my_channels(
+            MyChannelQueryRequest(
+                query_type=QueryTypeEnum.FOLLOWED,
+                sort_by=SortByEnum.LATEST_UPDATE,
+            ),
+            _LoginUser(),
+        )
+
+    assert [item.id for item in channels] == ['channel-3']
+    assert channels[0].permission_ids == ['edit_channel', 'view_channel']
+    assert channels[0].relation == ChannelRelationEnum.EDITOR.value
+
+
+@pytest.mark.asyncio
+async def test_authorized_membership_does_not_override_relation_model_permissions():
+    channel = SimpleNamespace(
+        id='channel-4',
+        name='历史授权频道',
+        source_list=[],
+        visibility=ChannelVisibilityEnum.PRIVATE,
+        filter_rules=[],
+        is_released=True,
+        latest_article_update_time=None,
+        create_time=None,
+        user_id=99,
+    )
+    membership = SimpleNamespace(
+        business_id='channel-4',
+        status=MembershipStatusEnum.ACTIVE,
+        user_role=UserRoleEnum.ADMIN,
+        relation=ChannelRelationEnum.MANAGER,
+        grant_subject_type='user',
+        grant_subject_id=7,
+        grant_binding_key='channel:channel-4:user:7:manager:-',
+        is_pinned=False,
+        create_time=None,
+    )
+    channel_repository = SimpleNamespace(find_channels_by_ids=AsyncMock(return_value=[channel]))
+    member_repository = SimpleNamespace(find_channel_memberships=AsyncMock(return_value=[membership]))
+    service = _service(channel_repository, member_repository)
+
+    with patch(
+        'bisheng.channel.domain.services.channel_service.PermissionService.list_accessible_ids',
+        new=AsyncMock(return_value=['channel-4']),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+        new=AsyncMock(return_value={'view_channel'}),
+    ):
+        channels = await service.get_my_channels(
+            MyChannelQueryRequest(
+                query_type=QueryTypeEnum.FOLLOWED,
+                sort_by=SortByEnum.LATEST_UPDATE,
+            ),
+            _LoginUser(),
+        )
+
+    assert [item.id for item in channels] == ['channel-4']
+    assert channels[0].permission_ids == ['view_channel']
+    assert channels[0].relation == ChannelRelationEnum.VIEWER.value
 
 
 @pytest.mark.asyncio
@@ -280,13 +372,20 @@ async def test_followed_channels_include_private_organization_grant_channel():
     member_repository = SimpleNamespace(find_channel_memberships=AsyncMock(return_value=[membership]))
     service = _service(channel_repository, member_repository)
 
-    channels = await service.get_my_channels(
-        MyChannelQueryRequest(
-            query_type=QueryTypeEnum.FOLLOWED,
-            sort_by=SortByEnum.LATEST_UPDATE,
-        ),
-        _LoginUser(),
-    )
+    with patch(
+        'bisheng.channel.domain.services.channel_service.PermissionService.list_accessible_ids',
+        new=AsyncMock(return_value=['channel-2']),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+        new=AsyncMock(return_value={'view_channel'}),
+    ):
+        channels = await service.get_my_channels(
+            MyChannelQueryRequest(
+                query_type=QueryTypeEnum.FOLLOWED,
+                sort_by=SortByEnum.LATEST_UPDATE,
+            ),
+            _LoginUser(),
+        )
 
     assert [item.id for item in channels] == ['channel-2']
     assert channels[0].relation == ChannelRelationEnum.VIEWER.value

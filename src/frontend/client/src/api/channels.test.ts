@@ -101,6 +101,7 @@ describe("channel permission APIs", () => {
           is_released: true,
           user_role: "member",
           relation: "editor",
+          permission_ids: ["view_channel", "edit_channel"],
           is_pinned: false,
           create_time: "2026-05-28T00:00:00Z",
           latest_article_update_time: "2026-05-28T01:00:00Z",
@@ -115,6 +116,7 @@ describe("channel permission APIs", () => {
     });
 
     expect(channels[0].role).toBe("editor");
+    expect(channels[0].permissionIds).toEqual(["view_channel", "edit_channel"]);
     expect(mockGet).toHaveBeenCalledWith(
       "/api/v1/channel/manager/my_channels",
       {
@@ -138,6 +140,11 @@ describe("channel relation helpers", () => {
     expect(canEditChannelSettings(ChannelRole.MEMBER)).toBe(false);
   });
 
+  it("uses permission ids ahead of role for channel settings", () => {
+    expect(canEditChannelSettings("manager", ["view_channel"])).toBe(false);
+    expect(canEditChannelSettings("viewer", ["view_channel", "edit_channel"])).toBe(true);
+  });
+
   it("allows new owner/manager and legacy creator/admin to manage permissions", () => {
     expect(canManageChannelPermissions("owner")).toBe(true);
     expect(canManageChannelPermissions("manager")).toBe(true);
@@ -146,5 +153,10 @@ describe("channel relation helpers", () => {
     expect(canManageChannelPermissions("editor")).toBe(false);
     expect(canManageChannelPermissions("viewer")).toBe(false);
     expect(canManageChannelPermissions(ChannelRole.MEMBER)).toBe(false);
+  });
+
+  it("uses permission ids ahead of role for member management", () => {
+    expect(canManageChannelPermissions("manager", ["view_channel", "edit_channel"])).toBe(false);
+    expect(canManageChannelPermissions("viewer", ["view_channel", "manage_channel_user"])).toBe(true);
   });
 });
