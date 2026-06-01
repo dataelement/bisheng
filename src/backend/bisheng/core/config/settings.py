@@ -237,12 +237,12 @@ class CeleryConf(BaseModel):
 
 
 class KnowledgeQAFilterConf(BaseModel):
-    """Knowledge space AI Q&A retrieval permission filter (F026).
+    """Knowledge space AI Q&A retrieval permission filter (F029).
 
     Controls the two-layer view_file permission filter shared by chat_folder
     (KnowledgeSpaceChatService), queryChunksFromDB (WorkStationService) and
     citation source resolve (CitationResolveService). See
-    features/v2.6.0/026-knowledge-qa-permission-filter/spec.md §4 (AD-02/03/08).
+    features/v2.6.0/029-knowledge-qa-permission-filter/spec.md §4 (AD-02/03/08).
     """
 
     index_filter_threshold: int = Field(

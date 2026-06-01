@@ -894,8 +894,8 @@ class WorkStationService(BaseService):
         return res, total
 
     # ------------------------------------------------------------------
-    # F026 helpers — view_file filter for the workstation chat retrieval.
-    # Spec: features/v2.6.0/026-knowledge-qa-permission-filter/spec.md §7.2b
+    # F029 helpers — view_file filter for the workstation chat retrieval.
+    # Spec: features/v2.6.0/029-knowledge-qa-permission-filter/spec.md §7.2b
     # ------------------------------------------------------------------
 
     @classmethod
@@ -1032,7 +1032,7 @@ class WorkStationService(BaseService):
         """
         failures: list[dict] = []
         try:
-            # F026 Stage 1: drop space-bucket kb_ids the user lacks view_space on.
+            # F029 Stage 1: drop space-bucket kb_ids the user lacks view_space on.
             visibility_filter = await cls._filter_visible_space_kb_ids(
                 login_user=login_user,
                 space_bucket=use_knowledge_param.knowledge_space_ids,
@@ -1110,7 +1110,7 @@ class WorkStationService(BaseService):
                     kb_docs = await per_kb_tool.ainvoke({'query': question})
                     pre_filter_count = len(kb_docs) if kb_docs else 0
 
-                    # F026 Stage 3: post-filter docs by view_file when the KB
+                    # F029 Stage 3: post-filter docs by view_file when the KB
                     # belongs to the space bucket; org-bucket KBs pass through.
                     kb_id_int = (
                         int(kb_id)

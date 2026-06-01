@@ -50,7 +50,7 @@ class KnowledgeSpaceChatService:
         return self._knowledge_space_permission_service
 
     def _visibility_service(self):
-        """F026: lazy KnowledgeFileVisibilityService for the two-layer view_file filter."""
+        """F029: lazy KnowledgeFileVisibilityService for the two-layer view_file filter."""
         from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
             KnowledgeFileVisibilityService,
         )
@@ -62,7 +62,7 @@ class KnowledgeSpaceChatService:
         return self._knowledge_file_visibility_service
 
     def _qa_filter_conf(self):
-        """F026 retrieval-loop config (multipliers, base k)."""
+        """F029 retrieval-loop config (multipliers, base k)."""
         try:
             from bisheng.common.services.config_service import settings
 
@@ -105,7 +105,7 @@ class KnowledgeSpaceChatService:
         """ Single file RAG query """
         # Verify file exists and is a file
         file_record = await self._require_file_view_permission(knowledge_id, file_id)
-        # F026/AC-09: trace that the view_file gate passed; the document_id == file_id
+        # F029/AC-09: trace that the view_file gate passed; the document_id == file_id
         # filter on the retriever guarantees no chunks from other files can leak.
         logger.debug(
             "chat_single_file: view_file check passed | file_id={} space_id={}",
@@ -432,7 +432,7 @@ class KnowledgeSpaceChatService:
         candidate_file_ids: Optional[List[int]],
         max_content: int,
     ) -> List[Document]:
-        """F026: two-layer view_file filter retrieval loop (AD-01 / AD-03).
+        """F029: two-layer view_file filter retrieval loop (AD-01 / AD-03).
 
         Returns docs whose ``document_id`` belongs to a file the current user
         has ``view_file`` on. Caps at two retrieval attempts; emits one
@@ -528,7 +528,7 @@ class KnowledgeSpaceChatService:
         model_id: int,
         tags: Any = None,
     ) -> AsyncIterator[ChatResponse]:
-        """F026: prompt rendering + LLM streaming, given pre-fetched docs.
+        """F029: prompt rendering + LLM streaming, given pre-fetched docs.
 
         Extracted from ``space_rag`` so ``chat_folder`` can drive retrieval via
         ``_retrieve_and_filter`` while reusing the unchanged prompt + stream path.
@@ -667,7 +667,7 @@ class KnowledgeSpaceChatService:
             else:
                 target_file_ids = tag_file_ids
 
-        # F026: two-layer view_file filter retrieval (AD-01 / AD-02 / AD-03).
+        # F029: two-layer view_file filter retrieval (AD-01 / AD-02 / AD-03).
         # `_retrieve_and_filter` consults KnowledgeFileVisibilityService for
         # both the index-layer IN/NOT-IN/none strategy and the result-layer
         # view_file post-filter, returning only chunks from files the user can

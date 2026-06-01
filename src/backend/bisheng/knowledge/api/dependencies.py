@@ -140,7 +140,7 @@ async def get_knowledge_file_visibility_service(
         login_user: UserPayload = Depends(UserPayload.get_login_user),
         version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
 ) -> 'KnowledgeFileVisibilityService':
-    """Get KnowledgeFileVisibilityService instance (F026).
+    """Get KnowledgeFileVisibilityService instance (F029).
 
     Bound to the current request and login user; shared by chat_folder,
     queryChunksFromDB and CitationResolveService for view_file filtering.

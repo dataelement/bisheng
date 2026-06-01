@@ -1,4 +1,4 @@
-# Tasks: F026-knowledge-qa-permission-filter（知识空间 AI 问答 - 检索权限过滤）
+# Tasks: F029-knowledge-qa-permission-filter（知识空间 AI 问答 - 检索权限过滤）
 
 **关联规格**: [spec.md](./spec.md)
 **版本**: v2.6.0
@@ -39,7 +39,7 @@
 - [x] **T001**: 配置常量 + release-contract 登记（commit `c2bf1e4ab`）
   **文件**:
   - `src/backend/bisheng/core/config/settings.py`（新增 `KnowledgeQAFilterConf` 配置块挂在 `Settings` 顶层为可选块）
-  - `features/v2.6.0/release-contract.md`（① 表 1 追加 F026 行，标注"不引入新领域对象、仅读取/调用现有对象"；② 表 2 追加 INV-6 完整三列定义（spec §9 已给出）；③ 表 3 追加 F026 行，依赖列填 "—"；④ 变更历史登记本次新增）
+  - `features/v2.6.0/release-contract.md`（① 表 1 追加 F029 行，标注"不引入新领域对象、仅读取/调用现有对象"；② 表 2 追加 INV-7 完整三列定义（spec §9 已给出）；③ 表 3 追加 F029 行，依赖列填 "—"；④ 变更历史登记本次新增）
   **逻辑**:
   - `KnowledgeQAFilterConf` 字段：`index_filter_threshold: int = 5000`、`retrieval_initial_multiplier: int = 3`、`retrieval_expansion_multiplier: int = 10`、`fine_grained_concurrency: int = 8`
   - 在 `Settings.knowledge_qa_filter_conf: Optional[KnowledgeQAFilterConf] = None` 字段中挂入；YAML 缺省时按默认值

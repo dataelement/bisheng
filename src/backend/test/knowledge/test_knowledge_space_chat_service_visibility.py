@@ -1,4 +1,4 @@
-"""F026 tests for KnowledgeSpaceChatService double-filter retrieval.
+"""F029 tests for KnowledgeSpaceChatService double-filter retrieval.
 
 Focuses on the new ``_retrieve_and_filter`` helper introduced by T005 and
 its interactions with the existing chat entrypoints:

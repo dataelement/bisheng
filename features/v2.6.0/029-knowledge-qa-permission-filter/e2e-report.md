@@ -1,4 +1,4 @@
-# E2E Verification Report — F026-knowledge-qa-permission-filter
+# E2E Verification Report — F029-knowledge-qa-permission-filter
 
 > **状态**：模板（待人工执行 + 填写结果）
 > **执行人**：_TBD_
@@ -14,7 +14,7 @@
 
 | 检查 | 命令 | 结果 |
 |------|------|------|
-| arch-guard 全量 | `bash scripts/arch-guard.sh <file>` 跨 6 个 F026 修改文件 | ✅ RULE-1 / RULE-2 / RULE-4 / RULE-5 / RULE-8 均无 VIOLATION；RULE-7 在 `settings.py` 的 `jwt_secret` 行为 WARNING（既有遗留，与 F026 无关）|
+| arch-guard 全量 | `bash scripts/arch-guard.sh <file>` 跨 6 个 F029 修改文件 | ✅ RULE-1 / RULE-2 / RULE-4 / RULE-5 / RULE-8 均无 VIOLATION；RULE-7 在 `settings.py` 的 `jwt_secret` 行为 WARNING（既有遗留，与 F029 无关）|
 | Python 语法 | `python3 -m py_compile <files>` | ✅ 所有新增 / 修改文件语法干净 |
 | JSON 语法 | `python3 -c "import json; json.load(...)"` 跨 6 个 i18n 文件 | ✅ 全部解析通过 |
 

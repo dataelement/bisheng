@@ -1,4 +1,4 @@
-"""F026 tests for WorkStationService.queryChunksFromDB view_file filtering.
+"""F029 tests for WorkStationService.queryChunksFromDB view_file filtering.
 
 Covers the workstation chat path where the user picks multiple knowledge
 spaces and asks a question. The helpers added by T007 are tested in

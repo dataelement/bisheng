@@ -21,13 +21,13 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 class CitationResolveService:
     """Resolve persisted citation items into a unified response payload.
 
-    F026 (knowledge QA permission filter) moved the access check from the
+    F029 (knowledge QA permission filter) moved the access check from the
     legacy RBAC ``AccessType.KNOWLEDGE`` space-level probe (an arch-guard
     RULE-8 violation) to the ReBAC + Fine-grained ``view_file`` per-file
     visibility primitive. The new flow filters out RAG citations the user
     cannot see before enrichment; anonymous callers (share-link / public
     flows) keep the original "always enrich" behaviour. See
-    features/v2.6.0/026-knowledge-qa-permission-filter/spec.md §7.3.
+    features/v2.6.0/029-knowledge-qa-permission-filter/spec.md §7.3.
     """
 
     def __init__(
@@ -39,7 +39,7 @@ class CitationResolveService:
         self.runtime_cache_service = runtime_cache_service or CitationRuntimeCacheService()
 
     # ------------------------------------------------------------------
-    # F026 — view_file filter
+    # F029 — view_file filter
     # ------------------------------------------------------------------
 
     async def _resolve_rag_space_pairs(
@@ -156,7 +156,7 @@ class CitationResolveService:
     ) -> CitationRegistryItemSchema:
         """Enrich a RAG citation with file share URLs and best-effort bbox details.
 
-        F026: by the time enrichment runs the upstream ``_filter_visible_rag_items``
+        F029: by the time enrichment runs the upstream ``_filter_visible_rag_items``
         has already removed citations the user cannot see; URLs / bbox are
         therefore always populated for surviving items (anonymous callers
         too, preserving the share-link behaviour).

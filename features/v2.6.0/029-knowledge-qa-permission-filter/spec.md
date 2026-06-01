@@ -1,4 +1,4 @@
-# Feature: F026-knowledge-qa-permission-filter（知识空间 AI 问答 - 检索权限过滤）
+# Feature: F029-knowledge-qa-permission-filter（知识空间 AI 问答 - 检索权限过滤）
 
 **关联 PRD**: [../../../docs/PRD/知识空间优化/知识空间AI问答-权限过滤.md](../../../docs/PRD/%E7%9F%A5%E8%AF%86%E7%A9%BA%E9%97%B4%E4%BC%98%E5%8C%96/%E7%9F%A5%E8%AF%86%E7%A9%BA%E9%97%B4AI%E9%97%AE%E7%AD%94-%E6%9D%83%E9%99%90%E8%BF%87%E6%BB%A4.md)
 **优先级**: P0（知识空间 AI 问答存在越权读取风险，必须在 v2.6.0 关闭）
@@ -169,7 +169,7 @@
 
 ```python
 class KnowledgeQAFilterConf(BaseModel):
-    """Knowledge space AI Q&A retrieval permission filter — see F026 spec."""
+    """Knowledge space AI Q&A retrieval permission filter — see F029 spec."""
     index_filter_threshold: int = 5000          # AD-02
     retrieval_initial_multiplier: int = 3       # AD-03 first attempt
     retrieval_expansion_multiplier: int = 10    # AD-03 second attempt
@@ -389,7 +389,7 @@ POST /api/v1/citations/resolve
 | `src/backend/bisheng/core/config/settings.py` | 新增 `KnowledgeQAFilterConf` 配置块（AD-02/03/08 的阈值/并发） |
 | `src/frontend/platform/public/locales/{en-US,zh-Hans,ja}/knowledge.json` | 补 `knowledge.qa.noVisibleContent` i18n key（若现状无对应文案） |
 | `src/frontend/client/src/locales/{en,zh-Hans,ja}/translation.json` | 补对应 i18n key |
-| `features/v2.6.0/release-contract.md` | ① 表 1 追加一行：F026 不引入新领域对象、仅读取 / 调用 F025 之外的现有对象；② 表 2 追加 INV-6（定义见下表）；③ 表 3 追加 F026 行，依赖列为 "—"（无前置 feature）；④ 变更历史登记本次新增 |
+| `features/v2.6.0/release-contract.md` | ① 表 1 追加一行：F029 不引入新领域对象、仅读取 / 调用 F025 之外的现有对象；② 表 2 追加 INV-7（定义见下表）；③ 表 3 追加 F029 行，依赖列为 "—"（无前置 feature）；④ 变更历史登记本次新增 |
 
 ### 不修改（明确排除，重申）
 
@@ -399,11 +399,11 @@ POST /api/v1/citations/resolve
 | `src/backend/bisheng/workflow/nodes/knowledge_retriever/` | 工作流节点检索路径，本期不动（AD-06） |
 | `src/backend/bisheng/open_endpoints/api/endpoints/filelib.py` 与 `citation.py` 的 v2 RPC | 默认 operator 身份运行，与终端用户视角不一致，本期不动（AD-06） |
 
-### INV-6 完整定义（待写入 `release-contract.md` 表 2）
+### INV-7 完整定义（待写入 `release-contract.md` 表 2）
 
 | ID | 不变量描述 | 涉及领域对象 | 来源 spec |
 |----|-----------|------------|---------|
-| INV-6 | 知识空间内容的"AI 问答可检索可见性"必须是"列表 UI 可见性"的子集；即对任意 `(user, space, file)`，若用户在列表 UI 中不可见该 `file`（`view_file ∉ effective_permissions`），则任何 AI 问答入口都不得让该 `file` 的 chunk / 文件名 / 来源出现在模型上下文、回答引用、角标溯源 `/api/v1/citations/resolve` 响应的结构化字段中 | KnowledgeSpace, Folder, KnowledgeFile, MessageCitation | F026 |
+| INV-7 | 知识空间内容的"AI 问答可检索可见性"必须是"列表 UI 可见性"的子集；即对任意 `(user, space, file)`，若用户在列表 UI 中不可见该 `file`（`view_file ∉ effective_permissions`），则任何 AI 问答入口都不得让该 `file` 的 chunk / 文件名 / 来源出现在模型上下文、回答引用、角标溯源 `/api/v1/citations/resolve` 响应的结构化字段中 | KnowledgeSpace, Folder, KnowledgeFile, MessageCitation | F029 |
 
 ### 不修改（明确排除）
 
@@ -448,7 +448,7 @@ POST /api/v1/citations/resolve
 
 ## 相关文档
 
-- 版本契约: [features/v2.6.0/release-contract.md](../release-contract.md)（写 spec 前必须先阅读；本 spec 要求在该文件追加 INV-6）
+- 版本契约: [features/v2.6.0/release-contract.md](../release-contract.md)（写 spec 前必须先阅读；本 spec 要求在该文件追加 INV-7）
 - 权限体系 P0 规则（v2.5 之后的现行体系）:
   - `src/backend/AGENTS.md` §3.4 ReBAC + Fine-grained permission_id 统一入口
   - [docs/PRD/2.5 权限管理体系改造 PRD/](../../../docs/PRD/2.5%20%E6%9D%83%E9%99%90%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E6%94%B9%E9%80%A0%20PRD/)（v2.5 ReBAC + OpenFGA 改造目标 & 模型）

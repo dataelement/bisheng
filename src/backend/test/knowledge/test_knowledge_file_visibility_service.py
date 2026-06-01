@@ -1,4 +1,4 @@
-"""Tests for F026 KnowledgeFileVisibilityService.
+"""Tests for F029 KnowledgeFileVisibilityService.
 
 Covers the three public methods that back the two-layer view_file filter:
 

@@ -1,11 +1,11 @@
-"""F026 KnowledgeFileVisibilityService.
+"""F029 KnowledgeFileVisibilityService.
 
 Implements the two-layer view_file permission filter shared by
 KnowledgeSpaceChatService.chat_folder, WorkStationService.queryChunksFromDB
 and CitationResolveService.
 
 Design rationale: see
-features/v2.6.0/026-knowledge-qa-permission-filter/spec.md §4 (AD-01/02/03/08).
+features/v2.6.0/029-knowledge-qa-permission-filter/spec.md §4 (AD-01/02/03/08).
 """
 
 from __future__ import annotations

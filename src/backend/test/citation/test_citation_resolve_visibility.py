@@ -1,4 +1,4 @@
-"""F026 tests for CitationResolveService view_file filtering.
+"""F029 tests for CitationResolveService view_file filtering.
 
 Covers the new ``_filter_visible_rag_items`` helper and its integration
 with ``resolve_citations`` / ``resolve_citation``.
