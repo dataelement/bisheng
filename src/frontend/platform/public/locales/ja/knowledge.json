@@ -442,5 +442,8 @@
   "appendTitleTooltipImageAlt": "チャンクに章題を追加する場合の説明図",
   "maxChunkSize": "最大分割長",
   "maxChunkSizeTooltip": "単一チャンクの最大文字数を設定できます",
-  "hfFilterTooltip": "解析時にヘッダーとフッターの内容を自動的にフィルタリングします"
+  "hfFilterTooltip": "解析時にヘッダーとフッターの内容を自動的にフィルタリングします",
+  "qa": {
+    "noVisibleContent": "アクセス権限のあるリソースに該当する内容が見つかりませんでした。"
+  }
 }

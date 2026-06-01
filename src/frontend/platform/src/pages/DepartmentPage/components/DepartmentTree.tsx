@@ -227,7 +227,6 @@ export function DepartmentTree({
                 {t("bs:tenant.mountedTag", { defaultValue: "子租户" })}
               </span>
             )}
-            <span className="mr-1 text-xs text-muted-foreground tabular-nums">{node.member_count}</span>
             {/* Quick create child button — hidden for archived departments */}
             {!isArchived && (
               <button

@@ -61,6 +61,41 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     approval_exception_cancelled: "com_notifications_action_approval_exception_cancelled",
     approval_exception_route_missing: "com_notifications_action_approval_exception_route_missing",
     approval_exception_approver_empty: "com_notifications_action_approval_exception_approver_empty",
+    approval_execute_failed: "com_notifications_action_approval_execute_failed",
+    menu_grant_revoked: "com_notifications_action_menu_grant_revoked",
+    revoked_channel_admin: "com_notifications_action_revoked_channel_admin",
+    revoked_knowledge_space_admin: "com_notifications_action_revoked_knowledge_space_admin",
+    removed_channel_member: "com_notifications_action_removed_channel_member",
+    removed_knowledge_space_member: "com_notifications_action_removed_knowledge_space_member",
+    channel_made_private: "com_notifications_action_channel_made_private",
+    knowledge_space_made_private: "com_notifications_action_knowledge_space_made_private",
+    channel_dismissed: "com_notifications_action_channel_dismissed",
+    knowledge_space_deleted: "com_notifications_action_knowledge_space_deleted",
+};
+
+const APPROVAL_CENTER_ACTION_CODES = new Set([
+    "request_menu_access",
+    "approval_task_pending",
+    "approval_task_rejected",
+    "approval_instance_approved",
+    "approval_instance_withdrawn",
+    "approval_exception_cancelled",
+    "approval_exception_route_missing",
+    "approval_exception_approver_empty",
+    "approval_execute_failed",
+    "menu_grant_revoked",
+]);
+
+const APPROVAL_NO_BUTTON_ACTION_CODES = new Set([
+    "approval_exception_route_missing",
+    "approval_exception_approver_empty",
+    "approval_execute_failed",
+]);
+
+const APPROVAL_TASK_SCENARIO_TEXT_KEYS: Record<string, string> = {
+    menu_access_request: "com_notifications_action_request_menu_access",
+    channel_subscribe_request: "com_notifications_action_request_channel",
+    knowledge_space_subscribe_request: "com_notifications_action_request_knowledge_space",
 };
 
 export function NotificationsDialog({
@@ -113,9 +148,23 @@ export function NotificationsDialog({
         actionCode === "approved_knowledge_space" ||
         actionCode === "rejected_knowledge_space";
     const isApprovalMessageType = (messageType?: string, actionCode?: string) =>
-        messageType === "request" || messageType === "approve" || isKnowledgeSpaceApprovalActionCode(actionCode);
+        messageType === "request" ||
+        messageType === "approve" ||
+        isKnowledgeSpaceApprovalActionCode(actionCode) ||
+        APPROVAL_CENTER_ACTION_CODES.has(actionCode || "");
     const isPendingApprovalStatus = (status?: string) =>
         !!status && ["pending", "PENDING", "wait_approve", "WAIT_APPROVE"].includes(status);
+    const getActionCode = (notification: MessageItem): string => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        const part = parts.find((c: any) => c?.type === "system_text");
+        const code = part?.content;
+        if (typeof code === "string" && code.trim()) return code.trim();
+        return notification.action_code || "";
+    };
+    const isPendingApprovalItem = (notification: MessageItem) =>
+        isPendingApprovalStatus(notification.status) ||
+        getActionCode(notification) === "approval_task_pending" ||
+        notification.action_code === "approval_task_pending";
     const isApprovedStatus = (status?: string) =>
         !!status && ["approved", "APPROVED"].includes(status);
     const isRejectedStatus = (status?: string) =>
@@ -133,7 +182,9 @@ export function NotificationsDialog({
         actionCode === "rejected_department_knowledge_space_upload" ||
         actionCode === "sensitive_rejected_department_knowledge_space_upload" ||
         actionCode === "approval_instance_approved" ||
-        actionCode === "approval_task_rejected";
+        actionCode === "approval_task_rejected" ||
+        actionCode === "approval_exception_cancelled" ||
+        actionCode === "menu_grant_revoked";
 
     const scanAndScheduleNotifyAutoRead = () => {
         const root =
@@ -276,10 +327,10 @@ export function NotificationsDialog({
     const requestGroups = useMemo(() => {
         if (activeTab !== "request") return { pending: [], approved: [] };
         const pending = filteredNotifications.filter(
-            n => isApprovalMessageType(n.message_type, n.action_code) && isPendingApprovalStatus(n.status)
+            n => isApprovalMessageType(n.message_type, n.action_code) && isPendingApprovalItem(n)
         );
         const approved = filteredNotifications.filter(
-            n => isApprovalMessageType(n.message_type, n.action_code) && !isPendingApprovalStatus(n.status)
+            n => isApprovalMessageType(n.message_type, n.action_code) && !isPendingApprovalItem(n)
         );
         return { pending, approved };
     }, [activeTab, filteredNotifications]);
@@ -358,7 +409,13 @@ export function NotificationsDialog({
             }
         }
 
-        const tab = isPendingApprovalStatus(notification.status) ? "my_tasks" : "my_requests";
+        const actionCode = getSystemTextCode(notification);
+        const tab =
+            isPendingApprovalStatus(notification.status) ||
+                actionCode === "approval_task_pending" ||
+                actionCode === "request_menu_access"
+                ? "my_tasks"
+                : "my_requests";
         return {
             tab,
             taskId,
@@ -395,17 +452,31 @@ export function NotificationsDialog({
     };
 
     const getSystemTextCode = (notification: MessageItem): string => {
+        return getActionCode(notification);
+    };
+
+    const getScenarioCode = (notification: MessageItem): string => {
         const parts = Array.isArray(notification.content) ? notification.content : [];
-        const part = parts.find((c: any) => c?.type === "system_text");
-        const code = part?.content;
-        if (typeof code === "string" && code.trim()) return code.trim();
-        return notification.action_code || "";
+        for (const part of parts) {
+            const metadata = (part as any)?.metadata ?? {};
+            const data = metadata?.data ?? {};
+            const value = metadata?.scenario_code ?? data?.scenario_code;
+            if (typeof value === "string" && value.trim()) return value.trim();
+        }
+        return "";
     };
 
     const getNotificationText = (notification: MessageItem) => {
         const targetName = getTargetName(notification);
         const actionCode = getSystemTextCode(notification);
-        const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode] || (actionCode ? `com_notifications_action_${actionCode}` : "");
+        const scenarioTextKey =
+            actionCode === "approval_task_pending"
+                ? APPROVAL_TASK_SCENARIO_TEXT_KEYS[getScenarioCode(notification)]
+                : "";
+        const actionTextKey =
+            scenarioTextKey ||
+            NOTIFICATION_ACTION_TEXT_KEYS[actionCode] ||
+            (actionCode ? `com_notifications_action_${actionCode}` : "");
         const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
         const safeLocalize = (key: string, vars?: Record<string, string>) => {
             if (!key) return "";
@@ -421,7 +492,8 @@ export function NotificationsDialog({
             fallbackText;
         const showApproval =
             isApprovalMessageType(notification.message_type, notification.action_code) &&
-            isPendingApprovalStatus(notification.status);
+            isPendingApprovalStatus(notification.status) &&
+            !APPROVAL_NO_BUTTON_ACTION_CODES.has(actionCode);
         return { text, targetName, showApproval };
     };
 
@@ -663,7 +735,11 @@ export function NotificationsDialog({
         const approvalCenterTarget = isApprovalMessageType(notification.message_type, notification.action_code)
             ? resolveApprovalCenterTarget(notification)
             : null;
-        const canOpenApprovalCenter = Boolean(onOpenApprovalCenter && approvalCenterTarget);
+        const canOpenApprovalCenter = Boolean(
+            onOpenApprovalCenter &&
+            approvalCenterTarget &&
+            !APPROVAL_NO_BUTTON_ACTION_CODES.has(getSystemTextCode(notification))
+        );
 
         return (
             <div

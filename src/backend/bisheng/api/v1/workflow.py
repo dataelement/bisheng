@@ -335,16 +335,28 @@ async def read_flows(*,
                      tag_id: int = Query(default=None, description='labelID'),
                      flow_type: int = Query(default=None, description='Type 5 assistant 10 workflow'),
                      page_size: int = Query(default=10, description='Items per page'),
-                     page_num: int = Query(default=1, description='Page'),
                      status: int = None,
                      managed: bool = Query(default=False, description='Whether to query the list of apps with administrative permissions'),
-                     permission_id: str = Query(default='use_app', description='Fine-grained permission id for non-managed app lists')):
-    """Read all flows."""
-    data, total = await WorkFlowService.get_all_flows(
-        login_user, name, status, tag_id, flow_type, page_num, page_size, managed,
+                     permission_id: str = Query(default='use_app', description='Fine-grained permission id for non-managed app lists'),
+                     cursor: Optional[str] = Query(
+                         default=None,
+                         description='F027 cursor-based pagination token from the previous response\'s '
+                                     '`next_cursor`. Omit (or pass empty) to fetch the first page.',
+                     )):
+    """Read all flows (F027 cursor-based pagination).
+
+    Response shape (PageInfiniteCursorData): ``{data, page_size, has_more, next_cursor}``.
+    The legacy ``total`` / ``page_num`` fields have been removed (AC-02).
+    """
+    result = await WorkFlowService.get_all_flows_envelope(
+        login_user,
+        name,
+        status,
+        tag_id,
+        flow_type,
+        cursor=cursor,
+        page_size=page_size,
+        managed=managed,
         permission_id=permission_id,
     )
-    return resp_200(data={
-        'data': data,
-        'total': total
-    })
+    return resp_200(data=result)

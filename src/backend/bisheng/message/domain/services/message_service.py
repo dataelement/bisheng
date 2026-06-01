@@ -19,11 +19,25 @@ from bisheng.message.domain.schemas.message_schema import (
     TabTypeEnum, MessageContentItem,
 )
 from bisheng.message.domain.services.approval_handler import ApprovalHandler
+from bisheng.message.domain.services.notification_content import infer_action_code
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.user.domain.models.user import UserDao
 from bisheng.notification.forwarder import maybe_forward_external
 
 logger = logging.getLogger(__name__)
+
+APPROVAL_CENTER_NOTIFY_ACTION_CODES = [
+    "request_menu_access",
+    "approval_task_pending",
+    "approval_task_rejected",
+    "approval_instance_approved",
+    "approval_instance_withdrawn",
+    "approval_exception_cancelled",
+    "approval_exception_route_missing",
+    "approval_exception_approver_empty",
+    "approval_execute_failed",
+    "menu_grant_revoked",
+]
 
 
 class MessageService:
@@ -98,13 +112,16 @@ class MessageService:
 
         # 2. Determine message type filter based on tab
         message_type = None
+        action_codes = None
         if tab == TabTypeEnum.REQUEST:
             message_type = MessageTypeEnum.APPROVE
+            action_codes = APPROVAL_CENTER_NOTIFY_ACTION_CODES
 
         # 3. Query messages
         messages = await self.message_repository.find_messages_by_receiver(
             user_id=login_user.user_id,
             message_type=message_type,
+            action_codes=action_codes,
             keyword=keyword,
             only_unread=only_unread,
             read_message_ids=read_message_ids if only_unread else None,
@@ -116,6 +133,7 @@ class MessageService:
         total = await self.message_repository.count_messages_by_receiver(
             user_id=login_user.user_id,
             message_type=message_type,
+            action_codes=action_codes,
             keyword=keyword,
             only_unread=only_unread,
             read_message_ids=read_message_ids if only_unread else None,
@@ -221,11 +239,13 @@ class MessageService:
             user_id=login_user.user_id,
             read_message_ids=read_message_ids,
             message_type=MessageTypeEnum.NOTIFY,
+            exclude_action_codes=APPROVAL_CENTER_NOTIFY_ACTION_CODES,
         )
         approve_count = await self.message_repository.count_unread_by_receiver(
             user_id=login_user.user_id,
             read_message_ids=read_message_ids,
             message_type=MessageTypeEnum.APPROVE,
+            action_codes=APPROVAL_CENTER_NOTIFY_ACTION_CODES,
         )
 
         return UnreadCountResponse(total=total, notify=notify_count, approve=approve_count)
@@ -370,11 +390,13 @@ class MessageService:
             sender: int,
             receiver_user_ids: List[int],
             content_item_list: List[MessageContentItem | Dict],
+            action_code: Optional[str] = None,
     ) -> InboxMessage:
         """
         Send a generic notification message to specific receivers.
         """
         content = self.build_generic_notify_content(content_item_list)
+        resolved_action_code = action_code or infer_action_code(content) or None
 
         message = await self.send_message(
             content=content,
@@ -382,6 +404,7 @@ class MessageService:
             message_type=MessageTypeEnum.NOTIFY,
             receiver=receiver_user_ids,
             status=MessageStatusEnum.APPROVED,  # Notify messages don't need approval
+            action_code=resolved_action_code,
         )
         return message
 
@@ -395,6 +418,7 @@ class MessageService:
             business_name: str,
             button_action_code: str,
             approval_message_id: Optional[int] = None,
+            scenario_code: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Build the generic message content structure for a business approval request.
@@ -414,7 +438,13 @@ class MessageService:
                 "content": f"--{business_name}",
                 "metadata": {
                     "business_type": business_type,
-                    "data": {business_type: business_id},
+                    "scenario_code": scenario_code,
+                    "data": {
+                        business_type: business_id,
+                        "business_id": business_id,
+                        "business_name": business_name,
+                        **({"scenario_code": scenario_code} if scenario_code else {}),
+                    },
                 },
             },
             {
@@ -438,6 +468,7 @@ class MessageService:
             business_name: str,
             button_action_code: str,
             receiver_user_ids: List[int],
+            scenario_code: Optional[str] = None,
     ) -> InboxMessage:
         """
         Send a generic approval notification to specific receivers.
@@ -451,6 +482,7 @@ class MessageService:
             business_id=business_id,
             business_name=business_name,
             button_action_code=button_action_code,
+            scenario_code=scenario_code,
         )
 
         # Create the message with action_code stored on model for reliable routing

@@ -26,7 +26,7 @@ async def test_review_channel_subscription_uses_approval_gate_pending():
         update=AsyncMock(),
     )
     approval_gate = SimpleNamespace(
-        request_or_pass=AsyncMock(return_value=SimpleNamespace(decision='pending', instance_id=11))
+        request_or_pass=AsyncMock(return_value=SimpleNamespace(decision='pending', instance_id=11, task_ids=[]))
     )
     message_service = SimpleNamespace(send_generic_approval=AsyncMock())
     service = ChannelService(
@@ -41,6 +41,9 @@ async def test_review_channel_subscription_uses_approval_gate_pending():
     with patch(
         'bisheng.channel.domain.services.channel_service.QuotaService.check_quota',
         new=AsyncMock(return_value=True),
+    ), patch(
+        'bisheng.database.models.department.UserDepartmentDao.aget_user_primary_department',
+        new=AsyncMock(return_value=None),
     ):
         status = await service.subscribe_channel(
             SubscribeChannelRequest(channel_id='channel-1'),
@@ -92,6 +95,9 @@ async def test_review_channel_subscription_direct_pass_activates_membership():
     with patch(
         'bisheng.channel.domain.services.channel_service.QuotaService.check_quota',
         new=AsyncMock(return_value=True),
+    ), patch(
+        'bisheng.database.models.department.UserDepartmentDao.aget_user_primary_department',
+        new=AsyncMock(return_value=None),
     ):
         status = await service.subscribe_channel(
             SubscribeChannelRequest(channel_id='channel-1'),

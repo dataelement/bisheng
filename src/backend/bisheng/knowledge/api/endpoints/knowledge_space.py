@@ -137,6 +137,32 @@ async def delete_space(
 # ──────────────────────────── Space Listings ───────────────────────────────────
 
 
+@router.get("/uploadable")
+async def list_uploadable_spaces(
+    keyword: Optional[str] = Query(default=None, description='substring filter on space name'),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """F028: list knowledge spaces where the user has ``upload_file`` permission.
+
+    Powers the ``AddToKnowledgeModal`` data source for the workstation
+    conversation-export flow. Returns a flat list (no cursor pagination —
+    INV-6 豁免, see spec §3): per-user uploadable spaces typically number
+    in the dozens. Body returns ``{"data": [{"id", "name", "icon", "description"}]}``.
+    """
+    spaces = await svc.list_uploadable_spaces(keyword=keyword)
+    return resp_200({
+        'data': [
+            {
+                'id': s.id,
+                'name': s.name or '',
+                'icon': None,
+                'description': s.description,
+            }
+            for s in spaces
+        ]
+    })
+
+
 @router.get("/mine")
 async def get_my_created_spaces(
     order_by: str = "update_time",
@@ -268,13 +294,22 @@ async def list_space_children(
     order_field: str = "file_type",
     order_sort: str = "asc",
     file_status: List[int] = Query(default=None, description="文件状态列表"),
-    page: int = 1,
     page_size: int = 20,
+    cursor: Optional[str] = Query(
+        default=None,
+        description="F027 cursor-based pagination token from the previous response's "
+                    "`next_cursor`. Omit (or pass empty) to fetch the first page.",
+    ),
     file_type: Optional[int] = Query(
         default=None, description="0=DIR only, 1=FILE only, empty=both"
     ),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
+    """List space children (F027 cursor-based pagination).
+
+    Response shape (PageInfiniteCursorData): ``{data, page_size, has_more, next_cursor}``.
+    The legacy ``total`` / ``page`` fields have been removed (AC-03).
+    """
     result = await svc.list_space_children(
         space_id,
         parent_id,
@@ -282,7 +317,7 @@ async def list_space_children(
         order_field,
         order_sort,
         file_status=file_status,
-        page=page,
+        cursor=cursor,
         page_size=page_size,
         file_type=file_type,
     )

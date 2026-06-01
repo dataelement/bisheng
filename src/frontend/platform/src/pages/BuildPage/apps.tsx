@@ -10,7 +10,7 @@ import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
-import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
+import LoadMore from "@/components/bs-comp/loadMore";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import SelectSearch from "@/components/bs-ui/select/select";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
@@ -23,7 +23,7 @@ import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/control
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppNumType, AppType } from "@/types/app";
 import { FlowType } from "@/types/flow";
-import { useTable } from "@/util/hook";
+import { useInfiniteCursorTable } from "@/util/hook";
 import { generateUUID } from "@/utils";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -114,8 +114,21 @@ export default function apps() {
     // Build page lists apps the user can manage. Backend treats managed=true
     // as "filter by edit_app" (admins still see everything via the admin
     // short-circuit). permission_id is unused server-side when managed=true.
-    const { page, pageSize, data: dataSource, total, loading, setPage, search, reload, refreshData, filterData } = useTable<FlowType>({ pageSize: 14, managed: true }, (param) =>
-        getAppsApi({ ...param })
+    // F027: cursor-based infinite scroll; `total` / `page` / `setPage` are gone.
+    // `managed: true` is seeded via initial param so it flows through every
+    // request automatically; `filterData({tag_id|type|status: ...})` then
+    // mutates paramsRef and triggers a fresh first-page load.
+    const { data: dataSource, loading, hasMore, search, reload, loadMore, filterData, refreshData } = useInfiniteCursorTable<FlowType>(
+        { pageSize: 14, cancelLoadingWhenReload: true, managed: true },
+        (param) => getAppsApi({
+            cursor: param.cursor,
+            pageSize: param.pageSize,
+            keyword: param.keyword,
+            tag_id: param.tag_id,
+            type: param.type,
+            status: param.status,
+            managed: param.managed,
+        }),
     )
 
     // Permission management state
@@ -439,6 +452,11 @@ export default function apps() {
                         }
                     </div>
             }
+            {/* F027: infinite-scroll trigger lives INSIDE the scroll container
+                (the `overflow-y-scroll` div above). Placing it outside the
+                scroll parent makes IntersectionObserver miss in-container
+                scroll events and the cursor pagination stalls after page 2. */}
+            {hasMore && <LoadMore onScrollLoad={loadMore} />}
         </div>
         {/* add template */}
         <CreateTemp flow={flowRef.current} type={tempType} open={tempOpen} setOpen={() => toggleTempModal()} onCreated={() => { }} ></CreateTemp>
@@ -447,7 +465,9 @@ export default function apps() {
             <div className="flex items-center gap-2">
                 <p className="text-sm text-muted-foreground break-keep">{t('build.manageYourApplications')}</p>
             </div>
-            <AutoPagination className="m-0 w-auto justify-end" page={page} pageSize={pageSize} total={total} showTotal={true} onChange={setPage}></AutoPagination>
+            {/* F027: legacy AutoPagination slot — infinite scroll trigger
+                moved INSIDE the scroll container above; this bar now only
+                holds the "manage your applications" caption. */}
         </div>
         {/* create flow&assistant */}
         <CreateApp ref={createAppModalRef} />

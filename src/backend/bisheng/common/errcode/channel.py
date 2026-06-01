@@ -108,3 +108,13 @@ class ChannelSubscribeLimitExceededError(BaseErrorCode):
 class KnowledgeSpaceLLMNotConfiguredError(BaseErrorCode):
     Code: int = 19053
     Msg: str = 'Knowledge space LLM is not configured. Please configure it in workbench settings first'
+
+
+class ChannelAuthorizationSyncError(BaseErrorCode):
+    Code: int = 19054
+    Msg: str = 'Channel authorization sync failed'
+
+
+class ChannelOrganizationGrantUnsubscribeDeniedError(BaseErrorCode):
+    Code: int = 19055
+    Msg: str = '本频道通过部门/用户组授权给你，暂无法取消订阅'

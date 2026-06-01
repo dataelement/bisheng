@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.approval.domain.models.approval_instance import (
-    ApprovalActionLog,
     ApprovalException,
     ApprovalExceptionType,
     ApprovalInstance,
@@ -17,6 +16,7 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTaskStatus,
 )
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
 from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
 
@@ -27,6 +27,28 @@ class _FlowNode:
     node_name: str
     node_order: int
     node_mode: str
+
+
+@pytest.fixture(autouse=True)
+def _mock_external_dependencies(monkeypatch: pytest.MonkeyPatch):
+    async def _list_node_definitions(_tenant_id: int, _flow_version_id: int):
+        return [_FlowNode(node_code='n1', node_name='node 1', node_order=1, node_mode='or')]
+
+    async def _lookup_user_name(_user_id: int | None):
+        return 'operator'
+
+    async def _noop_notify(**_kwargs):
+        return None
+
+    def _noop_dispatch(_outbox_id: int | None):
+        return None
+
+    monkeypatch.setattr(ApprovalScenarioRepository, 'list_node_definitions', _list_node_definitions)
+    monkeypatch.setattr(ApprovalCenterService, '_dispatch_outbox', staticmethod(_noop_dispatch))
+    monkeypatch.setattr(ApprovalCenterService, '_send_approval_notify', staticmethod(_noop_notify))
+    monkeypatch.setattr(ApprovalExceptionService, '_dispatch_outbox', staticmethod(_noop_dispatch))
+    monkeypatch.setattr(ApprovalExceptionService, '_notify_user', staticmethod(_noop_notify))
+    monkeypatch.setattr(ApprovalExceptionService, '_lookup_user_name', staticmethod(_lookup_user_name))
 
 
 class FakeApprovalRepo:
@@ -72,8 +94,9 @@ class FakeApprovalRepo:
     async def create_action_log(self, payload: dict) -> None:
         self.action_logs.append(payload)
 
-    async def create_outbox(self, payload: ApprovalOutbox) -> None:
+    async def create_outbox(self, payload: ApprovalOutbox) -> ApprovalOutbox:
         self.outbox_payloads.append(payload)
+        return payload
 
     async def list_outbox(self, instance_id: int) -> list[ApprovalOutbox]:
         return [outbox for outbox in self.outboxes.values() if outbox.instance_id == instance_id]
@@ -255,6 +278,7 @@ async def test_retry_exception_api_supports_assign_approvers_and_skip_node(monke
     monkeypatch.setattr(ApprovalInstanceRepository, 'update_exception', repo.update_exception)
     monkeypatch.setattr(ApprovalInstanceRepository, 'update_instance', repo.update_instance)
     monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
+    monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', repo.list_tasks)
     monkeypatch.setattr(ApprovalInstanceRepository, 'create_task', repo.create_task)
     monkeypatch.setattr(ApprovalInstanceRepository, 'create_outbox', repo.create_outbox)
     monkeypatch.setattr(ApprovalExceptionService, '_write_audit_log', AsyncMock())

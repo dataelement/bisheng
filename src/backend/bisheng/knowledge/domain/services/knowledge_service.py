@@ -34,12 +34,15 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeChunkError,
     KnowledgeExistError,
     KnowledgeFileFailedError,
+    KnowledgeInvalidCursorError,
     KnowledgeNoEmbeddingError,
     KnowledgeNotQAError,
     KnowledgeTagExistError,
     KnowledgeTagNotExistError,
     KnowledgeTenantMismatchError,
 )
+from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+from bisheng.common.schemas.api import PageInfiniteCursorData
 from bisheng.common.errcode.knowledge_space import SpaceFileSizeLimitError
 from bisheng.core.ai import FakeEmbeddings
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
@@ -231,12 +234,48 @@ class KnowledgeService(KnowledgeUtils):
         knowledge_type: KnowledgeTypeEnum,
         name: str = None,
         sort_by: str = "update_time",
-        page: int = 1,
-        limit: int = 10,
+        cursor: str | None = None,
+        page_size: int = 10,
         permission_id: str = "use_kb",
         preferred_ids: list[int] | None = None,
-    ) -> tuple[list[KnowledgeRead], int]:
+    ) -> PageInfiniteCursorData[KnowledgeRead]:
+        """List knowledge bases with cursor-based pagination (F027).
+
+        - ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset cursor;
+          cursor key = ``[sort_value, id]``.
+        - ``sort_by`` = ``name`` → pseudo-cursor (offset internally, AD-15);
+          cursor key = ``[page_num]``.
+        - ``has_more`` is detected by fetching ``page_size + 1`` rows; the
+          ``total`` field is no longer computed (the ReBAC scan it triggered
+          previously is gone).
+        """
         total_start = perf_counter()
+
+        # ---- 1. Decode cursor (branch on sort_by) ----
+        if sort_by not in {"create_time", "update_time", "name"}:
+            sort_by = "update_time"
+        is_name_sort = (sort_by == "name")
+        context = f"knowledge|sort_by={sort_by}"
+        try:
+            decoded = decode_cursor(
+                cursor,
+                expected_key_len=1 if is_name_sort else 2,
+                expected_context=context,
+            )
+        except CursorDecodeError as exc:
+            # Surface to the API layer as a stable business error code (10991).
+            raise KnowledgeInvalidCursorError(exception=exc)
+
+        if is_name_sort:
+            page_num = decoded[0] if decoded else 1
+            keyset_cursor = None
+        else:
+            page_num = None
+            keyset_cursor = decoded  # None for first page, else [sort_value, id]
+
+        fetch_limit = page_size + 1  # "fetch one extra" probe for has_more
+
+        # ---- 2. ReBAC + permission_map + DAO call ----
         scoped_super_admin = cls._is_scoped_super_admin(login_user)
         permission_map: dict[int, set[str]] = {}
         # 列表候选先由 ReBAC can_read 给出，再按 knowledge_library 关系模型
@@ -265,25 +304,23 @@ class KnowledgeService(KnowledgeUtils):
                 knowledge_type,
                 name,
                 sort_by,
-                page,
-                limit,
+                page=(page_num if is_name_sort else 0),
+                limit=fetch_limit,
                 preferred_ids=preferred_ids,
-            )
-            total = await KnowledgeDao.acount_user_knowledge(
-                login_user.user_id, knowledge_id_extra, knowledge_type, name
+                cursor=keyset_cursor,
             )
             logger.info(
                 "[perf][knowledge.list.filter] user_id={} permission_id={} type={} accessible_ids={} creator_ids={} "
-                "filtered_ids={} page={} limit={} total={} took_ms={:.2f}",
+                "filtered_ids={} sort_by={} page_size={} rows={} took_ms={:.2f}",
                 login_user.user_id,
                 permission_id,
                 knowledge_type.value,
                 len(accessible_ids),
                 len(creator_ids),
                 len(knowledge_id_extra),
-                page,
-                limit,
-                total,
+                sort_by,
+                page_size,
+                len(res),
                 (perf_counter() - filter_start) * 1000,
             )
         else:
@@ -292,11 +329,11 @@ class KnowledgeService(KnowledgeUtils):
                 name,
                 knowledge_type,
                 sort_by,
-                page=page,
-                limit=limit,
+                page=(page_num if is_name_sort else 0),
+                limit=fetch_limit,
                 preferred_ids=preferred_ids,
+                cursor=keyset_cursor,
             )
-            total = await KnowledgeDao.acount_all_knowledge(name, knowledge_type)
             # Admin / scoped-super-admin path bypasses ReBAC filtering, so seed the
             # permission map with full perms for every returned row — otherwise
             # aconvert_knowledge_read would emit empty permission_ids for KBs the
@@ -304,41 +341,63 @@ class KnowledgeService(KnowledgeUtils):
             full_perms = set(_KNOWLEDGE_LIST_PERMISSION_IDS)
             permission_map = {int(one.id): set(full_perms) for one in res}
             logger.info(
-                "[perf][knowledge.list.dao] user_id={} permission_id={} type={} page={} limit={} total={} rows={} "
+                "[perf][knowledge.list.dao] user_id={} permission_id={} type={} sort_by={} page_size={} rows={} "
                 "took_ms={:.2f}",
                 login_user.user_id,
                 permission_id,
                 knowledge_type.value,
-                page,
-                limit,
-                total,
+                sort_by,
+                page_size,
                 len(res),
                 (perf_counter() - dao_start) * 1000,
             )
 
+        # ---- 3. has_more probe + truncate ----
+        has_more = len(res) > page_size
+        if has_more:
+            res = res[:page_size]
+
+        # ---- 4. Enrich + build response ----
         enrich_start = perf_counter()
-        result = await cls.aconvert_knowledge_read(login_user, res, permission_map=permission_map)
+        result_data = await cls.aconvert_knowledge_read(login_user, res, permission_map=permission_map)
         logger.info(
             "[perf][knowledge.list.enrich] user_id={} permission_id={} type={} rows={} took_ms={:.2f}",
             login_user.user_id,
             permission_id,
             knowledge_type.value,
-            len(result),
+            len(result_data),
             (perf_counter() - enrich_start) * 1000,
         )
+
+        # ---- 5. Compute next_cursor (None if has_more is False) ----
+        next_cursor: Optional[str] = None
+        if has_more and result_data:
+            last = result_data[-1]
+            if is_name_sort:
+                next_cursor = encode_cursor((page_num + 1,), context=context)
+            elif sort_by == "create_time":
+                next_cursor = encode_cursor((last.create_time, last.id), context=context)
+            else:  # update_time
+                next_cursor = encode_cursor((last.update_time, last.id), context=context)
+
         logger.info(
-            "[perf][knowledge.list.total] user_id={} permission_id={} type={} page={} limit={} total={} rows={} "
-            "took_ms={:.2f}",
+            "[perf][knowledge.list.total] user_id={} permission_id={} type={} sort_by={} page_size={} rows={} "
+            "has_more={} took_ms={:.2f}",
             login_user.user_id,
             permission_id,
             knowledge_type.value,
-            page,
-            limit,
-            total,
-            len(result),
+            sort_by,
+            page_size,
+            len(result_data),
+            has_more,
             (perf_counter() - total_start) * 1000,
         )
-        return result, total
+        return PageInfiniteCursorData(
+            data=result_data,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     @classmethod
     async def aconvert_knowledge_read(

@@ -35,6 +35,15 @@ async function _post(url: string, data?: any, config?: AxiosRequestConfig) {
   return response.data;
 }
 
+async function _postResponse<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  // Mirror of _getResponse: returns the full Axios response so callers can
+  // read headers (e.g. Content-Disposition for file downloads).
+  return await customAxios.post(url, config ? data : JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json' },
+    ...config,
+  }) as unknown as T;
+}
+
 async function _postMultiPart(url: string, formData: FormData, options?: AxiosRequestConfig) {
   const response = await customAxios.post(url, formData, {
     ...options,
@@ -265,6 +274,7 @@ export default {
   get: _get,
   getResponse: _getResponse,
   post: _post,
+  postResponse: _postResponse,
   postMultiPart: _postMultiPart,
   postTTS: _postTTS,
   put: _put,

@@ -4,6 +4,9 @@ import { useToastContext } from "~/Providers";
 import {
   authorizeResource,
   getGrantableRelationModels,
+  getResourceGrantDepartments,
+  getResourceGrantUserGroups,
+  getResourceGrantUsers,
   getResourcePermissions,
 } from "~/api/permission";
 import type {
@@ -36,6 +39,15 @@ const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
   department: [],
   user_group: [],
 };
+
+export interface PermissionGrantApiAdapter {
+  getPermissions: typeof getResourcePermissions;
+  authorize: typeof authorizeResource;
+  getGrantableRelationModels: typeof getGrantableRelationModels;
+  getGrantUsers?: typeof getResourceGrantUsers;
+  getGrantDepartments?: typeof getResourceGrantDepartments;
+  getGrantUserGroups?: typeof getResourceGrantUserGroups;
+}
 
 // Render selected subjects as chips. Horizontally scrollable with a right-edge fade when overflow occurs.
 function SelectedSubjectChips({ subjects, fullText }: { subjects: SelectedSubject[]; fullText: string }) {
@@ -119,7 +131,17 @@ interface PermissionGrantTabProps {
   includeChildren?: boolean;
   onIncludeChildrenChange?: (value: boolean) => void;
   hideDepartmentIncludeChildrenControl?: boolean;
+  permissionApi?: PermissionGrantApiAdapter;
 }
+
+const DEFAULT_PERMISSION_API: PermissionGrantApiAdapter = {
+  getPermissions: getResourcePermissions,
+  authorize: authorizeResource,
+  getGrantableRelationModels,
+  getGrantUsers: getResourceGrantUsers,
+  getGrantDepartments: getResourceGrantDepartments,
+  getGrantUserGroups: getResourceGrantUserGroups,
+};
 
 export function PermissionGrantTab({
   resourceType,
@@ -133,9 +155,11 @@ export function PermissionGrantTab({
   includeChildren: includeChildrenProp,
   onIncludeChildrenChange,
   hideDepartmentIncludeChildrenControl = false,
+  permissionApi,
 }: PermissionGrantTabProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
+  const activePermissionApi = permissionApi ?? DEFAULT_PERMISSION_API;
   const [subjectType, setSubjectType] = useState<SubjectType>(fixedSubjectType ?? "user");
   const [selected, setSelected] = useState<SelectedSubject[]>([]);
   const [models, setModels] = useState<RelationModelOption[]>([]);
@@ -217,7 +241,7 @@ export function PermissionGrantTab({
 
   useEffect(() => {
     let cancelled = false;
-    getResourcePermissions(resourceType, resourceId)
+    activePermissionApi.getPermissions(resourceType, resourceId)
       .then((permissions) => {
         if (!cancelled) applyGrantedPermissions(permissions);
       })
@@ -227,7 +251,7 @@ export function PermissionGrantTab({
     return () => {
       cancelled = true;
     };
-  }, [applyGrantedPermissions, resourceId, resourceType]);
+  }, [activePermissionApi, applyGrantedPermissions, resourceId, resourceType]);
 
   useEffect(() => {
     if (skipGrantableModelsRequest) {
@@ -236,7 +260,7 @@ export function PermissionGrantTab({
       return;
     }
 
-    getGrantableRelationModels(resourceType, resourceId)
+    activePermissionApi.getGrantableRelationModels(resourceType, resourceId)
       .then((res) => {
         applyRelationModels(res, false);
       })
@@ -244,6 +268,7 @@ export function PermissionGrantTab({
         applyRelationModels(undefined, false);
       });
   }, [
+    activePermissionApi,
     applyRelationModels,
     prefetchedGrantableModels,
     prefetchedGrantableModelsLoaded,
@@ -288,7 +313,7 @@ export function PermissionGrantTab({
 
     setSubmitting(true);
     try {
-      await authorizeResource(resourceType, resourceId, grants, []);
+      await activePermissionApi.authorize(resourceType, resourceId, grants, []);
       showToast({
         message: localize("com_permission.success_grant"),
         status: "success",
@@ -367,6 +392,7 @@ export function PermissionGrantTab({
             resourceType={resourceType}
             resourceId={resourceId}
             disabledIds={grantedSubjectIds.user}
+            grantUsersApi={activePermissionApi.getGrantUsers}
           />
         )}
         {subjectType === "department" && (
@@ -379,6 +405,7 @@ export function PermissionGrantTab({
             onIncludeChildrenChange={handleIncludeChildrenChange}
             onSelectionSummaryChange={setSelectedDepartmentSummary}
             disabledIds={grantedSubjectIds.department}
+            grantDepartmentsApi={activePermissionApi.getGrantDepartments}
           />
         )}
         {subjectType === "user_group" && (
@@ -388,6 +415,7 @@ export function PermissionGrantTab({
             resourceType={resourceType}
             resourceId={resourceId}
             disabledIds={grantedSubjectIds.user_group}
+            grantUserGroupsApi={activePermissionApi.getGrantUserGroups}
           />
         )}
       </div>

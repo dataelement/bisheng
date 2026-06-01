@@ -54,18 +54,25 @@ from bisheng.common.errcode.channel import (
     ChannelCreateLimitExceededError,
     ChannelAdminLimitExceededError,
     ArticleSensitiveViolationError,
+    ChannelOrganizationGrantUnsubscribeDeniedError,
 )
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, SpaceFileNameDuplicateError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
+    ChannelRelationEnum,
     UserRoleEnum,
     SpaceChannelMemberDao,
     MembershipStatusEnum,
     REJECTED_STATUS_DISPLAY_WINDOW,
+    legacy_role_for_channel_relation,
+    resolve_channel_relation,
 )
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
+from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.permission.domain.services.owner_service import OwnerService
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
@@ -89,16 +96,61 @@ MAX_USER_CHANNEL_COUNT = 10
 # Maximum number of administrators per channel
 MAX_ADMIN_COUNT = 5
 CHANNEL_ADMIN_ASSIGNMENT_MESSAGE = "assigned_channel_admin"
+CHANNEL_ADMIN_REVOKED_MESSAGE = "revoked_channel_admin"
+CHANNEL_MEMBER_REMOVED_MESSAGE = "removed_channel_member"
+CHANNEL_MADE_PRIVATE_MESSAGE = "channel_made_private"
+CHANNEL_DISMISSED_MESSAGE = "channel_dismissed"
+
+
+def _self_channel_binding_key(channel_id: str, user_id: int, relation: ChannelRelationEnum) -> str:
+    return f'channel:{channel_id}:self:{user_id}:{relation.value}:-'
+
+
+def _member_relation_value(member) -> Optional[str]:
+    relation = resolve_channel_relation(member) if member else None
+    return relation.value if relation else None
+
+
+def _legacy_role_value_for_member(member) -> str:
+    relation = resolve_channel_relation(member)
+    if relation:
+        return legacy_role_for_channel_relation(relation).value
+    return member.user_role.value
+
+
+def _is_direct_channel_source(member, user_id: int) -> bool:
+    subject_type = getattr(member, 'grant_subject_type', None)
+    subject_id = getattr(member, 'grant_subject_id', None)
+    if subject_type is None:
+        return True
+    return subject_type in {'self', 'user'} and (subject_id is None or int(subject_id) == int(user_id))
+
+
+def _is_organization_channel_source(member) -> bool:
+    return getattr(member, 'grant_subject_type', None) in {'department', 'user_group'}
+
+
+def _is_authorized_channel_source(member) -> bool:
+    return getattr(member, 'grant_subject_type', None) in {'user', 'department', 'user_group'}
+
+
+def _is_channel_subscription_source(member) -> bool:
+    if resolve_channel_relation(member) == ChannelRelationEnum.OWNER:
+        return False
+    return not _is_authorized_channel_source(member)
 
 
 class ChannelService:
-    def __init__(self, channel_repository: 'ChannelRepository',
-                 space_channel_member_repository: 'SpaceChannelMemberRepository',
-                 channel_info_source_repository: 'ChannelInfoSourceRepository',
-                 article_es_service: 'ArticleEsService' = None,
-                 article_read_repository: 'ArticleReadRepository' = None,
-                 message_service: Optional[MessageService] = None,
-                 approval_gate: Optional[ApprovalGate] = None):
+    def __init__(
+        self,
+        channel_repository: "ChannelRepository",
+        space_channel_member_repository: "SpaceChannelMemberRepository",
+        channel_info_source_repository: "ChannelInfoSourceRepository",
+        article_es_service: "ArticleEsService" = None,
+        article_read_repository: "ArticleReadRepository" = None,
+        message_service: Optional[MessageService] = None,
+        approval_gate: Optional[ApprovalGate] = None,
+    ):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.channel_info_source_repository = channel_info_source_repository
@@ -109,8 +161,8 @@ class ChannelService:
 
     @staticmethod
     def _resolve_subscription_status(
-            membership_status: Optional[MembershipStatusEnum],
-            update_time: Optional[datetime] = None,
+        membership_status: Optional[MembershipStatusEnum],
+        update_time: Optional[datetime] = None,
     ) -> SubscriptionStatusEnum:
         if membership_status is None:
             return SubscriptionStatusEnum.NOT_SUBSCRIBED
@@ -119,9 +171,9 @@ class ChannelService:
         if membership_status == MembershipStatusEnum.PENDING:
             return SubscriptionStatusEnum.PENDING
         if (
-                membership_status == MembershipStatusEnum.REJECTED
-                and update_time is not None
-                and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
+            membership_status == MembershipStatusEnum.REJECTED
+            and update_time is not None
+            and update_time >= datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
         ):
             return SubscriptionStatusEnum.REJECTED
         return SubscriptionStatusEnum.NOT_SUBSCRIBED
@@ -149,10 +201,12 @@ class ChannelService:
 
     @staticmethod
     def _article_review_text(article: ArticleSearchResultItem | ArticleFullDocument) -> str:
-        return '\n'.join([
-            getattr(article, 'title', '') or '',
-            getattr(article, 'review_content', '') or getattr(article, 'content', '') or '',
-        ])
+        return "\n".join(
+            [
+                getattr(article, "title", "") or "",
+                getattr(article, "review_content", "") or getattr(article, "content", "") or "",
+            ]
+        )
 
     @classmethod
     def _to_sensitive_review(
@@ -167,10 +221,7 @@ class ChannelService:
         return ArticleSensitiveReview(
             enabled=enabled,
             violated=violated,
-            hits=[
-                ArticleSensitiveHit(word=hit.word, count=hit.count)
-                for hit in hits
-            ],
+            hits=[ArticleSensitiveHit(word=hit.word, count=hit.count) for hit in hits],
             can_view=(not violated) or can_view_sensitive,
             auto_reply=auto_reply,
         )
@@ -234,9 +285,7 @@ class ChannelService:
         """Create a new channel based on the provided data and the logged-in user."""
         # Check if the user has reached the maximum limit for creating channels
         existing_channels = await self.space_channel_member_repository.find_channel_memberships(
-            user_id=login_user.user_id,
-            roles=[UserRoleEnum.CREATOR],
-            statuses=[MembershipStatusEnum.ACTIVE]
+            user_id=login_user.user_id, roles=[UserRoleEnum.CREATOR], statuses=[MembershipStatusEnum.ACTIVE]
         )
         if len(existing_channels) >= MAX_USER_CHANNEL_COUNT:
             raise ChannelCreateLimitExceededError()
@@ -248,7 +297,7 @@ class ChannelService:
             visibility=channel_data.visibility,
             filter_rules=[] if not channel_data.filter_rules else [f.model_dump() for f in channel_data.filter_rules],
             user_id=login_user.user_id,
-            is_released=channel_data.is_released
+            is_released=channel_data.is_released,
         )
 
         channel_model = await self.channel_repository.save(channel_model)
@@ -258,16 +307,28 @@ class ChannelService:
             business_id=channel_model.id,
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=login_user.user_id,
-            role=UserRoleEnum.CREATOR
+            role=UserRoleEnum.CREATOR,
+            relation=ChannelRelationEnum.OWNER,
+            grant_subject_type='self',
+            grant_subject_id=login_user.user_id,
+            grant_relation=ChannelRelationEnum.OWNER,
+            grant_model_id=ChannelRelationEnum.OWNER.value,
+            grant_binding_key=_self_channel_binding_key(
+                str(channel_model.id),
+                login_user.user_id,
+                ChannelRelationEnum.OWNER,
+            ),
         )
 
         # F008: Write owner tuple to OpenFGA (INV-2)
         try:
             await OwnerService.write_owner_tuple(
-                login_user.user_id, 'channel', str(channel_model.id),
+                login_user.user_id,
+                "channel",
+                str(channel_model.id),
             )
         except Exception as e:
-            logger.warning('Failed to write owner tuple for channel %s: %s', channel_model.id, e)
+            logger.warning("Failed to write owner tuple for channel %s: %s", channel_model.id, e)
 
         bisheng_information_client = await get_bisheng_information_client()
         # Subscribe to the information sources associated with the channel
@@ -282,7 +343,8 @@ class ChannelService:
 
             if missing_source_ids:
                 missing_information_sources = await bisheng_information_client.get_information_source_by_ids(
-                    missing_source_ids)
+                    missing_source_ids
+                )
 
                 new_channel_info_sources = []
                 for info_source in missing_information_sources:
@@ -291,7 +353,7 @@ class ChannelService:
                         source_name=info_source.name,
                         source_icon=info_source.icon,
                         source_type=info_source.business_type,
-                        description=info_source.description
+                        description=info_source.description,
                     )
                     new_channel_info_sources.append(new_source)
 
@@ -312,6 +374,7 @@ class ChannelService:
 
         # Audit log
         from bisheng.api.services.audit_log import AuditLogService
+
         if request:
             await AuditLogService.create_channel(
                 login_user, get_request_ip(request), str(channel_model.id), channel_model.name
@@ -319,8 +382,9 @@ class ChannelService:
 
         return channel_model
 
-    async def get_my_channels(self, query_data: MyChannelQueryRequest,
-                              login_user: UserPayload) -> List[ChannelItemResponse]:
+    async def get_my_channels(
+        self, query_data: MyChannelQueryRequest, login_user: UserPayload
+    ) -> List[ChannelItemResponse]:
         """
         Get the list of channels associated with the logged-in user based on the query type (created or followed) and sorting preference.
         """
@@ -333,9 +397,7 @@ class ChannelService:
 
         # Get the user's channel memberships based on the query type and active status
         memberships = await self.space_channel_member_repository.find_channel_memberships(
-            user_id=login_user.user_id,
-            roles=roles,
-            statuses=[MembershipStatusEnum.ACTIVE]
+            user_id=login_user.user_id, roles=roles, statuses=[MembershipStatusEnum.ACTIVE]
         )
 
         if not memberships:
@@ -354,7 +416,7 @@ class ChannelService:
         # Build a map of business_id to membership for quick lookup
         membership_map = {m.business_id: m for m in memberships}
 
-        # Construct the result list, filtering out private channels for "followed" query type
+        # Construct the result list, filtering out non-authorized private channels for "followed" query type
         result: List[ChannelItemResponse] = []
         channels_to_process = []
         for channel_id, membership in membership_map.items():
@@ -362,9 +424,11 @@ class ChannelService:
             if not channel:
                 continue
 
-            # if query type is "followed", filter out private channels
             if query_data.query_type == QueryTypeEnum.FOLLOWED:
-                if channel.visibility == ChannelVisibilityEnum.PRIVATE:
+                if (
+                    channel.visibility == ChannelVisibilityEnum.PRIVATE
+                    and not _is_authorized_channel_source(membership)
+                ):
                     continue
 
             channels_to_process.append((channel, membership))
@@ -385,7 +449,8 @@ class ChannelService:
                 is_released=channel.is_released,
                 latest_article_update_time=channel.latest_article_update_time,
                 create_time=channel.create_time,
-                user_role=membership.user_role.value,
+                user_role=_legacy_role_value_for_member(membership),
+                relation=_member_relation_value(membership),
                 is_pinned=membership.is_pinned,
                 subscribed_at=membership.create_time,
                 unread_count=unread_count,
@@ -421,12 +486,12 @@ class ChannelService:
 
         tasks = []
         for i in range(0, len(all_read_ids), chunk_size):
-            chunked_ids = all_read_ids[i:i + chunk_size]
+            chunked_ids = all_read_ids[i : i + chunk_size]
             tasks.append(
                 self.article_es_service.count_articles(
                     source_ids=channel.source_list,
                     filter_rules=main_rule_groups if main_rule_groups else None,
-                    include_article_ids=chunked_ids
+                    include_article_ids=chunked_ids,
                 )
             )
 
@@ -443,6 +508,7 @@ class ChannelService:
         Sort channels with pinned channels always on top, then sort by the selected criteria:
         """
         if sort_by == SortByEnum.LATEST_UPDATE:
+
             def sort_key(item: ChannelItemResponse):
                 # Pinned channels get pin_order=0, others get pin_order=1, so pinned channels come first.
                 pin_order = 0 if item.is_pinned else 1
@@ -450,12 +516,14 @@ class ChannelService:
                 return pin_order, -timestamp
 
         elif sort_by == SortByEnum.LATEST_ADDED:
+
             def sort_key(item: ChannelItemResponse):
                 pin_order = 0 if item.is_pinned else 1
                 timestamp = item.subscribed_at.timestamp() if item.subscribed_at else 0.0
                 return pin_order, -timestamp
 
         else:  # CHANNEL_NAME
+
             def sort_key(item: ChannelItemResponse):
                 pin_order = 0 if item.is_pinned else 1
                 return (pin_order, item.name or "")
@@ -470,23 +538,21 @@ class ChannelService:
         """
 
         membership = await self.space_channel_member_repository.find_membership(
-            business_id=pin_data.channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=pin_data.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
 
         if not membership or membership.status != MembershipStatusEnum.ACTIVE:
             raise ChannelNotFoundError()
 
         await self.space_channel_member_repository.update_pin_status(
-            member_id=membership.id,
-            is_pinned=pin_data.is_pinned
+            member_id=membership.id, is_pinned=pin_data.is_pinned
         )
 
         return True
 
-    async def list_channel_members(self, channel_id: str, page: int, page_size: int,
-                                   keyword: Optional[str], login_user: UserPayload) -> ChannelMemberPageResponse:
+    async def list_channel_members(
+        self, channel_id: str, page: int, page_size: int, keyword: Optional[str], login_user: UserPayload
+    ) -> ChannelMemberPageResponse:
         from bisheng.user.domain.services.user import UserService
 
         """
@@ -498,9 +564,7 @@ class ChannelService:
         """
         # 1. Verify if the current user is a member of the channel
         current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not a member of this channel and cannot view the member list")
@@ -515,16 +579,12 @@ class ChannelService:
 
         # 3. Paginate member records
         members = await self.space_channel_member_repository.find_channel_members_paginated(
-            channel_id=channel_id,
-            user_ids=search_user_ids,
-            page=page,
-            page_size=page_size
+            channel_id=channel_id, user_ids=search_user_ids, page=page, page_size=page_size
         )
 
         # 4. Query total count
         total = await self.space_channel_member_repository.count_channel_members(
-            channel_id=channel_id,
-            user_ids=search_user_ids
+            channel_id=channel_id, user_ids=search_user_ids
         )
 
         if not members:
@@ -544,13 +604,16 @@ class ChannelService:
             # Query user groups the user belongs to
             user_groups = await login_user.get_user_groups(member.user_id)
 
-            result_list.append(ChannelMemberResponse(
-                user_id=member.user_id,
-                user_name=user_name,
-                user_avatar=await UserService.get_avatar_share_link(user.avatar) if user else None,
-                user_role=member.user_role.value,
-                user_groups=user_groups,
-            ))
+            result_list.append(
+                ChannelMemberResponse(
+                    user_id=member.user_id,
+                    user_name=user_name,
+                    user_avatar=await UserService.get_avatar_share_link(user.avatar) if user else None,
+                    user_role=_legacy_role_value_for_member(member),
+                    relation=_member_relation_value(member),
+                    user_groups=user_groups,
+                )
+            )
 
         return ChannelMemberPageResponse(data=result_list, total=total)
 
@@ -564,9 +627,7 @@ class ChannelService:
         """
         # 1. Verify current user permissions
         current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=req.channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=req.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ChannelNotFoundError()
@@ -576,9 +637,7 @@ class ChannelService:
 
         # 2. Query target member
         target_membership = await self.space_channel_member_repository.find_membership(
-            business_id=req.channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=req.user_id
+            business_id=req.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=req.user_id
         )
         if not target_membership or target_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("The target user is not a member of this channel")
@@ -599,35 +658,52 @@ class ChannelService:
         # 5. Check maximum limit when setting as an admin
         if req.role == UserRoleEnum.ADMIN.value:
             current_admins = await self.space_channel_member_repository.find_members_by_role(
-                channel_id=req.channel_id,
-                role=UserRoleEnum.ADMIN
+                channel_id=req.channel_id, role=UserRoleEnum.ADMIN
             )
             if len(current_admins) >= MAX_ADMIN_COUNT:
                 raise ChannelAdminLimitExceededError()
 
         should_notify_admin_assignment = (
-                target_membership.user_role == UserRoleEnum.MEMBER
-                and req.role == UserRoleEnum.ADMIN.value
+            target_membership.user_role == UserRoleEnum.MEMBER and req.role == UserRoleEnum.ADMIN.value
         )
+        should_notify_admin_revoked = (
+            target_membership.user_role == UserRoleEnum.ADMIN and req.role == UserRoleEnum.MEMBER.value
+        )
+        had_manage_access = False
+        if should_notify_admin_assignment:
+            had_manage_access = await self._user_can_manage_channel(
+                target_membership.user_id,
+                req.channel_id,
+            )
 
         # 6. Update role
         target_membership.user_role = UserRoleEnum(req.role)
         await self.space_channel_member_repository.update(target_membership)
 
-        if should_notify_admin_assignment and self.message_service:
+        if should_notify_admin_assignment and self.message_service and not had_manage_access:
             await self._send_admin_assignment_notification(
                 operator_user_id=login_user.user_id,
                 target_user_id=target_membership.user_id,
                 channel_id=req.channel_id,
             )
+        if should_notify_admin_revoked and self.message_service:
+            if not await self._user_can_manage_channel(target_membership.user_id, req.channel_id):
+                await self._send_channel_event_notification(
+                    action_code=CHANNEL_ADMIN_REVOKED_MESSAGE,
+                    operator_user_id=login_user.user_id,
+                    operator_user_name=getattr(login_user, "user_name", None),
+                    receiver_user_ids=[target_membership.user_id],
+                    channel_id=req.channel_id,
+                    navigable=True,
+                )
 
         return True
 
     async def _send_admin_assignment_notification(
-            self,
-            operator_user_id: int,
-            target_user_id: int,
-            channel_id: str,
+        self,
+        operator_user_id: int,
+        target_user_id: int,
+        channel_id: str,
     ) -> None:
         """Notify a channel member after being promoted from member to admin."""
         channel = await self.channel_repository.find_by_id(channel_id)
@@ -666,6 +742,66 @@ class ChannelService:
             sender=operator_user_id,
             receiver_user_ids=[target_user_id],
             content_item_list=content,
+            action_code=CHANNEL_ADMIN_ASSIGNMENT_MESSAGE,
+        )
+
+    async def _send_channel_event_notification(
+        self,
+        *,
+        action_code: str,
+        operator_user_id: int,
+        receiver_user_ids: List[int],
+        channel_id: str,
+        operator_user_name: str | None = None,
+        channel_name: str | None = None,
+        navigable: bool = False,
+    ) -> None:
+        if not self.message_service or not receiver_user_ids:
+            return
+
+        try:
+            channel = None
+            if channel_name is None:
+                channel = await self.channel_repository.find_by_id(channel_id)
+                channel_name = channel.name if channel else str(channel_id)
+
+            await self.message_service.send_generic_notify(
+                sender=operator_user_id,
+                receiver_user_ids=receiver_user_ids,
+                content_item_list=build_notify_content(
+                    action_code=action_code,
+                    target_name=channel_name,
+                    business_type="channel_id",
+                    business_id=channel_id,
+                    actor_user_id=operator_user_id,
+                    actor_user_name=operator_user_name,
+                    navigable=navigable,
+                ),
+                action_code=action_code,
+            )
+        except Exception:
+            logger.exception(
+                "failed to send channel event notification: action_code=%s channel_id=%s",
+                action_code,
+                channel_id,
+            )
+
+    @staticmethod
+    async def _user_can_manage_channel(user_id: int, channel_id: str) -> bool:
+        return await PermissionService.check(
+            user_id=user_id,
+            relation="can_manage",
+            object_type="channel",
+            object_id=channel_id,
+        )
+
+    @staticmethod
+    async def _user_can_read_channel(user_id: int, channel_id: str) -> bool:
+        return await PermissionService.check(
+            user_id=user_id,
+            relation="can_read",
+            object_type="channel",
+            object_id=channel_id,
         )
 
     async def remove_member(self, req: RemoveMemberRequest, login_user: UserPayload) -> bool:
@@ -678,9 +814,7 @@ class ChannelService:
         """
         # 1. Verify current user permissions
         current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=req.channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=req.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not a member of this channel")
@@ -694,9 +828,7 @@ class ChannelService:
 
         # 3. Query target member
         target_membership = await self.space_channel_member_repository.find_membership(
-            business_id=req.channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=req.user_id
+            business_id=req.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=req.user_id
         )
         if not target_membership or target_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("The target user is not a member of this channel")
@@ -712,11 +844,21 @@ class ChannelService:
 
         # 6. Hard delete: remove from database
         await self.space_channel_member_repository.delete(target_membership.id)
+        if self.message_service and not await self._user_can_read_channel(req.user_id, req.channel_id):
+            await self._send_channel_event_notification(
+                action_code=CHANNEL_MEMBER_REMOVED_MESSAGE,
+                operator_user_id=login_user.user_id,
+                operator_user_name=getattr(login_user, "user_name", None),
+                receiver_user_ids=[req.user_id],
+                channel_id=req.channel_id,
+                navigable=False,
+            )
 
         return True
 
-    async def get_channel_square(self, keyword: Optional[str], page: int, page_size: int,
-                                 login_user: UserPayload) -> ChannelSquarePageResponse:
+    async def get_channel_square(
+        self, keyword: Optional[str], page: int, page_size: int, login_user: UserPayload
+    ) -> ChannelSquarePageResponse:
         """
         Get the channel square: paginated list of all released channels with subscription status
         and subscriber count for the current user.
@@ -727,10 +869,7 @@ class ChannelService:
         """
         # 1. Multi-table join query for channels with subscription info
         rows = await self.channel_repository.find_square_channels(
-            user_id=login_user.user_id,
-            keyword=keyword,
-            page=page,
-            page_size=page_size
+            user_id=login_user.user_id, keyword=keyword, page=page, page_size=page_size
         )
 
         # 2. Count total matching channels
@@ -742,11 +881,13 @@ class ChannelService:
         for row in rows:
             channel = row[0]
             main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
-            batch_requests.append({
-                "source_ids": channel.source_list or [],
-                "filter_rules": main_rule_groups if main_rule_groups else None,
-                "include_article_ids": None
-            })
+            batch_requests.append(
+                {
+                    "source_ids": channel.source_list or [],
+                    "filter_rules": main_rule_groups if main_rule_groups else None,
+                    "include_article_ids": None,
+                }
+            )
 
         article_counts = await self.article_es_service.count_articles_batch(batch_requests)
 
@@ -784,27 +925,31 @@ class ChannelService:
             for sid in top_source_ids:
                 if sid in source_map:
                     s = source_map[sid]
-                    source_infos.append({
-                        "id": s.id,
-                        "source_name": s.source_name,
-                        "source_icon": s.source_icon,
-                        "source_type": s.source_type,
-                        "description": s.description
-                    })
+                    source_infos.append(
+                        {
+                            "id": s.id,
+                            "source_name": s.source_name,
+                            "source_icon": s.source_icon,
+                            "source_type": s.source_type,
+                            "description": s.description,
+                        }
+                    )
 
-            result_list.append(ChannelSquareItemResponse(
-                id=channel.id,
-                name=channel.name,
-                description=channel.description,
-                visibility=channel.visibility,
-                latest_article_update_time=channel.latest_article_update_time,
-                create_time=channel.create_time,
-                update_time=channel.update_time,
-                subscription_status=status,
-                subscriber_count=subscriber_count,
-                article_count=article_count,
-                source_infos=source_infos,
-            ))
+            result_list.append(
+                ChannelSquareItemResponse(
+                    id=channel.id,
+                    name=channel.name,
+                    description=channel.description,
+                    visibility=channel.visibility,
+                    latest_article_update_time=channel.latest_article_update_time,
+                    create_time=channel.create_time,
+                    update_time=channel.update_time,
+                    subscription_status=status,
+                    subscriber_count=subscriber_count,
+                    article_count=article_count,
+                    source_infos=source_infos,
+                )
+            )
 
         return ChannelSquarePageResponse(data=result_list, total=total)
 
@@ -827,9 +972,7 @@ class ChannelService:
         channel = channels[0]
 
         existing_membership = await self.space_channel_member_repository.find_membership(
-            business_id=req.channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=req.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if existing_membership and existing_membership.user_role != UserRoleEnum.MEMBER:
             return SubscriptionStatusEnum.SUBSCRIBED
@@ -850,7 +993,11 @@ class ChannelService:
 
         if existing_membership and existing_membership.status == MembershipStatusEnum.ACTIVE:
             return SubscriptionStatusEnum.SUBSCRIBED
-        if existing_membership and existing_membership.status == MembershipStatusEnum.PENDING and status == MembershipStatusEnum.PENDING:
+        if (
+            existing_membership
+            and existing_membership.status == MembershipStatusEnum.PENDING
+            and status == MembershipStatusEnum.PENDING
+        ):
             return SubscriptionStatusEnum.PENDING
 
         if not existing_membership or existing_membership.status == MembershipStatusEnum.REJECTED:
@@ -861,7 +1008,6 @@ class ChannelService:
                 login_user=login_user,
             )
 
-        previous_status = existing_membership.status if existing_membership else None
         if existing_membership:
             existing_membership.status = status
             await self.space_channel_member_repository.update(existing_membership)
@@ -871,33 +1017,34 @@ class ChannelService:
                 business_type=BusinessTypeEnum.CHANNEL,
                 user_id=login_user.user_id,
                 role=UserRoleEnum.MEMBER,
-                status=status
+                status=status,
             )
 
         if channel.visibility == ChannelVisibilityEnum.REVIEW:
             gate = self.approval_gate or self._build_channel_approval_gate()
             from bisheng.database.models.department import UserDepartmentDao
+
             primary_dept = await UserDepartmentDao.aget_user_primary_department(login_user.user_id)
             gate_result = await gate.request_or_pass(
                 ApprovalGateRequest(
                     tenant_id=login_user.tenant_id,
-                    scenario_code='channel_subscribe_request',
-                    business_key=f'channel:{channel.id}:user:{login_user.user_id}',
-                    business_resource_type='channel',
+                    scenario_code="channel_subscribe_request",
+                    business_key=f"channel:{channel.id}:user:{login_user.user_id}",
+                    business_resource_type="channel",
                     business_resource_id=str(channel.id),
                     business_name=channel.name,
                     applicant_user_id=login_user.user_id,
-                    applicant_user_name=getattr(login_user, 'user_name', str(login_user.user_id)),
+                    applicant_user_name=getattr(login_user, "user_name", str(login_user.user_id)),
                     applicant_department_id=primary_dept.department_id if primary_dept else None,
                     payload_snapshot={
-                        'channel_id': str(channel.id),
-                        'channel_name': channel.name,
-                        'applicant_user_id': login_user.user_id,
+                        "channel_id": str(channel.id),
+                        "channel_name": channel.name,
+                        "applicant_user_id": login_user.user_id,
                     },
                     ip_address=get_request_ip(request) if request else None,
                 )
             )
-            if gate_result.decision == 'pass':
+            if gate_result.decision == "pass":
                 if existing_membership:
                     existing_membership.status = MembershipStatusEnum.ACTIVE
                     await self.space_channel_member_repository.update(existing_membership)
@@ -924,7 +1071,7 @@ class ChannelService:
     def _build_channel_approval_gate(self) -> ApprovalGate:
         registry = ApprovalRegistry.with_default_presets()
         registry.register_handler(
-            'channel_subscribe_request',
+            "channel_subscribe_request",
             ChannelSubscribeScenarioHandler(self.space_channel_member_repository),
         )
         return ApprovalGate(registry=registry)
@@ -938,6 +1085,7 @@ class ChannelService:
         task_ids: list[int],
     ) -> None:
         from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+
         approver_user_ids: list[int] = []
         seen: set[int] = set()
         for task_id in task_ids:
@@ -949,19 +1097,20 @@ class ChannelService:
             return
         await self.message_service.send_generic_approval(
             applicant_user_id=login_user.user_id,
-            applicant_user_name=getattr(login_user, 'user_name', str(login_user.user_id)),
+            applicant_user_name=getattr(login_user, "user_name", str(login_user.user_id)),
             action_code="request_channel",
             business_type="approval_instance_id",
             business_id=str(instance_id),
             business_name=channel.name,
             button_action_code="request_channel",
             receiver_user_ids=approver_user_ids,
+            scenario_code="channel_subscribe_request",
         )
 
     async def _send_subscribe_approval_notification(
-            self,
-            channel: Channel,
-            login_user: UserPayload,
+        self,
+        channel: Channel,
+        login_user: UserPayload,
     ) -> None:
         """
         Send approval notification to channel creator and admins when a user
@@ -999,29 +1148,35 @@ class ChannelService:
             business_name=channel.name,
             button_action_code="request_channel",
             receiver_user_ids=receiver_user_ids,
+            scenario_code="channel_subscribe_request",
         )
 
     async def update_channel(self, channel_id: str, req: UpdateChannelRequest, login_user: UserPayload):
         """
-        Update channel information (name and description).
-        Only the creator can update the channel.
+        Update channel settings.
+        Channel owner, manager, and editor can update the channel.
         """
         # 1. Verify channel existence
         channel = await self.channel_repository.find_by_id(channel_id)
         if not channel:
             raise ChannelNotFoundError()
 
-        # 2. Verify current user is the creator
+        # 2. Verify current user can edit channel settings
         current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not a member of this channel")
 
-        if current_membership.user_role != UserRoleEnum.CREATOR:
-            raise ChannelPermissionDeniedError(msg="Only the creator can update the channel information")
+        current_relation = resolve_channel_relation(current_membership)
+        if current_relation not in {
+                ChannelRelationEnum.OWNER,
+                ChannelRelationEnum.MANAGER,
+                ChannelRelationEnum.EDITOR,
+        }:
+            raise ChannelPermissionDeniedError(
+                msg="Only the owner, manager, or editor can update the channel information"
+            )
 
         bisheng_information_client = await get_bisheng_information_client()
 
@@ -1038,23 +1193,54 @@ class ChannelService:
             new_visibility = ChannelVisibilityEnum(req.visibility)
             old_visibility = channel.visibility
             if old_visibility != new_visibility:
-                # When changing to PRIVATE, remove all non-creator members
+                # When changing to PRIVATE, remove square subscription members only.
                 if new_visibility == ChannelVisibilityEnum.PRIVATE:
-                    await self.space_channel_member_repository.remove_non_creator_members(channel_id)
-                    # F008: Clear all FGA tuples and re-write owner only
+                    removed_user_ids = []
+                    if self.message_service:
+                        removed_members = await self.space_channel_member_repository.find_all(
+                            business_id=channel_id,
+                            business_type=BusinessTypeEnum.CHANNEL,
+                        )
+                        removed_user_ids = [
+                            member.user_id
+                            for member in removed_members
+                            if member.status == MembershipStatusEnum.ACTIVE
+                            and _is_channel_subscription_source(member)
+                        ]
+                    owners = await self.space_channel_member_repository.find_members_by_role(
+                        channel_id,
+                        UserRoleEnum.CREATOR,
+                    )
+                    await self.space_channel_member_repository.remove_channel_subscription_members(channel_id)
                     try:
-                        await OwnerService.delete_resource_tuples('channel', channel_id)
-                        await OwnerService.write_owner_tuple(login_user.user_id, 'channel', channel_id)
+                        for owner in owners:
+                            await OwnerService.write_owner_tuple(owner.user_id, "channel", channel_id)
                     except Exception as e:
-                        logger.warning('Failed to sync FGA tuples after PRIVATE switch for channel %s: %s',
-                                       channel_id, e)
+                        logger.warning(
+                            "Failed to ensure owner FGA tuples after PRIVATE switch for channel %s: %s", channel_id, e
+                        )
+                    if removed_user_ids and self.message_service:
+                        final_removed_user_ids = []
+                        for user_id in removed_user_ids:
+                            if not await self._user_can_read_channel(user_id, channel_id):
+                                final_removed_user_ids.append(user_id)
+                        await self._send_channel_event_notification(
+                            action_code=CHANNEL_MADE_PRIVATE_MESSAGE,
+                            operator_user_id=login_user.user_id,
+                            operator_user_name=getattr(login_user, "user_name", None),
+                            receiver_user_ids=final_removed_user_ids,
+                            channel_id=channel_id,
+                            channel_name=channel.name,
+                            navigable=False,
+                        )
                 # When changing from REVIEW to PUBLIC, activate pending members and approve their messages
                 elif old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
                     activated_count = await self.space_channel_member_repository.activate_pending_members(channel_id)
                     if activated_count > 0:
                         logger.info(
                             "Activated %d pending members for channel_id=%s after visibility change from REVIEW to PUBLIC",
-                            activated_count, channel_id
+                            activated_count,
+                            channel_id,
                         )
                     await self.space_channel_member_repository.remove_rejected_members(channel_id)
                     if self.message_service:
@@ -1067,7 +1253,6 @@ class ChannelService:
         # Track if source_list changed for updating latest_article_update_time
         source_list_changed = False
         if req.source_list is not None:
-
             # Calculate the difference between old and new source lists to minimize calls to bisheng_information_client
             old_sources = set(channel.source_list or [])
             new_sources = set(req.source_list)
@@ -1092,7 +1277,6 @@ class ChannelService:
             await self.update_channels_latest_article_time([channel])
 
         if channel.source_list:
-
             # Sync information sources to local database
             existing_sources = await self.channel_info_source_repository.find_by_ids(channel.source_list)
             existing_source_ids = {source.id for source in existing_sources}
@@ -1101,7 +1285,8 @@ class ChannelService:
 
             if missing_source_ids:
                 missing_information_sources = await bisheng_information_client.get_information_source_by_ids(
-                    missing_source_ids)
+                    missing_source_ids
+                )
 
                 new_channel_info_sources = []
                 for info_source in missing_information_sources:
@@ -1110,12 +1295,13 @@ class ChannelService:
                         source_name=info_source.name,
                         source_icon=info_source.icon,
                         source_type=info_source.business_type,
-                        description=info_source.description
+                        description=info_source.description,
                     )
                     new_channel_info_sources.append(new_source)
 
                 if new_channel_info_sources:
                     from bisheng.worker.information.article import sync_information_article
+
                     await self.channel_info_source_repository.batch_add(new_channel_info_sources)
                     for one in new_channel_info_sources:
                         # Sync articles for the new information source one hour later
@@ -1144,9 +1330,7 @@ class ChannelService:
 
         # 2. Verify current user permission
         current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
@@ -1155,8 +1339,7 @@ class ChannelService:
 
         # 3. Get Creator Name
         creators = await self.space_channel_member_repository.find_members_by_role(
-            channel_id=channel_id,
-            role=UserRoleEnum.CREATOR
+            channel_id=channel_id, role=UserRoleEnum.CREATOR
         )
         creator_name = "Unknown"
         if creators:
@@ -1184,21 +1367,19 @@ class ChannelService:
             for sid in channel.source_list:
                 if sid in source_map:
                     s = source_map[sid]
-                    source_infos.append({
-                        "id": s.id,
-                        "source_name": s.source_name,
-                        "source_icon": s.source_icon,
-                        "source_type": s.source_type,
-                        "description": s.description
-                    })
+                    source_infos.append(
+                        {
+                            "id": s.id,
+                            "source_name": s.source_name,
+                            "source_icon": s.source_icon,
+                            "source_type": s.source_type,
+                            "description": s.description,
+                        }
+                    )
                 else:
-                    source_infos.append({
-                        "id": sid,
-                        "source_name": "Unknown",
-                        "source_icon": "",
-                        "source_type": "",
-                        "description": ""
-                    })
+                    source_infos.append(
+                        {"id": sid, "source_name": "Unknown", "source_icon": "", "source_type": "", "description": ""}
+                    )
 
         # Determine subscription status
         subscription_status = self._resolve_membership_subscription_status(current_membership)
@@ -1208,7 +1389,7 @@ class ChannelService:
         knowledge_sync_cfg: Optional[KnowledgeSyncConfig] = None
         is_creator = (
             current_membership is not None
-            and current_membership.user_role == UserRoleEnum.CREATOR
+            and resolve_channel_relation(current_membership) == ChannelRelationEnum.OWNER
         )
         if is_creator:
             knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
@@ -1227,6 +1408,7 @@ class ChannelService:
             subscriber_count=subscriber_count,
             article_count=article_count,
             subscription_status=subscription_status,
+            relation=_member_relation_value(current_membership),
             knowledge_sync=knowledge_sync_cfg,
         )
 
@@ -1238,7 +1420,10 @@ class ChannelService:
     # ------------------------------------------------------------------ #
 
     async def _save_knowledge_sync(
-        self, channel_id: str, cfg: KnowledgeSyncConfig, user_id: int,
+        self,
+        channel_id: str,
+        cfg: KnowledgeSyncConfig,
+        user_id: int,
     ) -> None:
         """Replace every sync row for `channel_id` with the rows derived from `cfg`.
 
@@ -1255,9 +1440,7 @@ class ChannelService:
         for sub in cfg.subs:
             referenced_ids.update(s.knowledge_space_id for s in sub.spaces)
         if referenced_ids:
-            owned_members = await SpaceChannelMemberDao.async_get_user_created_members(
-                int(user_id)
-            )
+            owned_members = await SpaceChannelMemberDao.async_get_user_created_members(int(user_id))
             owned_ids = {m.business_id for m in owned_members}
             if not referenced_ids.issubset(owned_ids):
                 raise SpacePermissionDeniedError()
@@ -1266,35 +1449,40 @@ class ChannelService:
 
         # main-channel scope
         for space in cfg.main.spaces:
-            rows.append(ChannelKnowledgeSync(
-                channel_id=channel_id,
-                sub_channel_name=None,
-                knowledge_space_id=space.knowledge_space_id,
-                folder_id=space.folder_id,
-                folder_path=space.folder_path,
-                is_enabled=cfg.main.enabled,
-                user_id=int(user_id),
-            ))
+            rows.append(
+                ChannelKnowledgeSync(
+                    channel_id=channel_id,
+                    sub_channel_name=None,
+                    knowledge_space_id=space.knowledge_space_id,
+                    folder_id=space.folder_id,
+                    folder_path=space.folder_path,
+                    is_enabled=cfg.main.enabled,
+                    user_id=int(user_id),
+                )
+            )
 
         # sub-channel scopes
         for sub in cfg.subs:
             if not sub.sub_channel_name:
                 continue
             for space in sub.spaces:
-                rows.append(ChannelKnowledgeSync(
-                    channel_id=channel_id,
-                    sub_channel_name=sub.sub_channel_name,
-                    knowledge_space_id=space.knowledge_space_id,
-                    folder_id=space.folder_id,
-                    folder_path=space.folder_path,
-                    is_enabled=sub.enabled,
-                    user_id=int(user_id),
-                ))
+                rows.append(
+                    ChannelKnowledgeSync(
+                        channel_id=channel_id,
+                        sub_channel_name=sub.sub_channel_name,
+                        knowledge_space_id=space.knowledge_space_id,
+                        folder_id=space.folder_id,
+                        folder_path=space.folder_path,
+                        is_enabled=sub.enabled,
+                        user_id=int(user_id),
+                    )
+                )
 
         await ChannelKnowledgeSyncDao.areplace_for_channel(channel_id, rows)
 
     async def _load_knowledge_sync(
-        self, channel_id: str,
+        self,
+        channel_id: str,
     ) -> KnowledgeSyncConfig:
         """Build a KnowledgeSyncConfig from the stored rows, plus display
         names for the bound knowledge spaces."""
@@ -1305,14 +1493,13 @@ class ChannelService:
         # Resolve knowledge-space display names for the UI.
         space_name_by_id: Dict[str, str] = {}
         numeric_ids = [
-            int(r.knowledge_space_id)
-            for r in rows
-            if r.knowledge_space_id and str(r.knowledge_space_id).isdigit()
+            int(r.knowledge_space_id) for r in rows if r.knowledge_space_id and str(r.knowledge_space_id).isdigit()
         ]
         if numeric_ids:
             from bisheng.knowledge.domain.models.knowledge import Knowledge
             from bisheng.core.database import get_async_db_session
             from sqlmodel import select as _select
+
             async with get_async_db_session() as session:
                 q = _select(Knowledge).where(Knowledge.id.in_(numeric_ids))
                 for kb in (await session.exec(q)).all():
@@ -1323,37 +1510,30 @@ class ChannelService:
         # channel_knowledge_sync cleanup; this keeps the UI clean if a row leaks.
         existing_space_ids = set(space_name_by_id.keys())
         rows = [
-            r for r in rows
+            r
+            for r in rows
             if r.knowledge_space_id
             and str(r.knowledge_space_id).isdigit()
             and str(r.knowledge_space_id) in existing_space_ids
         ]
-        folder_ids_to_check = {
-            int(r.folder_id)
-            for r in rows
-            if r.folder_id is not None and str(r.folder_id).isdigit()
-        }
+        folder_ids_to_check = {int(r.folder_id) for r in rows if r.folder_id is not None and str(r.folder_id).isdigit()}
         if folder_ids_to_check:
             from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
             from bisheng.core.database import get_async_db_session
             from sqlmodel import select as _select
+
             existing_folder_ids: set = set()
             async with get_async_db_session() as session:
-                q = _select(KnowledgeFile.id).where(
-                    KnowledgeFile.id.in_(list(folder_ids_to_check))
-                )
+                q = _select(KnowledgeFile.id).where(KnowledgeFile.id.in_(list(folder_ids_to_check)))
                 for row in (await session.exec(q)).all():
                     fid = row[0] if isinstance(row, tuple) else row
                     existing_folder_ids.add(int(fid))
-            rows = [
-                r for r in rows
-                if r.folder_id is None or int(r.folder_id) in existing_folder_ids
-            ]
+            rows = [r for r in rows if r.folder_id is None or int(r.folder_id) in existing_folder_ids]
 
         def _to_item(r: ChannelKnowledgeSync) -> KnowledgeSyncSpaceItem:
             return KnowledgeSyncSpaceItem(
                 knowledge_space_id=str(r.knowledge_space_id),
-                knowledge_space_name=space_name_by_id.get(str(r.knowledge_space_id), ''),
+                knowledge_space_name=space_name_by_id.get(str(r.knowledge_space_id), ""),
                 folder_id=r.folder_id,
                 folder_path=r.folder_path,
             )
@@ -1370,11 +1550,13 @@ class ChannelService:
         )
         subs: List[KnowledgeSyncSubConfig] = []
         for name, rlist in sub_rows_by_name.items():
-            subs.append(KnowledgeSyncSubConfig(
-                sub_channel_name=name,
-                enabled=bool(rlist) and all(r.is_enabled for r in rlist),
-                spaces=[_to_item(r) for r in rlist],
-            ))
+            subs.append(
+                KnowledgeSyncSubConfig(
+                    sub_channel_name=name,
+                    enabled=bool(rlist) and all(r.is_enabled for r in rlist),
+                    spaces=[_to_item(r) for r in rlist],
+                )
+            )
         return KnowledgeSyncConfig(main=main_cfg, subs=subs)
 
     async def dismiss_channel(self, channel_id: str, login_user: UserPayload, request=None):
@@ -1393,30 +1575,37 @@ class ChannelService:
 
         # 2. Verify current user is the creator
         current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if (
-                not current_membership
-                or current_membership.status != MembershipStatusEnum.ACTIVE
-                or current_membership.user_role != UserRoleEnum.CREATOR
+            not current_membership
+            or current_membership.status != MembershipStatusEnum.ACTIVE
+            or current_membership.user_role != UserRoleEnum.CREATOR
         ):
             raise ChannelPermissionDeniedError(msg="Only the creator can dismiss the channel")
 
         # 3. Delete all user relationships
         members = await self.space_channel_member_repository.find_all(
-            business_id=channel_id,
-            business_type=BusinessTypeEnum.CHANNEL
+            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL
+        )
+        original_member_ids = [member.user_id for member in members if member.status == MembershipStatusEnum.ACTIVE]
+        await self._send_channel_event_notification(
+            action_code=CHANNEL_DISMISSED_MESSAGE,
+            operator_user_id=login_user.user_id,
+            operator_user_name=getattr(login_user, "user_name", None),
+            receiver_user_ids=original_member_ids,
+            channel_id=channel_id,
+            channel_name=channel.name,
+            navigable=False,
         )
         for member in members:
             await self.space_channel_member_repository.delete(member.id)
 
         # F008: Delete all FGA tuples for this channel
         try:
-            await OwnerService.delete_resource_tuples('channel', channel_id)
+            await OwnerService.delete_resource_tuples("channel", channel_id)
         except Exception as e:
-            logger.warning('Failed to delete FGA tuples for channel %s: %s', channel_id, e)
+            logger.warning("Failed to delete FGA tuples for channel %s: %s", channel_id, e)
 
         # 4. Delete channel
         await self.channel_repository.delete(channel_id)
@@ -1428,10 +1617,9 @@ class ChannelService:
 
         # Audit log
         from bisheng.api.services.audit_log import AuditLogService
+
         if request:
-            await AuditLogService.delete_channel(
-                login_user, get_request_ip(request), channel_id, channel.name
-            )
+            await AuditLogService.delete_channel(login_user, get_request_ip(request), channel_id, channel.name)
 
         return True
 
@@ -1442,28 +1630,76 @@ class ChannelService:
         """
         # 1. Verify current user is a member
         current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id
+            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             raise ValueError("You are not subscribed to this channel")
 
-        # 2. Remove relationship
-        await self.space_channel_member_repository.delete(current_membership.id)
+        sources = await self.space_channel_member_repository.find_channel_membership_sources(
+            channel_id,
+            login_user.user_id,
+        )
+        if not sources:
+            sources = [current_membership]
+
+        direct_sources = [
+            source for source in sources
+            if _is_direct_channel_source(source, login_user.user_id)
+        ]
+        organization_sources = [
+            source for source in sources
+            if _is_organization_channel_source(source)
+        ]
+
+        if not direct_sources and organization_sources:
+            blocked_by = sorted({
+                source.grant_subject_type
+                for source in organization_sources
+                if source.grant_subject_type
+            })
+            raise ChannelOrganizationGrantUnsubscribeDeniedError(blocked_by=blocked_by)
+
+        targets = direct_sources or [current_membership]
+        for source in targets:
+            await self._remove_channel_direct_source(channel_id, source)
 
         return True
 
+    async def _remove_channel_direct_source(self, channel_id: str, source) -> None:
+        if getattr(source, 'grant_subject_type', None) == 'user' and getattr(source, 'grant_subject_id', None):
+            relation = getattr(source, 'grant_relation', None) or resolve_channel_relation(source)
+            await PermissionService.authorize(
+                object_type='channel',
+                object_id=channel_id,
+                grants=[],
+                revokes=[
+                    AuthorizeRevokeItem(
+                        subject_type='user',
+                        subject_id=int(source.grant_subject_id),
+                        relation=ChannelRelationEnum(relation).value,
+                        include_children=getattr(source, 'grant_include_children', None),
+                        model_id=getattr(source, 'grant_model_id', None),
+                    )
+                ],
+                enforce_fga_success=True,
+            )
+
+        binding_key = getattr(source, 'grant_binding_key', None)
+        if binding_key:
+            await self.space_channel_member_repository.delete_channel_membership_source(channel_id, binding_key)
+            return
+        await self.space_channel_member_repository.delete(source.id)
+
     async def search_channel_articles(
-            self,
-            channel_id: str,
-            keyword: Optional[str] = None,
-            source_ids: Optional[List[str]] = None,
-            sub_channel_name: Optional[str] = None,
-            page: int = 1,
-            page_size: int = 20,
-            login_user: UserPayload = None,
-            only_unread: bool = False,
+        self,
+        channel_id: str,
+        keyword: Optional[str] = None,
+        source_ids: Optional[List[str]] = None,
+        sub_channel_name: Optional[str] = None,
+        page: int = 1,
+        page_size: int = 20,
+        login_user: UserPayload = None,
+        only_unread: bool = False,
     ) -> ArticleSearchPageResponse:
         """
         Paginated search for articles in a channel.
@@ -1522,8 +1758,7 @@ class ChannelService:
         read_article_ids = []
         if login_user and self.article_read_repository:
             read_article_ids = await self.article_read_repository.find_article_ids_by_user_and_sources(
-                user_id=login_user.user_id,
-                source_ids=effective_source_ids
+                user_id=login_user.user_id, source_ids=effective_source_ids
             )
 
         # 5. Call ArticleEsService to search
@@ -1550,7 +1785,7 @@ class ChannelService:
                     "source_name": s.source_name,
                     "source_icon": s.source_icon,
                     "source_type": s.source_type,
-                    "description": s.description
+                    "description": s.description,
                 }
 
         read_ids_set = set(read_article_ids)
@@ -1600,8 +1835,7 @@ class ChannelService:
         # 2. Check read record
         if self.article_read_repository:
             read_record = await self.article_read_repository.find_by_user_and_article(
-                user_id=login_user.user_id,
-                article_id=article_id
+                user_id=login_user.user_id, article_id=article_id
             )
 
             # 3. Add read record if not exists
@@ -1621,8 +1855,8 @@ class ChannelService:
                     "source_name": source.source_name,
                     "source_icon": source.source_icon,
                     "source_type": source.source_type,
-                "description": source.description
-            }
+                    "description": source.description,
+                }
 
         return self._to_article_detail_response(article)
 
@@ -1632,9 +1866,9 @@ class ChannelService:
 
     @staticmethod
     def _extract_filter_rule_groups(
-            channel: Channel,
-            channel_type: str = "main",
-            sub_channel_name: Optional[str] = None,
+        channel: Channel,
+        channel_type: str = "main",
+        sub_channel_name: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Extract filter rule groups while preserving top-level grouping semantics."""
         filter_rules_raw = channel.filter_rules or []
@@ -1658,11 +1892,13 @@ class ChannelService:
             matched_groups.append(filter_rule)
 
         if legacy_main_rules and channel_type == "main":
-            matched_groups.append({
-                "relation": "or",
-                "rules": legacy_main_rules,
-                "channel_type": "main",
-            })
+            matched_groups.append(
+                {
+                    "relation": "or",
+                    "rules": legacy_main_rules,
+                    "channel_type": "main",
+                }
+            )
 
         return matched_groups
 
@@ -1724,9 +1960,7 @@ class ChannelService:
             try:
                 latest_article_create_time = await self._get_channel_latest_article_create_time(channel)
             except Exception as exc:
-                logger.exception(
-                    f"Failed to query latest article create_time for channel {channel.id}: {exc}"
-                )
+                logger.exception(f"Failed to query latest article create_time for channel {channel.id}: {exc}")
                 continue
 
             channel.latest_article_update_time = latest_article_create_time
@@ -1797,17 +2031,13 @@ class ChannelService:
                     updated_count += 1
                     continue
 
-                latest_article_time = ChannelService._normalize_datetime(
-                    datetime.fromisoformat(latest_publish_time)
-                )
+                latest_article_time = ChannelService._normalize_datetime(datetime.fromisoformat(latest_publish_time))
                 channel.latest_article_update_time = latest_article_time
                 update_channels.append(channel)
                 updated_count += 1
 
             except Exception as exc:
-                logger.exception(
-                    f"Failed to update latest_article_update_time for channel {channel.id}: {exc}"
-                )
+                logger.exception(f"Failed to update latest_article_update_time for channel {channel.id}: {exc}")
                 continue
 
         if update_channels:
@@ -1826,14 +2056,14 @@ class ChannelService:
         """Remove or replace characters that are invalid in file names."""
         invalid_chars = '/\\:*?"<>|\0'
         for ch in invalid_chars:
-            title = title.replace(ch, '_')
+            title = title.replace(ch, "_")
         return title.strip()[:200]
 
     async def add_articles_to_knowledge_space(
-            self,
-            req: AddArticlesToKnowledgeSpaceRequest,
-            login_user: UserPayload,
-            request: 'Request',
+        self,
+        req: AddArticlesToKnowledgeSpaceRequest,
+        login_user: UserPayload,
+        request: "Request",
     ) -> List[dict]:
         """Add channel articles to a knowledge space.
 
@@ -1849,9 +2079,7 @@ class ChannelService:
             article = await self.article_es_service.get_article(article_id)
             if not article:
                 if req.skip_missing_and_duplicates:
-                    logger.warning(
-                        f"add_articles_to_knowledge_space: skipping missing article {article_id}"
-                    )
+                    logger.warning(f"add_articles_to_knowledge_space: skipping missing article {article_id}")
                     continue
                 raise ValueError(f"Article not found: {article_id}")
             await self.ensure_article_sensitive_view_allowed(article, login_user)
@@ -1861,9 +2089,7 @@ class ChannelService:
             return []
 
         # 2. Check write permission before uploading to minio
-        role = await SpaceChannelMemberDao.async_get_active_member_role(
-            req.knowledge_id, login_user.user_id
-        )
+        role = await SpaceChannelMemberDao.async_get_active_member_role(req.knowledge_id, login_user.user_id)
         _WRITE_ROLES = {UserRoleEnum.CREATOR, UserRoleEnum.ADMIN}
         if role not in _WRITE_ROLES:
             raise SpacePermissionDeniedError()
@@ -1886,18 +2112,20 @@ class ChannelService:
                 content_type="text/markdown",
             )
             md_file_paths.append(
-                await minio_client.get_share_link(md_object_name, bucket=minio_client.tmp_bucket, clear_host=False))
+                await minio_client.get_share_link(md_object_name, bucket=minio_client.tmp_bucket, clear_host=False)
+            )
 
             preview_map[index] = article.content_html
 
         # 4. Call KnowledgeSpaceService.add_file
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
         knowledge_files = await space_service.add_file(
             knowledge_id=req.knowledge_id,
             file_path=md_file_paths,
             parent_id=req.parent_id,
-            file_source=FileSource.CHANNEL
+            file_source=FileSource.CHANNEL,
         )
 
         # 5. Update preview_file_object_name for successful files
@@ -1910,9 +2138,9 @@ class ChannelService:
             if kf.status != KnowledgeFileStatus.FAILED.value:
                 html_content = preview_map[index]
                 preview_object_name = f"preview/{kf.id}.html"
-                await minio_client.put_object(object_name=preview_object_name,
-                                              file=html_content.encode("utf-8"),
-                                              content_type="text/html")
+                await minio_client.put_object(
+                    object_name=preview_object_name, file=html_content.encode("utf-8"), content_type="text/html"
+                )
                 kf.preview_file_object_name = preview_object_name
                 result.append(kf)
             else:

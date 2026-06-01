@@ -5,6 +5,7 @@ import RolesAndPermissions from "@/pages/SystemPage/components/RolesAndPermissio
 import {
   createRelationModelApi,
   getApplicationPermissionTemplateApi,
+  getChannelPermissionTemplateApi,
   getGrantableRelationModelsApi,
   getKnowledgeLibraryPermissionTemplateApi,
   getKnowledgeSpacePermissionTemplateApi,
@@ -81,6 +82,7 @@ vi.mock("@/controllers/API/permission", () => ({
   createRelationModelApi: vi.fn(),
   deleteRelationModelApi: vi.fn(),
   getApplicationPermissionTemplateApi: vi.fn(),
+  getChannelPermissionTemplateApi: vi.fn(),
   getGrantableRelationModelsApi: vi.fn(),
   getKnowledgeLibraryPermissionTemplateApi: vi.fn(),
   getKnowledgeSpacePermissionTemplateApi: vi.fn(),
@@ -99,6 +101,7 @@ vi.mock("@/components/bs-ui/toast/use-toast", () => ({
 }));
 
 const mockedGetApplicationPermissionTemplateApi = vi.mocked(getApplicationPermissionTemplateApi);
+const mockedGetChannelPermissionTemplateApi = vi.mocked(getChannelPermissionTemplateApi);
 const mockedCreateRelationModelApi = vi.mocked(createRelationModelApi);
 const mockedGetGrantableRelationModelsApi = vi.mocked(getGrantableRelationModelsApi);
 const mockedGetKnowledgeLibraryPermissionTemplateApi = vi.mocked(getKnowledgeLibraryPermissionTemplateApi);
@@ -154,6 +157,18 @@ function renderAsAdmin(ui: ReactNode) {
 async function openRebacTab() {
   renderAsAdmin(<RolesAndPermissions />);
   await screen.findByText("system.relationModelSelectTemplate");
+}
+
+function getPermissionCheckbox(permissionText: string) {
+  const checkbox = screen.getByText(permissionText).closest("label")?.querySelector('[role="checkbox"]');
+  if (!checkbox) throw new Error(`Permission checkbox not found: ${permissionText}`);
+  return checkbox;
+}
+
+function expectTextBefore(firstText: string, secondText: string) {
+  const first = screen.getByText(firstText);
+  const second = screen.getByText(secondText);
+  expect(Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
 }
 
 describe("Permission dialog regressions", () => {
@@ -271,6 +286,17 @@ describe("Relation model regressions", () => {
           title: "",
           items: [
             { id: "view_tool", label: "查看工具", relation: "can_read" },
+          ],
+        },
+      ],
+    } as any);
+    mockedGetChannelPermissionTemplateApi.mockResolvedValue({
+      title: "频道模块",
+      columns: [
+        {
+          title: "频道级",
+          items: [
+            { id: "edit_channel", label: "编辑频道设置", relation: "can_edit" },
           ],
         },
       ],
@@ -567,5 +593,168 @@ describe("Relation model regressions", () => {
 
     expect(await screen.findByText("后端工具模板")).toBeInTheDocument();
     expect(screen.getByText("后端编辑工具")).toBeInTheDocument();
+  });
+
+  it("renders the channel section from the backend template source of truth", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "owner",
+        name: "所有者",
+        relation: "owner",
+        grant_tier: "owner",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+    ] as any);
+    mockedGetChannelPermissionTemplateApi.mockResolvedValue({
+      title: "后端频道模板",
+      columns: [
+        {
+          title: "频道级",
+          items: [
+            { id: "backend_edit_channel", label: "后端编辑频道设置", relation: "can_edit" },
+          ],
+        },
+      ],
+    } as any);
+
+    await openRebacTab();
+
+    expect(mockedGetChannelPermissionTemplateApi).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("后端频道模板")).toBeInTheDocument();
+    expect(screen.getByText("后端编辑频道设置")).toBeInTheDocument();
+  });
+
+  it("places the channel section directly after the knowledge-space section", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "owner",
+        name: "所有者",
+        relation: "owner",
+        grant_tier: "owner",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+    ] as any);
+
+    await openRebacTab();
+
+    expect(await screen.findByText("system.permissionTemplate.sectionChannel")).toBeInTheDocument();
+    expectTextBefore("system.permissionTemplate.sectionKnowledgeSpace", "system.permissionTemplate.sectionChannel");
+    expectTextBefore("system.permissionTemplate.sectionChannel", "system.permissionTemplate.sectionApplication");
+  });
+
+  it("groups channel permissions into operation and member-management columns", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "owner",
+        name: "所有者",
+        relation: "owner",
+        grant_tier: "owner",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+    ] as any);
+    mockedGetChannelPermissionTemplateApi.mockResolvedValue({
+      title: "频道模块",
+      columns: [
+        {
+          title: "频道级",
+          items: [
+            { id: "create_channel", label: "新建频道", relation: "can_read" },
+            { id: "view_channel", label: "查看频道", relation: "can_read" },
+            { id: "edit_channel", label: "编辑频道设置", relation: "can_edit" },
+            { id: "delete_channel", label: "删除频道", relation: "can_delete" },
+            { id: "manage_channel_owner", label: "管理频道所有者", relation: "owner" },
+            { id: "manage_channel_manager", label: "管理频道管理者", relation: "can_manage" },
+            { id: "manage_channel_user", label: "管理频道使用者", relation: "can_manage" },
+          ],
+        },
+      ],
+    } as any);
+
+    await openRebacTab();
+
+    expect(await screen.findByText("system.permissionTemplate.columnChannelOperation")).toBeInTheDocument();
+    expect(screen.getByText("system.permissionTemplate.columnChannelMemberManagement")).toBeInTheDocument();
+    expect(screen.queryByText("system.permissionTemplate.create_channel")).not.toBeInTheDocument();
+    expect(screen.queryByText("新建频道")).not.toBeInTheDocument();
+    expectTextBefore(
+      "system.permissionTemplate.columnChannelOperation",
+      "system.permissionTemplate.columnChannelMemberManagement",
+    );
+  });
+
+  it("checks owner-level channel permissions for the built-in owner relation model", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "owner",
+        name: "所有者",
+        relation: "owner",
+        grant_tier: "owner",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+    ] as any);
+    mockedGetChannelPermissionTemplateApi.mockResolvedValue({
+      title: "频道模块",
+      columns: [
+        {
+          title: "频道级",
+          items: [
+            { id: "manage_channel_owner", label: "管理频道所有者", relation: "owner" },
+          ],
+        },
+      ],
+    } as any);
+
+    await openRebacTab();
+
+    expect(await screen.findByText("system.permissionTemplate.sectionChannel")).toBeInTheDocument();
+    expect(getPermissionCheckbox("system.permissionTemplate.manage_channel_owner")).toBeChecked();
+  });
+
+  it("limits the built-in manager channel permissions to edit and user management", async () => {
+    mockedGetRelationModelsApi.mockResolvedValue([
+      {
+        id: "manager",
+        name: "可管理",
+        relation: "manager",
+        grant_tier: "manager",
+        permissions: [],
+        permissions_explicit: false,
+        is_system: true,
+      },
+    ] as any);
+    mockedGetChannelPermissionTemplateApi.mockResolvedValue({
+      title: "频道模块",
+      columns: [
+        {
+          title: "频道级",
+          items: [
+            { id: "view_channel", label: "查看频道", relation: "can_read" },
+            { id: "edit_channel", label: "编辑频道设置", relation: "can_edit" },
+            { id: "delete_channel", label: "删除频道", relation: "can_delete" },
+            { id: "manage_channel_owner", label: "管理频道所有者", relation: "owner" },
+            { id: "manage_channel_manager", label: "管理频道管理者", relation: "owner" },
+            { id: "manage_channel_user", label: "管理频道使用者", relation: "can_manage" },
+          ],
+        },
+      ],
+    } as any);
+
+    await openRebacTab();
+
+    expect(await screen.findByText("system.permissionTemplate.sectionChannel")).toBeInTheDocument();
+    expect(getPermissionCheckbox("system.permissionTemplate.view_channel")).toBeChecked();
+    expect(getPermissionCheckbox("system.permissionTemplate.edit_channel")).toBeChecked();
+    expect(getPermissionCheckbox("system.permissionTemplate.manage_channel_user")).toBeChecked();
+    expect(getPermissionCheckbox("system.permissionTemplate.delete_channel")).not.toBeChecked();
+    expect(getPermissionCheckbox("system.permissionTemplate.manage_channel_owner")).not.toBeChecked();
+    expect(getPermissionCheckbox("system.permissionTemplate.manage_channel_manager")).not.toBeChecked();
   });
 });

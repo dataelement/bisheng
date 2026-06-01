@@ -40,6 +40,7 @@ from bisheng.tenant.api.router import router as tenant_router
 from bisheng.admin.api.router import router as admin_router
 from bisheng.approval.api.router import router as approval_router
 from bisheng.sensitive_word.api.router import router as sensitive_word_policy_router
+from bisheng.workstation.api.endpoints.conversation_export import router as conversation_export_router
 
 router = APIRouter(prefix='/api/v1', )
 router.include_router(chat_router)
@@ -63,6 +64,7 @@ router.include_router(llm_router)
 router.include_router(workflow_router)
 router.include_router(mark_router)
 router.include_router(workstation_router)
+router.include_router(conversation_export_router)
 router.include_router(skillcenter_router)
 router.include_router(flows_router)
 router.include_router(linsight_router)

@@ -142,7 +142,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                             <p className="text-sm text-muted-foreground break-keep">
                                 {t("tools.manageCustomTools")}
                             </p>
-                            <span className="text-sm text-[#86909c] whitespace-nowrap">{t('pagination.totalRecords', { ns: 'bs', total: options.length })}</span>
+                            {/* F027 AC-12: "总记录数" badge removed from the tool list UI; backend response shape unchanged. */}
                         </div>
                     </div>
                 </div>

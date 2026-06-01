@@ -2,7 +2,8 @@ from datetime import datetime, timedelta
 from enum import Enum
 from typing import Optional, List
 
-from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, String, text, Boolean, delete, func, case
+from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, String, text, Boolean, delete, func, case, Integer
+from sqlalchemy.types import TypeDecorator
 from sqlmodel import Field, select, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -23,6 +24,39 @@ class UserRoleEnum(str, Enum):
     MEMBER = 'member'
 
 
+class ChannelRelationEnum(str, Enum):
+    OWNER = 'owner'
+    MANAGER = 'manager'
+    EDITOR = 'editor'
+    VIEWER = 'viewer'
+
+
+def normalize_channel_relation(value: ChannelRelationEnum | str | None) -> Optional[ChannelRelationEnum]:
+    if value is None:
+        return None
+    if isinstance(value, ChannelRelationEnum):
+        return value
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    try:
+        return ChannelRelationEnum(text_value.lower())
+    except ValueError:
+        return ChannelRelationEnum[text_value.upper()]
+
+
+class ChannelRelationType(TypeDecorator):
+    impl = String(32)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        relation = normalize_channel_relation(value)
+        return relation.value if relation else None
+
+    def process_result_value(self, value, dialect):
+        return normalize_channel_relation(value)
+
+
 class MembershipStatusEnum(str, Enum):
     ACTIVE = 'ACTIVE'
     PENDING = 'PENDING'
@@ -30,6 +64,37 @@ class MembershipStatusEnum(str, Enum):
 
 
 REJECTED_STATUS_DISPLAY_WINDOW = timedelta(hours=24)
+
+
+CHANNEL_ROLE_TO_RELATION = {
+    UserRoleEnum.CREATOR: ChannelRelationEnum.OWNER,
+    UserRoleEnum.ADMIN: ChannelRelationEnum.MANAGER,
+    UserRoleEnum.MEMBER: ChannelRelationEnum.VIEWER,
+}
+
+CHANNEL_RELATION_TO_ROLE = {
+    ChannelRelationEnum.OWNER: UserRoleEnum.CREATOR,
+    ChannelRelationEnum.MANAGER: UserRoleEnum.ADMIN,
+    ChannelRelationEnum.EDITOR: UserRoleEnum.MEMBER,
+    ChannelRelationEnum.VIEWER: UserRoleEnum.MEMBER,
+}
+
+CHANNEL_RELATION_PRIORITY = {
+    ChannelRelationEnum.OWNER: 4,
+    ChannelRelationEnum.MANAGER: 3,
+    ChannelRelationEnum.EDITOR: 2,
+    ChannelRelationEnum.VIEWER: 1,
+}
+
+
+def resolve_channel_relation(member: 'SpaceChannelMember') -> Optional[ChannelRelationEnum]:
+    if member.relation:
+        return normalize_channel_relation(member.relation)
+    return CHANNEL_ROLE_TO_RELATION.get(UserRoleEnum(member.user_role))
+
+
+def legacy_role_for_channel_relation(relation: ChannelRelationEnum | str) -> UserRoleEnum:
+    return CHANNEL_RELATION_TO_ROLE[normalize_channel_relation(relation)]
 
 
 class SpaceChannelMember(SQLModelSerializable, table=True):
@@ -67,6 +132,48 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
             String(32),
             nullable=True,
         ),
+    )
+    relation: Optional[ChannelRelationEnum] = Field(
+        default=None,
+        description='Channel relation: owner / manager / editor / viewer',
+        sa_column=Column(
+            ChannelRelationType(),
+            nullable=True,
+            index=True,
+        ),
+    )
+    grant_subject_type: Optional[str] = Field(
+        default=None,
+        description='Grant source subject type: user / department / user_group / self',
+        sa_column=Column(String(32), nullable=True, index=True),
+    )
+    grant_subject_id: Optional[int] = Field(
+        default=None,
+        description='Grant source subject ID',
+        sa_column=Column(Integer, nullable=True, index=True),
+    )
+    grant_relation: Optional[ChannelRelationEnum] = Field(
+        default=None,
+        description='Relation carried by this grant source',
+        sa_column=Column(
+            ChannelRelationType(),
+            nullable=True,
+        ),
+    )
+    grant_include_children: bool = Field(
+        default=False,
+        description='Whether department grant includes child departments',
+        sa_column=Column(Boolean, nullable=False, server_default=text('0')),
+    )
+    grant_model_id: Optional[str] = Field(
+        default=None,
+        description='Relation model id attached to this grant source',
+        sa_column=Column(String(64), nullable=True),
+    )
+    grant_binding_key: Optional[str] = Field(
+        default=None,
+        description='Stable relation-model binding key attached to this grant source',
+        sa_column=Column(String(255), nullable=True, index=True),
     )
     is_pinned: bool = Field(default=False, description='Whether the channel is pinned to top',
                             sa_column=Column(Boolean, nullable=False, server_default=text('0')))

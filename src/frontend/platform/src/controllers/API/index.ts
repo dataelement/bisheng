@@ -236,22 +236,35 @@ export function updateTempApi(temp_id, data) {
  * 获取知识库列表
  * type 0文件库 1qa库
  */
-export async function readFileLibDatabase({ page = 1, pageSize = 20, name = '', type = 0, permissionId = 'use_kb' }) {
-    try {
-        const response: { data: any[], total: number } = await axios.get('/api/v1/knowledge', {
-            params: {
-                permission_id: permissionId,
-                page_num: page,
-                page_size: pageSize,
-                name,
-                type,
-            },
-        });
-        return response;
-    } catch (error) {
-        console.error(error);
-        throw error;
-    }
+// F027: cursor-based pagination.
+//   request:  { cursor?, pageSize, name, type, permissionId }
+//   response: { data: any[], page_size, has_more, next_cursor }
+//   The legacy `total` / `page_num` fields are gone (spec AC-01).
+export async function readFileLibDatabase(
+    {
+        cursor,
+        pageSize = 20,
+        name = '',
+        type = 0,
+        permissionId = 'use_kb',
+    }: {
+        cursor?: string | null;
+        pageSize?: number;
+        name?: string;
+        type?: number;
+        permissionId?: string;
+    },
+): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
+    const response = await axios.get('/api/v1/knowledge', {
+        params: {
+            permission_id: permissionId,
+            page_size: pageSize,
+            name,
+            type,
+            ...(cursor ? { cursor } : {}),
+        },
+    });
+    return response as any;
 }
 
 /**

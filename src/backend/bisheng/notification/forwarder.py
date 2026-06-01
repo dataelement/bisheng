@@ -1,12 +1,11 @@
 """Synchronous hook: decide / resolve recipients / schedule HTTP task. Never blocks."""
 import asyncio
 import logging
-from typing import Optional, Tuple
 
 from bisheng.common.services.config_service import settings
-from bisheng.user.domain.models.user import UserDao
 from bisheng.notification.external._payload import FORWARDABLE_ACTION_CODES, build_textcard
 from bisheng.notification.external.cofco_eplus_client import CofcoEPlusClient
+from bisheng.user.domain.models.user import UserDao
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ def _fire_and_forget(coro) -> None:
     task.add_done_callback(_pending_tasks.discard)
 
 
-def resolve_eplus_recipient(target_user_id: int) -> Tuple[Optional[str], str]:
+def resolve_eplus_recipient(target_user_id: int) -> tuple[str | None, str]:
     """Return (e_plus_userid, skip_reason). skip_reason is empty string when resolved."""
     user = UserDao.get_user(target_user_id)
     if not user:
@@ -61,8 +60,8 @@ def _resolve_action_code(message) -> str:
     return ""
 
 
-def _extract_payload_fields(message) -> Tuple[str, str]:
-    """Extract (applicant_name, resource_name) from an InboxMessage content list.
+def _extract_payload_fields(message) -> tuple[str, str, str, str]:
+    """Extract (applicant_name, resource_name, reason, scenario_code) from content.
 
     Content block shapes (see message_schema.py):
       - UserContentItem     → {"type": "user",         "content": "@<user_name>", ...}
@@ -73,17 +72,28 @@ def _extract_payload_fields(message) -> Tuple[str, str]:
     """
     applicant_name = ""
     resource_name = ""
+    reason = ""
+    scenario_code = ""
     try:
         for block in (message.content or []):
             btype = block.get("type")
             raw = block.get("content") or ""
+            meta = block.get("metadata") or {}
+            data = meta.get("data") or {}
+            if not scenario_code:
+                scenario_code = meta.get("scenario_code") or data.get("scenario_code") or ""
             if btype == "user" and not applicant_name and isinstance(raw, str):
                 applicant_name = raw[1:] if raw.startswith("@") else raw
             elif btype == "business_url" and not resource_name and isinstance(raw, str):
                 resource_name = raw[2:] if raw.startswith("--") else raw
+            elif btype == "target" and not resource_name and isinstance(raw, str):
+                resource_name = raw
+            elif btype == "tooltip_text" and not reason and isinstance(raw, str):
+                reason_prefix = f"原因{chr(0xFF1A)}"
+                reason = raw[len(reason_prefix):].strip() if raw.startswith(reason_prefix) else raw.strip()
     except Exception as exc:
         logger.debug("_extract_payload_fields parse error: %s", exc, exc_info=True)
-    return applicant_name, resource_name
+    return applicant_name, resource_name, reason, scenario_code
 
 
 def maybe_forward_external(message) -> None:
@@ -130,7 +140,7 @@ def maybe_forward_external(message) -> None:
     if not resolved_eids:
         return
 
-    applicant_name, resource_name = _extract_payload_fields(message)
+    applicant_name, resource_name, reason, scenario_code = _extract_payload_fields(message)
     triggered_at = message.create_time.strftime("%Y-%m-%d %H:%M")
 
     textcard = build_textcard(
@@ -139,6 +149,8 @@ def maybe_forward_external(message) -> None:
         applicant_name=applicant_name,
         resource_name=resource_name,
         triggered_at=triggered_at,
+        reason=reason,
+        scenario_code=scenario_code,
     )
 
     client = CofcoEPlusClient()

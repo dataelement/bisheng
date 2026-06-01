@@ -13,6 +13,7 @@
 | # | Feature | 优先级 | 状态 | 依赖 |
 |---|---------|--------|------|------|
 | F025 | [approval-center-unification](./025-approval-center-unification/) | P0 | 🔲 规格已生成，待评审 | F005, F011, F012, F013 |
+| F028 | [conversation-export-import](./028-conversation-export-import/) | P0 | 🔲 规格已生成，待评审 | F004, F008 |
 
 ---
 
@@ -34,3 +35,4 @@
 | 日期 | 变更 |
 |------|------|
 | 2026-05-18 | 初始化 v2.6.0 版本目录，并迁入 **F025-approval-center-unification** 规格与任务。 |
+| 2026-05-30 | 新增 **F028-conversation-export-import** 规格：工作台会话回答级导出与导入知识空间。 |

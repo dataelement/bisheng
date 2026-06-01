@@ -33,7 +33,7 @@ import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
-import { PaginationBar } from "./PaginationBar";
+import { LoadMore } from "./LoadMore";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
@@ -53,6 +53,8 @@ interface KnowledgeSpaceContentProps {
     currentPage: number;
     pageSize: number;
     total: number;
+    /** F027 §AC-17-client-补做: whether a next batch exists; drives LoadMore sentinel. */
+    hasMore: boolean;
     onPageChange: (page: number) => void;
     loading: boolean;
     onSearch: (params: SearchParams) => void;
@@ -92,6 +94,7 @@ export function KnowledgeSpaceContent({
     currentPage,
     pageSize,
     total,
+    hasMore,
     onPageChange,
     loading,
     onSearch,
@@ -1080,6 +1083,12 @@ export function KnowledgeSpaceContent({
                                     </div>
                                 ))}
                             </div>
+                            {hasMore && (
+                                <LoadMore
+                                    onLoad={() => onPageChange(currentPage + 1)}
+                                    loading={loading}
+                                />
+                            )}
                         </div>
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
@@ -1112,6 +1121,12 @@ export function KnowledgeSpaceContent({
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                     canManageMembers={canManageMembers}
                                 />
+                                {hasMore && (
+                                    <LoadMore
+                                        onLoad={() => onPageChange(currentPage + 1)}
+                                        loading={loading}
+                                    />
+                                )}
                             </div>
                         </div>
                     )}
@@ -1145,14 +1160,7 @@ export function KnowledgeSpaceContent({
                         )
                     )}
 
-                    {files.length > 0 && (
-                        <PaginationBar
-                            currentPage={currentPage}
-                            pageSize={pageSize}
-                            total={total}
-                            onPageChange={onPageChange}
-                        />
-                    )}
+                    {/* F027 §AC-17-client-补做: PaginationBar removed; infinite scroll via <LoadMore /> sentinel inside the scroll containers above. */}
                 </div>
             </div>
 

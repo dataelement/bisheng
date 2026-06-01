@@ -183,3 +183,9 @@ class KnowledgeSpaceTagLibraryInvalidError(BaseErrorCode):
 class BackendProcessingError(BaseErrorCode):
     Code = 10990
     Msg = "Processing in the background, try again later"
+
+
+# F027: cursor-based pagination — cursor parsing/version/context/key-length failed
+class KnowledgeInvalidCursorError(BaseErrorCode):
+    Code: int = 10991
+    Msg: str = 'Invalid pagination cursor'

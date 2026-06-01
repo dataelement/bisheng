@@ -456,17 +456,9 @@ class DepartmentService:
                     if not depts:
                         return []
 
-            # Batch get member counts
-            dept_ids = [d.id for d in depts]
-            count_result = await session.exec(
-                select(
-                    UserDepartment.department_id,
-                    func.count(UserDepartment.id),
-                )
-                .where(UserDepartment.department_id.in_(dept_ids))
-                .group_by(UserDepartment.department_id)
-            )
-            count_map = dict(count_result.all())
+        # F027 AC-13: per-node user-count field removed from the tree response.
+        # The previous batched ``COUNT(UserDepartment.id) GROUP BY department_id``
+        # query is gone; the single-dept GET still populates the count (AC-15).
 
         # Build tree in memory
         nodes = {}
@@ -480,7 +472,6 @@ class DepartmentService:
                 sort_order=d.sort_order,
                 source=d.source,
                 status=d.status,
-                member_count=count_map.get(d.id, 0),
                 is_tenant_root=bool(getattr(d, 'is_tenant_root', 0)),
                 mounted_tenant_id=getattr(d, 'mounted_tenant_id', None),
                 children=[],

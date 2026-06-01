@@ -26,6 +26,25 @@ import LinsightChatInput from './LinsightChatInput';
 import Presentation from './Presentation';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import AppAvator from '../Avator';
+import {
+  importMessagesToKnowledgeApi,
+  listUploadableSpacesApi,
+} from '~/api/messageExport';
+import {
+  ExportFormatSheet,
+  MessageSelectionToolbar,
+} from '~/components/Chat/MessageSelection';
+import {
+  useExitSelectionOnChatChange,
+  useMessageSelection,
+} from '~/hooks/useMessageSelection';
+import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
+import { useToastContext } from '~/Providers';
+import { NotificationSeverity } from '~/common';
+import {
+  AddToKnowledgeModal,
+  type AddToKnowledgeSelection,
+} from '~/pages/Subscription/Article/AddToKnowledgeModal';
 
 const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?: number, shareToken?: string }) => {
   const t = useLocalize();
@@ -154,6 +173,51 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     clearConversation,
     regenerate,
   } = useAiChat(conversationId, false, shareToken);
+
+  // ── F028: workstation conversation export / import-to-knowledge ──
+  // Auto-exit selection mode whenever the user switches to another chat.
+  useExitSelectionOnChatChange(activeConvoId);
+  const { state: selectionState, getSelectedIds, exitSelectionMode } =
+    useMessageSelection();
+  const isH5 = usePrefersMobileLayout();
+  const { showToast } = useToastContext();
+  const [exportSheetOpen, setExportSheetOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+
+  const handleImportSelect = useCallback(
+    async (selection: AddToKnowledgeSelection) => {
+      if (!activeConvoId) return;
+      const ids = getSelectedIds(messages);
+      const messageIds = ids
+        .map((s) => Number.parseInt(s, 10))
+        .filter((n) => Number.isFinite(n));
+      if (!messageIds.length) return;
+
+      try {
+        const resp = await importMessagesToKnowledgeApi({
+          chatId: activeConvoId,
+          messageIds,
+          knowledgeSpaceId: Number(selection.knowledgeSpaceId),
+          parentId: selection.folderId ? Number(selection.folderId) : null,
+        });
+        showToast({
+          message:
+            t('workstation.messageExport.importSuccess') +
+            (resp.dup_renamed ? ` (${resp.target_filename})` : ''),
+          severity: NotificationSeverity.SUCCESS,
+        });
+        setImportModalOpen(false);
+        exitSelectionMode();
+      } catch {
+        // Toast text is generic — error code-specific copy is wired in T020.
+        showToast({
+          message: t('workstation.messageExport.renderFailed'),
+          severity: NotificationSeverity.ERROR,
+        });
+      }
+    },
+    [activeConvoId, messages, getSelectedIds, showToast, t, exitSelectionMode],
+  );
 
   const navigate = useNavigate();
 
@@ -417,6 +481,31 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
         {/* Invitation Code */}
         <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
+
+        {/* F028: workstation conversation export / import overlay layer */}
+        {activeConvoId && selectionState.active && selectionState.chatId === activeConvoId && (
+          <>
+            <MessageSelectionToolbar
+              chatId={activeConvoId}
+              messages={messages}
+              onExportToLocal={isH5 ? () => setExportSheetOpen(true) : undefined}
+              onImportToKnowledge={() => setImportModalOpen(true)}
+            />
+            <ExportFormatSheet
+              open={exportSheetOpen}
+              onOpenChange={setExportSheetOpen}
+              chatId={activeConvoId}
+              messages={messages}
+            />
+            <AddToKnowledgeModal
+              open={importModalOpen}
+              onOpenChange={setImportModalOpen}
+              mode="channel_sync"
+              dataSourceApi={listUploadableSpacesApi}
+              onSyncSelect={handleImportSelect}
+            />
+          </>
+        )}
       </div>
     </Presentation>
   );

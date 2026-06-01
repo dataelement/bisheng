@@ -41,7 +41,9 @@ async def get_online_chat(*,
     """
     total_start = perf_counter()
     if sort_by == 'update_time':
-        data, total = await WorkFlowService.get_all_flows(
+        # F027: get_all_flows now returns (data, has_more); ``total`` was removed.
+        # This chat endpoint logs are the only consumers; we log ``has_more``.
+        data, has_more = await WorkFlowService.get_all_flows(
             user,
             keyword,
             FlowStatus.ONLINE.value,
@@ -53,9 +55,10 @@ async def get_online_chat(*,
             search_description=bool(search_description),
             permission_id=permission_id,
         )
+        total = len(data)  # local view; not authoritative across DB
     else:
         flow_fetch_start = perf_counter()
-        data, total = await WorkFlowService.get_all_flows(
+        data, has_more = await WorkFlowService.get_all_flows(
             user,
             keyword,
             FlowStatus.ONLINE.value,
@@ -68,12 +71,12 @@ async def get_online_chat(*,
             permission_id=permission_id,
         )
         logger.info(
-            '[perf][chat.online.flow_fetch] user_id={} flow_type={} keyword={} rows={} total={} took_ms={:.2f}',
+            '[perf][chat.online.flow_fetch] user_id={} flow_type={} keyword={} rows={} has_more={} took_ms={:.2f}',
             user.user_id,
             flow_type,
             keyword or '',
             len(data),
-            total,
+            has_more,
             (perf_counter() - flow_fetch_start) * 1000,
         )
 

@@ -71,6 +71,10 @@ export async function getToolPermissionTemplateApi(): Promise<PermissionTemplate
   return await axios.get(`/api/v1/permissions/permission-templates/tool`)
 }
 
+export async function getChannelPermissionTemplateApi(): Promise<PermissionTemplateSection> {
+  return await axios.get(`/api/v1/permissions/permission-templates/channel`)
+}
+
 export async function getResourcePermissions(
   resourceType: string,
   resourceId: string,

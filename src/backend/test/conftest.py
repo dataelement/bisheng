@@ -138,7 +138,7 @@ async def async_db_session(async_db_engine):
     Isolation is provided by the function-scoped engine (fresh in-memory DB per
     test), so no explicit rollback is needed — the DB is discarded after yield.
     """
-    from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlmodel.ext.asyncio.session import AsyncSession
 
     # expire_on_commit=False prevents SQLAlchemy from marking objects as expired
     # after commit(), which would otherwise trigger sync lazy-loads in async
