@@ -1,6 +1,4 @@
 from bisheng.core.database import get_async_db_session, get_database_connection
-from bisheng.database.models.group import DefaultGroup
-from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
 from bisheng.telemetry_search.domain.models.dashboard import DashboardType
 from bisheng.telemetry_search.domain.models.dashboard_dao import DashboardDao
 from bisheng.telemetry_search.domain.models.dashboard_dataset import DashboardDataset, SchemaConfig, MetricConfig, \
@@ -1222,16 +1220,6 @@ async def init_dashboard_datasets():
     if not preset_dashboard:
         await DashboardDao.exec_sql_str(preset_oss_dashboard_sql)
         await DashboardDao.exec_sql_str(preset_commercial_dashboard_sql)
-        await GroupResourceDao.ainsert_group_batch([
-            GroupResource(
-                group_id=DefaultGroup,
-                third_id=str(10),
-                type=ResourceTypeEnum.DASHBOARD.value),
-            GroupResource(
-                group_id=DefaultGroup,
-                third_id=str(11),
-                type=ResourceTypeEnum.DASHBOARD.value),
-        ])
 
 
 if __name__ == '__main__':

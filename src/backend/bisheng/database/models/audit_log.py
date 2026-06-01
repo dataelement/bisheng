@@ -166,7 +166,6 @@ class AuditLogBase(SQLModelSerializable):
 
 
 class AuditLog(AuditLogBase, table=True):
-    # id = 2 Represents the default user group
     id: str = Field(default_factory=generate_uuid, primary_key=True, index=True, description="primary keyuuidFormat")
 
 

@@ -10,7 +10,7 @@ from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import Department, UserDepartment
-from bisheng.database.models.group import DefaultGroup, Group
+from bisheng.database.models.group import Group
 from bisheng.database.models.role import Role
 from bisheng.database.models.tenant import UserTenant
 from bisheng.database.models.user_group import UserGroup
@@ -334,14 +334,16 @@ class UserDao(UserBase):
         default_groupid: Optional[int] = None,
         default_roleid: Optional[int] = None) -> User:
         """
-        Add SSO users with configured default group and role.
+        Add SSO users with a configured role and, optionally, a configured group.
+
+        Users are no longer forced into a default user group: a group binding is
+        created only when ``default_groupid`` is explicitly configured.
         """
-        group_id = default_groupid or DefaultGroup
         role_id = default_roleid or DefaultRole
 
         async with get_async_db_session() as session:
             if default_groupid is not None:
-                group_result = await session.exec(select(Group).where(Group.id == group_id))
+                group_result = await session.exec(select(Group).where(Group.id == default_groupid))
                 if not group_result.first():
                     raise ValueError('Configured default_groupid does not exist')
 
@@ -349,7 +351,9 @@ class UserDao(UserBase):
             role = role_result.first()
             if not role:
                 raise ValueError('Configured default_roleid does not exist')
-            if role.group_id != group_id:
+            # When a group is explicitly configured, the configured role must belong
+            # to it. Without a configured group there is no group binding to validate.
+            if default_groupid is not None and role.group_id != default_groupid:
                 raise ValueError('Configured default_roleid does not belong to default_groupid')
 
             session.add(user)
@@ -359,8 +363,11 @@ class UserDao(UserBase):
             db_user_role = UserRole(user_id=user.user_id, role_id=role_id)
             session.add(db_user_role)
 
-            db_user_group = UserGroup(user_id=user.user_id, group_id=group_id, is_group_admin=False)
-            session.add(db_user_group)
+            if default_groupid is not None:
+                db_user_group = UserGroup(
+                    user_id=user.user_id, group_id=default_groupid, is_group_admin=False,
+                )
+                session.add(db_user_group)
 
             await session.commit()
             await session.refresh(user)

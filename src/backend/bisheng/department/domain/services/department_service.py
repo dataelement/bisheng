@@ -1104,7 +1104,7 @@ class DepartmentService:
         if user_ids:
             async with get_async_db_session() as session:
                 # User groups
-                from bisheng.database.models.group import Group, LEGACY_HIDDEN_USER_GROUP_NAMES
+                from bisheng.database.models.group import Group
                 from bisheng.database.models.user_group import UserGroup
                 from bisheng.user_group.domain.services.user_group_service import (
                     _can_view_all_groups,
@@ -1129,7 +1129,6 @@ class DepartmentService:
                     .join(Group, UserGroup.group_id == Group.id)
                     .where(
                         UserGroup.user_id.in_(user_ids),
-                        col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
                     )
                 )
                 if not await _can_view_all_groups(login_user):

@@ -767,11 +767,11 @@ async def _list_knowledge_space_grant_user_groups(
     keyword: str,
     login_user,
 ) -> list[dict]:
-    from sqlmodel import col, select
+    from sqlmodel import select
 
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.core.database import get_async_db_session
-    from bisheng.database.models.group import LEGACY_HIDDEN_USER_GROUP_NAMES, Group
+    from bisheng.database.models.group import Group
     from bisheng.database.models.tenant import Tenant
     from bisheng.database.models.user_group import UserGroupDao
     from bisheng.user_group.domain.services.user_group_service import (
@@ -798,7 +798,6 @@ async def _list_knowledge_space_grant_user_groups(
                 .where(
                     Group.tenant_id == tenant_id,
                     Tenant.status == 'active',
-                    col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
                 )
                 .order_by(Group.update_time.desc())
                 .limit(2000)

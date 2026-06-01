@@ -498,7 +498,7 @@ class UserGroupDao(UserGroupBase):
         Async: For a list of user_ids, return a map of user_id -> List[Group].
         Only includes non-admin group memberships (is_group_admin == 0).
         """
-        from bisheng.database.models.group import Group, LEGACY_HIDDEN_USER_GROUP_NAMES
+        from bisheng.database.models.group import Group
         if not user_ids:
             return {}
         statement = (
@@ -507,7 +507,6 @@ class UserGroupDao(UserGroupBase):
             .where(
                 UserGroup.user_id.in_(user_ids),
                 UserGroup.is_group_admin == 0,
-                col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
             )
         )
         async with get_async_db_session() as session:

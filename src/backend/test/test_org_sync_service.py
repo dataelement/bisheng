@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.database.constants import DefaultRole
-from bisheng.database.models.group import DefaultGroup
 from bisheng.org_sync.domain.schemas.remote_dto import RemoteMemberDTO
 from bisheng.org_sync.domain.services.reconciler import ArchiveDept, CreateMember
 
@@ -41,30 +40,9 @@ async def test_archive_dept_marks_remote_deleted(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ensure_default_user_group_membership_adds_missing_member(monkeypatch):
-    import bisheng.org_sync.domain.services.org_sync_service as m
-    from bisheng.org_sync.domain.services.org_sync_service import OrgSyncService
-
-    monkeypatch.setattr(
-        m.GroupDao, 'aget_by_id',
-        AsyncMock(return_value=SimpleNamespace(id=DefaultGroup)),
-    )
-    monkeypatch.setattr(
-        m.UserGroupDao, 'acheck_members_exist',
-        AsyncMock(return_value=[]),
-    )
-    monkeypatch.setattr(m.UserGroupDao, 'aadd_members_batch', AsyncMock())
-    monkeypatch.setattr(m.GroupChangeHandler, 'execute_async', AsyncMock())
-
-    result = await OrgSyncService._ensure_default_user_group_membership(7)
-
-    assert result == [DefaultGroup]
-    m.UserGroupDao.aadd_members_batch.assert_awaited_once_with(DefaultGroup, [7])
-    m.GroupChangeHandler.execute_async.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_create_member_syncs_default_group_tuple(monkeypatch):
+async def test_create_member_assigns_role_without_group(monkeypatch):
+    """Synced users get the default role but are no longer forced into any user
+    group; their access is carried by department membership."""
     import bisheng.org_sync.domain.services.org_sync_service as m
     from bisheng.org_sync.domain.services.org_sync_service import OrgSyncService
 
@@ -72,11 +50,6 @@ async def test_create_member_syncs_default_group_tuple(monkeypatch):
     monkeypatch.setattr(
         m.UserDao, 'add_user_and_default_role',
         AsyncMock(return_value=created_user),
-    )
-    monkeypatch.setattr(
-        OrgSyncService,
-        '_ensure_default_user_group_membership',
-        AsyncMock(return_value=[DefaultGroup]),
     )
     monkeypatch.setattr(
         m.LegacyRBACSyncService, 'sync_user_auth_created',
@@ -99,6 +72,7 @@ async def test_create_member_syncs_default_group_tuple(monkeypatch):
         CreateMember(remote=remote), config, {'d-1': 11},
     )
 
+    # No member_group_ids passed → no default user group binding.
     m.LegacyRBACSyncService.sync_user_auth_created.assert_awaited_once_with(
-        7, [DefaultRole], member_group_ids=[DefaultGroup],
+        7, [DefaultRole],
     )

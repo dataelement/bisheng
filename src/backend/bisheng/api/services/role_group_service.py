@@ -1,5 +1,4 @@
 import asyncio
-import json
 from datetime import datetime
 from typing import List, Any, Dict, Optional
 
@@ -13,13 +12,11 @@ from bisheng.api.v1.schemas import resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.user import AdminUserUpdateForbiddenError
-from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.database.constants import AdminRole
 from bisheng.database.models.assistant import AssistantDao
 from bisheng.database.models.flow import FlowDao, FlowType
 from bisheng.database.models.group import Group, GroupCreate, GroupDao, GroupRead
 from bisheng.database.models.group_resource import GroupResourceDao, ResourceTypeEnum
-from bisheng.database.models.role import RoleDao
 from bisheng.database.models.user_group import UserGroupCreate, UserGroupDao, UserGroupRead
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.permission.domain.services.legacy_rbac_sync_service import LegacyRBACSyncService
@@ -51,26 +48,6 @@ class RoleGroupService():
             _run_async_safe(LegacyRBACSyncService.cleanup_user_group_subject_tuples(group_id))
         except Exception as exc:
             logger.warning('Failed to cleanup legacy user_group subject tuples group=%s: %s', group_id, exc)
-
-    @staticmethod
-    def _sync_group_resource_move(
-        old_group_id: int,
-        new_group_id: int,
-        resource_type: int,
-        resource_id: str,
-    ) -> None:
-        try:
-            _run_async_safe(LegacyRBACSyncService.sync_group_resource_move(
-                old_group_id,
-                new_group_id,
-                int(resource_type),
-                str(resource_id),
-            ))
-        except Exception as exc:
-            logger.warning(
-                'Failed to sync legacy groupresource move old_group=%s new_group=%s type=%s resource=%s: %s',
-                old_group_id, new_group_id, resource_type, resource_id, exc,
-            )
 
     def enrich_group_reads(self, groups: List[Group]) -> List[GroupRead]:
         """Attach admins to Group ORM rows and return GroupRead list."""
@@ -156,42 +133,14 @@ class RoleGroupService():
         logger.info(f'act=delete_group_hook user={login_user.user_name} group_id={group_info.id}')
         # Log Audit Logs
         AuditLogService.delete_user_group(login_user, get_request_ip(request), group_info)
-        # Move resources that only belonged to this group to another existing group (if any)
-        all_resource = GroupResourceDao.get_group_all_resource(group_info.id)
-        need_move_resource = []
-        need_move_fga_sync = []
-        fallback_gid = None
-        for g in GroupDao.get_all_group():
-            if g.id != group_info.id:
-                fallback_gid = g.id
-                break
-        for one in all_resource:
-            resource_groups = GroupResourceDao.get_resource_group(ResourceTypeEnum(one.type), one.third_id)
-            if len(resource_groups) > 1:
-                continue
-            if fallback_gid is not None:
-                need_move_fga_sync.append((one.type, one.third_id))
-                one.group_id = str(fallback_gid)
-                need_move_resource.append(one)
-        if need_move_resource:
-            GroupResourceDao.update_group_resource(need_move_resource)
-            for resource_type, third_id in need_move_fga_sync:
-                self._sync_group_resource_move(group_info.id, fallback_gid, resource_type, third_id)
-        GroupResourceDao.delete_group_resource_by_group_id(group_info.id)
-        # Delete role list under user group
-        for role in RoleDao.get_role_by_groups([group_info.id], '', 0, 0):
-            try:
-                _run_async_safe(LegacyRBACSyncService.sync_role_deleted(role.id))
-            except Exception as exc:
-                logger.warning('Failed to sync legacy role deletion role=%s: %s', role.id, exc)
-        RoleDao.delete_role_by_group_id(group_info.id)
-        # Delete administrators of user groups
-        UserGroupDao.delete_group_all_admin(group_info.id)
-        # Send delete event toredisQueued
-        delete_message = json.dumps({"id": group_info.id})
-        redis_client = get_redis_client_sync()
-        redis_client.rpush('delete_group', delete_message, expiration=86400)
-        redis_client.publish('delete_group', delete_message)
+        # Resources and roles are no longer associated with user groups, so deletion
+        # neither migrates resources nor cascades role removal. Residual side effects
+        # (admin row cleanup + gateway notify) are shared with the F003 delete path.
+        from bisheng.user_group.domain.services.user_group_service import (
+            purge_user_group_residual_sync,
+        )
+
+        purge_user_group_residual_sync(group_info.id)
 
     def get_group_user_list(self, group_id: int, page_size: int, page_num: int) -> Optional[List[Dict]]:
         """Get the full amountgroupVertical"""

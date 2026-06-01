@@ -26,8 +26,6 @@ from bisheng.database.constants import (
     DefaultRole,
     USER_DISABLE_SOURCE_ORG_SYNC,
 )
-from bisheng.database.models.group import DefaultGroup, GroupDao
-from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.department import (
     Department,
     DepartmentDao,
@@ -47,7 +45,6 @@ from bisheng.tenant.domain.constants import DeletionSource
 from bisheng.tenant.domain.services.department_deletion_handler import (
     DepartmentDeletionHandler,
 )
-from bisheng.user_group.domain.services.group_change_handler import GroupChangeHandler
 from bisheng.org_sync.domain.models.org_sync import (
     OrgSyncConfig,
     OrgSyncConfigDao,
@@ -477,13 +474,11 @@ class OrgSyncService:
             password=password_hash,
         )
         user = await UserDao.add_user_and_default_role(user)
-        member_group_ids = await cls._ensure_default_user_group_membership(
-            user.user_id,
-        )
+        # Synced users are no longer forced into a default user group; their access
+        # is carried by department membership assigned below.
         await LegacyRBACSyncService.sync_user_auth_created(
             user.user_id,
             [DefaultRole],
-            member_group_ids=member_group_ids,
         )
 
         # Create UserTenant
@@ -517,39 +512,6 @@ class OrgSyncService:
             await DepartmentSyncRBACService.aapply_department_default_roles_for_user(
                 int(user.user_id), int(dept_id),
             )
-
-    @classmethod
-    async def _ensure_default_user_group_membership(cls, user_id: int) -> list[int]:
-        """Mirror normal user creation: add synced users to the default group.
-
-        Some deployments still use the legacy default user group as the
-        management surface for automatically-created accounts. Treat it as
-        best-effort because fresh v2.5 installs may not have group id 2.
-        """
-        try:
-            group = await GroupDao.aget_by_id(DefaultGroup)
-            if group is None:
-                return []
-            existing = await UserGroupDao.acheck_members_exist(
-                DefaultGroup, [user_id],
-            )
-            existing_ids = {
-                int(row[0]) if isinstance(row, (tuple, list)) else int(row)
-                for row in existing
-            }
-            if user_id not in existing_ids:
-                await UserGroupDao.aadd_members_batch(DefaultGroup, [user_id])
-                tuple_ops = GroupChangeHandler.on_members_added(
-                    DefaultGroup, [user_id],
-                )
-                await GroupChangeHandler.execute_async(tuple_ops)
-            return [DefaultGroup]
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                f'Failed to attach synced user {user_id} '
-                f'to default group: {exc}',
-            )
-            return []
 
     @classmethod
     async def _update_member(

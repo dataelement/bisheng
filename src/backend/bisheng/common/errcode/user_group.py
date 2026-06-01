@@ -12,16 +12,6 @@ class UserGroupNameDuplicateError(BaseErrorCode):
     Msg: str = 'User group name already exists in this tenant'
 
 
-class UserGroupDefaultProtectedError(BaseErrorCode):
-    Code: int = 23002
-    Msg: str = 'Cannot delete or rename default user group'
-
-
-class UserGroupHasMembersError(BaseErrorCode):
-    Code: int = 23003
-    Msg: str = 'Cannot delete user group with members'
-
-
 class UserGroupMemberExistsError(BaseErrorCode):
     Code: int = 23004
     Msg: str = 'User is already a member of this group'

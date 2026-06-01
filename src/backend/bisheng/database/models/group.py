@@ -3,15 +3,9 @@ from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import Column, DateTime, Integer, String, delete, func, text, update
 from sqlalchemy.schema import UniqueConstraint
-from sqlmodel import Field, col, select
+from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
-
-# Default User GroupID
-DefaultGroup = 2
-
-# 历史默认用户组名称，列表 API 中隐藏（数据可由 scripts/remove_default_user_group.py 清理）
-LEGACY_HIDDEN_USER_GROUP_NAMES = ('Default user group', '默认用户组')
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 
@@ -164,9 +158,7 @@ class GroupDao(GroupBase):
         """Paginated list of all groups for current tenant (auto-filtered)."""
         async with get_async_db_session() as session:
             session.expire_on_commit = False
-            base = select(Group).where(
-                col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES),
-            )
+            base = select(Group)
             if keyword:
                 base = base.where(Group.group_name.like(f'%{keyword}%'))
             # total count
@@ -207,15 +199,13 @@ class GroupDao(GroupBase):
 
             visibility_cond = Group.visibility == 'public'
             creator_cond = Group.create_user == user_id
-            hidden_name = col(Group.group_name).notin_(LEGACY_HIDDEN_USER_GROUP_NAMES)
             if user_group_ids:
                 stmt = select(Group).where(
-                    hidden_name
-                    & (visibility_cond | creator_cond | Group.id.in_(user_group_ids)),
+                    visibility_cond | creator_cond | Group.id.in_(user_group_ids),
                 )
             else:
                 stmt = select(Group).where(
-                    hidden_name & (visibility_cond | creator_cond),
+                    visibility_cond | creator_cond,
                 )
             if keyword:
                 stmt = stmt.where(Group.group_name.like(f'%{keyword}%'))

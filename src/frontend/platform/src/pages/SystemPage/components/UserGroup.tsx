@@ -56,7 +56,6 @@ export default function UserGroups() {
     const [userGroup, setUserGroup] = useState<UserGroupV2 | Record<string, never> | null>(null)
     const tempRef = useRef<UserGroupV2[]>([])
 
-    const HIDDEN_GROUP_NAMES = new Set(['Default user group', '默认用户组'])
     const PAGE_SIZE = 20
 
     const loadData = async (nextPage = page, nextKeyword = keyword) => {
@@ -67,7 +66,7 @@ export default function UserGroups() {
                 limit: PAGE_SIZE,
                 keyword: nextKeyword || undefined,
             })
-            const records = (res?.data ?? []).filter((ug) => !HIDDEN_GROUP_NAMES.has(ug.group_name))
+            const records = res?.data ?? []
             setUserGroups(records)
             tempRef.current = records
             setTotal(res?.total ?? records.length)
