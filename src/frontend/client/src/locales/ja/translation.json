@@ -1383,6 +1383,7 @@
     "exit_space_failed": "スペースの退出に失敗しました",
     "exit_space_short": "スペースを退出",
     "exited_space": "スペースを退出しました",
+    "organization_grant_exit_blocked": "このスペースは部署/ユーザーグループ経由で付与されているため、現在退出できません。",
     "explore_more_spaces": "ここでさらに多くのナレッジスペースを探索できます",
     "explore_square": "ナレッジ広場を探索する",
     "fail": "失敗",

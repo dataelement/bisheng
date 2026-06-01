@@ -121,18 +121,75 @@ async def test_unsubscribe_user_group_source_is_blocked():
 
 
 @pytest.mark.asyncio
-async def test_unsubscribe_mixed_sources_only_removes_direct_source():
+async def test_unsubscribe_permission_model_department_without_membership_is_blocked():
+    repo = _Repo([])
+    service = _service(repo)
+
+    with patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
+        new=AsyncMock(return_value=[{
+            'resource_type': 'channel',
+            'resource_id': 'channel-1',
+            'subject_type': 'department',
+            'subject_id': 100,
+            'relation': 'viewer',
+            'include_children': False,
+            'model_id': 'viewer',
+        }]),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_current_user_subject_strings',
+        new=AsyncMock(return_value={'user:7', 'department:100#member'}),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_binding_department_paths',
+        new=AsyncMock(return_value={}),
+    ):
+        with pytest.raises(ChannelOrganizationGrantUnsubscribeDeniedError) as exc_info:
+            await service.unsubscribe_channel('channel-1', _User())
+
+    assert exc_info.value.kwargs['blocked_by'] == ['department']
+    assert repo.deleted_binding_keys == []
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_permission_model_user_group_without_membership_is_blocked():
+    repo = _Repo([])
+    service = _service(repo)
+
+    with patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
+        new=AsyncMock(return_value=[{
+            'resource_type': 'channel',
+            'resource_id': 'channel-1',
+            'subject_type': 'user_group',
+            'subject_id': 200,
+            'relation': 'editor',
+            'include_children': None,
+            'model_id': 'editor',
+        }]),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_current_user_subject_strings',
+        new=AsyncMock(return_value={'user:7', 'user_group:200#member'}),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_binding_department_paths',
+        new=AsyncMock(return_value={}),
+    ):
+        with pytest.raises(ChannelOrganizationGrantUnsubscribeDeniedError) as exc_info:
+            await service.unsubscribe_channel('channel-1', _User())
+
+    assert exc_info.value.kwargs['blocked_by'] == ['user_group']
+    assert repo.deleted_binding_keys == []
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_mixed_sources_is_blocked_when_organization_source_exists():
     repo = _Repo([
         _member(member_id=1, subject_type='user', subject_id=7, binding_key='user-viewer'),
         _member(member_id=2, subject_type='department', subject_id=100, binding_key='dept-viewer'),
     ])
     service = _service(repo)
 
-    with patch(
-        'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
-        new=AsyncMock(),
-    ):
-        result = await service.unsubscribe_channel('channel-1', _User())
+    with pytest.raises(ChannelOrganizationGrantUnsubscribeDeniedError) as exc_info:
+        await service.unsubscribe_channel('channel-1', _User())
 
-    assert result is True
-    assert repo.deleted_binding_keys == ['user-viewer']
+    assert exc_info.value.kwargs['blocked_by'] == ['department']
+    assert repo.deleted_binding_keys == []

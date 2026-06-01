@@ -3,7 +3,7 @@ import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
 from fastapi import Request
 from loguru import logger
@@ -28,6 +28,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderNotFoundError,
     SpaceLimitError,
     SpaceNotFoundError,
+    SpaceOrganizationGrantExitDeniedError,
     SpacePermissionDeniedError,
     SpaceSubscribeLimitError,
     SpaceSubscribePrivateError,
@@ -92,12 +93,6 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.message.domain.services.notification_content import build_notify_content
-from bisheng.approval.domain.services.approval_gate import ApprovalGate
-from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
-from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
-from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
-    KnowledgeSpaceSubscribeScenarioHandler,
-)
 from bisheng.llm.domain import LLMService
 from bisheng.permission.domain.knowledge_space_permission_template import (
     default_permission_ids_for_relation,
@@ -118,6 +113,7 @@ from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 if TYPE_CHECKING:
+    from bisheng.common.schemas.api import PageInfiniteCursorData
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
         KnowledgeDocumentRepository,
     )
@@ -3608,6 +3604,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             current_membership and current_membership.user_role == UserRoleEnum.CREATOR
         ):
             raise SpacePermissionDeniedError()
+
+        organization_subject_types = await FineGrainedPermissionService.get_matching_binding_subject_types_async(
+            self.login_user,
+            'knowledge_space',
+            space_id,
+            {'department', 'user_group'},
+        )
+        if organization_subject_types:
+            raise SpaceOrganizationGrantExitDeniedError(
+                blocked_by=sorted(organization_subject_types),
+            )
 
         await self._revoke_direct_space_user_permissions(space_id, self.login_user.user_id)
         deleted = await SpaceChannelMemberDao.delete_space_member(space_id, self.login_user.user_id)

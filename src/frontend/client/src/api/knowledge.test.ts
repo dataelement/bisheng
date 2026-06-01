@@ -74,6 +74,27 @@ describe("subscribeSpaceApi", () => {
   });
 });
 
+describe("unsubscribeSpaceApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("returns backend response so callers can handle business status codes", async () => {
+    const { unsubscribeSpaceApi } = await import("./knowledge");
+    mockPost.mockResolvedValue({
+      status_code: 18071,
+      status_message: "本空间通过部门/用户组授权给你，暂无法退出",
+      data: null,
+    });
+
+    await expect(unsubscribeSpaceApi("101")).resolves.toEqual({
+      status_code: 18071,
+      status_message: "本空间通过部门/用户组授权给你，暂无法退出",
+      data: null,
+    });
+  });
+});
+
 describe("createFolderApi", () => {
   beforeEach(() => {
     mockPost.mockReset();
