@@ -6,6 +6,14 @@
  * - Tag badge overlays top-left of first line; text-indent clears the badge; outer wrapper scrolls so badge moves with text
  * - '#' key opens TagPicker; selecting a tag sets the badge (max 1)
  * - With tag selected and empty input: first Backspace/Delete highlights tag; second removes it (no extra chrome)
+ *
+ * Variants (frame only — internal layout is identical):
+ * - `box`  (default) standalone floating input — rounded-[20px] white card with subtle
+ *           border and shadow. Matches the bottom-dock collapsed state.
+ * - `line` flush input inside a chat card — no border/shadow/rounded; a thin top divider
+ *           visually separates it from the messages above.
+ *
+ * The component renders no outer padding; the parent owns positioning and spacing.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRecoilState } from "recoil";
@@ -17,6 +25,7 @@ import type { FolderChatTag } from "~/hooks/useFolderChat";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
+import { cn } from "~/utils";
 import store from "~/store";
 
 interface KnowledgeAiInputProps {
@@ -27,6 +36,11 @@ interface KnowledgeAiInputProps {
     disabled?: boolean;
     onSend: (text: string, files?: any[] | null, tag?: FolderChatTag) => void;
     onStop: () => void;
+    /** Visual frame; see file header. Defaults to "box". */
+    variant?: "box" | "line";
+    /** Notifies parent when the textarea gains/loses focus — used by the dock to
+     *  drive the mobile keyboard-up grey overlay. */
+    onFocusChange?: (focused: boolean) => void;
 }
 
 const TAG_TEXT_GAP_PX = 4;
@@ -43,6 +57,8 @@ export function KnowledgeAiInput({
     disabled,
     onSend,
     onStop,
+    variant = "box",
+    onFocusChange,
 }: KnowledgeAiInputProps) {
     const outerScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const localize = useLocalize();
@@ -219,8 +235,14 @@ export function KnowledgeAiInput({
     );
 
     return (
-        <div className="px-4 pb-4 shrink-0">
-            <div className="relative flex w-full flex-col rounded-xl bg-surface-tertiary pb-3">
+        <div
+            className={cn(
+                "relative flex w-full flex-col bg-white pb-3",
+                variant === "box"
+                    ? "rounded-[20px] border border-[#E5E6EB] shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+                    : "border-t border-[#EBEBEB]",
+            )}
+        >
                 {/* Tag picker popup */}
                 {showPicker && (
                     <div className="px-3">
@@ -272,6 +294,8 @@ export function KnowledgeAiInput({
                                 onCompositionEnd={() => {
                                     isComposingRef.current = false;
                                 }}
+                                onFocus={() => onFocusChange?.(true)}
+                                onBlur={() => onFocusChange?.(false)}
                                 disabled={disabled || isStreaming}
                                 placeholder={resolvedPlaceholder}
                                 rows={1}
@@ -351,7 +375,6 @@ export function KnowledgeAiInput({
                         </button>
                     )}
                 </div>
-            </div>
         </div>
     );
 }

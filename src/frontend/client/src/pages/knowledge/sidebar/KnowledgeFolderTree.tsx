@@ -120,8 +120,9 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
                     )}
                 </div>
 
-                {/* Folder name */}
-                <span className="min-w-0 flex-1 truncate pl-1">{node.name}</span>
+                {/* Folder name — no truncation: row width grows to natural content width,
+                    and the outer w-max wrapper aligns all rows to the widest. */}
+                <span className="flex-1 whitespace-nowrap pl-1">{node.name}</span>
             </div>
 
             {/* Recursively render children when expanded.

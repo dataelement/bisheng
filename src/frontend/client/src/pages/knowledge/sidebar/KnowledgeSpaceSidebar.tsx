@@ -323,10 +323,17 @@ export function KnowledgeSpaceSidebar({
                     }}
                 >
                     <div
-                        className="h-full overflow-y-auto overscroll-y-contain scroll-on-scroll px-3 pb-5"
+                        className="h-full overflow-auto overscroll-y-contain scroll-on-scroll pl-3 pb-5 [container-type:inline-size]"
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
+                        {/* Single shared w-max wrapper around ALL sections so every item
+                            (regardless of section) aligns to the global widest. Section
+                            headers inside this wrapper use width: 100cqi to stay at the
+                            scroll container's visible width — that lets sticky-left/top
+                            keep them pinned to the viewport edges even while items
+                            horizontally overflow. */}
+                        <div className="w-max min-w-full pr-3">
                         {/* Department spaces — always on top per PRD */}
                         {departmentSpaces.length > 0 && (
                             <div className="pt-0 pb-4">
@@ -424,6 +431,7 @@ export function KnowledgeSpaceSidebar({
                                     {!filteredJoinedSpaces.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>}
                                 </div>
                             )}
+                        </div>
                         </div>
                     </div>
                 </div>

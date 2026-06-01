@@ -30,12 +30,11 @@ import { useToastContext } from "~/Providers";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
-import { KnowledgeAiPanel } from "./SpaceDetail/AiChat/KnowledgeAiPanel";
+import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
 import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
-import { useAiSplitPane } from "./hooks/useAiSplitPane";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
@@ -161,9 +160,6 @@ export default function Knowledge() {
         loadFiles: fileManager.loadFiles,
         currentPage: fileManager.currentPage,
     });
-
-    // ─── AI split-pane ──────────────────────────────────────────────────
-    const aiPane = useAiSplitPane();
 
     // Share route: close drawer when leaving /knowledge/share/:spaceId
     useEffect(() => {
@@ -676,134 +672,90 @@ export default function Knowledge() {
                 : null}
 
             {activeSpace ? (
-                <div ref={aiPane.splitContainerRef} className="flex h-full min-w-0 flex-1 overflow-hidden">
-                    {(() => {
-                        const showMobileAiOnly = isH5 && aiPane.showAiAssistant;
-                        if (showMobileAiOnly) {
-                            return (
-                                // 与 MainLayout 内层卡片 min-h-[calc(100dvh-16px)]（main p-2）对齐，固定高度避免文档层滚动吃掉顶栏与输入区
-                                <div className="flex h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)] min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-                                    <KnowledgeAiPanel
-                                        spaceId={String(activeSpace.id)}
-                                        folderId={fileManager.currentFolderId}
-                                        contextLabel={contextLabel}
-                                        onClose={() => aiPane.setShowAiAssistant(false)}
-                                    />
-                                </div>
-                            );
-                        }
-                        return (
-                            <>
-                                {/* Left: file list */}
-                                <div
-                                    style={{ width: aiPane.showAiAssistant ? `${aiPane.aiSplitWidth}px` : '100%' }}
-                                    className={cn(
-                                        "flex h-full min-h-0 min-w-0 flex-shrink-0 flex-col overflow-hidden",
-                                        isH5 && "max-h-[calc(100dvh-16px)]",
-                                    )}
+                <div
+                    className={cn(
+                        "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                        isH5 && "max-h-[calc(100dvh-16px)]",
+                    )}
+                >
+                    {isH5 ? (
+                        // 勿用 fixed 贴视口：会叠在 MainLayout 圆角白卡外，盖住卡片上沿圆角；放在面板流式布局内即可
+                        <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                            <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
+                                <button
+                                    type="button"
+                                    aria-label={localize("com_nav_open_sidebar")}
+                                    onClick={() => setSystemMenuOpen(true)}
+                                    className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
                                 >
-                                    {isH5 ? (
-                                        // 勿用 fixed 贴视口：会叠在 MainLayout 圆角白卡外，盖住卡片上沿圆角；放在面板流式布局内即可
-                                        <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                                            <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
-                                                <button
-                                                    type="button"
-                                                    aria-label={localize("com_nav_open_sidebar")}
-                                                    onClick={() => setSystemMenuOpen(true)}
-                                                    className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
-                                                >
-                                                    <Outlined.SidebarMenu className="size-5" />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setSpaceListDrawerOpen((o) => !o)}
-                                                    aria-expanded={spaceListDrawerOpen}
-                                                    className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
-                                                >
-                                                    <span className="truncate text-base font-medium leading-6 text-[#212121]">
-                                                        {localize("com_knowledge.knowledge_space")}
-                                                    </span>
-                                                    <Outlined.Down
-                                                        className={cn(
-                                                            "size-5 shrink-0 text-[#86909C] transition-transform",
-                                                            spaceListDrawerOpen && "rotate-180",
-                                                        )}
-                                                    />
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    aria-label={localize("com_knowledge.create_knowledge_space")}
-                                                    onClick={handleCreateSpace}
-                                                    className={mobileHeadIconBtnClassName}
-                                                >
-                                                    <Outlined.Plus className="size-5" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ) : null}
-                                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]">
-                                    <KnowledgeSpaceContent
-                                        space={activeSpace}
-                                        files={fileManager.files}
-                                        total={fileManager.total}
-                                        onLoadMore={fileManager.loadMore}
-                                        hasMore={fileManager.hasMore}
-                                        loading={fileManager.loading}
-                                        onSearch={fileManager.handleSearch}
-                                        onFilterStatus={fileManager.setStatusFilter}
-                                        onSort={(sortBy, direction) => {
-                                            if (!sortBy || !direction) return;
-                                            fileManager.handleSort(sortBy, direction);
-                                        }}
-                                        onNavigateFolder={fileManager.handleNavigateFolder}
-                                        onUploadFile={fileUpload.handleUploadFile}
-                                        onCreateFolder={fileUpload.handleCreateFolder}
-                                        onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
-                                        onRenameFile={fileUpload.handleRenameFile}
-                                        onDeleteFile={fileUpload.handleDeleteFile}
-                                        onEditTags={fileUpload.handleEditTags}
-                                        onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
-                                        currentPath={fileManager.currentPath}
-                                        currentFolderId={fileManager.currentFolderId}
-                                        onDragStateChange={handleDragStateChange}
-                                        uploadingFiles={fileUpload.uploadingFiles}
-                                        creatingFolder={fileUpload.creatingFolder}
-                                        onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
-                                        onToggleAiAssistant={aiPane.handleToggleAiAssistant}
-                                        isAiAssistantOpen={aiPane.showAiAssistant}
-                                        onCreateSpace={handleCreateSpace}
-                                        onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                                    <Outlined.SidebarMenu className="size-5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSpaceListDrawerOpen((o) => !o)}
+                                    aria-expanded={spaceListDrawerOpen}
+                                    className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
+                                >
+                                    <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                                        {localize("com_knowledge.knowledge_space")}
+                                    </span>
+                                    <Outlined.Down
+                                        className={cn(
+                                            "size-5 shrink-0 text-[#86909C] transition-transform",
+                                            spaceListDrawerOpen && "rotate-180",
+                                        )}
                                     />
-                                    </div>
-                                </div>
-
-                                {/* Splitter */}
-                                {!isH5 && aiPane.showAiAssistant && (
-                                    <div className="relative z-20 w-px min-w-px max-w-px flex-none shrink-0">
-                                        {/* 分隔线固定 1px（w-px）；宽命中区用于拖拽，hover 仅变色不加宽 */}
-                                        <div
-                                            onMouseDown={aiPane.startSplitResize}
-                                            className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
-                                        >
-                                            <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-colors duration-150 group-hover:bg-primary group-active:bg-primary" />
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Right: AI assistant（左侧分隔由上一列 1px 承担，避免 border-l 叠成双线） */}
-                                {!isH5 && aiPane.showAiAssistant && (
-                                    <div className="flex-1 h-full min-w-[360px] bg-white">
-                                        <KnowledgeAiPanel
-                                            spaceId={String(activeSpace.id)}
-                                            folderId={fileManager.currentFolderId}
-                                            contextLabel={contextLabel}
-                                            onClose={() => aiPane.setShowAiAssistant(false)}
-                                        />
-                                    </div>
-                                )}
-                            </>
-                        );
-                    })()}
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-label={localize("com_knowledge.create_knowledge_space")}
+                                    onClick={handleCreateSpace}
+                                    className={mobileHeadIconBtnClassName}
+                                >
+                                    <Outlined.Plus className="size-5" />
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
+                    {/* `relative` anchors the bottom AI dock; the content scrolls within its own container while the dock overlays the bottom. */}
+                    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]">
+                        <KnowledgeSpaceContent
+                            space={activeSpace}
+                            files={fileManager.files}
+                            total={fileManager.total}
+                            onLoadMore={fileManager.loadMore}
+                            hasMore={fileManager.hasMore}
+                            loading={fileManager.loading}
+                            onSearch={fileManager.handleSearch}
+                            onFilterStatus={fileManager.setStatusFilter}
+                            onSort={(sortBy, direction) => {
+                                if (!sortBy || !direction) return;
+                                fileManager.handleSort(sortBy, direction);
+                            }}
+                            onNavigateFolder={fileManager.handleNavigateFolder}
+                            onUploadFile={fileUpload.handleUploadFile}
+                            onCreateFolder={fileUpload.handleCreateFolder}
+                            onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
+                            onRenameFile={fileUpload.handleRenameFile}
+                            onDeleteFile={fileUpload.handleDeleteFile}
+                            onEditTags={fileUpload.handleEditTags}
+                            onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
+                            currentPath={fileManager.currentPath}
+                            currentFolderId={fileManager.currentFolderId}
+                            onDragStateChange={handleDragStateChange}
+                            uploadingFiles={fileUpload.uploadingFiles}
+                            creatingFolder={fileUpload.creatingFolder}
+                            onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
+                            onCreateSpace={handleCreateSpace}
+                            onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                        />
+                        <KnowledgeAiBottomDock
+                            key={String(activeSpace.id)}
+                            spaceId={String(activeSpace.id)}
+                            folderId={fileManager.currentFolderId}
+                            contextLabel={contextLabel}
+                        />
+                    </div>
                 </div>
             ) : (
                 /* Empty state when no space is selected */

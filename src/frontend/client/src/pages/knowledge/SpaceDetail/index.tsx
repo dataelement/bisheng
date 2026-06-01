@@ -65,8 +65,6 @@ interface KnowledgeSpaceContentProps {
     uploadingFiles?: KnowledgeFile[];
     creatingFolder?: KnowledgeFile | null;
     onCancelCreateFolder?: () => void;
-    onToggleAiAssistant?: () => void;
-    isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
 }
@@ -95,8 +93,6 @@ export function KnowledgeSpaceContent({
     uploadingFiles = [],
     creatingFolder,
     onCancelCreateFolder,
-    onToggleAiAssistant,
-    isAiAssistantOpen,
     onCreateSpace,
     onGoKnowledgeSquare,
 }: KnowledgeSpaceContentProps) {
@@ -196,7 +192,7 @@ export function KnowledgeSpaceContent({
             window.removeEventListener("resize", apply);
             ro.disconnect();
         };
-    }, [viewMode, displayFiles.length, isAiAssistantOpen]);
+    }, [viewMode, displayFiles.length]);
 
     useEffect(() => {
         setSelectedFiles(new Set());
@@ -872,8 +868,6 @@ export function KnowledgeSpaceContent({
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
-                onToggleAiAssistant={onToggleAiAssistant}
-                isAiAssistantOpen={isAiAssistantOpen}
                 canShareSpace={canShareSpace}
             />
             </div>

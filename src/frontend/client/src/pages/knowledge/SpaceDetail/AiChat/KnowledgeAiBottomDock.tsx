@@ -1,0 +1,473 @@
+/**
+ * KnowledgeAiBottomDock — bottom-anchored AI dock for a single knowledge space.
+ *
+ * Architecture mirrors the subscription `ArticleAiDock`:
+ *   - Collapsed: a floating white input box pinned to the bottom of the pane.
+ *   - Expanded: a floating frosted card (header + messages + line-variant input)
+ *               grown upward by a `max-height` transition. The input itself never
+ *               moves — only its frame swaps between `box` and `line`.
+ *
+ * Differences from `ArticleAiDock`:
+ *   - Backend is `useFolderChat(spaceId, folderId)` — server-backed sessions,
+ *     history, rename, delete, regenerate.
+ *   - Input is `KnowledgeAiInput` — keeps the `#`-tag picker, tag badge, voice,
+ *     model select, and Enter-to-send behaviour intact across both variants.
+ *   - Header includes history toggle + new-session button (no destructive clear,
+ *     consistent with the prior side-panel UX).
+ *
+ * Parent contract: render inside a `position: relative` container with enough
+ * room above the dock for at least one row of content. The dock is `absolute
+ * inset-x-0 bottom-0` and overlays the bottom of that container.
+ */
+import { ChevronsRight, HistoryIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Outlined } from "bisheng-icons";
+import { useQuery } from "@tanstack/react-query";
+import { useRecoilValue } from "recoil";
+import { Button } from "~/components/ui";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "~/components/ui/Tooltip2";
+import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { KnowledgeAiInput } from "./KnowledgeAiInput";
+import { ConversationHistory } from "./ConversationHistory";
+import useFolderChat from "~/hooks/useFolderChat";
+import type { FolderChatTag } from "~/hooks/useFolderChat";
+import { getSpaceTagsApi } from "~/api/knowledge";
+import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { cn } from "~/utils";
+import store from "~/store";
+
+interface KnowledgeAiBottomDockProps {
+    /** Active knowledge space id. The dock unmounts when this is empty. */
+    spaceId: string;
+    /** Current folder id, undefined when browsing the space root. */
+    folderId?: string;
+    /** Welcome text disambiguates space-wide vs folder-scoped Q&A. */
+    contextLabel?: string;
+}
+
+export function KnowledgeAiBottomDock({
+    spaceId,
+    folderId,
+}: KnowledgeAiBottomDockProps) {
+    const localize = useLocalize();
+    const isH5 = usePrefersMobileLayout();
+    const { data: bsConfig } = useGetBsConfig();
+    const chatModel = useRecoilValue(store.chatModel);
+
+    const [open, setOpen] = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
+
+    /** Visual viewport tracking — pins the mobile-expanded panel above the virtual
+     *  keyboard. Mirrors `ArticleAiDock`. See that file for the full rationale. */
+    const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+    const [viewportOffsetTop, setViewportOffsetTop] = useState(0);
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
+    const peakVvHeightRef = useRef(0);
+    const keyboardUpRef = useRef(false);
+
+    useEffect(() => {
+        if (!isH5 || typeof window === "undefined") return;
+        const vv = window.visualViewport;
+        if (!vv) return;
+        const sync = () => {
+            setViewportHeight(vv.height);
+            setViewportOffsetTop(vv.offsetTop);
+            if (vv.height > peakVvHeightRef.current) peakVvHeightRef.current = vv.height;
+            if (peakVvHeightRef.current === 0) return;
+            const ratio = vv.height / peakVvHeightRef.current;
+            if (ratio < 0.6) {
+                keyboardUpRef.current = true;
+            } else if (ratio > 0.85 && keyboardUpRef.current) {
+                keyboardUpRef.current = false;
+                setKeyboardVisible(false);
+                // Force blur on iOS WeChat WKWebView's "收起" keyboard button which
+                // hides the keyboard without firing blur on the textarea.
+                const active = document.activeElement;
+                if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT")) {
+                    (active as HTMLElement).blur();
+                }
+            }
+        };
+        sync();
+        vv.addEventListener("resize", sync);
+        vv.addEventListener("scroll", sync);
+        window.addEventListener("resize", sync);
+        return () => {
+            vv.removeEventListener("resize", sync);
+            vv.removeEventListener("scroll", sync);
+            window.removeEventListener("resize", sync);
+        };
+    }, [isH5]);
+
+    // Space tags drive the '#' picker. Cached per space (shared with other consumers).
+    const { data: availableTags = [] } = useQuery({
+        queryKey: ["spaceTags", spaceId],
+        queryFn: () => getSpaceTagsApi(spaceId),
+        enabled: !!spaceId,
+    });
+
+    const {
+        messages,
+        sessions,
+        activeChatId,
+        isLoading,
+        isStreaming,
+        sendMessage,
+        stopGenerating,
+        createSession,
+        switchSession,
+        deleteSession,
+        renameSession,
+        regenerate,
+    } = useFolderChat(spaceId, folderId);
+
+    // Empty-state hint depends on whether the panel is opened at space root or in a folder.
+    const folderQaHint = folderId
+        ? localize("com_knowledge.qa_current_folder")
+        : localize("com_knowledge.qa_current_space");
+
+    const handleSend = (text: string, files?: any[] | null, tag?: FolderChatTag) => {
+        sendMessage(text, files, tag);
+        // First send slides the panel up — the input itself stays put.
+        if (!open) setOpen(true);
+    };
+
+    const handleNewChat = async () => {
+        await createSession();
+    };
+
+    const handleHistorySelect = (chatId: string) => {
+        switchSession(chatId);
+        setShowHistory(false);
+    };
+
+    // ─── Mobile + expanded: take over the full visual viewport ─────────────
+    if (isH5 && open) {
+        const messageHeader = (
+            <div className="relative flex shrink-0 items-center px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3">
+                <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
+                    {localize("com_knowledge.ai_assistant")}
+                </h3>
+                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+8px)] flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn(
+                            "size-8",
+                            showHistory ? "bg-[#e8f3ff] text-[#165dff]" : "text-[#86909c] hover:text-[#4e5969]",
+                        )}
+                        onClick={() => setShowHistory((v) => !v)}
+                        aria-label={localize("com_knowledge.history_chat")}
+                    >
+                        <HistoryIcon className="size-4" />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-[#86909c] hover:text-[#4e5969]"
+                        onClick={handleNewChat}
+                        aria-label={localize("com_knowledge.create_chat")}
+                    >
+                        <img
+                            className="size-4"
+                            src={`${__APP_ENV__.BASE_URL}/assets/channel/message-circle.svg`}
+                            alt=""
+                        />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-[#86909c] hover:text-[#4e5969]"
+                        onClick={() => setOpen(false)}
+                        aria-label={localize("com_ui_collapse")}
+                    >
+                        <Outlined.DoubleDown className="size-4" />
+                    </Button>
+                </div>
+            </div>
+        );
+
+        return (
+            <div
+                className="fixed inset-x-0 top-0 z-50 flex flex-col bg-white"
+                style={{
+                    height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+                    transform: `translateY(${viewportOffsetTop}px)`,
+                }}
+                role="dialog"
+                aria-modal="true"
+            >
+                {messageHeader}
+
+                {/* Messages — scrollable, with bottom fade-out under z-auto so the
+                    focused-state grey overlay can stack above. */}
+                <div className="relative min-h-0 flex-1">
+                    {messages.length === 0 && !activeChatId ? (
+                        <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+                            <img
+                                className="mx-auto block size-[80px] object-contain"
+                                src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
+                                alt="AI Assistant"
+                            />
+                            <p className="text-sm text-[#86909c]">{folderQaHint}</p>
+                        </div>
+                    ) : (
+                        <AiChatMessages
+                            messages={messages}
+                            conversationId={activeChatId}
+                            title=""
+                            isLoading={isLoading}
+                            isStreaming={isStreaming}
+                            presetQuestions={[]}
+                            hideShare
+                            hideHeaderTitle
+                            flatMode
+                            knowledgeChatLayout
+                            contentWidthClassName="max-w-none px-4"
+                            emptyStateHint={folderQaHint}
+                            onPresetClick={() => { }}
+                            onRegenerate={regenerate}
+                        />
+                    )}
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-10 bg-gradient-to-t from-white to-white/0"
+                    />
+                </div>
+
+                {/* Grey gradient overlay while the textarea has focus (keyboard up). */}
+                {keyboardVisible && (
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-b from-[rgba(0,0,0,0.10)] to-[rgba(0,0,0,0.45)]"
+                    />
+                )}
+
+                {/* Input — `relative z-[3]` lifts above the grey overlay. */}
+                <div className="relative z-[3] shrink-0 px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+                    <KnowledgeAiInput
+                        key={spaceId}
+                        availableTags={availableTags}
+                        modelOptions={bsConfig?.models}
+                        modelValue={chatModel.id}
+                        isStreaming={isStreaming}
+                        disabled={!bsConfig?.models?.length}
+                        onSend={handleSend}
+                        onStop={stopGenerating}
+                        variant="box"
+                        onFocusChange={setKeyboardVisible}
+                    />
+                </div>
+
+                {showHistory && (
+                    <ConversationHistory
+                        sessions={sessions}
+                        activeChatId={activeChatId}
+                        onSelect={handleHistorySelect}
+                        onDelete={deleteSession}
+                        onRename={renameSession}
+                        onClose={() => setShowHistory(false)}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    // ─── Desktop + mobile-collapsed: bottom-anchored dock ──────────────────
+    return (
+        <>
+            {/* Mobile collapsed-state grey overlay — when the box input is focused. */}
+            {isH5 && !open && keyboardVisible && (
+                <div
+                    aria-hidden
+                    className="pointer-events-none fixed inset-0 z-[19] bg-gradient-to-b from-[rgba(0,0,0,0.10)] to-[rgba(0,0,0,0.45)]"
+                />
+            )}
+            <div
+                className={cn(
+                    "absolute inset-x-0 bottom-0 z-20 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
+                    // pt-10 always — the fade backdrop hides on focus but the input
+                    // shouldn't jump when the keyboard opens.
+                    !open && "pt-10",
+                    !open && !keyboardVisible && "bg-gradient-to-b from-white/0 to-white",
+                )}
+            >
+                <div
+                    className={cn(
+                        "relative flex flex-col",
+                        open &&
+                            "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-gradient-to-b from-white/80 to-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)] backdrop-blur-[16px]",
+                    )}
+                >
+                    {/* Floating expand button — appears only after a conversation exists. */}
+                    {!open && messages.length > 0 && (
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        onClick={() => setOpen(true)}
+                                        aria-label={localize("com_ui_expand")}
+                                        className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                    >
+                                        <Outlined.DoubleDown className="size-4 rotate-180" />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p>{localize("com_ui_expand")}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    )}
+
+                    {/* Header + messages grow upward above the input. */}
+                    <div
+                        className={cn(
+                            "overflow-hidden transition-[max-height] duration-300 ease-out",
+                            open ? "max-h-[440px]" : "max-h-0",
+                        )}
+                    >
+                        <div className="flex h-[440px] flex-col">
+                            {/* Header */}
+                            <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
+                                <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-[#212121]">
+                                    {localize("com_knowledge.ai_assistant")}
+                                </h3>
+                                <div className="min-w-0 flex-1" aria-hidden />
+                                <div className="flex shrink-0 items-center gap-0">
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    type="button"
+                                                    size="icon"
+                                                    className={cn(
+                                                        "size-8 shrink-0",
+                                                        showHistory
+                                                            ? "bg-[#e8f3ff] text-[#165dff]"
+                                                            : "text-[#86909c] hover:text-[#4e5969]",
+                                                    )}
+                                                    onClick={() => setShowHistory((v) => !v)}
+                                                    aria-label={localize("com_knowledge.history_chat")}
+                                                >
+                                                    <HistoryIcon className="size-4 shrink-0" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>{localize("com_knowledge.history_chat")}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    type="button"
+                                                    size="icon"
+                                                    className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
+                                                    onClick={handleNewChat}
+                                                    aria-label={localize("com_knowledge.create_chat")}
+                                                >
+                                                    <img
+                                                        className="size-4 shrink-0"
+                                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/message-circle.svg`}
+                                                        alt=""
+                                                    />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>{localize("com_knowledge.create_chat")}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    type="button"
+                                                    size="icon"
+                                                    className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
+                                                    onClick={() => setOpen(false)}
+                                                    aria-label={localize("com_ui_collapse")}
+                                                >
+                                                    <Outlined.DoubleDown className="size-4 shrink-0" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top">
+                                                <p>{localize("com_ui_collapse")}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                </div>
+                            </div>
+
+                            {messages.length === 0 && !activeChatId ? (
+                                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+                                    <img
+                                        className="mx-auto block size-[80px] object-contain"
+                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
+                                        alt="AI Assistant"
+                                    />
+                                    <p className="text-sm text-[#86909c]">{folderQaHint}</p>
+                                </div>
+                            ) : (
+                                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                                    <AiChatMessages
+                                        messages={messages}
+                                        conversationId={activeChatId}
+                                        title=""
+                                        isLoading={isLoading}
+                                        isStreaming={isStreaming}
+                                        presetQuestions={[]}
+                                        hideShare
+                                        hideHeaderTitle
+                                        flatMode
+                                        knowledgeChatLayout
+                                        contentWidthClassName="max-w-none px-4"
+                                        emptyStateHint={folderQaHint}
+                                        onPresetClick={() => { }}
+                                        onRegenerate={regenerate}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Input bar — `box` collapsed, `line` expanded. */}
+                    <KnowledgeAiInput
+                        key={spaceId}
+                        availableTags={availableTags}
+                        modelOptions={bsConfig?.models}
+                        modelValue={chatModel.id}
+                        isStreaming={isStreaming}
+                        disabled={!bsConfig?.models?.length}
+                        onSend={handleSend}
+                        onStop={stopGenerating}
+                        variant={open ? "line" : "box"}
+                        onFocusChange={setKeyboardVisible}
+                    />
+
+                    {open && showHistory && (
+                        <ConversationHistory
+                            sessions={sessions}
+                            activeChatId={activeChatId}
+                            onSelect={handleHistorySelect}
+                            onDelete={deleteSession}
+                            onRename={renameSession}
+                            onClose={() => setShowHistory(false)}
+                        />
+                    )}
+                </div>
+            </div>
+        </>
+    );
+}

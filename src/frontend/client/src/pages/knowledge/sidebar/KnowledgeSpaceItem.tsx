@@ -116,7 +116,7 @@ export default function KnowledgeSpaceItem({
                 }}
                 onClick={() => !isEditing && onSelect(space)}
             >
-                <div className="flex items-center flex-1 min-w-0">
+                <div className="flex items-center flex-1">
                     {/* Expand/collapse chevron — only shown when treeEnabled */}
                     {treeEnabled && (
                         <button
@@ -158,8 +158,8 @@ export default function KnowledgeSpaceItem({
                             onClick={(e) => e.stopPropagation()}
                         />
                     ) : (
-                        <div className="flex flex-1 min-w-0 items-center gap-1 pl-1">
-                            <span onDoubleClick={() => canEditSpace && setIsEditing(true)} className={`truncate text-[12px] leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}>
+                        <div className="flex flex-1 items-center gap-1 pl-1">
+                            <span onDoubleClick={() => canEditSpace && setIsEditing(true)} className={`whitespace-nowrap text-[12px] leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}>
                                 {space.name}
                             </span>
                             {space.isPinned && (
@@ -169,13 +169,19 @@ export default function KnowledgeSpaceItem({
                     )}
                 </div>
 
-                <div className="relative flex h-5 w-8 flex-shrink-0 items-center justify-end">
+                {/* More-menu trigger — sticky-right pins it to the viewport's right
+                    edge regardless of scroll. -ml-8 cancels the wrapper's 32px width
+                    in flex layout, so the text on the left gets the full row width
+                    and the button overlays the text on hover instead of pre-reserving
+                    a fixed gutter. bg-inherit picks up the row's hover/active bg so
+                    the overlaying button visually "covers" the text beneath it. */}
+                <div className="sticky right-0 z-[1] -ml-8 flex h-5 w-8 flex-shrink-0 items-center justify-end bg-inherit pr-1">
                     <DropdownMenu onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={`
-                                    absolute right-0 flex items-center justify-center p-1 rounded-md hover:bg-black/5 transition-opacity duration-200 outline-none
-                                    ${menuOpen ? "opacity-100 z-10" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100 z-10"}
+                                    flex items-center justify-center p-1 rounded-md hover:bg-black/5 transition-opacity duration-200 outline-none
+                                    ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
                                 `}
                                 onClick={(e) => e.stopPropagation()}
                             >

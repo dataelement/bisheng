@@ -59,8 +59,6 @@ interface KnowledgeSpaceHeaderProps {
     onBatchDelete: () => void;
     canBatchDelete?: boolean;
     onGoKnowledgeSquare?: () => void;
-    onToggleAiAssistant?: () => void;
-    isAiAssistantOpen?: boolean;
     enableCardMode?: boolean;
     canShareSpace?: boolean;
 }
@@ -95,8 +93,6 @@ export function KnowledgeSpaceHeader({
     onBatchDelete,
     canBatchDelete = false,
     onGoKnowledgeSquare,
-    onToggleAiAssistant,
-    isAiAssistantOpen,
     enableCardMode = true,
     canShareSpace = false,
 }: KnowledgeSpaceHeaderProps) {
@@ -395,7 +391,7 @@ export function KnowledgeSpaceHeader({
                                         sharePath={`/knowledge/share/${space.id}`}
                                         successMessage={localize("com_knowledge.share_link_copied")}
                                         errorMessage={localize("com_knowledge.copy_failed_retry")}
-                                        className="ml-1 size-7 border-[#e5e6eb]"
+                                        className="ml-1 size-7 border-0"
                                         icon={<Outlined.Share className="size-4 text-[#4e5969]" />}
                                         aria-label={localize("com_knowledge.share")}
                                     />

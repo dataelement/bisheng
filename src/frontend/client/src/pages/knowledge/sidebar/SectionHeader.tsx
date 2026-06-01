@@ -26,7 +26,15 @@ export function SectionHeader({ title, collapsed, onToggle, sortText, onSort, on
                     onToggle();
                 }
             }}
-            className="group mb-2 flex h-7 cursor-pointer items-center justify-between rounded-md px-1 transition-colors hover:bg-[#F4F4F4]"
+            /* sticky top-0 + left-0 + width 100cqi:
+               • width: 100cqi sizes the header to the scroll container's visible inline
+                 size (set via [container-type:inline-size] on the scroll container) — so
+                 even though the shared w-max wrapper around all sections may be wider than
+                 the sidebar, the header stays at the sidebar's visible width.
+               • top-0 keeps the header pinned to the viewport top during vertical scroll.
+               • left-0 keeps the header pinned to the viewport left during horizontal
+                 scroll. bg-[#FBFBFB] hides items scrolling underneath. */
+            className="group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between rounded-md bg-[#FBFBFB] px-1 transition-colors hover:bg-[#F4F4F4]"
         >
             <div className="flex h-full items-center gap-1 text-[12px] text-[#999] group-hover:text-[#4e5969]">
                 <span>{title}</span>
