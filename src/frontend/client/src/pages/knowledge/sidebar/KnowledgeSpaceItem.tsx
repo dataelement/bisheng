@@ -103,7 +103,7 @@ export default function KnowledgeSpaceItem({
         <div>
             {/* Space row */}
             <div
-                className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
+                className={`group flex items-center justify-between h-7 pr-1 rounded-lg cursor-pointer border ${isActive
                     ? "bg-[#f4f4f4] border-transparent"
                     : "border-transparent hover:bg-[#f7f7f7]"
                     }`}
@@ -114,12 +114,12 @@ export default function KnowledgeSpaceItem({
                 }}
                 onClick={() => !isEditing && onSelect(space)}
             >
-                <div className="flex items-center gap-1 flex-1 min-w-0">
+                <div className="flex items-center flex-1 min-w-0">
                     {/* Expand/collapse chevron — only shown when treeEnabled */}
                     {treeEnabled && (
                         <button
                             type="button"
-                            className="flex size-4 shrink-0 items-center justify-center rounded hover:bg-black/10 transition-colors"
+                            className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-black/10 transition-colors"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setExpanded((prev) => !prev);
@@ -127,18 +127,18 @@ export default function KnowledgeSpaceItem({
                             aria-label={expanded ? "Collapse folder tree" : "Expand folder tree"}
                         >
                             {expanded ? (
-                                <Outlined.Down className="size-3.5 text-[#8D93A0]" />
+                                <Outlined.Down className="size-4 text-[#8D93A0]" />
                             ) : (
-                                <Outlined.Right className="size-3.5 text-[#8D93A0]" />
+                                <Outlined.Right className="size-4 text-[#8D93A0]" />
                             )}
                         </button>
                     )}
 
                     <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
                         {type === "department" ? (
-                            <Outlined.City className={`size-[14px] ${isActive ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.City className={`size-4 ${isActive ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         ) : (
-                            <Outlined.Notebook className={`size-[14px] ${isActive ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.Notebook className={`size-4 ${isActive ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         )}
                     </div>
 
@@ -256,9 +256,12 @@ export default function KnowledgeSpaceItem({
                 </div>
             </div>
 
-            {/* Folder tree — nested under this space row when expanded */}
+            {/* Folder tree — nested under this space row when expanded.
+                No wrapper indent: each tree node uses its own paddingLeft
+                ((depth+1)*20) so depth-0 folders align with the space row's
+                icon position, matching the design's 20px-per-level structure. */}
             {expanded && treeEnabled && (
-                <div className="pl-7">
+                <div>
                     <KnowledgeFolderTree
                         knowledgeId={space.id}
                         currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}

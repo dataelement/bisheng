@@ -13,10 +13,20 @@ interface SectionHeaderProps {
 
 export function SectionHeader({ title, collapsed, onToggle, sortText, onSort, onAdd, addLabel }: SectionHeaderProps) {
     return (
-        <div className="flex items-center justify-between mb-2">
-            <button onClick={onToggle} className="flex items-center gap-1 text-[12px] text-[#999] hover:text-[#4e5969]">
-                <Outlined.Down className={`size-4 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
-                {title}
+        // group: enables hover-reveal for the collapse chevron.
+        // h-7 (28px): matches the height of tree nodes below.
+        <div className="group mb-2 flex h-7 items-center justify-between">
+            <button
+                onClick={onToggle}
+                className="flex h-full items-center gap-1 text-[12px] text-[#999] hover:text-[#4e5969]"
+            >
+                <span>{title}</span>
+                {/* Collapse arrow: placed after the title; hidden by default, revealed on row hover. */}
+                <Outlined.Down
+                    className={`size-4 opacity-0 transition-[opacity,transform] group-hover:opacity-100 ${
+                        collapsed ? "-rotate-90" : ""
+                    }`}
+                />
             </button>
             <div className="flex items-center gap-1">
                 {onAdd && (

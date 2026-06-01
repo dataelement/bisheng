@@ -75,17 +75,20 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
         <>
             <div
                 className={cn(
-                    "group flex cursor-pointer select-none items-center gap-1 rounded-md px-2 py-1 text-sm text-[#1d2129] transition-colors hover:bg-[#f7f7f7]",
+                    // h-7 = 28px row, matching design and other items below the section title.
+                    // pr-1 matches design's 4px right padding; left padding comes from per-depth
+                    // inline style so each nested level indents 20px (one 20×20 switcher slot).
+                    "group flex h-7 cursor-pointer select-none items-center rounded-md pr-1 text-sm text-[#1d2129] transition-colors hover:bg-[#f7f7f7]",
                     isSelected && "bg-[#f4f4f4] hover:bg-[#f4f4f4]"
                 )}
-                style={{ paddingLeft: `${8 + depth * 16}px` }}
+                style={{ paddingLeft: `${(depth + 1) * 20}px` }}
                 onClick={() => onSelect(node)}
             >
-                {/* Expand arrow */}
+                {/* Switcher slot: 20×20 wrapper, 16×16 chevron inside */}
                 <button
                     type="button"
                     className={cn(
-                        "flex size-4 shrink-0 items-center justify-center rounded transition-transform",
+                        "flex size-5 shrink-0 items-center justify-center rounded",
                         node.loading && "animate-pulse"
                     )}
                     onClick={(e) => {
@@ -99,19 +102,21 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
                     ) : (
                         <Outlined.Right
                             className={cn(
-                                "size-3.5 text-[#8D93A0] transition-transform duration-150",
+                                "size-4 text-[#8D93A0] transition-transform duration-150",
                                 node.expanded && "rotate-90"
                             )}
                         />
                     )}
                 </button>
 
-                {/* Folder icon */}
-                {hasExpandedChildren ? (
-                    <Outlined.FolderOpen className={cn("size-4 shrink-0", isSelected ? "text-[#4e5969]" : "text-[#8D93A0]")} />
-                ) : (
-                    <Outlined.FolderClose className={cn("size-4 shrink-0", isSelected ? "text-[#4e5969]" : "text-[#8D93A0]")} />
-                )}
+                {/* Icon wrapper: 20×20 wrapper, 16×16 folder icon inside */}
+                <div className="flex size-5 shrink-0 items-center justify-center">
+                    {hasExpandedChildren ? (
+                        <Outlined.FolderOpen className={cn("size-4 shrink-0", isSelected ? "text-[#4e5969]" : "text-[#8D93A0]")} />
+                    ) : (
+                        <Outlined.FolderClose className={cn("size-4 shrink-0", isSelected ? "text-[#4e5969]" : "text-[#8D93A0]")} />
+                    )}
+                </div>
 
                 {/* Folder name */}
                 <span className="min-w-0 flex-1 truncate">{node.name}</span>

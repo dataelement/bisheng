@@ -156,19 +156,26 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             data-expanded={isExpanded ? 'true' : 'false'}
             className={cn(
                 "relative",
-                collapsed
-                    ? "w-8 shrink-0"
-                    : collapsible
-                        ? "w-[min(340px,60vw)] shrink-0 sm:w-[340px]"
-                        : "w-full",
+                collapsible
+                    ? cn(
+                        "shrink-0 transition-[width] duration-200 ease-out",
+                        collapsed ? "w-8" : "w-[min(340px,60vw)] sm:w-[340px]"
+                    )
+                    : "w-full",
                 className
             )}
         >
             <div
                 className={cn(
-                    "flex flex-nowrap items-center gap-1 h-8 min-h-8 max-h-8 overflow-x-auto overflow-y-hidden",
-                    "bg-white border rounded-md transition-[border-color,box-shadow]",
-                    collapsed ? "w-8 justify-center px-0 cursor-pointer" : "w-full px-2 sm:px-3",
+                    "flex flex-nowrap items-center w-full h-8 min-h-8 max-h-8 overflow-hidden",
+                    "bg-white border rounded-md",
+                    collapsible
+                        ? cn(
+                            // Animate gap so icon → input transition feels continuous, not snapped.
+                            "transition-[gap,border-color,box-shadow] duration-200 ease-out px-2",
+                            collapsed ? "gap-0 cursor-pointer" : "gap-1"
+                        )
+                        : "gap-1 px-2 sm:px-3 transition-[border-color,box-shadow]",
                     isFocused ? "border-primary ring-1 ring-primary/20" : "border-[#e5e6eb] hover:border-primary/50"
                 )}
                 onClick={() => {
