@@ -31,6 +31,7 @@ from bisheng.common.repositories.interfaces.space_channel_member_repository impo
 from bisheng.permission.domain.channel_permission_template import (
     can_channel_actor_grant_relation,
     default_permission_ids_for_relation,
+    relation_from_channel_permission_ids,
     validate_channel_grant_subject,
 )
 from bisheng.permission.domain.schemas.permission_schema import (
@@ -38,6 +39,7 @@ from bisheng.permission.domain.schemas.permission_schema import (
     AuthorizeRevokeItem,
 )
 from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
 logger = logging.getLogger(__name__)
 
@@ -82,42 +84,20 @@ class ChannelAuthorizationService:
                 enforce_fga_success=True,
             )
 
-        synced_user_ids: set[int] = set()
-        affected_member_count = 0
-        grant_binding_keys: list[str] = []
         original_bindings: list[dict] | None = None
         try:
             original_bindings = await self._get_bindings()
             await self._save_binding_changes_from_snapshot(channel_id, request, original_bindings)
-
-            for grant in request.grants:
-                binding_key = self.binding_key(channel_id, grant)
-                grant_binding_keys.append(binding_key)
-                affected = await self.membership_sync_service.sync_grant(
-                    channel_id=channel_id,
-                    grant=grant,
-                    binding_key=binding_key,
-                )
-                synced_user_ids.update(affected)
-                affected_member_count += len(affected)
-
-            for revoke in request.revokes:
-                binding_key = self.binding_key(channel_id, revoke)
-                affected_member_count += await self.membership_sync_service.sync_revoke(
-                    channel_id=channel_id,
-                    binding_key=binding_key,
-                )
         except Exception as exc:
             logger.exception('channel authorization sync failed: channel_id=%s', channel_id)
-            await self._cleanup_grant_membership_sources(channel_id, grant_binding_keys)
             if original_bindings is not None:
                 await self._restore_bindings(channel_id, original_bindings)
             await self._compensate_permission_write(channel_id, tuple_grants, tuple_revokes)
             raise ChannelAuthorizationSyncError(exception=exc) from exc
 
         return ChannelAuthorizeResponse(
-            synced_user_count=len(synced_user_ids),
-            affected_member_count=affected_member_count,
+            synced_user_count=0,
+            affected_member_count=0,
         )
 
     async def list_permissions(self, channel_id: str, login_user: UserPayload) -> List[ChannelPermissionEntry]:
@@ -361,6 +341,17 @@ class ChannelAuthorizationService:
     ) -> Optional[ChannelRelationEnum]:
         if login_user.is_admin():
             return ChannelRelationEnum.OWNER
+        try:
+            permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+                login_user,
+                'channel',
+                channel_id,
+            )
+            relation = relation_from_channel_permission_ids(permission_ids)
+            if relation:
+                return ChannelRelationEnum(relation)
+        except Exception:
+            logger.exception('failed to resolve channel permission ids: channel_id=%s', channel_id)
         return await self.space_channel_member_repository.get_effective_channel_relation(
             channel_id,
             login_user.user_id,

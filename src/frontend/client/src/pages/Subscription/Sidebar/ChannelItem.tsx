@@ -159,7 +159,7 @@ export default function ChannelItem({
                     </DropdownMenuTrigger>
 
                     <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {canEditChannelSettings(channel.role) && (
+                        {canEditChannelSettings(channel.role, channel.permissionIds) && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onChannelSettings(channel)}
@@ -170,7 +170,7 @@ export default function ChannelItem({
                                 </span>
                             </DropdownMenuItem>
                         )}
-                        {canManageChannelPermissions(channel.role) && (
+                        {canManageChannelPermissions(channel.role, channel.permissionIds) && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onManageMembers(channel)}
