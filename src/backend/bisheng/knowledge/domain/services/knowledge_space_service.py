@@ -3561,6 +3561,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             business_name=space.name,
             button_action_code="request_knowledge_space",
             receiver_user_ids=approver_user_ids,
+            scenario_code="knowledge_space_subscribe_request",
         )
 
     async def _send_subscription_notification(self, space: Knowledge):
@@ -3579,6 +3580,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             business_name=space.name,
             button_action_code="request_knowledge_space",
             receiver_user_ids=member_ids,
+            scenario_code="knowledge_space_subscribe_request",
         )
 
     async def unsubscribe_space(self, space_id: int) -> bool:

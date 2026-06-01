@@ -453,6 +453,7 @@ class ApprovalCenterService:
                 action_code='approval_instance_withdrawn',
                 business_name=instance.business_name,
                 instance_id=instance.id,
+                scenario_code=instance.scenario_code,
                 reason=reason,
             )
         try:
@@ -502,6 +503,7 @@ class ApprovalCenterService:
                 business_name=menu_name,
                 button_action_code='request_menu_access',
                 receiver_user_ids=approver_user_ids,
+                scenario_code='menu_access_request',
             )
 
     @classmethod
@@ -624,6 +626,7 @@ class ApprovalCenterService:
                     action_code='menu_grant_revoked',
                     business_name=instance.business_name,
                     instance_id=instance.id,
+                    scenario_code=instance.scenario_code,
                     reason=reason,
                 )
         return {'revoked_keys': [row.menu_key for row in rows], 'instance_id': instance_id}
@@ -702,6 +705,7 @@ class ApprovalCenterService:
                 action_code='approval_task_rejected',
                 business_name=instance.business_name,
                 instance_id=instance.id,
+                scenario_code=instance.scenario_code,
                 reason=comment,
             )
             try:
@@ -807,6 +811,7 @@ class ApprovalCenterService:
                 action_code='approval_instance_approved',
                 business_name=instance.business_name or '',
                 instance_id=instance.id,
+                scenario_code=instance.scenario_code,
             )
             return
 
@@ -841,6 +846,7 @@ class ApprovalCenterService:
                 action_code='approval_instance_approved',
                 business_name=instance.business_name or '',
                 instance_id=instance.id,
+                scenario_code=instance.scenario_code,
             )
             return
 
@@ -890,6 +896,7 @@ class ApprovalCenterService:
                 action_code='approval_exception_approver_empty',
                 business_name=instance.business_name,
                 instance_id=instance.id,
+                scenario_code=instance.scenario_code,
             )
             return
 
@@ -920,6 +927,7 @@ class ApprovalCenterService:
                 action_code='approval_task_pending',
                 business_name=instance.business_name,
                 instance_id=instance.id,
+                scenario_code=instance.scenario_code,
                 task_id=task.id,
             )
 
@@ -931,6 +939,7 @@ class ApprovalCenterService:
         action_code: str,
         business_name: str,
         instance_id: int,
+        scenario_code: str | None = None,
         reason: str | None = None,
         task_id: int | None = None,
     ) -> None:
@@ -942,6 +951,7 @@ class ApprovalCenterService:
             action_code=action_code,
             business_name=business_name,
             instance_id=instance_id,
+            scenario_code=scenario_code,
             reason=reason,
             task_id=task_id,
         )

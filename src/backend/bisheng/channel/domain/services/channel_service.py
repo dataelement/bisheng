@@ -1104,6 +1104,7 @@ class ChannelService:
             business_name=channel.name,
             button_action_code="request_channel",
             receiver_user_ids=approver_user_ids,
+            scenario_code="channel_subscribe_request",
         )
 
     async def _send_subscribe_approval_notification(
@@ -1147,6 +1148,7 @@ class ChannelService:
             business_name=channel.name,
             button_action_code="request_channel",
             receiver_user_ids=receiver_user_ids,
+            scenario_code="channel_subscribe_request",
         )
 
     async def update_channel(self, channel_id: str, req: UpdateChannelRequest, login_user: UserPayload):

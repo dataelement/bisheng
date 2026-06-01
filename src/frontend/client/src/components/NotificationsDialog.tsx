@@ -92,6 +92,12 @@ const APPROVAL_NO_BUTTON_ACTION_CODES = new Set([
     "approval_execute_failed",
 ]);
 
+const APPROVAL_TASK_SCENARIO_TEXT_KEYS: Record<string, string> = {
+    menu_access_request: "com_notifications_action_request_menu_access",
+    channel_subscribe_request: "com_notifications_action_request_channel",
+    knowledge_space_subscribe_request: "com_notifications_action_request_knowledge_space",
+};
+
 export function NotificationsDialog({
     open = false,
     onOpenChange,
@@ -449,10 +455,28 @@ export function NotificationsDialog({
         return getActionCode(notification);
     };
 
+    const getScenarioCode = (notification: MessageItem): string => {
+        const parts = Array.isArray(notification.content) ? notification.content : [];
+        for (const part of parts) {
+            const metadata = (part as any)?.metadata ?? {};
+            const data = metadata?.data ?? {};
+            const value = metadata?.scenario_code ?? data?.scenario_code;
+            if (typeof value === "string" && value.trim()) return value.trim();
+        }
+        return "";
+    };
+
     const getNotificationText = (notification: MessageItem) => {
         const targetName = getTargetName(notification);
         const actionCode = getSystemTextCode(notification);
-        const actionTextKey = NOTIFICATION_ACTION_TEXT_KEYS[actionCode] || (actionCode ? `com_notifications_action_${actionCode}` : "");
+        const scenarioTextKey =
+            actionCode === "approval_task_pending"
+                ? APPROVAL_TASK_SCENARIO_TEXT_KEYS[getScenarioCode(notification)]
+                : "";
+        const actionTextKey =
+            scenarioTextKey ||
+            NOTIFICATION_ACTION_TEXT_KEYS[actionCode] ||
+            (actionCode ? `com_notifications_action_${actionCode}` : "");
         const fallbackText = notification.content?.map((c) => c.content).filter(Boolean).join("") || "";
         const safeLocalize = (key: string, vars?: Record<string, string>) => {
             if (!key) return "";

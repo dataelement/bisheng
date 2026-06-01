@@ -418,6 +418,7 @@ class MessageService:
             business_name: str,
             button_action_code: str,
             approval_message_id: Optional[int] = None,
+            scenario_code: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Build the generic message content structure for a business approval request.
@@ -437,7 +438,13 @@ class MessageService:
                 "content": f"--{business_name}",
                 "metadata": {
                     "business_type": business_type,
-                    "data": {business_type: business_id},
+                    "scenario_code": scenario_code,
+                    "data": {
+                        business_type: business_id,
+                        "business_id": business_id,
+                        "business_name": business_name,
+                        **({"scenario_code": scenario_code} if scenario_code else {}),
+                    },
                 },
             },
             {
@@ -461,6 +468,7 @@ class MessageService:
             business_name: str,
             button_action_code: str,
             receiver_user_ids: List[int],
+            scenario_code: Optional[str] = None,
     ) -> InboxMessage:
         """
         Send a generic approval notification to specific receivers.
@@ -474,6 +482,7 @@ class MessageService:
             business_id=business_id,
             business_name=business_name,
             button_action_code=button_action_code,
+            scenario_code=scenario_code,
         )
 
         # Create the message with action_code stored on model for reliable routing

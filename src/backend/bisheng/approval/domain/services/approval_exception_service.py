@@ -221,6 +221,7 @@ class ApprovalExceptionService:
             action_code="approval_exception_cancelled",
             business_name=instance.business_name,
             instance_id=instance.id,
+            scenario_code=instance.scenario_code,
             reason=reason.strip(),
         )
         return {"exception_id": exception_id, "instance_id": instance.id, "status": "cancelled"}
@@ -254,6 +255,7 @@ class ApprovalExceptionService:
             sender=instance.applicant_user_id,
             business_name=instance.business_name,
             instance_id=instance.id,
+            scenario_code=instance.scenario_code,
             tasks=created_tasks,
         )
 
@@ -285,6 +287,7 @@ class ApprovalExceptionService:
             sender=instance.applicant_user_id,
             business_name=instance.business_name,
             instance_id=instance.id,
+            scenario_code=instance.scenario_code,
             tasks=created_tasks,
         )
 
@@ -485,6 +488,7 @@ class ApprovalExceptionService:
                 action_code="approval_task_pending",
                 business_name=instance.business_name or "",
                 instance_id=instance.id,
+                scenario_code=instance.scenario_code,
                 task_id=task.id,
             )
 
@@ -562,6 +566,7 @@ class ApprovalExceptionService:
         sender: int,
         business_name: str,
         instance_id: int,
+        scenario_code: str | None = None,
         tasks: list[ApprovalTask],
     ) -> None:
         for task in tasks:
@@ -571,6 +576,7 @@ class ApprovalExceptionService:
                 action_code="approval_task_pending",
                 business_name=business_name or "",
                 instance_id=instance_id,
+                scenario_code=scenario_code,
                 task_id=task.id,
             )
 
@@ -755,6 +761,7 @@ class ApprovalExceptionService:
         action_code: str,
         business_name: str,
         instance_id: int,
+        scenario_code: str | None = None,
         reason: str | None = None,
         task_id: int | None = None,
     ) -> None:
@@ -766,6 +773,7 @@ class ApprovalExceptionService:
             action_code=action_code,
             business_name=business_name,
             instance_id=instance_id,
+            scenario_code=scenario_code,
             reason=reason,
             task_id=task_id,
         )
