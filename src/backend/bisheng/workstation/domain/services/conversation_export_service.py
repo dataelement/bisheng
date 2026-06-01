@@ -87,6 +87,17 @@ _LONE_MARKER_TABLE = str.maketrans({'': '', '': '', '': ''})
 # Markdown image syntax: ![alt](url)
 _IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
 
+# Fallback for bare citation keys (``knowledgesearch_<hex>:N`` /
+# ``websearch_<hex>:N``) that survive when the surrounding private-use Unicode
+# markers were lost — e.g. the answer was assembled from streamed chunks that
+# split a marker pair, or the front-end rendered ``U+E200`` as the literal
+# ``"200"`` glyph (PUA fallback). Stripped after the well-formed marker pass.
+_BARE_CITATION_KEY_PATTERN = re.compile(
+    r'(?:||)*\s*'
+    r'(?:knowledgesearch|websearch)_[0-9a-fA-F]+:\d+'
+    r'\s*(?:||)*'
+)
+
 # Subprocess timeouts (spec §10 non-functional)
 _PANDOC_TIMEOUT_SECONDS = 15
 _LIBREOFFICE_TIMEOUT_SECONDS = 30
@@ -388,13 +399,23 @@ class ConversationExportService:
     def _strip_citations(text: str) -> str:
         """Remove all forms of RAG citation markers.
 
-        See T002 探查 + citation_prompt_helper.py for the canonical form.
-        The translate() pass cleans up any stray marker left by SSE truncation.
+        Three layered passes:
+
+        1. ``_CITATION_PATTERN``: matched well-formed ``U+E200 … U+E202`` pairs
+           and removes the whole payload.
+        2. ``_LONE_MARKER_TABLE``: scrubs any single PUA marker left by SSE
+           truncation or chunk boundaries.
+        3. ``_BARE_CITATION_KEY_PATTERN``: fallback that catches naked
+           ``knowledgesearch_<hex>:N`` / ``websearch_<hex>:N`` keys whose
+           surrounding markers were dropped earlier (the front-end has been
+           observed to render ``U+E200`` as the literal ``"200"`` glyph, which
+           our PUA passes can't reach).
         """
         if not text:
             return text
         text = _CITATION_PATTERN.sub('', text)
-        return text.translate(_LONE_MARKER_TABLE)
+        text = text.translate(_LONE_MARKER_TABLE)
+        return _BARE_CITATION_KEY_PATTERN.sub('', text)
 
     # ----------------------------------------------------------------------
     # Markdown intermediate representation (AD-03, AD-04)
