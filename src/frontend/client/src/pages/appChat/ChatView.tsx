@@ -197,7 +197,21 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                                 />
                             </div>
                         </div>
-                        {!readOnly && <ChatInput v={v} readOnly={readOnly} />}
+                        {!readOnly && (
+                            cid && selectionState.active && selectionState.chatId === cid ? (
+                                /* F028: input is replaced by the selection toolbar at 100% width */
+                                <div className="z-10 w-full max-w-[800px] mx-auto shrink-0 bg-[#fff] dark:bg-[#1B1B1B] py-1.5">
+                                    <MessageSelectionToolbar
+                                        chatId={cid}
+                                        messages={selectableMessages}
+                                        onExportToLocal={isH5 ? () => setExportSheetOpen(true) : undefined}
+                                        onImportToKnowledge={() => setImportModalOpen(true)}
+                                    />
+                                </div>
+                            ) : (
+                                <ChatInput v={v} readOnly={readOnly} />
+                            )
+                        )}
                     </div>
 
                     {citationPanelElement}
@@ -205,15 +219,9 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
             )}
         </div>
 
-        {/* F028 conversation export overlay layer */}
+        {/* F028: portal-style sheets/modals (the floating toolbar lives next to the input) */}
         {cid && selectionState.active && selectionState.chatId === cid && (
             <>
-                <MessageSelectionToolbar
-                    chatId={cid}
-                    messages={selectableMessages}
-                    onExportToLocal={isH5 ? () => setExportSheetOpen(true) : undefined}
-                    onImportToKnowledge={() => setImportModalOpen(true)}
-                />
                 <ExportFormatSheet
                     open={exportSheetOpen}
                     onOpenChange={setExportSheetOpen}

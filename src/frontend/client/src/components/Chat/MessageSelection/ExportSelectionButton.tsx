@@ -19,7 +19,7 @@
  */
 
 import { useCallback } from 'react';
-import { Download } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useMessageSelection } from '~/hooks/useMessageSelection';
 import { useSelectionMessages } from './SelectionMessagesContext';
 import { cn } from '~/utils';
@@ -67,7 +67,7 @@ export function ExportSelectionButton({
             aria-label={active ? '退出选择' : '导出'}
             aria-pressed={active}
         >
-            <Download
+            <Outlined.FileExport
                 size={14}
                 className={cn(active ? 'text-[#1677ff]' : 'text-[#818181]')}
             />
