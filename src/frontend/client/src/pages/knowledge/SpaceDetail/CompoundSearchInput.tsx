@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Search, X, ChevronDown } from 'lucide-react';
+import { X, ChevronDown } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -172,11 +173,18 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     collapsible
                         ? cn(
                             // Animate gap so icon → input transition feels continuous, not snapped.
-                            "transition-[gap,border-color,box-shadow] duration-200 ease-out px-2",
+                            "transition-[gap,background-color,border-color,box-shadow] duration-200 ease-out px-2",
                             collapsed ? "gap-0 cursor-pointer" : "gap-1"
                         )
                         : "gap-1 px-2 sm:px-3 transition-[border-color,box-shadow]",
-                    isFocused ? "border-primary ring-1 ring-primary/20" : "border-[#e5e6eb] hover:border-primary/50"
+                    // Active state per Figma 11495:16479 — gray border + gray ring (not blue).
+                    // Collapsed = behaves like the sibling icon buttons (bg change on hover, border steady);
+                    // expanded = behaves like an input field (border darkens on hover before focus).
+                    isFocused
+                        ? "border-[#ddd] shadow-[0_0_0_2px_#f1f5f9]"
+                        : collapsed
+                            ? "border-[#e5e6eb] hover:bg-[#f7f8fa]"
+                            : "border-[#e5e6eb] hover:border-[#ddd]"
                 )}
                 onClick={() => {
                     inputRef.current?.focus();
@@ -184,7 +192,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     setIsFocused(true);
                 }}
             >
-                <Search className="size-4 text-[#86909c] shrink-0" />
+                <Outlined.Search className="size-4 text-[#818181] shrink-0" />
 
                 {/* 范围选择：仅在输入框聚焦（或菜单已打开）时显示，高亮表示已选范围；仅文案随 current / all 切换 */}
                 {!isRoot && isExpanded && (

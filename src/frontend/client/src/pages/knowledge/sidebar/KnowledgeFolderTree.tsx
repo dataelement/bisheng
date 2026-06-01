@@ -1,6 +1,6 @@
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { KnowledgeFolderNode, listKnowledgeFolders } from "~/api/knowledge";
+import { KnowledgeFolderNode, listKnowledgeFolders, getFolderParentPathApi } from "~/api/knowledge";
 import { cn } from "~/utils";
 import {
     KNOWLEDGE_SPACE_FILES_REFRESH_EVENT,
@@ -78,8 +78,9 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
                     // h-7 = 28px row, matching design and other items below the section title.
                     // pr-1 matches design's 4px right padding; left padding comes from per-depth
                     // inline style so each nested level indents 20px (one 20×20 switcher slot).
-                    "group flex h-7 cursor-pointer select-none items-center rounded-md pr-1 text-sm text-[#1d2129] transition-colors hover:bg-[#f7f7f7]",
-                    isSelected && "bg-[#f4f4f4] hover:bg-[#f4f4f4]"
+                    "group flex h-7 cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-[#1d2129] transition-colors hover:bg-[#F4F4F4]",
+                    // Per design: selected folder = gray bg + semibold (600) title + dark folder icon.
+                    isSelected && "bg-[#EEEEEE] font-semibold hover:bg-[#EEEEEE]"
                 )}
                 style={{ paddingLeft: `${(depth + 1) * 20}px` }}
                 onClick={() => onSelect(node)}
@@ -109,22 +110,26 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
                     )}
                 </button>
 
-                {/* Icon wrapper: 20×20 wrapper, 16×16 folder icon inside */}
+                {/* Icon wrapper: 20×20 wrapper, 16×16 folder icon inside.
+                    Per design: selected folder icon is dark (#1d2129); unselected is light gray. */}
                 <div className="flex size-5 shrink-0 items-center justify-center">
                     {hasExpandedChildren ? (
-                        <Outlined.FolderOpen className={cn("size-4 shrink-0", isSelected ? "text-[#4e5969]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderOpen className={cn("size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
                     ) : (
-                        <Outlined.FolderClose className={cn("size-4 shrink-0", isSelected ? "text-[#4e5969]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderClose className={cn("size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
                     )}
                 </div>
 
                 {/* Folder name */}
-                <span className="min-w-0 flex-1 truncate">{node.name}</span>
+                <span className="min-w-0 flex-1 truncate pl-1">{node.name}</span>
             </div>
 
-            {/* Recursively render children when expanded */}
+            {/* Recursively render children when expanded.
+                flex-col + gap-0.5 keeps the 2px gap between siblings at every nested level.
+                Don't add pt-0.5 here — the parent container's gap-0.5 already provides
+                the 2px gap between the row and this children wrapper. */}
             {node.expanded && Array.isArray(node.children) && node.children.length > 0 && (
-                <div>
+                <div className="flex flex-col gap-0.5">
                     {node.children.map((child) => (
                         <TreeNodeRow
                             key={child.id}
@@ -159,24 +164,60 @@ export function KnowledgeFolderTree({
         rootsRef.current = roots;
     }, [roots]);
 
-    // Load root folders on mount or when knowledgeId / fileStatus changes
+    // Load root folders on mount or when knowledgeId / fileStatus changes.
+    // If a folder is currently selected (currentFolderId set), also fetch its
+    // ancestor chain and pre-expand every ancestor so the selected folder is
+    // visible without the user having to re-expand the tree manually after
+    // collapse → expand of the parent space.
     useEffect(() => {
         if (!knowledgeId) return;
         let cancelled = false;
         setRootLoading(true);
-        listKnowledgeFolders({ space_id: knowledgeId, parent_id: null, file_status: fileStatus })
-            .then(({ items }) => {
+        (async () => {
+            try {
+                const { items } = await listKnowledgeFolders({
+                    space_id: knowledgeId, parent_id: null, file_status: fileStatus,
+                });
                 if (cancelled) return;
-                setRoots(mapToTree(items));
-            })
-            .catch(() => {
+                let tree = mapToTree(items);
+
+                if (currentFolderId) {
+                    try {
+                        const parentPath = await getFolderParentPathApi(String(knowledgeId), currentFolderId);
+                        if (!cancelled && parentPath?.length > 0) {
+                            const ancestorIds = new Set(parentPath.map(p => Number(p.id)));
+                            // Walk the tree; for each ancestor, fetch its children
+                            // and recurse so deeper ancestors also get expanded.
+                            const expandChain = async (nodes: TreeNode[]): Promise<TreeNode[]> => {
+                                return Promise.all(nodes.map(async (n) => {
+                                    if (!ancestorIds.has(n.id)) return n;
+                                    try {
+                                        const { items: kids } = await listKnowledgeFolders({
+                                            space_id: knowledgeId, parent_id: n.id, file_status: fileStatus,
+                                        });
+                                        const children = await expandChain(mapToTree(kids));
+                                        return { ...n, expanded: true, loading: false, children };
+                                    } catch {
+                                        return { ...n, expanded: true, loading: false, children: [] };
+                                    }
+                                }));
+                            };
+                            tree = await expandChain(tree);
+                        }
+                    } catch {
+                        // ignore — fall through with collapsed tree
+                    }
+                }
+
+                if (!cancelled) setRoots(tree);
+            } catch {
                 if (!cancelled) setRoots([]);
-            })
-            .finally(() => {
+            } finally {
                 if (!cancelled) setRootLoading(false);
-            });
+            }
+        })();
         return () => { cancelled = true; };
-    }, [knowledgeId, fileStatus]);
+    }, [knowledgeId, fileStatus, currentFolderId]);
 
     /** Immutably update a node anywhere in the tree by id. */
     const updateNode = useCallback((

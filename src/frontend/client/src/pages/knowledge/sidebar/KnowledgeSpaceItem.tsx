@@ -1,4 +1,3 @@
-import { LogOut, Pin, PinOff, Settings, UsersRound } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -11,7 +10,6 @@ import {
 } from "~/components/ui/DropdownMenu";
 import {
     SidebarListMoreMenuContent,
-    SidebarListMoreMenuDivider,
     sidebarListMoreMenuDangerIconClassName,
     sidebarListMoreMenuDangerItemClassName,
     sidebarListMoreMenuDangerLabelClassName,
@@ -23,8 +21,6 @@ import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { getFullWidthLength } from "~/utils";
-import { ChannelPinIcon } from "~/components/icons/channels";
-import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { KnowledgeFolderTree, type FolderSelectPayload } from "./KnowledgeFolderTree";
 
 interface KnowledgeSpaceItemProps {
@@ -76,6 +72,12 @@ export default function KnowledgeSpaceItem({
         if (isActive) setExpanded(true);
     }, [isActive]);
 
+    // Only highlight the space row when this space is active AND no folder
+    // inside it is selected — folders take over the active styling once chosen
+    // so only one row in the tree appears active at a time.
+    const isFolderSelectedHere = isActive && !!urlFolderId;
+    const showSpaceHighlight = isActive && !isFolderSelectedHere;
+
     const handleSelectFolder = (folder: FolderSelectPayload | null) => {
         if (folder) {
             navigate(`/knowledge/space/${space.id}/folder/${folder.id}`);
@@ -100,12 +102,12 @@ export default function KnowledgeSpaceItem({
     };
 
     return (
-        <div>
+        <div className="flex flex-col gap-0.5">
             {/* Space row */}
             <div
-                className={`group flex items-center justify-between h-7 pr-1 rounded-lg cursor-pointer border ${isActive
-                    ? "bg-[#f4f4f4] border-transparent"
-                    : "border-transparent hover:bg-[#f7f7f7]"
+                className={`group flex items-center justify-between h-7 pr-1 rounded-md cursor-pointer border ${showSpaceHighlight
+                    ? "bg-[#EEEEEE] border-transparent"
+                    : "border-transparent hover:bg-[#F4F4F4]"
                     }`}
                 style={{
                     transitionProperty: 'background-color',
@@ -119,7 +121,7 @@ export default function KnowledgeSpaceItem({
                     {treeEnabled && (
                         <button
                             type="button"
-                            className="flex size-5 shrink-0 items-center justify-center rounded hover:bg-black/10 transition-colors"
+                            className="flex size-5 shrink-0 items-center justify-center"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setExpanded((prev) => !prev);
@@ -136,9 +138,9 @@ export default function KnowledgeSpaceItem({
 
                     <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
                         {type === "department" ? (
-                            <Outlined.City className={`size-4 ${isActive ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.City className={`size-4 ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         ) : (
-                            <Outlined.Notebook className={`size-4 ${isActive ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.Notebook className={`size-4 ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         )}
                     </div>
 
@@ -146,7 +148,7 @@ export default function KnowledgeSpaceItem({
                         <input
                             type="text"
                             defaultValue={space.name}
-                            className="flex-1 px-1 min-w-0 text-[14px] bg-white rounded focus:outline-none"
+                            className="flex-1 px-1 min-w-0 text-[12px] leading-5 bg-white rounded focus:outline-none"
                             autoFocus
                             onBlur={rename}
                             onKeyDown={(e) => {
@@ -156,12 +158,12 @@ export default function KnowledgeSpaceItem({
                             onClick={(e) => e.stopPropagation()}
                         />
                     ) : (
-                        <div className="flex flex-1 min-w-0 items-center gap-1">
-                            <span onDoubleClick={() => canEditSpace && setIsEditing(true)} className="truncate text-[14px] text-[#1d2129]">
+                        <div className="flex flex-1 min-w-0 items-center gap-1 pl-1">
+                            <span onDoubleClick={() => canEditSpace && setIsEditing(true)} className={`truncate text-[12px] leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}>
                                 {space.name}
                             </span>
                             {space.isPinned && (
-                                <ChannelPinIcon className="h-[14px] w-[14px] shrink-0" aria-hidden />
+                                <Outlined.Pin className="size-3 shrink-0 text-[#86909C]" aria-hidden />
                             )}
                         </div>
                     )}
@@ -187,7 +189,7 @@ export default function KnowledgeSpaceItem({
                                     className={sidebarListMoreMenuItemClassName}
                                     onClick={() => onSettings?.(space)}
                                 >
-                                    <Settings className={sidebarListMoreMenuIconClassName} />
+                                    <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                                     <span className={sidebarListMoreMenuLabelClassName}>
                                         {localize("com_knowledge.space_settings")}
                                     </span>
@@ -198,7 +200,7 @@ export default function KnowledgeSpaceItem({
                                     className={sidebarListMoreMenuItemClassName}
                                     onClick={() => onManageMembers?.(space)}
                                 >
-                                    <UsersRound className={sidebarListMoreMenuIconClassName} />
+                                    <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
                                     <span className={sidebarListMoreMenuLabelClassName}>
                                         {localize("com_knowledge.member_management")}
                                     </span>
@@ -210,18 +212,16 @@ export default function KnowledgeSpaceItem({
                             >
                                 {space.isPinned ? (
                                     <>
-                                        <PinOff className={sidebarListMoreMenuIconClassName} />
+                                        <Outlined.PinOff className={sidebarListMoreMenuIconClassName} />
                                         <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.unpin")}</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Pin className={sidebarListMoreMenuIconClassName} />
+                                        <Outlined.Pin className={sidebarListMoreMenuIconClassName} />
                                         <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.pin_space")}</span>
                                     </>
                                 )}
                             </DropdownMenuItem>
-
-                            <SidebarListMoreMenuDivider />
 
                             {(canDeleteSpace || type === "joined") && (
                                 <DropdownMenuItem
@@ -242,9 +242,9 @@ export default function KnowledgeSpaceItem({
                                     className={sidebarListMoreMenuDangerItemClassName}
                                 >
                                     {canDeleteSpace ? (
-                                        <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
+                                        <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
                                     ) : (
-                                        <LogOut className={sidebarListMoreMenuDangerIconClassName} />
+                                        <Outlined.LogOut className={sidebarListMoreMenuDangerIconClassName} />
                                     )}
                                     <span className={sidebarListMoreMenuDangerLabelClassName}>
                                         {canDeleteSpace ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}

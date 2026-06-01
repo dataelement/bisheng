@@ -1837,19 +1837,14 @@ body,
 html {
   height: 100%;
   font-family:
+    -apple-system,
+    BlinkMacSystemFont,
     "AlibabaPuHuiTi-3-55-Regular",
-    "PingFang SC",
-    /* 苹果设备优先使用苹方 */
     "Hiragino Sans GB",
-    /* 旧版 macOS 备选 */
     "Microsoft YaHei",
-    /* Windows 备选（微软雅黑） */
     "Helvetica Neue",
-    /* 通用西文字体 */
     Arial,
-    /* 最终回退字体 */
     sans-serif;
-  /* 无衬线字体族兜底 */
 }
 
 .dark body,

@@ -8,7 +8,11 @@ module.exports = {
   darkMode: ['class'],
   theme: {
     fontFamily: {
-      sans: ['Inter', 'sans-serif'],
+      // -apple-system / BlinkMacSystemFont 在 macOS / iOS / Apple 设备的浏览器里
+      // 解析为系统字体（San Francisco / SF Pro 等），同时 Apple System 字体在
+      // 中文系统下会自动联动 PingFang SC，所以放最前面体验最好。
+      // 非 Apple 系统再回退到 Inter / 系统默认 sans-serif。
+      sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'sans-serif'],
       mono: ['Roboto Mono', 'monospace'],
     },
     // fontFamily: {

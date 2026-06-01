@@ -14,12 +14,21 @@ interface SectionHeaderProps {
 export function SectionHeader({ title, collapsed, onToggle, sortText, onSort, onAdd, addLabel }: SectionHeaderProps) {
     return (
         // group: enables hover-reveal for the collapse chevron.
-        // h-7 (28px): matches the height of tree nodes below.
-        <div className="group mb-2 flex h-7 items-center justify-between">
-            <button
-                onClick={onToggle}
-                className="flex h-full items-center gap-1 text-[12px] text-[#999] hover:text-[#4e5969]"
-            >
+        // h-7 (28px) + rounded-md + hover bg: matches the tree nodes below.
+        // The whole row is the toggle target; right-side icons stop propagation.
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={onToggle}
+            onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onToggle();
+                }
+            }}
+            className="group mb-2 flex h-7 cursor-pointer items-center justify-between rounded-md px-1 transition-colors hover:bg-[#F4F4F4]"
+        >
+            <div className="flex h-full items-center gap-1 text-[12px] text-[#999] group-hover:text-[#4e5969]">
                 <span>{title}</span>
                 {/* Collapse arrow: placed after the title; hidden by default, revealed on row hover. */}
                 <Outlined.Down
@@ -27,11 +36,14 @@ export function SectionHeader({ title, collapsed, onToggle, sortText, onSort, on
                         collapsed ? "-rotate-90" : ""
                     }`}
                 />
-            </button>
+            </div>
             <div className="flex items-center gap-1">
                 {onAdd && (
                     <button
-                        onClick={onAdd}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onAdd();
+                        }}
                         title={addLabel}
                         aria-label={addLabel}
                         className="flex size-5 items-center justify-center rounded text-[#999] hover:bg-[#f2f3f5] hover:text-[#4e5969]"
@@ -40,7 +52,10 @@ export function SectionHeader({ title, collapsed, onToggle, sortText, onSort, on
                     </button>
                 )}
                 <button
-                    onClick={onSort}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onSort();
+                    }}
                     title={sortText}
                     aria-label={sortText}
                     className="flex size-5 items-center justify-center rounded text-[#999] hover:bg-[#f2f3f5] hover:text-[#4e5969]"

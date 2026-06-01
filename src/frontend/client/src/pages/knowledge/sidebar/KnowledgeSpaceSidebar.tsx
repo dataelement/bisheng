@@ -67,6 +67,68 @@ export function KnowledgeSpaceSidebar({
     const localize = useLocalize();
     const { data: bsConfig } = useGetBsConfig();
     const [collapsedState, setCollapsedState] = useState(false);
+
+    // ─── Resizable sidebar width ────────────────────────────────────────
+    const SIDEBAR_WIDTH_KEY = "knowledge-sidebar-width";
+    const MIN_SIDEBAR_WIDTH = 200;
+    const MAX_SIDEBAR_WIDTH = 480;
+    const DEFAULT_SIDEBAR_WIDTH = 240;
+    const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+        if (typeof window === "undefined") return DEFAULT_SIDEBAR_WIDTH;
+        const stored = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) || "", 10);
+        return Number.isFinite(stored) && stored >= MIN_SIDEBAR_WIDTH && stored <= MAX_SIDEBAR_WIDTH
+            ? stored
+            : DEFAULT_SIDEBAR_WIDTH;
+    });
+    const [isResizing, setIsResizing] = useState(false);
+    const dragStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
+    const sidebarWidthRef = useRef(sidebarWidth);
+    sidebarWidthRef.current = sidebarWidth;
+
+    const handleResizeStart = (e: React.MouseEvent) => {
+        e.preventDefault();
+        dragStartRef.current = { startX: e.clientX, startWidth: sidebarWidthRef.current };
+        setIsResizing(true);
+    };
+
+    // Double-click the resize handle → reset to default width
+    const handleResizeReset = () => {
+        setSidebarWidth(DEFAULT_SIDEBAR_WIDTH);
+        if (typeof window !== "undefined") localStorage.setItem(SIDEBAR_WIDTH_KEY, String(DEFAULT_SIDEBAR_WIDTH));
+    };
+
+    useEffect(() => {
+        if (!isResizing) return;
+        const onMove = (e: MouseEvent) => {
+            const start = dragStartRef.current;
+            if (!start) return;
+            const next = Math.max(
+                MIN_SIDEBAR_WIDTH,
+                Math.min(MAX_SIDEBAR_WIDTH, start.startWidth + (e.clientX - start.startX)),
+            );
+            setSidebarWidth(next);
+        };
+        const onUp = () => {
+            setIsResizing(false);
+            dragStartRef.current = null;
+            if (typeof window !== "undefined") {
+                localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidthRef.current));
+            }
+        };
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+        // Suppress text selection + force resize cursor while dragging.
+        const prevCursor = document.body.style.cursor;
+        const prevSelect = document.body.style.userSelect;
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        return () => {
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            document.body.style.cursor = prevCursor;
+            document.body.style.userSelect = prevSelect;
+        };
+    }, [isResizing]);
     const collapsed = collapsedProp ?? collapsedState;
     const setCollapsed = (next: boolean) => {
         onCollapsedChange?.(next);
@@ -201,13 +263,16 @@ export function KnowledgeSpaceSidebar({
         <div className={cn("relative h-full min-h-0 shrink-0", mobileDrawerMode && "w-full")}>
             <div
                 className={[
-                    `h-full bg-white flex flex-col overflow-hidden ${collapsed || mobileDrawerMode ? "" : "border-r border-[#e5e6eb]"}`,
-                    mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "w-60",
+                    `h-full bg-[#FBFBFB] flex flex-col overflow-hidden ${collapsed || mobileDrawerMode ? "" : "border-r-[0.5px] border-[#e5e6eb]"}`,
+                    mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "",
                 ].join(" ")}
                 style={mobileDrawerMode ? undefined : {
-                    transitionProperty: 'width',
+                    width: collapsed ? 0 : sidebarWidth,
+                    // Disable the width transition while the user is actively dragging,
+                    // otherwise the resize feels laggy and rubber-bandy.
+                    transitionProperty: isResizing ? 'none' : 'width',
                     transitionDuration: '300ms',
-                    transitionTimingFunction: 'ease-in-out'
+                    transitionTimingFunction: 'ease-in-out',
                 }}
             >
                 {mobileDrawerMode && !compactMode ? (
@@ -221,7 +286,7 @@ export function KnowledgeSpaceSidebar({
                 ) : null}
                 {/* Top actions */}
                 <div className={cn(
-                    collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 pt-4 pb-6" : "px-3 py-5",
+                    collapsed ? "px-0 py-5" : mobileDrawerMode ? "px-3 pt-4 pb-6" : "px-3 pt-5 pb-4",
                     compactMode && "hidden",
                 )}>
                     {mobileDrawerMode ? (
@@ -240,7 +305,7 @@ export function KnowledgeSpaceSidebar({
                         collapsed ? "flex items-center justify-center h-7" : "",
                         mobileDrawerMode && "hidden"
                     )}>
-                        {!collapsed && !mobileDrawerMode && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
+                        {!collapsed && !mobileDrawerMode && <div className="flex justify-between items-center text-[16px] font-medium">
                             <span className="text-[#1d2129]">{localize("com_knowledge.knowledge_space")}</span>
                         </div>}
                     </div>
@@ -273,7 +338,7 @@ export function KnowledgeSpaceSidebar({
                                     onSort={() => toggleSort("department")}
                                 />
                                 {!departmentCollapsed && (
-                                    <div className="space-y-1">
+                                    <div className="space-y-0.5">
                                         {departmentSpaces.map(s => (
                                             <KnowledgeSpaceItem
                                                 key={s.id}
@@ -296,7 +361,7 @@ export function KnowledgeSpaceSidebar({
                         )}
 
                         {/* My created */}
-                        <div className={departmentSpaces.length > 0 ? "py-4" : "pt-0"}>
+                        <div className="pb-4">
                             <SectionHeader
                                 title={localize("com_knowledge.created_by_me")}
                                 collapsed={createdCollapsed}
@@ -307,7 +372,7 @@ export function KnowledgeSpaceSidebar({
                                 addLabel={localize("com_knowledge.create")}
                             />
                             {!createdCollapsed && (
-                                <div className="space-y-1">
+                                <div className="space-y-0.5">
                                     {filteredCreatedSpaces.map(s => (
                                         <KnowledgeSpaceItem
                                             key={s.id}
@@ -330,7 +395,7 @@ export function KnowledgeSpaceSidebar({
                         </div>
 
                         {/* Joined */}
-                        <div className="py-4">
+                        <div className="pb-4">
                             <SectionHeader
                                 title={localize("com_knowledge.joined_by_me")}
                                 collapsed={joinedCollapsed}
@@ -339,7 +404,7 @@ export function KnowledgeSpaceSidebar({
                                 onSort={() => toggleSort("joined")}
                             />
                             {!joinedCollapsed && (
-                                <div className="space-y-1">
+                                <div className="space-y-0.5">
                                     {filteredJoinedSpaces.map(s => (
                                         <KnowledgeSpaceItem
                                             key={s.id}
@@ -363,11 +428,11 @@ export function KnowledgeSpaceSidebar({
                     </div>
                 </div>
                 {!collapsed && !mobileDrawerMode && !compactMode && (
-                    <div className="shrink-0 border-t border-[#e5e6eb] px-3 py-3">
+                    <div className="shrink-0 px-3 py-3">
                         <Button
                             variant="secondary"
                             onClick={() => onKnowledgeSquare?.()}
-                            className="h-8 w-full gap-1 border-none bg-[#F7F7F7] text-[13px] text-[#212121] hover:bg-[#E5E6EB]"
+                            className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#212121] hover:bg-[#F4F4F4]"
                         >
                             <Outlined.BlocksAndArrows className="size-4" />
                             {localize("com_knowledge.go_to_square")}
@@ -380,13 +445,34 @@ export function KnowledgeSpaceSidebar({
                     </div>
                 ) : null}
             </div>
+            {/* Resize handle — a thin invisible strip sitting on the right edge of
+                the sidebar. Drag horizontally to resize; double-click to reset. */}
+            {!collapsed && !mobileDrawerMode && (
+                <div
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Resize sidebar"
+                    onMouseDown={handleResizeStart}
+                    onDoubleClick={handleResizeReset}
+                    className={cn(
+                        // z below NavToggle (z-40) so the collapse button keeps capturing clicks
+                        // in its small area; everywhere else along the edge the resize handle wins.
+                        "absolute top-0 z-[35] h-full w-[6px] -translate-x-1/2 cursor-col-resize",
+                        // Subtle visual feedback: thin accent line on hover/active.
+                        "after:absolute after:right-1/2 after:top-0 after:h-full after:w-px after:translate-x-1/2",
+                        "after:bg-transparent hover:after:bg-[#165dff]/40",
+                        isResizing && "after:bg-[#165dff]",
+                    )}
+                    style={{ left: sidebarWidth }}
+                />
+            )}
             <NavToggle
                 navVisible={!collapsed}
                 onToggle={() => setCollapsed(!collapsed)}
                 isHovering={isToggleHovering}
                 setIsHovering={setIsToggleHovering}
                 className={`absolute top-1/2 left-0 z-[40] ${mobileDrawerMode ? "hidden" : ""}`}
-                translateX={240}
+                translateX={collapsed ? 0 : sidebarWidth}
             />
         </div>
     );

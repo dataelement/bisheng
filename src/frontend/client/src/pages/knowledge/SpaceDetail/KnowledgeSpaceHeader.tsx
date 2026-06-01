@@ -1,10 +1,6 @@
 import {
-    LayoutGrid,
-    List,
-    Upload,
     FolderPlus,
     ChevronLeft,
-    CircleQuestionMark,
     Info,
     Download,
     Tag,
@@ -112,23 +108,25 @@ export function KnowledgeSpaceHeader({
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
     const showAddMenu = canCreateFolder || canUploadFile;
-    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
     const showViewModeTabs = enableCardMode && !isNarrow576;
+    // Include the view-mode toggle here so the trailing button group still renders for
+    // viewers (no add menu, not admin, no selection) who only have the toggle to show.
+    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold || showViewModeTabs;
+
+    const viewModeToggleButton = showViewModeTabs ? (
+        <Button
+            variant="outline"
+            onClick={() => setViewMode(viewMode === "list" ? "card" : "list")}
+            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-[#818181] hover:bg-[#f7f8fa]"
+        >
+            {viewMode === "list"
+                ? <Outlined.ViewGridCard className="size-4 shrink-0" />
+                : <Outlined.List className="size-4 shrink-0" />}
+        </Button>
+    ) : null;
 
     const viewFilterSortCluster = (
         <div className="flex min-w-0 shrink-0 items-center gap-3">
-            {showViewModeTabs && (
-                <Button
-                    variant="outline"
-                    onClick={() => setViewMode(viewMode === "list" ? "card" : "list")}
-                    className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-gray-700 hover:bg-[#f7f8fa]"
-                >
-                    {viewMode === "list"
-                        ? <LayoutGrid className="size-4 shrink-0" />
-                        : <List className="size-4 shrink-0" />}
-                </Button>
-            )}
-
             {space.role !== SpaceRole.MEMBER && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -138,10 +136,10 @@ export function KnowledgeSpaceHeader({
                                 "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-[#e5e6eb]",
                                 statusFilter.length > 0
                                     ? "border-[#024DE3] bg-[#E6EDFC] text-[#024DE3] hover:bg-[#E6EDFC]"
-                                    : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
+                                    : "bg-white text-[#818181] hover:bg-[#f7f8fa]"
                             )}
                         >
-                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
+                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-[#818181]")} />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -211,7 +209,7 @@ export function KnowledgeSpaceHeader({
                     <DropdownMenuTrigger asChild>
                         <Button
                             variant="outline"
-                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-gray-700"
+                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-[#818181] hover:bg-[#f7f8fa]"
                         >
                             <Outlined.Sort className="size-4 shrink-0" aria-hidden />
                         </Button>
@@ -274,48 +272,68 @@ export function KnowledgeSpaceHeader({
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
+            {viewModeToggleButton}
             {showAddMenu && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button size="sm" className="h-8 rounded-md px-4 font-normal" disabled={isSearching}>
+                canUploadFile ? (
+                    // Split button per design 11495:14337: left half = direct upload, right half = dropdown
+                    // (only "新建文件夹"). When canCreateFolder is false the chevron half is omitted and the
+                    // shell becomes a single-action button.
+                    <div className="inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-md border border-[#ebebeb] bg-white">
+                        <button
+                            type="button"
+                            disabled={isSearching}
+                            onClick={onTriggerUpload}
+                            className={cn(
+                                "inline-flex items-center justify-center px-4 text-sm text-[#212121] transition-colors",
+                                "hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent",
+                                canCreateFolder && "border-r border-[#ebebeb]"
+                            )}
+                        >
                             {localize("com_knowledge.add_new")}
-                            <Outlined.Down className="ml-1 size-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                        </button>
                         {canCreateFolder && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        type="button"
+                                        disabled={isSearching}
+                                        aria-label={localize("com_knowledge.add_new")}
+                                        className="inline-flex items-center justify-center px-2 text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
+                                    >
+                                        <Outlined.Down className="size-4" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                                    <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
+                                        <FolderPlus className="mr-2 size-4" />
+                                        {localize("com_knowledge.new_folder")}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+                    </div>
+                ) : (
+                    // Fallback when the user can only create folders: keep the original dropdown shape
+                    // so the single available action is still discoverable.
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                disabled={isSearching}
+                                className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
+                            >
+                                {localize("com_knowledge.add_new")}
+                                <Outlined.Down className="size-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
                             <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
                                 <FolderPlus className="mr-2 size-4" />
                                 {localize("com_knowledge.new_folder")}
                             </DropdownMenuItem>
-                        )}
-                        {canUploadFile && (
-                            <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
-                                <Upload className="mr-2 size-4" />
-                                <span className="flex-1">{localize("com_knowledge.upload_file")}</span>
-                                {supportedFormatsLabel && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <span
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                                                onPointerDown={(e) => e.stopPropagation()}
-                                                className="ml-2 inline-flex items-center text-[#86909C] hover:text-[#4E5969]"
-                                                aria-label={localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
-                                            >
-                                                <CircleQuestionMark className="size-3.5" />
-                                            </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[320px] z-[260] bg-[rgba(23,23,23,0.85)]">
-                                            {localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
-                            </DropdownMenuItem>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )
             )}
         </div>
     );

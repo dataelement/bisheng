@@ -741,7 +741,7 @@ export default function Knowledge() {
                                             </div>
                                         </div>
                                     ) : null}
-                                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]">
                                     <KnowledgeSpaceContent
                                         space={activeSpace}
                                         files={fileManager.files}
