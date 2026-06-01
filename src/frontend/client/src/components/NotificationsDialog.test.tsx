@@ -12,7 +12,15 @@ jest.mock("react-i18next", () => ({
 
 jest.mock("~/hooks/useLocalize", () => ({
   __esModule: true,
-  default: () => (key: string) => key,
+  default: () => (key: string, vars?: Record<string, string>) => {
+    const translations: Record<string, string> = {
+      com_notifications_action_request_menu_access: "申请访问菜单「{{target}}」",
+      com_notifications_action_approval_task_pending: "提交了「{{target}}」审批申请",
+    };
+    const template = translations[key];
+    if (!template) return key;
+    return template.replace("{{target}}", vars?.target ?? "");
+  },
 }));
 
 jest.mock("~/Providers", () => ({
@@ -120,5 +128,44 @@ describe("NotificationsDialog approval jump", () => {
         instanceId: 99,
       });
     });
+  });
+
+  it("uses scenario-specific PRD copy for later approval nodes", async () => {
+    jest.mocked(getMessageListApi).mockResolvedValue({
+      total: 1,
+      data: [{
+        id: 502,
+        sender: 7,
+        sender_name: "站内信",
+        message_type: "notify",
+        action_code: "approval_task_pending",
+        status: "pending",
+        is_read: false,
+        create_time: "2026-06-01T10:00:00Z",
+        update_time: "2026-06-01T10:00:00Z",
+        content: [
+          { type: "system_text", content: "approval_task_pending" },
+          {
+            type: "business_url",
+            content: "--知识空间",
+            metadata: {
+              business_type: "approval_instance_id",
+              scenario_code: "menu_access_request",
+              data: {
+                approval_instance_id: "99",
+                business_name: "知识空间",
+                scenario_code: "menu_access_request",
+              },
+            },
+          },
+        ],
+      }],
+    });
+    jest.mocked(markMessageReadApi).mockResolvedValue({});
+
+    render(<NotificationsDialog open onOpenApprovalCenter={jest.fn()} />);
+
+    expect(await screen.findByText(/申请访问菜单/)).toBeInTheDocument();
+    expect(screen.queryByText(/提交了/)).not.toBeInTheDocument();
   });
 });

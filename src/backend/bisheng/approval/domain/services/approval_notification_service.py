@@ -19,6 +19,7 @@ class ApprovalNotificationService:
         action_code: str,
         business_name: str,
         instance_id: int,
+        scenario_code: str | None = None,
         reason: str | None = None,
         task_id: int | None = None,
     ) -> None:
@@ -28,6 +29,7 @@ class ApprovalNotificationService:
             action_code=action_code,
             business_name=business_name,
             instance_id=instance_id,
+            scenario_code=scenario_code,
             reason=reason,
             task_id=task_id,
         )
@@ -40,6 +42,7 @@ class ApprovalNotificationService:
         action_code: str,
         business_name: str,
         instance_id: int,
+        scenario_code: str | None = None,
         reason: str | None = None,
         task_id: int | None = None,
     ) -> None:
@@ -53,6 +56,11 @@ class ApprovalNotificationService:
                 metadata = {}
                 if task_id is not None:
                     metadata = {"data": {"approval_task_id": str(task_id)}}
+                if scenario_code:
+                    data = dict(metadata.get("data") or {})
+                    data.setdefault("scenario_code", scenario_code)
+                    metadata["data"] = data
+                    metadata["scenario_code"] = scenario_code
                 actor_user_name = None
                 try:
                     from bisheng.user.domain.models.user import UserDao
@@ -75,6 +83,7 @@ class ApprovalNotificationService:
                         business_id=instance_id,
                         actor_user_id=sender,
                         actor_user_name=actor_user_name,
+                        scenario_code=scenario_code,
                         reason=reason,
                         metadata=metadata,
                     ),
@@ -95,6 +104,7 @@ class ApprovalNotificationService:
         action_code: str,
         business_name: str,
         instance_id: int,
+        scenario_code: str | None = None,
     ) -> None:
         admin_ids = await ApprovalNotificationService._get_admin_recipient_ids(
             tenant_id=tenant_id,
@@ -106,6 +116,7 @@ class ApprovalNotificationService:
             action_code=action_code,
             business_name=business_name,
             instance_id=instance_id,
+            scenario_code=scenario_code,
         )
 
     @staticmethod

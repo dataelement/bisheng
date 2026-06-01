@@ -22,6 +22,7 @@ def build_notify_content(
     business_id: str | int | None = None,
     actor_user_id: int | None = None,
     actor_user_name: str | None = None,
+    scenario_code: str | None = None,
     reason: str | None = None,
     navigable: bool = True,
     metadata: dict[str, Any] | None = None,
@@ -41,12 +42,16 @@ def build_notify_content(
     content.append({"type": "system_text", "content": action_code})
 
     target_metadata = dict(metadata or {})
+    if scenario_code:
+        target_metadata.setdefault("scenario_code", scenario_code)
     if business_type and business_id is not None:
         target_metadata.setdefault("business_type", business_type)
         data = dict(target_metadata.get("data") or {})
         data.setdefault(business_type, str(business_id))
         data.setdefault("business_id", str(business_id))
         data.setdefault("business_name", target_name)
+        if scenario_code:
+            data.setdefault("scenario_code", scenario_code)
         target_metadata["data"] = data
 
     if navigable and business_type and business_id is not None:

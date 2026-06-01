@@ -1,9 +1,8 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from bisheng.notification.forwarder import (
-    resolve_eplus_recipient, maybe_forward_external,
-)
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from bisheng.notification.forwarder import maybe_forward_external, resolve_eplus_recipient
 
 # ---- resolve_eplus_recipient ----
 
@@ -112,7 +111,7 @@ def test_forward_schedules_fire_and_forget(
 ):
     mock_settings.get_cofco_forwarding_conf.return_value.enabled = True
     mock_resolve.return_value = ("EMP001", "")
-    mock_extract.return_value = ("张三", "技术频道")
+    mock_extract.return_value = ("张三", "技术频道", "", "")
     mock_payload_settings.get_cofco_forwarding_conf.return_value.bisheng_inbox_url = "https://bisheng.cofco.com"
 
     maybe_forward_external(fake_msg)
