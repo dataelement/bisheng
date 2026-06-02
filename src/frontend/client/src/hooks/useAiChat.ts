@@ -203,6 +203,14 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 linsight: isLingsi,
             };
 
+            // Correlation key for the user (question) message. Starts as the
+            // client-side temp UUID, then gets promoted to the real persisted
+            // DB id once the backend's `created` event delivers it (see
+            // onCreated). Kept in sync so later callbacks (onFinal) and the
+            // F028 export selection address the question by its real id rather
+            // than a temp value the backend never persisted.
+            let realUserMessageId = userMessageId;
+
             // Create SSE submission
             const submission: SSESubmission = {
                 payload,
@@ -241,11 +249,21 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             );
                         }
                     }
-                    // Update user message with server-assigned data
+                    // Promote the question message to its real persisted DB id.
+                    // The `created` event carries the backend message_id in
+                    // mergedUser.messageId; older code pinned it back to the
+                    // temp UUID here, which left the question unexportable
+                    // (F028 parses messageId as an int — a UUID becomes NaN and
+                    // the whole question turn is silently dropped from exports).
+                    const serverMessageId =
+                        mergedUser.messageId != null && mergedUser.messageId !== ""
+                            ? String(mergedUser.messageId)
+                            : userMessageId;
+                    realUserMessageId = serverMessageId;
                     setMessages((prev) =>
                         prev.map((m) =>
                             m.messageId === userMessageId
-                                ? { ...m, ...mergedUser, messageId: userMessageId }
+                                ? { ...m, ...mergedUser, messageId: serverMessageId }
                                 : m
                         )
                     );
@@ -303,9 +321,15 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             }
                         }
                         if (data.requestMessage) {
-                            // Update user message with final server data
+                            // Match by the (possibly promoted) real id first,
+                            // falling back to the temp UUID for the window
+                            // before `created` landed. onCreated may already
+                            // have swapped the question's messageId to the real
+                            // DB id, so a plain userMessageId lookup would miss.
                             const userIdx = msgs.findIndex(
-                                (m) => m.messageId === userMessageId
+                                (m) =>
+                                    m.messageId === realUserMessageId ||
+                                    m.messageId === userMessageId
                             );
                             if (userIdx >= 0 && data.requestMessage) {
                                 msgs[userIdx] = { ...msgs[userIdx], ...data.requestMessage };
