@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { CreateKnowledgeSpaceDrawer } from "./CreateKnowledgeSpaceDrawer";
-import { getCreateSpaceOptionsApi, SpaceLevel } from "~/api/knowledge";
+import { getCreateSpaceOptionsApi, getKnowledgeSpaceAutoTagVisibilityApi, SpaceLevel } from "~/api/knowledge";
 
 jest.mock("~/Providers", () => ({
     useToastContext: () => ({ showToast: jest.fn() }),
@@ -23,6 +23,13 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.member_management": "成员管理",
             "com_knowledge.cancel": "取消",
             "com_knowledge.confirm_create": "确认创建",
+            "com_subscription.premission_settings": "权限设置",
+            "com_knowledge.publish_to_square": "发布到广场",
+            "com_knowledge.publish_desc": "可在知识广场展示",
+            "com_knowledge.yes": "是",
+            "com_knowledge.no": "否",
+            "com_knowledge.auto_tag_generation": "自动标签生成",
+            "com_knowledge.auto_tag_generation_desc": "上传文件解析成功后自动生成标签",
         };
         return dict[key] || key;
     },
@@ -156,7 +163,89 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
         expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
-        expect(screen.getByRole("radio", { name: "个人知识库" })).toHaveAttribute("aria-checked", "false");
+        expect(screen.queryByRole("radio", { name: "个人知识库" })).not.toBeInTheDocument();
+    });
+
+    test("业务域知识库创建不展示部门选择且提交不带部门", async () => {
+        const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: true,
+            canCreateTeam: false,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.DEPARTMENT, onConfirm });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        expect(screen.getByRole("radio", { name: "业务域知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
+
+        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+            target: { value: "业务域资料库" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            name: "业务域资料库",
+            spaceLevel: SpaceLevel.DEPARTMENT,
+            departmentId: undefined,
+        }));
+    });
+
+    test("创建模式隐藏权限设置和发布到广场并提交默认值", async () => {
+        const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: false,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.PERSONAL, onConfirm });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        expect(screen.getByRole("radio", { name: "个人知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.queryByText("权限设置")).not.toBeInTheDocument();
+        expect(screen.queryByText("发布到广场")).not.toBeInTheDocument();
+
+        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+            target: { value: "个人资料库" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            joinPolicy: "review",
+            publishToSquare: "no",
+            spaceLevel: SpaceLevel.PERSONAL,
+        }));
+    });
+
+    test("创建模式隐藏权限和发布选项时始终保留自动标签生成", async () => {
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: false,
+            canCreateTeam: false,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+        renderDrawer({ initialSpaceLevel: SpaceLevel.PERSONAL });
+
+        await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
+        expect(screen.queryByText("权限设置")).not.toBeInTheDocument();
+        expect(screen.queryByText("发布到广场")).not.toBeInTheDocument();
+        expect(screen.getByText("自动标签生成")).toBeInTheDocument();
+        expect(getKnowledgeSpaceAutoTagVisibilityApi).not.toHaveBeenCalled();
     });
 
     test("入口层级无创建权限时回退到第一个有权限层级", async () => {

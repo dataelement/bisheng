@@ -652,6 +652,119 @@ async def test_create_team_space_writes_user_scope_without_default_group_grant()
     )
 
 
+@pytest.mark.asyncio
+async def test_create_department_space_without_department_writes_user_scope_without_default_grant():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    login_user.is_admin = lambda: True
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
+    created_space = _make_space(space_id=11, user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+        new_callable=AsyncMock,
+        return_value=0,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+        return_value=created_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate',
+        new_callable=AsyncMock,
+    ) as mock_create_scope, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+        new_callable=AsyncMock,
+    ) as mock_authorize, patch(
+        'bisheng.tenant.domain.services.resource_share_service.ResourceShareService.share_on_create',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
+        new_callable=AsyncMock,
+    ):
+        result = await svc.create_knowledge_space(
+            name='业务域空间',
+            space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+        )
+
+    assert result.id == 11
+    mock_create_scope.assert_awaited_once()
+    assert mock_create_scope.await_args.kwargs['level'] == KnowledgeSpaceLevelEnum.DEPARTMENT
+    assert mock_create_scope.await_args.kwargs['owner_type'] == KnowledgeSpaceOwnerTypeEnum.USER
+    assert mock_create_scope.await_args.kwargs['owner_id'] == 7
+    mock_authorize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_space_keeps_auto_tag_binding_when_visibility_flag_is_false():
+    KnowledgeSpaceService = _load_service_class()
+    login_user = _make_login_user(user_id=7)
+    svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
+    svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
+    svc._is_auto_tag_feature_visible = AsyncMock(return_value=False)
+    created_space = _make_space(space_id=11, user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
+        new_callable=AsyncMock,
+        return_value=0,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
+        return_value=created_space,
+    ), patch.object(
+        svc,
+        '_apply_auto_tag_binding',
+        new_callable=AsyncMock,
+        return_value=(True, 9),
+    ) as mock_apply_auto_tag, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
+        new_callable=AsyncMock,
+        return_value=created_space,
+    ) as mock_update_space, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.tenant.domain.services.resource_share_service.ResourceShareService.share_on_create',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
+        new_callable=AsyncMock,
+    ):
+        result = await svc.create_knowledge_space(
+            name='个人空间',
+            auto_tag_enabled=True,
+            auto_tag_library_id=9,
+        )
+
+    assert result.id == 11
+    mock_apply_auto_tag.assert_awaited_once()
+    assert mock_apply_auto_tag.await_args.kwargs['auto_tag_enabled'] is True
+    assert mock_apply_auto_tag.await_args.kwargs['auto_tag_library_id'] == 9
+    mock_update_space.assert_awaited_once()
+
+
 def _make_file(
         *,
         file_id: int = 11,

@@ -125,7 +125,7 @@ async def get_auto_tag_visibility(
         _src,
         _has_override,
     ) = await WorkStationService.get_knowledge_space_config_with_meta()
-    visible = bool(getattr(cfg, "auto_tag_visible", False)) if cfg else False
+    visible = bool(getattr(cfg, "auto_tag_visible", True)) if cfg else True
     return resp_200({"visible": visible})
 
 

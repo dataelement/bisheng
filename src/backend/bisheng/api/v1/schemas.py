@@ -475,7 +475,7 @@ class KnowledgeSpaceConfig(BaseModel):
     user_prompt: Optional[str] = Field(default='', description='User Prompt')
     max_chunk_size: Optional[int] = Field(default=15000, description='Max chunk size for file chunks')
     auto_tag_visible: Optional[bool] = Field(
-        default=False,
+        default=True,
         description='Whether the knowledge-space auto-tag UI is visible to users in this tenant',
     )
 

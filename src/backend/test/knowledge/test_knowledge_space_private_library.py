@@ -276,7 +276,7 @@ async def test_decorate_private_library_owned_by_other_space_treated_as_library(
 
 
 @pytest.mark.asyncio
-async def test_visibility_gate_returns_false_when_config_missing():
+async def test_visibility_gate_defaults_to_visible_when_config_missing():
     import bisheng.knowledge.domain.services.knowledge_space_service as svc
 
     fake_workstation = SimpleNamespace(
@@ -285,7 +285,7 @@ async def test_visibility_gate_returns_false_when_config_missing():
         )
     )
     with patch.object(svc, "WorkStationService", fake_workstation):
-        assert await KnowledgeSpaceService._is_auto_tag_feature_visible() is False
+        assert await KnowledgeSpaceService._is_auto_tag_feature_visible() is True
 
 
 @pytest.mark.asyncio
@@ -300,3 +300,17 @@ async def test_visibility_gate_honours_auto_tag_visible_flag():
     )
     with patch.object(svc, "WorkStationService", fake_workstation):
         assert await KnowledgeSpaceService._is_auto_tag_feature_visible() is True
+
+
+@pytest.mark.asyncio
+async def test_visibility_gate_honours_explicit_auto_tag_hidden_flag():
+    import bisheng.knowledge.domain.services.knowledge_space_service as svc
+
+    cfg = SimpleNamespace(auto_tag_visible=False)
+    fake_workstation = SimpleNamespace(
+        get_knowledge_space_config_with_meta=AsyncMock(
+            return_value=(cfg, False, "", True)
+        )
+    )
+    with patch.object(svc, "WorkStationService", fake_workstation):
+        assert await KnowledgeSpaceService._is_auto_tag_feature_visible() is False

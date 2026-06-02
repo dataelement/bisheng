@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useQuery } from "@tanstack/react-query";
 import { Upload, XIcon } from "lucide-react";
@@ -18,9 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
 import {
-    getCreateSpaceDepartmentsApi,
     getCreateSpaceOptionsApi,
-    getKnowledgeSpaceAutoTagVisibilityApi,
     getKnowledgeSpaceTagLibrariesApi,
     getKnowledgeSpaceTagLibraryDetailApi,
     SpaceLevel,
@@ -31,8 +29,6 @@ import {
 } from "~/api/knowledge";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
-import type { SelectedSubject } from "~/api/permission";
-import { SubjectSearchDepartment, type DepartmentNode } from "~/components/permission/SubjectSearchDepartment";
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
@@ -132,10 +128,8 @@ export function CreateKnowledgeSpaceDrawer({
     const [description, setDescription] = useState("");
     const [reason, setReason] = useState("");
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
-    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("yes");
+    const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("no");
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
-    const [departmentId, setDepartmentId] = useState<number | undefined>();
-    const [departmentSelection, setDepartmentSelection] = useState<SelectedSubject[]>([]);
     const [businessDomainCodes, setBusinessDomainCodes] = useState<BusinessDomainCode[]>([]);
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
     const [autoTagMode, setAutoTagMode] = useState<AutoTagMode>("library");
@@ -146,7 +140,6 @@ export function CreateKnowledgeSpaceDrawer({
     const [autoTagCustomTagsText, setAutoTagCustomTagsText] = useState("");
     const [tagLibraries, setTagLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([]);
     const [tagLibrariesLoading, setTagLibrariesLoading] = useState(false);
-    const [autoTagFeatureVisible, setAutoTagFeatureVisible] = useState(false);
     const customTags = useMemo(
         () => parseAutoTagText(autoTagCustomTagsText),
         [autoTagCustomTagsText],
@@ -167,16 +160,6 @@ export function CreateKnowledgeSpaceDrawer({
         queryFn: getCreateSpaceOptionsApi,
         enabled: open && mode === "create",
     });
-
-    const approvalCreateMode = mode === "create" && showApprovalReason;
-
-    const loadCreateDepartments = useCallback(async (config?: { signal?: AbortSignal }): Promise<DepartmentNode[]> => {
-        const result = await getCreateSpaceDepartmentsApi({
-            signal: config?.signal,
-            approvalRequest: approvalCreateMode,
-        });
-        return result.data;
-    }, [approvalCreateMode]);
 
     const levelOptions = useMemo(() => ([
         {
@@ -200,17 +183,23 @@ export function CreateKnowledgeSpaceDrawer({
             enabled: createOptions?.canCreatePersonal ?? true,
         },
     ]), [createOptions, localize]);
-    const visibleLevelOptions = useMemo(
+    const enabledLevelOptions = useMemo(
         () => levelOptions.filter((option) => option.enabled),
         [levelOptions],
+    );
+    const visibleLevelOptions = useMemo(
+        () => {
+            if (mode !== "create") return enabledLevelOptions;
+            return enabledLevelOptions.filter((option) => option.value === spaceLevel);
+        },
+        [enabledLevelOptions, mode, spaceLevel],
     );
     const selectedLevelCreateEnabled = useMemo(() => {
         if (mode !== "create") return true;
         return Boolean(levelOptions.find((option) => option.value === spaceLevel)?.enabled);
     }, [levelOptions, mode, spaceLevel]);
-    const shouldShowDepartmentSelector = mode === "create"
-        && spaceLevel === SpaceLevel.DEPARTMENT
-        && selectedLevelCreateEnabled;
+    const shouldShowVisibilityControls = mode !== "create";
+    const shouldShowPublishOption = shouldShowVisibilityControls && needPublishOption;
     const shouldShowBusinessDomainSelector = mode === "create"
         && spaceLevel === SpaceLevel.TEAM
         && selectedLevelCreateEnabled;
@@ -221,10 +210,8 @@ export function CreateKnowledgeSpaceDrawer({
         setDescription("");
         setReason("");
         setJoinPolicy("review");
-        setPublishToSquare("yes");
+        setPublishToSquare("no");
         setSpaceLevel(SpaceLevel.PERSONAL);
-        setDepartmentId(undefined);
-        setDepartmentSelection([]);
         setBusinessDomainCodes([]);
         setAutoTagEnabled(false);
         setAutoTagMode("library");
@@ -238,10 +225,6 @@ export function CreateKnowledgeSpaceDrawer({
 
     const handleSpaceLevelChange = (value: SpaceLevel) => {
         setSpaceLevel(value);
-        if (value !== SpaceLevel.DEPARTMENT) {
-            setDepartmentId(undefined);
-            setDepartmentSelection([]);
-        }
         if (value !== SpaceLevel.TEAM) {
             setBusinessDomainCodes([]);
         }
@@ -280,7 +263,6 @@ export function CreateKnowledgeSpaceDrawer({
             );
             setPublishToSquare(editingSpace.isReleased ? "yes" : "no");
             setSpaceLevel(editingSpace.spaceLevel || SpaceLevel.PERSONAL);
-            setDepartmentId(editingSpace.departmentId);
             setAutoTagEnabled(Boolean(editingSpace.autoTagEnabled));
             const editingMode: AutoTagMode = editingSpace.autoTagMode === "custom" ? "custom" : "library";
             setAutoTagMode(editingMode);
@@ -299,23 +281,14 @@ export function CreateKnowledgeSpaceDrawer({
 
     useEffect(() => {
         if (!open || mode !== "create" || !createOptions) return;
-        if (!visibleLevelOptions.some((option) => option.value === spaceLevel)) {
-            const next = visibleLevelOptions[0]?.value ?? SpaceLevel.PERSONAL;
+        if (!enabledLevelOptions.some((option) => option.value === spaceLevel)) {
+            const next = enabledLevelOptions[0]?.value ?? SpaceLevel.PERSONAL;
             setSpaceLevel(next);
         }
-    }, [createOptions, mode, open, spaceLevel, visibleLevelOptions]);
+    }, [createOptions, enabledLevelOptions, mode, open, spaceLevel]);
 
     useEffect(() => {
         if (!open) return;
-        // Tenant-level visibility gate: when the admin disables auto-tag
-        // generation in the workstation config, hide this section entirely.
-        getKnowledgeSpaceAutoTagVisibilityApi()
-            .then((res) => setAutoTagFeatureVisible(Boolean(res?.visible)))
-            .catch(() => setAutoTagFeatureVisible(false));
-    }, [open]);
-
-    useEffect(() => {
-        if (!open || !autoTagFeatureVisible) return;
         setTagLibrariesLoading(true);
         getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: 200 })
             .then((res) => {
@@ -332,12 +305,12 @@ export function CreateKnowledgeSpaceDrawer({
                 });
             })
             .finally(() => setTagLibrariesLoading(false));
-    }, [open, autoTagFeatureVisible]);
+    }, [open]);
 
     // Pull the selected library's full tag list so we can render the preview chips.
     // Only fires in library mode — the custom mode draws its tags from local state.
     useEffect(() => {
-        if (!open || !autoTagFeatureVisible) return;
+        if (!open) return;
         if (autoTagMode !== "library" || !autoTagLibraryId) {
             setAutoTagLibraryTags([]);
             setAutoTagPreviewExpanded(false);
@@ -362,7 +335,7 @@ export function CreateKnowledgeSpaceDrawer({
         return () => {
             cancelled = true;
         };
-    }, [open, autoTagFeatureVisible, autoTagMode, autoTagLibraryId]);
+    }, [open, autoTagMode, autoTagLibraryId]);
 
     const handleAutoTagModeChange = (value: string) => {
         const next = value === "custom" ? "custom" : "library";
@@ -407,13 +380,6 @@ export function CreateKnowledgeSpaceDrawer({
         if (mode === "create" && !selectedLevelCreateEnabled) {
             return;
         }
-        if (shouldShowDepartmentSelector && !departmentId) {
-            showToast({
-                message: localize("com_knowledge.department_required"),
-                severity: NotificationSeverity.WARNING
-            });
-            return;
-        }
         if (shouldShowBusinessDomainSelector && businessDomainCodes.length === 0) {
             showToast({
                 message: "请选择业务域类型",
@@ -421,9 +387,7 @@ export function CreateKnowledgeSpaceDrawer({
             });
             return;
         }
-        // When the tenant-level feature is hidden, drop any local state that
-        // might have been pre-filled in edit mode so we never submit stale flags.
-        const effectiveAutoTagEnabled = autoTagFeatureVisible && autoTagEnabled;
+        const effectiveAutoTagEnabled = autoTagEnabled;
         let effectiveAutoTagLibraryId: number | null = null;
         let effectiveAutoTagCustomTags: string[] | null = null;
         if (effectiveAutoTagEnabled) {
@@ -454,14 +418,15 @@ export function CreateKnowledgeSpaceDrawer({
                 effectiveAutoTagCustomTags = customTags;
             }
         }
+        const effectiveJoinPolicy: JoinPolicy = mode === "create" ? "review" : joinPolicy;
         const payload: CreateKnowledgeSpaceFormData = {
             name: name.trim(),
             description: description.trim(),
             reason: mode === "create" && showApprovalReason ? reason.trim() || undefined : undefined,
-            joinPolicy,
-            publishToSquare: needPublishOption ? publishToSquare : "no",
+            joinPolicy: effectiveJoinPolicy,
+            publishToSquare: mode === "create" ? "no" : needPublishOption ? publishToSquare : "no",
             spaceLevel,
-            departmentId: spaceLevel === SpaceLevel.DEPARTMENT ? departmentId : undefined,
+            departmentId: undefined,
             userGroupId: undefined,
             businessDomainCodes: spaceLevel === SpaceLevel.TEAM ? businessDomainCodes : [],
             autoTagEnabled: effectiveAutoTagEnabled,
@@ -588,27 +553,6 @@ export function CreateKnowledgeSpaceDrawer({
                                             </label>
                                         ))}
                                     </RadioGroup.Root>
-                                )}
-                                {shouldShowDepartmentSelector && (
-                                    <div className="space-y-2">
-                                        <Label className="text-sm text-[#1D2129] font-medium">
-                                            <span className="text-[#F53F3F] mr-1">*</span>
-                                            {localize("com_knowledge.select_department")}
-                                        </Label>
-                                        <div className="h-[260px]">
-                                            <SubjectSearchDepartment
-                                                value={departmentSelection}
-                                                onChange={(next) => {
-                                                    setDepartmentSelection(next);
-                                                    setDepartmentId(next[0]?.id);
-                                                }}
-                                                includeChildren={false}
-                                                onIncludeChildrenChange={() => undefined}
-                                                loadDepartments={loadCreateDepartments}
-                                                selectionMode="single"
-                                            />
-                                        </div>
-                                    </div>
                                 )}
                                 {shouldShowBusinessDomainSelector && (
                                     <div className="space-y-2">
@@ -750,72 +694,73 @@ export function CreateKnowledgeSpaceDrawer({
                                 </div>
                             )}
 
-                            {/* 权限设置 */}
-                            <div className="space-y-3">
-                                <Label className="text-sm text-[#1D2129] font-medium">
-                                    <span className="text-[#F53F3F]">*</span>
-                                    {localize("com_subscription.premission_settings")}
-                                </Label>
-                                <RadioGroup.Root
-                                    value={joinPolicy}
-                                    onValueChange={async (v) => {
-                                        if (mode === "edit" && v === "private" && joinPolicy !== "private") {
-                                            const confirmed = await confirm({
-                                                description: localize("com_subscription.confirm_knowledge_change_to_private"),
-                                                confirmText: localize("com_subscription.change_to_private"),
-                                                cancelText: localize("com_subscription.cancel"),
-                                            });
-                                            if (!confirmed) return;
-                                        }
-                                        setJoinPolicy(v as JoinPolicy);
-                                    }}
-                                    className="flex flex-col gap-3"
-                                >
-                                    {[
-                                        {
-                                            value: "private",
-                                            label: localize("com_subscription.private"),
-                                            desc: localize("com_subscription.cannot_subscribe")
-                                        },
-                                        {
-                                            value: "review",
-                                            label: localize("com_subscription.approval_required"),
-                                            desc: localize("com_subscription.require_approval")
-                                        },
-                                        {
-                                            value: "public",
-                                            label: localize("com_subscription.public"),
-                                            desc: localize("com_subscription.anyone_can_subscribe") || localize("com_knowledge.direct_subscribe_desc")
-                                        }
-                                    ].map((opt) => (
-                                        <label
-                                            key={opt.value}
-                                            className="flex items-start gap-2 cursor-pointer"
-                                        >
-                                            <RadioGroup.Item
-                                                value={opt.value}
-                                                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                            {shouldShowVisibilityControls && (
+                                <div className="space-y-3">
+                                    <Label className="text-sm text-[#1D2129] font-medium">
+                                        <span className="text-[#F53F3F]">*</span>
+                                        {localize("com_subscription.premission_settings")}
+                                    </Label>
+                                    <RadioGroup.Root
+                                        value={joinPolicy}
+                                        onValueChange={async (v) => {
+                                            if (mode === "edit" && v === "private" && joinPolicy !== "private") {
+                                                const confirmed = await confirm({
+                                                    description: localize("com_subscription.confirm_knowledge_change_to_private"),
+                                                    confirmText: localize("com_subscription.change_to_private"),
+                                                    cancelText: localize("com_subscription.cancel"),
+                                                });
+                                                if (!confirmed) return;
+                                            }
+                                            setJoinPolicy(v as JoinPolicy);
+                                        }}
+                                        className="flex flex-col gap-3"
+                                    >
+                                        {[
+                                            {
+                                                value: "private",
+                                                label: localize("com_subscription.private"),
+                                                desc: localize("com_subscription.cannot_subscribe")
+                                            },
+                                            {
+                                                value: "review",
+                                                label: localize("com_subscription.approval_required"),
+                                                desc: localize("com_subscription.require_approval")
+                                            },
+                                            {
+                                                value: "public",
+                                                label: localize("com_subscription.public"),
+                                                desc: localize("com_subscription.anyone_can_subscribe") || localize("com_knowledge.direct_subscribe_desc")
+                                            }
+                                        ].map((opt) => (
+                                            <label
+                                                key={opt.value}
+                                                className="flex items-start gap-2 cursor-pointer"
                                             >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <div className="flex flex-wrap items-baseline gap-x-2">
-                                                <span
-                                                    className={PERMISSION_OPTION_TEXT_CLASS}
-                                                    style={PERMISSION_OPTION_FONT}
+                                                <RadioGroup.Item
+                                                    value={opt.value}
+                                                    className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
                                                 >
-                                                    {opt.label}
-                                                </span>
-                                                <span className={FORM_HINT_TEXT_CLASS}>
-                                                    {opt.desc}
-                                                </span>
-                                            </div>
-                                        </label>
-                                    ))}
-                                </RadioGroup.Root>
-                            </div>
+                                                    <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                                </RadioGroup.Item>
+                                                <div className="flex flex-wrap items-baseline gap-x-2">
+                                                    <span
+                                                        className={PERMISSION_OPTION_TEXT_CLASS}
+                                                        style={PERMISSION_OPTION_FONT}
+                                                    >
+                                                        {opt.label}
+                                                    </span>
+                                                    <span className={FORM_HINT_TEXT_CLASS}>
+                                                        {opt.desc}
+                                                    </span>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </RadioGroup.Root>
+                                </div>
+                            )}
 
                             {/* 是否发布到知识广场 */}
-                            {needPublishOption && (
+                            {shouldShowPublishOption && (
                                 <div className="space-y-3">
                                     <Label className="text-[14px] text-[#1D2129]">
                                         <span className="text-[#F53F3F]">*</span>
@@ -849,53 +794,52 @@ export function CreateKnowledgeSpaceDrawer({
                                 </div>
                             )}
 
-                            {autoTagFeatureVisible && (
-                                <div className="space-y-3">
-                                    <Label className="text-[14px] text-[#1D2129]">
-                                        <span className="text-[#F53F3F]">*</span>
-                                        {localize("com_knowledge.auto_tag_generation")}
-                                        <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>
-                                            {localize("com_knowledge.auto_tag_generation_desc")}
-                                        </span>
-                                    </Label>
-                                    <RadioGroup.Root
-                                        value={autoTagEnabled ? "yes" : "no"}
-                                        onValueChange={(v) => {
-                                            const checked = v === "yes";
-                                            setAutoTagEnabled(checked);
-                                            if (!checked) return;
-                                            if (!autoTagLibraryId && tagLibraries.length === 1) {
-                                                setAutoTagLibraryId(tagLibraries[0].id);
-                                            }
-                                        }}
-                                        className="flex gap-6"
-                                    >
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroup.Item
-                                                value="yes"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.yes")}</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroup.Item
-                                                value="no"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.no")}</span>
-                                        </label>
-                                    </RadioGroup.Root>
-
-                                    {autoTagEnabled && (
-                                        <Tabs
-                                            value={autoTagMode}
-                                            onValueChange={handleAutoTagModeChange}
-                                            className="space-y-3"
+                            <div className="space-y-3">
+                                <Label className="text-[14px] text-[#1D2129]">
+                                    <span className="text-[#F53F3F]">*</span>
+                                    {localize("com_knowledge.auto_tag_generation")}
+                                    <span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>
+                                        {localize("com_knowledge.auto_tag_generation_desc")}
+                                    </span>
+                                </Label>
+                                <RadioGroup.Root
+                                    value={autoTagEnabled ? "yes" : "no"}
+                                    onValueChange={(v) => {
+                                        const checked = v === "yes";
+                                        setAutoTagEnabled(checked);
+                                        if (!checked) return;
+                                        if (!autoTagLibraryId && tagLibraries.length === 1) {
+                                            setAutoTagLibraryId(tagLibraries[0].id);
+                                        }
+                                    }}
+                                    className="flex gap-6"
+                                >
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <RadioGroup.Item
+                                            value="yes"
+                                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
                                         >
+                                            <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                        </RadioGroup.Item>
+                                        <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.yes")}</span>
+                                    </label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <RadioGroup.Item
+                                            value="no"
+                                            className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                        >
+                                            <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
+                                        </RadioGroup.Item>
+                                        <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.no")}</span>
+                                    </label>
+                                </RadioGroup.Root>
+
+                                {autoTagEnabled && (
+                                    <Tabs
+                                        value={autoTagMode}
+                                        onValueChange={handleAutoTagModeChange}
+                                        className="space-y-3"
+                                    >
                                             <TabsList className="h-8 gap-1 rounded-[6px] border border-[#E5E6EB] bg-white p-1">
                                                 <TabsTrigger
                                                     value="library"
@@ -1020,10 +964,9 @@ export function CreateKnowledgeSpaceDrawer({
                                                     />
                                                 </div>
                                             </TabsContent>
-                                        </Tabs>
-                                    )}
-                                </div>
-                            )}
+                                    </Tabs>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}

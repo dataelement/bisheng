@@ -529,8 +529,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return level, KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT, await self._get_tenant_root_department_id()
 
         if level == KnowledgeSpaceLevelEnum.DEPARTMENT:
-            if department_id is None or user_group_id is not None:
+            if user_group_id is not None:
                 raise SpaceInvalidScopeOwnerError()
+            if department_id is None:
+                if not self.login_user.is_admin():
+                    raise SpaceCreateDepartmentDeniedError()
+                return level, KnowledgeSpaceOwnerTypeEnum.USER, int(self.login_user.user_id)
             dept = await DepartmentDao.aget_by_id(int(department_id))
             if dept is None or getattr(dept, 'status', 'active') != 'active':
                 raise SpaceInvalidScopeOwnerError(msg='Department does not exist or is archived')
@@ -601,6 +605,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         *,
         level: KnowledgeSpaceLevelEnum,
+        owner_type: KnowledgeSpaceOwnerTypeEnum,
         owner_id: int,
         space_id: int,
     ) -> None:
@@ -612,7 +617,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 relation='viewer',
                 include_children=True,
             )
-        elif level == KnowledgeSpaceLevelEnum.DEPARTMENT:
+        elif level == KnowledgeSpaceLevelEnum.DEPARTMENT and owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT:
             grant = AuthorizeGrantItem(
                 subject_type='department',
                 subject_id=owner_id,
@@ -1762,7 +1767,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             _src,
             _has_override,
         ) = await WorkStationService.get_knowledge_space_config_with_meta()
-        return bool(getattr(cfg, "auto_tag_visible", False)) if cfg else False
+        return bool(getattr(cfg, "auto_tag_visible", True)) if cfg else True
 
     @staticmethod
     async def _decorate_auto_tag_for_info(result: KnowledgeSpaceInfoResp) -> None:
@@ -1886,25 +1891,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_id=owner_id,
         )
 
-        if await self._is_auto_tag_feature_visible():
-            auto_tag_touched = (
-                auto_tag_enabled
-                or auto_tag_library_id is not None
-                or auto_tag_custom_tags is not None
-            )
-            if auto_tag_touched:
-                if auto_tag_custom_tags is not None:
-                    normalized = KnowledgeSpaceTagLibraryService.normalize_tags(
-                        auto_tag_custom_tags
+        auto_tag_touched = (
+            auto_tag_enabled
+            or auto_tag_library_id is not None
+            or auto_tag_custom_tags is not None
+        )
+        if auto_tag_touched:
+            if auto_tag_custom_tags is not None:
+                normalized = KnowledgeSpaceTagLibraryService.normalize_tags(
+                    auto_tag_custom_tags
+                )
+                if not normalized:
+                    raise KnowledgeSpaceTagLibraryInvalidError(
+                        message="开启自动标签时必须提供至少一个自定义标签"
                     )
-                    if not normalized:
-                        raise KnowledgeSpaceTagLibraryInvalidError(
-                            message="开启自动标签时必须提供至少一个自定义标签"
-                        )
-                else:
-                    await KnowledgeSpaceTagLibraryService.validate_bindable_library(
-                        auto_tag_library_id
-                    )
+            else:
+                await KnowledgeSpaceTagLibraryService.validate_bindable_library(
+                    auto_tag_library_id
+                )
 
         return level, owner_type, owner_id
 
@@ -1955,12 +1959,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             owner_id=owner_id,
         )
 
-        # Defence-in-depth: a tenant with the feature flag off must not be able to
-        # configure auto-tag by hand-crafting requests.
-        if not await self._is_auto_tag_feature_visible():
-            auto_tag_enabled = False
-            auto_tag_library_id = None
-            auto_tag_custom_tags = None
         # Library-id needs the freshly minted knowledge.id when we are upserting
         # a private library, so defer the auto-tag fields until after insert.
         db_knowledge = Knowledge(
@@ -2031,6 +2029,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         await self._grant_default_scope_permissions(
             level=level,
+            owner_type=owner_type,
             owner_id=owner_id,
             space_id=int(knowledge_space.id),
         )
@@ -3364,21 +3363,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             auto_tag_enabled is not None or auto_tag_library_id is not None or auto_tag_custom_tags is not None
         )
         if auto_tag_touched:
-            if not await self._is_auto_tag_feature_visible():
-                # Tenant has the feature gated off — force-disable instead of
-                # honouring the request payload.
-                desired_enabled = False
-                desired_library_id: Optional[int] = None
-                desired_custom_tags: Optional[List[str]] = None
-            else:
-                desired_enabled = space.auto_tag_enabled if auto_tag_enabled is None else auto_tag_enabled
-                desired_library_id = auto_tag_library_id
-                desired_custom_tags = auto_tag_custom_tags
-                if desired_enabled and desired_library_id is None and desired_custom_tags is None:
-                    # Toggling enabled without choosing a source — fall back to
-                    # the currently bound library so validate_bindable_library
-                    # still runs (and rejects empty libraries).
-                    desired_library_id = space.auto_tag_library_id
+            desired_enabled = space.auto_tag_enabled if auto_tag_enabled is None else auto_tag_enabled
+            desired_library_id = auto_tag_library_id
+            desired_custom_tags = auto_tag_custom_tags
+            if desired_enabled and desired_library_id is None and desired_custom_tags is None:
+                # Toggling enabled without choosing a source — fall back to
+                # the currently bound library so validate_bindable_library
+                # still runs (and rejects empty libraries).
+                desired_library_id = space.auto_tag_library_id
 
             resolved_enabled, resolved_library_id = await self._apply_auto_tag_binding(
                 knowledge=space,
