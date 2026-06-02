@@ -117,6 +117,17 @@ export function computeSelectedIds(
             for (let i = anchorIdx; i < messages.length; i++) {
                 out.add(messages[i].messageId);
             }
+            // If the anchor is an answer, also pull in its paired question
+            // (which sits *above* the anchor and would otherwise be excluded
+            // by the below-only range). buildPairGroup returns
+            // [questionId, ...answers]; adding the whole group is a no-op for
+            // the answers already in range and grabs the missing question.
+            const anchor = messages[anchorIdx];
+            if (anchor && anchor.isCreatedByUser === false) {
+                for (const id of buildPairGroup(anchor.messageId, messages)) {
+                    out.add(id);
+                }
+            }
         }
     }
     return out;
@@ -277,6 +288,12 @@ export function useMessageSelection(): UseMessageSelectionApi {
                 if (!prev.active) return prev;
                 return {
                     ...prev,
+                    // Overwrite semantics: clicking the floating bar resets the
+                    // selection to "anchor + everything below it", dropping any
+                    // earlier explicit toggles above the anchor (messages the
+                    // user scrolled past). The question paired with an answer
+                    // anchor is re-added in computeSelectedIds, not here.
+                    selectedIds: new Set<string>(),
                     selectAllBelowAnchor: anchorMessageId,
                     globalSelectAllOn: false,
                     anchorMessageId,

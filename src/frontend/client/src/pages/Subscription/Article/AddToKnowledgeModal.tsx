@@ -725,8 +725,17 @@ export function AddToKnowledgeModal({
 
     const goBackToChannelForm = () => handleOpenChange(false);
 
+    // Desktop centered dialogs (article + channel-sync) share the same fixed
+    // h-[80vh]/max-h-[600px] shell. On short viewports a fixed-height tree pushed
+    // the footer flush against the bottom edge; letting the tree flex lets it
+    // shrink so the footer keeps its normal padding.
+    const isArticleDesktop = mode === "article" && !(isModalMobile768 || forceMobile768);
     const useFlexTree =
-        embedInChannelSheet || isChannelSyncCenteredMobile || isArticleMobileFullScreen;
+        embedInChannelSheet ||
+        isChannelSyncCenteredMobile ||
+        isArticleMobileFullScreen ||
+        isArticleDesktop ||
+        shouldUseDesktopChannelSyncDialog;
     const isChannelSyncMobileFooter =
         mode === "channel_sync" && (embedInChannelSheet || isChannelSyncCenteredMobile);
 
@@ -791,7 +800,7 @@ export function AddToKnowledgeModal({
                             ? "mb-4 flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
                             : isArticleMobileFullScreen
                                 ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[84px]"
-                            : "px-6 pt-4 touch-mobile:px-4"
+                            : "flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
                 }
             >
                 <div

@@ -316,8 +316,12 @@ export default function MainLayout() {
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
   /** 订阅 / 应用中心：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
+  // App-chat manages its own scroll (message list + pinned input), so the
+  // outer white card must NOT scroll — give it the flex/overflow-hidden shell
+  // (definite height on both mobile & desktop) instead of overflow-y-auto.
+  // Without this the card stayed scrollable and AppRoot's height overflowed it.
   const innerScrollShell =
-    isChannelRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
+    isChannelRoute || isAppChatRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   // 移动端：应用会话、/apps、/channel、/knowledge 都隐藏 MainLayout 左栏。
