@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 import { useRecoilValue } from "recoil";
 import type { CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
-import { SelectionMessagesProvider } from "~/components/Chat/MessageSelection";
+import { SelectionMessagesProvider, SelectAllBelowBanner } from "~/components/Chat/MessageSelection";
 import type { SelectableMessage } from "~/hooks/useMessageSelection";
 import { useLocalize } from "~/hooks";
 import GuideWord from "./components/GuideWord";
@@ -40,6 +40,8 @@ type ChatMessagesProps = {
     isGuestMode?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
+    /** F028: selection mode is active for this chat — show the "select all below" bar. */
+    selectionActive?: boolean;
 };
 export default function ChatMessages({
     useName,
@@ -50,6 +52,7 @@ export default function ChatMessages({
     isGuestMode = false,
     onOpenCitationPanel,
     activeCitationMessageId = null,
+    selectionActive = false,
 }: ChatMessagesProps) {
     const { messageScrollRef, messages } = useMessage(readOnly);
     const { inputForm, guideWord, inputDisabled } = useRecoilValue(currentRunningState);
@@ -77,6 +80,9 @@ export default function ChatMessages({
 
     return <div id="messageScrollPanne" ref={messageScrollRef} className="h-full overflow-y-auto scrollbar-hide pt-2 pb-44 px-4">
         <SelectionMessagesProvider messages={selectableMessages}>
+        {selectionActive && messages.length > 0 && (
+            <SelectAllBelowBanner scrollRef={messageScrollRef} />
+        )}
         {remark && <MessageRemark
             readOnly={readOnly}
             logo={logo}

@@ -31,6 +31,10 @@ export function MessageCheckbox({ messageId, className }: MessageCheckboxProps) 
 
     return (
         <Checkbox
+            // Anchor for the "select all below" floating bar: it measures each
+            // checkbox's viewport position to find the topmost message sitting
+            // under the bar at click time. Radix forwards data-* to the DOM.
+            data-message-id={messageId}
             checked={checked}
             // Don't bubble into the message bubble's own click handlers
             // (regenerate, copy, etc.) — selection is the dominant intent

@@ -3,13 +3,12 @@
  */
 import {
     BotIcon,
-    CheckIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
-    CopyIcon,
     Loader2,
     RefreshCwIcon
 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { memo, useCallback, useMemo, useState } from "react";
 import Thinking from "~/components/Artifacts/Thinking";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
@@ -66,7 +65,7 @@ function CopyButton({ text }: { text: string }) {
             title="复制"
             aria-label="复制"
         >
-            {copied ? <CheckIcon size={14} className="text-[#818181]" /> : <CopyIcon size={14} className="text-[#818181]" />}
+            {copied ? <Outlined.Copied size={14} className="text-[#1677ff]" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
         </button>
     );
 }

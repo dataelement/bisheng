@@ -194,6 +194,7 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                                     disabledSearch={data.flow_type === 10}
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
+                                    selectionActive={!!(cid && selectionState.active && selectionState.chatId === cid)}
                                 />
                             </div>
                         </div>

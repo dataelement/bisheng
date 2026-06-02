@@ -11,7 +11,8 @@ import { Button } from "~/components";
 import type { CitationReferencesDesktopPayload } from "./Messages/Content/CitationReferencesDrawer";
 import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
-import { SelectionMessagesProvider } from "./MessageSelection";
+import { SelectionMessagesProvider, SelectAllBelowBanner } from "./MessageSelection";
+import { useMessageSelection } from "~/hooks/useMessageSelection";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
@@ -153,6 +154,7 @@ export default function AiChatMessages({
     const isNarrowViewport = usePrefersMobileLayout();
     const setChatMobileHeader = useSetRecoilState(store.chatMobileHeaderState);
     const queryClient = useQueryClient();
+    const { isActiveForChat } = useMessageSelection();
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const messagesScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const emptyScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -330,6 +332,9 @@ export default function AiChatMessages({
                         (MessageCheckbox / ExportSelectionButton inside AiMessageBubble)
                         without modifying useAiChat or prop-drilling. */}
                     <SelectionMessagesProvider messages={messages}>
+                    {isActiveForChat(conversationId) && messages.length > 0 && (
+                        <SelectAllBelowBanner scrollRef={scrollRef} />
+                    )}
                     {flatMode ? (
                         /* Flat mode: render messages as a simple list */
                         messages.map((message, idx) => {
