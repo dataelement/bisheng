@@ -21,6 +21,8 @@ interface ConfirmOptions {
     cancelText?: string
     confirmText?: string
     variant?: "default" | "destructive"
+    /** Override the title icon in the destructive variant (defaults to Trash2). */
+    icon?: React.ReactNode
 }
 
 interface ConfirmContextType {
@@ -68,7 +70,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                         className="inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-[20px] border border-[#ebebeb] p-6 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-[20px]"
                     >
                         <AlertDialogHeader className="w-full flex-row items-center justify-center gap-2 space-y-0 text-center sm:justify-start sm:text-left">
-                            <Trash2 className="size-5 shrink-0 text-[#f53f3f]" />
+                            {options.icon ?? <Trash2 className="size-5 shrink-0 text-[#f53f3f]" />}
                             <AlertDialogTitle className="text-base font-medium leading-6 text-[#f53f3f]">
                                 {options.title || localize("com_knowledge.confirm_delete_title")}
                             </AlertDialogTitle>

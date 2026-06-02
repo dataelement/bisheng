@@ -1634,6 +1634,7 @@
     "official_account_content_source": "公式アカウントコンテンツソース",
     "official_account_link_detected_adding": "公式アカウントのリンクが検出されました。追加中...",
     "ok": "OK",
+    "operation_confirm": "操作確認",
     "operation_failed_retry": "操作に失敗しました。再試行してください",
     "original_webpage": "元のウェブページ",
     "pin_channel": "チャンネルを固定",

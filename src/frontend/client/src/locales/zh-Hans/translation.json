@@ -1637,6 +1637,7 @@
     "official_account_content_source": "公众号内容源",
     "official_account_link_detected_adding": "检测到是公众号链接，正在添加中...",
     "ok": "好的",
+    "operation_confirm": "操作确认",
     "operation_failed_retry": "操作失败，请重试",
     "original_webpage": "原网页",
     "pin_channel": "置顶频道",

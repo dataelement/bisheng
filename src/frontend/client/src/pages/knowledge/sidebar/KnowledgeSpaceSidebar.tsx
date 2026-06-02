@@ -492,6 +492,7 @@ export function KnowledgeSpaceSidebar({
                 setIsHovering={setIsToggleHovering}
                 className={`absolute top-1/2 left-0 z-[40] ${mobileDrawerMode ? "hidden" : ""}`}
                 translateX={collapsed ? 0 : sidebarWidth}
+                disableTransition={isResizing}
             />
         </div>
     );

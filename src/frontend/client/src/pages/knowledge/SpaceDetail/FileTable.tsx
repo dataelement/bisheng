@@ -6,24 +6,16 @@ import {
     TableRow,
 } from "@/components/ui/Table";
 import {
-    Download,
-    Edit,
     FileImageIcon,
     FileUserIcon,
-    MoreVertical,
-    PencilLineIcon,
-    RefreshCw,
-    Shield,
-    Tag, Trash2
 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import {
     Checkbox,
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "~/components";
+import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import TagGroup from "./TagGroup";
 import { EditEncodingModal } from "./EditEncodingModal";
@@ -32,7 +24,6 @@ import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useToastContext } from "~/Providers";
@@ -54,9 +45,9 @@ const renderHighlightedName = (text: string, keyword?: string) => {
     );
 };
 
-/** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
+/** 状态列悬停：下载 / 更多 — 白底、细灰边、8px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
-    "size-7 shrink-0 flex items-center justify-center rounded-[4px] border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
+    "size-7 shrink-0 flex items-center justify-center rounded-[8px] border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -177,19 +168,27 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 // ============================================================
 // 辅助组件：状态标签渲染
 // ============================================================
+// Status pill — matches the card-view tag (Figma 11671:34506). Neutral grey for
+// in-progress states (parsing / queueing / rebuilding / uploading), red for errors,
+// blue for pending approval, green for success.
 const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFile }) => {
     const localize = useLocalize();
     const approvalStatusLabel = file ? getKnowledgeApprovalStatusLabel(file) : null;
     const statusReason = file?.approvalReason?.trim() || file?.errorMessage?.trim() || null;
+
+    type Tone = { bg: string; text: string; dot: string };
+    const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
+    const errorTone: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
+    const infoTone: Tone = { bg: "bg-[#e8f3ff]", text: "text-[#165dff]", dot: "bg-[#165dff]" };
+    const successTone: Tone = { bg: "bg-[#e8ffea]", text: "text-[#00b42a]", dot: "bg-[#00b42a]" };
+
     const wrapWithReason = (node: React.ReactNode) => {
         // Skip tooltip for queueing status
         if (!statusReason || status === FileStatus.WAITING) return node;
         return (
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <div className="inline-flex max-w-full">
-                        {node}
-                    </div>
+                    <div className="inline-flex max-w-full">{node}</div>
                 </TooltipTrigger>
                 <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
                     {statusReason}
@@ -197,41 +196,39 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
             </Tooltip>
         );
     };
+
+    let label: string;
+    let tone: Tone;
+
     if (approvalStatusLabel) {
-        const rejected = file ? isKnowledgeApprovalRejected(file) : false;
-        return wrapWithReason(
-            <div
-                className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
-                    rejected ? "bg-[#fff2f0] text-[#f53f3f]" : "bg-[#e8f3ff] text-[#165dff]"
-                )}
-            >
-                <span className={cn("size-1.5 shrink-0 rounded-full", rejected ? "bg-[#f53f3f]" : "bg-[#165dff]")} />
-                {approvalStatusLabel}
-            </div>
-        );
+        label = approvalStatusLabel;
+        tone = (file && isKnowledgeApprovalRejected(file)) ? errorTone : infoTone;
+    } else {
+        const config: Record<string, { label: string; tone: Tone }> = {
+            [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), tone: successTone },
+            [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: neutralTone },
+            [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: neutralTone },
+            [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: neutralTone },
+            [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: neutralTone },
+            [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: errorTone },
+            [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: errorTone },
+            [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: errorTone },
+        };
+        const item = config[status] || config[FileStatus.WAITING];
+        label = item.label;
+        tone = item.tone;
     }
-    const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-        [FileStatus.SUCCESS]: { label: localize("com_knowledge.success"), color: "text-[#00b42a]", bg: "bg-[#e8ffea]", dot: "bg-[#00b42a]" },
-        [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-        [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-        [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-        [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-    };
-    const item = config[status] || config[FileStatus.WAITING];
+
     return wrapWithReason(
         <div
             className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
-                item.bg,
-                item.color
+                "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-[4px] px-2 text-xs leading-5",
+                tone.bg,
+                tone.text,
             )}
         >
-            <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} />
-            {item.label}
+            <span className={cn("size-1 shrink-0 rounded-full", tone.dot)} />
+            {label}
         </div>
     );
 };
@@ -302,14 +299,14 @@ const SortableHeader = ({
     const direction = isActive ? currentSort.direction : "asc";
     const isSticky = stickyLeft !== undefined;
     const isResizable = !NON_RESIZABLE_COLUMNS.includes(columnKey);
-    const arrowDir = direction === "asc" ? "up" : "down";
-    const sortIconSrc = `${__APP_ENV__.BASE_URL}/assets/channel/sort-amount-${arrowDir}${isActive ? "-blue" : ""}.svg`;
+    const ArrowIcon = direction === "asc" ? Outlined.SortAmountUp : Outlined.SortAmountDown;
     const sortIcon = (
-        <img
-            className={`size-4 shrink-0 transition-opacity ${isActive ? "opacity-100" : "opacity-0"
-                } group-hover:opacity-100`}
-            src={sortIconSrc}
-            alt=""
+        <ArrowIcon
+            className={cn(
+                "size-4 shrink-0 transition-opacity",
+                isActive ? "text-[#212121] opacity-100" : "text-[#999] opacity-0",
+                "group-hover:opacity-100",
+            )}
         />
     );
     const title = (
@@ -803,77 +800,69 @@ function FileRow({
                     }}
                     title={localize("com_knowledge.download")}
                 >
-                    <Download className="size-4" />
+                    <Outlined.Download className="size-4" />
                 </button>
             )}
             {showMoreMenu && (
                 <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
                     <DropdownMenuTrigger asChild>
                         <button type="button" className={FILE_ROW_ACTION_BTN_CLASS}>
-                            <MoreVertical className="size-4" />
+                            <Outlined.More className="size-4" />
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                        align="end"
-                        className={cn("w-32", knowledgeSpaceDropdownSurfaceClassName)}
-                    >
+                    <ActionMenuContent align="end">
                         {isAdmin && !isFolder && (
-                            <DropdownMenuItem
+                            <ActionMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onEditTags();
                                 }}
-                            >
-                                <Tag className="mr-2 size-4" />
-                                {localize("com_knowledge.edit_tags")}
-                            </DropdownMenuItem>
+                                icon={<Outlined.Tag />}
+                                label={localize("com_knowledge.edit_tags")}
+                            />
                         )}
                         {canRename && (
-                            <DropdownMenuItem
+                            <ActionMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     startRenaming();
                                 }}
-                            >
-                                <Edit className="mr-2 size-4" />
-                                {localize("com_knowledge.rename")}
-                            </DropdownMenuItem>
+                                icon={<Outlined.Edit />}
+                                label={localize("com_knowledge.rename")}
+                            />
                         )}
                         {isAdmin && hasRetryOption && (
-                            <DropdownMenuItem
+                            <ActionMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onRetry?.();
                                 }}
-                            >
-                                <RefreshCw className="mr-2 size-4" />
-                                {localize("com_knowledge.retry")}
-                            </DropdownMenuItem>
+                                icon={<Outlined.Refresh />}
+                                label={localize("com_knowledge.retry")}
+                            />
                         )}
                         {onManagePermission && (
-                            <DropdownMenuItem
+                            <ActionMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onManagePermission();
                                 }}
-                            >
-                                <Shield className="mr-2 size-4" />
-                                {localize("com_permission.manage_permission")}
-                            </DropdownMenuItem>
+                                icon={<Outlined.PeopleSafe />}
+                                label={localize("com_permission.manage_permission")}
+                            />
                         )}
                         {canDelete && (
-                            <DropdownMenuItem
-                                className="text-[#f53f3f] focus:bg-[#fff2f0] focus:text-[#f53f3f]"
+                            <ActionMenuItem
+                                danger
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onDelete();
                                 }}
-                            >
-                                <Trash2 className="mr-2 size-4" />
-                                {localize("com_knowledge.delete")}
-                            </DropdownMenuItem>
+                                icon={<Outlined.Delete />}
+                                label={localize("com_knowledge.delete")}
+                            />
                         )}
-                    </DropdownMenuContent>
+                    </ActionMenuContent>
                 </DropdownMenu>
             )}
         </div>
@@ -945,8 +934,8 @@ function FileRow({
                             className={cn(
                                 "text-sm truncate flex-1",
                                 namePreviewable
-                                    ? "cursor-pointer text-[#165dff] hover:text-[#4080FF]"
-                                    : "cursor-default text-[#4e5969]"
+                                    ? "cursor-pointer text-[#212121] hover:text-[#4080FF]"
+                                    : "cursor-default text-[#999]"
                             )}
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -1005,9 +994,9 @@ function FileRow({
                                             e.stopPropagation();
                                             onEditTags();
                                         }}
-                                        className="hidden cursor-pointer items-center justify-center text-[#165dff] transition-colors hover:text-[#165dff]/80 group-hover:flex"
+                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-[#4080FF] group-hover:flex"
                                     >
-                                        <PencilLineIcon className="size-3.5" />
+                                        <Outlined.Edit className="size-3.5" />
                                     </button>
                                 ) : undefined
                             }
@@ -1044,9 +1033,9 @@ function FileRow({
                                             e.stopPropagation();
                                             onEditEncoding?.(file);
                                         }}
-                                        className="hidden cursor-pointer items-center justify-center text-[#165dff] transition-colors hover:text-[#165dff]/80 group-hover:flex"
+                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-[#4080FF] group-hover:flex"
                                     >
-                                        <PencilLineIcon className="size-3.5" />
+                                        <Outlined.Edit className="size-3.5" />
                                     </button>
                                 )}
                             </>

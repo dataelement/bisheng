@@ -244,6 +244,9 @@ export function CreateChannelDrawer({
                 return;
             }
             const confirmed = await confirm({
+                variant: "destructive",
+                icon: <XIcon className="size-5 shrink-0 text-[#f53f3f]" strokeWidth={2.5} />,
+                title: localize("com_subscription.operation_confirm"),
                 description: localize("com_subscription.unsaved_tab_confirm_close"),
                 cancelText: localize("com_subscription.continue_editing"),
                 confirmText: localize("com_subscription.confirm_close"),
@@ -526,38 +529,23 @@ export function CreateChannelDrawer({
 
                             {/* 是否发布到广场（仅在非私有时展示） */}
                             {form.visibility !== "private" && (
-                                <div className="space-y-3">
-                                    <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
-                                        <span>
-                                            <span className="text-[#F53F3F] mr-1">*</span>
-                                            {localize("com_subscription.is_publish_plaza")}
-                                        </span>
-                                        <span className={FORM_HINT_TEXT_CLASS}>{localize("com_subscription.publish_to_square_description")}</span>
-                                    </Label>
-                                    <RadioGroup.Root
-                                        value={form.publishToSquare}
-                                        onValueChange={(v) => form.setPublishToSquare(v as any)}
-                                        className="flex gap-6"
-                                    >
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroup.Item
-                                                value="yes"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_subscription.yes")}</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroup.Item
-                                                value="no"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_subscription.no")}</span>
-                                        </label>
-                                    </RadioGroup.Root>
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="min-w-0 pr-2">
+                                        <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                            <span>{localize("com_subscription.is_publish_plaza")}</span>
+                                            <span className={FORM_HINT_TEXT_CLASS}>
+                                                {localize("com_subscription.publish_to_square_description")}
+                                            </span>
+                                        </Label>
+                                    </div>
+                                    <Switch
+                                        checked={form.publishToSquare === "yes"}
+                                        onCheckedChange={(checked) => form.setPublishToSquare(checked ? "yes" : "no")}
+                                        className={cn(
+                                            "data-[state=checked]:bg-[#165DFF]",
+                                            "data-[state=unchecked]:bg-[#E5E6EB]"
+                                        )}
+                                    />
                                 </div>
                             )}
 

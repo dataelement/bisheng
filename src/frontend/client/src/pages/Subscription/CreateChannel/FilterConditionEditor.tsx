@@ -109,7 +109,7 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
 
     return (
         <div
-            className="min-h-[32px] w-full rounded-[6px] border border-[#EBECF0] bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#165DFF] focus-within:ring-2 focus-within:ring-[#165DFF]/20"
+            className="min-h-[32px] w-full rounded-[6px] border border-[#EBECF0] bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#DDDDDD] focus-within:ring-2 focus-within:ring-[#F1F5F9]"
             onClick={() => inputRef.current?.focus()}
         >
             {keywords.map((kw, idx) => (
