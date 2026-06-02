@@ -317,13 +317,17 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
             # db_file is empty — fixed to use file_id directly.
             delete_vector_files([file_id], knowledge)
 
-        if settings.knowledge_file_worker.fair_scheduler_enabled and db_file:
+        if settings.knowledge_file_worker.fair_scheduler_enabled:
             try:
-                user_id = db_file[0].user_id
-                file_scheduler.FileScheduler().complete_file(
-                    user_id=str(user_id),
-                    file_id=str(file_id),
-                )
+                sched = file_scheduler.FileScheduler()
+                if db_file:
+                    sched.complete_file(user_id=str(db_file[0].user_id), file_id=str(file_id))
+                else:
+                    # DB row is gone (file deleted mid-parse) or invisible under
+                    # the current tenant context. Release the in-flight slot
+                    # anyway, otherwise it leaks and blocks the per-user queue
+                    # forever (fatal with max_per_user_inflight=1).
+                    sched.release_file(file_id=str(file_id))
                 file_scheduler.trigger_dispatch_task.delay()
             except Exception:
                 logger.exception(

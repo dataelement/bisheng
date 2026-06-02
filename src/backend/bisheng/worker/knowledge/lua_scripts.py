@@ -13,13 +13,15 @@ local preview_cache_key = ARGV[2]
 local callback_url = ARGV[3]
 local file_ext = ARGV[4]
 local payload_ttl = tonumber(ARGV[5])
+local tenant_id = ARGV[6]
 
 redis.call('LPUSH', prefix .. 'queue:' .. user_id, file_id)
 redis.call('HSET',  prefix .. 'payload:' .. file_id,
     'preview_cache_key', preview_cache_key,
     'callback_url',      callback_url,
     'user_id',           user_id,
-    'file_ext',          file_ext)
+    'file_ext',          file_ext,
+    'tenant_id',         tenant_id)
 redis.call('EXPIRE', prefix .. 'payload:' .. file_id, payload_ttl)
 redis.call('SADD', prefix .. 'active_users', user_id)
 redis.call('SADD', prefix .. 'inflight_users', user_id)

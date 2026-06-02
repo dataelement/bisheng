@@ -8,6 +8,11 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import (
+    bypass_tenant_filter,
+    current_tenant_id,
+    get_current_tenant_id,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
@@ -122,6 +127,7 @@ class FileScheduler:
         preview_cache_key: str,
         callback_url: str,
         file_ext: str,
+        tenant_id: int | str | None = None,
     ) -> None:
         self._enqueue(
             keys=[str(user_id)],
@@ -131,6 +137,7 @@ class FileScheduler:
                 callback_url or "",
                 (file_ext or "").lower(),
                 self._PAYLOAD_TTL_SECONDS,
+                "" if tenant_id is None else str(tenant_id),
             ],
         )
 
@@ -145,6 +152,38 @@ class FileScheduler:
 
     def complete_file(self, *, user_id: str, file_id: str) -> None:
         self._complete(keys=[str(user_id)], args=[str(file_id)])
+
+    def release_file(self, *, file_id: str) -> bool:
+        """Release a file's in-flight slot from whichever user holds it.
+
+        Safety net for when the file's DB row is gone (deleted) or invisible
+        under the current tenant context: without this, a lost completion
+        leaks the in-flight slot and blocks the per-user queue forever (with
+        ``max_per_user_inflight=1`` a single leaked slot stalls the whole
+        user). Returns True if a slot was released.
+        """
+        target = str(file_id)
+        for uid in self.inflight_users():
+            if target in self.inflight_files(user_id=uid):
+                self.complete_file(user_id=uid, file_id=target)
+                return True
+        return False
+
+    def purge_file(self, *, user_id: str, file_id: str) -> None:
+        """Remove a file from the scheduler entirely (queue + inflight + payload).
+
+        Called when a file is deleted so it does not linger as a ghost entry
+        that later gets dispatched against a non-existent DB row.
+        """
+        uid = str(user_id)
+        fid = str(file_id)
+        self._conn.lrem(_queue_key(uid), 0, fid)
+        self._conn.srem(_inflight_key(uid), fid)
+        self._conn.delete(_payload_key(fid))
+        if self._conn.scard(_inflight_key(uid)) == 0:
+            self._conn.srem(INFLIGHT_USERS_KEY, uid)
+        if self._conn.llen(_queue_key(uid)) == 0:
+            self._conn.srem(ACTIVE_USERS_KEY, uid)
 
     def get_payload(self, *, file_id: str) -> dict[str, str]:
         raw = self._conn.hgetall(_payload_key(file_id))
@@ -223,6 +262,14 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
                 )
                 continue
             queue = decide_queue(payload.get("file_ext", ""))
+            # Stamp the dispatched parse task with the file's OWNING tenant
+            # (captured at enqueue time), not the tenant that happens to be
+            # driving this dispatch round. Beat-driven rounds run under the
+            # default tenant, so without this a file owned by another tenant
+            # would be parsed under the wrong tenant context, get_file_by_ids
+            # would return empty, and the file would never be processed.
+            payload_tenant = payload.get("tenant_id") or ""
+            tenant_token = current_tenant_id.set(int(payload_tenant)) if payload_tenant else None
             try:
                 _parse_apply_async(
                     args=[
@@ -240,6 +287,9 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
                     file_id,
                     exc,
                 )
+            finally:
+                if tenant_token is not None:
+                    current_tenant_id.reset(tenant_token)
     finally:
         sched.release_dispatch_lock(token)
 
@@ -289,6 +339,9 @@ def enqueue_or_dispatch(
         preview_cache_key=preview_cache_key,
         callback_url=callback_url,
         file_ext=_extract_ext(file_name),
+        # Captured in the request context so the later (possibly Beat-driven)
+        # dispatch round can parse the file under its owning tenant.
+        tenant_id=get_current_tenant_id(),
     )
     try:
         trigger_dispatch_task.delay()
@@ -325,7 +378,12 @@ def reconcile_file_scheduler_task() -> None:
 
     for user_id in sched.inflight_users():
         for file_id in sched.inflight_files(user_id=user_id):
-            rows = KnowledgeFileDao.get_file_by_ids([int(file_id)])
+            # Beat runs under the default tenant, but in-flight files can
+            # belong to any tenant. Bypass the auto-injected tenant filter so
+            # cross-tenant rows are actually found instead of being mistaken
+            # for "missing DB row" (which would silently drop a valid file).
+            with bypass_tenant_filter():
+                rows = KnowledgeFileDao.get_file_by_ids([int(file_id)])
             if not rows:
                 sched.complete_file(user_id=user_id, file_id=file_id)
                 logger.warning("reconcile: missing DB row, cleared inflight file_id={}", file_id)
@@ -352,6 +410,7 @@ def reconcile_file_scheduler_task() -> None:
                     preview_cache_key="",
                     callback_url="",
                     file_ext=_extract_ext(row.file_name),
+                    tenant_id=getattr(row, "tenant_id", None),
                 )
                 logger.error("reconcile: re-enqueued orphaned file_id={}", file_id)
                 continue
@@ -360,16 +419,18 @@ def reconcile_file_scheduler_task() -> None:
                 # Case 3: worker may be dead — timeout-based recovery
                 if datetime.now() - row.update_time > inflight_ttl:
                     sched.complete_file(user_id=user_id, file_id=file_id)
-                    KnowledgeFileDao.update_file_status(
-                        [int(file_id)],
-                        KnowledgeFileStatus.WAITING,
-                    )
+                    with bypass_tenant_filter():
+                        KnowledgeFileDao.update_file_status(
+                            [int(file_id)],
+                            KnowledgeFileStatus.WAITING,
+                        )
                     sched.enqueue_file(
                         user_id=user_id,
                         file_id=file_id,
                         preview_cache_key="",
                         callback_url="",
                         file_ext=_extract_ext(row.file_name),
+                        tenant_id=getattr(row, "tenant_id", None),
                     )
                     logger.error("reconcile: timed-out file_id={} re-enqueued", file_id)
 

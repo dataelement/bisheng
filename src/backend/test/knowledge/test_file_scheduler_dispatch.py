@@ -97,6 +97,45 @@ def test_run_dispatch_round_missing_payload_rolls_back(monkeypatch):
     sched.release_dispatch_lock.assert_called_once_with("tok")
 
 
+def test_run_dispatch_round_stamps_owning_tenant(monkeypatch):
+    """The dispatched parse task must run under the file's OWNING tenant
+    (from payload), not the tenant driving the dispatch round."""
+    from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+
+    sched = MagicMock(spec=FileScheduler)
+    sched.acquire_dispatch_lock.return_value = "tok"
+    sched.active_users.return_value = ["a"]
+    sched.dispatch_one.return_value = "10"
+    sched.get_payload.return_value = {
+        "preview_cache_key": "pk",
+        "callback_url": "",
+        "file_ext": "txt",
+        "tenant_id": "18",
+    }
+    seen = {}
+
+    def _capture(*, args, queue):
+        seen["tenant"] = current_tenant_id.get()
+
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._parse_apply_async", _capture)
+    monkeypatch.setattr(
+        "bisheng.worker.knowledge.scheduler.decide_queue",
+        lambda ext: "knowledge_celery",
+    )
+    monkeypatch.setattr(
+        "bisheng.worker.knowledge.scheduler._fair_scheduler_conf",
+        lambda: MagicMock(dispatch_lock_ttl_seconds=24, limit_for=lambda _u: 1),
+    )
+
+    # Simulate a Beat-driven round running under the default tenant (1).
+    set_current_tenant_id(1)
+    run_dispatch_round(scheduler=sched)
+
+    assert seen["tenant"] == 18  # stamped with the file's owning tenant
+    # context restored to the round's tenant afterwards
+    assert current_tenant_id.get() == 1
+
+
 def test_trigger_dispatch_task_returns_early_when_fair_disabled(monkeypatch):
     """When fair_scheduler_enabled=False the Beat task must not call run_dispatch_round."""
     monkeypatch.setattr(
