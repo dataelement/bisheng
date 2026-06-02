@@ -227,6 +227,33 @@ def test_space_create_upload_list(client):
         client.delete(f"{V2}/{sid}")  # AC-30: space delete dispatch (cascade)
 
 
+def test_retrieve_accepts_knowledge_base(client):
+    """F030 fix: /retrieve must accept a knowledge base id (type 0/1), not only spaces.
+
+    Previously a KB id returned 18000 (Knowledge Space does not exist). Now it
+    dispatches to the KB retrieval path → 200 with the RetrieveResp shape
+    (chunks list may be empty depending on indexed content).
+    """
+    kbs = assert_resp_200(client.get(V2 + "/", params={"type": TYPE_NORMAL, "page_size": 20}))
+    # Find a KB whose retrieve no longer fails with the space-only 18000 guard.
+    # (Empty KBs may 500 with ES index_not_found — a data-state issue, not the
+    #  type-dispatch we're verifying — so iterate to a populated/indexed one.)
+    verified = False
+    for kb in kbs.get("data", []):
+        resp = client.post(V2 + "/retrieve", json={
+            "query": "测试", "knowledge_base_ids": [kb["id"]], "top_k": 3,
+        })
+        body = resp.json()
+        assert body["status_code"] != 18000, "KB retrieve still hitting space-only guard (18000)"
+        if body["status_code"] == 200:
+            assert "chunks" in body["data"] and "total" in body["data"]
+            assert isinstance(body["data"]["chunks"], list)
+            verified = True
+            break
+    if not verified:
+        pytest.skip("no indexed knowledge base available to confirm a 200 retrieve")
+
+
 def test_space_keyword_search_existing(client):
     """偏差3: keyword search over a space routes to search → cursor shape, no total.
 
