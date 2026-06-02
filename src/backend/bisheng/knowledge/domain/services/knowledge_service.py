@@ -254,7 +254,7 @@ class KnowledgeService(KnowledgeUtils):
         # ---- 1. Decode cursor (branch on sort_by) ----
         if sort_by not in {"create_time", "update_time", "name"}:
             sort_by = "update_time"
-        is_name_sort = (sort_by == "name")
+        is_name_sort = sort_by == "name"
         context = f"knowledge|sort_by={sort_by}"
         try:
             decoded = decode_cursor(
@@ -1049,7 +1049,6 @@ class KnowledgeService(KnowledgeUtils):
         *,
         upload_limit_bytes: int | None = None,
     ) -> list[KnowledgeFile]:
-
         """Process uploaded files"""
         knowledge, failed_files, process_files, preview_cache_keys = cls.save_knowledge_file(
             login_user, req_data, upload_limit_bytes=upload_limit_bytes
@@ -1582,6 +1581,29 @@ class KnowledgeService(KnowledgeUtils):
         return page_data, writeable
 
     @classmethod
+    def _purge_files_from_scheduler(cls, files: list[KnowledgeFile]) -> None:
+        """Remove deleted files from the fair-scheduler queue/inflight/payload.
+
+        Without this, files deleted while still WAITING linger as "ghost"
+        entries in the per-user Redis queue and get dispatched against a
+        non-existent DB row. Best-effort: a Redis hiccup here must not fail
+        the delete (the scheduler self-heals via release_file/reconcile).
+        """
+        from bisheng.common.services.config_service import settings
+
+        if not settings.knowledge_file_worker.fair_scheduler_enabled:
+            return
+        try:
+            from bisheng.worker.knowledge.scheduler import FileScheduler
+
+            sched = FileScheduler()
+            for f in files:
+                if f.user_id is not None:
+                    sched.purge_file(user_id=f.user_id, file_id=f.id)
+        except Exception:
+            logger.exception("file_scheduler: purge on delete failed; relying on self-heal")
+
+    @classmethod
     def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: list[int]):
         from bisheng.worker.knowledge import file_worker
 
@@ -1601,6 +1623,7 @@ class KnowledgeService(KnowledgeUtils):
         # <g id="Bold">Medical Treatment:</g>vectordb
         delete_knowledge_file_vectors(file_ids)
         KnowledgeFileDao.delete_batch(file_ids)
+        cls._purge_files_from_scheduler(knowledge_file)
         cls.audit_telemetry_service.telemetry_delete_knowledge_file(login_user)
 
         # Delete Audit Log for Knowledge Base Files
@@ -1892,8 +1915,9 @@ class KnowledgeService(KnowledgeUtils):
         return cls.get_file_share_url(file=file)
 
     @classmethod
-    async def aget_file_share_with_auth(cls, login_user: UserPayload, file_id: int,
-                                        request: Request = None) -> tuple[str, str]:
+    async def aget_file_share_with_auth(
+        cls, login_user: UserPayload, file_id: int, request: Request = None
+    ) -> tuple[str, str]:
         """Async permission-safe variant of ``get_file_share_with_auth``.
 
         The endpoint serves both knowledge bases and knowledge spaces. Knowledge
@@ -1911,9 +1935,10 @@ class KnowledgeService(KnowledgeUtils):
             from bisheng.knowledge.domain.services.knowledge_space_service import (
                 KnowledgeSpaceService,
             )
+
             space_service = KnowledgeSpaceService(request=request, login_user=login_user)
             result = await space_service.get_file_preview(file_id)
-            return result['original_url'], result['preview_url']
+            return result["original_url"], result["preview_url"]
         await cls.permission_service.ensure_knowledge_read_async(
             login_user=login_user,
             owner_user_id=knowledge_info.user_id,

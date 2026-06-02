@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.worker.knowledge.scheduler import enqueue_or_dispatch
 
 
@@ -44,6 +45,7 @@ def test_fair_on_calls_enqueue_and_trigger(monkeypatch):
         preview_cache_key="pk",
         callback_url="cb",
         file_ext="pdf",
+        tenant_id=get_current_tenant_id(),
     )
     trigger.assert_called_once_with()
 

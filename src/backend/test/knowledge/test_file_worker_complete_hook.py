@@ -58,7 +58,10 @@ def test_complete_file_skipped_when_fair_scheduler_disabled(monkeypatch):
     sched_factory.assert_not_called()
 
 
-def test_complete_file_safe_when_db_row_missing(monkeypatch):
+def test_release_file_called_when_db_row_missing(monkeypatch):
+    """When the DB row is gone (deleted) or invisible under the current tenant,
+    the in-flight slot must still be released so the per-user queue does not
+    stay blocked forever."""
     monkeypatch.setattr(
         "bisheng.common.services.config_service.settings.knowledge_file_worker.fair_scheduler_enabled",
         True,
@@ -67,9 +70,20 @@ def test_complete_file_safe_when_db_row_missing(monkeypatch):
         "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.get_file_by_ids",
         lambda ids: [],
     )
-    sched_factory = MagicMock()
-    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", sched_factory)
+    release = MagicMock()
+    complete = MagicMock()
+    trigger = MagicMock()
+    monkeypatch.setattr(
+        "bisheng.worker.knowledge.scheduler.FileScheduler",
+        lambda: MagicMock(release_file=release, complete_file=complete),
+    )
+    monkeypatch.setattr(
+        "bisheng.worker.knowledge.scheduler.trigger_dispatch_task",
+        MagicMock(delay=trigger),
+    )
 
     file_worker.parse_knowledge_file_celery.run(100)  # must not raise
 
-    sched_factory.assert_not_called()
+    release.assert_called_once_with(file_id="100")
+    complete.assert_not_called()
+    trigger.assert_called_once_with()
