@@ -214,6 +214,18 @@ class ChannelService:
         permission_ids.update(_business_member_permission_ids(membership))
         return permission_ids
 
+    async def _get_channel_organization_grant_subject_types(
+        self,
+        channel_id: str,
+        login_user: UserPayload,
+    ) -> set[str]:
+        return await FineGrainedPermissionService.get_matching_binding_subject_types_async(
+            login_user,
+            'channel',
+            channel_id,
+            {'department', 'user_group'},
+        )
+
     @staticmethod
     def _resolve_subscription_status(
         membership_status: Optional[MembershipStatusEnum],
@@ -1735,6 +1747,14 @@ class ChannelService:
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
+            model_organization_subject_types = await self._get_channel_organization_grant_subject_types(
+                channel_id,
+                login_user,
+            )
+            if model_organization_subject_types:
+                raise ChannelOrganizationGrantUnsubscribeDeniedError(
+                    blocked_by=sorted(model_organization_subject_types),
+                )
             raise ValueError("You are not subscribed to this channel")
 
         sources = await self.space_channel_member_repository.find_channel_membership_sources(
@@ -1753,12 +1773,22 @@ class ChannelService:
             if _is_organization_channel_source(source)
         ]
 
-        if not direct_sources and organization_sources:
-            blocked_by = sorted({
-                source.grant_subject_type
-                for source in organization_sources
-                if source.grant_subject_type
-            })
+        member_organization_subject_types = {
+            source.grant_subject_type
+            for source in organization_sources
+            if source.grant_subject_type
+        }
+        if member_organization_subject_types:
+            raise ChannelOrganizationGrantUnsubscribeDeniedError(
+                blocked_by=sorted(member_organization_subject_types),
+            )
+
+        model_organization_subject_types = await self._get_channel_organization_grant_subject_types(
+            channel_id,
+            login_user,
+        )
+        blocked_by = sorted(model_organization_subject_types)
+        if blocked_by:
             raise ChannelOrganizationGrantUnsubscribeDeniedError(blocked_by=blocked_by)
 
         targets = direct_sources or [current_membership]

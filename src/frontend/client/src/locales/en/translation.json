@@ -1459,6 +1459,7 @@
     "exit_space_failed": "Failed to exit space",
     "exit_space_short": "Exit space",
     "exited_space": "Exited space",
+    "organization_grant_exit_blocked": "This space was granted to you through a department/user group and cannot be exited yet.",
     "explore_more_spaces": "You can explore more knowledge spaces here",
     "explore_square": "Explore Knowledge Square",
     "fail": "Failed",

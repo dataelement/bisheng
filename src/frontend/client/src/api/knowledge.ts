@@ -1139,8 +1139,8 @@ export async function subscribeSpaceApi(space_id: string): Promise<SubscribeSpac
  * Unsubscribe from a space (leave)
  * POST /api/v1/knowledge/space/{space_id}/unsubscribe
  */
-export async function unsubscribeSpaceApi(space_id: string): Promise<void> {
-    await request.post(`/api/v1/knowledge/space/${space_id}/unsubscribe`);
+export async function unsubscribeSpaceApi(space_id: string): Promise<any> {
+    return await request.post(`/api/v1/knowledge/space/${space_id}/unsubscribe`);
 }
 
 /**

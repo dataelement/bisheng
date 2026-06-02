@@ -12,6 +12,8 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { createApiStatusError, extractApiStatusCode } from "../errorUtils";
 
+const ORGANIZATION_GRANT_UNSUBSCRIBE_DENIED_CODE = 19055;
+
 interface UseChannelActionsOptions {
     activeChannelId?: string;
     createdSortBy: SortType;
@@ -134,7 +136,6 @@ export function useChannelActions({
 
     // Unsubscribe
     const handleUnsubscribeChannel = async (channelId: string) => {
-        let nextActive: Channel | null = null;
         const previousSubscribed =
             queryClient.getQueryData<Channel[]>(["channels", "subscribed", subscribedSortBy])
             ?? subscribedChannels;
@@ -142,16 +143,8 @@ export function useChannelActions({
             previousSubscribed.find(c => c.id === channelId)
             ?? subscribedChannels.find(c => c.id === channelId)
             ?? null;
-        queryClient.setQueryData(["channels", "subscribed", subscribedSortBy], (old: Channel[] = []) => {
-            const newData = old.filter(c => c.id !== channelId);
-            if (activeChannelId === channelId && newData.length > 0) nextActive = newData[0];
-            return newData;
-        });
-
-        if (activeChannelId === channelId) {
-            if (!nextActive && createdChannels.length > 0) nextActive = createdChannels[0];
-            onChannelSelect(nextActive);
-        }
+        const nextSubscribed = previousSubscribed.filter(c => c.id !== channelId);
+        const nextActive = nextSubscribed[0] ?? createdChannels[0] ?? null;
 
         try {
             const response = await unsubscribeChannelApi(channelId);
@@ -159,16 +152,26 @@ export function useChannelActions({
             if (unsubscribeCode && unsubscribeCode !== 200) {
                 throw createApiStatusError(response);
             }
+            queryClient.setQueryData(["channels", "subscribed", subscribedSortBy], nextSubscribed);
+            if (activeChannelId === channelId) {
+                onChannelSelect(nextActive);
+            }
             queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
             showToast({ message: localize("com_subscription.unsubscribed"), severity: NotificationSeverity.WARNING });
         } catch (e) {
+            const errorCode = extractApiStatusCode(e);
             queryClient.setQueryData(["channels", "subscribed", subscribedSortBy], previousSubscribed);
             if (activeChannelId === channelId && previousActive) {
                 onChannelSelect(previousActive);
             }
-            queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
+            if (errorCode !== ORGANIZATION_GRANT_UNSUBSCRIBE_DENIED_CODE) {
+                queryClient.invalidateQueries({ queryKey: ["channels", "subscribed"] });
+            }
+            const message = errorCode === ORGANIZATION_GRANT_UNSUBSCRIBE_DENIED_CODE
+                ? localize("com_subscription.organization_grant_unsubscribe_blocked")
+                : extractApiErrorMessage(e) || localize("com_subscription.unsubscribe_failed_retry");
             showToast({
-                message: extractApiErrorMessage(e) || localize("com_subscription.unsubscribe_failed_retry"),
+                message,
                 severity: NotificationSeverity.ERROR
             });
         }

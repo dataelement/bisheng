@@ -19,6 +19,7 @@
 | ChannelAuthorizationWrite | F026-channel-active-authorization | 频道资源主动授权、撤销授权、频道 relation-model binding 写入与清理行为 |
 | SpaceChannelMember(channel relation/source fields) | F026-channel-active-authorization | `space_channel_member` 中 `business_type='channel'` 的四档关系与授权来源字段；不拥有知识空间成员关系 |
 | —（无新增） | F029-knowledge-qa-permission-filter | 仅读取/调用现有 KnowledgeSpace / Folder / KnowledgeFile / MessageCitation；不引入新领域对象 |
+| —（无新增） | F030-knowledge-resource-unified-api | v2 filelib 统一对外 API；仅经由现有 `KnowledgeService` / `KnowledgeSpaceService` 读写 Knowledge / KnowledgeFile / KnowledgeSpace，不引入新领域对象、不新增 DAO 入口 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -56,6 +57,7 @@
 | F027-rebac-list-perf-optim | F004, F008, F011/F012/F013 | 性能优化型；不新增领域对象，仅修改高频列表接口分页协议与部门树 member_count |
 | F028-conversation-export-import | F004, F008（ReBAC core / resource-rebac-adaptation） | 工作台会话回答级导出与导入知识空间；复用 `KnowledgeSpaceService.add_file` 链路，不新增领域对象 |
 | F029-knowledge-qa-permission-filter | — | 仅复用现有 ReBAC `list_accessible_ids` + Fine-grained `view_file` 解析；不依赖其他 v2.6.0 Feature |
+| F030-knowledge-resource-unified-api | F027, F029 | 列表/文件列表沿用 F027 cursor 协议（INV-6）；代用户检索 `user_id` 闭合 F029 遗留的 RPC 越权口子（对齐 INV-7） |
 
 ---
 
@@ -68,6 +70,7 @@
 | 181 | approval | F025（沿用现有 `common/errcode/approval.py`，扩展为统一审批中心错误码） |
 | 190 | channel / bisheng_information | F026 沿用现有 `common/errcode/channel.py`，扩展频道授权错误码时不得与既有 190xx 冲突 |
 | 120 | workstation | F028 沿用现有 `common/errcode/workstation.py`，会话导出 / 导入知识空间错误码段位 12060-12079，不得与既有 1204X / 1205X 冲突 |
+| 109 | knowledge | F030 沿用现有 `common/errcode/knowledge.py`，新增 `KnowledgeTypeNotSupportedError`(10962)；复用 10900/10901/10991。180 (knowledge_space) 复用 18001/18010/18040 |
 
 ---
 
@@ -80,3 +83,4 @@
 | 2026-05-28 | 登记 F027 ReBAC 列表性能优化：新增 INV-6（cursor-based 分页 + 统一 cursor 契约）；未新增领域对象；扩展现有模块错误码 109 / 105 / 180 各新增 1 个 `*InvalidCursorError` | F027 |
 | 2026-05-29 | 登记 F029 知识空间 AI 问答检索权限过滤：表 1 标注"无新增领域对象"、表 2 追加 INV-7（AI 问答可见性 ⊆ 列表 UI 可见性）、表 3 标注无依赖；未新增模块编码（沿用 180 `knowledge_space`）；不影响 F025 范围 | F029 |
 | 2026-05-30 | 登记 F028 工作台会话导出 / 导入知识空间：不新增领域对象，不新增不变量；扩展 120 (workstation) 错误码段位 12060-12079；复用 `KnowledgeSpaceService.add_file` 与 `AddToKnowledgeModal` | F028 |
+| 2026-06-02 | 登记 F030 知识资源统一对外 API（v2 filelib 改造）：表 1 标注"无新增领域对象"、表 3 追加依赖 F027/F029；新增模块 109 错误码 `KnowledgeTypeNotSupportedError`(10962)；列表/文件列表遵循 INV-6 cursor 协议（PRD 同步改造）；代用户检索 `user_id` 对齐 INV-7；个人库 type=2 对外不暴露但枚举保留（workstation/linsight 内部继续使用）；未新增不变量 | F030 |

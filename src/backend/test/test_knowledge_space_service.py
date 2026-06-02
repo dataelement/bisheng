@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileSizeLimitError,
     SpaceFileNotFoundError,
@@ -2272,7 +2273,40 @@ class TestTupleLifecycle:
         mock_delete_member.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_unsubscribe_space_without_direct_grant_only_removes_membership(self, service):
+    async def test_unsubscribe_space_blocks_department_model_grant_without_member_row(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, user_id=99)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.FineGrainedPermissionService.get_matching_binding_subject_types_async',
+            new_callable=AsyncMock,
+            return_value={'department'},
+        ), patch.object(
+            service,
+            '_revoke_direct_space_user_permissions',
+            new_callable=AsyncMock,
+        ) as mock_revoke, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member',
+            new_callable=AsyncMock,
+        ) as mock_delete_member:
+            with pytest.raises(BaseErrorCode) as exc_info:
+                await service.unsubscribe_space(1)
+
+        assert exc_info.value.code == 18071
+        assert exc_info.value.message == '本空间通过部门/用户组授权给你，暂无法退出'
+        assert exc_info.value.kwargs['blocked_by'] == ['department']
+        mock_revoke.assert_not_awaited()
+        mock_delete_member.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_space_blocks_user_group_model_grant_with_direct_member(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, user_id=99)
         active_member = _make_member(user_id=service.login_user.user_id)
 
@@ -2284,6 +2318,43 @@ class TestTupleLifecycle:
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
             new_callable=AsyncMock,
             return_value=active_member,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.FineGrainedPermissionService.get_matching_binding_subject_types_async',
+            new_callable=AsyncMock,
+            return_value={'user_group'},
+        ), patch.object(
+            service,
+            '_revoke_direct_space_user_permissions',
+            new_callable=AsyncMock,
+        ) as mock_revoke, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member',
+            new_callable=AsyncMock,
+        ) as mock_delete_member:
+            with pytest.raises(BaseErrorCode) as exc_info:
+                await service.unsubscribe_space(1)
+
+        assert exc_info.value.code == 18071
+        assert exc_info.value.kwargs['blocked_by'] == ['user_group']
+        mock_revoke.assert_not_awaited()
+        mock_delete_member.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_unsubscribe_space_without_organization_grant_removes_membership(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, user_id=99)
+        active_member = _make_member(user_id=service.login_user.user_id)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=active_member,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.FineGrainedPermissionService.get_matching_binding_subject_types_async',
+            new_callable=AsyncMock,
+            return_value=set(),
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member',
             new_callable=AsyncMock,
@@ -2302,8 +2373,13 @@ class TestTupleLifecycle:
             result = await service.unsubscribe_space(1)
 
         assert result is True
-        mock_authorize.assert_not_awaited()
-        mock_save_bindings.assert_not_awaited()
+        mock_authorize.assert_awaited_once()
+        kwargs = mock_authorize.await_args.kwargs
+        assert kwargs['object_type'] == 'knowledge_space'
+        assert kwargs['object_id'] == '1'
+        assert kwargs['grants'] == []
+        assert {revoke.relation for revoke in kwargs['revokes']} == {'editor', 'manager', 'viewer'}
+        mock_save_bindings.assert_awaited_once_with([])
 
     @pytest.mark.asyncio
     async def test_unsubscribe_space_revokes_direct_rebac_binding(self, service):
@@ -2339,6 +2415,10 @@ class TestTupleLifecycle:
             new_callable=AsyncMock,
             return_value=active_member,
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.FineGrainedPermissionService.get_matching_binding_subject_types_async',
+            new_callable=AsyncMock,
+            return_value=set(),
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.delete_space_member',
             new_callable=AsyncMock,
             return_value=True,
@@ -2362,10 +2442,10 @@ class TestTupleLifecycle:
         assert kwargs['object_type'] == 'knowledge_space'
         assert kwargs['object_id'] == '1'
         assert kwargs['enforce_fga_success'] is True
-        assert len(kwargs['revokes']) == 1
-        assert kwargs['revokes'][0].subject_type == 'user'
-        assert kwargs['revokes'][0].subject_id == service.login_user.user_id
-        assert kwargs['revokes'][0].relation == 'viewer'
+        assert {revoke.relation for revoke in kwargs['revokes']} == {'editor', 'manager', 'viewer'}
+        viewer_revoke = next(revoke for revoke in kwargs['revokes'] if revoke.relation == 'viewer')
+        assert viewer_revoke.subject_type == 'user'
+        assert viewer_revoke.subject_id == service.login_user.user_id
         mock_save_bindings.assert_awaited_once_with([other_binding])
 
     @pytest.mark.asyncio

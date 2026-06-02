@@ -74,6 +74,11 @@ class SpaceSubscribeLimitError(BaseErrorCode):
     Msg: str = 'You can subscribe to a maximum of 50 knowledge spaces'
 
 
+class SpaceOrganizationGrantExitDeniedError(BaseErrorCode):
+    Code: int = 18071
+    Msg: str = '本空间通过部门/用户组授权给你，暂无法退出'
+
+
 # ── Permission ────────────────────────────────────────────────────────────────
 
 class SpacePermissionDeniedError(BaseErrorCode):

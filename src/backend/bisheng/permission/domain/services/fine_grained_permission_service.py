@@ -215,6 +215,51 @@ class FineGrainedPermissionService:
         )
 
     @classmethod
+    async def get_matching_binding_subject_types_async(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_id: str | int,
+        subject_types: Iterable[str],
+    ) -> set[str]:
+        normalized_subject_types = {str(subject_type) for subject_type in subject_types if subject_type}
+        if not normalized_subject_types:
+            return set()
+
+        bindings = await _get_bindings()
+        candidate_bindings = [
+            binding for binding in bindings
+            if binding.get('resource_type') == object_type
+            and str(binding.get('resource_id')) == str(object_id)
+            and binding.get('subject_type') in normalized_subject_types
+        ]
+        if not candidate_bindings:
+            return set()
+
+        user_subject_strings = await cls.get_current_user_subject_strings(login_user)
+        binding_department_paths = await cls.get_binding_department_paths(candidate_bindings)
+        needs_department_paths = any(
+            binding.get('subject_type') == 'department' and binding.get('include_children')
+            for binding in candidate_bindings
+        )
+        user_department_paths = (
+            await cls.get_current_user_department_paths(user_subject_strings)
+            if needs_department_paths
+            else {}
+        )
+
+        return {
+            binding.get('subject_type')
+            for binding in candidate_bindings
+            if cls._binding_matches_current_user(
+                binding,
+                user_subject_strings,
+                binding_department_paths,
+                user_department_paths,
+            )
+        }
+
+    @classmethod
     async def _permission_ids_from_bindings(
         cls,
         lineage: list[tuple[str, str | int]],

@@ -1,7 +1,9 @@
+
 from fastapi.exceptions import HTTPException
 from sqlmodel import select
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter, set_current_tenant_id
 from bisheng.core.database import get_sync_db_session
@@ -66,6 +68,36 @@ async def get_default_operator_async() -> UserPayload:
     login_user = await UserPayload.init_login_user(
         user_id=login_user.user_id,
         user_name=login_user.user_name,
+        tenant_id=tenant_id,
+    )
+    set_current_tenant_id(tenant_id)
+    return login_user
+
+
+async def resolve_operator(user_id: int | None = None) -> UserPayload:
+    """Resolve the acting identity for v2 filelib endpoints (F030 AD-02).
+
+    - ``user_id`` omitted → fall back to the configured default operator
+      (existing behaviour, unchanged).
+    - ``user_id`` provided → build a ``UserPayload`` for that target user so
+      列表 / 检索 / 文件列表 are filtered by *that user's* visibility scope and
+      ``permission_ids`` are computed under the same identity. This is the
+      "代用户" protocol F029 deferred for ``/api/v2/filelib/retrieve``.
+
+    Seeds ``current_tenant_id`` with the resolved user's active tenant so
+    tenant-aware queries stay multi-tenant safe (mirrors get_default_operator_async).
+    """
+    if user_id is None:
+        return await get_default_operator_async()
+
+    target_user = await UserDao.aget_user(user_id)
+    if not target_user:
+        raise NotFoundError.http_exception()
+    active = await UserTenantDao.aget_active_user_tenant(target_user.user_id)
+    tenant_id = active.tenant_id if active else DEFAULT_TENANT_ID
+    login_user = await UserPayload.init_login_user(
+        user_id=target_user.user_id,
+        user_name=target_user.user_name,
         tenant_id=tenant_id,
     )
     set_current_tenant_id(tenant_id)

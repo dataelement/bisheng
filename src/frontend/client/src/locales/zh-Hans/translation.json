@@ -1386,6 +1386,7 @@
     "exit_space_failed": "退出空间失败",
     "exit_space_short": "退出空间",
     "exited_space": "已退出空间",
+    "organization_grant_exit_blocked": "本空间通过部门/用户组授权给你，暂无法退出",
     "explore_more_spaces": "您可以在这里探索更多的知识空间",
     "explore_square": "探索知识广场",
     "fail": "失败",

@@ -104,6 +104,13 @@ class KnowledgeRecommendQuestionError(BaseErrorCode):
     Msg: str = 'The model returned an incorrect format: {message}'
 
 
+# F030: resource type not supported by the v2 unified filelib API
+# (illegal type value, or personal knowledge base type=2 which is not exposed externally)
+class KnowledgeTypeNotSupportedError(BaseErrorCode):
+    Code: int = 10962
+    Msg: str = 'Unsupported knowledge resource type'
+
+
 # Knowledge base does not exist
 class KnowledgeNotExistError(BaseErrorCode):
     Code: int = 10970
