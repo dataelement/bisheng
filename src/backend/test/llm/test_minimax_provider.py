@@ -1,4 +1,4 @@
-"""Tests for MiniMax provider upgrade to OpenAI-compatible API (M2.7 support).
+"""Tests for MiniMax provider upgrade to OpenAI-compatible API (M3 support).
 
 These tests verify the MiniMax provider changes without requiring the full
 bisheng backend to be installed, by testing the specific files that were changed.
@@ -90,7 +90,7 @@ class TestCoreAIModuleChanges(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.init_py_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'core', 'ai', '__init__.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'core', 'ai', '__init__.py'
         )
         cls.init_py_path = os.path.normpath(cls.init_py_path)
         with open(cls.init_py_path) as f:
@@ -139,7 +139,7 @@ class TestEmbeddingModuleConsistency(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.emb_py_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'llm', 'embedding.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'llm', 'domain', 'llm', 'embedding.py'
         )
         cls.emb_py_path = os.path.normpath(cls.emb_py_path)
         with open(cls.emb_py_path) as f:
@@ -169,7 +169,7 @@ class TestFrontendModelData(unittest.TestCase):
     def setUpClass(cls):
         cls.data_path = os.path.join(
             os.path.dirname(__file__),
-            '../../frontend/platform/public/models/data.json'
+            '../../../frontend/platform/public/models/data.json'
         )
         cls.data_path = os.path.normpath(cls.data_path)
         if not os.path.exists(cls.data_path):
@@ -181,6 +181,11 @@ class TestFrontendModelData(unittest.TestCase):
         """MiniMax models should be present in data.json."""
         self.assertIn('minimax', self.model_data)
 
+    def test_minimax_has_m3_model(self):
+        """MiniMax-M3 should be listed as an LLM model."""
+        model_names = [m['model_name'] for m in self.model_data['minimax']]
+        self.assertIn('MiniMax-M3', model_names)
+
     def test_minimax_has_m27_model(self):
         """MiniMax-M2.7 should be listed as an LLM model."""
         model_names = [m['model_name'] for m in self.model_data['minimax']]
@@ -191,24 +196,15 @@ class TestFrontendModelData(unittest.TestCase):
         model_names = [m['model_name'] for m in self.model_data['minimax']]
         self.assertIn('MiniMax-M2.7-highspeed', model_names)
 
-    def test_minimax_has_m25_model(self):
-        """MiniMax-M2.5 should still be listed for backward compatibility."""
+    def test_minimax_older_models_removed(self):
+        """Older MiniMax models (M2.5 / M2.5-highspeed / Text-01) should be removed."""
         model_names = [m['model_name'] for m in self.model_data['minimax']]
-        self.assertIn('MiniMax-M2.5', model_names)
+        for legacy in ('MiniMax-M2.5', 'MiniMax-M2.5-highspeed', 'MiniMax-Text-01'):
+            self.assertNotIn(legacy, model_names)
 
-    def test_minimax_has_m25_highspeed_model(self):
-        """MiniMax-M2.5-highspeed should still be listed."""
-        model_names = [m['model_name'] for m in self.model_data['minimax']]
-        self.assertIn('MiniMax-M2.5-highspeed', model_names)
-
-    def test_minimax_has_text01_model(self):
-        """MiniMax-Text-01 should still be listed for backward compatibility."""
-        model_names = [m['model_name'] for m in self.model_data['minimax']]
-        self.assertIn('MiniMax-Text-01', model_names)
-
-    def test_minimax_m27_is_first(self):
-        """MiniMax-M2.7 should be the first (default) model."""
-        self.assertEqual(self.model_data['minimax'][0]['model_name'], 'MiniMax-M2.7')
+    def test_minimax_m3_is_first(self):
+        """MiniMax-M3 should be the first (default) model."""
+        self.assertEqual(self.model_data['minimax'][0]['model_name'], 'MiniMax-M3')
 
     def test_minimax_models_are_llm_type(self):
         """All MiniMax models should be of type 'llm'."""
@@ -216,8 +212,8 @@ class TestFrontendModelData(unittest.TestCase):
             self.assertEqual(model['model_type'], 'llm')
 
     def test_minimax_model_count(self):
-        """MiniMax should have 5 models listed."""
-        self.assertEqual(len(self.model_data['minimax']), 5)
+        """MiniMax should have 3 models listed (M3, M2.7, M2.7-highspeed)."""
+        self.assertEqual(len(self.model_data['minimax']), 3)
 
 
 class TestFrontendCustomForm(unittest.TestCase):
@@ -227,7 +223,7 @@ class TestFrontendCustomForm(unittest.TestCase):
     def setUpClass(cls):
         cls.form_path = os.path.join(
             os.path.dirname(__file__),
-            '../../frontend/platform/src/pages/ModelPage/manage/CustomForm.tsx'
+            '../../../frontend/platform/src/pages/ModelPage/manage/CustomForm.tsx'
         )
         cls.form_path = os.path.normpath(cls.form_path)
         if not os.path.exists(cls.form_path):
@@ -250,7 +246,7 @@ class TestMiniMaxLLMServerTypeEnum(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.const_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'const.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'llm', 'domain', 'const.py'
         )
         cls.const_path = os.path.normpath(cls.const_path)
         with open(cls.const_path) as f:
@@ -267,7 +263,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         llm_py_path = os.path.join(
-            os.path.dirname(__file__), '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py'
+            os.path.dirname(__file__), '..', '..', 'bisheng', 'llm', 'domain', 'llm', 'llm.py'
         )
         llm_py_path = os.path.normpath(llm_py_path)
         with open(llm_py_path) as f:
@@ -288,7 +284,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     def test_extracts_api_key(self):
         """Should use openai_api_key from server config."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5'},
+            {'model': 'MiniMax-M3'},
             {'openai_api_key': 'test-minimax-key', 'openai_api_base': 'https://api.minimax.io/v1'},
             {}
         )
@@ -297,7 +293,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     def test_extracts_base_url(self):
         """Should use openai_api_base as base_url."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5'},
+            {'model': 'MiniMax-M3'},
             {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
             {}
         )
@@ -306,7 +302,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     def test_strips_trailing_slash(self):
         """Should strip trailing slash from base_url."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5'},
+            {'model': 'MiniMax-M3'},
             {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1/'},
             {}
         )
@@ -315,7 +311,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     def test_stream_usage_true(self):
         """Should set stream_usage=True."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5'},
+            {'model': 'MiniMax-M3'},
             {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
             {}
         )
@@ -324,7 +320,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     def test_no_legacy_params(self):
         """Should not produce minimax_api_key or group_id."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5'},
+            {'model': 'MiniMax-M3'},
             {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
             {}
         )
@@ -333,8 +329,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
 
     def test_preserves_model_name(self):
         """Model name should be preserved."""
-        for name in ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed',
-                     'MiniMax-Text-01']:
+        for name in ['MiniMax-M3', 'MiniMax-M2.7', 'MiniMax-M2.7-highspeed']:
             result = self._openai_params_fn(
                 {'model': name},
                 {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
@@ -345,17 +340,17 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     def test_user_kwargs_applied(self):
         """User advanced kwargs should be merged."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5', 'temperature': 0.7},
+            {'model': 'MiniMax-M3', 'temperature': 0.7},
             {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
             {'user_kwargs': json.dumps({'max_tokens': 4096})}
         )
         self.assertEqual(result['temperature'], 0.7)
-        self.assertEqual(result['model'], 'MiniMax-M2.5')
+        self.assertEqual(result['model'], 'MiniMax-M3')
 
     def test_empty_key_fallback(self):
         """Should fall back to 'empty' when API key is empty."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5'},
+            {'model': 'MiniMax-M3'},
             {'openai_api_key': '', 'openai_api_base': 'https://api.minimax.io/v1'},
             {}
         )
@@ -364,7 +359,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     def test_proxy_passthrough(self):
         """Should pass through openai_proxy if configured."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5'},
+            {'model': 'MiniMax-M3'},
             {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1',
              'openai_proxy': 'http://proxy:8080'},
             {}
@@ -374,7 +369,7 @@ class TestOpenAIParamsFunction(unittest.TestCase):
     def test_no_url_appending(self):
         """Should NOT append /chat/completions to the URL."""
         result = self._openai_params_fn(
-            {'model': 'MiniMax-M2.5'},
+            {'model': 'MiniMax-M3'},
             {'openai_api_key': 'key', 'openai_api_base': 'https://api.minimax.io/v1'},
             {}
         )
@@ -383,6 +378,46 @@ class TestOpenAIParamsFunction(unittest.TestCase):
 
 class TestMiniMaxIntegration(unittest.TestCase):
     """Integration tests for MiniMax provider (require MINIMAX_API_KEY)."""
+
+    @unittest.skipUnless(
+        os.environ.get('MINIMAX_API_KEY'),
+        'MINIMAX_API_KEY not set'
+    )
+    def test_minimax_m3_chat_completion(self):
+        """Test actual chat completion with MiniMax-M3 via OpenAI-compatible API."""
+        from langchain_openai import ChatOpenAI
+
+        llm = ChatOpenAI(
+            model='MiniMax-M3',
+            api_key=os.environ['MINIMAX_API_KEY'],
+            base_url='https://api.minimax.io/v1',
+            temperature=0.1,
+            max_tokens=64,
+        )
+        response = llm.invoke('Say hello in one word.')
+        self.assertIsNotNone(response.content)
+        self.assertTrue(len(response.content) > 0)
+
+    @unittest.skipUnless(
+        os.environ.get('MINIMAX_API_KEY'),
+        'MINIMAX_API_KEY not set'
+    )
+    def test_minimax_m3_streaming(self):
+        """Test streaming chat completion with MiniMax-M3."""
+        from langchain_openai import ChatOpenAI
+
+        llm = ChatOpenAI(
+            model='MiniMax-M3',
+            api_key=os.environ['MINIMAX_API_KEY'],
+            base_url='https://api.minimax.io/v1',
+            temperature=0.1,
+            max_tokens=64,
+            streaming=True,
+        )
+        chunks = list(llm.stream('Say hello in one word.'))
+        self.assertTrue(len(chunks) > 0)
+        full_content = ''.join(c.content for c in chunks)
+        self.assertTrue(len(full_content) > 0)
 
     @unittest.skipUnless(
         os.environ.get('MINIMAX_API_KEY'),
@@ -413,46 +448,6 @@ class TestMiniMaxIntegration(unittest.TestCase):
 
         llm = ChatOpenAI(
             model='MiniMax-M2.7-highspeed',
-            api_key=os.environ['MINIMAX_API_KEY'],
-            base_url='https://api.minimax.io/v1',
-            temperature=0.1,
-            max_tokens=64,
-        )
-        response = llm.invoke('Say hello in one word.')
-        self.assertIsNotNone(response.content)
-        self.assertTrue(len(response.content) > 0)
-
-    @unittest.skipUnless(
-        os.environ.get('MINIMAX_API_KEY'),
-        'MINIMAX_API_KEY not set'
-    )
-    def test_minimax_m27_streaming(self):
-        """Test streaming chat completion with MiniMax-M2.7."""
-        from langchain_openai import ChatOpenAI
-
-        llm = ChatOpenAI(
-            model='MiniMax-M2.7',
-            api_key=os.environ['MINIMAX_API_KEY'],
-            base_url='https://api.minimax.io/v1',
-            temperature=0.1,
-            max_tokens=64,
-            streaming=True,
-        )
-        chunks = list(llm.stream('Say hello in one word.'))
-        self.assertTrue(len(chunks) > 0)
-        full_content = ''.join(c.content for c in chunks)
-        self.assertTrue(len(full_content) > 0)
-
-    @unittest.skipUnless(
-        os.environ.get('MINIMAX_API_KEY'),
-        'MINIMAX_API_KEY not set'
-    )
-    def test_minimax_m25_chat_completion(self):
-        """Test actual chat completion with MiniMax-M2.5 via OpenAI-compatible API."""
-        from langchain_openai import ChatOpenAI
-
-        llm = ChatOpenAI(
-            model='MiniMax-M2.5',
             api_key=os.environ['MINIMAX_API_KEY'],
             base_url='https://api.minimax.io/v1',
             temperature=0.1,
