@@ -63,9 +63,11 @@ const FileIconRenderer = ({ file, isFolder }: { file: any; isFolder: boolean }) 
         );
     }
 
-    // Only show thumbnail when file is successfully parsed
+    // Only show thumbnail when file is successfully parsed.
+    // object-top so the preview keeps the page header (title area) visible instead
+    // of clipping it equally top & bottom.
     if (file.thumbnail && file.status === FileStatus.SUCCESS) {
-        return <img src={file.thumbnail} alt={file.name} className="size-full object-cover" />;
+        return <img src={file.thumbnail} alt={file.name} className="size-full object-cover object-top" />;
     }
 
     // For non-success states (uploading/processing/failed/etc.), use the neutral
