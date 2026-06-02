@@ -1309,7 +1309,7 @@ export default function PortalKnowledgeWorkbench() {
                         setAiDialogOpen(true);
                     }}
                     onOpenTags={() => setTagModalOpen(true)}
-                    onOpenShare={() => setActivePanel("share")}
+                    // onOpenShare={() => setActivePanel("share")}
                     onDownload={() => void handleDownloadSelected()}
                     canManagePermission={canManageSelectedFilePermission}
                     onOpenPermission={() => {

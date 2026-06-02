@@ -44,6 +44,12 @@ import {
     uploadFileToServerApi,
 } from "~/api/knowledge";
 
+function stripComments(source: string): string {
+    return source
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+}
+
 const mockShowToast = jest.fn();
 const mockConfirm = jest.fn();
 const mockUseKnowledgeSpaceActionPermissions = jest.fn();
@@ -1385,7 +1391,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(rail).queryByRole("button", { name: "权限" })).not.toBeInTheDocument();
     });
 
-    test("renders document preview actions in Lanhu order and opens the existing portals", async () => {
+    test("renders document preview actions with the share action hidden", async () => {
         const teamSpace = makeSpace("team-1", "我的技术文档", {
             spaceLevel: SpaceLevel.TEAM,
             role: SpaceRole.ADMIN,
@@ -1418,7 +1424,6 @@ describe("PortalKnowledgeWorkbench", () => {
         ).toEqual([
             "AI 对话",
             "编辑标签",
-            "分享",
             "下载",
             "权限管理",
             "复制",
@@ -1438,8 +1443,7 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(actions).getByRole("button", { name: "编辑标签" }));
         expect(screen.getByTestId("edit-tags-modal")).toBeInTheDocument();
 
-        fireEvent.click(within(actions).getByRole("button", { name: "分享" }));
-        expect(screen.getByText("分享")).toBeInTheDocument();
+        expect(within(actions).queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
 
         fireEvent.click(within(actions).getByRole("button", { name: "下载" }));
         await waitFor(() => {
@@ -1448,6 +1452,16 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(within(actions).getByRole("button", { name: "权限管理" }));
         expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:knowledge_file:后端开发.md");
+    });
+
+    test("keeps the document preview share entry commented out", () => {
+        const previewSource = readFileSync(path.join(__dirname, "components/DocumentPreview.tsx"), "utf8");
+        const workbenchSource = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.tsx"), "utf8");
+
+        expect(previewSource).toContain('title="分享"');
+        expect(stripComments(previewSource)).not.toContain('title="分享"');
+        expect(workbenchSource).toContain('onOpenShare={() => setActivePanel("share")}');
+        expect(stripComments(workbenchSource)).not.toContain('onOpenShare={() => setActivePanel("share")}');
     });
 
     test("hides document preview permission action without file management permission", async () => {

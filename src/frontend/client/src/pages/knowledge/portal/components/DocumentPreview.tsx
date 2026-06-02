@@ -1,4 +1,5 @@
-import { Bot, ChevronDown, Copy, Download, FileText, Share2, ShieldCheck, SquarePen } from "lucide-react";
+import { Bot, ChevronDown, Copy, Download, FileText, ShieldCheck, SquarePen } from "lucide-react";
+// import { Share2 } from "lucide-react";
 import type { KnowledgeFile } from "~/api/knowledge";
 import FilePreview from "../../FilePreview";
 import type { PreviewState } from "../types";
@@ -11,7 +12,7 @@ interface DocumentPreviewProps {
     summaryExpanded: boolean;
     onOpenAi: () => void;
     onOpenTags: () => void;
-    onOpenShare: () => void;
+    // onOpenShare: () => void;
     onDownload: () => void;
     canManagePermission: boolean;
     onOpenPermission: () => void;
@@ -26,7 +27,7 @@ export function DocumentPreview({
     summaryExpanded,
     onOpenAi,
     onOpenTags,
-    onOpenShare,
+    // onOpenShare,
     onDownload,
     canManagePermission,
     onOpenPermission,
@@ -52,9 +53,9 @@ export function DocumentPreview({
                             <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={onOpenTags}>
                                 <SquarePen size={16} />
                             </button>
-                            <button type="button" className={s.iconAction} title="分享" aria-label="分享" onClick={onOpenShare}>
+                            {/* <button type="button" className={s.iconAction} title="分享" aria-label="分享" onClick={onOpenShare}>
                                 <Share2 size={16} />
-                            </button>
+                            </button> */}
                             <button type="button" className={s.iconAction} title="下载" aria-label="下载" onClick={onDownload}>
                                 <Download size={16} />
                             </button>
