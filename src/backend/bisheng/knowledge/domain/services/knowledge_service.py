@@ -1892,14 +1892,28 @@ class KnowledgeService(KnowledgeUtils):
         return cls.get_file_share_url(file=file)
 
     @classmethod
-    async def aget_file_share_with_auth(cls, login_user: UserPayload, file_id: int) -> tuple[str, str]:
-        """Async permission-safe variant of ``get_file_share_with_auth``."""
+    async def aget_file_share_with_auth(cls, login_user: UserPayload, file_id: int,
+                                        request: Request = None) -> tuple[str, str]:
+        """Async permission-safe variant of ``get_file_share_with_auth``.
+
+        The endpoint serves both knowledge bases and knowledge spaces. Knowledge
+        spaces (``KnowledgeTypeEnum.SPACE``) use a dedicated membership/permission
+        model, so the knowledge-base ACL check must not be applied to them.
+        """
         file = await KnowledgeFileDao.query_by_id(file_id)
         if not file:
             raise NotFoundError(msg="file not found")
         knowledge_info = await KnowledgeDao.aquery_by_id(file.knowledge_id)
         if not knowledge_info:
             raise NotFoundError(msg="knowledge not found")
+        if knowledge_info.type == KnowledgeTypeEnum.SPACE.value:
+            # Delegate to the knowledge space permission model.
+            from bisheng.knowledge.domain.services.knowledge_space_service import (
+                KnowledgeSpaceService,
+            )
+            space_service = KnowledgeSpaceService(request=request, login_user=login_user)
+            result = await space_service.get_file_preview(file_id)
+            return result['original_url'], result['preview_url']
         await cls.permission_service.ensure_knowledge_read_async(
             login_user=login_user,
             owner_user_id=knowledge_info.user_id,

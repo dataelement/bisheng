@@ -51,7 +51,6 @@ def _seed_exists() -> bool:
 
 def upgrade() -> None:
     conn = op.get_bind()
-
     # -- department.is_deleted --
     if not column_exists(conn, 'department', 'is_deleted'):
         op.add_column(

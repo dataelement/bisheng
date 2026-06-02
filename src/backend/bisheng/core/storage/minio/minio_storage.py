@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import BinaryIO, Union, Optional
 
 import minio
+import miniopy_async
 from loguru import logger
 from minio.commonconfig import Filter
 from minio.error import S3Error
@@ -81,13 +82,12 @@ class MinioStorage(BaseStorage, ABC):
             cert_check=minio_config.share_cert_check
         )
 
-        # self.minio_client = miniopy_async.Minio(
-        #     endpoint=minio_config.endpoint,
-        #     access_key=minio_config.access_key,
-        #     secret_key=minio_config.secret_key,
-        #     secure=minio_config.secure,
-        #     cert_check=minio_config.cert_check
-        # )
+        self.minio_client = miniopy_async.Minio(
+            endpoint=minio_config.endpoint,
+            access_key=minio_config.access_key,
+            secret_key=minio_config.secret_key,
+            secure=minio_config.secure,
+        )
         self._init_bucket_conf()
 
     def _init_bucket_conf(self):
@@ -156,8 +156,48 @@ class MinioStorage(BaseStorage, ABC):
     async def put_object(self, *, bucket_name: Optional[str] = None, object_name: str,
                          file: Union[bytes, BinaryIO, Path, str],
                          content_type: str = "application/octet-stream", **kwargs) -> None:
-        return await asyncio.to_thread(self.put_object_sync, bucket_name=bucket_name, object_name=object_name,
-                                       file=file, content_type=content_type, **kwargs)
+        if bucket_name is None:
+            bucket_name = self.bucket
+
+        if isinstance(file, (Path, str)):
+            # file path upload: fall back to thread to avoid reading entire file into memory
+            await asyncio.to_thread(
+                self.minio_client_sync.fput_object,
+                bucket_name, object_name, str(file),
+                content_type=content_type,
+            )
+            return
+
+        data_stream = BytesIO(file) if isinstance(file, bytes) else file
+
+        if 'length' not in kwargs:
+            try:
+                if hasattr(data_stream, "getbuffer"):
+                    kwargs['length'] = data_stream.getbuffer().nbytes
+                elif hasattr(data_stream, "fileno"):
+                    try:
+                        kwargs['length'] = os.fstat(data_stream.fileno()).st_size
+                    except Exception:
+                        data_stream.seek(0, 2)
+                        kwargs['length'] = data_stream.tell()
+                        data_stream.seek(0)
+                else:
+                    data_stream.seek(0, 2)
+                    kwargs['length'] = data_stream.tell()
+                    data_stream.seek(0)
+            except Exception as e:
+                raise ValueError(f"Could not determine file length for upload: {str(e)}")
+
+        if hasattr(data_stream, "seek") and callable(data_stream.seek):
+            data_stream.seek(0)
+
+        await self.minio_client.put_object(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            data=data_stream,
+            content_type=content_type,
+            **kwargs
+        )
 
     def put_object_sync(self, *, bucket_name: Optional[str] = None, object_name: str,
                         file: Union[bytes, BinaryIO, Path, str],
