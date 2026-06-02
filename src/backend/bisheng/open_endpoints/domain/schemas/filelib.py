@@ -41,6 +41,12 @@ class RetrieveReq(BaseModel):
     knowledge_base_ids: List[int] = Field(
         ..., min_length=1, description="Knowledge base ids to search across"
     )
+    user_id: Optional[int] = Field(
+        default=None,
+        description="F030: act-on-behalf-of user id. When set, retrieval is scoped "
+                    "to this user's visible resources/files; omit to run as the "
+                    "configured default operator.",
+    )
     filters: Optional[RetrieveFilters] = None
     top_k: int = Field(default=10, ge=1, le=200, description="Max chunks to return")
     max_content: int = Field(

@@ -1444,6 +1444,25 @@ class KnowledgeService(KnowledgeUtils):
             extra_file_ids=extra_file_ids,
         )
 
+        finally_res = await cls._adecorate_knowledge_files(db_knowledge, res)
+
+        writeable = await cls.permission_service.check_access_async(
+            login_user=login_user,
+            owner_user_id=db_knowledge.user_id,
+            knowledge_id=knowledge_id,
+            access_type=AccessType.KNOWLEDGE_WRITE,
+        )
+        return finally_res, total, writeable
+
+    @classmethod
+    async def _adecorate_knowledge_files(
+        cls, db_knowledge: Knowledge, res: list[KnowledgeFile]
+    ) -> list[KnowledgeFileResp]:
+        """Decorate raw file rows with title/tags and flag 24h-stuck files as TIMEOUT.
+
+        Shared by ``aget_knowledge_files`` (offset) and
+        ``aget_knowledge_files_cursor`` (F030 cursor) so both stay in sync.
+        """
         file_title_map = await asyncio.to_thread(
             cls.get_knowledge_files_title,
             db_knowledge,
@@ -1477,6 +1496,76 @@ class KnowledgeService(KnowledgeUtils):
                 KnowledgeFileStatus.TIMEOUT,
                 KnowledgeFileFailedError(data={"exception": "Parsing time exceeds 24 hours"}).to_json_str(),
             )
+        return finally_res
+
+    @classmethod
+    async def aget_knowledge_files_cursor(
+        cls,
+        request: Request,
+        login_user: UserPayload,
+        knowledge_id: int,
+        file_name: str = None,
+        status: list[int] = None,
+        page_size: int = 10,
+        cursor: str | None = None,
+        file_ids: list[int] = None,
+    ) -> tuple[PageInfiniteCursorData[KnowledgeFileResp], bool]:
+        """Cursor-paginated knowledge-base file list (F030 AD-13, INV-6).
+
+        Pseudo-cursor over the existing offset query (mirrors F027 AD-15 name-sort):
+        cursor key = ``[page_num]``; fetch ``page_size + 1`` rows to probe
+        ``has_more``; **no total count** (INV-6: never scan all batches for total).
+        The underlying ``aget_file_by_filters`` offset path is unchanged.
+        """
+        context = "filelib_file|kb"
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
+        except CursorDecodeError as exc:
+            raise KnowledgeInvalidCursorError(exception=exc)
+        page_num = decoded[0] if decoded else 1
+        if not isinstance(page_num, int) or page_num < 1:
+            raise KnowledgeInvalidCursorError()
+
+        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not db_knowledge:
+            raise NotFoundError.http_exception()
+        try:
+            await cls.permission_service.ensure_knowledge_read_async(
+                login_user=login_user,
+                owner_user_id=db_knowledge.user_id,
+                knowledge_id=knowledge_id,
+            )
+        except UnAuthorizedError:
+            raise UnAuthorizedError.http_exception()
+
+        extra_file_ids = None
+        if file_name:
+            all_tags = await TagDao.asearch_tags(
+                file_name, business_type=TagBusinessTypeEnum.KNOWLEDGE, business_id=str(knowledge_id)
+            )
+            if all_tags:
+                tag_ids = [one.id for one in all_tags]
+                extra_resources = await TagDao.aget_resources_by_tags(
+                    tag_ids, resource_type=ResourceTypeEnum.KNOWLEDGE_FILE
+                )
+                extra_file_ids = [int(one.resource_id) for one in extra_resources]
+
+        # "fetch one extra" probe for has_more; no count query (INV-6).
+        res = await KnowledgeFileDao.aget_file_by_filters(
+            knowledge_id,
+            file_name,
+            status,
+            page=page_num,
+            page_size=page_size + 1,
+            file_ids=file_ids,
+            extra_file_ids=extra_file_ids,
+        )
+        has_more = len(res) > page_size
+        if has_more:
+            res = res[:page_size]
+
+        finally_res = await cls._adecorate_knowledge_files(db_knowledge, res)
+        next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
 
         writeable = await cls.permission_service.check_access_async(
             login_user=login_user,
@@ -1484,7 +1573,13 @@ class KnowledgeService(KnowledgeUtils):
             knowledge_id=knowledge_id,
             access_type=AccessType.KNOWLEDGE_WRITE,
         )
-        return finally_res, total, writeable
+        page_data = PageInfiniteCursorData(
+            data=finally_res,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
+        return page_data, writeable
 
     @classmethod
     def delete_knowledge_file(cls, request: Request, login_user: UserPayload, file_ids: list[int]):

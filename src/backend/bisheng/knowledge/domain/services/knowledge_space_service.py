@@ -1115,6 +1115,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if permission_id not in effective_permissions:
             raise SpacePermissionDeniedError()
 
+    async def can_write_space_container(self, space_id: int, parent_id: int | None = None) -> bool:
+        """F030: best-effort boolean — can the acting user upload into this container?
+
+        Populates ``writeable`` in the v2 file list. Mirrors the permission the
+        ``add_file`` path enforces: ``upload_file`` on the target folder, or on
+        the knowledge space itself when listing the root.
+        """
+        if parent_id:
+            effective = await self._get_effective_permission_ids("folder", parent_id, space_id=space_id)
+        else:
+            effective = await self._get_effective_permission_ids("knowledge_space", space_id)
+        return "upload_file" in effective
+
     async def _list_space_child_resources(self, space_id: int) -> list[tuple[str, int]]:
         async with get_async_db_session() as session:
             rows = (
@@ -1399,6 +1412,31 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
+    async def clear_space(self, space_id: int) -> None:
+        """F030: clear a knowledge space's contents but keep the space itself.
+
+        Mirrors ``delete_space``'s content cleanup (vector + ES + minio + child
+        file/folder rows + child FGA tuples) while preserving the space row, its
+        members, space-level FGA tuples and tag library — i.e. name/description/id
+        and membership survive, only the files/folders inside are removed.
+        """
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        await self._require_permission_id("knowledge_space", space_id, "delete_space")
+        child_resources = await self._list_space_child_resources(space_id)
+
+        # Cleaned vector + ES data
+        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
+        # Cleaned minio data
+        await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_minio, space_id)
+
+        # Remove child file/folder rows only (only_clear keeps the space row).
+        await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id, only_clear=True)
+
+        # F008: drop FGA tuples for child resources only; keep the space's tuple.
+        await self._cleanup_resource_tuples(child_resources)
+
     async def delete_space(self, space_id: int) -> None:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
@@ -1659,6 +1697,114 @@ class KnowledgeSpaceService(KnowledgeUtils):
             memberships=members,
             exclude_created=True,
             required_permission_id="view_space",
+        )
+
+    async def alist_mine_and_joined_cursor(
+        self,
+        name: str | None = None,
+        page_size: int = 10,
+        cursor: str | None = None,
+    ) -> "PageInfiniteCursorData":
+        """F030 AD-08: unified v2 list of "我创建的 + 我加入的" knowledge spaces.
+
+        Reuses ``get_my_created_spaces`` + ``get_my_followed_spaces`` (each returns
+        the fully-decorated ``KnowledgeRead`` list for ``self.login_user``), merges
+        & de-dupes by id, applies an optional name filter, then pseudo-cursor
+        pagination (key=``[page_num]``, **no total**, INV-6 — mirrors F027 AD-15).
+        Department spaces and the square are intentionally excluded.
+        "我" follows ``self.login_user`` (the resolved operator / 代用户).
+        """
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+        from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        context = "filelib_space|mine_joined"
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
+        except CursorDecodeError as exc:
+            raise KnowledgeSpaceInvalidCursorError(exception=exc)
+        page_num = decoded[0] if decoded else 1
+        if not isinstance(page_num, int) or page_num < 1:
+            raise KnowledgeSpaceInvalidCursorError()
+
+        created = await self.get_my_created_spaces()
+        # exclude_created=True inside get_my_followed_spaces guarantees no overlap.
+        joined = await self.get_my_followed_spaces()
+
+        merged: dict = {}
+        for space in [*created, *joined]:
+            merged[space.id] = space
+        items = list(merged.values())
+
+        if name:
+            keyword = name.strip().lower()
+            items = [sp for sp in items if sp.name and keyword in sp.name.lower()]
+
+        # Default order: update_time desc (fall back to create_time / id when null).
+        items.sort(
+            key=lambda sp: (sp.update_time or sp.create_time or datetime.min, sp.id),
+            reverse=True,
+        )
+
+        start = (page_num - 1) * page_size
+        page_items = items[start:start + page_size + 1]
+        has_more = len(page_items) > page_size
+        page_items = page_items[:page_size]
+        next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
+        return PageInfiniteCursorData(
+            data=page_items,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
+
+    async def asearch_space_children_cursor(
+        self,
+        space_id: int,
+        parent_id: int | None = None,
+        keyword: str | None = None,
+        file_status: list[int] | None = None,
+        page_size: int = 20,
+        cursor: str | None = None,
+    ) -> "PageInfiniteCursorData":
+        """F030: keyword search over a space's files, adapted to the cursor contract.
+
+        The v2 file list keeps a single ``PageInfiniteCursorData`` shape whether or
+        not a keyword is supplied. ``search_space_children`` is offset-based and
+        already computes ``total``; we reuse that ``total`` to derive ``has_more``
+        (no page-size inflation, so offsets stay aligned across pages) via the
+        F027 AD-15 pseudo-cursor (key=``[page_num]``). ``total`` is **not** exposed.
+        """
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+        from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        context = "filelib_space|search"
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=1, expected_context=context)
+        except CursorDecodeError as exc:
+            raise KnowledgeSpaceInvalidCursorError(exception=exc)
+        page_num = decoded[0] if decoded else 1
+        if not isinstance(page_num, int) or page_num < 1:
+            raise KnowledgeSpaceInvalidCursorError()
+
+        result = await self.search_space_children(
+            space_id,
+            parent_id=parent_id,
+            keyword=keyword,
+            page=page_num,
+            page_size=page_size,
+            file_status=file_status,
+        )
+        rows = result.get("data", [])
+        total = result.get("total", 0)
+        has_more = page_num * page_size < total
+        next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
+        return PageInfiniteCursorData(
+            data=rows,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
         )
 
     async def list_uploadable_spaces(
