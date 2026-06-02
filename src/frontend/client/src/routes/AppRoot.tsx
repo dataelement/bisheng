@@ -130,8 +130,12 @@ export default function AppRoot() {
     if (!isAuthenticated) {
         return null;
     }
+    // Root uses h-full (not h-[100dvh]) so it fills the parent card, which
+    // MainLayout sizes to calc(100dvh-16px) (the outer <main> has a p-2 gutter).
+    // Hardcoding 100dvh made this 16px taller than the card and tripped the
+    // card's overflow into a scrollbar. Inner height math is relative (100%) too.
     return (
-        <div className="h-[100dvh] w-full overflow-hidden">
+        <div className="h-full w-full overflow-hidden">
             {/* Page header banner */}
             <Banner onHeightChange={setBannerHeight} />
             <div
@@ -141,7 +145,7 @@ export default function AppRoot() {
                         ? " touch-mobile:p-0 max-[768px]:p-0"
                         : " touch-mobile:p-0",
                 )}
-                style={{ height: `calc(100dvh - ${bannerHeight}px)` }}
+                style={{ height: `calc(100% - ${bannerHeight}px)` }}
             >
                 <div
                     className={cn(

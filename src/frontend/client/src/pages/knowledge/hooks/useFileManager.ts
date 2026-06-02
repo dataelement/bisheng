@@ -203,24 +203,13 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             if (initialFolderId && consumedFolderIdRef.current !== initialFolderId) {
                 consumedFolderIdRef.current = initialFolderId;
                 setCurrentFolderId(initialFolderId);
-                // Fetch parent chain for breadcrumb path
+                // Fetch the breadcrumb path for the URL folder. The API now
+                // includes the folder itself as the leaf (with its real name),
+                // so we use it directly — no extra children lookup, and no
+                // intermittent fall-back to the raw id.
                 getFolderParentPathApi(activeSpace.id, initialFolderId)
                     .then((parentPath) => {
-                        // parentPath excludes the folder itself — use last parent's children API
-                        // to find the actual folder name. Fallback to the ID string.
-                        const lastParentId = parentPath.length > 0
-                            ? parentPath[parentPath.length - 1].id
-                            : undefined;
-                        return getSpaceChildrenApi({
-                            space_id: activeSpace.id,
-                            parent_id: lastParentId,
-                            // F027: no `page` param; cursor=null fetches first page.
-                            page_size: 100,
-                        }).then((res) => {
-                            const folder = res.data.find(f => f.id === initialFolderId);
-                            const folderName = folder?.name || initialFolderId;
-                            setCurrentPath([...parentPath, { id: initialFolderId, name: folderName }]);
-                        });
+                        setCurrentPath(parentPath);
                     })
                     .catch(() => {
                         setCurrentPath([{ id: initialFolderId, name: initialFolderId }]);
@@ -378,15 +367,18 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 return;
             }
 
-            // Fetch the full parent chain from API
-            const folder = files.find(f => f.id === folderId);
-            const currentFolder = { id: folderId, name: folder?.name || folderId };
+            // Fetch the full breadcrumb path from API. It now includes the
+            // target folder itself as the leaf (with its authoritative name),
+            // so we use it directly instead of guessing the leaf name from the
+            // local file list (which is often stale right after navigating in
+            // from the sidebar tree, and used to fall back to the raw id).
             try {
                 const parentPath = await getFolderParentPathApi(activeSpace.id, folderId);
-                setCurrentPath([...parentPath, currentFolder]);
+                setCurrentPath(parentPath);
             } catch {
-                // Fallback: append folder to current path
-                setCurrentPath(prev => [...prev, currentFolder]);
+                // API failed: best-effort leaf from the local list, else the id.
+                const folder = files.find(f => f.id === folderId);
+                setCurrentPath(prev => [...prev, { id: folderId, name: folder?.name || folderId }]);
             }
         },
         [activeSpace, currentPath, files]
