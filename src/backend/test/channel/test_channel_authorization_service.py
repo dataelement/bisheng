@@ -109,6 +109,17 @@ async def test_owner_cannot_grant_organization_owner():
 
 
 @pytest.mark.asyncio
+async def test_owner_cannot_grant_user_group_owner():
+    service = _service(ChannelRelationEnum.OWNER)
+    request = ChannelAuthorizeRequest(grants=[
+        ChannelGrantItem(subject_type='user_group', subject_id=11, relation=ChannelRelationEnum.OWNER),
+    ])
+
+    with pytest.raises(ChannelPermissionDeniedError):
+        await service.authorize_channel('channel-1', request, _User())
+
+
+@pytest.mark.asyncio
 async def test_manager_can_only_grant_usage_relations():
     service = _service(ChannelRelationEnum.MANAGER)
     allowed = ChannelAuthorizeRequest(grants=[

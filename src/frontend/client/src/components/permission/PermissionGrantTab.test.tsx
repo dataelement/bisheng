@@ -10,8 +10,10 @@ import {
 } from "~/api/permission";
 import { PermissionGrantTab } from "./PermissionGrantTab";
 
+const mockLocalize = (key: string) => key;
+
 jest.mock("~/hooks", () => ({
-  useLocalize: () => (key: string) => key,
+  useLocalize: () => mockLocalize,
 }));
 
 jest.mock("~/Providers", () => ({
@@ -50,6 +52,34 @@ describe("PermissionGrantTab", () => {
       configurable: true,
       value: IntersectionObserverMock,
     });
+    class ResizeObserverMock implements ResizeObserver {
+      disconnect = jest.fn();
+      observe = jest.fn();
+      unobserve = jest.fn();
+    }
+    Object.defineProperty(globalThis, "ResizeObserver", {
+      writable: true,
+      configurable: true,
+      value: ResizeObserverMock,
+    });
+    if (!window.PointerEvent) {
+      Object.defineProperty(window, "PointerEvent", {
+        configurable: true,
+        value: MouseEvent,
+      });
+    }
+    if (!Element.prototype.scrollIntoView) {
+      Element.prototype.scrollIntoView = jest.fn();
+    }
+    if (!Element.prototype.hasPointerCapture) {
+      Element.prototype.hasPointerCapture = jest.fn(() => false);
+    }
+    if (!Element.prototype.setPointerCapture) {
+      Element.prototype.setPointerCapture = jest.fn();
+    }
+    if (!Element.prototype.releasePointerCapture) {
+      Element.prototype.releasePointerCapture = jest.fn();
+    }
   });
 
   beforeEach(() => {
@@ -77,6 +107,88 @@ describe("PermissionGrantTab", () => {
       },
     ]);
     mockedGetResourceGrantUserGroups.mockResolvedValue([]);
+  });
+
+  const channelRelationModels = [
+    {
+      id: "owner",
+      name: "Owner",
+      relation: "owner",
+      permissions: [],
+      is_system: true,
+    },
+    {
+      id: "viewer",
+      name: "Viewer",
+      relation: "viewer",
+      permissions: [],
+      is_system: true,
+    },
+    {
+      id: "editor",
+      name: "Editor",
+      relation: "editor",
+      permissions: [],
+      is_system: true,
+    },
+    {
+      id: "manager",
+      name: "Manager",
+      relation: "manager",
+      permissions: [],
+      is_system: true,
+    },
+  ] as const;
+
+  async function openRelationSelect() {
+    const trigger = screen.getByRole("combobox");
+    trigger.focus();
+    fireEvent.keyDown(trigger, {
+      key: "ArrowDown",
+      code: "ArrowDown",
+      keyCode: 40,
+    });
+    return await screen.findByRole("listbox");
+  }
+
+  it("keeps owner grant level available for channel user grants", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        onSuccess={jest.fn()}
+        prefetchedGrantableModels={[...channelRelationModels]}
+        prefetchedGrantableModelsLoaded
+        skipGrantableModelsRequest
+        fixedSubjectType="user"
+      />,
+    );
+
+    const listbox = await openRelationSelect();
+
+    expect(listbox).toHaveTextContent("com_permission.level_owner");
+  });
+
+  it.each([
+    ["department", "部门"],
+    ["user_group", "用户组"],
+  ] as const)("hides owner grant level for channel %s grants", async (subjectType) => {
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        onSuccess={jest.fn()}
+        prefetchedGrantableModels={[...channelRelationModels]}
+        prefetchedGrantableModelsLoaded
+        skipGrantableModelsRequest
+        fixedSubjectType={subjectType}
+      />,
+    );
+
+    const listbox = await openRelationSelect();
+
+    expect(listbox).not.toHaveTextContent("com_permission.level_owner");
+    expect(listbox).toHaveTextContent("com_permission.level_viewer");
   });
 
   it("submits the current include-children checkbox value for department grants", async () => {
@@ -149,7 +261,8 @@ describe("PermissionGrantTab", () => {
     fireEvent.click(await screen.findByText("测试部门"));
 
     await waitFor(() => {
-      expect(screen.getByText("测试部门、测试部门/子部门")).toBeInTheDocument();
+      expect(screen.getAllByText("测试部门").length).toBeGreaterThan(1);
+      expect(screen.getByText("测试部门/子部门")).toBeInTheDocument();
     });
   });
 
