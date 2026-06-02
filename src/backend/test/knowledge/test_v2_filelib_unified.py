@@ -290,6 +290,46 @@ async def test_clear_dispatch_space(monkeypatch):
     assert called["space_id"] == 7
 
 
+def _setup_delete_knowledge_mocks(monkeypatch, knowledge, qa_delete_spy):
+    """Stub the heavy deps of KnowledgeService.delete_knowledge for unit testing."""
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+    from bisheng.knowledge.domain.models.knowledge_file import QAKnoweldgeDao
+
+    monkeypatch.setattr(KnowledgeDao, "query_by_id", classmethod(lambda cls, kid: knowledge))
+    monkeypatch.setattr(KnowledgeDao, "delete_knowledge", classmethod(lambda cls, kid, only_clear=False: None))
+    monkeypatch.setattr(KnowledgeService, "delete_knowledge_file_in_vector", classmethod(lambda cls, k: None))
+    monkeypatch.setattr(KnowledgeService, "delete_knowledge_file_in_minio", classmethod(lambda cls, kid: None))
+    monkeypatch.setattr(KnowledgeService.permission_service, "ensure_knowledge_delete_sync", lambda **kw: None)
+    monkeypatch.setattr(KnowledgeService.audit_telemetry_service, "telemetry_delete_knowledge", lambda u: None)
+
+    class _QA:
+        def __init__(self, i):
+            self.id = i
+
+    monkeypatch.setattr(QAKnoweldgeDao, "get_qa_knowledge_by_knowledge_ids",
+                        classmethod(lambda cls, kids: [_QA(11), _QA(12)]))
+    monkeypatch.setattr(QAKnoweldgeDao, "delete_batch",
+                        classmethod(lambda cls, ids: qa_delete_spy.update({"ids": ids})))
+
+
+def test_clear_qa_removes_qa_rows(monkeypatch):
+    """偏差6-QA: clearing a QA knowledge base also deletes its QAKnowledge rows."""
+    qa = type("K", (), {"type": KnowledgeTypeEnum.QA.value, "user_id": 1, "id": 5})()
+    spy = {}
+    _setup_delete_knowledge_mocks(monkeypatch, qa, spy)
+    KnowledgeService.delete_knowledge(request=None, login_user=_FakeUser(), knowledge_id=5, only_clear=True)
+    assert spy.get("ids") == [11, 12]
+
+
+def test_clear_normal_kb_skips_qa_rows(monkeypatch):
+    """A document KB (type=0) clear must NOT touch the QAKnowledge table."""
+    kb = type("K", (), {"type": KnowledgeTypeEnum.NORMAL.value, "user_id": 1, "id": 6})()
+    spy = {}
+    _setup_delete_knowledge_mocks(monkeypatch, kb, spy)
+    KnowledgeService.delete_knowledge(request=None, login_user=_FakeUser(), knowledge_id=6, only_clear=True)
+    assert "ids" not in spy  # QA delete path not taken
+
+
 async def test_delete_rejects_type2(monkeypatch):
     """type=2 resource is not deletable via v2."""
     async def _fake_query(knowledge_id):

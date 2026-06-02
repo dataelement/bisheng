@@ -69,6 +69,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
     ParseType,
+    QAKnoweldgeDao,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
@@ -695,6 +696,14 @@ class KnowledgeService(KnowledgeUtils):
 
         # DeletemysqlDATA
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
+
+        # QA knowledge bases keep their Q&A pairs in the QAKnowledge table (not
+        # KnowledgeFile), so the deletion above doesn't touch them. Remove them
+        # explicitly for both clear and full delete to avoid orphaned rows.
+        if knowledge.type == KnowledgeTypeEnum.QA.value:
+            qa_rows = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_ids([knowledge_id])
+            if qa_rows:
+                QAKnoweldgeDao.delete_batch([qa.id for qa in qa_rows])
 
         cls.audit_telemetry_service.telemetry_delete_knowledge(login_user)
 
