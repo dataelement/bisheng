@@ -2850,20 +2850,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "view_folder" if file_record.file_type == FileType.DIR.value else "view_file",
             space_id=space_id,
         )
-        if file_record.level == 0:
-            return []
-        file_level_path_list = file_record.file_level_path.split("/")
-        file_ids = [int(one) for one in file_level_path_list if one]
-        file_list = await KnowledgeFileDao.aget_file_by_ids(file_ids)
-        file_list = {file.id: file for file in file_list}
+        # Build the breadcrumb path: ancestors (from file_level_path) followed by
+        # the target folder/file itself as the leaf. The leaf is included so the
+        # frontend has an authoritative name for it and does not have to guess
+        # from a possibly-stale local file list (which intermittently fell back
+        # to showing the raw id in the breadcrumb).
         res = []
-        for one in file_ids:
-            res.append(
-                {
-                    "id": one,
-                    "file_name": file_list.get(one).file_name if file_list.get(one) else one,
-                }
-            )
+        if file_record.level != 0 and file_record.file_level_path:
+            ancestor_ids = [int(one) for one in file_record.file_level_path.split("/") if one]
+            ancestors = await KnowledgeFileDao.aget_file_by_ids(ancestor_ids)
+            ancestor_map = {file.id: file for file in ancestors}
+            for one in ancestor_ids:
+                ancestor = ancestor_map.get(one)
+                res.append(
+                    {
+                        "id": one,
+                        "file_name": ancestor.file_name if ancestor else one,
+                    }
+                )
+        res.append({"id": file_record.id, "file_name": file_record.file_name})
         return res
 
     # ──────────────────────────── Files ───────────────────────────────────────
