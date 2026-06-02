@@ -227,6 +227,38 @@ def test_space_create_upload_list(client):
         client.delete(f"{V2}/{sid}")  # AC-30: space delete dispatch (cascade)
 
 
+def test_qa_add_then_clear_removes_pairs(client):
+    """add_qa tenant-context fix + QA clear fix: add a QA pair, clear, verify gone.
+
+    Exercises two F030 follow-up fixes end-to-end:
+    - add_qa now seeds the tenant ContextVar (no more 20004 in multi-tenant)
+    - clear on a QA KB now removes the QAKnowledge rows (not just files/vectors)
+    """
+    model_id = _discover_embedding_model(client)
+    if not model_id:
+        pytest.skip("no embedding model available")
+    kb = _ok(client.post(V2 + "/", json={"name": PREFIX + "qa", "type": TYPE_QA, "model": model_id}))
+    kid = kb["id"]
+    try:
+        added = assert_resp_200(client.post(V2 + "/add_qa", json={
+            "knowledge_id": kid,
+            "data": [{"question": PREFIX + "q", "answer": ["a1"]}],
+        }))
+        assert added and added[0].get("id"), f"add_qa returned no id: {added}"
+        qa_id = added[0]["id"]
+
+        # present before clear
+        d1 = assert_resp_200(client.get(V2 + "/detail_qa", params={"id": qa_id}))
+        assert d1 and d1.get("id") == qa_id
+
+        # clear → QA pairs must be removed
+        assert_resp_200(client.delete(f"{V2}/clear/{kid}"))
+        d2 = client.get(V2 + "/detail_qa", params={"id": qa_id}).json()
+        assert not d2.get("data"), f"QA pair still present after clear: {d2.get('data')}"
+    finally:
+        client.delete(f"{V2}/{kid}")
+
+
 def test_retrieve_accepts_knowledge_base(client):
     """F030 fix: /retrieve must accept a knowledge base id (type 0/1), not only spaces.
 
