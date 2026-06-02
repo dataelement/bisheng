@@ -16,6 +16,7 @@ from bisheng.chat_session.domain.chat import ChatSessionService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.constants import MessageCategory
@@ -841,11 +842,18 @@ class KnowledgeSpaceChatService:
         tag_names: List[str],
         max_content: int,
     ) -> List[Tuple[int, Document]]:
-        """F030: route a single id to the space or knowledge-base retrieval path.
+        """F030: route a single id to the space or document-knowledge-base path.
 
         Knowledge space (type=3) keeps the view_space/view_file-gated path; a
-        document/QA knowledge base (type 0/1) uses KB read permission + whole-KB
-        (or tag-filtered) retrieval. Personal KB (type=2) is not exposed.
+        **document** knowledge base (type=0) uses KB read permission + whole-KB
+        (or tag-filtered) retrieval.
+
+        QA knowledge base (type=1) is **not yet supported**: QA stores data with a
+        different schema (page_content=question, answer in metadata.extra, file_id
+        instead of document_id) and needs answer-oriented recall — routing it
+        through the document path would return mismatched results. It is rejected
+        with KnowledgeTypeNotSupportedError until a dedicated QA recall path lands.
+        Personal KB (type=2) is likewise not exposed.
         """
         row = await KnowledgeDao.aquery_by_id(kb_id)
         if not row:
@@ -853,11 +861,11 @@ class KnowledgeSpaceChatService:
         if row.type == KnowledgeTypeEnum.SPACE.value:
             return await self._aretrieve_chunks_for_kb(
                 kb_id, query=query, tag_names=tag_names, max_content=max_content)
-        if row.type in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value):
+        if row.type == KnowledgeTypeEnum.NORMAL.value:
             return await self._aretrieve_chunks_for_knowledge_base(
                 row, query=query, tag_names=tag_names, max_content=max_content)
-        # type=2 (personal KB) is not retrievable via the v2 RPC surface.
-        raise NotFoundError(msg=f"Knowledge resource {kb_id} not retrievable")
+        # QA (type=1) / personal (type=2) / illegal types are not retrievable here.
+        raise KnowledgeTypeNotSupportedError()
 
     async def _aretrieve_chunks_for_knowledge_base(
         self,

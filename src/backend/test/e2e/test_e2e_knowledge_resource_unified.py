@@ -307,6 +307,27 @@ def test_clear_kb_keeps_index_queryable(client):
         client.delete(f"{V2}/{kid}")
 
 
+def test_retrieve_rejects_qa_kb(client):
+    """Option B: QA knowledge base retrieval is not yet supported → 10962.
+
+    QA stores answer-oriented data with a different schema; routing it through the
+    document path would return mismatched results, so it's explicitly rejected
+    until a dedicated QA recall path lands.
+    """
+    model_id = _discover_embedding_model(client)
+    if not model_id:
+        pytest.skip("no embedding model available")
+    qa = _ok(client.post(V2 + "/", json={"name": PREFIX + "qaret", "type": TYPE_QA, "model": model_id}))
+    kid = qa["id"]
+    try:
+        resp = client.post(V2 + "/retrieve", json={
+            "query": "测试", "knowledge_base_ids": [kid], "top_k": 3,
+        })
+        assert_resp_error(resp, ERR_TYPE_UNSUPPORTED)
+    finally:
+        client.delete(f"{V2}/{kid}")
+
+
 def test_space_keyword_search_existing(client):
     """偏差3: keyword search over a space routes to search → cursor shape, no total.
 
