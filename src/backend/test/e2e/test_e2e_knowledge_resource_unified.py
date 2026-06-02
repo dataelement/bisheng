@@ -286,6 +286,27 @@ def test_retrieve_accepts_knowledge_base(client):
         pytest.skip("no indexed knowledge base available to confirm a 200 retrieve")
 
 
+def test_clear_kb_keeps_index_queryable(client):
+    """Option A: after clear, a KB stays queryable (retrieve 200, empty) — not 500 index_not_found.
+
+    Create a fresh doc KB (creation builds the index), clear it (drops + recreates
+    the empty index), then retrieve → must be 200 with an empty chunks list.
+    """
+    model_id = _discover_embedding_model(client)
+    if not model_id:
+        pytest.skip("no embedding model available")
+    kb = _ok(client.post(V2 + "/", json={"name": PREFIX + "clearidx", "type": TYPE_NORMAL, "model": model_id}))
+    kid = kb["id"]
+    try:
+        assert_resp_200(client.delete(f"{V2}/clear/{kid}"))
+        data = assert_resp_200(client.post(V2 + "/retrieve", json={
+            "query": "测试", "knowledge_base_ids": [kid], "top_k": 3,
+        }))
+        assert data["chunks"] == []  # queryable, empty — index exists, no index_not_found 500
+    finally:
+        client.delete(f"{V2}/{kid}")
+
+
 def test_space_keyword_search_existing(client):
     """偏差3: keyword search over a space routes to search → cursor shape, no total.
 
