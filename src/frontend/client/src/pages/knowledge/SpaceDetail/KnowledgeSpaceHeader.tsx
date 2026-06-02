@@ -1,11 +1,4 @@
-import {
-    FolderPlus,
-    Info,
-    Download,
-    Tag,
-    RotateCcw,
-    Trash2
-} from "lucide-react";
+import { FolderPlus, Info } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -19,6 +12,7 @@ import {
     DropdownMenuCheckboxItem
 } from "~/components/ui/DropdownMenu";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
@@ -230,43 +224,48 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
+            {viewModeToggleButton}
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="h-8 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
+                        <Button size="sm" variant="outline" className="h-8 gap-0.5 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
                             {localize("com_knowledge.batch_operation")}
-                            <Outlined.Down className="ml-1 size-4" />
+                            <Outlined.Down className="size-4" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                    <ActionMenuContent align="end">
                         {canBatchDownload && (
-                            <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
-                                <Download className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_download")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                onClick={onBatchDownload}
+                                icon={<Outlined.Download />}
+                                label={localize("com_knowledge.batch_download")}
+                            />
                         )}
                         {isAdmin && !hasFoldersSelected && (
-                            <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
-                                <Tag className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_add_tags")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                onClick={onBatchTag}
+                                icon={<Outlined.Tag />}
+                                label={localize("com_knowledge.batch_add_tags")}
+                            />
                         )}
                         {isAdmin && hasFailedFiles && (
-                            <DropdownMenuItem onClick={onBatchRetry} className="cursor-pointer">
-                                <RotateCcw className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_retry")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                onClick={onBatchRetry}
+                                icon={<Outlined.Refresh />}
+                                label={localize("com_knowledge.batch_retry")}
+                            />
                         )}
                         {canBatchDelete && (
-                            <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
-                                <Trash2 className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_delete")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                danger
+                                onClick={onBatchDelete}
+                                icon={<Outlined.Delete />}
+                                label={localize("com_knowledge.batch_delete")}
+                            />
                         )}
-                    </DropdownMenuContent>
+                    </ActionMenuContent>
                 </DropdownMenu>
             )}
-            {viewModeToggleButton}
             {showAddMenu && (
                 canUploadFile ? (
                     // Split button per design 11495:14337: left half = direct upload, right half = dropdown
@@ -297,12 +296,13 @@ export function KnowledgeSpaceHeader({
                                         <Outlined.Down className="size-4" />
                                     </button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                                    <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                                        <FolderPlus className="mr-2 size-4" />
-                                        {localize("com_knowledge.new_folder")}
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
+                                <ActionMenuContent align="end">
+                                    <ActionMenuItem
+                                        onClick={onCreateFolder}
+                                        icon={<FolderPlus />}
+                                        label={localize("com_knowledge.new_folder")}
+                                    />
+                                </ActionMenuContent>
                             </DropdownMenu>
                         )}
                     </div>
@@ -320,12 +320,13 @@ export function KnowledgeSpaceHeader({
                                 <Outlined.Down className="size-4" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                            <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                                <FolderPlus className="mr-2 size-4" />
-                                {localize("com_knowledge.new_folder")}
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
+                        <ActionMenuContent align="end">
+                            <ActionMenuItem
+                                onClick={onCreateFolder}
+                                icon={<FolderPlus />}
+                                label={localize("com_knowledge.new_folder")}
+                            />
+                        </ActionMenuContent>
                     </DropdownMenu>
                 )
             )}
@@ -339,6 +340,7 @@ export function KnowledgeSpaceHeader({
                     <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                         {currentPath.length > 0 ? (
                             <>
+                                {/* 返回按钮 + 分隔线先隐藏，后续可能恢复（设计稿 11772:70584）
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -351,6 +353,7 @@ export function KnowledgeSpaceHeader({
                                     <Outlined.ArrowLeft className="size-4" />
                                 </button>
                                 <div className="mx-1 h-4 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
+                                */}
                                 <h1 className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {currentPath[currentPath.length - 1]?.name || space.name}
                                 </h1>

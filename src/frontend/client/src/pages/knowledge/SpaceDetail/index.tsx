@@ -138,14 +138,15 @@ export function KnowledgeSpaceContent({
 
     // Card view: compute columns by *container width* (not viewport width).
     // Thresholds (container width):
-    // >=1296: 6, 1024-1295: 5, 768-1023: 4, 600-767: 3, 480-599: 2, <480: 1
+    // >=1296: 7, 1024-1295: 6, 768-1023: 5, 600-767: 4, 480-599: 3, 320-479: 2, <320: 1
     const cardGridRef = useRef<HTMLDivElement | null>(null);
     const calcCols = (w: number) => {
-        if (w >= 1296) return 6;
-        if (w >= 1024) return 5;
-        if (w >= 768) return 4;
-        if (w >= 600) return 3;
-        if (w >= 480) return 2;
+        if (w >= 1296) return 7;
+        if (w >= 1024) return 6;
+        if (w >= 768) return 5;
+        if (w >= 600) return 4;
+        if (w >= 480) return 3;
+        if (w >= 320) return 2;
         return 1;
     };
     const [cardCols, setCardCols] = useState(() => {
@@ -962,6 +963,8 @@ export function KnowledgeSpaceContent({
                                             canDelete={deleteEntryIds.has(file.id)}
                                             canDownload={downloadEntryIds.has(file.id)}
                                             mobileListMode={isH5 && viewMode === "list"}
+                                            highlightedTagIds={searchTagIds}
+                                            highlightKeyword={searchQuery}
                                         />
                                     </div>
                                 ))}
@@ -996,6 +999,8 @@ export function KnowledgeSpaceContent({
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
+                                    highlightedTagIds={searchTagIds}
+                                    highlightKeyword={searchQuery}
                                 />
                                 </div>
                             </div>

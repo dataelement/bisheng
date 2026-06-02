@@ -22,6 +22,7 @@ import { useLocalize } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { getFullWidthLength } from "~/utils";
 import { KnowledgeFolderTree, type FolderSelectPayload } from "./KnowledgeFolderTree";
+import { DynamicEllipsisName } from "./DynamicEllipsisName";
 
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
@@ -105,6 +106,7 @@ export default function KnowledgeSpaceItem({
         <div className="flex flex-col gap-0.5">
             {/* Space row */}
             <div
+                data-ee-row
                 className={`group flex items-center justify-between h-7 rounded-md cursor-pointer border ${showSpaceHighlight
                     ? "bg-[#EEEEEE] border-transparent"
                     : "border-transparent hover:bg-[#F4F4F4]"
@@ -158,14 +160,16 @@ export default function KnowledgeSpaceItem({
                             onClick={(e) => e.stopPropagation()}
                         />
                     ) : (
-                        <div className="flex flex-1 items-center gap-1 pl-1">
-                            <span onDoubleClick={() => canEditSpace && setIsEditing(true)} className={`whitespace-nowrap text-[12px] leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}>
-                                {space.name}
-                            </span>
-                            {space.isPinned && (
-                                <Outlined.Pin className="size-3 shrink-0 text-[#86909C]" aria-hidden />
-                            )}
-                        </div>
+                        <DynamicEllipsisName
+                            name={space.name}
+                            onDoubleClick={() => canEditSpace && setIsEditing(true)}
+                            textClassName={`text-[12px] leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}
+                            trailing={
+                                space.isPinned ? (
+                                    <Outlined.Pin className="size-3 shrink-0 text-[#86909C]" aria-hidden />
+                                ) : null
+                            }
+                        />
                     )}
                 </div>
 
@@ -184,10 +188,17 @@ export default function KnowledgeSpaceItem({
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={`
-                                    flex size-5 items-center justify-center rounded-md transition-opacity duration-200 outline-none
+                                    flex size-5 items-center justify-center rounded-md outline-none
                                     ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
                                     ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
                                 `}
+                                // Match the row's background-color transition (350ms ease-in-out)
+                                // so the button bg fades in sync with the row; keep opacity at 200ms.
+                                style={{
+                                    transitionProperty: "opacity, background-color",
+                                    transitionDuration: "200ms, 350ms",
+                                    transitionTimingFunction: "ease, ease-in-out",
+                                }}
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <Outlined.More className="size-4 text-[#4e5969]" />

@@ -1277,7 +1277,7 @@
   "com_knowledge": {
     "add_new": "新規追加",
     "ai_assistant": "AI アシスタント",
-    "ai_input_placeholder": "質問を入力してください。# を入力すると、回答のタグを指定できます...",
+    "ai_input_placeholder": "現在のフォルダーについて質問してください。# を入力すると、回答のタグを指定できます…",
     "ai_input_placeholder_short": "質問を入力してください...",
     "all_files": "すべてのファイル",
     "applied_to_join_space": "ナレッジスペースへの参加を申請しました:",

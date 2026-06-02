@@ -6,6 +6,7 @@ import {
     KNOWLEDGE_SPACE_FILES_REFRESH_EVENT,
     type KnowledgeSpaceFilesRefreshEventDetail,
 } from "../hooks/useFileManager";
+import { DynamicEllipsisName } from "./DynamicEllipsisName";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -120,9 +121,11 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
                     )}
                 </div>
 
-                {/* Folder name — no truncation: row width grows to natural content width,
-                    and the outer w-max wrapper aligns all rows to the widest. */}
-                <span className="flex-1 whitespace-nowrap pl-1">{node.name}</span>
+                {/* Folder name — an invisible natural-width spacer keeps the row as wide
+                    as the full name (so the outer w-max wrapper aligns all rows to the
+                    widest and the container can scroll), while the visible overlay
+                    truncates with a scroll-following ellipsis (see useDynamicEllipsis). */}
+                <DynamicEllipsisName name={node.name} />
             </div>
 
             {/* Recursively render children when expanded.

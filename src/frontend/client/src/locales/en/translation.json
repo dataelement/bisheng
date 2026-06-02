@@ -1353,7 +1353,7 @@
   "com_knowledge": {
     "add_new": "Add",
     "ai_assistant": "AI Assistant",
-    "ai_input_placeholder": "Please enter your question, type # to specify tags for the answer...",
+    "ai_input_placeholder": "Ask about the current folder, type # to specify tags for the answer…",
     "ai_input_placeholder_short": "Please enter your question...",
     "all_files": "All files",
     "applied_to_join_space": "Applied to join knowledge space:",

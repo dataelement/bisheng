@@ -23,6 +23,7 @@ import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
+import { useDynamicEllipsis } from "../hooks/useDynamicEllipsis";
 
 interface KnowledgeSpaceSidebarProps {
     activeSpaceId?: string;
@@ -142,6 +143,9 @@ export function KnowledgeSpaceSidebar({
     const [departmentSortBy, setDepartmentSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Scrolling container ref — drives the dynamic, scroll-following name ellipsis.
+    const listScrollRef = useRef<HTMLDivElement>(null);
+    useDynamicEllipsis(listScrollRef);
     const [isToggleHovering, setIsToggleHovering] = useState(false);
 
     const queryClient = useQueryClient();
@@ -323,6 +327,7 @@ export function KnowledgeSpaceSidebar({
                     }}
                 >
                     <div
+                        ref={listScrollRef}
                         className="h-full overflow-auto overscroll-y-contain scroll-on-scroll pb-5 [container-type:inline-size]"
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}

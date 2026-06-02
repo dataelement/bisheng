@@ -803,7 +803,7 @@ export default function Knowledge() {
                     />
                     <p className="text-[14px] leading-6 text-[#4E5969]">
                         {localize("com_knowledge.no_related_content_please")}<span
-                            className="ml-1.5 cursor-pointer text-[#165DFF] underline decoration-dashed underline-offset-4 transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                            className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
                             onClick={handleCreateSpace}
                         >
                             {localize("com_knowledge.create_knowledge_space")}</span>

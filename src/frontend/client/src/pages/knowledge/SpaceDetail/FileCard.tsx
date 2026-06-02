@@ -1,15 +1,14 @@
-import { Download, Edit, MoreVertical, RefreshCw, Shield, Tag, Trash2, X } from "lucide-react";
+import { Download, MoreVertical } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { Card, CardContent } from "~/components/ui/Card";
 import {
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
@@ -17,6 +16,21 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Highlight case-insensitive matches of `keyword` inside `text` (Figma 11814:70449). */
+const renderHighlightedName = (text: string, keyword?: string) => {
+    const kw = keyword?.trim();
+    if (!kw) return text;
+    const parts = text.split(new RegExp(`(${escapeRegExp(kw)})`, "gi"));
+    const lowerKw = kw.toLowerCase();
+    return parts.map((part, i) =>
+        part.toLowerCase() === lowerKw
+            ? <span key={i} className="text-[#3a74e9]">{part}</span>
+            : part
+    );
+};
 
 interface FileCardProps {
     file: KnowledgeFile;
@@ -42,6 +56,10 @@ interface FileCardProps {
     mobileListMode?: boolean;
     /** Hide per-file download UI (icon + menu item), e.g. in read-only preview drawers. */
     hideDownloadActions?: boolean;
+    /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
+    highlightedTagIds?: number[];
+    /** Keyword hit by the active search; matching substring in the file name is highlighted. */
+    highlightKeyword?: string;
 }
 
 export function FileCard({
@@ -66,6 +84,8 @@ export function FileCard({
     hideSelectionCheckbox = false,
     mobileListMode = false,
     hideDownloadActions = false,
+    highlightedTagIds,
+    highlightKeyword,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -161,9 +181,9 @@ export function FileCard({
         if (!label) return null;
 
         const pill = (
-            <div className={cn("inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5", tone.bg)}>
+            <div className={cn("inline-flex items-center justify-center gap-1 rounded-[4px] px-2", tone.bg)}>
                 <span className={cn("size-1 shrink-0 rounded-full", tone.dot)} />
-                <span className={cn("text-xs leading-5", tone.text)}>{label}</span>
+                <span className={cn("whitespace-nowrap text-xs leading-5", tone.text)}>{label}</span>
             </div>
         );
 
@@ -208,7 +228,7 @@ export function FileCard({
                     nameToneClass,
                 )}
             >
-                {file.name}
+                {renderHighlightedName(file.name, highlightKeyword)}
             </span>
         );
     };
@@ -251,6 +271,7 @@ export function FileCard({
         <Card
             className={cn(
                 "group rounded-[6px] overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
+                !mobileListMode && "h-[160px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
                     ? "bg-[rgba(230,237,252,0.3)]"
@@ -278,6 +299,7 @@ export function FileCard({
         >
             <CardContent className={cn(
                 "flex flex-col p-0",
+                !mobileListMode && "h-full",
                 mobileListMode && "max-[767px]:flex-row max-[767px]:items-center max-[767px]:gap-2 max-[767px]:p-1"
             )}>
                 {!hideSelectionCheckbox && mobileListMode && (
@@ -292,10 +314,11 @@ export function FileCard({
                         />
                     </div>
                 )}
-                {/* Thumbnail / icon area */}
+                {/* Thumbnail / icon area — flexes to fill the remaining space under
+                    the 160px fixed-height card, leaving the bottom info row at its natural height. */}
                 <div className={cn(
-                    "relative flex h-[106px] shrink-0 p-1",
-                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:p-0 max-[767px]:rounded-[4px]",
+                    "relative flex min-h-0 flex-1 p-1.5",
+                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:flex-none max-[767px]:p-0 max-[767px]:rounded-[4px]",
                 )}>
                     <div className={cn(
                         "relative flex flex-1 items-center justify-center overflow-hidden rounded-[4px]",
@@ -368,71 +391,57 @@ export function FileCard({
                                         </Button>
                                     </DropdownMenuTrigger>
 
-                                    <DropdownMenuContent
+                                    <ActionMenuContent
                                         align="end"
-                                        className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         {showMenuDownloadItem && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Download className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.download")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Download />}
+                                                label={localize("com_knowledge.download")}
+                                            />
                                         )}
-
                                         {onManagePermission && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Shield className="mr-2 size-4 shrink-0" />
-                                                {localize("com_permission.manage_permission")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.PeopleSafe />}
+                                                label={localize("com_permission.manage_permission")}
+                                            />
                                         )}
-
                                         {isAdmin && !isFolder && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Tag className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.edit_tags")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Tag />}
+                                                label={localize("com_knowledge.edit_tags")}
+                                            />
                                         )}
                                         {canRename && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     startRenaming();
                                                 }}
-                                                className="flex items-center"
-                                            >
-                                                <Edit className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.rename")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Edit />}
+                                                label={localize("com_knowledge.rename")}
+                                            />
                                         )}
                                         {isAdmin && hasRetryOption && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                                className="flex items-center"
-                                            >
-                                                <RefreshCw className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.retry")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Refresh />}
+                                                label={localize("com_knowledge.retry")}
+                                            />
                                         )}
                                         {canDelete && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
+                                                danger
                                                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                                className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
-                                            >
-                                                <Trash2 className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.delete")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Delete />}
+                                                label={localize("com_knowledge.delete")}
+                                            />
                                         )}
-                                    </DropdownMenuContent>
+                                    </ActionMenuContent>
                                 </DropdownMenu>
                             )}
                         </div>
@@ -463,7 +472,7 @@ export function FileCard({
                                 </span>
                             )}
                             {(!isFolder && file.tags && file.tags.length > 0) && (
-                                <TagGroup tags={file.tags} />
+                                <TagGroup tags={file.tags} variant="text" highlightedTagIds={highlightedTagIds} />
                             )}
                         </div>
                         <span className="shrink-0 text-[10px] leading-5 text-[#999] tabular-nums">{formatTimeCard(file.updatedAt)}</span>
@@ -504,71 +513,57 @@ export function FileCard({
                                     <MoreVertical className="size-4 text-[#4e5969]" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent
+                            <ActionMenuContent
                                 align="end"
-                                className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                        {showMenuDownloadItem && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                                className="flex items-center"
-                                            >
-                                        <Download className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.download")}
-                                            </DropdownMenuItem>
-                                        )}
-
-                                {onManagePermission && (
-                                    <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                        className="flex items-center"
-                                    >
-                                        <Shield className="mr-2 size-4 shrink-0" />
-                                        {localize("com_permission.manage_permission")}
-                                    </DropdownMenuItem>
+                                {showMenuDownloadItem && (
+                                    <ActionMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                        icon={<Outlined.Download />}
+                                        label={localize("com_knowledge.download")}
+                                    />
                                 )}
-
+                                {onManagePermission && (
+                                    <ActionMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                                        icon={<Outlined.PeopleSafe />}
+                                        label={localize("com_permission.manage_permission")}
+                                    />
+                                )}
                                 {isAdmin && !isFolder && (
-                                    <DropdownMenuItem
+                                    <ActionMenuItem
                                         onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                        className="flex items-center"
-                                    >
-                                        <Tag className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.edit_tags")}
-                                    </DropdownMenuItem>
+                                        icon={<Outlined.Tag />}
+                                        label={localize("com_knowledge.edit_tags")}
+                                    />
                                 )}
                                 {canRename && (
-                                    <DropdownMenuItem
+                                    <ActionMenuItem
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             startRenaming();
                                         }}
-                                        className="flex items-center"
-                                    >
-                                        <Edit className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.rename")}
-                                    </DropdownMenuItem>
+                                        icon={<Outlined.Edit />}
+                                        label={localize("com_knowledge.rename")}
+                                    />
                                 )}
                                 {isAdmin && hasRetryOption && (
-                                    <DropdownMenuItem
+                                    <ActionMenuItem
                                         onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                        className="flex items-center"
-                                    >
-                                        <RefreshCw className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.retry")}
-                                    </DropdownMenuItem>
+                                        icon={<Outlined.Refresh />}
+                                        label={localize("com_knowledge.retry")}
+                                    />
                                 )}
                                 {canDelete && (
-                                    <DropdownMenuItem
+                                    <ActionMenuItem
+                                        danger
                                         onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                        className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
-                                    >
-                                        <Trash2 className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.delete")}
-                                    </DropdownMenuItem>
+                                        icon={<Outlined.Delete />}
+                                        label={localize("com_knowledge.delete")}
+                                    />
                                 )}
-                            </DropdownMenuContent>
+                            </ActionMenuContent>
                         </DropdownMenu>
                     )}
                     </div>

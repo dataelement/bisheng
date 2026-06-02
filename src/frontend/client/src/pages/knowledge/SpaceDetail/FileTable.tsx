@@ -39,6 +39,21 @@ import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Highlight case-insensitive matches of `keyword` inside `text` (Figma 11814:70449). */
+const renderHighlightedName = (text: string, keyword?: string) => {
+    const kw = keyword?.trim();
+    if (!kw) return text;
+    const parts = text.split(new RegExp(`(${escapeRegExp(kw)})`, "gi"));
+    const lowerKw = kw.toLowerCase();
+    return parts.map((part, i) =>
+        part.toLowerCase() === lowerKw
+            ? <span key={i} className="text-[#3a74e9]">{part}</span>
+            : part
+    );
+};
+
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、4px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
     "size-7 shrink-0 flex items-center justify-center rounded-[4px] border border-[#ECECEC] bg-white text-[#4e5969] hover:bg-[#f7f7f7] transition-colors";
@@ -525,9 +540,13 @@ interface FileTableProps {
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
+    /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
+    highlightedTagIds?: number[];
+    /** Keyword hit by the active search; matching substring in the file name is highlighted. */
+    highlightKeyword?: string;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -646,6 +665,8 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 shougangEnabled={shougangEnabled}
                                 canEditEncoding={canEditEncoding}
                                 onEditEncoding={handleOpenEditEncoding}
+                                highlightedTagIds={highlightedTagIds}
+                                highlightKeyword={highlightKeyword}
                             />
                         ))}
                     </TableBody>
@@ -702,6 +723,8 @@ function FileRow({
     shougangEnabled = false,
     canEditEncoding = false,
     onEditEncoding,
+    highlightedTagIds,
+    highlightKeyword,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -727,6 +750,8 @@ function FileRow({
     shougangEnabled?: boolean;
     canEditEncoding?: boolean;
     onEditEncoding?: (file: KnowledgeFile) => void;
+    highlightedTagIds?: number[];
+    highlightKeyword?: string;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -933,7 +958,7 @@ function FileRow({
                                 onPreview?.();
                             }}
                         >
-                            <span className="block truncate">{file.name}</span>
+                            <span className="block truncate">{renderHighlightedName(file.name, highlightKeyword)}</span>
                         </span>
                     )}
                 </div>
@@ -970,6 +995,7 @@ function FileRow({
                     {!isFolder && (
                         <TagGroup
                             tags={file.tags}
+                            highlightedTagIds={highlightedTagIds}
                             actionButton={
                                 isAdmin ? (
                                     <button

@@ -1280,7 +1280,7 @@
   "com_knowledge": {
     "add_new": "新增",
     "ai_assistant": "AI 助手",
-    "ai_input_placeholder": "请输入你的问题，输入 # 可指定标签回答...",
+    "ai_input_placeholder": "基于当前文件夹提问，输入＃可指定标签回答…",
     "ai_input_placeholder_short": "请输入你的问题...",
     "all_files": "全部文件",
     "applied_to_join_space": "申请已发送",

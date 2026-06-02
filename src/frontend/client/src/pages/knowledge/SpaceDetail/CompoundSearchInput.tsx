@@ -119,9 +119,6 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             fireSearch(selectedTags, keyword);
             setIsFocused(false);
             inputRef.current?.blur();
-        } else if (e.key === 'Backspace' && keyword === '' && selectedTags.length > 0) {
-            const newTags = selectedTags.slice(0, -1);
-            setSelectedTags(newTags);
         }
     };
 
@@ -217,24 +214,6 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     </DropdownMenu>
                 )}
 
-                {/* Selected Tags */}
-                {selectedTags.map((tag) => (
-                    <div key={tag.id} className="flex items-center h-[22px] gap-1 bg-[#f2f3f5] text-[#4e5969] text-sm px-2 rounded truncate max-w-[100px] shrink-0">
-                        {tag.name}
-                        <X
-                            className="size-3 text-[#86909c] hover:text-[#4e5969] cursor-pointer shrink-0"
-                            onMouseDown={(e) => {
-                                // Keep input focused to avoid focus-within width flicker.
-                                e.preventDefault();
-                            }}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveTag(tag.id);
-                            }}
-                        />
-                    </div>
-                ))}
-
                 <input
                     ref={inputRef}
                     type="text"
@@ -249,7 +228,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     }}
                     onKeyDown={handleKeyDown}
                     maxLength={100}
-                    placeholder={collapsed ? "" : selectedTags.length === 0 ? localize("com_knowledge.search_in_current_space") : ""}
+                    placeholder={collapsed ? "" : localize("com_knowledge.search_in_current_space")}
                     className={cn(
                         "min-w-0 bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]",
                         collapsed ? "w-0 flex-none p-0" : "flex-1 min-w-[50px]"
@@ -286,14 +265,16 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                         )}
                         {spaceTags.map((tag) => {
                             const isSelected = selectedTags.some((t) => t.id === tag.id);
+                            const atLimit = !isSelected && selectedTags.length >= 5;
                             return (
                                 <button
                                     key={tag.id}
                                     className={cn(
                                         "px-2 rounded text-sm transition-colors border outline-none",
                                         isSelected
-                                            ? "bg-primary/10 text-primary border-transparent cursor-default"
-                                            : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] hover:bg-[#e5e6eb]"
+                                            ? "bg-primary/10 text-primary border-transparent hover:bg-primary/15"
+                                            : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] hover:bg-[#e5e6eb]",
+                                        atLimit && "opacity-50 cursor-not-allowed hover:bg-[#f2f3f5]"
                                     )}
                                     onMouseDown={(e) => {
                                         // Keep focus on input to avoid focus-within width flicker.
@@ -302,9 +283,13 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                                     onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        if (!isSelected) handleAddTag(tag);
+                                        if (isSelected) {
+                                            handleRemoveTag(tag.id);
+                                        } else if (!atLimit) {
+                                            handleAddTag(tag);
+                                        }
                                     }}
-                                    disabled={isSelected || selectedTags.length >= 5}
+                                    disabled={atLimit}
                                     type="button"
                                 >
                                     {tag.name}
