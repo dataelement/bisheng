@@ -1,4 +1,4 @@
-import { FolderPlus, Info } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -363,29 +363,9 @@ export function KnowledgeSpaceHeader({
                                 <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {space.name}
                                 </h1>
-                                {space.spaceKind === "department" && (
-                                    <span className="inline-flex shrink-0 items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600">
-                                        {localize("com_knowledge.department_badge")}
-                                    </span>
-                                )}
-                                {/* {space.spaceKind === "department" && space.approvalEnabled !== undefined && ( */}
-                                {space.spaceKind === "department" && space.approvalEnabled && (
-                                    <span
-                                        className={cn(
-                                            "inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[11px] font-medium",
-                                            space.approvalEnabled
-                                                ? "bg-[#E6EDFC] text-[#165DFF]"
-                                                : "bg-[#F2F3F5] text-[#4E5969]",
-                                        )}
-                                    >
-                                        {space.approvalEnabled
-                                            ? localize("com_knowledge.approval_enabled_badge")
-                                            : localize("com_knowledge.approval_disabled_badge")}
-                                    </span>
-                                )}
                                 <Tooltip>
                                     <TooltipTrigger className="shrink-0 cursor-pointer">
-                                        <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
+                                        <Outlined.Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
                                     </TooltipTrigger>
                                     <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
                                         <div className="space-y-1.5 text-gray-800 text-sm">

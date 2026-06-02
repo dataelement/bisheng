@@ -53,12 +53,12 @@ const FileIconRenderer = ({ file, isFolder }: { file: any; isFolder: boolean }) 
     const extension: string = file.name?.split('.').pop()?.toLowerCase() ?? '';
     const typeKey: FileTypeKey | undefined = EXTENSION_TO_TYPE[extension];
 
-    // Markdown always renders its colored icon + grey backdrop — never a thumbnail,
-    // regardless of parse state.
-    if (typeKey === 'md') {
+    // Plain-text formats (txt / md) always render their colored placeholder icon —
+    // never a thumbnail, regardless of parse state.
+    if (typeKey === 'md' || typeKey === 'txt') {
         return (
-            <div className={cn(wrapperClass, FILE_TYPE_BG.md)}>
-                {TYPE_TO_ICON.md}
+            <div className={cn(wrapperClass, FILE_TYPE_BG[typeKey])}>
+                {TYPE_TO_ICON[typeKey]}
             </div>
         );
     }

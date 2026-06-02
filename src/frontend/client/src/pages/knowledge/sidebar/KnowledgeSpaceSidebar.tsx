@@ -44,13 +44,6 @@ interface KnowledgeSpaceSidebarProps {
     compactMode?: boolean;
 }
 
-// Sort cycle: update_time → name → update_time
-const SORT_CYCLE = [SpaceSortType.UPDATE_TIME, SpaceSortType.NAME];
-
-function getSortLabel(sort: SpaceSortType, localize: any) {
-    return sort === SpaceSortType.NAME ? localize("com_knowledge.name") : localize("com_knowledge.recently_updated");
-}
-
 export function KnowledgeSpaceSidebar({
     activeSpaceId,
     onSpaceSelect,
@@ -237,21 +230,28 @@ export function KnowledgeSpaceSidebar({
         }
     }, [activeSpaceId, departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces, isCreatedLoading, isJoinedLoading, isDepartmentLoading, onSpaceSelect]);
 
-    const toggleSort = (type: "created" | "joined" | "department") => {
+    // Set a section's sort field to a specific value (chosen from the sort dropdown).
+    const setSort = (type: "created" | "joined" | "department", value: SpaceSortType) => {
         if (type === "created") {
-            const next = SORT_CYCLE[(SORT_CYCLE.indexOf(createdSortBy) + 1) % SORT_CYCLE.length];
+            if (value === createdSortBy) return;
             queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "mine", createdSortBy] });
-            setCreatedSortBy(next);
+            setCreatedSortBy(value);
         } else if (type === "department") {
-            const next = SORT_CYCLE[(SORT_CYCLE.indexOf(departmentSortBy) + 1) % SORT_CYCLE.length];
+            if (value === departmentSortBy) return;
             queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "department", departmentSortBy] });
-            setDepartmentSortBy(next);
+            setDepartmentSortBy(value);
         } else {
-            const next = SORT_CYCLE[(SORT_CYCLE.indexOf(joinedSortBy) + 1) % SORT_CYCLE.length];
+            if (value === joinedSortBy) return;
             queryClient.removeQueries({ queryKey: ["knowledgeSpaces", "joined", joinedSortBy] });
-            setJoinedSortBy(next);
+            setJoinedSortBy(value);
         }
     };
+
+    // Sort options shown in every section header's sort dropdown.
+    const sortOptions = [
+        { value: SpaceSortType.UPDATE_TIME, label: localize("com_knowledge.recently_updated") },
+        { value: SpaceSortType.NAME, label: localize("com_knowledge.name") },
+    ];
 
     const handleListScroll = () => {
         setIsListScrolling(true);
@@ -346,8 +346,10 @@ export function KnowledgeSpaceSidebar({
                                     title={localize("com_knowledge.department_spaces")}
                                     collapsed={departmentCollapsed}
                                     onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
-                                    sortText={getSortLabel(departmentSortBy, localize)}
-                                    onSort={() => toggleSort("department")}
+                                    sortValue={departmentSortBy}
+                                    sortOptions={sortOptions}
+                                    sortFieldLabel={localize("com_knowledge.sort_field")}
+                                    onSortChange={(v) => setSort("department", v as SpaceSortType)}
                                 />
                                 {!departmentCollapsed && (
                                     <div className="space-y-0.5 px-3">
@@ -378,8 +380,10 @@ export function KnowledgeSpaceSidebar({
                                 title={localize("com_knowledge.created_by_me")}
                                 collapsed={createdCollapsed}
                                 onToggle={() => setCreatedCollapsed(!createdCollapsed)}
-                                sortText={getSortLabel(createdSortBy, localize)}
-                                onSort={() => toggleSort("created")}
+                                sortValue={createdSortBy}
+                                sortOptions={sortOptions}
+                                sortFieldLabel={localize("com_knowledge.sort_field")}
+                                onSortChange={(v) => setSort("created", v as SpaceSortType)}
                                 onAdd={onCreateSpace}
                                 addLabel={localize("com_knowledge.create")}
                             />
@@ -412,8 +416,10 @@ export function KnowledgeSpaceSidebar({
                                 title={localize("com_knowledge.joined_by_me")}
                                 collapsed={joinedCollapsed}
                                 onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
-                                sortText={getSortLabel(joinedSortBy, localize)}
-                                onSort={() => toggleSort("joined")}
+                                sortValue={joinedSortBy}
+                                sortOptions={sortOptions}
+                                sortFieldLabel={localize("com_knowledge.sort_field")}
+                                onSortChange={(v) => setSort("joined", v as SpaceSortType)}
                             />
                             {!joinedCollapsed && (
                                 <div className="space-y-0.5 px-3">

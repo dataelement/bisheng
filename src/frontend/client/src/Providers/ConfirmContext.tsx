@@ -13,6 +13,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "~/components/ui"
+import { useLocalize } from "~/hooks"
 
 interface ConfirmOptions {
     title?: string
@@ -29,6 +30,7 @@ interface ConfirmContextType {
 export const ConfirmContext = createContext<ConfirmContextType | undefined>(undefined)
 
 export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => {
+    const localize = useLocalize()
     const [open, setOpen] = useState(false)
     const [options, setOptions] = useState<ConfirmOptions>({})
     const [resolvePromise, setResolvePromise] = useState<(value: boolean) => void>()
@@ -68,7 +70,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                         <AlertDialogHeader className="w-full flex-row items-center justify-center gap-2 space-y-0 text-center sm:justify-start sm:text-left">
                             <Trash2 className="size-5 shrink-0 text-[#f53f3f]" />
                             <AlertDialogTitle className="text-base font-medium leading-6 text-[#f53f3f]">
-                                {options.title || "删除操作确认"}
+                                {options.title || localize("com_knowledge.confirm_delete_title")}
                             </AlertDialogTitle>
                         </AlertDialogHeader>
 
@@ -81,13 +83,13 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                                 onClick={handleCancel}
                                 className="mt-0 h-auto flex-1 rounded-[6px] border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] hover:bg-white/70 sm:mt-0 sm:flex-none"
                             >
-                                {options.cancelText || "暂不"}
+                                {options.cancelText || localize("com_knowledge.defer")}
                             </AlertDialogCancel>
                             <AlertDialogAction
                                 onClick={handleConfirm}
                                 className="h-auto flex-1 rounded-[6px] bg-[#f53f3f] px-4 py-[5px] text-sm font-normal text-white hover:bg-[#f53f3f]/90 sm:flex-none"
                             >
-                                {options.confirmText || "确认删除"}
+                                {options.confirmText || localize("com_knowledge.confirm_delete_action")}
                             </AlertDialogAction>
                         </AlertDialogFooter>
                     </AlertDialogContent>

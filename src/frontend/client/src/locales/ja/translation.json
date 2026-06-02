@@ -1509,7 +1509,13 @@
     "uploading_status": "アップロード中",
     "users_count": "ユーザー",
     "window_too_narrow_ai": "ウィンドウの幅が狭すぎるため、AI アシスタントを開けません",
-    "yes": "はい"
+    "yes": "はい",
+    "confirm_delete_title": "削除操作の確認",
+    "defer": "あとで",
+    "confirm_delete_action": "削除を確認",
+    "delete_irreversible_warning": "この操作は取り消せません。慎重に削除してください！",
+    "confirm_delete_files_count": "これら {{0}} 個のファイルを削除してもよろしいですか？",
+    "confirm_delete_folder_name": "フォルダ「{{0}}」を削除してもよろしいですか？"
   },
   "com_subscription": {
     "add": "追加",

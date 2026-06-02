@@ -1,17 +1,44 @@
 import { Outlined } from "bisheng-icons";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "~/components/ui/DropdownMenu";
+import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+
+interface SortOption {
+    value: string;
+    label: string;
+}
 
 interface SectionHeaderProps {
     title: string;
     collapsed: boolean;
     onToggle: () => void;
-    sortText: string;
-    onSort: () => void;
+    /** Currently-selected sort field value. */
+    sortValue: string;
+    /** Available sort fields rendered in the sort dropdown. */
+    sortOptions: SortOption[];
+    /** Heading shown above the sort options (e.g. "排序字段"). */
+    sortFieldLabel: string;
+    onSortChange: (value: string) => void;
     /** When provided, renders a "+" button before the sort icon (e.g. create space on "我创建的"). */
     onAdd?: () => void;
     addLabel?: string;
 }
 
-export function SectionHeader({ title, collapsed, onToggle, sortText, onSort, onAdd, addLabel }: SectionHeaderProps) {
+export function SectionHeader({
+    title,
+    collapsed,
+    onToggle,
+    sortValue,
+    sortOptions,
+    sortFieldLabel,
+    onSortChange,
+    onAdd,
+    addLabel,
+}: SectionHeaderProps) {
     return (
         // group: enables hover-reveal for the collapse chevron.
         // h-7 (28px) + rounded-md + hover bg: matches the tree nodes below.
@@ -62,17 +89,43 @@ export function SectionHeader({ title, collapsed, onToggle, sortText, onSort, on
                         <Outlined.Plus className="size-4" />
                     </button>
                 )}
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onSort();
-                    }}
-                    title={sortText}
-                    aria-label={sortText}
-                    className="flex size-5 items-center justify-center rounded text-[#999] hover:bg-[#f2f3f5] hover:text-[#4e5969]"
-                >
-                    <Outlined.Sort className="size-4" />
-                </button>
+                {/* Sort field dropdown — opens a menu of sort options with the
+                    currently-selected one marked, mirroring the right-side panel. */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button
+                            onClick={(e) => e.stopPropagation()}
+                            title={sortFieldLabel}
+                            aria-label={sortFieldLabel}
+                            className="flex size-5 items-center justify-center rounded text-[#999] outline-none hover:bg-[#f2f3f5] hover:text-[#4e5969] data-[state=open]:bg-[#f2f3f5] data-[state=open]:text-[#4e5969]"
+                        >
+                            <Outlined.Sort className="size-4" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                        align="end"
+                        className={knowledgeSpaceDropdownSurfaceClassName}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{sortFieldLabel}</div>
+                        {sortOptions.map((opt) => {
+                            const active = opt.value === sortValue;
+                            return (
+                                <DropdownMenuItem
+                                    key={opt.value}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onSortChange(opt.value);
+                                    }}
+                                    className="flex items-center justify-between gap-6"
+                                >
+                                    <span>{opt.label}</span>
+                                    {active && <Outlined.Check className="size-4 shrink-0" />}
+                                </DropdownMenuItem>
+                            );
+                        })}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
         </div>
     );

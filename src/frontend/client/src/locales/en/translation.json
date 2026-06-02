@@ -1586,7 +1586,13 @@
     "uploading_status": "Uploading",
     "users_count": "users",
     "window_too_narrow_ai": "Window width is insufficient to open AI Assistant",
-    "yes": "Yes"
+    "yes": "Yes",
+    "confirm_delete_title": "Confirm Delete",
+    "defer": "Not now",
+    "confirm_delete_action": "Confirm delete",
+    "delete_irreversible_warning": "This action is irreversible. Please proceed with caution!",
+    "confirm_delete_files_count": "Are you sure you want to delete these {{0}} file(s)?",
+    "confirm_delete_folder_name": "Are you sure you want to delete folder \"{{0}}\"?"
   },
   "com_subscription": {
     "add": "Add",

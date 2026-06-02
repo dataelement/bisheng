@@ -1513,7 +1513,13 @@
     "yes": "是",
     "supported_formats_basic": "pdf、txt、docx、doc、ppt、pptx、md、html、xls、xlsx、csv",
     "supported_formats_tip": "支持的文件格式为 {{formats}}",
-    "supported_formats_with_etl4lm": "pdf（含扫描件）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp"
+    "supported_formats_with_etl4lm": "pdf（含扫描件）、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp",
+    "confirm_delete_title": "删除操作确认",
+    "defer": "暂不",
+    "confirm_delete_action": "确认删除",
+    "delete_irreversible_warning": "此操作不可逆，请谨慎删除！",
+    "confirm_delete_files_count": "确认删除这 {{0}} 个文件吗？",
+    "confirm_delete_folder_name": "确认删除文件夹 \"{{0}}\" 吗？"
   },
   "com_subscription": {
     "add": "加入",

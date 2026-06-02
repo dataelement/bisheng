@@ -695,11 +695,8 @@ export function KnowledgeSpaceContent({
 
     const handleBatchDelete = async () => {
         const confirmed = await confirm({
-            title: localize("com_knowledge.confirm_delete_selected_items", { 0: selectedFiles.size }),
-            description: localize("com_knowledge.delete_folder_warning"),
-            cancelText: localize("com_knowledge.cancel"),
-            confirmText: localize("com_knowledge.delete"),
-            variant: "destructive"
+            description: `${localize("com_knowledge.confirm_delete_files_count", { 0: selectedFiles.size })}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
         });
 
         if (!confirmed) return;
@@ -737,11 +734,10 @@ export function KnowledgeSpaceContent({
         }
 
         const confirmed = await confirm({
-            title: isFolder ? `确认删除文件夹 "${file.name}" 吗？` : localize("com_knowledge.confirm_delete_file"),
-            description: isFolder ? localize("com_knowledge.delete_folder_permanent_warning") : undefined,
-            cancelText: localize("com_knowledge.cancel"),
-            confirmText: localize("com_knowledge.delete"),
-            variant: "destructive"
+            description: isFolder
+                ? `${localize("com_knowledge.confirm_delete_folder_name", { 0: file.name })}${localize("com_knowledge.delete_folder_permanent_warning")}`
+                : `${localize("com_knowledge.confirm_delete_file")}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
         });
 
         if (confirmed) {
