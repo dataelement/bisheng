@@ -1212,6 +1212,7 @@
     "10610": "User group contains users and cannot be deleted",
     "10620": "User is disabled. Contact admin",
     "10621": "Account disabled due to too many failed login attempts",
+    "10622": "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
     "10630": "User group cannot be empty",
     "10640": "Cannot modify admin account",
     "10700": "Tag already exists",

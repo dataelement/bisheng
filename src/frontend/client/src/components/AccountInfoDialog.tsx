@@ -186,6 +186,15 @@ export function AccountInfoDialog({
                 return;
             }
 
+            // 10622：密码强度不达标（后端校验），按当前语言本地化提示
+            if (code === 10622) {
+                showToast({
+                    message: localize("api_errors.10622"),
+                    severity: NotificationSeverity.ERROR
+                });
+                return;
+            }
+
             const errorMessage =
                 error?.response?.data?.status_message ||
                 error?.response?.data?.message ||
