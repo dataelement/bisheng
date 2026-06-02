@@ -1,0 +1,1144 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BiSheng v2 filelib — 知识资源统一对外 API (F030)",
+    "version": "2.6.0",
+    "description": "F030 改动的 /api/v2/filelib 接口子集（列表/创建/更新/检索/上传/文件列表/删除/清空）。按 type 或 row.type 在文档知识库(0)/QA库(1)/知识空间(3)间分派；type=2 不对外暴露。列表与文件列表为 cursor 分页（PageInfiniteCursorData，无 total）。"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "BiSheng backend"
+    }
+  ],
+  "paths": {
+    "/api/v2/filelib/": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Create",
+        "description": "Create a knowledge resource (F030 facade, dispatch by ``type``).\n\ntype 0/1 → 文档 / QA 知识库（KnowledgeService）；type 3 → 知识空间\n（KnowledgeSpaceService，忽略 model，用 workbench embedding）；type 2 / 非法 → 不支持。",
+        "operationId": "create_api_v2_filelib__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Update Knowledge",
+        "description": "Update name/description of a knowledge resource (F030, dispatch by row.type).",
+        "operationId": "update_knowledge_api_v2_filelib__put",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Get Knowledge",
+        "description": "List knowledge resources by ``type`` (F030 cursor pagination, INV-6).\n\nParams align with v1 ``GET /api/v1/knowledge``. ``user_id`` scopes the list\nto that user's visibility; omit to use the default operator (AD-02).\nResponse is ``PageInfiniteCursorData`` (data/page_size/has_more/next_cursor).",
+        "operationId": "get_knowledge_api_v2_filelib__get",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Type"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Name"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "update_time",
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": 10,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/filelib/{knowledge_id}": {
+      "delete": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Delete Knowledge Api",
+        "description": "Delete a knowledge resource (F030, dispatch by row.type).\n\nKnowledge space (3) → ``KnowledgeSpaceService.delete_space`` (cascade child\nfiles/folders + ReBAC tuple cleanup + members). Knowledge base (0/1) →\n``KnowledgeService.delete_knowledge``.",
+        "operationId": "delete_knowledge_api_api_v2_filelib__knowledge_id__delete",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/filelib/clear/{knowledge_id}": {
+      "delete": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Clear Knowledge Files",
+        "description": "Clear a knowledge resource's contents (F030, dispatch by row.type).\n\nKnowledge space (3) → ``KnowledgeSpaceService.clear_space`` (remove child\nfiles/folders + child tuples, keep the space). Knowledge base (0/1) →\n``KnowledgeService.delete_knowledge(only_clear=True)``.",
+        "operationId": "clear_knowledge_files_api_v2_filelib_clear__knowledge_id__delete",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/filelib/file/{knowledge_id}": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Upload File",
+        "description": "Upload a file to a knowledge resource (F030 facade, dispatch by row.type).\n\nKnowledge base (0/1) → existing parse/split/ingest pipeline (``parent_id``\nignored). Knowledge space (3) → ``KnowledgeSpaceService.add_file`` which\nnatively places the file under ``parent_id`` (must exist, else 18010).",
+        "operationId": "upload_file_api_v2_filelib_file__knowledge_id__post",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_file_api_v2_filelib_file__knowledge_id__post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/filelib/file/list": {
+      "get": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Get Filelist",
+        "description": "List files of a knowledge resource (F030 cursor pagination, dispatch by row.type).\n\nKnowledge base (0/1) → flat cursor list (``aget_knowledge_files_cursor``,\n``parent_id`` ignored). Knowledge space (3) → hierarchical cursor list\n(``list_space_children``) under ``parent_id`` (root when omitted). ``user_id``\nscopes visibility to that user (AD-02). Returns ``PageInfiniteCursorData`` + ``writeable``.",
+        "operationId": "get_filelist_api_v2_filelib_file_list_get",
+        "parameters": [
+          {
+            "name": "knowledge_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Knowledge Id"
+            }
+          },
+          {
+            "name": "parent_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Id"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Keyword"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              },
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/filelib/retrieve": {
+      "post": {
+        "tags": [
+          "OpenAPI",
+          "Knowledge"
+        ],
+        "summary": "Retrieve Chunks",
+        "description": "Retrieve top-k chunks across one or more knowledge bases (no LLM generation).\n\nDesigned for external retrieval-tool integrations (e.g. agents that bring\ntheir own LLM). F030: runs as the configured default operator by default;\nwhen ``req.user_id`` is set, retrieval is scoped to that user's visible\nresources/files (the \"代用户检索\" protocol F029 deferred). Per-knowledge-base\ntag filtering keeps the existing ``filters`` structure (no flat tags).",
+        "operationId": "retrieve_chunks_api_v2_filelib_retrieve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrieveReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthTypeEnum": {
+        "type": "string",
+        "enum": [
+          "public",
+          "private",
+          "approval"
+        ],
+        "title": "AuthTypeEnum"
+      },
+      "Body_upload_file_api_v2_filelib_file__knowledge_id__post": {
+        "properties": {
+          "split_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "custom",
+                  "hierarchical"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split Mode",
+            "default": "auto"
+          },
+          "separator": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Separator",
+            "description": "Split text rule, If not passed on, it is the default"
+          },
+          "separator_rule": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Separator Rule",
+            "description": "Segmentation before or after the segmentation rule;before/after"
+          },
+          "chunk_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Size",
+            "description": "Split text length, default if not passed"
+          },
+          "chunk_overlap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Overlap",
+            "description": "Split text overlap length, default if not passed"
+          },
+          "hierarchy_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hierarchy Level",
+            "default": 3
+          },
+          "append_title": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Append Title",
+            "default": false
+          },
+          "max_chunk_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Chunk Size",
+            "default": 1000
+          },
+          "callback_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Url",
+            "description": "Return URL"
+          },
+          "file_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Url",
+            "description": "File URL"
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "binary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File",
+            "description": "Upload file"
+          },
+          "retain_images": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retain Images",
+            "description": "Keep document image",
+            "default": 1
+          },
+          "force_ocr": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Force Ocr",
+            "description": "EnableOCR",
+            "default": 0
+          },
+          "enable_formula": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Formula",
+            "description": "latexFormula Recognition",
+            "default": 1
+          },
+          "filter_page_header_footer": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter Page Header Footer",
+            "description": "Filter Header Footer",
+            "default": 0
+          },
+          "excel_rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExcelRule"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "excel rule",
+            "default": {}
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "Target folder id; knowledge-space only, must exist. Ignored for knowledge bases."
+          }
+        },
+        "type": "object",
+        "title": "Body_upload_file_api_v2_filelib_file__knowledge_id__post"
+      },
+      "ExcelRule": {
+        "properties": {
+          "slice_length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slice Length",
+            "description": "Data Line",
+            "default": 10
+          },
+          "header_start_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header Start Row",
+            "description": "Table header start",
+            "default": 1
+          },
+          "header_end_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header End Row",
+            "description": "End of header",
+            "default": 1
+          },
+          "append_header": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Append Header",
+            "description": "Whether to add a header",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "title": "ExcelRule"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "KnowledgeBaseFilter": {
+        "properties": {
+          "knowledge_base_id": {
+            "type": "integer",
+            "title": "Knowledge Base Id",
+            "description": "Must appear in knowledge_base_ids"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Tag names defined under this knowledge base used to narrow files"
+          },
+          "tag_match_mode": {
+            "type": "string",
+            "enum": [
+              "ANY",
+              "ALL"
+            ],
+            "title": "Tag Match Mode",
+            "description": "ANY = file matches any tag; ALL is reserved for future use",
+            "default": "ANY"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_base_id"
+        ],
+        "title": "KnowledgeBaseFilter",
+        "description": "Per-knowledge-base filter applied when retrieving chunks."
+      },
+      "KnowledgeCreate": {
+        "properties": {
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "description": "Knowledge Base Name"
+          },
+          "type": {
+            "type": "integer",
+            "title": "Type",
+            "description": "Knowledge Base Type, value from KnowledgeTypeEnum",
+            "default": 0
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "collection_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Name"
+          },
+          "index_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Name"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State",
+            "description": "value from KnowledgeState",
+            "default": 1
+          },
+          "is_released": {
+            "type": "boolean",
+            "title": "Is Released",
+            "description": "is released to knowledge space square",
+            "default": false
+          },
+          "auth_type": {
+            "$ref": "#/components/schemas/AuthTypeEnum",
+            "description": "Authentication Type",
+            "default": "public"
+          },
+          "is_shared": {
+            "type": "boolean",
+            "title": "Is Shared",
+            "default": false
+          },
+          "auto_tag_enabled": {
+            "type": "boolean",
+            "title": "Auto Tag Enabled",
+            "default": false
+          },
+          "auto_tag_library_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Tag Library Id"
+          },
+          "metadata_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Fields",
+            "description": "Metadata Field Configuration for Knowledge Base"
+          },
+          "is_partition": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Partition"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "KnowledgeCreate"
+      },
+      "KnowledgeUpdate": {
+        "properties": {
+          "knowledge_id": {
+            "type": "integer",
+            "title": "Knowledge Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "knowledge_id"
+        ],
+        "title": "KnowledgeUpdate"
+      },
+      "RetrieveFilters": {
+        "properties": {
+          "knowledge_base_filters": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeBaseFilter"
+            },
+            "type": "array",
+            "title": "Knowledge Base Filters"
+          }
+        },
+        "type": "object",
+        "title": "RetrieveFilters"
+      },
+      "RetrieveReq": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Query",
+            "description": "User question"
+          },
+          "knowledge_base_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Knowledge Base Ids",
+            "description": "Knowledge base ids to search across"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "F030: act-on-behalf-of user id. When set, retrieval is scoped to this user's visible resources/files; omit to run as the configured default operator."
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetrieveFilters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top_k": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "description": "Max chunks to return",
+            "default": 10
+          },
+          "max_content": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Max Content",
+            "description": "Per-knowledge-base content length cap during merge",
+            "default": 15000
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "knowledge_base_ids"
+        ],
+        "title": "RetrieveReq"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

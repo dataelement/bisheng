@@ -25,8 +25,7 @@ from bisheng.database.models.message import ChatMessageDao, ChatMessage
 from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain.utils import extract_reasoning_content
@@ -781,7 +780,7 @@ class KnowledgeSpaceChatService:
 
         per_kb_results = await asyncio.gather(
             *(
-                self._aretrieve_chunks_for_kb(
+                self._aretrieve_chunks_dispatch(
                     kb_id,
                     query=query,
                     tag_names=(filters_by_kb.get(kb_id) or {}).get("tags") or [],
@@ -833,6 +832,119 @@ class KnowledgeSpaceChatService:
         )
         docs: List[Document] = await retriever_tool.ainvoke(query)
         return [(kb_id, d) for d in docs]
+
+    async def _aretrieve_chunks_dispatch(
+        self,
+        kb_id: int,
+        *,
+        query: str,
+        tag_names: List[str],
+        max_content: int,
+    ) -> List[Tuple[int, Document]]:
+        """F030: route a single id to the space or knowledge-base retrieval path.
+
+        Knowledge space (type=3) keeps the view_space/view_file-gated path; a
+        document/QA knowledge base (type 0/1) uses KB read permission + whole-KB
+        (or tag-filtered) retrieval. Personal KB (type=2) is not exposed.
+        """
+        row = await KnowledgeDao.aquery_by_id(kb_id)
+        if not row:
+            raise NotFoundError(msg=f"Knowledge resource {kb_id} not found")
+        if row.type == KnowledgeTypeEnum.SPACE.value:
+            return await self._aretrieve_chunks_for_kb(
+                kb_id, query=query, tag_names=tag_names, max_content=max_content)
+        if row.type in (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value):
+            return await self._aretrieve_chunks_for_knowledge_base(
+                row, query=query, tag_names=tag_names, max_content=max_content)
+        # type=2 (personal KB) is not retrievable via the v2 RPC surface.
+        raise NotFoundError(msg=f"Knowledge resource {kb_id} not retrievable")
+
+    async def _aretrieve_chunks_for_knowledge_base(
+        self,
+        kb,
+        *,
+        query: str,
+        tag_names: List[str],
+        max_content: int,
+    ) -> List[Tuple[int, Document]]:
+        """Retrieve chunks for a document/QA knowledge base (type 0/1, F030).
+
+        Uses knowledge-base read permission (not view_space) and retrieves across
+        the whole KB, or only files carrying the requested tags. No folder /
+        version-primary logic (those are knowledge-space-only concepts).
+        """
+        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+        kb_id = kb.id
+        # KB-level read permission (raises UnAuthorizedError on denial → surfaced
+        # by the endpoint's BaseErrorCode handler).
+        await KnowledgeService.permission_service.ensure_knowledge_read_async(
+            login_user=self.login_user,
+            owner_user_id=kb.user_id,
+            knowledge_id=kb_id,
+        )
+
+        target_file_ids = await self._resolve_kb_file_ids_by_tags(kb_id, tag_names)
+        if tag_names and not target_file_ids:
+            return []
+
+        if target_file_ids:
+            milvus_kwargs: dict = {
+                "k": 100,
+                "param": {"ef": 110},
+                "expr": f"document_id in {target_file_ids}",
+            }
+            es_kwargs: dict = {
+                "k": 100,
+                "filter": [{"terms": {"metadata.document_id": target_file_ids}}],
+            }
+        else:
+            milvus_kwargs = {"k": 100, "param": {"ef": 110}}
+            es_kwargs = {"k": 100}
+
+        milvus_vector = await KnowledgeRag.init_knowledge_milvus_vectorstore(
+            self.login_user.user_id, knowledge=kb
+        )
+        es_vector = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=kb)
+        vector_retriever = milvus_vector.as_retriever(search_kwargs=milvus_kwargs)
+        es_retriever = es_vector.as_retriever(search_kwargs=es_kwargs)
+
+        retriever_tool = KnowledgeRetrieverTool(
+            vector_retriever=vector_retriever,
+            elastic_retriever=es_retriever,
+            max_content=max_content,
+            sort_by_source_and_index=False,
+        )
+        docs: List[Document] = await retriever_tool.ainvoke(query)
+        return [(kb_id, d) for d in docs]
+
+    async def _resolve_kb_file_ids_by_tags(
+        self,
+        knowledge_id: int,
+        tag_names: List[str],
+    ) -> Optional[List[int]]:
+        """Map tag names (scoped to a knowledge base) to file ids.
+
+        ``None`` = no tag filter (whole KB). Empty list = tags given but no files
+        match (caller short-circuits and skips this KB).
+        """
+        if not tag_names:
+            return None
+        resolved_tag_ids: List[int] = []
+        for tag_name in tag_names:
+            tags = await TagDao.get_tags_by_business(
+                business_type=TagBusinessTypeEnum.KNOWLEDGE,
+                business_id=str(knowledge_id),
+                name=tag_name,
+            )
+            resolved_tag_ids.extend([t.id for t in tags])
+        if not resolved_tag_ids:
+            return []
+        tag_links = await TagDao.aget_resources_by_tags(
+            resolved_tag_ids,
+            resource_type=ResourceTypeEnum.KNOWLEDGE_FILE,
+        )
+        return [int(link.resource_id) for link in tag_links]
 
     @staticmethod
     async def get_history(chat_id: str, limit: int = 4) -> List[BaseMessage]:
