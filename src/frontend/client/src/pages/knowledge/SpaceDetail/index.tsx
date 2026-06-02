@@ -928,7 +928,9 @@ export function KnowledgeSpaceContent({
                             <div
                                 ref={cardGridRef}
                                 className={cn(
-                                    "w-full min-w-0 py-4",
+                                    // pb-[112px] reserves room for the bottom AI dock (40px gap + 56px input + 16px safe-area)
+                                    // so the last card row clears the dock with a 40px visual gap above the input top.
+                                    "w-full min-w-0 pt-4 pb-[112px]",
                                     viewMode === "list"
                                         ? "grid grid-cols-1 gap-2"
                                         : "grid gap-4"
@@ -968,6 +970,9 @@ export function KnowledgeSpaceContent({
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
                             <div ref={tableScrollRevealRef} onScroll={handleListScroll} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll border-t border-[#e5e6eb]">
+                                {/* Spacer below the table reserves 112px for the bottom AI dock so the
+                                    last row clears with a 40px visual gap above the input. */}
+                                <div className="pb-[112px]">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
@@ -992,6 +997,7 @@ export function KnowledgeSpaceContent({
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
                                 />
+                                </div>
                             </div>
                         </div>
                     )}

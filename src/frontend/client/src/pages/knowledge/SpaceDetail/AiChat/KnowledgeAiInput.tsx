@@ -71,23 +71,38 @@ export function KnowledgeAiInput({
     const [showPicker, setShowPicker] = useState(false);
     const [pickerSearch, setPickerSearch] = useState("");
     const [tagDeleteHighlight, setTagDeleteHighlight] = useState(false);
+    /** Restacks the input from single-row to two-row when the textarea wraps.
+     *  Only escalates (one-way) to avoid oscillation; resets when the input is cleared. */
+    const [multiline, setMultiline] = useState(false);
     const isComposingRef = useRef(false);
+
+    /** Two-row layout: textarea on top, model + controls below. Single-row otherwise. */
+    const stacked = variant === "line" || multiline;
 
     // Voice input: check if ASR model is available
     const { data: modelData } = useGetWorkbenchModelsQuery();
     const showVoice = !!modelData?.asr_model?.id;
 
     // Grow textarea with content; outer wrapper applies max-h-48 + scroll so tag and text scroll together.
+    // Also escalates the layout to two-row once the text wraps past a single line.
     const autoResize = useCallback(() => {
         const el = textareaRef.current;
         if (!el) return;
         el.style.height = "auto";
-        el.style.height = `${el.scrollHeight}px`;
+        const next = el.scrollHeight;
+        el.style.height = `${next}px`;
+        // leading-5 = 20px line-height; >30px ≈ second line has wrapped/started.
+        if (next > 30) setMultiline(true);
     }, []);
 
     useEffect(() => {
         autoResize();
     }, [inputText, autoResize]);
+
+    // Reset to single-row when the input is cleared (incl. parent-driven clears on send).
+    useEffect(() => {
+        if (!inputText) setMultiline(false);
+    }, [inputText]);
 
     // First-line indent = badge width + gap so wrapped lines use full width under the badge.
     useEffect(() => {
@@ -234,147 +249,149 @@ export function KnowledgeAiInput({
         [showPicker, handleSend, selectedTag, tagDeleteHighlight, handleRemoveTag]
     );
 
+    const modelSelect = (
+        <AiModelSelect
+            options={modelOptions}
+            value={modelValue}
+            disabled={disabled || isStreaming || !modelOptions?.length}
+            onChange={(val) => {
+                const model = modelOptions?.find((item) => String(item.id) === String(val));
+                setChatModel({
+                    id: Number(val),
+                    name: model?.displayName || "",
+                });
+            }}
+        />
+    );
+
+    const sendControls = (
+        <div className="flex shrink-0 items-center gap-2">
+            {showVoice && (
+                <SpeechToTextComponent
+                    disabled={disabled}
+                    onChange={(e) => {
+                        const newText = (inputText || "") + e;
+                        setInputText(newText);
+                    }}
+                />
+            )}
+            {isStreaming ? (
+                <button
+                    type="button"
+                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200"
+                    onClick={onStop}
+                    aria-label="Stop generating"
+                >
+                    <svg
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="icon-lg text-surface-primary"
+                    >
+                        <rect x="7" y="7" width="10" height="10" rx="1.25" fill="currentColor" />
+                    </svg>
+                </button>
+            ) : (
+                <button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={disabled || !inputText.trim()}
+                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
+                    aria-label="Send message"
+                    data-testid="send-button"
+                >
+                    <SendIcon size={24} />
+                </button>
+            )}
+        </div>
+    );
+
     return (
         <div
             className={cn(
-                "relative flex w-full flex-col bg-white pb-3",
+                "relative flex w-full bg-white p-3",
                 variant === "box"
                     ? "rounded-[20px] border border-[#E5E6EB] shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
                     : "border-t border-[#EBEBEB]",
+                stacked ? "flex-col gap-2" : "items-center gap-2",
             )}
         >
-                {/* Tag picker popup */}
-                {showPicker && (
-                    <div className="px-3">
-                        <TagPicker
-                            tags={availableTags
-                                .filter((t) => !selectedTag || t.id !== selectedTag.id)
-                                .map((t) => t.name)}
-                            searchText={pickerSearch}
-                            onSelect={handleTagSelect}
-                            onClose={() => setShowPicker(false)}
-                        />
-                    </div>
-                )}
-
-                {/* Outer scroll: badge + textarea are one block so they scroll together; badge overlays first line only */}
-                <div className="p-3 pb-10">
-                    <div ref={outerScrollRevealRef} className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-scroll pr-6">
-                        <div className="relative">
-                            {selectedTag && (
-                                <span
-                                    ref={badgeRef}
-                                    className={`absolute left-0 top-0 z-10 box-border inline-flex h-5 max-h-5 min-h-5 max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-0 text-xs font-medium leading-none ${TAG_TEXT_CLASS} select-none transition-[background-color,box-shadow] duration-150 ease-out`}
-                                    style={{
-                                        boxSizing: "border-box",
-                                        backgroundColor: tagDeleteHighlight
-                                            ? "rgba(51, 92, 255, 0.28)"
-                                            : TAG_BG,
-                                        boxShadow: tagDeleteHighlight
-                                            ? "inset 0 0 0 1.5px #335CFF"
-                                            : "inset 0 0 0 1.5px rgba(51, 92, 255, 0)",
-                                    }}
-                                    aria-selected={tagDeleteHighlight}
-                                >
-                                    <span
-                                        className={`min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap ${TAG_TEXT_CLASS}`}
-                                    >
-                                        #{selectedTag.name}
-                                    </span>
-                                </span>
-                            )}
-                            <textarea
-                                ref={textareaRef}
-                                value={inputText}
-                                onChange={handleInput}
-                                onKeyDown={handleKeyDown}
-                                onCompositionStart={() => {
-                                    isComposingRef.current = true;
-                                }}
-                                onCompositionEnd={() => {
-                                    isComposingRef.current = false;
-                                }}
-                                onFocus={() => onFocusChange?.(true)}
-                                onBlur={() => onFocusChange?.(false)}
-                                disabled={disabled || isStreaming}
-                                placeholder={resolvedPlaceholder}
-                                rows={1}
-                                className="w-full min-h-5 bg-transparent text-sm leading-5 text-text-primary outline-none resize-none overflow-hidden"
-                                style={{
-                                    textIndent: selectedTag ? `${badgeIndentPx ?? 0}px` : undefined,
-                                }}
-                                data-testid="knowledge-ai-input"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="absolute bottom-3 left-3 flex items-center">
-                    <AiModelSelect
-                        options={modelOptions}
-                        value={modelValue}
-                        disabled={disabled || isStreaming || !modelOptions?.length}
-                        onChange={(val) => {
-                            const model = modelOptions?.find((item) => String(item.id) === String(val));
-                            setChatModel({
-                                id: Number(val),
-                                name: model?.displayName || "",
-                            });
-                        }}
+            {/* Tag picker — floats above the input as a popover so single-row height stays compact */}
+            {showPicker && (
+                <div className="absolute bottom-full left-0 right-0 z-20 mb-2 px-3">
+                    <TagPicker
+                        tags={availableTags
+                            .filter((t) => !selectedTag || t.id !== selectedTag.id)
+                            .map((t) => t.name)}
+                        searchText={pickerSearch}
+                        onSelect={handleTagSelect}
+                        onClose={() => setShowPicker(false)}
                     />
                 </div>
+            )}
 
-                {/* Send / Stop / Voice buttons */}
-                <div className="absolute bottom-3 right-3 flex items-center gap-2">
-                    {/* Voice input (Speech to Text) */}
-                    {showVoice && (
-                        <SpeechToTextComponent
-                            disabled={disabled}
-                            onChange={(e) => {
-                                const newText = (inputText || "") + e;
-                                setInputText(newText);
-                            }}
-                        />
-                    )}
+            {/* Single-row: model on the left, inline with the textarea. */}
+            {!stacked && <div className="shrink-0">{modelSelect}</div>}
 
-                    {isStreaming ? (
-                        <button
-                            type="button"
-                            className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200"
-                            onClick={onStop}
-                            aria-label="Stop generating"
-                        >
-                            <svg
-                                width="24"
-                                height="24"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="icon-lg text-surface-primary"
+            {/* Textarea + tag badge. The badge overlays the first line; outer wrapper scrolls so the badge moves with text. */}
+            <div className={cn(stacked ? "w-full" : "min-w-0 flex-1")}>
+                <div ref={outerScrollRevealRef} className="max-h-48 overflow-y-auto overflow-x-hidden scrollbar-on-scroll">
+                    <div className="relative">
+                        {selectedTag && (
+                            <span
+                                ref={badgeRef}
+                                className={`absolute left-0 top-0 z-10 box-border inline-flex h-5 max-h-5 min-h-5 max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-0 text-xs font-medium leading-none ${TAG_TEXT_CLASS} select-none transition-[background-color,box-shadow] duration-150 ease-out`}
+                                style={{
+                                    boxSizing: "border-box",
+                                    backgroundColor: tagDeleteHighlight
+                                        ? "rgba(51, 92, 255, 0.28)"
+                                        : TAG_BG,
+                                    boxShadow: tagDeleteHighlight
+                                        ? "inset 0 0 0 1.5px #335CFF"
+                                        : "inset 0 0 0 1.5px rgba(51, 92, 255, 0)",
+                                }}
+                                aria-selected={tagDeleteHighlight}
                             >
-                                <rect
-                                    x="7"
-                                    y="7"
-                                    width="10"
-                                    height="10"
-                                    rx="1.25"
-                                    fill="currentColor"
-                                />
-                            </svg>
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={handleSend}
-                            disabled={disabled || !inputText.trim()}
-                            className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10"
-                            aria-label="Send message"
-                            data-testid="send-button"
-                        >
-                            <SendIcon size={24} />
-                        </button>
-                    )}
+                                <span
+                                    className={`min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap ${TAG_TEXT_CLASS}`}
+                                >
+                                    #{selectedTag.name}
+                                </span>
+                            </span>
+                        )}
+                        <textarea
+                            ref={textareaRef}
+                            value={inputText}
+                            onChange={handleInput}
+                            onKeyDown={handleKeyDown}
+                            onCompositionStart={() => {
+                                isComposingRef.current = true;
+                            }}
+                            onCompositionEnd={() => {
+                                isComposingRef.current = false;
+                            }}
+                            onFocus={() => onFocusChange?.(true)}
+                            onBlur={() => onFocusChange?.(false)}
+                            disabled={disabled || isStreaming}
+                            placeholder={resolvedPlaceholder}
+                            rows={1}
+                            className="block w-full min-h-5 resize-none overflow-hidden bg-transparent text-sm leading-5 text-text-primary outline-none placeholder-[#86909c]"
+                            style={{
+                                textIndent: selectedTag ? `${badgeIndentPx ?? 0}px` : undefined,
+                            }}
+                            data-testid="knowledge-ai-input"
+                        />
+                    </div>
                 </div>
+            </div>
+
+            {/* Controls. Single-row: mic + send pinned right. Stacked: model on the left, mic + send on the right. */}
+            <div className={cn("flex items-center", stacked ? "w-full justify-between" : "shrink-0")}>
+                {stacked && <div className="shrink-0">{modelSelect}</div>}
+                {sendControls}
+            </div>
         </div>
     );
 }

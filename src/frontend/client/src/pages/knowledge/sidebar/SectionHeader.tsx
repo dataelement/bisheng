@@ -27,14 +27,17 @@ export function SectionHeader({ title, collapsed, onToggle, sortText, onSort, on
                 }
             }}
             /* sticky top-0 + left-0 + width 100cqi:
-               • width: 100cqi sizes the header to the scroll container's visible inline
-                 size (set via [container-type:inline-size] on the scroll container) — so
-                 even though the shared w-max wrapper around all sections may be wider than
-                 the sidebar, the header stays at the sidebar's visible width.
+               • width: 100cqi sizes the header to the scroll container's full visible inline
+                 size (the scroll container has NO horizontal padding — items get their 12px
+                 left/right gutter from their own list's px-3 instead). So the header spans
+                 the panel edge-to-edge, fully covering items that scroll underneath with no
+                 left/right peek-through.
                • top-0 keeps the header pinned to the viewport top during vertical scroll.
-               • left-0 keeps the header pinned to the viewport left during horizontal
-                 scroll. bg-[#FBFBFB] hides items scrolling underneath. */
-            className="group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between rounded-md bg-[#FBFBFB] px-1 transition-colors hover:bg-[#F4F4F4]"
+               • left-0 keeps the header pinned to the viewport left during horizontal scroll.
+                 Because the scroll container has no padding, the sticky offset reference is
+                 the true edge, so the header does NOT shift on horizontal scroll.
+               • Inner px-4 (16px) aligns the title text with the items' left gutter. */
+            className="group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4 transition-colors hover:bg-[#F4F4F4]"
         >
             <div className="flex h-full items-center gap-1 text-[12px] text-[#999] group-hover:text-[#4e5969]">
                 <span>{title}</span>

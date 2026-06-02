@@ -105,7 +105,7 @@ export default function KnowledgeSpaceItem({
         <div className="flex flex-col gap-0.5">
             {/* Space row */}
             <div
-                className={`group flex items-center justify-between h-7 pr-1 rounded-md cursor-pointer border ${showSpaceHighlight
+                className={`group flex items-center justify-between h-7 rounded-md cursor-pointer border ${showSpaceHighlight
                     ? "bg-[#EEEEEE] border-transparent"
                     : "border-transparent hover:bg-[#F4F4F4]"
                     }`}
@@ -169,18 +169,23 @@ export default function KnowledgeSpaceItem({
                     )}
                 </div>
 
-                {/* More-menu trigger — sticky-right pins it to the viewport's right
-                    edge regardless of scroll. -ml-8 cancels the wrapper's 32px width
-                    in flex layout, so the text on the left gets the full row width
-                    and the button overlays the text on hover instead of pre-reserving
-                    a fixed gutter. bg-inherit picks up the row's hover/active bg so
-                    the overlaying button visually "covers" the text beneath it. */}
-                <div className="sticky right-0 z-[1] -ml-8 flex h-5 w-8 flex-shrink-0 items-center justify-end bg-inherit pr-1">
+                {/* More-menu trigger. The button reserves real layout width so the item name
+                    ends *before* it — when an item is scrolled to its end the name's tail stays
+                    fully visible instead of being hidden under the button. Only the 20px button
+                    itself carries an opaque bg (matching the row state) to cover text it floats
+                    over; the 12px right gap stays transparent.
+                      • w-8 (32px border box) + pr-3 (12px) → 20px button + 12px transparent gap;
+                        justify-start keeps the button on the left.
+                      • sticky right-1 (4px): margin-box right edge sticks 4px from the viewport.
+                      • -mr-3 (-12px): negative right margin lets the box extend past the list's
+                        right padding so the button can reach its intended offset from the edge. */}
+                <div className="sticky right-1 z-[1] ml-2 -mr-3 pr-3 flex h-5 w-8 flex-shrink-0 items-center justify-start">
                     <DropdownMenu onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={`
-                                    flex items-center justify-center p-1 rounded-md hover:bg-black/5 transition-opacity duration-200 outline-none
+                                    flex size-5 items-center justify-center rounded-md transition-opacity duration-200 outline-none
+                                    ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
                                     ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
                                 `}
                                 onClick={(e) => e.stopPropagation()}

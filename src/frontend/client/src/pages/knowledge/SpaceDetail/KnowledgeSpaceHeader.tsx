@@ -1,6 +1,5 @@
 import {
     FolderPlus,
-    ChevronLeft,
     Info,
     Download,
     Tag,
@@ -24,7 +23,6 @@ import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
-import { Fragment } from "react";
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -337,9 +335,27 @@ export function KnowledgeSpaceHeader({
     return (
         <div className="flex min-h-8 items-center justify-between gap-3 pt-5 pb-4 max-[767px]:gap-2 max-[767px]:pt-4 max-[767px]:pb-3">
 
-                    {/* 左侧：当前空间标题 / 面包屑 + 信息 + 分享 */}
+                    {/* 左侧：根目录显示空间标题 + 信息 + 分享；进入文件夹后显示返回按钮 + 分隔线 + 当前文件夹名（设计稿 11772:70584） */}
                     <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
-                        {currentPath.length === 0 ? (
+                        {currentPath.length > 0 ? (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const parent = currentPath[currentPath.length - 2];
+                                        onNavigateFolder(parent?.id);
+                                    }}
+                                    aria-label={localize("com_ui_go_back")}
+                                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-[#4e5969] transition-colors hover:bg-[#f7f8fa]"
+                                >
+                                    <Outlined.ArrowLeft className="size-4" />
+                                </button>
+                                <div className="mx-1 h-4 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
+                                <h1 className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                    {currentPath[currentPath.length - 1]?.name || space.name}
+                                </h1>
+                            </>
+                        ) : (
                             <div className="flex min-w-0 flex-1 items-center gap-1">
                                 <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {space.name}
@@ -397,56 +413,6 @@ export function KnowledgeSpaceHeader({
                                     />
                                 )}
                             </div>
-                        ) : (
-                            <>
-                                {/* 移动端（<768px）：返回上一级 + 当前文件夹名 */}
-                                <div className="flex min-w-0 items-center gap-2 text-[#1d2129] md:hidden">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const parent = currentPath[currentPath.length - 2];
-                                            onNavigateFolder(parent?.id);
-                                        }}
-                                        aria-label={localize("com_ui_go_back")}
-                                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
-                                    >
-                                        <ChevronLeft className="size-4" />
-                                    </button>
-                                    <span className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
-                                        {currentPath[currentPath.length - 1]?.name || space.name}
-                                    </span>
-                                </div>
-                                {/* PC 端：完整文件路径（空间名 / 文件夹…） */}
-                                <div className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm text-[#1d2129] md:flex">
-                                    <button
-                                        type="button"
-                                        onClick={() => onNavigateFolder(undefined)}
-                                        className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
-                                    >
-                                        {space.name}
-                                    </button>
-                                    {currentPath.map((seg, idx) => (
-                                        <Fragment key={seg.id ?? `path-${idx}`}>
-                                            <span className="shrink-0 text-[#86909c]" aria-hidden>
-                                                /
-                                            </span>
-                                            {idx === currentPath.length - 1 ? (
-                                                <span className="min-w-0 truncate text-base font-medium text-[#1d2129]">
-                                                    {seg.name}
-                                                </span>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onNavigateFolder(seg.id)}
-                                                    className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
-                                                >
-                                                    {seg.name}
-                                                </button>
-                                            )}
-                                        </Fragment>
-                                    ))}
-                                </div>
-                            </>
                         )}
                     </div>
 

@@ -323,7 +323,7 @@ export function KnowledgeSpaceSidebar({
                     }}
                 >
                     <div
-                        className="h-full overflow-auto overscroll-y-contain scroll-on-scroll pl-3 pb-5 [container-type:inline-size]"
+                        className="h-full overflow-auto overscroll-y-contain scroll-on-scroll pb-5 [container-type:inline-size]"
                         onScroll={handleListScroll}
                         data-scrolling={isListScrolling ? "true" : "false"}
                     >
@@ -333,7 +333,7 @@ export function KnowledgeSpaceSidebar({
                             scroll container's visible width — that lets sticky-left/top
                             keep them pinned to the viewport edges even while items
                             horizontally overflow. */}
-                        <div className="w-max min-w-full pr-3">
+                        <div className="w-max min-w-full">
                         {/* Department spaces — always on top per PRD */}
                         {departmentSpaces.length > 0 && (
                             <div className="pt-0 pb-4">
@@ -345,7 +345,7 @@ export function KnowledgeSpaceSidebar({
                                     onSort={() => toggleSort("department")}
                                 />
                                 {!departmentCollapsed && (
-                                    <div className="space-y-0.5">
+                                    <div className="space-y-0.5 px-3">
                                         {departmentSpaces.map(s => (
                                             <KnowledgeSpaceItem
                                                 key={s.id}
@@ -379,7 +379,7 @@ export function KnowledgeSpaceSidebar({
                                 addLabel={localize("com_knowledge.create")}
                             />
                             {!createdCollapsed && (
-                                <div className="space-y-0.5">
+                                <div className="space-y-0.5 px-3">
                                     {filteredCreatedSpaces.map(s => (
                                         <KnowledgeSpaceItem
                                             key={s.id}
@@ -411,7 +411,7 @@ export function KnowledgeSpaceSidebar({
                                 onSort={() => toggleSort("joined")}
                             />
                             {!joinedCollapsed && (
-                                <div className="space-y-0.5">
+                                <div className="space-y-0.5 px-3">
                                     {filteredJoinedSpaces.map(s => (
                                         <KnowledgeSpaceItem
                                             key={s.id}

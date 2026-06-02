@@ -19,12 +19,10 @@
  * room above the dock for at least one row of content. The dock is `absolute
  * inset-x-0 bottom-0` and overlays the bottom of that container.
  */
-import { ChevronsRight, HistoryIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Outlined } from "bisheng-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useRecoilValue } from "recoil";
-import { Button } from "~/components/ui";
 import {
     Tooltip,
     TooltipContent,
@@ -154,41 +152,35 @@ export function KnowledgeAiBottomDock({
                 <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
                     {localize("com_knowledge.ai_assistant")}
                 </h3>
-                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+8px)] flex items-center gap-1">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                            "size-8",
-                            showHistory ? "bg-[#e8f3ff] text-[#165dff]" : "text-[#86909c] hover:text-[#4e5969]",
-                        )}
+                {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
+                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] flex items-center justify-end gap-3 py-1">
+                    <button
+                        type="button"
                         onClick={() => setShowHistory((v) => !v)}
                         aria-label={localize("com_knowledge.history_chat")}
+                        className={cn(
+                            "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
+                            showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
+                        )}
                     >
-                        <HistoryIcon className="size-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-[#86909c] hover:text-[#4e5969]"
+                        <Outlined.History className="size-4" />
+                    </button>
+                    <button
+                        type="button"
                         onClick={handleNewChat}
                         aria-label={localize("com_knowledge.create_chat")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
                     >
-                        <img
-                            className="size-4"
-                            src={`${__APP_ENV__.BASE_URL}/assets/channel/message-circle.svg`}
-                            alt=""
-                        />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-[#86909c] hover:text-[#4e5969]"
+                        <Outlined.MessagePlus className="size-4" />
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setOpen(false)}
                         aria-label={localize("com_ui_collapse")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
                     >
                         <Outlined.DoubleDown className="size-4" />
-                    </Button>
+                    </button>
                 </div>
             </div>
         );
@@ -300,7 +292,7 @@ export function KnowledgeAiBottomDock({
             >
                 <div
                     className={cn(
-                        "relative flex flex-col",
+                        "relative mx-auto flex w-full max-w-[800px] flex-col",
                         open &&
                             "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-gradient-to-b from-white/80 to-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)] backdrop-blur-[16px]",
                     )}
@@ -340,25 +332,22 @@ export function KnowledgeAiBottomDock({
                                     {localize("com_knowledge.ai_assistant")}
                                 </h3>
                                 <div className="min-w-0 flex-1" aria-hidden />
-                                <div className="flex shrink-0 items-center gap-0">
+                                {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
+                                <div className="flex shrink-0 items-center justify-end gap-3 py-1">
                                     <TooltipProvider>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
+                                                <button
                                                     type="button"
-                                                    size="icon"
-                                                    className={cn(
-                                                        "size-8 shrink-0",
-                                                        showHistory
-                                                            ? "bg-[#e8f3ff] text-[#165dff]"
-                                                            : "text-[#86909c] hover:text-[#4e5969]",
-                                                    )}
                                                     onClick={() => setShowHistory((v) => !v)}
                                                     aria-label={localize("com_knowledge.history_chat")}
+                                                    className={cn(
+                                                        "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
+                                                        showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
+                                                    )}
                                                 >
-                                                    <HistoryIcon className="size-4 shrink-0" />
-                                                </Button>
+                                                    <Outlined.History className="size-4 shrink-0" />
+                                                </button>
                                             </TooltipTrigger>
                                             <TooltipContent>
                                                 <p>{localize("com_knowledge.history_chat")}</p>
@@ -368,20 +357,14 @@ export function KnowledgeAiBottomDock({
                                     <TooltipProvider>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
+                                                <button
                                                     type="button"
-                                                    size="icon"
-                                                    className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
                                                     onClick={handleNewChat}
                                                     aria-label={localize("com_knowledge.create_chat")}
+                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
                                                 >
-                                                    <img
-                                                        className="size-4 shrink-0"
-                                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/message-circle.svg`}
-                                                        alt=""
-                                                    />
-                                                </Button>
+                                                    <Outlined.MessagePlus className="size-4 shrink-0" />
+                                                </button>
                                             </TooltipTrigger>
                                             <TooltipContent>
                                                 <p>{localize("com_knowledge.create_chat")}</p>
@@ -391,16 +374,14 @@ export function KnowledgeAiBottomDock({
                                     <TooltipProvider>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
+                                                <button
                                                     type="button"
-                                                    size="icon"
-                                                    className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
                                                     onClick={() => setOpen(false)}
                                                     aria-label={localize("com_ui_collapse")}
+                                                    className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
                                                 >
                                                     <Outlined.DoubleDown className="size-4 shrink-0" />
-                                                </Button>
+                                                </button>
                                             </TooltipTrigger>
                                             <TooltipContent side="top">
                                                 <p>{localize("com_ui_collapse")}</p>

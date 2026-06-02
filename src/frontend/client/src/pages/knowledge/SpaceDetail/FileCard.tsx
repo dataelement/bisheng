@@ -87,6 +87,15 @@ export function FileCard({
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
+    /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
+    const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
+    /** Subset of isNotParsed that should show the "In progress" overlay tag. */
+    const isInProgress = !isFolder && (
+        file.status === FileStatus.UPLOADING ||
+        file.status === FileStatus.PROCESSING ||
+        file.status === FileStatus.WAITING ||
+        file.status === FileStatus.REBUILDING
+    );
 
     const {
         isRenaming,
@@ -111,66 +120,66 @@ export function FileCard({
         ? "text-[#212121]"
         : "text-[#999]";
 
-    const renderStatusBadge = () => {
+    /**
+     * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
+     * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
+     */
+    const renderStatusOverlayTag = () => {
         if (!isAdmin || isFolder) return null;
+        if (file.status === FileStatus.SUCCESS) return null;
 
         const approvalLabel = approvalStatusLabel;
         const statusReason = failureMessage || approvalReason;
 
-        let badge: React.ReactNode = null;
+        type Tone = { bg: string; text: string; dot: string };
+        const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
+        const errorTone: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
+        const infoTone: Tone = { bg: "bg-[#e8f3ff]", text: "text-[#165dff]", dot: "bg-[#165dff]" };
+
+        let label: string | null = null;
+        let tone: Tone = neutralTone;
+
         if (approvalLabel) {
-            const rejected = isKnowledgeApprovalRejected(file);
-            badge = (
-                <span
-                    className={cn(
-                        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
-                        rejected ? "bg-[#fff2f0] text-[#f53f3f]" : "bg-[#e8f3ff] text-[#165dff]",
-                    )}
-                >
-                    <span className={cn("size-1.5 shrink-0 rounded-full", rejected ? "bg-[#f53f3f]" : "bg-[#165dff]")} />
-                    {approvalLabel}
-                </span>
-            );
+            label = approvalLabel;
+            tone = isKnowledgeApprovalRejected(file) ? errorTone : infoTone;
         } else {
-            const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-                [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-                [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-                [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-                [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-                [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-                [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-                [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+            const config: Record<string, { label: string; tone: Tone }> = {
+                [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: neutralTone },
+                [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: neutralTone },
+                [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: neutralTone },
+                [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: neutralTone },
+                [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: errorTone },
+                [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: errorTone },
+                [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: errorTone },
             };
-            const item = config[file.status];
+            const item = file.status ? config[file.status] : undefined;
             if (!item) return null;
-            badge = (
-                <span
-                    className={cn(
-                        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
-                        item.bg,
-                        item.color,
-                    )}
-                >
-                    <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} />
-                    {item.label}
-                </span>
-            );
+            label = item.label;
+            tone = item.tone;
         }
 
-        if (!badge) return null;
-        if (!statusReason) return badge;
+        if (!label) return null;
 
-        return (
+        const pill = (
+            <div className={cn("inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5", tone.bg)}>
+                <span className={cn("size-1 shrink-0 rounded-full", tone.dot)} />
+                <span className={cn("text-xs leading-5", tone.text)}>{label}</span>
+            </div>
+        );
+
+        const wrapped = statusReason ? (
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <span className="inline-flex">
-                        {badge}
-                    </span>
+                    <span className="inline-flex">{pill}</span>
                 </TooltipTrigger>
                 <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
                     {statusReason}
                 </TooltipContent>
             </Tooltip>
+        ) : pill;
+
+        return (
+            <div className="absolute bottom-1 left-1 z-10">{wrapped}</div>
         );
     };
 
@@ -192,14 +201,15 @@ export function FileCard({
             );
         }
 
-        if ((!isAdmin && !approvalStatusLabel) || isFolder) {
-            return <span className={cn("truncate", nameToneClass)}>{file.name}</span>;
-        }
         return (
-            <div className="flex min-w-0 items-center gap-2">
-                <span className={cn("min-w-0 flex-1 truncate", nameToneClass)}>{file.name}</span>
-                {renderStatusBadge()}
-            </div>
+            <span
+                className={cn(
+                    "line-clamp-2 min-h-[40px] break-all leading-5",
+                    nameToneClass,
+                )}
+            >
+                {file.name}
+            </span>
         );
     };
 
@@ -240,17 +250,27 @@ export function FileCard({
     return (
         <Card
             className={cn(
-                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
+                "group rounded-[6px] overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
-                    ? "border-primary shadow-sm"
+                    ? "bg-[rgba(230,237,252,0.3)]"
+                    : isNotParsed
+                        ? "bg-[#fbfbfb]"
+                        : "bg-white",
+                isSelected
+                    ? "border-[#ECECEC] shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
                     : "border-[#ECECEC] hover:border-[#c9cdd4]",
-                hovered && "shadow-md"
+                hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
             )}
             style={{
-                transitionProperty: 'background-color',
+                transitionProperty: 'background-color, box-shadow, border-color',
                 transitionDuration: '350ms',
-                transitionTimingFunction: 'ease-in-out'
+                transitionTimingFunction: 'ease-in-out',
+                ...(isSelected
+                    ? { backgroundColor: 'rgba(230,237,252,0.3)' }
+                    : isNotParsed
+                        ? { backgroundColor: '#fbfbfb' }
+                        : {}),
             }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
@@ -272,13 +292,23 @@ export function FileCard({
                         />
                     </div>
                 )}
-                {/* 缩略图或图标区域 */}
+                {/* Thumbnail / icon area */}
                 <div className={cn(
-                    "relative flex h-[106px] shrink-0 items-center justify-center",
-                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:rounded-[4px]",
-                    isFolder ? "bg-[#FAFCFF]" : "bg-gray-50"
+                    "relative flex h-[106px] shrink-0 p-1",
+                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:p-0 max-[767px]:rounded-[4px]",
                 )}>
-                    <FileIconRenderer file={file} isFolder={isFolder} />
+                    <div className={cn(
+                        "relative flex flex-1 items-center justify-center overflow-hidden rounded-[4px]",
+                        isSelected
+                            ? "bg-transparent"
+                            : isNotParsed
+                                ? "bg-[#fbfbfb]"
+                                : "bg-white",
+                        mobileListMode && "max-[767px]:rounded-[4px]",
+                    )}>
+                        <FileIconRenderer file={file} isFolder={isFolder} />
+                        {renderStatusOverlayTag()}
+                    </div>
 
                     {!hideSelectionCheckbox && (
                         <div
@@ -409,26 +439,26 @@ export function FileCard({
                     )}
                 </div>
 
-                {/* 底部内容区域 */}
+                {/* Bottom info area */}
                 <div className={cn(
-                    "p-1",
-                    mobileListMode && "max-[767px]:min-w-0 max-[767px]:flex-1 max-[767px]:pr-1"
+                    "flex flex-col gap-1 px-2 py-1.5",
+                    mobileListMode && "max-[767px]:min-w-0 max-[767px]:flex-1 max-[767px]:gap-0 max-[767px]:p-0 max-[767px]:pr-1",
                 )}>
-                    {/* 文件名和状态 */}
-                    <div className="flex items-center text-sm font-medium min-w-0">
+                    {/* File name + status */}
+                    <div className="flex min-w-0 text-xs font-medium">
                         {getStatusText()}
                     </div>
 
-                    {/* 底部信息 (标签、数量和时间) */}
-                    <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
-                        <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
+                    {/* Footer (tags / count + time) */}
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                        <div className="flex min-h-[20px] min-w-0 flex-1 items-center">
                             {isAdmin && isFolder && file.fileNum != null && (
-                                <span className="text-xs text-[#86909c] whitespace-nowrap">
+                                <span className="whitespace-nowrap text-[10px] leading-5 text-[#999] tabular-nums">
                                     {localize("com_knowledge_items_count", { count: file.fileNum ?? 0 })}
                                 </span>
                             )}
                             {!isAdmin && isFolder && file.fileNum != null && (
-                                <span className="text-xs text-[#86909c] whitespace-nowrap">
+                                <span className="whitespace-nowrap text-[10px] leading-5 text-[#999] tabular-nums">
                                     {localize("com_knowledge_items_count", { count: file.successFileNum ?? 0 })}
                                 </span>
                             )}
@@ -436,7 +466,7 @@ export function FileCard({
                                 <TagGroup tags={file.tags} />
                             )}
                         </div>
-                        <span className="text-[#999] text-xs shrink-0 ">{formatTimeCard(file.updatedAt)}</span>
+                        <span className="shrink-0 text-[10px] leading-5 text-[#999] tabular-nums">{formatTimeCard(file.updatedAt)}</span>
                     </div>
                 </div>
 
