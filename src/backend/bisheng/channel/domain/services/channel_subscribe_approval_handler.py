@@ -130,9 +130,14 @@ class ChannelSubscribeApprovalHandler(ApprovalHandler):
         )
 
     async def _get_membership(self, channel_id: str, applicant_user_id: int):
-        """Load the applicant membership for the target channel."""
+        """Load the applicant membership for the target channel.
+
+        Includes inactive rows: the applicant's membership is PENDING while awaiting
+        approval, and this handler must find it to flip it to ACTIVE/REJECTED.
+        """
         return await self.space_channel_member_repository.find_membership(
             business_id=channel_id,
             business_type=BusinessTypeEnum.CHANNEL,
             user_id=applicant_user_id,
+            include_inactive=True,
         )

@@ -83,8 +83,15 @@ class ChannelSubscribeScenarioHandler:
     async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
         membership = await self._get_membership(payload_snapshot)
         if not membership:
-            logger.warning('Channel membership not found when approval instance=%s approved', instance_id)
-            return {'status': 'missing_membership'}
+            # Fail loudly: the outbox executor turns this into a FAILED outbox +
+            # execute_failed exception. Returning a benign dict here would mark the
+            # instance EXECUTED while the membership stays PENDING and ReBAC is never
+            # written, so the channel never appears in the user's subscription list.
+            raise RuntimeError(
+                f'Channel membership not found for approval instance={instance_id}, '
+                f"channel_id={payload_snapshot.get('channel_id')}, "
+                f"applicant_user_id={payload_snapshot.get('applicant_user_id')}"
+            )
         membership.status = MembershipStatusEnum.ACTIVE
         await self.space_channel_member_repository.update(membership)
         if self.sync_permissions:

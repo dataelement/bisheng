@@ -36,8 +36,14 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC)
 
     @abstractmethod
     async def find_membership(self, business_id: str, business_type: BusinessTypeEnum,
-                              user_id: int) -> Optional[SpaceChannelMember]:
-        """Find a specific membership by business ID, type, and user ID."""
+                              user_id: int, include_inactive: bool = False) -> Optional[SpaceChannelMember]:
+        """Find a specific membership by business ID, type, and user ID.
+
+        For channels the default only returns ACTIVE members. Set
+        ``include_inactive=True`` to also match PENDING/REJECTED rows — required by
+        the approval activation flow, which must locate the PENDING membership to
+        flip it to ACTIVE.
+        """
         pass
 
     @abstractmethod
