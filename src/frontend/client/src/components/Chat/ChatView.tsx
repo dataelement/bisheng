@@ -30,6 +30,7 @@ import {
   importMessagesToKnowledgeApi,
   listUploadableSpacesApi,
 } from '~/api/messageExport';
+import { translateApiErrorMessage } from '~/api/request';
 import {
   ExportFormatSheet,
   MessageSelectionToolbar,
@@ -213,7 +214,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         // 12066 文件夹不存在 / 12067 暂无权限) so the user sees the real reason
         // instead of a generic failure — and never a false "success".
         showToast({
-          message: e?.status_message || t('workstation.messageExport.renderFailed'),
+          message:
+            translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
+            || t('workstation.messageExport.renderFailed'),
           severity: NotificationSeverity.ERROR,
         });
       }

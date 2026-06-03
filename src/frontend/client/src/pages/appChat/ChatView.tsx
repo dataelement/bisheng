@@ -21,6 +21,7 @@ import {
     importMessagesToKnowledgeApi,
     listUploadableSpacesApi,
 } from "~/api/messageExport";
+import { translateApiErrorMessage } from "~/api/request";
 import {
     AddToKnowledgeModal,
     type AddToKnowledgeSelection,
@@ -135,7 +136,9 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                 // Surface the backend business message (12065/12066/12067/...)
                 // instead of a generic failure, and never a false "success".
                 showToast({
-                    message: e?.status_message || localize("workstation.messageExport.renderFailed"),
+                    message:
+                        translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
+                        || localize("workstation.messageExport.renderFailed"),
                     severity: NotificationSeverity.ERROR,
                 });
             }

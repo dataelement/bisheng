@@ -607,10 +607,11 @@ class ConversationExportService:
                     extra_args=['--reference-doc=' + template],
                 )
             except (RuntimeError, OSError) as e:
+                # Full pandoc detail goes to the log only — the user-facing
+                # message stays the clean default ("文件生成失败，请稍后重试"),
+                # never the raw pandoc/exception text.
                 logger.exception('pypandoc convert_text(docx) failed')
-                raise ConversationExportRenderFailedError(
-                    msg=f'pandoc 转换失败: {e}',
-                )
+                raise ConversationExportRenderFailedError() from e
             return Path(out_path).read_bytes()
 
     # ----------------------------------------------------------------------
@@ -715,8 +716,9 @@ class ConversationExportService:
                 finally:
                     await browser.close()
         except Exception as e:
+            # Detail to logs only; user sees the clean default message.
             logger.exception('Chromium PDF rendering failed')
-            raise ConversationExportRenderFailedError(msg=f'PDF 渲染失败: {e}')
+            raise ConversationExportRenderFailedError() from e
 
     @classmethod
     def _render_txt(cls, markdown: str) -> bytes:

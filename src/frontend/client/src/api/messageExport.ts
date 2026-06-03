@@ -81,6 +81,27 @@ export async function exportMessagesApi(payload: ExportMessagesPayload): Promise
         body,
         { responseType: 'blob' },
     );
+    // On a business error the backend returns a JSON envelope (HTTP 200), but
+    // we requested a blob, so the shared interceptor can't read status_code and
+    // resolves. Without this guard the error JSON would be "downloaded" as the
+    // exported file instead of surfacing the 12064 "文件生成失败" prompt.
+    const blob = res.data;
+    if (blob && typeof blob.type === 'string' && blob.type.includes('application/json')) {
+        let envelope: { status_code?: number; status_message?: string } = {};
+        try {
+            envelope = JSON.parse(await blob.text());
+        } catch {
+            // not parseable — fall through and treat as a generic failure
+        }
+        if (!envelope.status_code || envelope.status_code !== 200) {
+            const err = new Error(
+                envelope.status_message || 'export failed',
+            ) as Error & { status_code?: number; status_message?: string };
+            err.status_code = envelope.status_code;
+            err.status_message = envelope.status_message;
+            throw err;
+        }
+    }
     const filename = parseContentDispositionFilename(
         (res.headers?.['content-disposition'] as string) ?? '',
     );

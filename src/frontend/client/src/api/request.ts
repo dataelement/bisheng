@@ -109,7 +109,7 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
   failedQueue = [];
 };
 
-const translateApiErrorMessage = (data: any) => {
+export const translateApiErrorMessage = (data: any) => {
   const statusCodeKey = data?.status_code != null ? `api_errors.${data.status_code}` : "";
   const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
   const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";
