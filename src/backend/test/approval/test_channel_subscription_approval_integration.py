@@ -151,3 +151,27 @@ async def test_channel_subscribe_scenario_handler_updates_membership_states():
     membership.status = MembershipStatusEnum.PENDING
     await handler.on_rejected(instance_id=1, payload_snapshot=payload, reason='reject')
     assert membership.status == MembershipStatusEnum.REJECTED
+
+
+@pytest.mark.asyncio
+async def test_channel_subscribe_on_approved_raises_when_membership_missing():
+    """A missing membership must fail loudly so the outbox is marked FAILED and an
+    execute_failed exception is raised — never silently reported as success."""
+    from bisheng.approval.domain.services.channel_subscribe_scenario_handler import (
+        ChannelSubscribeScenarioHandler,
+    )
+
+    member_repository = SimpleNamespace(
+        find_membership=AsyncMock(return_value=None),
+        update=AsyncMock(),
+    )
+    sync_permissions = AsyncMock()
+    handler = ChannelSubscribeScenarioHandler(
+        space_channel_member_repository=member_repository,
+        sync_permissions=sync_permissions,
+    )
+
+    payload = {'channel_id': 'channel-1', 'applicant_user_id': 427}
+    with pytest.raises(RuntimeError):
+        await handler.on_approved(instance_id=99, payload_snapshot=payload)
+    sync_permissions.assert_not_awaited()

@@ -134,6 +134,7 @@ ApprovalCenterService.decide_task()
 - **入口**：`channel/domain/services/channel_service.py::subscribe_channel()`（`REVIEW` 可见性频道）
 - **Handler**：`ChannelSubscribeScenarioHandler`
 - 通过 / pass 路径调 `ChannelService.sync_direct_channel_user_permissions()` 写 ReBAC(OpenFGA) 关系（否则成员不出现在 ReBAC 成员列表）
+- `on_approved` 先把申请人的 **PENDING** membership 翻成 ACTIVE 再写 ReBAC（查 membership 注意频道默认只返回 ACTIVE，激活需带非 ACTIVE 状态）
 - PENDING 时调 `_send_channel_approval_notification()` 通知审批人
 
 ### 4.3 知识空间加入审批 (`knowledge_space_subscribe_request`)
@@ -169,6 +170,8 @@ ApprovalCenterService.decide_task()
 ## 6. outbox 与 Celery
 
 业务执行走 outbox：通过后写 `approval_outbox(PENDING)` → Celery `execute_approval_outbox` 执行 `handler.on_approved()` → 成功 outbox=SUCCESS、instance=EXECUTED；失败 outbox=FAILED、instance=EXECUTE_FAILED 并建 `execute_failed` 异常。
+
+> **原则：业务回调（`on_approved` 等）不得静默失败。** 该执行成功/失败由「是否抛异常」判定：抛异常 → outbox=FAILED + `execute_failed` 异常暴露问题；正常返回 → 一律视为成功并置 instance=EXECUTED。因此前置条件缺失（如找不到要激活的 membership/资源）**必须 raise**，绝不能 `return {'status':'xxx'}` 之类把失败伪装成成功——否则会出现 instance=executed 但业务实际没生效的「假成功」，且无任何告警。
 
 **dispatch 入口（两处，功能相同名字不同）：**
 - `approval_center_service.py::_dispatch_outbox(outbox_id)` — `decide_task` 最后节点通过 / skip_node
@@ -312,7 +315,7 @@ SELECT id, exception_type, status, detail FROM approval_exception WHERE instance
 若异常类型是 `approver_empty`：检查 `approval_instance.applicant_department_id` 是否为 NULL，以及节点 `approver_config.sources` 里 `department_admin` 是否依赖部门。
 
 ### "频道/知识空间审批通过但成员列表看不到"
-检查对应 `sync_direct_channel_user_permissions` / `sync_direct_space_user_permissions` 是否在该激活路径被调用（写 ReBAC/OpenFGA 关系）。
+检查对应 `sync_direct_channel_user_permissions` / `sync_direct_space_user_permissions` 是否在该激活路径被调用（写 ReBAC/OpenFGA 关系）。若 `instance=executed` 但 `space_channel_member.status` 仍为 `PENDING`，说明 `on_approved` 没真正激活成员（见 §6 的"业务回调不得静默失败"原则）。
 
 ---
 

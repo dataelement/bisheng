@@ -35,10 +35,12 @@ class _AsyncSpaceChannelMembershipAdapter:
     async def find_membership(self, business_id: str, business_type: BusinessTypeEnum, user_id: int):
         async with get_async_db_session() as session:
             repository = SpaceChannelMemberRepositoryImpl(session)
+            # Activation must locate the PENDING membership (not just ACTIVE) to flip it to ACTIVE.
             return await repository.find_membership(
                 business_id=business_id,
                 business_type=business_type,
                 user_id=user_id,
+                include_inactive=True,
             )
 
     async def update(self, membership):

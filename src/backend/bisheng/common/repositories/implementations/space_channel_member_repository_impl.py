@@ -104,14 +104,19 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         return list(highest_by_channel.values())
 
     async def find_membership(self, business_id: str, business_type: BusinessTypeEnum,
-                              user_id: int) -> Optional[SpaceChannelMember]:
-        """Find a specific membership by business ID, type, and user ID."""
+                              user_id: int, include_inactive: bool = False) -> Optional[SpaceChannelMember]:
+        """Find a specific membership by business ID, type, and user ID.
+
+        For channels the default only returns ACTIVE members. Pass
+        ``include_inactive=True`` to also match PENDING/REJECTED rows — the approval
+        activation flow needs the PENDING membership in order to flip it to ACTIVE.
+        """
         query = select(SpaceChannelMember).where(
             SpaceChannelMember.business_id == business_id,
             SpaceChannelMember.business_type == business_type,
             SpaceChannelMember.user_id == user_id
         )
-        if business_type == BusinessTypeEnum.CHANNEL:
+        if business_type == BusinessTypeEnum.CHANNEL and not include_inactive:
             query = query.where(SpaceChannelMember.status == MembershipStatusEnum.ACTIVE)
         result = await self.session.exec(query)
         rows = list(result.all())

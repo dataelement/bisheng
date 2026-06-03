@@ -250,3 +250,48 @@ async def test_remove_channel_subscription_members_preserves_authorized_grants(a
     ).all()
     assert removed == 2
     assert sorted(remaining) == [1, 4, 5]
+
+
+@pytest.mark.asyncio
+async def test_find_membership_skips_pending_channel_by_default(async_db_session: AsyncSession):
+    """Default channel lookup only returns ACTIVE members (existing behavior)."""
+    repo = SpaceChannelMemberRepositoryImpl(async_db_session)
+    async_db_session.add(
+        SpaceChannelMember(
+            business_id='channel-pending',
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=427,
+            user_role=UserRoleEnum.MEMBER,
+            status=MembershipStatusEnum.PENDING,
+            relation=ChannelRelationEnum.VIEWER,
+        )
+    )
+    await async_db_session.commit()
+
+    found = await repo.find_membership('channel-pending', BusinessTypeEnum.CHANNEL, 427)
+
+    assert found is None
+
+
+@pytest.mark.asyncio
+async def test_find_membership_returns_pending_channel_when_include_inactive(async_db_session: AsyncSession):
+    """Approval activation must locate the PENDING membership to flip it to ACTIVE."""
+    repo = SpaceChannelMemberRepositoryImpl(async_db_session)
+    async_db_session.add(
+        SpaceChannelMember(
+            business_id='channel-pending',
+            business_type=BusinessTypeEnum.CHANNEL,
+            user_id=427,
+            user_role=UserRoleEnum.MEMBER,
+            status=MembershipStatusEnum.PENDING,
+            relation=ChannelRelationEnum.VIEWER,
+        )
+    )
+    await async_db_session.commit()
+
+    found = await repo.find_membership(
+        'channel-pending', BusinessTypeEnum.CHANNEL, 427, include_inactive=True
+    )
+
+    assert found is not None
+    assert found.status == MembershipStatusEnum.PENDING
