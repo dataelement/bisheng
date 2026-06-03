@@ -37,7 +37,11 @@ async def test_subscribe_channel_uses_role_quota_service():
     with patch(
         'bisheng.channel.domain.services.channel_service.QuotaService.check_quota',
         new=AsyncMock(return_value=True),
-    ) as mock_check:
+    ) as mock_check, patch.object(
+        ChannelService,
+        'sync_direct_channel_user_permissions',
+        new_callable=AsyncMock,
+    ):
         status = await service.subscribe_channel(
             SubscribeChannelRequest(channel_id='channel-1'),
             login_user,

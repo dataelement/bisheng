@@ -59,6 +59,7 @@ from bisheng.common.errcode.channel import (
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, SpaceFileNameDuplicateError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
+    CHANNEL_ROLE_TO_RELATION,
     ChannelRelationEnum,
     UserRoleEnum,
     SpaceChannelMemberDao,
@@ -76,7 +77,7 @@ from bisheng.permission.domain.channel_permission_template import (
 )
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 from bisheng.permission.domain.services.owner_service import OwnerService
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
@@ -1141,6 +1142,17 @@ class ChannelService:
                 status=status,
             )
 
+        # Public channels activate the subscriber immediately, so mirror the
+        # membership into an explicit ReBAC viewer grant. Review channels stay
+        # PENDING here and are synced once their approval passes.
+        if status == MembershipStatusEnum.ACTIVE:
+            await self.__class__.sync_direct_channel_user_permissions(
+                req.channel_id,
+                login_user.user_id,
+                UserRoleEnum.MEMBER,
+                is_active=True,
+            )
+
         if channel.visibility == ChannelVisibilityEnum.REVIEW:
             gate = self.approval_gate or self._build_channel_approval_gate()
             from bisheng.database.models.department import UserDepartmentDao
@@ -1178,6 +1190,12 @@ class ChannelService:
                     if membership:
                         membership.status = MembershipStatusEnum.ACTIVE
                         await self.space_channel_member_repository.update(membership)
+                await self.__class__.sync_direct_channel_user_permissions(
+                    req.channel_id,
+                    login_user.user_id,
+                    UserRoleEnum.MEMBER,
+                    is_active=True,
+                )
                 return SubscriptionStatusEnum.SUBSCRIBED
             if gate_result.decision == ApprovalGateDecision.PENDING and gate_result.task_ids and self.message_service:
                 await self._send_channel_approval_notification(
@@ -1386,13 +1404,21 @@ class ChannelService:
                         )
                 # When changing from REVIEW to PUBLIC, activate pending members and approve their messages
                 elif old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
-                    activated_count = await self.space_channel_member_repository.activate_pending_members(channel_id)
-                    if activated_count > 0:
+                    activated_members = await self.space_channel_member_repository.activate_pending_members(channel_id)
+                    if activated_members:
                         logger.info(
                             "Activated %d pending members for channel_id=%s after visibility change from REVIEW to PUBLIC",
-                            activated_count,
+                            len(activated_members),
                             channel_id,
                         )
+                        # Mirror the newly-activated members into explicit ReBAC grants.
+                        for member in activated_members:
+                            await self.__class__.sync_direct_channel_user_permissions(
+                                channel_id,
+                                member.user_id,
+                                member.user_role,
+                                is_active=True,
+                            )
                     await self.space_channel_member_repository.remove_rejected_members(channel_id)
                     if self.message_service:
                         await self.message_service.batch_approve_channel_subscription_messages(
@@ -1732,16 +1758,24 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Verify current user is the creator
+        # 2. Verify current user may dismiss the channel: either the creator, or
+        #    a user explicitly granted the `delete_channel` fine-grained permission.
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
-        if (
-            not current_membership
-            or current_membership.status != MembershipStatusEnum.ACTIVE
-            or current_membership.user_role != UserRoleEnum.CREATOR
-        ):
-            raise ChannelPermissionDeniedError(msg="Only the creator can dismiss the channel")
+        is_active_creator = (
+            current_membership is not None
+            and current_membership.status == MembershipStatusEnum.ACTIVE
+            and current_membership.user_role == UserRoleEnum.CREATOR
+        )
+        if not is_active_creator:
+            permission_ids = await self._get_channel_permission_ids(
+                channel_id, login_user, current_membership
+            )
+            if 'delete_channel' not in permission_ids:
+                raise ChannelPermissionDeniedError(
+                    msg="Only the creator or a user with delete permission can dismiss the channel"
+                )
 
         # 3. Delete all user relationships
         members = await self.space_channel_member_repository.find_all(
@@ -1844,6 +1878,104 @@ class ChannelService:
             await self._remove_channel_direct_source(channel_id, source)
 
         return True
+
+    @staticmethod
+    def _is_direct_channel_user_binding(binding: dict, channel_id: str, user_id: int) -> bool:
+        return (
+            binding.get('resource_type') == 'channel'
+            and str(binding.get('resource_id')) == str(channel_id)
+            and binding.get('subject_type') == 'user'
+            and str(binding.get('subject_id')) == str(user_id)
+        )
+
+    @classmethod
+    async def sync_direct_channel_user_permissions(
+        cls,
+        channel_id: str,
+        user_id: int,
+        user_role: Optional[UserRoleEnum],
+        *,
+        is_active: bool,
+    ) -> None:
+        """Keep direct channel memberships and ReBAC grants in sync.
+
+        Active members receive a single explicit relation grant (viewer/editor/manager)
+        plus the matching UI binding so they surface in the channel authorization list.
+        The owner relation is never mirrored here; it is managed by OwnerService.
+        """
+        from bisheng.permission.api.endpoints.resource_permission import (
+            _binding_key_with_scope,
+            _get_bindings,
+            _save_bindings,
+        )
+
+        desired_relation: Optional[str] = None
+        if is_active and user_role is not None:
+            relation_enum = CHANNEL_ROLE_TO_RELATION.get(UserRoleEnum(user_role))
+            desired_relation = relation_enum.value if relation_enum else None
+            if desired_relation == ChannelRelationEnum.OWNER.value:
+                desired_relation = None
+
+        relations_to_revoke = {
+            ChannelRelationEnum.VIEWER.value,
+            ChannelRelationEnum.EDITOR.value,
+            ChannelRelationEnum.MANAGER.value,
+        }
+        if desired_relation:
+            relations_to_revoke.discard(desired_relation)
+
+        revokes = [
+            AuthorizeRevokeItem(
+                subject_type='user',
+                subject_id=int(user_id),
+                relation=relation,
+                include_children=False,
+            )
+            for relation in sorted(relations_to_revoke)
+        ]
+        grants = []
+        if desired_relation:
+            grants.append(AuthorizeGrantItem(
+                subject_type='user',
+                subject_id=int(user_id),
+                relation=desired_relation,
+                include_children=False,
+                model_id=desired_relation,
+            ))
+
+        await PermissionService.authorize(
+            object_type='channel',
+            object_id=str(channel_id),
+            grants=grants,
+            revokes=revokes,
+            enforce_fga_success=True,
+        )
+
+        bindings = await _get_bindings()
+        updated_bindings = [
+            binding for binding in bindings
+            if not cls._is_direct_channel_user_binding(binding, channel_id, user_id)
+        ]
+        if desired_relation:
+            key = _binding_key_with_scope(
+                'channel',
+                str(channel_id),
+                'user',
+                int(user_id),
+                desired_relation,
+                None,
+            )
+            updated_bindings.append({
+                'key': key,
+                'resource_type': 'channel',
+                'resource_id': str(channel_id),
+                'subject_type': 'user',
+                'subject_id': int(user_id),
+                'relation': desired_relation,
+                'include_children': None,
+                'model_id': desired_relation,
+            })
+        await _save_bindings(updated_bindings)
 
     async def _remove_channel_direct_source(self, channel_id: str, source) -> None:
         if getattr(source, 'grant_subject_type', None) == 'user' and getattr(source, 'grant_subject_id', None):

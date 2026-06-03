@@ -125,9 +125,9 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC)
         pass
 
     @abstractmethod
-    async def activate_pending_members(self, channel_id: str) -> int:
-        """Activate all pending members of a channel (set status to True).
+    async def activate_pending_members(self, channel_id: str) -> List[SpaceChannelMember]:
+        """Activate all pending members of a channel (set status to ACTIVE).
 
-        Returns the number of members activated.
+        Returns the members that were activated.
         """
         pass

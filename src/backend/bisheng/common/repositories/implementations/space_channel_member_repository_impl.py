@@ -251,12 +251,23 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         await self.session.exec(query)
         await self.session.commit()
 
-    async def activate_pending_members(self, channel_id: str) -> int:
-        """Activate all pending members of a channel (set status to True).
+    async def activate_pending_members(self, channel_id: str) -> List[SpaceChannelMember]:
+        """Activate all pending members of a channel (set status to ACTIVE).
 
-        Returns the number of members activated.
+        Returns the members that were activated so callers can sync their
+        downstream ReBAC grants.
         """
         from sqlalchemy import update
+        pending_query = select(SpaceChannelMember).where(
+            SpaceChannelMember.business_id == channel_id,
+            SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
+            SpaceChannelMember.status == MembershipStatusEnum.PENDING,
+        )
+        pending_result = await self.session.exec(pending_query)
+        pending_members = list(pending_result.all())
+        if not pending_members:
+            return []
+
         query = (
             update(SpaceChannelMember)
             .where(
@@ -266,9 +277,11 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
             )
             .values(status=MembershipStatusEnum.ACTIVE)
         )
-        result = await self.session.exec(query)
+        await self.session.exec(query)
         await self.session.commit()
-        return result.rowcount
+        for member in pending_members:
+            member.status = MembershipStatusEnum.ACTIVE
+        return pending_members
 
     async def get_effective_channel_relation(self, channel_id: str, user_id: int) -> Optional[ChannelRelationEnum]:
         member = await self.find_membership(channel_id, BusinessTypeEnum.CHANNEL, user_id)

@@ -10,8 +10,9 @@ logger = logging.getLogger(__name__)
 class ChannelSubscribeScenarioHandler:
     scenario_code = 'channel_subscribe_request'
 
-    def __init__(self, space_channel_member_repository):
+    def __init__(self, space_channel_member_repository, sync_permissions=None):
         self.space_channel_member_repository = space_channel_member_repository
+        self.sync_permissions = sync_permissions
 
     async def validate(self, req, login_user) -> None:
         return None
@@ -86,6 +87,13 @@ class ChannelSubscribeScenarioHandler:
             return {'status': 'missing_membership'}
         membership.status = MembershipStatusEnum.ACTIVE
         await self.space_channel_member_repository.update(membership)
+        if self.sync_permissions:
+            await self.sync_permissions(
+                str(payload_snapshot['channel_id']),
+                membership.user_id,
+                membership.user_role,
+                is_active=True,
+            )
         return {'status': MembershipStatusEnum.ACTIVE.value}
 
     async def on_rejected(self, instance_id: int, payload_snapshot: dict, reason: str | None) -> None:

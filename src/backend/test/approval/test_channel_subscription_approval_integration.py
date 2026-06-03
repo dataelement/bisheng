@@ -70,7 +70,7 @@ async def test_review_channel_subscription_direct_pass_activates_membership():
         SubscriptionStatusEnum,
     )
     from bisheng.channel.domain.services.channel_service import ChannelService
-    from bisheng.common.models.space_channel_member import MembershipStatusEnum
+    from bisheng.common.models.space_channel_member import MembershipStatusEnum, UserRoleEnum
 
     channel = SimpleNamespace(id='channel-1', name='资讯频道', visibility=ChannelVisibilityEnum.REVIEW)
     membership = SimpleNamespace(id=99, status=MembershipStatusEnum.REJECTED, user_role='member')
@@ -98,7 +98,11 @@ async def test_review_channel_subscription_direct_pass_activates_membership():
     ), patch(
         'bisheng.database.models.department.UserDepartmentDao.aget_user_primary_department',
         new=AsyncMock(return_value=None),
-    ):
+    ), patch.object(
+        ChannelService,
+        'sync_direct_channel_user_permissions',
+        new_callable=AsyncMock,
+    ) as mock_sync_permissions:
         status = await service.subscribe_channel(
             SubscribeChannelRequest(channel_id='channel-1'),
             login_user,
@@ -107,6 +111,12 @@ async def test_review_channel_subscription_direct_pass_activates_membership():
     assert status == SubscriptionStatusEnum.SUBSCRIBED
     assert membership.status == MembershipStatusEnum.ACTIVE
     member_repository.update.assert_awaited()
+    mock_sync_permissions.assert_awaited_once_with(
+        'channel-1',
+        42,
+        UserRoleEnum.MEMBER,
+        is_active=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -114,18 +124,29 @@ async def test_channel_subscribe_scenario_handler_updates_membership_states():
     from bisheng.approval.domain.services.channel_subscribe_scenario_handler import (
         ChannelSubscribeScenarioHandler,
     )
-    from bisheng.common.models.space_channel_member import MembershipStatusEnum
+    from bisheng.common.models.space_channel_member import MembershipStatusEnum, UserRoleEnum
 
-    membership = SimpleNamespace(id=1, status=MembershipStatusEnum.PENDING)
+    membership = SimpleNamespace(id=1, status=MembershipStatusEnum.PENDING, user_id=42, user_role=UserRoleEnum.MEMBER)
     member_repository = SimpleNamespace(
         find_membership=AsyncMock(return_value=membership),
         update=AsyncMock(side_effect=lambda row: row),
     )
-    handler = ChannelSubscribeScenarioHandler(space_channel_member_repository=member_repository)
+    sync_permissions = AsyncMock()
+    handler = ChannelSubscribeScenarioHandler(
+        space_channel_member_repository=member_repository,
+        sync_permissions=sync_permissions,
+    )
 
     payload = {'channel_id': 'channel-1', 'applicant_user_id': 42}
     await handler.on_approved(instance_id=1, payload_snapshot=payload)
     assert membership.status == MembershipStatusEnum.ACTIVE
+    # Approval must mirror the membership into an explicit ReBAC grant.
+    sync_permissions.assert_awaited_once_with(
+        'channel-1',
+        42,
+        UserRoleEnum.MEMBER,
+        is_active=True,
+    )
 
     membership.status = MembershipStatusEnum.PENDING
     await handler.on_rejected(instance_id=1, payload_snapshot=payload, reason='reject')
