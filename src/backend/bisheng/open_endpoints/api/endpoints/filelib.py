@@ -25,6 +25,7 @@ from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     KnowledgeCreate,
     KnowledgeDao,
+    KnowledgeRead,
     KnowledgeTypeEnum,
     KnowledgeUpdate,
 )
@@ -91,7 +92,10 @@ async def create(
         knowledge.auth_type = AuthTypeEnum.PUBLIC
         knowledge.is_released = False
         db_knowledge = await KnowledgeService.acreate_knowledge(request, login_user, knowledge)
-        return resp_200(db_knowledge)
+        # Enrich to the unified KnowledgeRead (user_name + permission_ids), matching
+        # the list/update output. The creator owns the KB → full permission ids.
+        result = (await KnowledgeService.aconvert_knowledge_read(login_user, [db_knowledge]))[0]
+        return resp_200(result)
     if knowledge.type == KnowledgeTypeEnum.SPACE.value:
         space_svc = _build_space_service(request, login_user, version_repo, doc_repo)
         space = await space_svc.create_knowledge_space(
@@ -100,7 +104,16 @@ async def create(
             auth_type=knowledge.auth_type,
             is_released=knowledge.is_released,
         )
-        return resp_200(space)
+        # Spaces use a different permission model than KBs; populate user_name and
+        # the creator's effective space permission ids for a consistent output.
+        result = KnowledgeRead(
+            **space.model_dump(),
+            user_name=login_user.user_name,
+            permission_ids=sorted(
+                await space_svc._get_effective_permission_ids("knowledge_space", space.id)
+            ),
+        )
+        return resp_200(result)
     raise KnowledgeTypeNotSupportedError.http_exception()
 
 

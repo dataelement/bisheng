@@ -294,6 +294,23 @@ export function PermissionListTab({
     const model = grantableModelOptions.find((item) => item.id === modelId);
     const newLevel = (model?.relation || "viewer") as RelationLevel;
     if (newLevel === entry.relation && (entry.model_id || entry.relation) === modelId) return;
+    // When only the relation model changes but the underlying relation stays the
+    // same, this is a binding-only update: the grant rewrites the binding while
+    // the FGA tuple is unchanged. Skip the revoke so we don't delete the very
+    // tuple the grant re-adds (which would drop the member from the list).
+    const relationChanged = newLevel !== entry.relation;
+    const revokes = relationChanged
+      ? [
+          {
+            subject_type: entry.subject_type,
+            subject_id: entry.subject_id,
+            relation: entry.relation,
+            ...(entry.subject_type === "department"
+              ? { include_children: Boolean(entry.include_children) }
+              : {}),
+          },
+        ]
+      : [];
     try {
       await activePermissionApi.authorize(
         resourceType,
@@ -309,16 +326,7 @@ export function PermissionListTab({
               : {}),
           },
         ],
-        [
-          {
-            subject_type: entry.subject_type,
-            subject_id: entry.subject_id,
-            relation: entry.relation,
-            ...(entry.subject_type === "department"
-              ? { include_children: Boolean(entry.include_children) }
-              : {}),
-          },
-        ],
+        revokes,
       );
       showToast({ message: localize("com_permission.success_modify"), status: "success" });
       onChanged?.();
@@ -560,7 +568,12 @@ export function PermissionListTab({
                 const currentModelId = entry.model_id || entry.relation;
                 const isOwner = entry.relation === "owner";
                 const canManageOwnerEntry = isOwner && ownerEntryCount > 1;
-                const canModifyEntry = canManageEntry(entry) && grantableModelOptions.length > 0;
+                // Only users can be owners; departments and user groups cannot be
+                // granted the owner relation, so hide owner models for them.
+                const entryModelOptions = entry.subject_type === "user"
+                  ? grantableModelOptions
+                  : grantableModelOptions.filter((model) => model.relation !== "owner");
+                const canModifyEntry = canManageEntry(entry) && entryModelOptions.length > 0;
                 const canDeleteEntrySubject = canDeleteSubject(entry);
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
@@ -608,7 +621,7 @@ export function PermissionListTab({
                             align="end"
                             className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
                           >
-                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && grantableModelOptions.map((model) => {
+                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && entryModelOptions.map((model) => {
                               const active = model.id === currentModelId;
                               return (
                                 <DropdownMenuItem

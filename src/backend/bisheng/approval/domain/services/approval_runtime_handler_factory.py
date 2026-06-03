@@ -14,7 +14,12 @@ async def build_runtime_handler(scenario_code: str) -> Any:
     if scenario_code == 'menu_access_request':
         return MenuAccessApprovalHandler()
     if scenario_code == 'channel_subscribe_request':
-        return ChannelSubscribeScenarioHandler(_AsyncSpaceChannelMembershipAdapter())
+        from bisheng.channel.domain.services.channel_service import ChannelService
+
+        return ChannelSubscribeScenarioHandler(
+            _AsyncSpaceChannelMembershipAdapter(),
+            sync_permissions=ChannelService.sync_direct_channel_user_permissions,
+        )
     if scenario_code == 'knowledge_space_subscribe_request':
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 

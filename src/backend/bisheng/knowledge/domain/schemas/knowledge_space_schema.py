@@ -45,6 +45,9 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         default=False, description="Knowledge Space pinned by current user or not"
     )
     user_name: str = Field(default="", description="Knowledge Space creator name")
+    permission_ids: Optional[List[str]] = Field(
+        default=None, description="Effective permission ids the current identity holds on this space"
+    )
     avatar: Optional[str] = Field(
         default=None, description="Knowledge Space creator avatar"
     )

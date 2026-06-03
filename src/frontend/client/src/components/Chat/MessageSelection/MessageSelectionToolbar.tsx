@@ -20,6 +20,7 @@ import {
     exportMessagesApi,
     triggerBrowserDownload,
 } from '~/api/messageExport';
+import { translateApiErrorMessage } from '~/api/request';
 import { Button } from '~/components/ui/Button';
 import { Checkbox } from '~/components/ui/Checkbox';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
@@ -99,9 +100,11 @@ export function MessageSelectionToolbar({
                     format,
                 });
                 triggerBrowserDownload(file);
-            } catch (err) {
+            } catch (err: any) {
                 showToast({
-                    message: localize('workstation.messageExport.renderFailed'),
+                    message:
+                        translateApiErrorMessage({ status_code: err?.status_code, status_message: err?.status_message })
+                        || localize('workstation.messageExport.renderFailed'),
                     severity: NotificationSeverity.ERROR,
                 });
                 // The error envelope is already logged by the axios interceptor;

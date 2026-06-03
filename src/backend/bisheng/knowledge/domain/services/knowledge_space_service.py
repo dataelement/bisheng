@@ -148,6 +148,7 @@ _SPACE_MEMBER_RELATION_LEVEL = {
     "manager": 3,
     "owner": 4,
 }
+_SPACE_MEMBER_RELATIONS = {"owner", "manager", "editor", "viewer"}
 
 _logger = logging.getLogger(__name__)
 
@@ -1450,7 +1451,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_permission_id("knowledge_space", space_id, "delete_space")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
-        original_member_ids = [member.user_id for member in original_members]
+        original_member_ids = {member.user_id for member in original_members}
+        original_member_ids.update(await self._authorized_space_user_ids(space_id))
 
         # Cleaned vectorData in
         await asyncio.to_thread(KnowledgeService.delete_knowledge_file_in_vector, space)
@@ -1461,7 +1463,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id)
         await self._send_space_event_notification(
             action_code=SPACE_DELETED_MESSAGE,
-            receiver_user_ids=original_member_ids,
+            receiver_user_ids=sorted(original_member_ids),
             space_id=space_id,
             space_name=space.name,
             navigable=False,
@@ -1574,9 +1576,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # When switching to PRIVATE, remove all non-creator members
         if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
             removed_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
-            removed_user_ids = [
+            removed_user_ids = {
                 member.user_id for member in removed_members if member.user_role != UserRoleEnum.CREATOR
-            ]
+            }
+            removed_user_ids.update(await self._authorized_space_user_ids(space_id))
             child_resources = await self._list_space_child_resources(space_id)
             await self.__class__.clear_space_authorization_for_private(
                 space=space,
@@ -1589,7 +1592,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     final_removed_user_ids.append(user_id)
             await self._send_space_event_notification(
                 action_code=SPACE_MADE_PRIVATE_MESSAGE,
-                receiver_user_ids=final_removed_user_ids,
+                receiver_user_ids=sorted(final_removed_user_ids),
                 space_id=space_id,
                 space_name=space.name,
                 navigable=False,
@@ -1756,6 +1759,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_items = items[start:start + page_size + 1]
         has_more = len(page_items) > page_size
         page_items = page_items[:page_size]
+
+        # F030: enrich the page with creator user_name + the acting identity's
+        # effective permission ids (the v1 list paths leave these unset). Only the
+        # page is enriched, so the cost is bounded by page_size.
+        if page_items:
+            user_ids = {sp.user_id for sp in page_items if sp.user_id is not None}
+            users = await UserDao.aget_user_by_ids(list(user_ids)) or []
+            user_name_map = {u.user_id: u.user_name for u in users}
+            perm_id_lists = await asyncio.gather(
+                *[self._get_effective_permission_ids("knowledge_space", sp.id) for sp in page_items]
+            )
+            for sp, perm_ids in zip(page_items, perm_id_lists):
+                sp.user_name = user_name_map.get(sp.user_id, str(sp.user_id))
+                sp.permission_ids = sorted(perm_ids)
+
         next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
         return PageInfiniteCursorData(
             data=page_items,
@@ -2286,6 +2304,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
             object_type="knowledge_space",
             object_id=str(space_id),
         )
+
+    @staticmethod
+    async def _authorized_space_user_ids(space_id: int) -> set[int]:
+        permissions = await PermissionService.get_resource_permissions("knowledge_space", str(space_id))
+        user_ids: set[int] = set()
+        for permission in permissions:
+            if getattr(permission, "relation", None) not in _SPACE_MEMBER_RELATIONS:
+                continue
+            try:
+                subject_id = int(getattr(permission, "subject_id", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            include_children = getattr(permission, "include_children", None)
+            user_ids.update(
+                await PermissionService._affected_user_ids_for_subject(
+                    getattr(permission, "subject_type", ""),
+                    subject_id,
+                    True if include_children is None else bool(include_children),
+                )
+            )
+        return user_ids
 
     async def _enrich_with_version_info(self, items: list[KnowledgeFile]) -> list[KnowledgeFile]:
         """Attach version_no / is_multi_version / has_similar to file items in-place.

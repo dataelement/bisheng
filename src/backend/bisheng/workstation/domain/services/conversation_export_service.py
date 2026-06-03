@@ -201,7 +201,56 @@ class ConversationExportService:
             raise ConversationMessageNotFoundError(
                 msg=f'消息不存在或已删除: {missing}',
             )
+        messages = await cls._backfill_paired_questions(messages, chat_id)
         return messages, session
+
+    @classmethod
+    async def _backfill_paired_questions(
+        cls, messages: list[ChatMessage], chat_id: str,
+    ) -> list[ChatMessage]:
+        """Ensure every selected answer has its paired question in the set.
+
+        Live (un-reloaded) workflow / assistant exports send only the answer
+        ids: the question's frontend id is a temporary ``u-<uuid>`` that the
+        client drops when coercing message ids to int. Without a question in
+        the set, ``_build_turns`` (which iterates queries) produces zero turns
+        and the export comes out empty. Pull each orphan answer's nearest
+        preceding ``question`` row from the same chat so the turn renders. The
+        chat is already ownership-validated by the caller, and the questions
+        live in the same chat, so no extra IDOR fence is needed. After a
+        history reload the question id is sent normally → this is a no-op.
+        """
+        present_ids = {m.id for m in messages if m.id is not None}
+        present_q_ids = {m.id for m in messages if cls._is_query(m)}
+        answer_ids = sorted(
+            m.id for m in messages if m.id is not None and not cls._is_query(m)
+        )
+        if not answer_ids:
+            return messages
+
+        # Chronological questions of this chat (most-recent window; covers any
+        # realistic conversation given the 200-message export cap).
+        questions = await ChatMessageDao.aget_messages_by_chat_id(
+            chat_id, category_list=['question'], limit=500,
+        )
+        q_sorted = sorted((q for q in questions if q.id is not None), key=lambda q: q.id)
+        if not q_sorted:
+            return messages
+
+        to_add: dict[int, ChatMessage] = {}
+        for aid in answer_ids:
+            best = None
+            for q in q_sorted:
+                if q.id < aid:
+                    best = q
+                else:
+                    break
+            if best is not None and best.id not in present_q_ids and best.id not in present_ids:
+                to_add[best.id] = best
+
+        if to_add:
+            messages = messages + list(to_add.values())
+        return messages
 
     # ----------------------------------------------------------------------
     # Build conversation turns (Markdown intermediate representation source)
@@ -350,71 +399,87 @@ class ConversationExportService:
 
     @staticmethod
     def _extract_answer_text(m: ChatMessage) -> str:
-        """Pull the user-facing answer text out of a ChatMessage.
+        """Pull the user-facing answer text out of a bot ChatMessage.
 
-        Three category formats exist (T003 探查):
-        - 'answer'      : message is plain markdown text
-        - 'agent_answer': message is JSON dict {msg, events: [...]}
-        - others ('agent_tool_call', 'agent_thinking', ...): drop entirely
+        Multiple answer formats coexist across chat surfaces (T003 + workflow /
+        assistant / QA probing on real data):
+
+        - ``answer``            : plain markdown string (workflow / legacy), OR
+                                  ``{"content": "...", "reasoning_content": ...}`` (knowledge / QA)
+        - ``agent_answer``      : ``{"msg": "...", "events": [...]}`` (workstation agent)
+        - ``stream_msg`` /
+          ``output_msg``        : workflow node output
+                                  ``{"unique_id", "node_id", "name", "msg": "...", "events"?}``
+        - ``reasoning_answer`` / ``agent_thinking`` / ``agent_tool_call`` /
+          ``input``             : reasoning / tooling / node config — NOT a
+                                  user-facing answer, drop entirely.
+
+        Older code only understood ``answer`` (returned raw) and ``agent_answer``;
+        workflow/assistant answers land in ``stream_msg``/``output_msg`` and were
+        silently exported as empty.
         """
         cat = (m.category or '').lower()
         raw = m.message or ''
+        if not raw:
+            return ''
 
-        if cat == 'answer':
+        # Categories that never carry user-facing answer text.
+        if cat in {'agent_thinking', 'agent_tool_call', 'reasoning_answer', 'input'}:
+            return ''
+
+        # Plain-string answers (workflow / legacy ``answer``) aren't JSON.
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return raw
+        if not isinstance(data, dict):
             return raw
 
-        if cat == 'agent_answer':
-            try:
-                data = json.loads(raw)
-            except (ValueError, TypeError):
-                # Stored as raw text in older rows — best-effort: return raw.
-                return raw
-            if not isinstance(data, dict):
-                return raw
+        # Knowledge / QA answers keep the body in ``content``.
+        content = data.get('content')
+        if isinstance(content, str) and content.strip():
+            return content
 
-            msg = data.get('msg') or ''
-            events = data.get('events') or []
-
-            # The v2.5 agent-native format may keep the final answer text only
-            # in ``events`` (last item with type ``text``) and leave ``msg``
-            # empty. Fall through to events to recover that case, and also
-            # capture text from workflow OUTPUT nodes whose ``output_type``
-            # is ``text``.
-            text_chunks: list[str] = []
-            placeholders: list[str] = []
-            for e in events:
-                if not isinstance(e, dict):
-                    continue
-                etype = (e.get('type') or '').lower()
-                # Drop reasoning / tool interactions.
-                if etype in {'thinking', 'tool_call', 'tool_result'}:
-                    continue
-                if etype == 'text':
-                    content = e.get('content') or ''
-                    if content:
+        # agent_answer / workflow stream_msg|output_msg: body in ``msg`` with an
+        # optional ``events`` array (v2.5 agent-native + workflow OUTPUT nodes).
+        # ``msg`` may be empty when the text lives only in ``events`` (last item
+        # with type ``text``); fall through to recover that case and capture
+        # workflow OUTPUT nodes whose ``output_type`` is ``text``.
+        msg = data.get('msg') or ''
+        events = data.get('events') or []
+        text_chunks: list[str] = []
+        placeholders: list[str] = []
+        for e in events:
+            if not isinstance(e, dict):
+                continue
+            etype = (e.get('type') or '').lower()
+            # Drop reasoning / tool interactions.
+            if etype in {'thinking', 'tool_call', 'tool_result'}:
+                continue
+            if etype == 'text':
+                content = e.get('content') or ''
+                if content:
+                    text_chunks.append(content)
+                continue
+            if etype == 'output':
+                output_kind = (e.get('output_type') or e.get('kind') or '').lower()
+                if output_kind == 'text':
+                    content = (
+                        e.get('content')
+                        or (e.get('data') or {}).get('content')
+                        or (e.get('data') or {}).get('text')
+                        or ''
+                    )
+                    if isinstance(content, str) and content:
                         text_chunks.append(content)
-                    continue
-                if etype == 'output':
-                    output_kind = (e.get('output_type') or e.get('kind') or '').lower()
-                    if output_kind == 'text':
-                        content = (
-                            e.get('content')
-                            or (e.get('data') or {}).get('content')
-                            or (e.get('data') or {}).get('text')
-                            or ''
-                        )
-                        if isinstance(content, str) and content:
-                            text_chunks.append(content)
-                    elif output_kind:
-                        placeholders.append(f'[交互组件：{output_kind}]')
+                elif output_kind:
+                    placeholders.append(f'[交互组件：{output_kind}]')
 
-            body = msg if msg.strip() else '\n\n'.join(text_chunks)
-            if placeholders:
-                body = (body or '').rstrip() + '\n\n' + '\n\n'.join(placeholders)
-            return body
-
-        # agent_tool_call / agent_thinking / unknown -> drop
-        return ''
+        body = msg if msg.strip() else '\n\n'.join(text_chunks)
+        if placeholders:
+            body = (body or '').rstrip() + '\n\n' + '\n\n'.join(placeholders)
+        # JSON envelope with no recognizable text field → drop (don't dump JSON).
+        return body
 
     @staticmethod
     def _strip_citations(text: str) -> str:
@@ -542,10 +607,11 @@ class ConversationExportService:
                     extra_args=['--reference-doc=' + template],
                 )
             except (RuntimeError, OSError) as e:
+                # Full pandoc detail goes to the log only — the user-facing
+                # message stays the clean default ("文件生成失败，请稍后重试"),
+                # never the raw pandoc/exception text.
                 logger.exception('pypandoc convert_text(docx) failed')
-                raise ConversationExportRenderFailedError(
-                    msg=f'pandoc 转换失败: {e}',
-                )
+                raise ConversationExportRenderFailedError() from e
             return Path(out_path).read_bytes()
 
     # ----------------------------------------------------------------------
@@ -650,8 +716,9 @@ class ConversationExportService:
                 finally:
                     await browser.close()
         except Exception as e:
+            # Detail to logs only; user sees the clean default message.
             logger.exception('Chromium PDF rendering failed')
-            raise ConversationExportRenderFailedError(msg=f'PDF 渲染失败: {e}')
+            raise ConversationExportRenderFailedError() from e
 
     @classmethod
     def _render_txt(cls, markdown: str) -> bytes:

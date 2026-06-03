@@ -14,6 +14,7 @@ import {
     exportMessagesApi,
     triggerBrowserDownload,
 } from '~/api/messageExport';
+import { translateApiErrorMessage } from '~/api/request';
 import {
     Sheet,
     SheetContent,
@@ -92,9 +93,11 @@ export function ExportFormatSheet({
                 });
                 triggerBrowserDownload(file);
                 onOpenChange(false);
-            } catch {
+            } catch (e: any) {
                 showToast({
-                    message: localize('workstation.messageExport.renderFailed'),
+                    message:
+                        translateApiErrorMessage({ status_code: e?.status_code, status_message: e?.status_message })
+                        || localize('workstation.messageExport.renderFailed'),
                     severity: NotificationSeverity.ERROR,
                 });
             } finally {

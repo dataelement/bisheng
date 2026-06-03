@@ -29,7 +29,6 @@ from bisheng.common.repositories.interfaces.space_channel_member_repository impo
     SpaceChannelMemberRepository,
 )
 from bisheng.permission.domain.channel_permission_template import (
-    can_channel_actor_grant_relation,
     default_permission_ids_for_relation,
     relation_from_channel_permission_ids,
     validate_channel_grant_subject,
@@ -40,12 +39,34 @@ from bisheng.permission.domain.schemas.permission_schema import (
 )
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.resource_permission_notification_service import (
+    ResourcePermissionNotificationService,
+)
 
 logger = logging.getLogger(__name__)
 
 _RELATION_MODELS_KEY = 'permission_relation_models_v1'
 _RELATION_MODEL_BINDINGS_KEY = 'permission_relation_model_bindings_v1'
 _GRANT_TIER_VALUES = frozenset({'owner', 'manager', 'usage'})
+
+# A relation model can only be granted when the caller holds the matching
+# fine-grained management permission. This intentionally keeps the three
+# `manage_channel_*` checkboxes independent: holding `manage_channel_manager`
+# must NOT imply the ability to grant the owner tier.
+_GRANT_TIER_TO_MANAGE_PERMISSION = {
+    'owner': 'manage_channel_owner',
+    'manager': 'manage_channel_manager',
+    'usage': 'manage_channel_user',
+}
+_CHANNEL_MANAGE_PERMISSION_IDS = frozenset(_GRANT_TIER_TO_MANAGE_PERMISSION.values())
+
+
+def _grant_tier_for_relation(relation: str) -> str:
+    if relation == 'owner':
+        return 'owner'
+    if relation == 'manager':
+        return 'manager'
+    return 'usage'
 
 
 class ChannelAuthorizationService:
@@ -68,12 +89,21 @@ class ChannelAuthorizationService:
         login_user: UserPayload,
     ) -> ChannelAuthorizeResponse:
         channel = await self._ensure_channel(channel_id)
-        actor_relation = await self._actor_relation(channel_id, login_user)
-        self._validate_request(actor_relation, request)
+        self._reject_creator_permission_change(channel, request)
+        actor_permissions = await self._actor_grant_permissions(channel_id, login_user)
+        self._validate_request(actor_permissions, request)
         await self._validate_subjects_belong_to_channel_tenant(channel, request, login_user)
 
         tuple_grants = [self._to_permission_grant(item) for item in request.grants]
         tuple_revokes = [self._to_permission_revoke(item) for item in request.revokes]
+        notify_context = None
+        if tuple_grants or tuple_revokes:
+            notify_context = await ResourcePermissionNotificationService.build_context(
+                resource_type='channel',
+                resource_id=channel_id,
+                grants=tuple_grants,
+                revokes=tuple_revokes,
+            )
 
         if tuple_grants or tuple_revokes:
             await PermissionService.authorize(
@@ -94,6 +124,12 @@ class ChannelAuthorizationService:
                 await self._restore_bindings(channel_id, original_bindings)
             await self._compensate_permission_write(channel_id, tuple_grants, tuple_revokes)
             raise ChannelAuthorizationSyncError(exception=exc) from exc
+
+        await ResourcePermissionNotificationService.dispatch_after_authorize(
+            context=notify_context,
+            operator_user_id=login_user.user_id,
+            operator_user_name=getattr(login_user, 'user_name', None),
+        )
 
         return ChannelAuthorizeResponse(
             synced_user_count=0,
@@ -142,12 +178,13 @@ class ChannelAuthorizationService:
         await self._ensure_channel(channel_id)
         if login_user.is_admin():
             return [ChannelRelationModelItem(**m) for m in await self._get_relation_models()]
-        actor_relation = await self._actor_relation(channel_id, login_user)
-        if actor_relation is None:
+        actor_permissions = await self._actor_grant_permissions(channel_id, login_user)
+        if not actor_permissions:
             return []
         models = []
         for model in await self._get_relation_models():
-            if can_channel_actor_grant_relation(actor_relation.value, model.get('relation') or ''):
+            required = _GRANT_TIER_TO_MANAGE_PERMISSION.get(self._model_grant_tier(model))
+            if required and required in actor_permissions:
                 models.append(ChannelRelationModelItem(**model))
         return models
 
@@ -363,18 +400,76 @@ class ChannelAuthorizationService:
             raise ChannelPermissionDeniedError()
         return actor_relation
 
+    async def _actor_grant_permissions(
+        self,
+        channel_id: str,
+        login_user: UserPayload,
+    ) -> set[str]:
+        """Return the subset of channel `manage_channel_*` permissions the caller holds.
+
+        Grant gating is driven by these fine-grained permissions rather than a
+        collapsed relation tier, so e.g. a role that can manage managers but not
+        owners cannot grant the owner relation.
+        """
+        if login_user.is_admin():
+            return set(_CHANNEL_MANAGE_PERMISSION_IDS)
+        permission_ids: set[str] = set()
+        try:
+            resolved = await FineGrainedPermissionService.get_effective_permission_ids_async(
+                login_user,
+                'channel',
+                channel_id,
+            )
+            permission_ids = set(resolved or [])
+        except Exception:
+            logger.exception('failed to resolve channel permission ids: channel_id=%s', channel_id)
+        if not permission_ids:
+            # Legacy members without a relation-model binding: derive the manage
+            # permissions from their effective membership relation.
+            relation = await self.space_channel_member_repository.get_effective_channel_relation(
+                channel_id,
+                login_user.user_id,
+            )
+            if relation is not None:
+                permission_ids = set(default_permission_ids_for_relation(relation.value))
+        return permission_ids & _CHANNEL_MANAGE_PERMISSION_IDS
+
+    @staticmethod
+    def _model_grant_tier(model: dict) -> str:
+        tier = model.get('grant_tier')
+        if tier in _GRANT_TIER_VALUES:
+            return tier
+        return _grant_tier_for_relation(model.get('relation') or '')
+
+    @staticmethod
+    def _reject_creator_permission_change(channel, request: ChannelAuthorizeRequest) -> None:
+        """The channel creator is a permanent owner.
+
+        Their permission level can never be modified through authorization — not
+        even by an actor holding ``manage_channel_owner``. Any grant or revoke
+        that targets the creator user is rejected.
+        """
+        creator_id = getattr(channel, 'user_id', None)
+        if creator_id is None:
+            return
+        creator_id = int(creator_id)
+        for item in [*(request.grants or []), *(request.revokes or [])]:
+            if item.subject_type == 'user' and int(item.subject_id) == creator_id:
+                raise ChannelPermissionDeniedError(msg='无法修改频道创建人的权限')
+
     def _validate_request(
         self,
-        actor_relation: Optional[ChannelRelationEnum],
+        actor_permissions: set[str],
         request: ChannelAuthorizeRequest,
     ) -> None:
-        if actor_relation is None:
+        if not actor_permissions:
             raise ChannelPermissionDeniedError()
         for item in [*(request.grants or []), *(request.revokes or [])]:
             relation = ChannelRelationEnum(item.relation).value
             if not validate_channel_grant_subject(item.subject_type, relation):
                 raise ChannelPermissionDeniedError(msg='部门或用户组无法成为所有者')
-            if not can_channel_actor_grant_relation(actor_relation.value, relation):
+            required = _GRANT_TIER_TO_MANAGE_PERMISSION.get(_grant_tier_for_relation(relation))
+            if not required or required not in actor_permissions:
                 raise ChannelPermissionDeniedError()
 
     @staticmethod
@@ -529,6 +624,30 @@ class ChannelAuthorizationService:
             if binding:
                 return binding
         return None
+
+    @classmethod
+    async def clear_non_owner_bindings(cls, channel_id: str) -> int:
+        """Remove every relation-model binding for a channel except owner bindings.
+
+        Called when a channel switches to PRIVATE: all non-owner relations are
+        revoked, so their bindings must be dropped too — otherwise a later
+        re-grant could resurrect a stale model. Returns the number removed.
+        """
+        bindings = await cls._get_bindings()
+        remaining: list[dict] = []
+        removed = 0
+        for binding in bindings:
+            is_channel_binding = (
+                binding.get('resource_type') == 'channel'
+                and str(binding.get('resource_id')) == str(channel_id)
+            )
+            if is_channel_binding and binding.get('relation') != ChannelRelationEnum.OWNER.value:
+                removed += 1
+                continue
+            remaining.append(binding)
+        if removed:
+            await cls._save_bindings(remaining)
+        return removed
 
     @staticmethod
     async def _get_bindings() -> list[dict]:
