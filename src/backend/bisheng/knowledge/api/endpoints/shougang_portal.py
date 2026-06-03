@@ -6,6 +6,8 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    ShougangPortalDomainFileCountReq,
+    ShougangPortalDomainFileCountResp,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
     ShougangPortalFileSearchReq,
@@ -113,6 +115,15 @@ async def search_shougang_portal_tags(
 ) -> Any:
     tags = await svc.search_shougang_portal_tags(req.space_ids, req.space_level)
     return resp_200(ShougangPortalTagSearchResp(tags=tags).model_dump(mode='json'))
+
+
+@router.post('/domain-file-counts')
+async def count_shougang_portal_domain_files(
+        req: ShougangPortalDomainFileCountReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    counts = await svc.count_shougang_portal_domain_files(req.codes)
+    return resp_200(ShougangPortalDomainFileCountResp(counts=counts).model_dump(mode='json'))
 
 
 @router.post('/home')

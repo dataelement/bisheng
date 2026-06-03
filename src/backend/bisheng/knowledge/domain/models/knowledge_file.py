@@ -231,6 +231,40 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return {row[0]: row[1] for row in rows}
 
     @classmethod
+    async def async_count_files_by_domain_codes(cls, codes: List[str]) -> dict:
+        """Async: count SUCCESS document files per business-domain code across ALL knowledge bases.
+
+        Business-domain code = the 3rd '-'-separated segment of file_encoding
+        (e.g. 'GF-STD-SC-2026...' -> 'SC'). Counts only file_type==FILE and
+        status==SUCCESS files. Returns {code: count} for every requested code
+        (codes with no match -> 0). Login/space filters are intentionally ignored.
+        """
+        normalized = sorted({c.strip().upper() for c in codes if c and c.strip()})
+        if not normalized:
+            return {}
+        like_conditions = [col(KnowledgeFile.file_encoding).like(f'%-{code}-%') for code in normalized]
+        statement = (
+            select(KnowledgeFile.file_encoding)
+            .where(
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+                col(KnowledgeFile.file_encoding).is_not(None),
+                or_(*like_conditions),
+            )
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        counts = {code: 0 for code in normalized}
+        code_set = set(normalized)
+        for encoding in rows:
+            parts = (encoding or '').split('-')
+            if len(parts) >= 3:
+                domain = parts[2].strip().upper()
+                if domain in code_set:
+                    counts[domain] += 1
+        return counts
+
+    @classmethod
     def delete_batch(cls, file_ids: List[int]) -> bool:
         with get_sync_db_session() as session:
             session.exec(delete(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))

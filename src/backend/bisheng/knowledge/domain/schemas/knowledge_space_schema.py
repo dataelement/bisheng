@@ -276,6 +276,14 @@ class ShougangPortalTagSearchResp(BaseModel):
     tags: List[str] = Field(default_factory=list)
 
 
+class ShougangPortalDomainFileCountReq(BaseModel):
+    codes: List[str] = Field(default_factory=list, max_length=200, description="Business-domain codes, e.g. ['PP','QM']")
+
+
+class ShougangPortalDomainFileCountResp(BaseModel):
+    counts: Dict[str, int] = Field(default_factory=dict)
+
+
 class ShougangPortalFileSearchReq(BaseModel):
     q: Optional[str] = Field(default=None, description="Search keyword")
     tag: Optional[str] = Field(default=None, description="Space tag name")

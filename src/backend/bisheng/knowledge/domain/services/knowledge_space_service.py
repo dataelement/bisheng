@@ -2627,6 +2627,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
         return sorted(tag_names)
 
+    async def count_shougang_portal_domain_files(self, codes: List[str]) -> Dict[str, int]:
+        return await KnowledgeFileDao.async_count_files_by_domain_codes(codes)
+
     async def get_shougang_portal_home(self, req: ShougangPortalHomeReq) -> Dict:
         spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
         section_tags = list(dict.fromkeys(section.tag for section in req.sections if section.tag))

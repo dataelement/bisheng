@@ -125,6 +125,10 @@ class _FakeKnowledgeSpaceService:
             "page_size": req.page_size,
         }
 
+    async def count_shougang_portal_domain_files(self, codes):
+        self.requested_codes = codes
+        return {"PP": 5, "QM": 2}
+
     async def get_shougang_portal_home(self, req):
         return {
             "sections": {
@@ -341,6 +345,27 @@ async def test_shougang_portal_file_search_accepts_space_level_filter(monkeypatc
     assert fake_service.search_request.space_ids == [12, 18]
     assert response.data["total"] == 1
     assert response.data["data"][0]["space_id"] == 12
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_domain_file_counts_delegates_to_service(monkeypatch: pytest.MonkeyPatch):
+    endpoint_module_name = 'bisheng.knowledge.api.endpoints.shougang_portal'
+    previous_endpoint_module = sys.modules.get(endpoint_module_name)
+    sys.modules.pop(endpoint_module_name, None)
+    try:
+        endpoint = _load_shougang_portal_endpoint(monkeypatch)
+        fake_service = _FakeKnowledgeSpaceService()
+        req = endpoint.ShougangPortalDomainFileCountReq(codes=["PP", "QM"])
+        response = await endpoint.count_shougang_portal_domain_files(req, svc=fake_service)
+    finally:
+        if previous_endpoint_module is None:
+            sys.modules.pop(endpoint_module_name, None)
+        else:
+            sys.modules[endpoint_module_name] = previous_endpoint_module
+
+    assert response.status_code == 200
+    assert fake_service.requested_codes == ["PP", "QM"]
+    assert response.data["counts"] == {"PP": 5, "QM": 2}
 
 
 @pytest.mark.asyncio
