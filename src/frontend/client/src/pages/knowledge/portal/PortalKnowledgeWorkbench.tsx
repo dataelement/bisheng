@@ -1191,7 +1191,6 @@ export default function PortalKnowledgeWorkbench() {
                 department_id: form.departmentId,
                 auto_tag_enabled: form.autoTagEnabled,
                 auto_tag_library_id: form.autoTagLibraryId,
-                business_domain_codes: form.businessDomainCodes,
                 reason: form.reason,
             });
 

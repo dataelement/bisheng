@@ -126,11 +126,6 @@ class SpaceTenantMismatchError(BaseErrorCode):
     Msg: str = '当前租户与知识空间归属租户不一致，暂不支持该操作，请切换到知识空间所属租户后重试'
 
 
-class SpaceBusinessDomainRequiredError(BaseErrorCode):
-    Code: int = 18049
-    Msg: str = '创建团队知识空间时必须至少选择一个业务域类型'
-
-
 # —— TAG
 class SpaceTagExistsError(BaseErrorCode):
     Code: int = 18050
@@ -167,8 +162,3 @@ class VersionLinkSourceFileMissingError(BaseErrorCode):
 class KnowledgeSpaceInvalidCursorError(BaseErrorCode):
     Code: int = 18070
     Msg: str = 'Invalid pagination cursor'
-
-
-class SpaceBusinessDomainInvalidError(BaseErrorCode):
-    Code: int = 18071
-    Msg: str = '业务域类型不存在'

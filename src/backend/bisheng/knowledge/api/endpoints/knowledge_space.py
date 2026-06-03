@@ -64,7 +64,6 @@ async def create_space(
         space_level=req.space_level,
         department_id=req.department_id,
         user_group_id=req.user_group_id,
-        business_domain_codes=req.business_domain_codes,
         auto_tag_enabled=req.auto_tag_enabled,
         auto_tag_library_id=req.auto_tag_library_id,
         auto_tag_custom_tags=req.auto_tag_custom_tags,
@@ -697,7 +696,7 @@ async def subscribe_space(
 
 
 @router.post("/{space_id}/unsubscribe", response_model=None)
-async def subscribe_space(
+async def unsubscribe_space(
     space_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
@@ -772,7 +771,7 @@ async def create_chat_folder_session(
 
 
 @router.delete("/{space_id}/chat/folder/session")
-async def create_chat_folder_session(
+async def delete_chat_folder_session(
     space_id: int,
     folder_id: int = Body(default=0, description="folder id"),
     chat_id: str = Body(..., description="Chat ID"),
@@ -795,7 +794,7 @@ async def get_chat_folder_history(
 
 
 @router.delete("/{space_id}/chat/folder/history")
-async def get_chat_folder_history(
+async def delete_chat_folder_history(
     space_id: int,
     folder_id: int = Query(default=0, description="folder id"),
     chat_id: str = Query(..., description="Chat ID"),

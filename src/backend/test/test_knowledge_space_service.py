@@ -469,7 +469,6 @@ async def test_team_space_create_accepts_no_user_group_for_any_user():
         level, owner_type, owner_id = await svc.validate_knowledge_space_create(
             name='团队空间',
             space_level=KnowledgeSpaceLevelEnum.TEAM,
-            business_domain_codes=['PP'],
         )
 
     assert level == KnowledgeSpaceLevelEnum.TEAM
@@ -505,7 +504,7 @@ async def test_team_space_create_rejects_legacy_user_group_id():
 
 
 @pytest.mark.asyncio
-async def test_validate_team_space_create_requires_business_domain_codes():
+async def test_validate_team_space_create_does_not_require_business_domain_codes():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7)
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
@@ -521,13 +520,14 @@ async def test_validate_team_space_create_requires_business_domain_codes():
         new_callable=AsyncMock,
         return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
     ):
-        with pytest.raises(Exception) as exc_info:
-            await svc.validate_knowledge_space_create(
-                name='团队空间',
-                space_level=KnowledgeSpaceLevelEnum.TEAM,
-            )
+        level, owner_type, owner_id = await svc.validate_knowledge_space_create(
+            name='团队空间',
+            space_level=KnowledgeSpaceLevelEnum.TEAM,
+        )
 
-    assert exc_info.value.__class__.__name__ == 'SpaceBusinessDomainRequiredError'
+    assert level == KnowledgeSpaceLevelEnum.TEAM
+    assert owner_type == KnowledgeSpaceOwnerTypeEnum.USER
+    assert owner_id == 7
 
 
 @pytest.mark.asyncio
@@ -629,14 +629,10 @@ async def test_create_team_space_writes_user_scope_without_default_group_grant()
     ), patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
         new_callable=AsyncMock,
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceBusinessDomainDao.areplace_for_space',
-        new_callable=AsyncMock,
-    ) as mock_replace_business_domains:
+    ):
         result = await svc.create_knowledge_space(
             name='团队空间',
             space_level=KnowledgeSpaceLevelEnum.TEAM,
-            business_domain_codes=['PP'],
         )
 
     assert result.id == 11
@@ -646,12 +642,6 @@ async def test_create_team_space_writes_user_scope_without_default_group_grant()
     assert mock_create_scope.await_args.kwargs['owner_type'] == KnowledgeSpaceOwnerTypeEnum.USER
     assert mock_create_scope.await_args.kwargs['owner_id'] == 7
     mock_authorize.assert_not_awaited()
-    mock_replace_business_domains.assert_awaited_once_with(
-        tenant_id=login_user.tenant_id,
-        space_id=11,
-        domain_codes=['PP'],
-        created_by=login_user.user_id,
-    )
 
 
 @pytest.mark.asyncio
@@ -3226,7 +3216,6 @@ class TestCreateSpace:
                 await service.create_knowledge_space(
                     name='重复空间',
                     space_level=KnowledgeSpaceLevelEnum.TEAM,
-                    business_domain_codes=['PP'],
                 )
 
         assert exc_info.value.__class__.__name__ == 'SpaceNameDuplicateError'
@@ -3290,14 +3279,10 @@ class TestCreateSpace:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
             new_callable=AsyncMock,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceBusinessDomainDao.areplace_for_space',
-            new_callable=AsyncMock,
         ):
             result = await service.create_knowledge_space(
                 name='重复空间',
                 space_level=KnowledgeSpaceLevelEnum.TEAM,
-                business_domain_codes=['PP'],
             )
 
         assert result.id == 23
@@ -3306,14 +3291,11 @@ class TestCreateSpace:
         mock_get_global.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_create_team_space_persists_business_domain_codes(self, service):
+    async def test_create_team_space_does_not_require_business_domain_codes(self, service):
         created_space = _make_space(
             space_id=23,
             user_id=service.login_user.user_id,
             space_level=KnowledgeSpaceLevelEnum.TEAM,
-        )
-        mock_business_domain_dao = SimpleNamespace(
-            areplace_for_space=AsyncMock(return_value=None)
         )
 
         with patch(
@@ -3354,24 +3336,13 @@ class TestCreateSpace:
         ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
             new_callable=AsyncMock,
-        ), patch(
-            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceBusinessDomainDao',
-            new=mock_business_domain_dao,
-            create=True,
         ):
             result = await service.create_knowledge_space(
                 name='团队空间',
                 space_level=KnowledgeSpaceLevelEnum.TEAM,
-                business_domain_codes=['PP', 'QM'],
             )
 
         assert result.id == 23
-        mock_business_domain_dao.areplace_for_space.assert_awaited_once_with(
-            tenant_id=service.login_user.tenant_id,
-            space_id=23,
-            domain_codes=['PP', 'QM'],
-            created_by=service.login_user.user_id,
-        )
 
     @pytest.mark.asyncio
     async def test_create_limit_count_excludes_department_spaces(self, service):

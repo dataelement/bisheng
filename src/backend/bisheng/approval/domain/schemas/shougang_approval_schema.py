@@ -5,9 +5,6 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
-from bisheng.knowledge.domain.models.knowledge_space_business_domain import (
-    KnowledgeSpaceBusinessDomainCodeEnum,
-)
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.schemas.knowledge_version_schema import (
     ShougangFilePublishDocumentEntry,
@@ -24,9 +21,6 @@ class ShougangKnowledgeSpaceCreateBase(BaseModel):
     space_level: KnowledgeSpaceLevelEnum = KnowledgeSpaceLevelEnum.PERSONAL
     department_id: Optional[int] = None
     user_group_id: Optional[int] = None
-    business_domain_codes: list[KnowledgeSpaceBusinessDomainCodeEnum] = Field(
-        default_factory=list
-    )
     auto_tag_enabled: bool = False
     auto_tag_library_id: Optional[int] = None
     auto_tag_custom_tags: Optional[list[str]] = None

@@ -28,9 +28,8 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             autoTagEnabled: true,
             autoTagLibraryId: 9,
             autoTagCustomTags: ["技术"],
-            businessDomainCodes: ["PP", "QM"],
             reason: "申请创建团队知识库",
-        });
+        } as any);
 
         const payload = jest.mocked(submitShougangKnowledgeSpaceCreateApprovalApi).mock.calls[0][0];
         expect(payload).toEqual({
@@ -43,9 +42,9 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             auto_tag_enabled: true,
             auto_tag_library_id: 9,
             auto_tag_custom_tags: ["技术"],
-            business_domain_codes: ["PP", "QM"],
             reason: "申请创建团队知识库",
         });
         expect(payload).not.toHaveProperty("user_group_id");
+        expect(payload).not.toHaveProperty("business_domain_codes");
     });
 });

@@ -196,7 +196,6 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
                             joinPolicy: "review",
                             publishToSquare: "no",
                             spaceLevel: initialSpaceLevel,
-                            businessDomainCodes: initialSpaceLevel === "team" ? ["PP"] : [],
                             autoTagEnabled: false,
                             autoTagLibraryId: null,
                         });
@@ -658,12 +657,12 @@ describe("PortalKnowledgeWorkbench", () => {
             is_released: false,
             space_level: SpaceLevel.TEAM,
             department_id: undefined,
-            business_domain_codes: ["PP"],
             auto_tag_enabled: false,
             auto_tag_library_id: null,
             reason: "申请创建团队知识库",
         });
         expect(payload).not.toHaveProperty("user_group_id");
+        expect(payload).not.toHaveProperty("business_domain_codes");
         expect(createSpaceApi).not.toHaveBeenCalled();
         expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "已提交申请" }));
         await waitFor(() => {
