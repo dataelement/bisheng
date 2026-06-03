@@ -215,6 +215,14 @@ def test_space_create_upload_list(client):
     assert body["data"].get("user_name"), f"space create missing user_name: {body['data']}"
     assert body["data"].get("permission_ids"), f"space create missing permission_ids: {body['data']}"
     try:
+        # type=3 list (mine+joined) must also carry user_name + permission_ids.
+        listed = assert_resp_200(client.get(
+            V2 + "/", params={"type": TYPE_SPACE, "name": PREFIX + "space", "page_size": 20}))
+        mine = [s for s in listed.get("data", []) if s["id"] == sid]
+        assert mine, "created space not found in mine+joined list"
+        assert mine[0].get("user_name"), f"space list missing user_name: {mine[0]}"
+        assert mine[0].get("permission_ids"), f"space list missing permission_ids: {mine[0]}"
+
         # AC-22: upload a file to the space root (parent_id omitted).
         up = client.post(
             f"{V2}/file/{sid}",

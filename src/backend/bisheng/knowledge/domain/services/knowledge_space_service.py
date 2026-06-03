@@ -1756,6 +1756,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_items = items[start:start + page_size + 1]
         has_more = len(page_items) > page_size
         page_items = page_items[:page_size]
+
+        # F030: enrich the page with creator user_name + the acting identity's
+        # effective permission ids (the v1 list paths leave these unset). Only the
+        # page is enriched, so the cost is bounded by page_size.
+        if page_items:
+            user_ids = {sp.user_id for sp in page_items if sp.user_id is not None}
+            users = await UserDao.aget_user_by_ids(list(user_ids)) or []
+            user_name_map = {u.user_id: u.user_name for u in users}
+            perm_id_lists = await asyncio.gather(
+                *[self._get_effective_permission_ids("knowledge_space", sp.id) for sp in page_items]
+            )
+            for sp, perm_ids in zip(page_items, perm_id_lists):
+                sp.user_name = user_name_map.get(sp.user_id, str(sp.user_id))
+                sp.permission_ids = sorted(perm_ids)
+
         next_cursor = encode_cursor((page_num + 1,), context=context) if has_more else None
         return PageInfiniteCursorData(
             data=page_items,
