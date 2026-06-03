@@ -157,9 +157,10 @@ export function ArticleList({
     }, [channelDetail?.source_infos]);
 
     const subChannels = useMemo(() => {
+        const unreadByName = channelDetail?.sub_channel_unread_counts || {};
         return (channelDetail?.filter_rules || [])
             .filter(fr => fr.channel_type === "sub" && fr.name)
-            .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name! }))
+            .map((fr, idx) => ({ id: `sub-${idx}`, name: fr.name!, unreadCount: unreadByName[fr.name!] ?? 0 }))
             .sort((a, b) => {
                 const getPriority = (name: string) => {
                     const ch = name.charAt(0);
@@ -524,6 +525,11 @@ export function ArticleList({
                                             )}
                                         >
                                             <span>{sub.name}</span>
+                                            {sub.unreadCount > 0 && (
+                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                                    {sub.unreadCount}
+                                                </span>
+                                            )}
                                         </button>
                                     ))}
                                 </div>
@@ -662,6 +668,11 @@ export function ArticleList({
                                         )}
                                     >
                                         <span>{sub.name}</span>
+                                        {sub.unreadCount > 0 && (
+                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                                {sub.unreadCount}
+                                            </span>
+                                        )}
                                     </button>
                                 ))}
                             </div>

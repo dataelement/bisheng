@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Literal
+from typing import Dict, List, Optional, Literal
 
 from pydantic import BaseModel, Field
 
@@ -141,6 +141,10 @@ class ChannelDetailResponse(BaseModel):
     creator_name: str = Field(..., description='Channel Creator Name')
     subscriber_count: int = Field(default=0, description='Number of subscribers')
     article_count: int = Field(default=0, description='Total number of articles in the main channel')
+    sub_channel_unread_counts: Dict[str, int] = Field(
+        default_factory=dict,
+        description='Unread article count per sub-channel (keyed by sub-channel name)',
+    )
     subscription_status: SubscriptionStatusEnum = Field(..., description='Current user subscription status')
     knowledge_sync: Optional[KnowledgeSyncConfig] = Field(
         None,

@@ -36,7 +36,7 @@ import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
@@ -44,6 +44,9 @@ import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDial
 export default function Knowledge() {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    // ≥1024 = desktop (sidebar expanded by default). 768–1023 = tablet: sidebar starts
+    // collapsed but keeps its expand toggle (the mobile flow only kicks in below 768).
+    const isDesktop = useMediaQuery("(min-width: 1024px)");
     const MAX_USER_SPACES = 30;
     const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
@@ -111,6 +114,12 @@ export default function Knowledge() {
     useEffect(() => {
         if (!isH5) setSpaceListDrawerOpen(false);
     }, [isH5]);
+
+    // Tablet (768–1023): collapse the sidebar by default so the file area gets the room,
+    // while the NavToggle stays available to expand it. Desktop keeps the user's choice.
+    useEffect(() => {
+        if (!isH5 && !isDesktop) setSidebarCollapsed(true);
+    }, [isH5, isDesktop]);
 
     useEffect(() => {
         if (showKnowledgeSquare) setSpaceListDrawerOpen(false);
@@ -656,10 +665,11 @@ export default function Knowledge() {
                 </div>
             )}
 
-            {/* PC sidebar — desktop only. Must NOT mount on mobile: its auto-select-first
-                effect would jump straight into a space and bypass the mobile list page. */}
+            {/* Sidebar — shown ≥768px. Must NOT mount on mobile (<768): its auto-select-first
+                effect would jump straight into a space and bypass the mobile list page.
+                Tablet (768–1023) keeps it (collapsed by default) so the expand toggle stays. */}
             {!isH5 && (
-                <div className="hidden h-full shrink-0 touch-desktop:block">
+                <div className="h-full shrink-0">
                     <KnowledgeSpaceSidebar
                         activeSpaceId={activeSpace?.id}
                         onSpaceSelect={handleSpaceSelect}
@@ -671,7 +681,7 @@ export default function Knowledge() {
                         onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                         collapsed={sidebarCollapsed}
                         onCollapsedChange={setSidebarCollapsed}
-                        hideExpandToggleWhenCollapsed={!!activeSpace}
+                        hideExpandToggleWhenCollapsed={isDesktop && !!activeSpace}
                     />
                 </div>
             )}
