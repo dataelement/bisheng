@@ -59,39 +59,56 @@ def test_errcode_value():
 # T06 — create dispatch
 # --------------------------------------------------------------------------- #
 async def test_create_dispatch_kb(monkeypatch):
-    """AC-07/AC-12: type=0 → KnowledgeService; auth_type/is_released forced to default."""
+    """AC-07/AC-12: type=0 → KnowledgeService; auth_type/is_released forced to default;
+    output enriched to KnowledgeRead (user_name + permission_ids)."""
     captured = {}
 
-    async def _fake_acreate(request, login_user, knowledge):
+    async def _fake_acreate(cls, request, login_user, knowledge):
         captured["knowledge"] = knowledge
-        return {"id": 1, "type": knowledge.type}
+        return type("K", (), {"id": 1, "type": knowledge.type, "user_id": 1})()
 
-    monkeypatch.setattr(KnowledgeService, "acreate_knowledge", classmethod(
-        lambda cls, request, login_user, knowledge: _fake_acreate(request, login_user, knowledge)))
+    async def _fake_convert(cls, login_user, knowledge_list):
+        return [{"id": 1, "type": knowledge_list[0].type,
+                 "user_name": "operator", "permission_ids": ["use_kb", "edit_kb"]}]
+
+    monkeypatch.setattr(KnowledgeService, "acreate_knowledge", classmethod(_fake_acreate))
+    monkeypatch.setattr(KnowledgeService, "aconvert_knowledge_read", classmethod(_fake_convert))
 
     req = KnowledgeCreate(name="kb", type=KnowledgeTypeEnum.NORMAL.value, model="12",
                           auth_type=AuthTypeEnum.APPROVAL, is_released=True)
     resp = await filelib.create(request=None, knowledge=req, version_repo=None, doc_repo=None)
     assert resp.data["type"] == KnowledgeTypeEnum.NORMAL.value
+    assert resp.data["user_name"] == "operator"            # enriched
+    assert resp.data["permission_ids"]                     # enriched, non-empty
     # AC-12: KB ignores auth_type / is_released (forced to defaults before create).
     assert captured["knowledge"].auth_type == AuthTypeEnum.PUBLIC
     assert captured["knowledge"].is_released is False
 
 
 async def test_create_dispatch_space(monkeypatch):
-    """AC-09: type=3 → KnowledgeSpaceService.create_knowledge_space, model ignored."""
+    """AC-09: type=3 → create_knowledge_space (model ignored); output enriched with
+    user_name + creator's effective space permission_ids."""
     captured = {}
 
     async def _fake_space_create(self, **kwargs):
         captured.update(kwargs)
-        return {"id": 7, "type": KnowledgeTypeEnum.SPACE.value}
+        return type("S", (), {
+            "id": 7,
+            "model_dump": lambda self: {"id": 7, "name": "space", "type": KnowledgeTypeEnum.SPACE.value},
+        })()
+
+    async def _fake_eff(self, object_type, object_id, **kw):
+        return {"view_space", "edit_space"}
 
     monkeypatch.setattr(KnowledgeSpaceService, "create_knowledge_space", _fake_space_create)
+    monkeypatch.setattr(KnowledgeSpaceService, "_get_effective_permission_ids", _fake_eff)
 
     req = KnowledgeCreate(name="space", type=KnowledgeTypeEnum.SPACE.value, model="ignored",
                           auth_type=AuthTypeEnum.PRIVATE, is_released=True)
     resp = await filelib.create(request=None, knowledge=req, version_repo=None, doc_repo=None)
-    assert resp.data["type"] == KnowledgeTypeEnum.SPACE.value
+    assert resp.data.type == KnowledgeTypeEnum.SPACE.value
+    assert resp.data.user_name == "operator"               # enriched
+    assert set(resp.data.permission_ids) == {"edit_space", "view_space"}  # enriched
     # model is never forwarded to the space create path.
     assert "model" not in captured
     assert captured["auth_type"] == AuthTypeEnum.PRIVATE

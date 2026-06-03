@@ -153,6 +153,9 @@ T02(identity) ─┼─→ T03(kb file cursor) ─┐
 
 ## 实际偏差记录
 
+- **偏差 9（创建出参缺 permission_ids/user_name —— 已修复，post-merge）**：create 端点原样返回 `acreate_knowledge`/`create_knowledge_space` 的 raw `Knowledge`，缺 `permission_ids`、`user_name`（与 list/update 出参不一致）。**修复**：KB(0/1) 走 `KnowledgeService.aconvert_knowledge_read`（创建者=owner→全量 KB 权限点 + user_name）；空间(3) 用 `KnowledgeRead(**space.model_dump(), user_name=login_user.user_name, permission_ids=sorted(_get_effective_permission_ids("knowledge_space", id)))`（空间权限模型不同，取创建者有效权限点）。e2e 在 test_kb_lifecycle / test_space_create_upload_list 增断言。**注**：知识空间 LIST(type=3, `_format_member_spaces`) 同样未填 permission_ids/user_name，存在相同 gap，待确认是否一并补。
+
+
 > 完成后，在此记录实现与 spec.md 的偏差，供后续参考。
 
 - **偏差 1（错误码编号）**：spec/tasks 原定 `KnowledgeTypeNotSupportedError = 10970`，实现时发现 **10970 已被 `KnowledgeNotExistError` 占用**，改用 **10962**（109 模块空闲段）。spec/tasks/release-contract 三处已同步为 10962。
