@@ -796,6 +796,7 @@ describe("ApprovalPage", () => {
         approver_source_types: [
           "direct_user",
           "department_admin",
+          "role_user",
           "knowledge_space_owner",
           "knowledge_space_manager",
           "target_knowledge_space_owner",
@@ -826,7 +827,7 @@ describe("ApprovalPage", () => {
     const sourceSelect = getSelectWithOptionValue("knowledge_space_manager");
     expect(within(sourceSelect).getByRole("option", { name: "指定用户" })).toHaveValue("direct_user");
     expect(within(sourceSelect).getByRole("option", { name: "申请人部门管理员" })).toHaveValue("department_admin");
-    expect(within(sourceSelect).queryByRole("option", { name: "指定用户角色" })).not.toBeInTheDocument();
+    expect(within(sourceSelect).getByRole("option", { name: "指定用户角色" })).toHaveValue("role_user");
     expect(within(sourceSelect).getByRole("option", { name: "来源知识空间 Owner" })).toHaveValue("knowledge_space_owner");
     expect(within(sourceSelect).getByRole("option", { name: "来源知识空间 Manager" })).toHaveValue("knowledge_space_manager");
     expect(within(sourceSelect).getByRole("option", { name: "目标知识空间 Owner" })).toHaveValue("target_knowledge_space_owner");

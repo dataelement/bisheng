@@ -2004,6 +2004,7 @@ def test_shougang_scenarios_registered_in_default_presets():
     assert presets["knowledge_space_file_publish_request"].approver_source_types == [
         "direct_user",
         "department_admin",
+        "role_user",
         "knowledge_space_owner",
         "knowledge_space_manager",
         "target_knowledge_space_owner",
@@ -2049,6 +2050,7 @@ def test_shougang_scenarios_registered_in_default_presets():
     ] == [
         "direct_user",
         "department_admin",
+        "role_user",
         "knowledge_space_owner",
         "knowledge_space_manager",
         "target_knowledge_space_owner",

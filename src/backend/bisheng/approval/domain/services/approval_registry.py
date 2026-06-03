@@ -196,6 +196,7 @@ class ApprovalRegistry:
                 approver_source_types=[
                     'direct_user',
                     'department_admin',
+                    'role_user',
                     'knowledge_space_owner',
                     'knowledge_space_manager',
                     'target_knowledge_space_owner',
