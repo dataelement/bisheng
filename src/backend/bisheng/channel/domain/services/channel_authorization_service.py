@@ -591,6 +591,30 @@ class ChannelAuthorizationService:
                 return binding
         return None
 
+    @classmethod
+    async def clear_non_owner_bindings(cls, channel_id: str) -> int:
+        """Remove every relation-model binding for a channel except owner bindings.
+
+        Called when a channel switches to PRIVATE: all non-owner relations are
+        revoked, so their bindings must be dropped too — otherwise a later
+        re-grant could resurrect a stale model. Returns the number removed.
+        """
+        bindings = await cls._get_bindings()
+        remaining: list[dict] = []
+        removed = 0
+        for binding in bindings:
+            is_channel_binding = (
+                binding.get('resource_type') == 'channel'
+                and str(binding.get('resource_id')) == str(channel_id)
+            )
+            if is_channel_binding and binding.get('relation') != ChannelRelationEnum.OWNER.value:
+                removed += 1
+                continue
+            remaining.append(binding)
+        if removed:
+            await cls._save_bindings(remaining)
+        return removed
+
     @staticmethod
     async def _get_bindings() -> list[dict]:
         row = await ConfigDao.aget_config_by_key(_RELATION_MODEL_BINDINGS_KEY)

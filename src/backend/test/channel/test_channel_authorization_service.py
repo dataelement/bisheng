@@ -304,6 +304,48 @@ async def test_authorize_allows_manager_grant_with_manage_channel_manager():
 
 
 @pytest.mark.asyncio
+async def test_clear_non_owner_bindings_keeps_owner_and_other_resources():
+    bindings = [
+        {'key': 'k1', 'resource_type': 'channel', 'resource_id': 'channel-1', 'relation': 'owner'},
+        {'key': 'k2', 'resource_type': 'channel', 'resource_id': 'channel-1', 'relation': 'manager'},
+        {'key': 'k3', 'resource_type': 'channel', 'resource_id': 'channel-1', 'relation': 'viewer'},
+        {'key': 'k4', 'resource_type': 'channel', 'resource_id': 'channel-2', 'relation': 'viewer'},
+        {'key': 'k5', 'resource_type': 'knowledge_space', 'resource_id': 'channel-1', 'relation': 'viewer'},
+    ]
+    saved: dict = {}
+
+    async def _fake_save(new_bindings):
+        saved['value'] = new_bindings
+
+    with patch.object(
+        ChannelAuthorizationService, '_get_bindings', new_callable=AsyncMock, return_value=bindings,
+    ), patch.object(
+        ChannelAuthorizationService, '_save_bindings', new=_fake_save,
+    ):
+        removed = await ChannelAuthorizationService.clear_non_owner_bindings('channel-1')
+
+    assert removed == 2
+    remaining_keys = {b['key'] for b in saved['value']}
+    assert remaining_keys == {'k1', 'k4', 'k5'}
+
+
+@pytest.mark.asyncio
+async def test_clear_non_owner_bindings_noop_when_nothing_to_remove():
+    bindings = [
+        {'key': 'k1', 'resource_type': 'channel', 'resource_id': 'channel-1', 'relation': 'owner'},
+    ]
+    with patch.object(
+        ChannelAuthorizationService, '_get_bindings', new_callable=AsyncMock, return_value=bindings,
+    ), patch.object(
+        ChannelAuthorizationService, '_save_bindings', new_callable=AsyncMock,
+    ) as mock_save:
+        removed = await ChannelAuthorizationService.clear_non_owner_bindings('channel-1')
+
+    assert removed == 0
+    mock_save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_cross_tenant_subject_validation_rejects_before_fga_write():
     service = ChannelAuthorizationService(
         channel_repository=_ChannelRepo(),

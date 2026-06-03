@@ -139,12 +139,6 @@ def _is_authorized_channel_source(member) -> bool:
     return getattr(member, 'grant_subject_type', None) in {'user', 'department', 'user_group'}
 
 
-def _is_channel_subscription_source(member) -> bool:
-    if resolve_channel_relation(member) == ChannelRelationEnum.OWNER:
-        return False
-    return not _is_authorized_channel_source(member)
-
-
 def _sorted_channel_permission_ids(permission_ids: set[str]) -> list[str]:
     return sorted(permission_ids)
 
@@ -1299,25 +1293,55 @@ class ChannelService:
             new_visibility = ChannelVisibilityEnum(req.visibility)
             old_visibility = channel.visibility
             if old_visibility != new_visibility:
-                # When changing to PRIVATE, remove square subscription members only.
+                # When changing to PRIVATE (from PUBLIC or REVIEW), revoke every
+                # non-owner permission relation so the channel is only reachable
+                # by its owner(s): square subscribers, directly authorized users,
+                # and department/user_group grants alike.
                 if new_visibility == ChannelVisibilityEnum.PRIVATE:
+                    owners = await self.space_channel_member_repository.find_members_by_role(
+                        channel_id,
+                        UserRoleEnum.CREATOR,
+                    )
+                    owner_user_ids = {owner.user_id for owner in owners}
+                    # Capture active non-owner members before removal so we can
+                    # notify everyone who loses access.
                     removed_user_ids = []
                     if self.message_service:
-                        removed_members = await self.space_channel_member_repository.find_all(
+                        existing_members = await self.space_channel_member_repository.find_all(
                             business_id=channel_id,
                             business_type=BusinessTypeEnum.CHANNEL,
                         )
                         removed_user_ids = [
                             member.user_id
-                            for member in removed_members
+                            for member in existing_members
                             if member.status == MembershipStatusEnum.ACTIVE
-                            and _is_channel_subscription_source(member)
+                            and member.user_id not in owner_user_ids
                         ]
-                    owners = await self.space_channel_member_repository.find_members_by_role(
-                        channel_id,
-                        UserRoleEnum.CREATOR,
-                    )
-                    await self.space_channel_member_repository.remove_channel_subscription_members(channel_id)
+                    # 1. Drop every non-owner membership row.
+                    await self.space_channel_member_repository.remove_non_creator_members(channel_id)
+                    # 2. Revoke every non-owner ReBAC relation (users, departments,
+                    #    user groups) at the FGA layer.
+                    try:
+                        await OwnerService.delete_non_owner_resource_tuples("channel", channel_id)
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to revoke non-owner FGA tuples after PRIVATE switch for channel %s: %s",
+                            channel_id, e,
+                        )
+                    # 3. Drop their relation-model bindings so a later re-grant
+                    #    cannot resurrect a stale model.
+                    try:
+                        from bisheng.channel.domain.services.channel_authorization_service import (
+                            ChannelAuthorizationService,
+                        )
+                        await ChannelAuthorizationService.clear_non_owner_bindings(channel_id)
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to clear non-owner relation-model bindings after PRIVATE switch "
+                            "for channel %s: %s",
+                            channel_id, e,
+                        )
+                    # 4. Re-assert owner FGA tuples defensively.
                     try:
                         for owner in owners:
                             await OwnerService.write_owner_tuple(owner.user_id, "channel", channel_id)

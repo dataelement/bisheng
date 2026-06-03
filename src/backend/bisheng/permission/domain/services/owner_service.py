@@ -148,6 +148,46 @@ class OwnerService:
             logger.warning('Failed to cleanup tuples for %s:%s: %s', object_type, object_id, e)
 
     @classmethod
+    async def delete_non_owner_resource_tuples(
+        cls,
+        object_type: str,
+        object_id: str,
+    ) -> int:
+        """Delete all FGA tuples for a resource except ``owner`` relations.
+
+        Used when a resource's access narrows (e.g. a channel switched to
+        private) and every granted relation other than ownership must be
+        revoked. Returns the number of deleted tuples. Best-effort: logs a
+        warning and returns 0 on failure (mirrors ``delete_resource_tuples``).
+        """
+        from bisheng.permission.domain.services.permission_service import PermissionService
+        fga = PermissionService._get_fga()
+        if fga is None:
+            logger.warning('FGAClient not available for tuple cleanup: %s:%s', object_type, object_id)
+            return 0
+        try:
+            tuples = await fga.read_tuples(object=f'{object_type}:{object_id}')
+            from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+            operations = [
+                TupleOperation(
+                    action='delete',
+                    user=t['user'],
+                    relation=t['relation'],
+                    object=t['object'],
+                )
+                for t in (tuples or [])
+                if t.get('relation') != 'owner'
+            ]
+            if not operations:
+                return 0
+            await PermissionService.batch_write_tuples(operations)
+            logger.info('Cleaned up %d non-owner tuples for %s:%s', len(operations), object_type, object_id)
+            return len(operations)
+        except Exception as e:
+            logger.warning('Failed to cleanup non-owner tuples for %s:%s: %s', object_type, object_id, e)
+            return 0
+
+    @classmethod
     async def transfer_ownership(
         cls,
         from_user_id: int,
