@@ -17,6 +17,8 @@ jest.mock("~/hooks", () => ({
             "com_subscription.confirm": "确认",
             "com_subscription.cancel": "取消",
             "com_subscription.max_10_characters": "最多10个字符",
+            "com_subscription.dissolve_channel": "解散频道",
+            "com_subscription.unsubscribe": "取消订阅",
         };
         return labels[key] ?? key;
     },
@@ -126,5 +128,64 @@ describe("ChannelItem relation actions", () => {
         await user.click(menuTrigger as HTMLButtonElement);
 
         expect(await screen.findByText("频道设置")).toBeInTheDocument();
+    });
+
+    it("shows both dissolve and unsubscribe to a subscribed user granted delete_channel", async () => {
+        const user = userEvent.setup();
+        const { container } = renderChannelItem("manager", "subscribed", [
+            "view_channel",
+            "edit_channel",
+            "delete_channel",
+        ]);
+        const menuTrigger = container.querySelector("button");
+
+        expect(menuTrigger).not.toBeNull();
+        await user.click(menuTrigger as HTMLButtonElement);
+
+        expect(await screen.findByText("解散频道")).toBeInTheDocument();
+        expect(screen.getByText("取消订阅")).toBeInTheDocument();
+    });
+
+    it("shows only dissolve (no unsubscribe) for a created channel", async () => {
+        const user = userEvent.setup();
+        const { container } = renderChannelItem(ChannelRole.CREATOR, "created", [
+            "view_channel",
+            "edit_channel",
+            "delete_channel",
+        ]);
+        const menuTrigger = container.querySelector("button");
+
+        expect(menuTrigger).not.toBeNull();
+        await user.click(menuTrigger as HTMLButtonElement);
+
+        expect(await screen.findByText("解散频道")).toBeInTheDocument();
+        expect(screen.queryByText("取消订阅")).not.toBeInTheDocument();
+    });
+
+    it("triggers onDelete when a delete-permitted subscriber dissolves", async () => {
+        const user = userEvent.setup();
+        const { container, props } = renderChannelItem("manager", "subscribed", [
+            "view_channel",
+            "delete_channel",
+        ]);
+        const menuTrigger = container.querySelector("button");
+
+        await user.click(menuTrigger as HTMLButtonElement);
+        await user.click(await screen.findByText("解散频道"));
+
+        expect(props.onDelete).toHaveBeenCalledWith("channel-1");
+        expect(props.onUnsubscribe).not.toHaveBeenCalled();
+    });
+
+    it("shows unsubscribe to a subscriber without delete permission", async () => {
+        const user = userEvent.setup();
+        const { container } = renderChannelItem("viewer", "subscribed", ["view_channel"]);
+        const menuTrigger = container.querySelector("button");
+
+        expect(menuTrigger).not.toBeNull();
+        await user.click(menuTrigger as HTMLButtonElement);
+
+        expect(await screen.findByText("取消订阅")).toBeInTheDocument();
+        expect(screen.queryByText("解散频道")).not.toBeInTheDocument();
     });
 });

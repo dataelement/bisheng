@@ -1,7 +1,7 @@
 import { useLocalize } from "~/hooks";
 import { LogOut, MoreHorizontal, Pin, PinOff, Settings, UsersRound } from "lucide-react";
 import { useState } from "react";
-import { canEditChannelSettings, canManageChannelPermissions, type Channel } from "~/api/channels";
+import { canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, type Channel } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
@@ -54,6 +54,13 @@ export default function ChannelItem({
     const [menuOpen, setMenuOpen] = useState(false); // 控制菜单打开时的状态显示
     const { showToast } = useToastContext();
     const confirm = useConfirm()
+
+    // Dissolving deletes the channel for everyone — gate it on the delete
+    // permission (or owner/creator), not on whether the user created it, so a
+    // user explicitly granted `delete_channel` sees the action. Unsubscribe is
+    // independent: any subscriber can leave, including one who can also dissolve.
+    const canDissolve = canDeleteChannel(channel.role, channel.permissionIds);
+    const canUnsubscribe = type === "subscribed";
 
     const rename = (e) => {
         const newName = e.target.value.trim();
@@ -197,32 +204,53 @@ export default function ChannelItem({
                                 </>
                             )}
                         </DropdownMenuItem>
-                        <SidebarListMoreMenuDivider />
+                        {(canDissolve || canUnsubscribe) && <SidebarListMoreMenuDivider />}
 
-                        <DropdownMenuItem
-                            onClick={async () => {
-                                const ok = await confirm({
-                                    title: localize("com_subscription.prompt_tip"),
-                                    description: type === "created" ? localize("com_subscription.confirm_delete_channel_for_all") : localize("com_subscription.confirm_unsubscribe_channel_and_subs"),
-                                    confirmText: localize("com_subscription.confirm"),
-                                    cancelText: localize("com_subscription.cancel")
-                                })
+                        {canDissolve && (
+                            <DropdownMenuItem
+                                onClick={async () => {
+                                    const ok = await confirm({
+                                        title: localize("com_subscription.prompt_tip"),
+                                        description: localize("com_subscription.confirm_delete_channel_for_all"),
+                                        confirmText: localize("com_subscription.confirm"),
+                                        cancelText: localize("com_subscription.cancel")
+                                    })
 
-                                if (ok) {
-                                    type === "created" ? onDelete(channel.id) : onUnsubscribe(channel.id);
-                                }
-                            }}
-                            className={sidebarListMoreMenuDangerItemClassName}
-                        >
-                            {type === "created" ? (
+                                    if (ok) {
+                                        onDelete(channel.id);
+                                    }
+                                }}
+                                className={sidebarListMoreMenuDangerItemClassName}
+                            >
                                 <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
-                            ) : (
+                                <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                    {localize("com_subscription.dissolve_channel")}
+                                </span>
+                            </DropdownMenuItem>
+                        )}
+
+                        {canUnsubscribe && (
+                            <DropdownMenuItem
+                                onClick={async () => {
+                                    const ok = await confirm({
+                                        title: localize("com_subscription.prompt_tip"),
+                                        description: localize("com_subscription.confirm_unsubscribe_channel_and_subs"),
+                                        confirmText: localize("com_subscription.confirm"),
+                                        cancelText: localize("com_subscription.cancel")
+                                    })
+
+                                    if (ok) {
+                                        onUnsubscribe(channel.id);
+                                    }
+                                }}
+                                className={sidebarListMoreMenuDangerItemClassName}
+                            >
                                 <LogOut className={sidebarListMoreMenuDangerIconClassName} />
-                            )}
-                            <span className={sidebarListMoreMenuDangerLabelClassName}>
-                                {type === "created" ? localize("com_subscription.dissolve_channel") : localize("com_subscription.unsubscribe")}
-                            </span>
-                        </DropdownMenuItem>
+                                <span className={sidebarListMoreMenuDangerLabelClassName}>
+                                    {localize("com_subscription.unsubscribe")}
+                                </span>
+                            </DropdownMenuItem>
+                        )}
                     </SidebarListMoreMenuContent>
                 </DropdownMenu>
             </div>

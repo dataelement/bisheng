@@ -62,6 +62,16 @@ export function canManageChannelPermissions(
         || role === ChannelRole.ADMIN;
 }
 
+export function canDeleteChannel(
+    role?: ChannelUserRole | null,
+    permissionIds?: ChannelPermissionId[] | null,
+): boolean {
+    if (hasPermissionIds(permissionIds)) {
+        return permissionIds.includes("delete_channel");
+    }
+    return role === "owner" || role === ChannelRole.CREATOR;
+}
+
 // 子频道接口
 export interface SubChannel {
     id: string;

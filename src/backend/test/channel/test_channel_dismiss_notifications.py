@@ -6,8 +6,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.channel.domain.services.channel_service import ChannelService
+from bisheng.common.errcode.channel import ChannelPermissionDeniedError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
+    ChannelRelationEnum,
     MembershipStatusEnum,
     UserRoleEnum,
 )
@@ -18,6 +20,9 @@ class _User:
     user_id = 693
     user_name = "yangxin"
     tenant_id = 1
+
+    def is_admin(self):
+        return False
 
 
 class _MemberRepo:
@@ -86,3 +91,73 @@ async def test_dismiss_channel_notifies_authorized_users_not_only_member_rows():
     assert notify_kwargs["action_code"] == "channel_dismissed"
     assert notify_kwargs["receiver_user_ids"] == [693, 740]
     assert member_repo.deleted_ids == [1]
+
+
+def _authorized_member(member_id: int, user_id: int, role: UserRoleEnum):
+    member = _member(member_id, user_id, role)
+    member.grant_subject_type = "user"
+    member.relation = ChannelRelationEnum.MANAGER
+    return member
+
+
+@pytest.mark.asyncio
+async def test_dismiss_allowed_for_non_creator_with_delete_channel_permission():
+    channel = SimpleNamespace(id="channel-1", name="test-channel", source_list=[])
+    member_repo = _MemberRepo([
+        _authorized_member(1, 693, UserRoleEnum.ADMIN),
+    ])
+    channel_repository = SimpleNamespace(
+        find_channels_by_ids=AsyncMock(return_value=[channel]),
+        delete=AsyncMock(),
+    )
+    service = ChannelService(
+        channel_repository=channel_repository,
+        space_channel_member_repository=member_repo,
+        channel_info_source_repository=SimpleNamespace(),
+    )
+
+    with patch(
+        "bisheng.channel.domain.services.channel_service.FineGrainedPermissionService"
+        ".get_effective_permission_ids_async",
+        new=AsyncMock(return_value={"view_channel", "edit_channel", "delete_channel"}),
+    ), patch(
+        "bisheng.channel.domain.services.channel_service.OwnerService.delete_resource_tuples",
+        new=AsyncMock(),
+    ) as mock_delete_tuples:
+        await service.dismiss_channel("channel-1", _User())
+
+    channel_repository.delete.assert_awaited_once_with("channel-1")
+    mock_delete_tuples.assert_awaited_once()
+    assert member_repo.deleted_ids == [1]
+
+
+@pytest.mark.asyncio
+async def test_dismiss_denied_for_non_creator_without_delete_channel_permission():
+    channel = SimpleNamespace(id="channel-1", name="test-channel", source_list=[])
+    member_repo = _MemberRepo([
+        _authorized_member(1, 693, UserRoleEnum.ADMIN),
+    ])
+    channel_repository = SimpleNamespace(
+        find_channels_by_ids=AsyncMock(return_value=[channel]),
+        delete=AsyncMock(),
+    )
+    service = ChannelService(
+        channel_repository=channel_repository,
+        space_channel_member_repository=member_repo,
+        channel_info_source_repository=SimpleNamespace(),
+    )
+
+    with patch(
+        "bisheng.channel.domain.services.channel_service.FineGrainedPermissionService"
+        ".get_effective_permission_ids_async",
+        new=AsyncMock(return_value={"view_channel", "edit_channel"}),
+    ), patch(
+        "bisheng.channel.domain.services.channel_service.OwnerService.delete_resource_tuples",
+        new=AsyncMock(),
+    ) as mock_delete_tuples:
+        with pytest.raises(ChannelPermissionDeniedError):
+            await service.dismiss_channel("channel-1", _User())
+
+    channel_repository.delete.assert_not_awaited()
+    mock_delete_tuples.assert_not_awaited()
+    assert member_repo.deleted_ids == []
