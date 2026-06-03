@@ -14,7 +14,10 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     UpdateChannelRequest,
 )
 from bisheng.channel.domain.services.channel_service import ChannelService
-from bisheng.common.errcode.channel import ChannelPermissionDeniedError
+from bisheng.common.errcode.channel import (
+    ChannelPermissionDeniedError,
+    InformationSourceSubscriptionLimitError,
+)
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     ChannelRelationEnum,
@@ -92,6 +95,47 @@ async def test_create_channel_writes_owner_relation_for_creator():
         grant_model_id=ChannelRelationEnum.OWNER.value,
         grant_binding_key='channel:channel-1:self:7:owner:-',
     )
+
+
+@pytest.mark.asyncio
+async def test_create_channel_aborts_before_persist_when_subscription_limit_exceeded():
+    """A 19007 source-subscription limit must abort creation before anything is
+    persisted, so no orphaned channel / membership / owner tuple is left behind."""
+    channel_repository = SimpleNamespace(save=AsyncMock())
+    member_repository = SimpleNamespace(
+        find_channel_memberships=AsyncMock(return_value=[]),
+        add_member=AsyncMock(),
+    )
+    service = _service(channel_repository, member_repository)
+
+    info_client = SimpleNamespace(
+        subscribe_information_source=AsyncMock(side_effect=InformationSourceSubscriptionLimitError()),
+        get_information_source_by_ids=AsyncMock(return_value=[]),
+    )
+    write_owner_tuple = AsyncMock()
+
+    with patch(
+        'bisheng.channel.domain.services.channel_service.OwnerService.write_owner_tuple',
+        new=write_owner_tuple,
+    ), patch(
+        'bisheng.channel.domain.services.channel_service.get_bisheng_information_client',
+        new=AsyncMock(return_value=info_client),
+    ):
+        with pytest.raises(InformationSourceSubscriptionLimitError):
+            await service.create_channel(
+                CreateChannelRequest(
+                    name='资讯频道',
+                    source_list=['src-1'],
+                    visibility=ChannelVisibilityEnum.PUBLIC,
+                    is_released=True,
+                ),
+                _LoginUser(),
+            )
+
+    info_client.subscribe_information_source.assert_awaited_once_with(['src-1'])
+    channel_repository.save.assert_not_awaited()
+    member_repository.add_member.assert_not_awaited()
+    write_owner_tuple.assert_not_awaited()
 
 
 @pytest.mark.asyncio

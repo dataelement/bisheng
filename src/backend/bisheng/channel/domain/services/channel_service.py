@@ -352,6 +352,39 @@ class ChannelService:
         if len(existing_channels) >= MAX_USER_CHANNEL_COUNT:
             raise ChannelCreateLimitExceededError()
 
+        bisheng_information_client = await get_bisheng_information_client()
+        # Subscribe to the information sources BEFORE persisting the channel.
+        # The subscribe call enforces the API-key source-count limit (19007);
+        # doing it first guarantees that a limit error aborts creation instead
+        # of leaving an orphaned channel / membership / OpenFGA owner tuple.
+        if channel_data.source_list:
+            await bisheng_information_client.subscribe_information_source(channel_data.source_list)
+
+            # Sync information sources to local database
+            existing_sources = await self.channel_info_source_repository.find_by_ids(channel_data.source_list)
+            existing_source_ids = {source.id for source in existing_sources}
+
+            missing_source_ids = [sid for sid in channel_data.source_list if sid not in existing_source_ids]
+
+            if missing_source_ids:
+                missing_information_sources = await bisheng_information_client.get_information_source_by_ids(
+                    missing_source_ids
+                )
+
+                new_channel_info_sources = []
+                for info_source in missing_information_sources:
+                    new_source = ChannelInfoSource(
+                        id=info_source.id,
+                        source_name=info_source.name,
+                        source_icon=info_source.icon,
+                        source_type=info_source.business_type,
+                        description=info_source.description,
+                    )
+                    new_channel_info_sources.append(new_source)
+
+                if new_channel_info_sources:
+                    await self.channel_info_source_repository.batch_add(new_channel_info_sources)
+
         channel_model = Channel(
             name=channel_data.name,
             source_list=channel_data.source_list,
@@ -391,36 +424,6 @@ class ChannelService:
             )
         except Exception as e:
             logger.warning("Failed to write owner tuple for channel %s: %s", channel_model.id, e)
-
-        bisheng_information_client = await get_bisheng_information_client()
-        # Subscribe to the information sources associated with the channel
-        if channel_data.source_list:
-            await bisheng_information_client.subscribe_information_source(channel_data.source_list)
-
-            # Sync information sources to local database
-            existing_sources = await self.channel_info_source_repository.find_by_ids(channel_data.source_list)
-            existing_source_ids = {source.id for source in existing_sources}
-
-            missing_source_ids = [sid for sid in channel_data.source_list if sid not in existing_source_ids]
-
-            if missing_source_ids:
-                missing_information_sources = await bisheng_information_client.get_information_source_by_ids(
-                    missing_source_ids
-                )
-
-                new_channel_info_sources = []
-                for info_source in missing_information_sources:
-                    new_source = ChannelInfoSource(
-                        id=info_source.id,
-                        source_name=info_source.name,
-                        source_icon=info_source.icon,
-                        source_type=info_source.business_type,
-                        description=info_source.description,
-                    )
-                    new_channel_info_sources.append(new_source)
-
-                if new_channel_info_sources:
-                    await self.channel_info_source_repository.batch_add(new_channel_info_sources)
 
         # Update latest_article_update_time for the new channel
         if channel_model.source_list:
