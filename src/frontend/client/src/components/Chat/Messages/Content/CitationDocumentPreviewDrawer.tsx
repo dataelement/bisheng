@@ -181,6 +181,11 @@ export default function CitationDocumentPreviewDrawer({
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target || drawerRef.current?.contains(target)) return;
+      // Don't collapse the preview when clicking the citation marker or its
+      // hover popover card — those re-drive the preview, not dismiss it.
+      const el = target instanceof Element ? target : (target as any)?.parentElement;
+      if (el?.closest?.('[data-citation-trigger="true"]')) return;
+      if (el?.closest?.('[data-citation-popover-surface]')) return;
       onClose();
     };
 

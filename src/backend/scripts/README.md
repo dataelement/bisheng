@@ -90,6 +90,40 @@ Options:
 
 - `--apply`: perform writes; default is dry-run
 
+### `backfill_channel_member_rebac_grants.py`
+
+Repairs **already-active** channel subscribers that were activated before commit
+`c530bf375` and therefore never got a ReBAC grant written. The 成员管理 /
+authorization list is rendered from OpenFGA tuples, so such members are active in
+`space_channel_member` but invisible in the list.
+
+Behavior:
+
+- scans channels (all, or one via `--channel-id`) for `status = ACTIVE`,
+  non-`CREATOR`, **direct** (`grant_subject_type` in `NULL` / `self`) members
+- for each member with **no** existing FGA grant on the channel, writes the
+  viewer/manager grant + relation-model binding via
+  `ChannelService.sync_direct_channel_user_permissions` (idempotent)
+- skips the creator (owner is managed by `OwnerService`), `PENDING` / `REJECTED`
+  members, organisation-granted members, and members already present in FGA
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backfill_channel_member_rebac_grants.py
+PYTHONPATH=./ .venv/bin/python scripts/backfill_channel_member_rebac_grants.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/backfill_channel_member_rebac_grants.py --channel-id <id> --apply
+
+bash scripts/backfill_channel_member_rebac_grants.sh
+bash scripts/backfill_channel_member_rebac_grants.sh apply
+bash scripts/backfill_channel_member_rebac_grants.sh --channel-id <id> apply
+```
+
+Options:
+
+- `--channel-id <id>`: restrict to a single channel; default is all channels
+- `--apply`: perform writes; default is dry-run
+
 ### `permission_migration.sh`
 
 Manual runner for the F006 historical permission migration from RBAC to ReBAC.
