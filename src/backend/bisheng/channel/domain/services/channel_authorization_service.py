@@ -39,6 +39,9 @@ from bisheng.permission.domain.schemas.permission_schema import (
 )
 from bisheng.permission.domain.services.permission_service import PermissionService
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.resource_permission_notification_service import (
+    ResourcePermissionNotificationService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +95,14 @@ class ChannelAuthorizationService:
 
         tuple_grants = [self._to_permission_grant(item) for item in request.grants]
         tuple_revokes = [self._to_permission_revoke(item) for item in request.revokes]
+        notify_context = None
+        if tuple_grants or tuple_revokes:
+            notify_context = await ResourcePermissionNotificationService.build_context(
+                resource_type='channel',
+                resource_id=channel_id,
+                grants=tuple_grants,
+                revokes=tuple_revokes,
+            )
 
         if tuple_grants or tuple_revokes:
             await PermissionService.authorize(
@@ -112,6 +123,12 @@ class ChannelAuthorizationService:
                 await self._restore_bindings(channel_id, original_bindings)
             await self._compensate_permission_write(channel_id, tuple_grants, tuple_revokes)
             raise ChannelAuthorizationSyncError(exception=exc) from exc
+
+        await ResourcePermissionNotificationService.dispatch_after_authorize(
+            context=notify_context,
+            operator_user_id=login_user.user_id,
+            operator_user_name=getattr(login_user, 'user_name', None),
+        )
 
         return ChannelAuthorizeResponse(
             synced_user_count=0,

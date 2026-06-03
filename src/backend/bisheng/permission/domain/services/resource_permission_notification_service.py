@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 _SUPPORTED_RESOURCE_TYPES = {"channel", "knowledge_space"}
 _ADMIN_RELATIONS = {"owner", "manager"}
+_READ_ACCESS_RELATIONS = {"owner", "manager", "editor", "viewer"}
 
 
 @dataclass
@@ -22,15 +23,17 @@ class ResourcePermissionNotificationContext:
     resource_id: str
     grant_user_ids: set[int] = field(default_factory=set)
     revoke_user_ids: set[int] = field(default_factory=set)
+    read_revoke_user_ids: set[int] = field(default_factory=set)
     before_can_manage: dict[int, bool] = field(default_factory=dict)
+    before_can_read: dict[int, bool] = field(default_factory=dict)
 
     @property
     def has_events(self) -> bool:
-        return bool(self.grant_user_ids or self.revoke_user_ids)
+        return bool(self.grant_user_ids or self.revoke_user_ids or self.read_revoke_user_ids)
 
 
 class ResourcePermissionNotificationService:
-    """Station-message notifications for relation-model admin changes."""
+    """Station-message notifications for relation-model permission changes."""
 
     @classmethod
     async def build_context(
@@ -50,6 +53,7 @@ class ResourcePermissionNotificationService:
         )
         context.grant_user_ids = await cls._expand_admin_subjects(grants)
         context.revoke_user_ids = await cls._expand_admin_subjects(revokes)
+        context.read_revoke_user_ids = await cls._expand_read_access_subjects(revokes)
         if not context.has_events:
             return None
 
@@ -61,6 +65,14 @@ class ResourcePermissionNotificationService:
                 resource_id=str(resource_id),
             )
             for user_id in impacted_user_ids
+        }
+        context.before_can_read = {
+            user_id: await cls._can_read(
+                user_id=user_id,
+                resource_type=resource_type,
+                resource_id=str(resource_id),
+            )
+            for user_id in context.read_revoke_user_ids
         }
         return context
 
@@ -100,6 +112,20 @@ class ResourcePermissionNotificationService:
                 and not after_can_manage.get(user_id, False)
             ]
 
+            after_can_read = {
+                user_id: await cls._can_read(
+                    user_id=user_id,
+                    resource_type=context.resource_type,
+                    resource_id=context.resource_id,
+                )
+                for user_id in context.read_revoke_user_ids
+            }
+            removed_member_user_ids = [
+                user_id for user_id in sorted(context.read_revoke_user_ids)
+                if context.before_can_read.get(user_id, False)
+                and not after_can_read.get(user_id, False)
+            ]
+
             await cls._send_admin_change_notifications(
                 resource_type=context.resource_type,
                 resource_id=context.resource_id,
@@ -108,6 +134,7 @@ class ResourcePermissionNotificationService:
                 operator_user_name=operator_user_name,
                 assigned_user_ids=assigned_user_ids,
                 revoked_user_ids=revoked_user_ids,
+                removed_member_user_ids=removed_member_user_ids,
             )
         except Exception:
             logger.exception(
@@ -132,10 +159,34 @@ class ResourcePermissionNotificationService:
         return user_ids
 
     @staticmethod
+    async def _expand_read_access_subjects(items: Iterable) -> set[int]:
+        user_ids: set[int] = set()
+        for item in items or []:
+            if getattr(item, "relation", None) not in _READ_ACCESS_RELATIONS:
+                continue
+            user_ids.update(
+                await PermissionService._affected_user_ids_for_subject(
+                    getattr(item, "subject_type", ""),
+                    int(getattr(item, "subject_id", 0) or 0),
+                    bool(getattr(item, "include_children", True)),
+                )
+            )
+        return user_ids
+
+    @staticmethod
     async def _can_manage(*, user_id: int, resource_type: str, resource_id: str) -> bool:
         return await PermissionService.check(
             user_id=user_id,
             relation="can_manage",
+            object_type=resource_type,
+            object_id=resource_id,
+        )
+
+    @staticmethod
+    async def _can_read(*, user_id: int, resource_type: str, resource_id: str) -> bool:
+        return await PermissionService.check(
+            user_id=user_id,
+            relation="can_read",
             object_type=resource_type,
             object_id=resource_id,
         )
@@ -182,8 +233,9 @@ class ResourcePermissionNotificationService:
         operator_user_name: str | None,
         assigned_user_ids: list[int],
         revoked_user_ids: list[int],
+        removed_member_user_ids: list[int],
     ) -> None:
-        if not assigned_user_ids and not revoked_user_ids:
+        if not assigned_user_ids and not revoked_user_ids and not removed_member_user_ids:
             return
 
         action_codes = cls._action_codes(resource_type)
@@ -220,6 +272,21 @@ class ResourcePermissionNotificationService:
                     ),
                     action_code=action_codes["revoked"],
                 )
+            if removed_member_user_ids:
+                await message_service.send_generic_notify(
+                    sender=operator_user_id,
+                    receiver_user_ids=removed_member_user_ids,
+                    content_item_list=build_notify_content(
+                        action_code=action_codes["removed"],
+                        target_name=resource_name,
+                        business_type=business_type,
+                        business_id=resource_id,
+                        actor_user_id=operator_user_id,
+                        actor_user_name=operator_user_name,
+                        navigable=False,
+                    ),
+                    action_code=action_codes["removed"],
+                )
 
     @staticmethod
     def _action_codes(resource_type: str) -> dict[str, str]:
@@ -227,10 +294,12 @@ class ResourcePermissionNotificationService:
             return {
                 "assigned": "assigned_channel_admin",
                 "revoked": "revoked_channel_admin",
+                "removed": "removed_channel_member",
             }
         return {
             "assigned": "assigned_knowledge_space_admin",
             "revoked": "revoked_knowledge_space_admin",
+            "removed": "removed_knowledge_space_member",
         }
 
     @staticmethod

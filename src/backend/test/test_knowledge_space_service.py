@@ -58,10 +58,31 @@ def _install_schema_stubs() -> None:
             model_name: str | None = None
 
         schemas_module.KnowledgeFileOne = _DummySchema
+        schemas_module.KnowledgeFileProcess = _DummySchema
+        schemas_module.KnowledgeSpaceConfig = _DummySchema
+        schemas_module.LinsightConfig = _DummySchema
+        schemas_module.SubscriptionConfig = _DummySchema
+        schemas_module.ToolConfig = _DummySchema
+        schemas_module.WorkstationConfig = _DummySchema
+        schemas_module.WSPrompt = _DummySchema
         schemas_module.FileProcessBase = _DummySchema
         schemas_module.ExcelRule = _DummySchema
         schemas_module.WSModel = _DummyWSModel
         sys.modules['bisheng.api.v1.schemas'] = schemas_module
+
+    if 'bisheng.api.v1.schema' not in sys.modules:
+        schema_pkg = ModuleType('bisheng.api.v1.schema')
+        schema_pkg.__path__ = []
+        sys.modules['bisheng.api.v1.schema'] = schema_pkg
+    if 'bisheng.api.v1.schema.chat_schema' not in sys.modules:
+        chat_schema_module = ModuleType('bisheng.api.v1.schema.chat_schema')
+
+        class _DummyUseKnowledgeBaseParam(BaseModel):
+            id: int | None = None
+
+        chat_schema_module.UseKnowledgeBaseParam = _DummyUseKnowledgeBaseParam
+        sys.modules['bisheng.api.v1.schema.chat_schema'] = chat_schema_module
+        sys.modules['bisheng.api.v1.schema'].chat_schema = chat_schema_module
 
     if 'bisheng.api.services' not in sys.modules:
         services_module = ModuleType('bisheng.api.services')
@@ -632,6 +653,12 @@ class TestDeleteSpace:
             new_callable=AsyncMock,
             return_value=None,
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch.object(
+            service, '_authorized_space_user_ids', new_callable=AsyncMock, return_value=set(),
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_delete_knowledge',
             new_callable=AsyncMock,
         ) as mock_delete, patch(
@@ -641,6 +668,15 @@ class TestDeleteSpace:
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_delete_knowledge_space',
             new_callable=AsyncMock,
         ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.clean_space_member',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.channel.domain.models.channel_knowledge_sync.ChannelKnowledgeSyncDao.adelete_by_space_id',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge',
+            new_callable=AsyncMock,
+        ), patch(
             'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.telemetry_delete_knowledge',
         ):
             await service.delete_space(1)
@@ -648,6 +684,56 @@ class TestDeleteSpace:
         mock_require_permission_id.assert_awaited_once_with('knowledge_space', 1, 'delete_space')
         mock_delete.assert_awaited_once_with(knowledge_id=1)
         mock_cleanup.assert_awaited_once_with([('folder', 201), ('knowledge_file', 202), ('knowledge_space', 1)])
+
+    @pytest.mark.asyncio
+    async def test_delete_space_notifies_authorized_users_not_only_member_rows(self, service):
+        space = _make_space(user_id=999)
+        member = _make_member(user_id=8, user_role=UserRoleEnum.MEMBER)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=space,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch.object(
+            service, '_list_space_child_resources', new_callable=AsyncMock, return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
+            new_callable=AsyncMock,
+            return_value=[member],
+        ), patch.object(
+            service, '_authorized_space_user_ids', new_callable=AsyncMock, return_value={740},
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.asyncio.to_thread',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_delete_knowledge',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, '_send_space_event_notification', new_callable=AsyncMock,
+        ) as mock_send, patch.object(
+            service, '_cleanup_resource_tuples', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.clean_space_member',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.channel.domain.models.channel_knowledge_sync.ChannelKnowledgeSyncDao.adelete_by_space_id',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_delete_knowledge_space',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.telemetry_delete_knowledge',
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge',
+            new_callable=AsyncMock,
+        ):
+            await service.delete_space(1)
+
+        assert mock_send.await_args.kwargs['action_code'] == 'knowledge_space_deleted'
+        assert mock_send.await_args.kwargs['receiver_user_ids'] == [8, 740]
 
 
 class TestSpaceListings:
@@ -2189,7 +2275,13 @@ class TestTupleLifecycle:
             '_list_space_child_resources',
             new_callable=AsyncMock,
             return_value=child_resources,
-        ) as mock_list_children, patch.object(
+        ) as mock_list_children, patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch.object(
+            service, '_authorized_space_user_ids', new_callable=AsyncMock, return_value=set(),
+        ), patch.object(
             service.__class__,
             'clear_space_authorization_for_private',
             new_callable=AsyncMock,
@@ -2205,6 +2297,45 @@ class TestTupleLifecycle:
             child_resources=child_resources,
         )
         mock_delete_members.assert_awaited_once_with(1)
+
+    @pytest.mark.asyncio
+    async def test_public_to_private_notifies_authorized_users_not_only_member_rows(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE)
+        creator_member = _make_member(user_id=1, user_role=UserRoleEnum.CREATOR)
+
+        with patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=public_space,
+        ), patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space',
+            new_callable=AsyncMock,
+            return_value=private_space,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
+            new_callable=AsyncMock,
+            return_value=[creator_member],
+        ), patch.object(
+            service, '_authorized_space_user_ids', new_callable=AsyncMock, return_value={740},
+        ), patch.object(
+            service, '_list_space_child_resources', new_callable=AsyncMock, return_value=[],
+        ), patch.object(
+            service.__class__, 'clear_space_authorization_for_private', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_delete_non_creator_members',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service, '_user_can_read_space', new_callable=AsyncMock, return_value=False,
+        ), patch.object(
+            service, '_send_space_event_notification', new_callable=AsyncMock,
+        ) as mock_send:
+            await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
+
+        assert mock_send.await_args.kwargs['action_code'] == 'knowledge_space_made_private'
+        assert mock_send.await_args.kwargs['receiver_user_ids'] == [740]
 
     @pytest.mark.asyncio
     async def test_approval_to_public_activates_pending_members_and_syncs_rebac_tuple(self, service):
