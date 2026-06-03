@@ -660,7 +660,7 @@
     "appCenterDescription": "App Center Description",
     "appCenterDescriptionPlaceholder": "You can select the required agents here for production and work",
     "modelManagement": "Dialogue Model Management",
-    "maxTokens": "Knowledge Base/Web Search Result Max Characters",
+    "maxTokens": "Knowledge Base/Web Search/Uploaded File Result Max Characters",
     "maxTokensPlaceholder": "Maximum characters supported by the model",
     "systemPrompt": "System Prompt",
     "systemPromptPlaceholder": "Please enter the model system prompt.",

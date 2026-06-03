@@ -769,17 +769,25 @@ class ConversationExportService:
     # Image preprocessing (AD-06)
     # ----------------------------------------------------------------------
 
+    # Image extension → MIME for data: URIs.
+    _IMAGE_MIME = {
+        'jpg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif',
+        'webp': 'image/webp', 'svg': 'image/svg+xml',
+    }
+
     @classmethod
-    async def _preprocess_images(cls, markdown: str, temp_dir: str) -> str:
-        """Pre-download all ``![](url)`` images to ``temp_dir`` and rewrite the
-        Markdown to point at local ``file://`` paths.
+    async def _embed_images_as_data_uri(cls, markdown: str) -> str:
+        """Download every ``![](url)`` image and rewrite the link to an inline
+        ``data:`` base64 URI.
 
-        Why: pandoc itself can fetch http(s) images, but its error surface is
-        opaque and uncontrolled. By preloading we get one place to handle:
-        timeouts, MinIO/HTTPS/data: protocols, and per-image fallback (AC-29).
+        Used by the docx (pandoc) and pdf (chromium) renderers: both embed
+        ``data:`` URIs directly, so we avoid temp files / pandoc resource-path /
+        ``file://`` quirks, and — crucially — handle the root-relative
+        ``/bisheng/...`` image paths that are otherwise only reachable through
+        the frontend nginx proxy (resolved to MinIO in ``_fetch_image_bytes``).
 
-        Concurrency: at most ``_IMAGE_FETCH_CONCURRENCY`` parallel downloads
-        through a single shared ``httpx.AsyncClient``.
+        Per-image failures fall back to a ``[图片加载失败：url]`` placeholder
+        (AC-29) instead of dropping the whole export. md/txt skip this step.
         """
         matches = list(_IMAGE_PATTERN.finditer(markdown))
         if not matches:
@@ -787,11 +795,12 @@ class ConversationExportService:
 
         unique_urls = sorted({m.group(2) for m in matches})
         sem = asyncio.Semaphore(_IMAGE_FETCH_CONCURRENCY)
+        minio_host = await cls._resolve_minio_host()
 
         async with httpx.AsyncClient(timeout=_IMAGE_FETCH_TIMEOUT_SECONDS) as client:
             async def _wrap(url: str):
                 async with sem:
-                    return await cls._fetch_image_bytes(url, client)
+                    return await cls._fetch_image_bytes(url, client, minio_host)
 
             results = await asyncio.gather(
                 *(_wrap(u) for u in unique_urls), return_exceptions=True,
@@ -804,31 +813,33 @@ class ConversationExportService:
                 replacements[url] = None
                 continue
             raw, ext = result
-            digest = hashlib.md5(url.encode('utf-8')).hexdigest()[:12]
-            local_path = Path(temp_dir) / f'img_{digest}.{ext}'
-            local_path.write_bytes(raw)
-            replacements[url] = local_path.as_uri()
+            mime = cls._IMAGE_MIME.get(ext, 'image/png')
+            b64 = base64.b64encode(raw).decode('ascii')
+            replacements[url] = f'data:{mime};base64,{b64}'
 
         def _replace(m: re.Match) -> str:
             alt = m.group(1)
             url = m.group(2)
-            local_uri = replacements.get(url)
-            if local_uri:
-                return f'![{alt}]({local_uri})'
+            data_uri = replacements.get(url)
+            if data_uri:
+                return f'![{alt}]({data_uri})'
             return f'[图片加载失败：{url}]'  # AC-29
 
         return _IMAGE_PATTERN.sub(_replace, markdown)
 
     @staticmethod
     async def _fetch_image_bytes(
-        url: str, client: httpx.AsyncClient,
+        url: str, client: httpx.AsyncClient, minio_host: Optional[str] = None,
     ) -> tuple[bytes, str]:
         """Fetch image bytes + extension hint. Raises on failure.
 
-        Three protocol families:
+        Protocol families:
 
         - ``data:`` URLs: decoded in-process (no network).
         - ``http(s)://``: shared AsyncClient (caller's timeout governs).
+        - root-relative ``/bisheng/...``: a path the browser resolves through
+          the frontend nginx proxy. The backend has no such proxy, so we
+          rebuild the absolute MinIO URL from the share host and fetch that.
         - everything else: raises ValueError → caller substitutes placeholder.
 
         MinIO internal URLs are HTTP, so they go through the same client. The
@@ -855,13 +866,38 @@ class ConversationExportService:
                 raise ValueError('invalid base64 payload') from e
             return raw, ext
 
+        # Root-relative path (nginx-proxied on the frontend, e.g.
+        # "/bisheng/knowledge/images/..."): rebuild the absolute MinIO URL.
+        if url.startswith('/') and not url.startswith('//') and minio_host:
+            url = minio_host.rstrip('/') + url
+
         if url.startswith(('http://', 'https://')):
             resp = await client.get(url)
             resp.raise_for_status()
             ext = _guess_ext_from_content_type(resp.headers.get('content-type', ''))
+            if ext == 'bin':
+                # MinIO serves images as application/octet-stream — fall back to
+                # the URL path suffix so the local file carries a real image
+                # extension and pandoc/Word embeds it instead of dropping it.
+                suffix = url.split('?', 1)[0].rsplit('.', 1)[-1].lower()
+                if suffix in {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}:
+                    ext = 'jpg' if suffix == 'jpeg' else suffix
             return resp.content, ext
 
         raise ValueError(f'unsupported image URL scheme: {url[:40]}')
+
+    @staticmethod
+    async def _resolve_minio_host() -> Optional[str]:
+        """Best-effort MinIO share host for rebuilding nginx-proxied image
+        paths. Returns None when MinIO context is unavailable (the images then
+        fall back to the load-failure placeholder)."""
+        try:
+            from bisheng.core.storage.minio.minio_manager import get_minio_storage
+            storage = await get_minio_storage()
+            return storage.get_minio_share_host()
+        except Exception:  # noqa: BLE001 — best-effort; missing host is non-fatal
+            logger.warning('resolve minio host failed; relative image URLs unfetchable')
+            return None
 
     # ----------------------------------------------------------------------
     # Filename (AC-10)
@@ -1022,6 +1058,10 @@ class ConversationExportService:
                 file_path=[file_path],
                 parent_id=parent_id,
                 file_source=FileSource.SPACE_UPLOAD,
+                # F028 already resolved a unique "(N)" filename; bypass the
+                # platform's md5/name dedup so re-importing the same conversation
+                # creates a new file instead of being rejected as a duplicate.
+                skip_dedup=True,
             )
         except SpaceFileNameDuplicateError:
             # Race window between our dedup scan and add_file: another row
@@ -1038,6 +1078,7 @@ class ConversationExportService:
                     file_path=[file_path],
                     parent_id=parent_id,
                     file_source=FileSource.SPACE_UPLOAD,
+                    skip_dedup=True,
                 )
             except SpaceFileNameDuplicateError as e:
                 raise ConversationImportFailedError(

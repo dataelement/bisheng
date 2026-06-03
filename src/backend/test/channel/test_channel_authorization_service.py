@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -514,3 +515,28 @@ async def test_granting_non_creator_user_is_not_blocked_by_creator_guard():
         await service.authorize_channel('channel-1', request, _User())
 
     mock_authorize.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_list_permissions_marks_creator_entry():
+    # Channel created by user 99; user 11 is a granted (non-creator) owner.
+    service = _service_with_creator(ChannelRelationEnum.OWNER, creator_id=99)
+    service._require_manage_access = AsyncMock(return_value=ChannelRelationEnum.OWNER)
+    service._get_relation_models = AsyncMock(return_value=[])
+
+    def _perm(subject_id: int, name: str):
+        return SimpleNamespace(
+            subject_type='user', subject_id=subject_id, relation='owner',
+            subject_name=name, subject_group_names=None, subject_member_names=None,
+            include_children=None, model_id='owner', model_name=None,
+        )
+
+    with patch(
+        'bisheng.channel.domain.services.channel_authorization_service.PermissionService.get_resource_permissions',
+        new=AsyncMock(return_value=[_perm(99, 'creator'), _perm(11, 'granted-owner')]),
+    ):
+        entries = await service.list_permissions('channel-1', _User())
+
+    by_id = {e.subject_id: e for e in entries}
+    assert by_id[99].is_creator is True
+    assert by_id[11].is_creator is False

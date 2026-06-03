@@ -887,7 +887,7 @@
     "appCenterWelcomePlaceholder": "$t(bisheng) のエージェントを探索しましょう",
     "appCenterDescription": "ここで必要なエージェントを選び、業務や生産に活用できます。",
     "modelManagement": "対話モデル管理",
-    "maxTokens": "ナレッジベース / Web 検索結果の最大文字数",
+    "maxTokens": "ナレッジベース / Web 検索 / アップロードファイル結果の最大文字数",
     "maxTokensPlaceholder": "モデルがサポートする最大文字数",
     "systemPrompt": "システムプロンプト",
     "systemPromptPlaceholder": "モデルシステムプロンプトを入力してください",

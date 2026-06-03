@@ -1,3 +1,11 @@
+"""DEPRECATED — Legacy department knowledge space file-upload approval API.
+
+This module backs the old `approval_request`-table approval flow
+(`/api/v1/approval/requests/*` and `/api/v1/approval/department-knowledge-space/*`).
+It is kept only for backward compatibility with existing data and MUST NOT be
+extended. New approval needs go through the unified approval center
+(`approval_gate.py` / `approval_center_service.py`).
+"""
 from __future__ import annotations
 
 from typing import List, Optional
@@ -17,7 +25,7 @@ from bisheng.common.schemas.api import resp_200
 router = APIRouter(prefix='/approval', tags=['approval'])
 
 
-@router.get('/department-knowledge-space/settings/{space_id}')
+@router.get('/department-knowledge-space/settings/{space_id}', deprecated=True)
 async def get_department_knowledge_space_approval_settings(
     space_id: int,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -29,7 +37,7 @@ async def get_department_knowledge_space_approval_settings(
         return e.return_resp_instance()
 
 
-@router.put('/department-knowledge-space/settings/{space_id}')
+@router.put('/department-knowledge-space/settings/{space_id}', deprecated=True)
 async def update_department_knowledge_space_approval_settings(
     space_id: int,
     settings: DepartmentKnowledgeSpaceApprovalSettings,
@@ -46,7 +54,7 @@ async def update_department_knowledge_space_approval_settings(
         return e.return_resp_instance()
 
 
-@router.get('/requests')
+@router.get('/requests', deprecated=True)
 async def list_approval_requests(
     space_id: Optional[int] = Query(default=None),
     statuses: Optional[List[str]] = Query(default=None),
@@ -67,7 +75,7 @@ async def list_approval_requests(
         return e.return_resp_instance()
 
 
-@router.get('/requests/{request_id}')
+@router.get('/requests/{request_id}', deprecated=True)
 async def get_approval_request(
     request_id: int,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -82,7 +90,7 @@ async def get_approval_request(
         return e.return_resp_instance()
 
 
-@router.post('/requests/{request_id}/decision')
+@router.post('/requests/{request_id}/decision', deprecated=True)
 async def decide_approval_request(
     request_id: int,
     req: ApprovalRequestDecisionReq,

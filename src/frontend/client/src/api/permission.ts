@@ -24,6 +24,8 @@ export interface PermissionEntry {
   model_id?: string;
   model_name?: string;
   include_children?: boolean;
+  /** Channel creator: permission level is permanent and not editable. */
+  is_creator?: boolean;
 }
 
 export interface GrantItem {

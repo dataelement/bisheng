@@ -893,7 +893,7 @@
     "appCenterDescription": "应用中心描述",
     "appCenterDescriptionPlaceholder": "您可以在这里选择需要的智能体来进行生产与工作~",
     "modelManagement": "对话模型管理",
-    "maxTokens": "知识库/联网检索结果最大字符数",
+    "maxTokens": "知识库/联网检索结果/上传文件最大字符数",
     "maxTokensPlaceholder": "模型支持的最大字符数",
     "systemPrompt": "系统提示词",
     "systemPromptPlaceholder": "请输入模型系统提示词",

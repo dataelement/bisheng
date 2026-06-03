@@ -11,10 +11,10 @@ result_serializer = 'json'
 accept_content = ['json']
 timezone = 'Asia/Shanghai'
 enable_utc = False
-_DEFAULT_ROUTES = {
-    'bisheng.worker.approval.*': {'queue': 'workflow_celery'},
-}
-task_routes = {**_DEFAULT_ROUTES, **settings.celery_task.task_routers}
+# Approval async tasks (outbox execution / retry) intentionally have NO route here,
+# so they fall through to Celery's default `celery` queue. The `workflow_celery`
+# queue is reserved for workflow DAG execution only.
+task_routes = {**settings.celery_task.task_routers}
 # redisHealth check interval, unit sec
 redis_backend_health_check_interval = 5
 

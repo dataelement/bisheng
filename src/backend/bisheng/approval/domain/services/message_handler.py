@@ -1,3 +1,9 @@
+"""DEPRECATED — Bridges legacy inbox-message approval actions to the legacy
+department knowledge space file-upload approval service (`ApprovalService`).
+
+Kept only for backward compatibility with existing data; do NOT add new features
+here. New approval needs go through the unified approval center.
+"""
 from __future__ import annotations
 
 from bisheng.approval.domain.schemas.approval_schema import ApprovalDecisionActionEnum
@@ -7,6 +13,8 @@ from bisheng.message.domain.services.approval_handler import ApprovalHandler
 
 
 class DepartmentKnowledgeSpaceUploadApprovalHandler(ApprovalHandler):
+    """DEPRECATED: legacy department knowledge space upload approval handler. Do not extend."""
+
     LEGACY_REJECT_REASON = 'Rejected via legacy message approval route'
 
     def get_action_code(self) -> str:

@@ -1,3 +1,9 @@
+"""DEPRECATED — Legacy department knowledge space file-upload approval service.
+
+Backs the old `approval_request`-table flow. Kept only for backward compatibility
+with existing data; do NOT add new features here. New approval needs go through the
+unified approval center (`approval_gate.py` / `approval_center_service.py`).
+"""
 from __future__ import annotations
 
 import asyncio
@@ -46,6 +52,8 @@ _MESSAGE_ACTION_CODE = 'request_department_knowledge_space_upload'
 
 
 class ApprovalService:
+    """DEPRECATED: legacy department knowledge space file-upload approval. Do not extend."""
+
     @classmethod
     async def _sync_message_after_decision(
         cls,

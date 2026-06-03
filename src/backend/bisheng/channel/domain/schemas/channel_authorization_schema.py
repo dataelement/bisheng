@@ -43,6 +43,9 @@ class ChannelPermissionEntry(BaseModel):
     include_children: Optional[bool] = None
     model_id: Optional[str] = None
     model_name: Optional[str] = None
+    # True for the channel creator's entry: their permission level is permanent
+    # and must not be editable in the UI.
+    is_creator: bool = False
 
 
 class ChannelRelationModelItem(BaseModel):
