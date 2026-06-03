@@ -164,7 +164,11 @@ function Sidebar({
 
       {
         section: 'knowledge' as const,
-        to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable',
+        // Mobile is list-page-first: the menu always opens the space list (/knowledge),
+        // never the last-visited file page. Desktop keeps last-path restoration.
+        to: hasPlugin('knowledge_space') || !menuApprovalMode
+          ? (isMobile ? '/knowledge' : (lastSectionPaths.knowledge || '/knowledge'))
+          : '/menu-unavailable',
         icon: <Outlined.Book />,
         activeIcon: <Filled.Book />,
         label: localize('com_knowledge.knowledge_space'),
@@ -205,7 +209,7 @@ function Sidebar({
       if (l.section === 'portal-admin') return showShougangPortalTab;
       return true;
     });
-  }, [canOpenWorkbenchEntry, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, showShougangPortalTab, menuApprovalMode, plugins, localize]);
+  }, [canOpenWorkbenchEntry, pathname, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, showShougangPortalTab, menuApprovalMode, plugins, localize]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;

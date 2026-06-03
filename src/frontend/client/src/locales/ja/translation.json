@@ -1323,6 +1323,8 @@
     "delete_folder_warning": "含まれるフォルダーとそのサブファイルも一緒に削除され、復元することはできません。",
     "delete_space": "スペースを削除",
     "delete_space_failed": "スペースの削除に失敗しました",
+    "more": "その他",
+    "share_link_copy_failed": "共有リンクのコピーに失敗しました",
     "delete_tag_failed": "タグの削除に失敗しました",
     "delete_tag_success": "タグを削除しました",
     "deleted": "削除済み",

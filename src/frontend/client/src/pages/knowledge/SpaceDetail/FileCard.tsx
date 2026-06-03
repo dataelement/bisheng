@@ -3,6 +3,7 @@ import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
+import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
 import { Card, CardContent } from "~/components/ui/Card";
 import {
     DropdownMenu,
@@ -144,7 +145,7 @@ export function FileCard({
      * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
      * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
      */
-    const renderStatusOverlayTag = () => {
+    const renderStatusOverlayTag = (inline = false) => {
         if (!isAdmin || isFolder) return null;
         if (file.status === FileStatus.SUCCESS) return null;
 
@@ -198,7 +199,8 @@ export function FileCard({
             </Tooltip>
         ) : pill;
 
-        return (
+        // Inline (H5 row meta line) returns the bare pill; desktop card overlays it on the icon.
+        return inline ? wrapped : (
             <div className="absolute bottom-1 left-1 z-10">{wrapped}</div>
         );
     };
@@ -266,6 +268,89 @@ export function FileCard({
         !isCreating &&
         !isRenaming &&
         (isFolder || isKnowledgeItemPreviewable(file));
+
+    // H5 mobile list row: flat row (no border / shadow / card background) with
+    // icon + title + date + tags, and a circular checkbox on the far right.
+    // Rendered independently from the desktop card so the desktop path is untouched.
+    if (mobileListMode) {
+        const mobileStatusPill = renderStatusOverlayTag(true);
+        return (
+            <div
+                className={cn(
+                    // Full-bleed row: the list container has no horizontal padding on mobile,
+                    // so the row's own px-4 gives the 16px content gutter while the selected
+                    // background spans the full width.
+                    "flex items-center gap-2 px-4 py-3",
+                    cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
+                )}
+                style={
+                    isSelected
+                        ? { background: "linear-gradient(0deg, rgba(230, 237, 252, 0.30) 0%, rgba(230, 237, 252, 0.30) 100%), #FFF" }
+                        : undefined
+                }
+                onClick={handleCardClick}
+            >
+                {/* File icon 48x48 */}
+                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[6px] bg-white">
+                    <FileIconRenderer file={file} isFolder={isFolder} iconClassName="size-12 shrink-0" thumbBordered />
+                </div>
+
+                {/* Text block: title + (date + tags) */}
+                <div className="flex min-w-0 flex-1 flex-col">
+                    {isRenaming ? (
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={handleRenameSubmit}
+                            onKeyDown={handleKeyDown}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-6 w-full rounded border border-[#165dff] bg-white px-1.5 text-sm font-normal shadow-[0_0_0_2px_rgba(22,93,255,0.2)] outline-none"
+                        />
+                    ) : (
+                        <span className={cn("truncate text-sm", nameToneClass)}>
+                            {renderHighlightedName(file.name, highlightKeyword)}
+                        </span>
+                    )}
+
+                    {/* Status (non-success only) + date + tags on a single line */}
+                    <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
+                        {mobileStatusPill && <span className="shrink-0">{mobileStatusPill}</span>}
+                        <span className="shrink-0 text-xs leading-5 text-[#818181] tabular-nums">
+                            {formatTimeCard(file.updatedAt)}
+                        </span>
+                        {isFolder ? (
+                            (isAdmin || file.successFileNum != null) && file.fileNum != null && (
+                                <span className="shrink-0 whitespace-nowrap text-xs leading-5 text-[#999999] tabular-nums">
+                                    {localize("com_knowledge_items_count", {
+                                        count: isAdmin ? (file.fileNum ?? 0) : (file.successFileNum ?? 0),
+                                    })}
+                                </span>
+                            )
+                        ) : (
+                            file.tags && file.tags.length > 0 && (
+                                <TagGroup
+                                    tags={file.tags}
+                                    variant="text-h5"
+                                    highlightedTagIds={highlightedTagIds}
+                                />
+                            )
+                        )}
+                    </div>
+                </div>
+
+                {/* Circular selection checkbox on the far right */}
+                {!hideSelectionCheckbox && (
+                    <RoundCheckbox
+                        className="shrink-0"
+                        checked={isSelected}
+                        onCheckedChange={(checked) => onSelect(checked)}
+                    />
+                )}
+            </div>
+        );
+    }
 
     return (
         <Card

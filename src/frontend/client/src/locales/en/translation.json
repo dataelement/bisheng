@@ -1399,6 +1399,8 @@
     "delete_folder_warning": "The included folders and their sub-files will also be deleted and cannot be recovered.",
     "delete_space": "Delete space",
     "delete_space_failed": "Failed to delete space",
+    "more": "More",
+    "share_link_copy_failed": "Failed to copy share link",
     "delete_tag_failed": "Failed to delete tag",
     "delete_tag_success": "Tag deleted",
     "deleted": "Deleted",

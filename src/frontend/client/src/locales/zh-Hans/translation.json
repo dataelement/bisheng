@@ -1326,6 +1326,8 @@
     "delete_folder_warning": "包含的文件夹及其子文件也将被一并删除，且不可恢复。",
     "delete_space": "删除空间",
     "delete_space_failed": "删除空间失败",
+    "more": "更多",
+    "share_link_copy_failed": "复制分享链接失败",
     "delete_tag_failed": "删除标签失败",
     "delete_tag_success": "标签已删除",
     "deleted": "已删除",

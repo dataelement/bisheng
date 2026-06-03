@@ -36,6 +36,8 @@ interface KnowledgeFolderTreeProps {
      */
     fileStatus?: number[];
     onSelectFolder: (folder: FolderSelectPayload | null) => void;
+    /** Compact dropdown styling: 14px folder icons + slightly looser node spacing. */
+    compact?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -66,9 +68,10 @@ interface TreeNodeRowProps {
     currentFolderId?: string;
     onExpand: (node: TreeNode) => void;
     onSelect: (node: TreeNode) => void;
+    compact?: boolean;
 }
 
-function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeNodeRowProps) {
+function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect, compact = false }: TreeNodeRowProps) {
     const isSelected = currentFolderId === String(node.id);
     const hasExpandedChildren = node.expanded && Array.isArray(node.children);
 
@@ -115,9 +118,9 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
                     Per design: selected folder icon is dark (#1d2129); unselected is light gray. */}
                 <div className="flex size-5 shrink-0 items-center justify-center">
                     {hasExpandedChildren ? (
-                        <Outlined.FolderOpen className={cn("size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderOpen className={cn(compact ? "size-3.5 shrink-0" : "size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
                     ) : (
-                        <Outlined.FolderClose className={cn("size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderClose className={cn(compact ? "size-3.5 shrink-0" : "size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
                     )}
                 </div>
 
@@ -142,6 +145,7 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect }: TreeN
                             currentFolderId={currentFolderId}
                             onExpand={onExpand}
                             onSelect={onSelect}
+                            compact={compact}
                         />
                     ))}
                 </div>
@@ -157,6 +161,7 @@ export function KnowledgeFolderTree({
     currentFolderId,
     fileStatus,
     onSelectFolder,
+    compact = false,
 }: KnowledgeFolderTreeProps) {
     const [roots, setRoots] = useState<TreeNode[]>([]);
     const [rootLoading, setRootLoading] = useState(false);
@@ -351,6 +356,7 @@ export function KnowledgeFolderTree({
                     currentFolderId={currentFolderId}
                     onExpand={handleExpand}
                     onSelect={handleSelect}
+                    compact={compact}
                 />
             ))}
         </div>

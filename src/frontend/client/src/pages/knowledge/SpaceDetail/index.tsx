@@ -1,7 +1,10 @@
-import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
+import { Fragment, useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import { Outlined } from "bisheng-icons";
+import { NotificationSeverity } from "~/common";
+import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { useConfirm, useToastContext } from "~/Providers";
 import {
     DropdownMenu,
@@ -23,7 +26,7 @@ import {
     triggerUrlDownload,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { SearchParams } from "./CompoundSearchInput";
+import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
@@ -36,7 +39,16 @@ import {
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import {
+    knowledgeSpaceDropdownSurfaceClassName,
+    SidebarListMoreMenuContent,
+    sidebarListMoreMenuItemClassName,
+    sidebarListMoreMenuIconClassName,
+    sidebarListMoreMenuLabelClassName,
+    sidebarListMoreMenuDangerItemClassName,
+    sidebarListMoreMenuDangerIconClassName,
+    sidebarListMoreMenuDangerLabelClassName,
+} from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
@@ -67,6 +79,19 @@ interface KnowledgeSpaceContentProps {
     onCancelCreateFolder?: () => void;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
+    /** Mobile top bar — provided by the Knowledge page (index.tsx). */
+    onOpenSystemMenu?: () => void;
+    onToggleSpaceList?: () => void;
+    spaceListOpen?: boolean;
+    /** Delete current space (navigates back to the list); permission-gated by the menu. */
+    onDeleteSpace?: () => void;
+    /** Open the search page from the top-bar search icon. */
+    onOpenSearch?: () => void;
+    /** Mobile full-page search mode: replaces the top bar with an inline search header. */
+    searchMode?: boolean;
+    onCloseSearch?: () => void;
+    /** Notify the page when a mobile batch selection is active, so it can hide the AI dock. */
+    onSelectionActiveChange?: (active: boolean) => void;
 }
 
 export function KnowledgeSpaceContent({
@@ -95,6 +120,14 @@ export function KnowledgeSpaceContent({
     onCancelCreateFolder,
     onCreateSpace,
     onGoKnowledgeSquare,
+    onOpenSystemMenu,
+    onToggleSpaceList,
+    spaceListOpen = false,
+    onDeleteSpace,
+    onOpenSearch,
+    searchMode = false,
+    onCloseSearch,
+    onSelectionActiveChange,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -208,6 +241,22 @@ export function KnowledgeSpaceContent({
         space.id,
         "share_space",
     );
+    const canDeleteSpace = isAdmin || hasKnowledgeSpacePermission(
+        spaceActionPermissions,
+        space.id,
+        "delete_space",
+    );
+    // Share = copy the space share link (mirrors the desktop CopyShareLinkButton);
+    // only when the space is shareable and not private.
+    const showShareInMenu = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
+    const handleCopyShareLink = async () => {
+        try {
+            await navigator.clipboard.writeText(buildClientShareUrl(`/knowledge/share/${space.id}`));
+            showToast({ message: localize("com_knowledge.share_link_copied"), severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: localize("com_knowledge.share_link_copy_failed"), severity: NotificationSeverity.ERROR });
+        }
+    };
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
@@ -811,9 +860,48 @@ export function KnowledgeSpaceContent({
         downloadEntryIds.has(file.id)
     );
 
+    // Mobile only ever shows the list form — never the multi-column card grid.
+    const effectiveViewMode: "card" | "list" = isH5 ? "list" : viewMode;
+    // Search page starts empty: show results only once a keyword/tag search is active.
+    const suppressList = searchMode && !isSearching;
+
+    // ─── Mobile batch action bar ────────────────────────────────────────
+    // Shown at the bottom (replacing the AI dock) once any file is selected. Which
+    // actions appear mirrors the desktop toolbar exactly (same permission/status gates).
+    const selectionActive = isH5 && selectedFiles.size > 0;
+    useEffect(() => {
+        onSelectionActiveChange?.(selectionActive);
+    }, [selectionActive, onSelectionActiveChange]);
+
+    // Permission management is a single-target action: only with exactly one selected item,
+    // and only when the user is allowed to manage its permission (permissionEntryIds is the
+    // permission-probed set, so this respects the user's permission).
+    const singleSelectedId = selectedFiles.size === 1 ? Array.from(selectedFiles)[0] : undefined;
+    const canManageSinglePermission = !!singleSelectedId && permissionEntryIds.has(singleSelectedId);
+
+    type BatchAction = { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; onClick: () => void; danger?: boolean };
+    const batchActions: BatchAction[] = [
+        canBatchDownload && {
+            key: "download",
+            label: localize("com_knowledge.download"),
+            Icon: Outlined.Download,
+            // A single selected file uses the single-file download (no zip); multiple → batch zip.
+            onClick: () => (selectedFiles.size === 1 ? handleSingleDownload(Array.from(selectedFiles)[0]) : handleBatchDownload()),
+        },
+        (isAdmin && !hasFoldersSelected) && { key: "tag", label: localize("com_knowledge.batch_add_tags"), Icon: Outlined.Tag, onClick: handleBatchTag },
+        (isAdmin && hasFailedFiles) && { key: "retry", label: localize("com_knowledge.retry"), Icon: Outlined.Refresh, onClick: handleBatchRetry },
+        canManageSinglePermission && { key: "permission", label: localize("com_permission.manage_permission"), Icon: Outlined.PeopleSafe, onClick: () => handleManagePermission(singleSelectedId!) },
+        canBatchDelete && { key: "delete", label: localize("com_knowledge.delete"), Icon: Outlined.Delete, onClick: handleBatchDelete, danger: true },
+    ].filter(Boolean) as BatchAction[];
+    // Up to 3 slots inline; if more actions exist, the last slot becomes a "更多" dropdown.
+    const MAX_INLINE = 3;
+    const hasOverflow = batchActions.length > MAX_INLINE;
+    const inlineActions = hasOverflow ? batchActions.slice(0, MAX_INLINE - 1) : batchActions;
+    const overflowActions = hasOverflow ? batchActions.slice(MAX_INLINE - 1) : [];
+
     return (
         <div
-            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden"
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden max-[767px]:px-0"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -828,7 +916,139 @@ export function KnowledgeSpaceContent({
                 onChange={handleFileChange}
                 accept={fileInputAccept}
             />
-            {/* Header */}
+            {/* Mobile full-page search header: inline search box (scope + keyword + tags) + 取消. */}
+            {isH5 && searchMode && (
+                <div className="shrink-0 rounded-t-xl bg-white px-4 pt-[calc(env(safe-area-inset-top,0px)+8px)] pb-2">
+                    <div className="flex items-start gap-3">
+                        <div className="min-w-0 flex-1">
+                            <CompoundSearchInput
+                                pageMode
+                                spaceId={space.id}
+                                isRoot={currentPath.length === 0}
+                                onSearch={handleSearch}
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                handleSearch({ scope: currentPath.length === 0 ? "all" : "current", tagIds: [], keyword: "" });
+                                onCloseSearch?.();
+                            }}
+                            className="flex h-8 shrink-0 items-center text-sm text-[#999]"
+                        >
+                            {localize("com_knowledge.cancel")}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Mobile top bar: system menu + space-name dropdown + search/sort/more.
+                Search/sort/more are greyed + disabled while the space-list dropdown is open. */}
+            {isH5 && !searchMode && (
+                /* Root has no padding on mobile; the inner row's px-4 gives the 16px gutter. */
+                <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                    <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
+                        <button
+                            type="button"
+                            aria-label={localize("com_nav_open_sidebar")}
+                            onClick={() => onOpenSystemMenu?.()}
+                            className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                        >
+                            <Outlined.SidebarMenu className="size-5" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onToggleSpaceList?.()}
+                            aria-expanded={spaceListOpen}
+                            className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
+                        >
+                            <span className="truncate text-base font-medium leading-6 text-[#212121]">{space.name}</span>
+                            <Outlined.Down className={cn("size-5 shrink-0 text-[#86909C] transition-transform", spaceListOpen && "rotate-180")} />
+                        </button>
+                        <div className="flex shrink-0 items-center gap-3">
+                            <button
+                                type="button"
+                                aria-label={localize("com_knowledge.search")}
+                                onClick={() => onOpenSearch?.()}
+                                className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121]", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                            >
+                                <Outlined.Search className="size-5" />
+                            </button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild disabled={spaceListOpen}>
+                                    <button
+                                        type="button"
+                                        aria-label={localize("com_knowledge.sort_field")}
+                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121] outline-none", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                                    >
+                                        <Outlined.Sort className="size-5" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                                    <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
+                                    {[
+                                        { value: SortType.NAME, label: localize("com_knowledge.sort_by_name_label") },
+                                        { value: SortType.TYPE, label: localize("com_knowledge.sort_by_type_label") },
+                                        { value: SortType.UPDATE_TIME, label: localize("com_knowledge.sort_by_update_time_label") },
+                                    ].map((opt) => (
+                                        <DropdownMenuItem
+                                            key={opt.value}
+                                            onClick={() => handleSort(opt.value)}
+                                            className="flex items-center justify-between gap-6"
+                                        >
+                                            <span>{opt.label}</span>
+                                            {sortBy === opt.value && (
+                                                <span className="shrink-0 text-xs text-[#86909c]">
+                                                    {sortDirection === SortDirection.ASC ? "↑" : "↓"}
+                                                </span>
+                                            )}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild disabled={spaceListOpen}>
+                                    <button
+                                        type="button"
+                                        aria-label={localize("com_knowledge.more")}
+                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121] outline-none", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                                    >
+                                        <Outlined.MoreCircle className="size-5" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <SidebarListMoreMenuContent>
+                                    {canUploadFile && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerUpload}>
+                                            <Outlined.Upload className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.upload_file")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canCreateFolder && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onCreateFolder()}>
+                                            <FolderPlus className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.new_folder")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {showShareInMenu && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={handleCopyShareLink}>
+                                            <Outlined.Share className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.share")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canDeleteSpace && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuDangerItemClassName} onClick={() => onDeleteSpace?.()}>
+                                            <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
+                                            <span className={sidebarListMoreMenuDangerLabelClassName}>{localize("com_knowledge.delete_space")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                </SidebarListMoreMenuContent>
+                            </DropdownMenu>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Header (desktop only; on mobile these actions live in the top-bar menu) */}
+            {!isH5 && (
             <div className="shrink-0">
             <KnowledgeSpaceHeader
                 space={space}
@@ -868,6 +1088,7 @@ export function KnowledgeSpaceContent({
                 canShareSpace={canShareSpace}
             />
             </div>
+            )}
 
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -892,7 +1113,10 @@ export function KnowledgeSpaceContent({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    {loading && displayFiles.length === 0 ? (
+                    {suppressList ? (
+                        // Search page before any query — intentionally empty.
+                        <div className="min-h-0 flex-1" />
+                    ) : loading && displayFiles.length === 0 ? (
                         // Space switching / first load: show a spinner instead of the
                         // "no files here" empty illustration. The fileManager hook clears
                         // `files` immediately on activeSpace change, so this branch fires
@@ -928,12 +1152,12 @@ export function KnowledgeSpaceContent({
                                     // pb-[112px] reserves room for the bottom AI dock (40px gap + 56px input + 16px safe-area)
                                     // so the last card row clears the dock with a 40px visual gap above the input top.
                                     "w-full min-w-0 pt-4 pb-[112px]",
-                                    viewMode === "list"
-                                        ? "grid grid-cols-1 gap-2"
+                                    effectiveViewMode === "list"
+                                        ? "grid grid-cols-1 gap-0"
                                         : "grid gap-4"
                                 )}
                                 style={
-                                    viewMode === "card"
+                                    effectiveViewMode === "card"
                                         ? { gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }
                                         : undefined
                                 }
@@ -958,7 +1182,7 @@ export function KnowledgeSpaceContent({
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
                                             canDownload={downloadEntryIds.has(file.id)}
-                                            mobileListMode={isH5 && viewMode === "list"}
+                                            mobileListMode={isH5}
                                             highlightedTagIds={searchTagIds}
                                             highlightKeyword={searchQuery}
                                         />
@@ -1015,6 +1239,61 @@ export function KnowledgeSpaceContent({
                             selectedFiles={selectedFiles}
                             displayFiles={displayFiles}
                         />
+                    </div>
+                </div>
+            )}
+
+            {/* Mobile batch action bar — pinned to the bottom, replaces the AI dock while
+                files are selected. Actions + permissions mirror the desktop toolbar. */}
+            {selectionActive && batchActions.length > 0 && (
+                /* Floating capsule: 16px from left/right/bottom, 12px inner padding. Buttons share
+                   width evenly (flex-1); a 12px-tall divider sits between them. */
+                <div className="absolute inset-x-0 bottom-[max(16px,env(safe-area-inset-bottom))] z-30 px-4">
+                    <div className="flex w-full items-center rounded-[20px] border border-[#EBECF0] bg-white p-3 shadow-[0_6px_24px_0_rgba(0,17,147,0.12)]">
+                        {inlineActions.map((a, i) => (
+                            <Fragment key={a.key}>
+                                {i > 0 && <span className="h-3 w-px shrink-0 bg-[#EBECF0]" aria-hidden />}
+                                <button
+                                    type="button"
+                                    onClick={a.onClick}
+                                    className={cn(
+                                        "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm",
+                                        a.danger ? "text-[#F53F3F]" : "text-[#212121]",
+                                    )}
+                                >
+                                    <a.Icon className="size-4" />
+                                    {a.label}
+                                </button>
+                            </Fragment>
+                        ))}
+                        {overflowActions.length > 0 && (
+                            <>
+                                {inlineActions.length > 0 && <span className="h-3 w-px shrink-0 bg-[#EBECF0]" aria-hidden />}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button
+                                            type="button"
+                                            className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm text-[#212121]"
+                                        >
+                                            <Outlined.More className="size-4" />
+                                            {localize("com_knowledge.more")}
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent side="top" align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                                        {overflowActions.map((a) => (
+                                            <DropdownMenuItem
+                                                key={a.key}
+                                                onClick={a.onClick}
+                                                className={a.danger ? sidebarListMoreMenuDangerItemClassName : sidebarListMoreMenuItemClassName}
+                                            >
+                                                <a.Icon className={a.danger ? sidebarListMoreMenuDangerIconClassName : sidebarListMoreMenuIconClassName} />
+                                                <span className={a.danger ? sidebarListMoreMenuDangerLabelClassName : sidebarListMoreMenuLabelClassName}>{a.label}</span>
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </>
+                        )}
                     </div>
                 </div>
             )}

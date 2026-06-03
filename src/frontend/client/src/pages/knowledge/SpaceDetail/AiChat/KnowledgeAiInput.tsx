@@ -22,7 +22,7 @@ import AiModelSelect from "~/components/Chat/AiModelSelect";
 import type { BsConfig } from "~/api/chatApi";
 import { TagPicker } from "./TagPicker";
 import type { FolderChatTag } from "~/hooks/useFolderChat";
-import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { cn } from "~/utils";
@@ -75,9 +75,12 @@ export function KnowledgeAiInput({
      *  Only escalates (one-way) to avoid oscillation; resets when the input is cleared. */
     const [multiline, setMultiline] = useState(false);
     const isComposingRef = useRef(false);
+    const isH5 = usePrefersMobileLayout();
 
-    /** Two-row layout: textarea on top, model + controls below. Single-row otherwise. */
-    const stacked = variant === "line" || multiline;
+    /** Two-row layout: textarea on top, model + controls below. Single-row otherwise.
+     *  Mobile is always two-row (matches the channel article dock) — the extra controls
+     *  (tag picker / model / voice) don't fit comfortably on one line on phones. */
+    const stacked = variant === "line" || multiline || isH5;
 
     // Voice input: check if ASR model is available
     const { data: modelData } = useGetWorkbenchModelsQuery();
@@ -204,7 +207,10 @@ export function KnowledgeAiInput({
         onSend(inputText.trim(), null, selectedTag ?? undefined);
         setInputText("");
         setSelectedTag(null);
-    }, [isStreaming, disabled, inputText, selectedTag, onSend]);
+        // Mobile: blur after sending so the keyboard dismisses and the grey overlay
+        // (driven by focus → keyboardVisible) clears instead of lingering.
+        if (isH5) textareaRef.current?.blur();
+    }, [isStreaming, disabled, inputText, selectedTag, onSend, isH5]);
 
     // Handle keydown
     const handleKeyDown = useCallback(

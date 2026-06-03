@@ -24,9 +24,10 @@ import {
     getMineSpacesApi,
     createSpaceApi,
     updateSpaceApi,
+    deleteSpaceApi,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
-import { useToastContext } from "~/Providers";
+import { useConfirm, useToastContext } from "~/Providers";
 import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
@@ -55,10 +56,15 @@ export default function Knowledge() {
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [spaceListDrawerOpen, setSpaceListDrawerOpen] = useState(false);
+    // Mobile: a batch selection in the file list hides the AI dock and shows the action bar.
+    const [fileSelectionActive, setFileSelectionActive] = useState(false);
+    // Mobile: full-page file search (opened from the file-page top-bar search icon).
+    const [knowledgeSearchMode, setKnowledgeSearchMode] = useState(false);
     const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]";
     const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
 
     const { showToast } = useToastContext();
+    const confirm = useConfirm();
     const { user, isUserLoading } = useAuthContext();
     const navigate = useNavigate();
 
@@ -102,8 +108,6 @@ export default function Knowledge() {
         return plugins.includes("knowledge_space") ? "enabled" : "disabled";
     }, [user, isUserLoading]);
 
-    // Feature gate: system may disable Knowledge Space via user plugins.
-    // Share links should redirect to workbench home with a clear permission toast.
     useEffect(() => {
         if (!isH5) setSpaceListDrawerOpen(false);
     }, [isH5]);
@@ -117,6 +121,31 @@ export default function Knowledge() {
         setSpaceListDrawerOpen(false);
     }, [activeSpace?.id]);
 
+    // Mobile: the space list is a standalone page at /knowledge. When the URL leaves a
+    // space detail route (browser Back, or in-app navigation to /knowledge), drop the
+    // active space so the full-page list shows again. PC keeps its auto-selected space.
+    useEffect(() => {
+        if (!isH5) return;
+        if (detailSpaceId || isShareRoute) return;
+        setActiveSpace(null);
+    }, [isH5, detailSpaceId, isShareRoute]);
+
+    // Browser Back/Forward: this tab is cached (react-activation), so the router hooks may
+    // not re-run inside it. Re-sync activeSpace with the live URL on popstate. Mobile only —
+    // desktop keeps its combined list+detail view (and auto-selects the first space).
+    useEffect(() => {
+        const onPop = () => {
+            if (!window.matchMedia("(max-width: 767px)").matches) return;
+            if (!/\/knowledge\/space\//.test(window.location.pathname)) {
+                setActiveSpace(null);
+            }
+        };
+        window.addEventListener("popstate", onPop);
+        return () => window.removeEventListener("popstate", onPop);
+    }, []);
+
+    // Feature gate: system may disable Knowledge Space via user plugins.
+    // Share links should redirect to workbench home with a clear permission toast.
     useEffect(() => {
         if (knowledgePluginGate !== "disabled") return;
         showToastRef.current({
@@ -148,6 +177,13 @@ export default function Knowledge() {
     useActivate(() => {
         fileManager.loadFiles(fileManager.currentPage);
         setKnowledgeTabActivateEpoch((e) => e + 1);
+        // This tab is cached (react-activation) — re-syncing with the live URL is required,
+        // otherwise re-entering the Knowledge menu shows the previously-open space (stale
+        // activeSpace) instead of the space list. Read window.location directly because the
+        // router hooks can lag a cached re-activation.
+        if (typeof window !== "undefined" && !/\/knowledge\/space\//.test(window.location.pathname)) {
+            setActiveSpace(null);
+        }
     });
 
     const fileUpload = useFileUpload({
@@ -502,6 +538,27 @@ export default function Knowledge() {
         }
     };
 
+    // Delete the current space from the file-page top-bar menu, then return to the list.
+    const handleDeleteActiveSpace = async (sp: KnowledgeSpace | null) => {
+        if (!sp) return;
+        const ok = await confirm({
+            title: localize("com_knowledge.prompt"),
+            description: localize("com_knowledge.confirm_operation"),
+            confirmText: localize("com_knowledge.delete"),
+            cancelText: localize("com_knowledge.cancel"),
+        });
+        if (!ok) return;
+        try {
+            await deleteSpaceApi(sp.id);
+            queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
+            setActiveSpace(null);
+            navigate("/knowledge");
+        } catch {
+            showToast({ message: localize("com_knowledge.delete_space_failed"), severity: NotificationSeverity.ERROR });
+        }
+    };
+
     const handleDragStateChange = (dragging: boolean, error?: string | null) => {
         setIsDragging(dragging);
         setDragError(error || null);
@@ -599,23 +656,28 @@ export default function Knowledge() {
                 </div>
             )}
 
-            <div className="hidden h-full shrink-0 touch-desktop:block">
-                <KnowledgeSpaceSidebar
-                    activeSpaceId={activeSpace?.id}
-                    onSpaceSelect={handleSpaceSelect}
-                    onCreateSpace={handleCreateSpace}
-                    onSpaceSettings={handleSpaceSettings}
-                    onManageMembers={(space) => {
-                        openSpacePermissionDialog(space);
-                    }}
-                    onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
-                    collapsed={sidebarCollapsed}
-                    onCollapsedChange={setSidebarCollapsed}
-                    hideExpandToggleWhenCollapsed={!!activeSpace}
-                />
-            </div>
+            {/* PC sidebar — desktop only. Must NOT mount on mobile: its auto-select-first
+                effect would jump straight into a space and bypass the mobile list page. */}
+            {!isH5 && (
+                <div className="hidden h-full shrink-0 touch-desktop:block">
+                    <KnowledgeSpaceSidebar
+                        activeSpaceId={activeSpace?.id}
+                        onSpaceSelect={handleSpaceSelect}
+                        onCreateSpace={handleCreateSpace}
+                        onSpaceSettings={handleSpaceSettings}
+                        onManageMembers={(space) => {
+                            openSpacePermissionDialog(space);
+                        }}
+                        onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                        collapsed={sidebarCollapsed}
+                        onCollapsedChange={setSidebarCollapsed}
+                        hideExpandToggleWhenCollapsed={!!activeSpace}
+                    />
+                </div>
+            )}
 
-            {isH5 && spaceListDrawerOpen && typeof document !== "undefined"
+            {/* File page: the top Title ▾ opens this drawer to switch spaces (unchanged behaviour). */}
+            {isH5 && activeSpace && spaceListDrawerOpen && typeof document !== "undefined"
                 ? createPortal(
                     <div
                         className="fixed inset-x-0 bottom-0 z-[80] flex flex-col bg-white"
@@ -652,20 +714,6 @@ export default function Knowledge() {
                                 }}
                             />
                         </div>
-                        {/* Bottom action: 前往知识广场 — same style as channel dropdown's go-to-square */}
-                        <div className="shrink-0 px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setSpaceListDrawerOpen(false);
-                                    setShowKnowledgeSquare(true);
-                                }}
-                                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[6px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
-                            >
-                                <Outlined.BlocksAndArrows className="size-4 text-[#86909C]" />
-                                {localize("com_knowledge.go_to_square")}
-                            </button>
-                        </div>
                     </div>,
                     document.body,
                 )
@@ -674,49 +722,14 @@ export default function Knowledge() {
             {activeSpace ? (
                 <div
                     className={cn(
-                        "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-                        isH5 && "max-h-[calc(100dvh-16px)]",
+                        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                        // Mobile needs a DEFINITE viewport height (the KeepAlive shell is h-auto,
+                        // so percentage chains collapse): without it the content grows with the
+                        // file count and the absolute-bottom AI dock drifts / the layout cramps.
+                        isH5 ? "h-[100dvh]" : "h-full",
                     )}
                 >
-                    {isH5 ? (
-                        // 勿用 fixed 贴视口：会叠在 MainLayout 圆角白卡外，盖住卡片上沿圆角；放在面板流式布局内即可
-                        <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                            <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
-                                <button
-                                    type="button"
-                                    aria-label={localize("com_nav_open_sidebar")}
-                                    onClick={() => setSystemMenuOpen(true)}
-                                    className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
-                                >
-                                    <Outlined.SidebarMenu className="size-5" />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setSpaceListDrawerOpen((o) => !o)}
-                                    aria-expanded={spaceListDrawerOpen}
-                                    className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
-                                >
-                                    <span className="truncate text-base font-medium leading-6 text-[#212121]">
-                                        {localize("com_knowledge.knowledge_space")}
-                                    </span>
-                                    <Outlined.Down
-                                        className={cn(
-                                            "size-5 shrink-0 text-[#86909C] transition-transform",
-                                            spaceListDrawerOpen && "rotate-180",
-                                        )}
-                                    />
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-label={localize("com_knowledge.create_knowledge_space")}
-                                    onClick={handleCreateSpace}
-                                    className={mobileHeadIconBtnClassName}
-                                >
-                                    <Outlined.Plus className="size-5" />
-                                </button>
-                            </div>
-                        </div>
-                    ) : null}
+                    {/* Mobile top bar now lives inside KnowledgeSpaceContent (it owns search/sort/upload). */}
                     {/* `relative` anchors the bottom AI dock; the content scrolls within its own container while the dock overlays the bottom. */}
                     <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white shadow-[0px_4px_20px_0px_rgba(0,17,147,0.05)]">
                         <KnowledgeSpaceContent
@@ -748,54 +761,61 @@ export default function Knowledge() {
                             onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
                             onCreateSpace={handleCreateSpace}
                             onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                            onOpenSystemMenu={() => setSystemMenuOpen(true)}
+                            onToggleSpaceList={() => setSpaceListDrawerOpen((o) => !o)}
+                            spaceListOpen={spaceListDrawerOpen}
+                            onDeleteSpace={() => handleDeleteActiveSpace(activeSpace)}
+                            onOpenSearch={() => setKnowledgeSearchMode(true)}
+                            searchMode={knowledgeSearchMode}
+                            onCloseSearch={() => setKnowledgeSearchMode(false)}
+                            onSelectionActiveChange={setFileSelectionActive}
                         />
-                        <KnowledgeAiBottomDock
-                            key={String(activeSpace.id)}
-                            spaceId={String(activeSpace.id)}
-                            folderId={fileManager.currentFolderId}
-                            contextLabel={contextLabel}
-                        />
+                        {/* Hide the AI dock during a mobile batch selection (the batch action bar
+                            takes the bottom slot) and in search mode (the search page has no dock). */}
+                        {!fileSelectionActive && !knowledgeSearchMode && (
+                            <KnowledgeAiBottomDock
+                                key={String(activeSpace.id)}
+                                spaceId={String(activeSpace.id)}
+                                folderId={fileManager.currentFolderId}
+                                contextLabel={contextLabel}
+                            />
+                        )}
                     </div>
                 </div>
-            ) : (
-                /* Empty state when no space is selected */
-                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-                    {isH5 ? (
-                        <div className="absolute left-0 right-0 top-4 z-10 flex h-8 items-center justify-between gap-3 px-4">
+            ) : isH5 ? (
+                /* Mobile: standalone full-page space list. Tapping a space navigates to
+                   /knowledge/space/:id (handled by handleSpaceSelect) → the file page. */
+                <div className="flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden bg-white">
+                    <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                        <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
                             <button
                                 type="button"
                                 aria-label={localize("com_nav_open_sidebar")}
                                 onClick={() => setSystemMenuOpen(true)}
-                                className={cn(mobileHeadIconBtnClassName, spaceListDrawerOpen && "pointer-events-none text-[#C9CDD4]")}
+                                className={mobileHeadIconBtnClassName}
                             >
                                 <Outlined.SidebarMenu className="size-5" />
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => setSpaceListDrawerOpen((o) => !o)}
-                                aria-expanded={spaceListDrawerOpen}
-                                className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
-                            >
-                                <span className="truncate text-base font-medium leading-6 text-[#212121]">
-                                    {localize("com_knowledge.knowledge_space")}
-                                </span>
-                                <Outlined.Down
-                                    className={cn(
-                                        "size-5 shrink-0 text-[#86909C] transition-transform",
-                                        spaceListDrawerOpen && "rotate-180",
-                                    )}
-                                />
-                            </button>
-                            <button
-                                type="button"
-                                aria-label={localize("com_knowledge.create_knowledge_space")}
-                                onClick={handleCreateSpace}
-                                className={mobileHeadIconBtnClassName}
-                            >
-                                <Outlined.Plus className="size-5" />
-                            </button>
+                            <span className="min-w-0 flex-1 truncate text-center text-base font-medium leading-6 text-[#212121]">
+                                {localize("com_knowledge.knowledge_space")}
+                            </span>
+                            <span className="size-5 shrink-0" aria-hidden />
                         </div>
-                    ) : null}
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-hidden">
+                        <KnowledgeSpaceSidebar
+                            mobilePageMode
+                            onSpaceSelect={handleSpaceSelect}
+                            onCreateSpace={handleCreateSpace}
+                            onSpaceSettings={handleSpaceSettings}
+                            onManageMembers={(space) => openSpacePermissionDialog(space)}
+                            onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
+                        />
+                    </div>
+                </div>
+            ) : (
+                /* PC empty state when no space is selected */
+                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                     <img
                         className="size-[120px] mb-4 object-contain opacity-90"
                         src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}

@@ -45,11 +45,11 @@ const TYPE_TO_ICON: Record<FileTypeKey, React.ReactNode> = {
     md: <Colored.FileMd className={iconSlotClass} />,
 };
 
-const FileIconRenderer = ({ file, isFolder }: { file: any; isFolder: boolean }) => {
+const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered }: { file: any; isFolder: boolean; iconClassName?: string; thumbBordered?: boolean }) => {
     if (isFolder) {
         return (
             <div className={cn(wrapperClass, FILE_TYPE_BG.folder)}>
-                {TYPE_TO_ICON.folder}
+                <Colored.Folder className={iconClassName ?? iconSlotClass} />
             </div>
         );
     }
@@ -71,7 +71,7 @@ const FileIconRenderer = ({ file, isFolder }: { file: any; isFolder: boolean }) 
     // object-top so the preview keeps the page header (title area) visible instead
     // of clipping it equally top & bottom.
     if (file.thumbnail && file.status === FileStatus.SUCCESS) {
-        return <img src={file.thumbnail} alt={file.name} className="size-full object-cover object-top" />;
+        return <img src={file.thumbnail} alt={file.name} className={cn("size-full object-cover object-top", thumbBordered && "rounded-[6px] border border-[#EBECF0]")} />;
     }
 
     // For non-success states (uploading/processing/failed/etc.), use the neutral

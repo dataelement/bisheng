@@ -38,6 +38,10 @@ interface KnowledgeSpaceItemProps {
     canEditSpace?: boolean;
     canDeleteSpace?: boolean;
     canManageMembers?: boolean;
+    /** Hide the per-row "..." menu (e.g. the compact dropdown's tree). */
+    hideMoreMenu?: boolean;
+    /** Compact dropdown styling: 14px space/folder icons, slightly looser tree node spacing. */
+    compact?: boolean;
 }
 
 export default function KnowledgeSpaceItem({
@@ -54,6 +58,8 @@ export default function KnowledgeSpaceItem({
     canEditSpace = false,
     canDeleteSpace = false,
     canManageMembers = false,
+    hideMoreMenu = false,
+    compact = false,
 }: KnowledgeSpaceItemProps) {
     const localize = useLocalize();
     const [isEditing, setIsEditing] = useState(false);
@@ -140,9 +146,9 @@ export default function KnowledgeSpaceItem({
 
                     <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
                         {type === "department" ? (
-                            <Outlined.City className={`size-4 ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.City className={`${compact ? "size-3.5" : "size-4"} ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         ) : (
-                            <Outlined.Notebook className={`size-4 ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.Notebook className={`${compact ? "size-3.5" : "size-4"} ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         )}
                     </div>
 
@@ -183,6 +189,7 @@ export default function KnowledgeSpaceItem({
                       • sticky right-1 (4px): margin-box right edge sticks 4px from the viewport.
                       • -mr-3 (-12px): negative right margin lets the box extend past the list's
                         right padding so the button can reach its intended offset from the edge. */}
+                {!hideMoreMenu && (
                 <div className="sticky right-1 z-[1] ml-2 -mr-3 pr-3 flex h-5 w-8 flex-shrink-0 items-center justify-start">
                     <DropdownMenu onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
@@ -276,6 +283,7 @@ export default function KnowledgeSpaceItem({
                         </SidebarListMoreMenuContent>
                     </DropdownMenu>
                 </div>
+                )}
             </div>
 
             {/* Folder tree — nested under this space row when expanded.
@@ -285,6 +293,7 @@ export default function KnowledgeSpaceItem({
             {expanded && treeEnabled && (
                 <div>
                     <KnowledgeFolderTree
+                        compact={compact}
                         knowledgeId={space.id}
                         currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}
                         // Mirror the right-side panel: MEMBER-role users hide FAILED

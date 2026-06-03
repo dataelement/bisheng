@@ -26,6 +26,16 @@ interface SectionHeaderProps {
     /** When provided, renders a "+" button before the sort icon (e.g. create space on "我创建的"). */
     onAdd?: () => void;
     addLabel?: string;
+    /** When provided, renders a knowledge-square entry icon in the right group. */
+    onSquare?: () => void;
+    squareLabel?: string;
+    /** When provided, renders a cycle (⇄) icon after the title that switches space type. */
+    onCycle?: () => void;
+    cycleLabel?: string;
+    /** Mobile full-page list styling: larger title/padding, dark icons, always-visible chevron. */
+    mobile?: boolean;
+    /** Compact dropdown styling: dark right-side icons, grey cycle icon. */
+    compact?: boolean;
 }
 
 export function SectionHeader({
@@ -38,7 +48,23 @@ export function SectionHeader({
     onSortChange,
     onAdd,
     addLabel,
+    onSquare,
+    squareLabel,
+    onCycle,
+    cycleLabel,
+    mobile = false,
+    compact = false,
 }: SectionHeaderProps) {
+    // Mobile right-side icon button: same color as the title (#212121), larger hit area.
+    const mobileIconBtnClassName =
+        "flex size-6 items-center justify-center rounded text-[#212121] outline-none active:bg-[#f2f3f5]";
+    // Right-side icon button (+ / square / sort). Compact dropdown uses dark icons (#212121),
+    // the PC sidebar keeps grey (#999); mobile full-page uses its own larger button.
+    const rightIconBtn = mobile
+        ? mobileIconBtnClassName
+        : compact
+            ? "flex size-5 items-center justify-center rounded text-[#212121] outline-none hover:bg-[#f2f3f5]"
+            : "flex size-5 items-center justify-center rounded text-[#999] outline-none hover:bg-[#f2f3f5] hover:text-[#4e5969]";
     return (
         // group: enables hover-reveal for the collapse chevron.
         // h-7 (28px) + rounded-md + hover bg: matches the tree nodes below.
@@ -64,18 +90,44 @@ export function SectionHeader({
                  Because the scroll container has no padding, the sticky offset reference is
                  the true edge, so the header does NOT shift on horizontal scroll.
                • Inner px-4 (16px) aligns the title text with the items' left gutter. */
-            className="group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4 transition-colors hover:bg-[#F4F4F4]"
+            className={
+                mobile
+                    ? "group sticky top-0 left-0 z-[2] flex w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-5 py-2"
+                    : "group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4 transition-colors hover:bg-[#F4F4F4]"
+            }
         >
-            <div className="flex h-full items-center gap-1 text-[12px] text-[#999] group-hover:text-[#4e5969]">
+            <div
+                className={
+                    mobile
+                        ? "flex items-center gap-1 text-[14px] leading-5 text-[#212121]"
+                        : "flex h-full items-center gap-1 text-[12px] text-[#999] group-hover:text-[#4e5969]"
+                }
+            >
                 <span>{title}</span>
-                {/* Collapse arrow: placed after the title; hidden by default, revealed on row hover. */}
-                <Outlined.Down
-                    className={`size-4 opacity-0 transition-[opacity,transform] group-hover:opacity-100 ${
-                        collapsed ? "-rotate-90" : ""
-                    }`}
-                />
+                {onCycle ? (
+                    /* Cycle space type (⇄). Replaces the collapse chevron in the compact dropdown. */
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onCycle();
+                        }}
+                        title={cycleLabel}
+                        aria-label={cycleLabel}
+                        className="flex size-4 items-center justify-center text-[#999] outline-none"
+                    >
+                        <Outlined.Exchange className="size-4" />
+                    </button>
+                ) : (
+                    /* Collapse arrow: placed after the title; hidden by default, revealed on row hover. */
+                    <Outlined.Down
+                        className={`size-4 transition-[opacity,transform] group-hover:opacity-100 ${
+                            mobile ? "opacity-100" : "opacity-0"
+                        } ${collapsed ? "-rotate-90" : ""}`}
+                    />
+                )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className={mobile ? "flex items-center gap-2" : "flex items-center gap-1"}>
                 {onAdd && (
                     <button
                         onClick={(e) => {
@@ -84,9 +136,23 @@ export function SectionHeader({
                         }}
                         title={addLabel}
                         aria-label={addLabel}
-                        className="flex size-5 items-center justify-center rounded text-[#999] hover:bg-[#f2f3f5] hover:text-[#4e5969]"
+                        className={rightIconBtn}
                     >
                         <Outlined.Plus className="size-4" />
+                    </button>
+                )}
+                {/* Knowledge-square entry. Placed before the sort icon per design. */}
+                {onSquare && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSquare();
+                        }}
+                        title={squareLabel}
+                        aria-label={squareLabel}
+                        className={rightIconBtn}
+                    >
+                        <Outlined.BlocksAndArrows className="size-4" />
                     </button>
                 )}
                 {/* Sort field dropdown — opens a menu of sort options with the
@@ -97,14 +163,14 @@ export function SectionHeader({
                             onClick={(e) => e.stopPropagation()}
                             title={sortFieldLabel}
                             aria-label={sortFieldLabel}
-                            className="flex size-5 items-center justify-center rounded text-[#999] outline-none hover:bg-[#f2f3f5] hover:text-[#4e5969] data-[state=open]:bg-[#f2f3f5] data-[state=open]:text-[#4e5969]"
+                            className={`${rightIconBtn} data-[state=open]:bg-[#f2f3f5]`}
                         >
                             <Outlined.Sort className="size-4" />
                         </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                         align="end"
-                        className={knowledgeSpaceDropdownSurfaceClassName}
+                        className={`${knowledgeSpaceDropdownSurfaceClassName} z-[100]`}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{sortFieldLabel}</div>

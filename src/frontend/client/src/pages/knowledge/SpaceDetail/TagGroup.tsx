@@ -5,10 +5,15 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '~/components/ui/Tooltip2';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from '~/components/ui/DropdownMenu';
 import { FileTag } from '~/api/knowledge';
 import { cn } from '~/utils';
 
-type TagVariant = 'pill' | 'text';
+type TagVariant = 'pill' | 'text' | 'text-h5';
 
 interface TagGroupProps {
     tags: FileTag[];
@@ -55,13 +60,24 @@ const VARIANT_STYLES: Record<TagVariant, {
         measure: 'text-[10px] leading-5',
         moreBadgeReserve: 24,
     },
+    // H5 mobile row: 12px `#tag` in #999999, with a `+N` overflow counter (Figma H5 file row).
+    'text-h5': {
+        container: 'min-h-[20px] gap-1',
+        tag: 'text-xs leading-5 text-[#999999] whitespace-nowrap',
+        tagHighlighted: 'text-xs leading-5 font-semibold text-[#3a74e9] whitespace-nowrap',
+        tagFirst: 'min-w-[20px] truncate flex-shrink',
+        moreBadge: 'bg-[#F2F3F5] text-[#999999] text-xs leading-5 px-1.5 rounded-[4px] cursor-pointer flex-shrink-0',
+        measure: 'text-xs leading-5',
+        moreBadgeReserve: 34,
+    },
 };
 
 const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: TagGroupProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [visibleCount, setVisibleCount] = useState(1); // Initial fallback
     const styles = VARIANT_STYLES[variant];
-    const renderTagText = (tag: FileTag) => variant === 'text' ? `#${tag.name}` : tag.name;
+    const renderTagText = (tag: FileTag) =>
+        variant === 'text' || variant === 'text-h5' ? `#${tag.name}` : tag.name;
     const highlightSet = React.useMemo(
         () => new Set(highlightedTagIds ?? []),
         [highlightedTagIds],
@@ -74,7 +90,7 @@ const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: T
 
             const containerWidth = containerRef.current.offsetWidth;
             const tagElements = containerRef.current.querySelectorAll('.tag-measure') as NodeListOf<HTMLElement>;
-            const gap = variant === 'text' ? 4 : 6;
+            const gap = variant === 'pill' ? 6 : 4;
             const actionBtnWidth = actionButton ? 28 : 0;
 
             let currentWidth = (tagElements[0]?.offsetWidth || 0) + gap;
@@ -125,24 +141,53 @@ const TagGroup = ({ tags, actionButton, variant = 'pill', highlightedTagIds }: T
                     </div>
                 ))}
 
-                {/* 2. Overflow "+N" tooltip */}
+                {/* 2. Overflow "+N". On the H5 row it's a tap-to-open dropdown listing the
+                    hidden tags (touch has no hover); other variants keep the hover tooltip. */}
                 {hiddenTags.length > 0 && (
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <div className={styles.moreBadge}>
-                                +{hiddenTags.length}
-                            </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" noArrow className="bg-white p-2 border border-gray-100 shadow-md">
-                            <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                {hiddenTags.map((tag) => (
-                                    <span key={tag.id} className={cn(tagClass(tag), "whitespace-nowrap")}>
-                                        {renderTagText(tag)}
-                                    </span>
-                                ))}
-                            </div>
-                        </TooltipContent>
-                    </Tooltip>
+                    variant === 'text-h5' ? (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button
+                                    type="button"
+                                    className={styles.moreBadge}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                >
+                                    +{hiddenTags.length}
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="end"
+                                className="min-w-[96px] rounded-[8px] border border-gray-100 bg-white p-2 shadow-md"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="flex flex-col gap-1">
+                                    {hiddenTags.map((tag) => (
+                                        <span key={tag.id} className={cn(tagClass(tag), "whitespace-nowrap")}>
+                                            {renderTagText(tag)}
+                                        </span>
+                                    ))}
+                                </div>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    ) : (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div className={styles.moreBadge}>
+                                    +{hiddenTags.length}
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" noArrow className="bg-white p-2 border border-gray-100 shadow-md">
+                                <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                    {hiddenTags.map((tag) => (
+                                        <span key={tag.id} className={cn(tagClass(tag), "whitespace-nowrap")}>
+                                            {renderTagText(tag)}
+                                        </span>
+                                    ))}
+                                </div>
+                            </TooltipContent>
+                        </Tooltip>
+                    )
                 )}
 
                 {/* 3. Action button */}

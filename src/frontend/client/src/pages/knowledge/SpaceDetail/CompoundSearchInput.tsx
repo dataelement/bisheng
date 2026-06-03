@@ -25,9 +25,11 @@ export interface CompoundSearchInputProps {
     className?: string;
     /** Render as a single search-icon button that expands into the full field on click. */
     collapsible?: boolean;
+    /** Full-page search: scope + tags always visible, tags rendered inline below the box. */
+    pageMode?: boolean;
 }
 
-export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false }: CompoundSearchInputProps) {
+export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, pageMode = false }: CompoundSearchInputProps) {
     const localize = useLocalize();
     const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
@@ -40,7 +42,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
     // either via input focus / tag dropdown or the scope DropdownMenu. The parent
     // toolbar reads this via has-[[data-expanded=true]] to keep its width stable
     // even when Radix portals the menu out of the focus tree.
-    const isExpanded = isFocused || isScopeMenuOpen;
+    const isExpanded = isFocused || isScopeMenuOpen || pageMode;
 
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -255,9 +257,13 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 )}
             </div>
 
-            {/* Dropdown Panel — space tags */}
-            {isFocused && !isScopeMenuOpen && (
-                <div className="absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3 max-[767px]:min-w-0 max-[767px]:w-full">
+            {/* Dropdown Panel — space tags. Page mode renders it inline (static) below the box. */}
+            {(pageMode || (isFocused && !isScopeMenuOpen)) && (
+                <div className={cn(
+                    pageMode
+                        ? "mt-3 w-full"
+                        : "absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3 max-[767px]:min-w-0 max-[767px]:w-full",
+                )}>
                     <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
                     <div className="flex flex-wrap gap-2">
                         {spaceTags.length === 0 && (

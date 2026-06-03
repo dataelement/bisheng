@@ -36,6 +36,10 @@ export interface FilePreviewProps {
     targetBBox?: CitationPdfBBox | null;
     /** Render viewer-only layout (hide top toolbar and sidebar controls). */
     compactMode?: boolean;
+    /** Hide the TopBar header entirely while keeping the full preview controls
+     *  (sidebar/zoom/pagination). Used by the mobile bare-preview layout where the
+     *  header is replaced by floating controls. */
+    hideHeader?: boolean;
     /** Whether to expose download actions. */
     allowDownload?: boolean;
     /** Optional business-level download handler. Defaults to downloading fileUrl. */
@@ -51,6 +55,7 @@ export default function FilePreview({
     highlightBboxes = [],
     targetBBox = null,
     compactMode = false,
+    hideHeader = false,
     allowDownload = true,
     onDownloadFile,
 }: FilePreviewProps) {
@@ -59,6 +64,9 @@ export default function FilePreview({
     const hasSidebar = !compactMode && supportsSidebar(viewerType);
     const hasPagination = !compactMode && supportsPagination(viewerType);
     const hasZoom = !compactMode && supportsZoom(viewerType);
+    // Suppress the TopBar header without dropping into compactMode (which also
+    // strips sidebar/zoom/pagination). `showHeader` gates every header render below.
+    const showHeader = !compactMode && !hideHeader;
 
     // --- PDF-specific state ---
     const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -138,7 +146,7 @@ export default function FilePreview({
     if (viewerType === "unsupported") {
         return (
             <div className="w-full h-full flex flex-col">
-                {!compactMode && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
+                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-4 text-[#86909c]">
                         <div className="text-5xl">📄</div>
@@ -160,7 +168,7 @@ export default function FilePreview({
     if (conversionFailed) {
         return (
             <div className="w-full h-full flex flex-col">
-                {!compactMode && (
+                {showHeader && (
                     <TopBar
                         fileName={fileName}
                         showZoom={true}
@@ -185,7 +193,7 @@ export default function FilePreview({
     if (error) {
         return (
             <div className="w-full h-full flex flex-col">
-                {!compactMode && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
+                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-3 text-[#86909c]">
                         <div className="text-4xl">📄</div>
@@ -229,7 +237,7 @@ export default function FilePreview({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden">
-            {!compactMode && (
+            {showHeader && (
                 <TopBar
                     fileName={fileName}
                     showSidebar={hasSidebar}
