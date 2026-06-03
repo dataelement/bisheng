@@ -89,6 +89,7 @@ class ChannelAuthorizationService:
         login_user: UserPayload,
     ) -> ChannelAuthorizeResponse:
         channel = await self._ensure_channel(channel_id)
+        self._reject_creator_permission_change(channel, request)
         actor_permissions = await self._actor_grant_permissions(channel_id, login_user)
         self._validate_request(actor_permissions, request)
         await self._validate_subjects_belong_to_channel_tenant(channel, request, login_user)
@@ -439,6 +440,22 @@ class ChannelAuthorizationService:
         if tier in _GRANT_TIER_VALUES:
             return tier
         return _grant_tier_for_relation(model.get('relation') or '')
+
+    @staticmethod
+    def _reject_creator_permission_change(channel, request: ChannelAuthorizeRequest) -> None:
+        """The channel creator is a permanent owner.
+
+        Their permission level can never be modified through authorization — not
+        even by an actor holding ``manage_channel_owner``. Any grant or revoke
+        that targets the creator user is rejected.
+        """
+        creator_id = getattr(channel, 'user_id', None)
+        if creator_id is None:
+            return
+        creator_id = int(creator_id)
+        for item in [*(request.grants or []), *(request.revokes or [])]:
+            if item.subject_type == 'user' and int(item.subject_id) == creator_id:
+                raise ChannelPermissionDeniedError(msg='无法修改频道创建人的权限')
 
     def _validate_request(
         self,
