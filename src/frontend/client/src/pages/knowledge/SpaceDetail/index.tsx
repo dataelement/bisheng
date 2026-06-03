@@ -554,7 +554,7 @@ export function KnowledgeSpaceContent({
     }, [isAdmin, permissionEntryProbeKey]);
 
     useEffect(() => {
-        const eligibleSourceSpace = space.spaceLevel === SpaceLevel.TEAM || space.spaceLevel === SpaceLevel.PERSONAL;
+        const eligibleSourceSpace = space.spaceLevel !== SpaceLevel.PUBLIC;
         const candidates = displayFiles.filter((file) => (
             eligibleSourceSpace &&
             !file.isCreating &&
@@ -575,20 +575,15 @@ export function KnowledgeSpaceContent({
 
         let cancelled = false;
         const controller = new AbortController();
-        Promise.all(
-            candidates.map(async (file) => {
-                const result = await checkPermission(
-                    "knowledge_file",
-                    file.id,
-                    "can_edit",
-                    "upload_file",
-                    { signal: controller.signal },
-                ).catch(() => ({ allowed: false }));
-                return result.allowed ? file.id : null;
-            }),
-        ).then((ids) => {
+        checkPermission(
+            "knowledge_space",
+            space.id,
+            "can_edit",
+            "upload_file",
+            { signal: controller.signal },
+        ).catch(() => ({ allowed: false })).then((result) => {
             if (!cancelled) {
-                setPublishEntryIds(new Set(ids.filter((id): id is string => Boolean(id))));
+                setPublishEntryIds(result.allowed ? new Set(candidates.map((file) => file.id)) : new Set());
             }
         });
 

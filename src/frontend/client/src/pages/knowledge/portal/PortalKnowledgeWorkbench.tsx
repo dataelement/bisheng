@@ -731,11 +731,12 @@ export default function PortalKnowledgeWorkbench() {
     }, [activeSpace?.id, isActiveSpaceAdmin, permissionProbeKey]);
 
     useEffect(() => {
-        const eligibleSourceSpace = activeSpace?.spaceLevel === SpaceLevel.TEAM || activeSpace?.spaceLevel === SpaceLevel.PERSONAL;
+        const eligibleSourceSpace = Boolean(activeSpace && activeSpace.spaceLevel !== SpaceLevel.PUBLIC);
         const candidates = displayedFiles.filter((file) => (
             eligibleSourceSpace
             && !file.isCreating
             && file.type !== FileType.FOLDER
+            && file.status === FileStatus.SUCCESS
             && /^\d+$/.test(String(file.id))
         ));
         if (!activeSpace || candidates.length === 0) {
@@ -1151,8 +1152,9 @@ export default function PortalKnowledgeWorkbench() {
     const canShowPublishFile = useCallback((file: KnowledgeFile) => {
         return Boolean(
             activeSpace
-            && (activeSpace.spaceLevel === SpaceLevel.TEAM || activeSpace.spaceLevel === SpaceLevel.PERSONAL)
+            && activeSpace.spaceLevel !== SpaceLevel.PUBLIC
             && file.type !== FileType.FOLDER
+            && file.status === FileStatus.SUCCESS
             && publishEntryIds.has(file.id),
         );
     }, [activeSpace, publishEntryIds]);

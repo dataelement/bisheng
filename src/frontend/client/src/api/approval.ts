@@ -295,12 +295,17 @@ export async function submitShougangKnowledgeSpaceCreateApprovalApi(
   return unwrapPayload(response);
 }
 
-export async function getShougangFilePublishTargetSpacesApi(): Promise<{
+export async function getShougangFilePublishTargetSpacesApi(sourceSpaceId: string | number): Promise<{
   data: ShougangFilePublishTargetSpace[];
   total: number;
 }> {
   const response = await request.get<ApiResponse<{ data: ShougangFilePublishTargetSpace[]; total: number }>>(
     "/api/v1/approval/shougang/file-publish/target-spaces",
+    {
+      params: {
+        source_space_id: sourceSpaceId,
+      },
+    },
   );
   return unwrapPaged<ShougangFilePublishTargetSpace>(response);
 }
@@ -343,6 +348,7 @@ export async function submitShougangFilePublishApprovalApi(data: {
   source_space_id: string | number;
   source_file_id: string | number;
   target_space_id: string | number;
+  target_folder_id?: number | null;
   target_document_id?: number | null;
   target_file_id?: number | null;
   reason?: string;

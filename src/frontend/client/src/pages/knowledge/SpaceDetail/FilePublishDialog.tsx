@@ -10,6 +10,7 @@ import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
+import { FilePublishTargetTree } from "./FilePublishTargetTree";
 
 type VersionTarget = {
     type: "document" | "file";
@@ -44,6 +45,7 @@ export function FilePublishDialog({
     const { showToast } = useToastContext();
     const [targetSpaces, setTargetSpaces] = useState<ShougangFilePublishTargetSpace[]>([]);
     const [targetSpaceId, setTargetSpaceId] = useState("");
+    const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
     const [reason, setReason] = useState("");
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -60,6 +62,7 @@ export function FilePublishDialog({
         if (!open) {
             setTargetSpaces([]);
             setTargetSpaceId("");
+            setTargetFolderId(null);
             setReason("");
             setCandidates([]);
             setCandidatesLoading(false);
@@ -72,14 +75,22 @@ export function FilePublishDialog({
             return;
         }
 
+        if (!activeSpace?.id) {
+            setTargetSpaces([]);
+            setTargetSpaceId("");
+            setTargetFolderId(null);
+            return;
+        }
+
         let cancelled = false;
         setLoading(true);
-        getShougangFilePublishTargetSpacesApi()
+        getShougangFilePublishTargetSpacesApi(activeSpace.id)
             .then((res) => {
                 if (cancelled) return;
                 setTargetSpaces(res.data || []);
                 const first = res.data?.[0]?.id;
                 setTargetSpaceId(first !== undefined ? String(first) : "");
+                setTargetFolderId(null);
             })
             .catch(() => {
                 if (!cancelled) {
@@ -93,7 +104,7 @@ export function FilePublishDialog({
         return () => {
             cancelled = true;
         };
-    }, [open, showToast]);
+    }, [activeSpace?.id, open, showToast]);
 
     useEffect(() => {
         if (!open || !file || !targetSpaceId || !versionManagementEnabled) {
@@ -151,6 +162,26 @@ export function FilePublishDialog({
         }
     };
 
+    const clearTargetVersionState = () => {
+        setVersionTarget(null);
+        setCandidates([]);
+        setCandidateError(false);
+        setSearchResults([]);
+        setSearchResultsOpen(false);
+    };
+
+    const handleSelectTargetRoot = (spaceId: string | number) => {
+        setTargetSpaceId(String(spaceId));
+        setTargetFolderId(null);
+        clearTargetVersionState();
+    };
+
+    const handleSelectTargetFolder = (spaceId: string | number, folderId: string | number) => {
+        setTargetSpaceId(String(spaceId));
+        setTargetFolderId(String(folderId));
+        clearTargetVersionState();
+    };
+
     const handleSubmit = async () => {
         if (!activeSpace || !file || !targetSpaceId) return;
         setSubmitting(true);
@@ -159,6 +190,7 @@ export function FilePublishDialog({
                 source_space_id: activeSpace.id,
                 source_file_id: file.id,
                 target_space_id: targetSpaceId,
+                target_folder_id: targetFolderId ? Number(targetFolderId) : null,
                 target_document_id: versionTarget?.type === "document" ? versionTarget.id : null,
                 target_file_id: versionTarget?.type === "file" ? versionTarget.id : null,
                 reason: reason.trim() || undefined,
@@ -226,13 +258,14 @@ export function FilePublishDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="w-[min(640px,calc(100vw-48px))] max-w-none"
+                data-testid="file-publish-dialog"
+                className="!flex max-h-[calc(100dvh-48px)] w-[min(640px,calc(100vw-48px))] max-w-none flex-col overflow-hidden"
                 onPointerDownOutside={(event) => event.preventDefault()}
             >
                 <DialogHeader>
                     <DialogTitle>发布文件</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4 py-2">
+                <div data-testid="file-publish-dialog-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto py-2 pr-1">
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-[#1d2129]">源文件</label>
                         <div className="rounded-md border border-[#e5e6eb] bg-[#f7f8fa] px-3 py-2 text-sm text-[#1d2129]">
@@ -246,28 +279,17 @@ export function FilePublishDialog({
                         </div>
                     </div>
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-[#1d2129]" htmlFor="file-publish-target-space">发布目标知识库</label>
-                        <select
-                            id="file-publish-target-space"
-                            className="h-9 w-full rounded-md border border-[#dcdfe6] bg-white px-3 text-sm outline-none focus:border-[#165dff]"
-                            value={targetSpaceId}
-                            disabled={loading}
-                            onChange={(event) => {
-                                setTargetSpaceId(event.target.value);
-                                setVersionTarget(null);
-                                setCandidates([]);
-                                setCandidateError(false);
-                                setSearchResults([]);
-                                setSearchResultsOpen(false);
-                            }}
-                        >
-                            <option value="">{loading ? "加载中..." : "请选择目标知识库"}</option>
-                            {targetSpaces.map((space) => (
-                                <option key={space.id} value={String(space.id)}>
-                                    {space.name}
-                                </option>
-                            ))}
-                        </select>
+                        <label className="text-sm font-medium text-[#1d2129]">发布目标位置</label>
+                        <div className="max-h-64 overflow-y-auto rounded-md border border-[#dcdfe6] bg-white p-2">
+                            <FilePublishTargetTree
+                                loading={loading}
+                                targetSpaces={targetSpaces}
+                                targetSpaceId={targetSpaceId}
+                                targetFolderId={targetFolderId}
+                                onSelectRoot={handleSelectTargetRoot}
+                                onSelectFolder={handleSelectTargetFolder}
+                            />
+                        </div>
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-[#1d2129]" htmlFor="file-publish-version-document">版本管理</label>
@@ -332,7 +354,7 @@ export function FilePublishDialog({
                         />
                     </div>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="shrink-0">
                     <Button variant="outline" className="h-8" onClick={() => onOpenChange(false)}>
                         取消
                     </Button>

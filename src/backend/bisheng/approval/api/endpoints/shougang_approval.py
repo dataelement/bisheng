@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.approval.domain.schemas.shougang_approval_schema import (
     ShougangFilePublishSubmitReq,
@@ -50,11 +50,15 @@ async def submit_knowledge_space_create(
 
 @router.get('/file-publish/target-spaces')
 async def list_file_publish_target_spaces(
+    source_space_id: int = Query(..., gt=0),
     _: UserPayload = Depends(UserPayload.get_login_user),
     space_service=Depends(get_knowledge_space_service),
 ):
     service = ShougangApprovalService(message_service=getattr(space_service, 'message_service', None))
-    data = await service.list_file_publish_target_spaces(space_service=space_service)
+    data = await service.list_file_publish_target_spaces(
+        source_space_id=source_space_id,
+        space_service=space_service,
+    )
     return resp_200(data)
 
 

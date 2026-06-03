@@ -1044,7 +1044,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("发布文件")).toBeInTheDocument();
         await waitFor(() => {
-            expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalled();
+            expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalledWith("team-1");
         });
         await waitFor(() => {
             expect(screen.getByRole("button", { name: "提交申请" })).toBeEnabled();
@@ -1056,10 +1056,43 @@ describe("PortalKnowledgeWorkbench", () => {
                 source_space_id: "team-1",
                 source_file_id: "301",
                 target_space_id: "public-target",
+                target_folder_id: null,
                 target_document_id: null,
                 target_file_id: null,
                 reason: undefined,
             });
+        });
+    });
+
+    test("shows publish action for a successful business domain space file", async () => {
+        const departmentSpace = makeSpace("department-1", "业务域空间01", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const file = makeFile("302", "业务制度.pdf", {
+            type: FileType.PDF,
+            status: FileStatus.SUCCESS,
+            spaceId: "department-1",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-302");
+        fireEvent.click(within(fileRow).getByRole("button", { name: "发布" }));
+
+        expect(await screen.findByText("发布文件")).toBeInTheDocument();
+        await waitFor(() => {
+            expect(getShougangFilePublishTargetSpacesApi).toHaveBeenCalledWith("department-1");
         });
     });
 

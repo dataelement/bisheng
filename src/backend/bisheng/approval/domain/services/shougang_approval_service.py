@@ -52,6 +52,21 @@ from bisheng.tenant.domain.services.tenant_service import TenantService
 
 
 class ShougangApprovalService:
+    _FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLevelEnum]] = {
+        KnowledgeSpaceLevelEnum.PERSONAL: {
+            KnowledgeSpaceLevelEnum.PUBLIC,
+            KnowledgeSpaceLevelEnum.DEPARTMENT,
+            KnowledgeSpaceLevelEnum.TEAM,
+        },
+        KnowledgeSpaceLevelEnum.TEAM: {
+            KnowledgeSpaceLevelEnum.PUBLIC,
+            KnowledgeSpaceLevelEnum.DEPARTMENT,
+        },
+        KnowledgeSpaceLevelEnum.DEPARTMENT: {
+            KnowledgeSpaceLevelEnum.PUBLIC,
+        },
+    }
+
     def __init__(
         self,
         *,
@@ -67,6 +82,20 @@ class ShougangApprovalService:
         registry.register_handler(KNOWLEDGE_SPACE_CREATE_SCENARIO, KnowledgeSpaceCreateApprovalHandler())
         registry.register_handler(FILE_PUBLISH_SCENARIO, KnowledgeSpaceFilePublishApprovalHandler())
         return ApprovalGate(registry=registry)
+
+    @staticmethod
+    def _normalize_space_level(level) -> KnowledgeSpaceLevelEnum:
+        if isinstance(level, KnowledgeSpaceLevelEnum):
+            return level
+        return KnowledgeSpaceLevelEnum(str(level))
+
+    @classmethod
+    def _allowed_file_publish_target_levels(cls, source_level) -> set[KnowledgeSpaceLevelEnum]:
+        return cls._FILE_PUBLISH_TARGET_LEVELS.get(cls._normalize_space_level(source_level), set())
+
+    @classmethod
+    def _is_file_publish_pair_allowed(cls, source_level, target_level) -> bool:
+        return cls._normalize_space_level(target_level) in cls._allowed_file_publish_target_levels(source_level)
 
     async def _get_primary_department_id(self, login_user) -> Optional[int]:
         primary = await UserDepartmentDao.aget_user_primary_department(login_user.user_id)
@@ -175,7 +204,9 @@ class ShougangApprovalService:
         )
 
     @staticmethod
-    def _space_create_params(req: ShougangKnowledgeSpaceCreateSubmitReq | ShougangKnowledgeSpaceCreateValidateReq) -> dict:
+    def _space_create_params(
+        req: ShougangKnowledgeSpaceCreateSubmitReq | ShougangKnowledgeSpaceCreateValidateReq,
+    ) -> dict:
         return req.model_dump(exclude={'reason'}, mode='json')
 
     @staticmethod
@@ -342,8 +373,8 @@ class ShougangApprovalService:
         return source_space, source_file, source_level
 
     async def _ensure_can_publish_file(self, *, source_file, source_level, space_service) -> None:
-        if source_level not in {KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceLevelEnum.PERSONAL}:
-            raise HTTPException(status_code=400, detail='仅团队/个人知识库文件可提交发布审批')
+        if not self._allowed_file_publish_target_levels(source_level):
+            raise HTTPException(status_code=400, detail='当前知识空间类型不支持发布文件')
         if source_file.file_type == FileType.DIR.value:
             raise HTTPException(status_code=400, detail='文件夹不支持发布审批')
         if source_file.status != KnowledgeFileStatus.SUCCESS.value:
@@ -355,17 +386,60 @@ class ShougangApprovalService:
                 'upload_file',
             )
 
-    async def _ensure_publish_target_space(self, target_space_id: int, space_service=None):
+    async def _ensure_publish_target_space(self, target_space_id: int, *, source_level, space_service=None):
         target_space = await KnowledgeDao.aquery_by_id(target_space_id)
         if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
             raise HTTPException(status_code=404, detail='目标知识空间不存在')
         scope = await KnowledgeSpaceScopeDao.aget_by_space_id(target_space_id)
         target_level = scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
-        if target_level not in {KnowledgeSpaceLevelEnum.PUBLIC, KnowledgeSpaceLevelEnum.DEPARTMENT}:
-            raise HTTPException(status_code=400, detail='目标知识空间必须是公共或业务域知识库')
+        if not self._is_file_publish_pair_allowed(source_level, target_level):
+            raise HTTPException(status_code=400, detail='目标知识空间类型不允许发布')
         if space_service is not None:
             await space_service._require_permission_id('knowledge_space', target_space_id, 'view_space')
         return target_space
+
+    async def _ensure_publish_target_folder(
+        self,
+        target_space_id: int,
+        target_folder_id: int | None,
+        *,
+        space_service=None,
+    ):
+        if target_folder_id is None:
+            return None
+        target_folder = await KnowledgeFileDao.query_by_id(target_folder_id)
+        if (
+            not target_folder
+            or int(target_folder.knowledge_id) != int(target_space_id)
+            or int(target_folder.file_type) != FileType.DIR.value
+        ):
+            raise HTTPException(status_code=404, detail='目标目录不存在')
+        if space_service is not None:
+            await space_service._require_permission_id(
+                'folder',
+                int(target_folder_id),
+                'view_folder',
+                space_id=int(target_space_id),
+            )
+        return target_folder
+
+    @staticmethod
+    def _target_folder_payload(target_folder) -> dict[str, Any]:
+        if not target_folder:
+            return {
+                'target_folder_id': None,
+                'target_folder_name': '根目录',
+                'target_folder_level': 0,
+                'target_folder_level_path': '',
+            }
+        folder_id = int(target_folder.id)
+        folder_level_path = (target_folder.file_level_path or '').rstrip('/')
+        return {
+            'target_folder_id': folder_id,
+            'target_folder_name': target_folder.file_name,
+            'target_folder_level': int(target_folder.level or 0) + 1,
+            'target_folder_level_path': f"{folder_level_path}/{folder_id}" if folder_level_path else f"/{folder_id}",
+        }
 
     async def _space_level_for_payload(self, space) -> str:
         level = getattr(space, 'space_level', None)
@@ -374,9 +448,32 @@ class ShougangApprovalService:
             level = scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
         return self._enum_value(level)
 
-    async def list_file_publish_target_spaces(self, *, space_service) -> ShougangFilePublishTargetSpacesResp:
+    async def list_file_publish_target_spaces(
+        self,
+        *,
+        source_space_id: int,
+        space_service,
+    ) -> ShougangFilePublishTargetSpacesResp:
+        source_space = await KnowledgeDao.aquery_by_id(source_space_id)
+        if not source_space or source_space.type != KnowledgeTypeEnum.SPACE.value:
+            raise HTTPException(status_code=404, detail='源知识空间不存在')
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(source_space_id)
+        source_level = scope.level if scope else KnowledgeSpaceLevelEnum.PERSONAL
+        allowed_levels = self._allowed_file_publish_target_levels(source_level)
+        if not allowed_levels:
+            raise HTTPException(status_code=400, detail='当前知识空间类型不支持发布文件')
         grouped = await space_service.get_grouped_spaces()
-        spaces = list(grouped.public_spaces or []) + list(grouped.department_spaces or [])
+        space_groups = [
+            (KnowledgeSpaceLevelEnum.PUBLIC, list(grouped.public_spaces or [])),
+            (KnowledgeSpaceLevelEnum.DEPARTMENT, list(grouped.department_spaces or [])),
+            (KnowledgeSpaceLevelEnum.TEAM, list(grouped.team_spaces or [])),
+        ]
+        spaces = [
+            space
+            for level, group_spaces in space_groups
+            if level in allowed_levels
+            for space in group_spaces
+        ]
         items = [
             ShougangFilePublishTargetSpace(
                 id=int(space.id),
@@ -407,7 +504,11 @@ class ShougangApprovalService:
             source_level=source_level,
             space_service=space_service,
         )
-        await self._ensure_publish_target_space(target_space_id, space_service=space_service)
+        await self._ensure_publish_target_space(
+            target_space_id,
+            source_level=source_level,
+            space_service=space_service,
+        )
 
     async def list_file_publish_similar_candidates(
         self,
@@ -511,8 +612,18 @@ class ShougangApprovalService:
             source_level=source_level,
             space_service=space_service,
         )
-        target_space = await self._ensure_publish_target_space(req.target_space_id, space_service=space_service)
+        target_space = await self._ensure_publish_target_space(
+            req.target_space_id,
+            source_level=source_level,
+            space_service=space_service,
+        )
         target_level = await self._space_level_for_payload(target_space)
+        target_folder = await self._ensure_publish_target_folder(
+            req.target_space_id,
+            req.target_folder_id,
+            space_service=space_service,
+        )
+        target_folder_payload = self._target_folder_payload(target_folder)
 
         target_document_title = None
         if req.target_document_id and req.target_file_id:
@@ -587,6 +698,7 @@ class ShougangApprovalService:
                 'target_space_id': int(target_space.id),
                 'target_space_name': target_space.name,
                 'target_space_level': target_level,
+                **target_folder_payload,
                 'target_document_id': req.target_document_id,
                 'target_file_id': req.target_file_id,
                 'target_document_title': target_document_title,

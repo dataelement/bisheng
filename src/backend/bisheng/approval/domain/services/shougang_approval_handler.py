@@ -8,6 +8,7 @@ from bisheng.approval.domain.services.approver_resolver import resolve_approvers
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import _resolve_space_roles_via_fga
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
@@ -16,6 +17,21 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpace
 
 KNOWLEDGE_SPACE_CREATE_SCENARIO = 'knowledge_space_create_request'
 FILE_PUBLISH_SCENARIO = 'knowledge_space_file_publish_request'
+
+_FILE_PUBLISH_TARGET_LEVELS: dict[KnowledgeSpaceLevelEnum, set[KnowledgeSpaceLevelEnum]] = {
+    KnowledgeSpaceLevelEnum.PERSONAL: {
+        KnowledgeSpaceLevelEnum.PUBLIC,
+        KnowledgeSpaceLevelEnum.DEPARTMENT,
+        KnowledgeSpaceLevelEnum.TEAM,
+    },
+    KnowledgeSpaceLevelEnum.TEAM: {
+        KnowledgeSpaceLevelEnum.PUBLIC,
+        KnowledgeSpaceLevelEnum.DEPARTMENT,
+    },
+    KnowledgeSpaceLevelEnum.DEPARTMENT: {
+        KnowledgeSpaceLevelEnum.PUBLIC,
+    },
+}
 
 
 class _RuntimeLoginUser:
@@ -35,6 +51,20 @@ def _runtime_request() -> Any:
 
 def _enum_value(value):
     return value.value if hasattr(value, 'value') else value
+
+
+def _file_publish_pair_allowed(source_level, target_level) -> bool:
+    source_level = (
+        source_level
+        if isinstance(source_level, KnowledgeSpaceLevelEnum)
+        else KnowledgeSpaceLevelEnum(str(source_level))
+    )
+    target_level = (
+        target_level
+        if isinstance(target_level, KnowledgeSpaceLevelEnum)
+        else KnowledgeSpaceLevelEnum(str(target_level))
+    )
+    return target_level in _FILE_PUBLISH_TARGET_LEVELS.get(source_level, set())
 
 
 async def _resolve_approvers(node_config: dict, req) -> list[int]:
@@ -210,6 +240,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             'source_file_name': req.payload_snapshot.get('source_file_name'),
             'target_space_id': req.payload_snapshot.get('target_space_id'),
             'target_space_name': req.payload_snapshot.get('target_space_name'),
+            'target_folder_id': req.payload_snapshot.get('target_folder_id'),
+            'target_folder_name': req.payload_snapshot.get('target_folder_name'),
             'target_document_id': req.payload_snapshot.get('target_document_id'),
             'target_document_title': req.payload_snapshot.get('target_document_title'),
             'reason': req.reason,
@@ -221,6 +253,7 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         return {
             'source_file_id': req.payload_snapshot.get('source_file_id'),
             'target_space_id': req.payload_snapshot.get('target_space_id'),
+            'target_folder_id': req.payload_snapshot.get('target_folder_id'),
         }
 
     async def resolve_approvers(self, node_config: dict, req) -> list[int]:
@@ -233,6 +266,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         target_space,
         user_id: int,
         instance_id: int,
+        target_level: int = 0,
+        target_file_level_path: str = '',
     ) -> KnowledgeFile | None:
         from bisheng.worker.knowledge import file_worker
 
@@ -249,8 +284,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             target_space,
             user_id,
             extra_user_metadata=extra_user_metadata,
-            target_level=0,
-            target_file_level_path='',
+            target_level=target_level,
+            target_file_level_path=target_file_level_path,
         )
 
     async def _find_copied_file(self, instance_id: int, target_space_id: int) -> KnowledgeFile | None:
@@ -270,6 +305,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         source_space_id = int(payload_snapshot['source_space_id'])
         source_file_id = int(payload_snapshot['source_file_id'])
         target_space_id = int(payload_snapshot['target_space_id'])
+        target_folder_id = payload_snapshot.get('target_folder_id')
+        target_folder_id = int(target_folder_id) if target_folder_id else None
         target_document_id = payload_snapshot.get('target_document_id')
         target_file_id = payload_snapshot.get('target_file_id')
 
@@ -298,6 +335,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                     login_user=login_user,
                     knowledge_file_id=int(existing_file.id),
                     target_document_id=resolved_target_document_id,
+                    file_level_path=getattr(existing_file, 'file_level_path', '') or '',
+                    level=int(getattr(existing_file, 'level', 0) or 0),
                 )
             return {
                 'file_id': int(existing_file.id),
@@ -317,12 +356,30 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             raise ValueError('source file not found')
         source_level = await self._space_level(source_space_id)
         target_level = await self._space_level(target_space_id)
-        if source_level not in {KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceLevelEnum.PERSONAL}:
-            raise ValueError('source space must be team or personal')
-        if target_level not in {KnowledgeSpaceLevelEnum.PUBLIC, KnowledgeSpaceLevelEnum.DEPARTMENT}:
-            raise ValueError('target space must be public or department')
+        if not _file_publish_pair_allowed(source_level, target_level):
+            raise ValueError('source and target space levels are not allowed for publish')
         if source_file.status != KnowledgeFileStatus.SUCCESS.value:
             raise ValueError('source file is not parsed successfully')
+
+        target_parent_type = 'knowledge_space'
+        target_parent_id = target_space_id
+        copy_target_level = 0
+        copy_target_file_level_path = ''
+        if target_folder_id is not None:
+            target_folder = await KnowledgeFileDao.query_by_id(target_folder_id)
+            if (
+                not target_folder
+                or int(target_folder.knowledge_id) != target_space_id
+                or int(target_folder.file_type) != FileType.DIR.value
+            ):
+                raise ValueError('target folder not found')
+            copy_target_level = int(target_folder.level or 0) + 1
+            folder_level_path = (target_folder.file_level_path or '').rstrip('/')
+            copy_target_file_level_path = (
+                f"{folder_level_path}/{target_folder_id}" if folder_level_path else f"/{target_folder_id}"
+            )
+            target_parent_type = 'folder'
+            target_parent_id = target_folder_id
 
         copied_file = await asyncio.to_thread(
             self._copy_file,
@@ -331,6 +388,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
             target_space,
             int(payload_snapshot['applicant_user_id']),
             instance_id,
+            copy_target_level,
+            copy_target_file_level_path,
         )
         if not copied_file or not copied_file.id:
             raise ValueError('copy file failed')
@@ -345,8 +404,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         await space_service._initialize_child_resource_permissions(
             'knowledge_file',
             int(copied_file.id),
-            'knowledge_space',
-            target_space_id,
+            target_parent_type,
+            target_parent_id,
         )
         await KnowledgeDao.async_update_knowledge_update_time_by_id(target_space_id)
 
@@ -357,6 +416,8 @@ class KnowledgeSpaceFilePublishApprovalHandler:
                 login_user=login_user,
                 knowledge_file_id=int(copied_file.id),
                 target_document_id=resolved_target_document_id,
+                file_level_path=copy_target_file_level_path,
+                level=copy_target_level,
             )
         return {
             'file_id': int(copied_file.id),
@@ -371,7 +432,14 @@ class KnowledgeSpaceFilePublishApprovalHandler:
         return None
 
 
-async def _link_file_as_version(*, login_user: _RuntimeLoginUser, knowledge_file_id: int, target_document_id: int) -> dict:
+async def _link_file_as_version(
+    *,
+    login_user: _RuntimeLoginUser,
+    knowledge_file_id: int,
+    target_document_id: int,
+    file_level_path: str | None = None,
+    level: int | None = None,
+) -> dict:
     from bisheng.core.database import get_async_db_session
     from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
         KnowledgeDocumentRepositoryImpl,
@@ -393,6 +461,12 @@ async def _link_file_as_version(*, login_user: _RuntimeLoginUser, knowledge_file
             knowledge_file_repo=KnowledgeFileRepositoryImpl(session),
         )
         result = await service.link_file_to_document(knowledge_file_id, target_document_id)
+        if file_level_path is not None and level is not None:
+            target_doc = await service.doc_repo.find_by_id(target_document_id)
+            if target_doc is not None:
+                target_doc.file_level_path = file_level_path
+                target_doc.level = level
+                await service.doc_repo.update(target_doc)
         return result.model_dump()
 
 

@@ -78,6 +78,7 @@ class ShougangFilePublishSubmitReq(BaseModel):
     source_space_id: int = Field(..., gt=0)
     source_file_id: int = Field(..., gt=0)
     target_space_id: int = Field(..., gt=0)
+    target_folder_id: int | None = Field(default=None, gt=0)
     target_document_id: Optional[int] = Field(default=None, gt=0)
     target_file_id: Optional[int] = Field(default=None, gt=0)
     reason: Optional[str] = Field(default=None, max_length=2000)
