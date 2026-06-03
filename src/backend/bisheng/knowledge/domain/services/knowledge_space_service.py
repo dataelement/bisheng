@@ -2925,6 +2925,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         parent_id: int | None = None,
         file_source: FileSource = None,
         skip_approval: bool = False,
+        skip_dedup: bool = False,
     ) -> list[KnowledgeSpaceFileResponse]:
         if file_source is None:
             file_source = FileSource.SPACE_UPLOAD
@@ -3018,6 +3019,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         "file_level_path": file_level_path,
                         "file_source": file_source.value,
                     },
+                    skip_dedup=skip_dedup,
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
                     if getattr(db_file, "id", None):

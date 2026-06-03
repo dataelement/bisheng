@@ -120,6 +120,12 @@ async def _run_export(
     )
     markdown = ConversationExportService._render_markdown(turns)
 
+    # docx (pandoc) and pdf (chromium) embed images by value — inline them as
+    # data: URIs first (also resolves nginx-proxied /bisheng/... paths). md/txt
+    # keep the original links/placeholders and skip this step.
+    if fmt in (ExportFormat.DOCX, ExportFormat.PDF):
+        markdown = await ConversationExportService._embed_images_as_data_uri(markdown)
+
     if fmt == ExportFormat.DOCX:
         file_bytes = ConversationExportService._render_docx(markdown)
         ext = 'docx'
