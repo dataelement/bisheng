@@ -47,6 +47,7 @@ from bisheng.common.errcode.tenant_quota import TenantStorageQuotaExceededError
 from bisheng.common.errcode.workstation import (
     ConversationExportRenderFailedError,
     ConversationImportFailedError,
+    ConversationImportFileTooLargeError,
     ConversationImportFolderNotFoundError,
     ConversationImportPermissionDeniedError,
     ConversationImportQuotaExceededError,
@@ -1000,6 +1001,21 @@ class ConversationExportService:
         turns = cls._build_turns(messages, session, user_name=user.user_name or '')
         markdown = cls._render_markdown(turns)
         markdown_bytes = markdown.encode('utf-8')
+
+        # Per-file size limit (env.uploaded_files_maximum_size, in MB). The
+        # frontend enforces this for manual uploads; F028 builds the file
+        # server-side and bypasses that check, so enforce it here too.
+        from bisheng.common.services.config_service import settings as _bs_settings
+        env_conf = (await _bs_settings.aget_all_config()).get('env') or {}
+        max_mb = env_conf.get('uploaded_files_maximum_size')
+        try:
+            max_bytes = float(max_mb) * 1024 * 1024 if max_mb is not None else None
+        except (TypeError, ValueError):
+            max_bytes = None
+        if max_bytes is not None and len(markdown_bytes) > max_bytes:
+            raise ConversationImportFileTooLargeError(
+                msg=f'文件大小超过上传限制（{max_mb}MB）',
+            )
 
         # Resolve a non-conflicting filename within the target layer.
         base_filename = cls._resolve_filename(session, 'md')
