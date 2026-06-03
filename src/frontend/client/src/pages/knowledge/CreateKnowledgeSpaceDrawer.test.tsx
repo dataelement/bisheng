@@ -78,17 +78,56 @@ jest.mock("~/components/icons/channels", () => ({
 }));
 
 jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
-    SubjectSearchDepartment: ({ value, onChange }: any) => (
-        <div data-testid="department-selector">
-            <span>{value?.[0]?.name ?? "未选择部门"}</span>
-            <button
-                type="button"
-                onClick={() => onChange([{ type: "department", id: 9, name: "炼铁部" }])}
-            >
-                选择炼铁部
-            </button>
-        </div>
-    ),
+    SubjectSearchDepartment: ({ value, onChange, loadDepartments }: any) => {
+        const React = require("react");
+        const [departments, setDepartments] = React.useState<any[]>([]);
+        const [loading, setLoading] = React.useState(Boolean(loadDepartments));
+        const [failed, setFailed] = React.useState(false);
+
+        React.useEffect(() => {
+            if (!loadDepartments) return;
+            let active = true;
+            setLoading(true);
+            loadDepartments()
+                .then((rows: any[]) => {
+                    if (active) setDepartments(rows);
+                })
+                .catch(() => {
+                    if (active) setFailed(true);
+                })
+                .finally(() => {
+                    if (active) setLoading(false);
+                });
+            return () => {
+                active = false;
+            };
+        }, [loadDepartments]);
+
+        return (
+            <div data-testid="department-selector">
+                <span>{value?.[0]?.name ?? "未选择部门"}</span>
+                {loading ? <span>加载部门中</span> : null}
+                {!loading && failed ? <span>暂无部门数据</span> : null}
+                {!loading && departments.map((department) => (
+                    <button
+                        key={department.id}
+                        type="button"
+                        onClick={() => onChange([{ type: "department", id: department.id, name: department.name }])}
+                    >
+                        选择{department.name}
+                    </button>
+                ))}
+                {!loading && departments.length === 0 ? (
+                    <button
+                        type="button"
+                        onClick={() => onChange([{ type: "department", id: 9, name: "炼铁部" }])}
+                    >
+                        选择炼铁部
+                    </button>
+                ) : null}
+            </div>
+        );
+    },
 }));
 
 jest.mock("~/components/permission/SubjectSearchUserGroup", () => ({
@@ -209,6 +248,37 @@ describe("CreateKnowledgeSpaceDrawer", () => {
             name: "业务域资料库",
             spaceLevel: SpaceLevel.DEPARTMENT,
             departmentId: 9,
+        }));
+    });
+
+    test("业务域知识库创建加载租户全部激活部门时请求参数符合后端限制", async () => {
+        jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
+            canCreatePublic: false,
+            canCreateDepartment: true,
+            canCreateTeam: false,
+            canCreatePersonal: true,
+            departments: [],
+            userGroups: [],
+            defaultSpaceLevel: SpaceLevel.PERSONAL,
+        });
+        const getDepartments = jest.requireMock("~/api/knowledge").getCreateSpaceDepartmentsApi;
+        getDepartments.mockImplementation(({ pageSize }: { pageSize?: number }) => {
+            if ((pageSize ?? 20) > 100) {
+                return Promise.reject(new Error("page_size must be less than or equal to 100"));
+            }
+            return Promise.resolve({
+                data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", parent_id: null, children: [] }],
+                total: 1,
+            });
+        });
+
+        renderDrawer({ initialSpaceLevel: SpaceLevel.DEPARTMENT });
+
+        await waitFor(() => expect(screen.getByRole("button", { name: "选择炼钢部" })).toBeInTheDocument());
+        expect(screen.queryByText("暂无部门数据")).not.toBeInTheDocument();
+        expect(getDepartments).toHaveBeenCalledWith(expect.objectContaining({
+            approvalRequest: true,
+            pageSize: 100,
         }));
     });
 

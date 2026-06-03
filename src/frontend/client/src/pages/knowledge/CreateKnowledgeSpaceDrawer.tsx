@@ -219,7 +219,7 @@ export function CreateKnowledgeSpaceDrawer({
     const loadCreateDepartments = useCallback(async (config?: { signal?: AbortSignal }): Promise<DepartmentNode[]> => {
         const res = await getCreateSpaceDepartmentsApi({
             page: 1,
-            pageSize: 200,
+            pageSize: 100,
             approvalRequest: showApprovalReason,
             signal: config?.signal,
         });
