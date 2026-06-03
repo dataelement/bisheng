@@ -511,6 +511,7 @@ describe("PortalKnowledgeWorkbench", () => {
             "src",
             "/assets/knowledge-portal/group-department-expanded.png",
         );
+        expect(screen.getByRole("button", { name: "收起部门知识库" })).toBeInTheDocument();
         expect(screen.getByTestId("space-group-icon-team")).toHaveAttribute(
             "src",
             "/assets/knowledge-portal/group-team-expanded.png",
@@ -857,7 +858,7 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(within(departmentGroup).queryByRole("button", { name: "新建知识库" })).not.toBeInTheDocument();
         });
 
-        const departmentCreateButton = screen.getByRole("button", { name: "新增业务域知识库知识空间" });
+        const departmentCreateButton = screen.getByRole("button", { name: "新增部门知识库知识空间" });
         expect(departmentCreateButton).toBeDisabled();
 
         fireEvent.click(departmentCreateButton);

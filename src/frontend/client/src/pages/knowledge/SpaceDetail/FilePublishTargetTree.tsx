@@ -34,7 +34,7 @@ interface FilePublishTargetTreeProps {
 
 const TARGET_LEVEL_LABELS: Record<PublishTargetLevel, string> = {
     public: "公共知识库",
-    department: "业务域知识库",
+    department: "部门知识库",
     team: "团队知识库",
     personal: "个人知识库",
 };

@@ -38,6 +38,7 @@ import {
   type ApprovalInstanceDetail,
   type ApprovalNodeItem,
   type ApprovalRouteItem,
+  type ApprovalRouteMatchConfig,
   type ApprovalScenarioItem,
   type ApprovalScenarioPreset,
 } from "@/controllers/API/approval";
@@ -147,11 +148,57 @@ const PUBLISH_ALLOWED_CONDITION_FIELDS = new Set([
   'source_space_level',
   'target_space_level',
 ]);
+const FILE_PUBLISH_SCENARIO_CODE = 'knowledge_space_file_publish_request';
+type MatchCondition = { field?: string; value?: string };
 
 function scenarioConditionFieldCodes(preset: ApprovalScenarioPreset | null | undefined): string[] {
   const fields = presetConditionFieldCodes(preset);
-  if (preset?.scenario_code !== 'knowledge_space_file_publish_request') return fields;
+  if (preset?.scenario_code !== FILE_PUBLISH_SCENARIO_CODE) return fields;
   return fields.filter((field) => PUBLISH_ALLOWED_CONDITION_FIELDS.has(field));
+}
+
+function isFilePublishScenario(scenarioCode?: string | null): boolean {
+  return scenarioCode === FILE_PUBLISH_SCENARIO_CODE;
+}
+
+function isAndMatchConfig(
+  matchConfig: ApprovalRouteMatchConfig | null | undefined,
+): matchConfig is Extract<ApprovalRouteMatchConfig, { conditions: MatchCondition[] }> {
+  return !!matchConfig && "conditions" in matchConfig && Array.isArray(matchConfig.conditions);
+}
+
+function isSingleMatchConfig(
+  matchConfig: ApprovalRouteMatchConfig | null | undefined,
+): matchConfig is MatchCondition {
+  return !!matchConfig && !isAndMatchConfig(matchConfig);
+}
+
+function routeConditionsFromMatchConfig(matchConfig: ApprovalRouteMatchConfig | null | undefined): MatchCondition[] {
+  const conditions = isAndMatchConfig(matchConfig)
+    ? matchConfig.conditions
+        .map((condition) => ({
+          field: condition?.field ?? "",
+          value: condition?.value ?? "",
+        }))
+        .filter((condition) => condition.field || condition.value)
+    : [];
+  if (conditions.length > 0) return conditions;
+  if (isSingleMatchConfig(matchConfig) && matchConfig.field) {
+    return [{ field: matchConfig.field, value: matchConfig.value ?? "" }];
+  }
+  return [{ field: "", value: "" }];
+}
+
+function buildAndMatchConfig(conditions: MatchCondition[]): ApprovalRouteMatchConfig {
+  const complete = conditions
+    .map((condition) => ({
+      field: condition.field ?? "",
+      value: condition.value ?? "",
+    }))
+    .filter((condition) => condition.field && condition.value);
+  return complete.length > 0
+    ? { operator: "and", conditions: complete }
+    : {};
 }
 
 // All label strings below are i18n keys resolved with t() at render time.
@@ -247,11 +294,40 @@ const APPROVER_SOURCE_LABEL_KEYS: Record<string, string> = {
   space_admin:             'approvalPage.approverSource.space_admin',
   knowledge_space_owner:   'approvalPage.approverSource.knowledge_space_owner',
   knowledge_space_manager: 'approvalPage.approverSource.knowledge_space_manager',
+  target_knowledge_space_owner:
+    'approvalPage.approverSource.target_knowledge_space_owner',
+  target_knowledge_space_manager:
+    'approvalPage.approverSource.target_knowledge_space_manager',
+  target_knowledge_space_owner_department_admin:
+    'approvalPage.approverSource.target_knowledge_space_owner_department_admin',
+  target_knowledge_space_manager_department_admin:
+    'approvalPage.approverSource.target_knowledge_space_manager_department_admin',
 };
+
+function approverSourceLabelKey(sourceType: string, scenarioCode?: string | null): string {
+  if (isFilePublishScenario(scenarioCode)) {
+    if (sourceType === 'knowledge_space_owner') {
+      return 'approvalPage.approverSource.filePublishSourceKnowledgeSpaceOwner';
+    }
+    if (sourceType === 'knowledge_space_manager') {
+      return 'approvalPage.approverSource.filePublishSourceKnowledgeSpaceManager';
+    }
+  }
+  return APPROVER_SOURCE_LABEL_KEYS[sourceType] ?? `approvalPage.approverSource.${sourceType}`;
+}
+
+function approverSourceLabel(
+  sourceType: string,
+  t: TFn,
+  scenarioCode?: string | null,
+  fallback?: string,
+): string {
+  return t(approverSourceLabelKey(sourceType, scenarioCode), { defaultValue: fallback ?? sourceType });
+}
 
 type TFn = (key: string, opts?: Record<string, string>) => string;
 
-function conditionLabel(
+function singleConditionLabel(
   matchConfig: { field?: string; value?: string } | null | undefined,
   t: TFn,
   roleNameMap: Record<string, string> = {},
@@ -275,6 +351,24 @@ function conditionLabel(
         ? (roleNameMap[value] ?? `${t('approvalPage.systemRole', { defaultValue: '系统角色' })} #${value.slice(5)}`)
         : value;
   return `${fieldLabel} = ${valLabel}`;
+}
+
+function conditionLabel(
+  matchConfig: ApprovalRouteMatchConfig | null | undefined,
+  t: TFn,
+  roleNameMap: Record<string, string> = {},
+  departmentNameMap: Record<string, string> = {},
+): string {
+  const conditions = isAndMatchConfig(matchConfig)
+    ? matchConfig.conditions.filter((condition) => condition?.field)
+    : [];
+  if (conditions.length > 0) {
+    return conditions
+      .map((condition) => singleConditionLabel(condition, t, roleNameMap, departmentNameMap))
+      .filter(Boolean)
+      .join(` ${t("approvalPage.conditionOperatorAnd", { defaultValue: "AND" })} `);
+  }
+  return singleConditionLabel(matchConfig, t, roleNameMap, departmentNameMap);
 }
 
 // ─── Add/Edit dialogs ────────────────────────────────────────────────────────
@@ -309,7 +403,7 @@ function AddScenarioDialog({
     .join("、");
 
   const approverSourceLabels = (preset?.approver_source_types ?? [])
-    .map((s) => t(APPROVER_SOURCE_LABEL_KEYS[s] ?? `approvalPage.approverSource.${s}`, { defaultValue: s }))
+    .map((s) => approverSourceLabel(s, t, preset?.scenario_code))
     .join("、");
 
   return (
@@ -401,6 +495,7 @@ function RouteDialog({
   initial,
   flows,
   conditionFields,
+  scenarioCode,
   onClose,
   onConfirm,
 }: {
@@ -408,21 +503,27 @@ function RouteDialog({
   initial: Partial<ApprovalRouteItem>;
   flows: ApprovalFlowItem[];
   conditionFields: string[];
+  scenarioCode?: string | null;
   onClose: () => void;
   onConfirm: (data: {
     route_name: string;
     route_type: string;
     flow_definition_id: number | null;
-    match_config: { field?: string; value?: string };
+    match_config: ApprovalRouteMatchConfig;
   }) => void;
 }) {
+  const isPublishRoute = isFilePublishScenario(scenarioCode);
   const [name, setName] = useState(initial.route_name ?? "");
   const [type, setType] = useState(initial.route_type ?? "flow");
   const [flowId, setFlowId] = useState(
     initial.flow_definition_id ? String(initial.flow_definition_id) : "",
   );
-  const [condField, setCondField] = useState(initial.match_config?.field ?? "");
-  const [condValue, setCondValue] = useState(initial.match_config?.value ?? "");
+  const initialSingleMatchConfig = isSingleMatchConfig(initial.match_config) ? initial.match_config : null;
+  const [condField, setCondField] = useState(initialSingleMatchConfig?.field ?? "");
+  const [condValue, setCondValue] = useState(initialSingleMatchConfig?.value ?? "");
+  const [conditions, setConditions] = useState<MatchCondition[]>(() =>
+    routeConditionsFromMatchConfig(initial.match_config),
+  );
   const [systemRoles, setSystemRoles] = useState<{ value: string; label: string }[]>([]);
   const [roleSearch, setRoleSearch] = useState("");
   const [targetSpaces, setTargetSpaces] = useState<TargetSpaceOption[]>([]);
@@ -443,8 +544,10 @@ function RouteDialog({
       setName(initial.route_name ?? "");
       setType(initial.route_type ?? "flow");
       setFlowId(initial.flow_definition_id ? String(initial.flow_definition_id) : "");
-      setCondField(initial.match_config?.field ?? "");
-      setCondValue(initial.match_config?.value ?? "");
+      const singleMatchConfig = isSingleMatchConfig(initial.match_config) ? initial.match_config : null;
+      setCondField(singleMatchConfig?.field ?? "");
+      setCondValue(singleMatchConfig?.value ?? "");
+      setConditions(routeConditionsFromMatchConfig(initial.match_config));
       setRoleSearch("");
       setTargetSpaceSearch("");
       setTargetSpacesLoaded(false);
@@ -469,20 +572,23 @@ function RouteDialog({
         );
       }).catch(() => setSystemRoles([]));
     }
-  }, [open]);
+  }, [open, initial]);
 
   const { t } = useTranslation("bs");
-  const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
-  // For applicant_role: fixed entries use i18n keys → need t(); system roles have real names → no translation
-  const allRoleValues = condField === 'applicant_role'
-    ? [
+  const getConditionValueOptions = (field: string) => {
+    const fieldMeta = field ? CONDITION_FIELD_META[field] : null;
+    if (field === 'applicant_role') {
+      return [
         ...FIXED_ROLE_VALUES.map((v) => ({ value: v.value, label: t(v.label, { defaultValue: v.value }) })),
-        ...systemRoles,  // label is already the display name, skip t()
-      ]
-    : (fieldMeta?.values ?? []).map((v) => ({
+        ...systemRoles,
+      ];
+    }
+    return (fieldMeta?.values ?? []).map((v) => ({
         value: v.value,
         label: t(v.label, { defaultValue: v.value }),
       }));
+  };
+  const allRoleValues = getConditionValueOptions(condField);
   // Apply search filter for applicant_role (search against translated label)
   const effectiveValues = condField === 'applicant_role' && roleSearch
     ? allRoleValues.filter((v) => v.label.toLowerCase().includes(roleSearch.toLowerCase()))
@@ -568,6 +674,29 @@ function RouteDialog({
     setDepartmentSearch("");
   };
 
+  const handlePublishConditionFieldChange = (index: number, field: string) => {
+    setConditions((prev) => prev.map((condition, i) =>
+      i === index ? { field, value: "" } : condition,
+    ));
+  };
+
+  const handlePublishConditionValueChange = (index: number, value: string) => {
+    setConditions((prev) => prev.map((condition, i) =>
+      i === index ? { ...condition, value } : condition,
+    ));
+  };
+
+  const addPublishCondition = () => {
+    setConditions((prev) => [...prev, { field: "", value: "" }]);
+  };
+
+  const removePublishCondition = (index: number) => {
+    setConditions((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.length > 0 ? next : [{ field: "", value: "" }];
+    });
+  };
+
   const targetSpaceConditionInvalid = condField === "target_space_id" && (
     targetSpacesLoading ||
     targetSpacesLoadFailed ||
@@ -580,6 +709,7 @@ function RouteDialog({
     !departmentsLoaded ||
     !condValue
   );
+  const publishConditionsInvalid = isPublishRoute && conditions.some((condition) => condition.field && !condition.value);
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -601,6 +731,80 @@ function RouteDialog({
           {/* Condition */}
           <div className="rounded-lg border border-border-subtle bg-gray-50 p-3 space-y-3">
             <div className="text-xs font-medium text-text-secondary">{t("approvalPage.matchConditionHint")}</div>
+            {isPublishRoute ? (
+              <div className="space-y-2">
+                {conditions.map((condition, index) => {
+                  const valueOptions = getConditionValueOptions(condition.field ?? "");
+                  const rowNumber = index + 1;
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <select
+                        aria-label={`条件 ${rowNumber} 字段`}
+                        value={condition.field ?? ""}
+                        onChange={(e) => handlePublishConditionFieldChange(index, e.target.value)}
+                        className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                      >
+                        <option value="">{t("approvalPage.noCondition")}</option>
+                        {conditionFields.map((f) => (
+                          <option key={f} value={f}>
+                            {CONDITION_FIELD_META[f]
+                              ? t(CONDITION_FIELD_META[f].label, { defaultValue: f })
+                              : t(`approvalPage.condition.${f}`, { defaultValue: f })}
+                          </option>
+                        ))}
+                      </select>
+                      {condition.field && <span className="text-xs text-text-secondary">=</span>}
+                      {condition.field && valueOptions.length > 0 && (
+                        <select
+                          aria-label={`条件 ${rowNumber} 值`}
+                          value={condition.value ?? ""}
+                          onChange={(e) => handlePublishConditionValueChange(index, e.target.value)}
+                          className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                        >
+                          <option value="">{t("approvalPage.pleaseSelect")}</option>
+                          {valueOptions.map((v) => (
+                            <option key={v.value} value={v.value}>
+                              {v.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {condition.field && valueOptions.length === 0 && (
+                        <input
+                          aria-label={`条件 ${rowNumber} 值`}
+                          value={condition.value ?? ""}
+                          onChange={(e) => handlePublishConditionValueChange(index, e.target.value)}
+                          placeholder={t("approvalPage.inputConditionValue")}
+                          className="h-9 flex-1 rounded-lg border border-border-subtle bg-white px-2 text-sm text-text-primary outline-none"
+                        />
+                      )}
+                      {conditions.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removePublishCondition(index)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border-subtle bg-white text-text-secondary hover:bg-gray-50"
+                          aria-label={`${t("approvalPage.removeCondition", { defaultValue: "删除条件" })} ${rowNumber}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={addPublishCondition}
+                  className="inline-flex items-center gap-1 rounded border border-dashed border-border-subtle bg-white px-2.5 py-1.5 text-xs text-text-secondary hover:bg-gray-50"
+                >
+                  <Plus size={12} />
+                  {t("approvalPage.addCondition", { defaultValue: "添加条件" })}
+                </button>
+                {publishConditionsInvalid && (
+                  <p className="text-xs text-amber-500">{t("approvalPage.conditionValueWarning")}</p>
+                )}
+              </div>
+            ) : (
+            <>
             <div className="flex items-center gap-2">
               <select
                 value={condField}
@@ -741,6 +945,8 @@ function RouteDialog({
             {condField && !condValue && (
               <p className="text-xs text-amber-500">{t("approvalPage.conditionValueWarning")}</p>
             )}
+            </>
+            )}
           </div>
 
           {/* Route type */}
@@ -786,13 +992,15 @@ function RouteDialog({
           </button>
           <button
             type="button"
-            disabled={!name.trim() || (type === "flow" && !flowId) || targetSpaceConditionInvalid || departmentConditionInvalid}
+            disabled={!name.trim() || (type === "flow" && !flowId) || targetSpaceConditionInvalid || departmentConditionInvalid || publishConditionsInvalid}
             onClick={() =>
               onConfirm({
                 route_name: name.trim(),
                 route_type: type,
                 flow_definition_id: type === "flow" && flowId ? Number(flowId) : null,
-                match_config: condField ? { field: condField, value: condValue } : {},
+                match_config: isPublishRoute
+                  ? buildAndMatchConfig(conditions)
+                  : (condField ? { field: condField, value: condValue } : {}),
               })
             }
             className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
@@ -870,6 +1078,22 @@ const APPROVER_SOURCE_OPTIONS = [
   { value: "role_user",               labelKey: "approvalPage.approverSource.role_user" },
   { value: "knowledge_space_owner",   labelKey: "approvalPage.approverSource.knowledge_space_owner" },
   { value: "knowledge_space_manager", labelKey: "approvalPage.approverSource.knowledge_space_manager" },
+  {
+    value: "target_knowledge_space_owner",
+    labelKey: "approvalPage.approverSource.target_knowledge_space_owner",
+  },
+  {
+    value: "target_knowledge_space_manager",
+    labelKey: "approvalPage.approverSource.target_knowledge_space_manager",
+  },
+  {
+    value: "target_knowledge_space_owner_department_admin",
+    labelKey: "approvalPage.approverSource.target_knowledge_space_owner_department_admin",
+  },
+  {
+    value: "target_knowledge_space_manager_department_admin",
+    labelKey: "approvalPage.approverSource.target_knowledge_space_manager_department_admin",
+  },
   { value: "channel_owner",           labelKey: "approvalPage.approverSource.channel_owner" },
   { value: "channel_manager",         labelKey: "approvalPage.approverSource.channel_manager" },
 ];
@@ -878,12 +1102,14 @@ function NodeDialog({
   open,
   initial,
   allowedSourceTypes,
+  scenarioCode,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   initial: Partial<ApprovalNodeItem>;
   allowedSourceTypes?: string[];
+  scenarioCode?: string | null;
   onClose: () => void;
   onConfirm: (data: {
     node_name: string;
@@ -920,10 +1146,7 @@ function NodeDialog({
     ? APPROVER_SOURCE_OPTIONS.filter((o) => allowedSourceTypes.includes(o.value))
     : APPROVER_SOURCE_OPTIONS;
 
-  const getApproverLabel = (type: string) => {
-    const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === type);
-    return opt ? t(opt.labelKey, { defaultValue: type }) : type;
-  };
+  const getApproverLabel = (type: string) => approverSourceLabel(type, t, scenarioCode);
 
   useEffect(() => {
     if (open) {
@@ -949,7 +1172,7 @@ function NodeDialog({
         })),
       );
     }
-  }, [open]);
+  }, [open, initial, scenarioCode]);
 
   const PAGE_SIZE = 50;
 
@@ -1122,7 +1345,7 @@ function NodeDialog({
                 {effectiveSourceOptions.filter((o) => !sources.some((s) => s.type === o.value)).map(
                   (o) => (
                     <option key={o.value} value={o.value}>
-                      {t(o.labelKey, { defaultValue: o.value })}
+                      {approverSourceLabel(o.value, t, scenarioCode)}
                     </option>
                   ),
                 )}
@@ -1765,7 +1988,7 @@ export default function ApprovalPage() {
     route_name: string;
     route_type: string;
     flow_definition_id: number | null;
-    match_config: { field?: string; value?: string };
+    match_config: ApprovalRouteMatchConfig;
   }) => {
     if (!selectedScenarioId) return;
     try {
@@ -2462,10 +2685,7 @@ export default function ApprovalPage() {
                                       className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2.5 py-0.5 text-xs text-text-primary"
                                     >
                                       <Users size={10} className="text-text-secondary" />
-                                      {(() => {
-                                        const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
-                                        return opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type);
-                                      })()}
+                                      {approverSourceLabel(src.type, t, selectedScenario?.scenario_code, src.label ?? src.type)}
                                     </span>
                                   );
                                 })}
@@ -2702,6 +2922,7 @@ export default function ApprovalPage() {
         initial={routeDialog.initial}
         flows={flows}
         conditionFields={activeConditionFields}
+        scenarioCode={selectedScenario?.scenario_code}
         onClose={() => setRouteDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveRoute(data)}
       />
@@ -2715,6 +2936,7 @@ export default function ApprovalPage() {
         open={nodeDialog.open}
         initial={nodeDialog.initial}
         allowedSourceTypes={activeSourceTypes}
+        scenarioCode={selectedScenario?.scenario_code}
         onClose={() => setNodeDialog({ open: false, initial: {} })}
         onConfirm={(data) => void handleSaveNode(data)}
       />
@@ -2778,14 +3000,13 @@ export default function ApprovalPage() {
                                 </span>
                               ));
                             }
-                            const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
                             return (
                               <span
                                 key={src.type}
                                 className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-gray-50 px-2 py-0.5 text-xs text-text-primary"
                               >
                                 <Users size={10} className="text-text-secondary" />
-                                {opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type)}
+                                {approverSourceLabel(src.type, t, selectedScenario?.scenario_code, src.label ?? src.type)}
                               </span>
                             );
                           })}

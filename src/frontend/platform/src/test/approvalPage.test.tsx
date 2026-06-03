@@ -54,6 +54,8 @@ vi.mock("react-i18next", () => ({
         "approvalPage.editRoute": "编辑条件分支",
         "approvalPage.routeNameLabel": "分支名称",
         "approvalPage.matchConditionHint": "匹配条件",
+        "approvalPage.addCondition": "添加条件",
+        "approvalPage.removeCondition": "删除条件",
         "approvalPage.noCondition": "无条件",
         "approvalPage.pleaseSelect": "请选择",
         "approvalPage.routeTypeLabel": "分支结果",
@@ -89,6 +91,9 @@ vi.mock("react-i18next", () => ({
         "approvalPage.condition.target_space_level": "目标知识空间类型",
         "approvalPage.condition.target_space_id": "目标知识空间",
         "approvalPage.condition.applicant_department_id": "申请人部门",
+        "approvalPage.roleValue.admin": "系统管理员",
+        "approvalPage.roleValue.tenant_admin": "租户管理员",
+        "approvalPage.roleValue.dept_admin": "部门管理员",
         "approvalPage.spaceLevel.public": "公共",
         "approvalPage.spaceLevel.department": "部门",
         "approvalPage.spaceLevel.team": "团队",
@@ -102,6 +107,14 @@ vi.mock("react-i18next", () => ({
         "approvalPage.approverSource.role_user": "指定用户角色",
         "approvalPage.approverSource.knowledge_space_owner": "知识空间 Owner",
         "approvalPage.approverSource.knowledge_space_manager": "知识空间 Manager",
+        "approvalPage.approverSource.filePublishSourceKnowledgeSpaceOwner": "来源知识空间 Owner",
+        "approvalPage.approverSource.filePublishSourceKnowledgeSpaceManager": "来源知识空间 Manager",
+        "approvalPage.approverSource.target_knowledge_space_owner": "目标知识空间 Owner",
+        "approvalPage.approverSource.target_knowledge_space_manager": "目标知识空间 Manager",
+        "approvalPage.approverSource.target_knowledge_space_owner_department_admin":
+          "目标知识空间 Owner 的部门管理员",
+        "approvalPage.approverSource.target_knowledge_space_manager_department_admin":
+          "目标知识空间 Manager 的部门管理员",
         "approvalPage.approverSource.channel_owner": "频道 Owner",
       };
       return map[key] ?? opts?.defaultValue ?? key;
@@ -389,6 +402,10 @@ describe("ApprovalPage", () => {
           "department_admin",
           "knowledge_space_owner",
           "knowledge_space_manager",
+          "target_knowledge_space_owner",
+          "target_knowledge_space_manager",
+          "target_knowledge_space_owner_department_admin",
+          "target_knowledge_space_manager_department_admin",
         ],
       },
     ]);
@@ -431,7 +448,160 @@ describe("ApprovalPage", () => {
       expect(createApprovalRouteApi).toHaveBeenCalledWith(
         31,
         expect.objectContaining({
-          match_config: { field: "target_space_level", value: "department" },
+          match_config: {
+            operator: "and",
+            conditions: [{ field: "target_space_level", value: "department" }],
+          },
+        }),
+      );
+    });
+  });
+
+  it("creates a Shougang publish route with multiple AND conditions", async () => {
+    const user = userEvent.setup();
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "knowledge_space_file_publish_request",
+        scenario_name: "知识空间文件发布审批",
+        handler_key: "knowledge_space_file_publish_request",
+        condition_fields: ["applicant_role", "source_space_level", "target_space_level"],
+        approver_source_types: [
+          "direct_user",
+          "department_admin",
+          "knowledge_space_owner",
+          "knowledge_space_manager",
+          "target_knowledge_space_owner",
+          "target_knowledge_space_manager",
+          "target_knowledge_space_owner_department_admin",
+          "target_knowledge_space_manager_department_admin",
+        ],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 31,
+        scenario_code: "knowledge_space_file_publish_request",
+        scenario_name: "知识空间文件发布审批",
+        enabled: true,
+      },
+    ]);
+    listApprovalRoutesApi.mockResolvedValue([]);
+
+    render(<ApprovalPage />);
+    await screen.findAllByText("知识空间文件发布审批");
+
+    await user.click(screen.getByRole("button", { name: /新增分支/ }));
+    await screen.findByText("新增条件分支");
+
+    await user.type(screen.getByPlaceholderText("如：管理员直接通过"), "团队到公共发布");
+
+    await user.selectOptions(screen.getByLabelText("条件 1 字段"), "applicant_role");
+    await user.selectOptions(screen.getByLabelText("条件 1 值"), "dept_admin");
+
+    await user.click(screen.getByRole("button", { name: "添加条件" }));
+    await user.selectOptions(screen.getByLabelText("条件 2 字段"), "source_space_level");
+    await user.selectOptions(screen.getByLabelText("条件 2 值"), "team");
+
+    await user.click(screen.getByRole("button", { name: "添加条件" }));
+    await user.selectOptions(screen.getByLabelText("条件 3 字段"), "target_space_level");
+    await user.selectOptions(screen.getByLabelText("条件 3 值"), "public");
+
+    await user.selectOptions(getSelectWithOptionValue("pass"), "pass");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(createApprovalRouteApi).toHaveBeenCalledWith(
+        31,
+        expect.objectContaining({
+          route_name: "团队到公共发布",
+          match_config: {
+            operator: "and",
+            conditions: [
+              { field: "applicant_role", value: "dept_admin" },
+              { field: "source_space_level", value: "team" },
+              { field: "target_space_level", value: "public" },
+            ],
+          },
+        }),
+      );
+    });
+  });
+
+  it("edits a Shougang publish route with multiple AND conditions", async () => {
+    const user = userEvent.setup();
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "knowledge_space_file_publish_request",
+        scenario_name: "知识空间文件发布审批",
+        handler_key: "knowledge_space_file_publish_request",
+        condition_fields: ["applicant_role", "source_space_level", "target_space_level"],
+        approver_source_types: [
+          "direct_user",
+          "department_admin",
+          "knowledge_space_owner",
+          "knowledge_space_manager",
+          "target_knowledge_space_owner",
+          "target_knowledge_space_manager",
+          "target_knowledge_space_owner_department_admin",
+          "target_knowledge_space_manager_department_admin",
+        ],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 31,
+        scenario_code: "knowledge_space_file_publish_request",
+        scenario_name: "知识空间文件发布审批",
+        enabled: true,
+      },
+    ]);
+    listApprovalRoutesApi.mockResolvedValue([
+      {
+        ...ROUTE,
+        id: 44,
+        route_name: "团队到公共发布",
+        match_config: {
+          operator: "and",
+          conditions: [
+            { field: "applicant_role", value: "dept_admin" },
+            { field: "source_space_level", value: "team" },
+            { field: "target_space_level", value: "public" },
+          ],
+        },
+      },
+    ]);
+
+    render(<ApprovalPage />);
+
+    expect(await screen.findByText("团队到公共发布")).toBeInTheDocument();
+    expect(screen.getByText("申请人身份 = 部门管理员 AND 来源知识空间类型 = 团队 AND 目标知识空间类型 = 公共")).toBeInTheDocument();
+
+    const editBtns = screen.getAllByRole("button", { name: "编辑" });
+    await user.click(editBtns[editBtns.length - 1]);
+
+    expect(await screen.findByText("编辑条件分支")).toBeInTheDocument();
+    expect(screen.getByLabelText("条件 1 字段")).toHaveValue("applicant_role");
+    expect(screen.getByLabelText("条件 1 值")).toHaveValue("dept_admin");
+    expect(screen.getByLabelText("条件 2 字段")).toHaveValue("source_space_level");
+    expect(screen.getByLabelText("条件 2 值")).toHaveValue("team");
+    expect(screen.getByLabelText("条件 3 字段")).toHaveValue("target_space_level");
+    expect(screen.getByLabelText("条件 3 值")).toHaveValue("public");
+
+    await user.selectOptions(screen.getByLabelText("条件 3 值"), "department");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+
+    await waitFor(() => {
+      expect(updateApprovalRouteApi).toHaveBeenCalledWith(
+        44,
+        expect.objectContaining({
+          match_config: {
+            operator: "and",
+            conditions: [
+              { field: "applicant_role", value: "dept_admin" },
+              { field: "source_space_level", value: "team" },
+              { field: "target_space_level", value: "department" },
+            ],
+          },
         }),
       );
     });
@@ -541,6 +711,47 @@ describe("ApprovalPage", () => {
     });
   });
 
+  it("keeps generic knowledge space source labels outside Shougang publish preset", async () => {
+    const user = userEvent.setup();
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      {
+        scenario_code: "knowledge_space_subscribe_request",
+        scenario_name: "知识空间加入审批",
+        handler_key: "knowledge_space_subscribe_request",
+        condition_fields: ["applicant_role"],
+        approver_source_types: [
+          "direct_user",
+          "department_admin",
+          "knowledge_space_owner",
+          "knowledge_space_manager",
+        ],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      {
+        id: 35,
+        scenario_code: "knowledge_space_subscribe_request",
+        scenario_name: "知识空间加入审批",
+        enabled: true,
+      },
+    ]);
+
+    render(<ApprovalPage />);
+    await screen.findByText("审批流程");
+
+    await user.click(screen.getByRole("button", { name: /编辑节点/ }));
+    expect(await screen.findByText(/编辑中/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /新增节点/ }));
+    await screen.findByText("新增审批节点");
+
+    const sourceSelect = getSelectWithOptionValue("knowledge_space_manager");
+    expect(within(sourceSelect).getByRole("option", { name: "知识空间 Owner" })).toHaveValue("knowledge_space_owner");
+    expect(within(sourceSelect).getByRole("option", { name: "知识空间 Manager" })).toHaveValue("knowledge_space_manager");
+    expect(within(sourceSelect).queryByRole("option", { name: "来源知识空间 Owner" })).not.toBeInTheDocument();
+    expect(within(sourceSelect).queryByRole("option", { name: "来源知识空间 Manager" })).not.toBeInTheDocument();
+  });
+
   it("filters target_space_id from stale Shougang publish preset", async () => {
     const user = userEvent.setup();
     listApprovalScenarioPresetsApi.mockResolvedValue([
@@ -587,6 +798,10 @@ describe("ApprovalPage", () => {
           "department_admin",
           "knowledge_space_owner",
           "knowledge_space_manager",
+          "target_knowledge_space_owner",
+          "target_knowledge_space_manager",
+          "target_knowledge_space_owner_department_admin",
+          "target_knowledge_space_manager_department_admin",
         ],
       },
     ]);
@@ -612,8 +827,16 @@ describe("ApprovalPage", () => {
     expect(within(sourceSelect).getByRole("option", { name: "指定用户" })).toHaveValue("direct_user");
     expect(within(sourceSelect).getByRole("option", { name: "申请人部门管理员" })).toHaveValue("department_admin");
     expect(within(sourceSelect).queryByRole("option", { name: "指定用户角色" })).not.toBeInTheDocument();
-    expect(within(sourceSelect).getByRole("option", { name: "知识空间 Owner" })).toHaveValue("knowledge_space_owner");
-    expect(within(sourceSelect).getByRole("option", { name: "知识空间 Manager" })).toHaveValue("knowledge_space_manager");
+    expect(within(sourceSelect).getByRole("option", { name: "来源知识空间 Owner" })).toHaveValue("knowledge_space_owner");
+    expect(within(sourceSelect).getByRole("option", { name: "来源知识空间 Manager" })).toHaveValue("knowledge_space_manager");
+    expect(within(sourceSelect).getByRole("option", { name: "目标知识空间 Owner" })).toHaveValue("target_knowledge_space_owner");
+    expect(within(sourceSelect).getByRole("option", { name: "目标知识空间 Manager" })).toHaveValue("target_knowledge_space_manager");
+    expect(within(sourceSelect).getByRole("option", { name: "目标知识空间 Owner 的部门管理员" })).toHaveValue(
+      "target_knowledge_space_owner_department_admin",
+    );
+    expect(within(sourceSelect).getByRole("option", { name: "目标知识空间 Manager 的部门管理员" })).toHaveValue(
+      "target_knowledge_space_manager_department_admin",
+    );
     expect(within(sourceSelect).queryByRole("option", { name: "频道 Owner" })).not.toBeInTheDocument();
   });
 

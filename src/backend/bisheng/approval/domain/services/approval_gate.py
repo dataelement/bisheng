@@ -24,6 +24,13 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.database.models.audit_log import AuditLogDao
 
+FILE_PUBLISH_SCENARIO_CODE = "knowledge_space_file_publish_request"
+FILE_PUBLISH_ALLOWED_CONDITION_FIELDS = frozenset({
+    "applicant_role",
+    "source_space_level",
+    "target_space_level",
+})
+
 
 async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
     """Return the full set of identity labels for a user.
@@ -424,6 +431,11 @@ class ApprovalGate:
            "value": "admin"}             → matches if 'admin' ∈ user's identity labels
           {"field": "<payload_key>",
            "value": "<expected>"}        → matches if payload_snapshot[field] == expected
+          {"operator": "and",
+           "conditions": [
+             {"field": "source_space_level", "value": "team"},
+             {"field": "target_space_level", "value": "public"}
+           ]}                            → file publish only; all conditions must match
 
         applicant_role condition uses "包含即命中" semantics:
           a user may have multiple labels simultaneously (e.g. admin + dept_admin).
@@ -437,30 +449,64 @@ class ApprovalGate:
         """
         user_labels: frozenset[str] | None = None  # lazily resolved; shared across routes
 
+        async def condition_matches(field: str, expected: str) -> bool:
+            nonlocal user_labels
+            if field == "applicant_role":
+                if user_labels is None:
+                    user_labels = await _get_user_role_labels(req.applicant_user_id, req.tenant_id)
+                return expected in user_labels
+            if field == "applicant_department_id":
+                dept_id = req.applicant_department_id
+                return dept_id is not None and str(dept_id) == expected
+            payload_val = req.payload_snapshot.get(field)
+            return payload_val is not None and str(payload_val) == expected
+
         for route in route_rules:
             if not getattr(route, "enabled", True):
                 continue
             match_config = getattr(route, "match_config", {}) or {}
+            conditions = match_config.get("conditions")
+            if isinstance(conditions, list):
+                if req.scenario_code != FILE_PUBLISH_SCENARIO_CODE:
+                    continue
+                operator = str(match_config.get("operator") or "and").lower()
+                if operator != "and":
+                    continue
+
+                normalized_conditions = []
+                has_unsupported_condition = False
+                for condition in conditions:
+                    if not isinstance(condition, dict) or not condition.get("field"):
+                        continue
+                    field = str(condition.get("field", ""))
+                    if field not in FILE_PUBLISH_ALLOWED_CONDITION_FIELDS:
+                        has_unsupported_condition = True
+                        break
+                    normalized_conditions.append(condition)
+
+                if has_unsupported_condition:
+                    continue
+                if not normalized_conditions:
+                    return route
+                route_matches = True
+                for condition in normalized_conditions:
+                    if not await condition_matches(
+                        str(condition.get("field", "")),
+                        str(condition.get("value", "")),
+                    ):
+                        route_matches = False
+                        break
+                if route_matches:
+                    return route
+                continue
+
             field = match_config.get("field", "")
             if not field:
                 return route  # catch-all branch
 
             expected = str(match_config.get("value", ""))
-
-            if field == "applicant_role":
-                if user_labels is None:
-                    user_labels = await _get_user_role_labels(req.applicant_user_id, req.tenant_id)
-                if expected in user_labels:
-                    return route
-            elif field == "applicant_department_id":
-                dept_id = req.applicant_department_id
-                if dept_id is not None and str(dept_id) == expected:
-                    return route
-            else:
-                # Payload-based condition: compare against payload_snapshot field
-                payload_val = req.payload_snapshot.get(field)
-                if payload_val is not None and str(payload_val) == expected:
-                    return route
+            if await condition_matches(field, expected):
+                return route
 
         return None
 

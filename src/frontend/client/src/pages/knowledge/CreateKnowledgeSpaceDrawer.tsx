@@ -140,6 +140,17 @@ export function CreateKnowledgeSpaceDrawer({
         () => joinPolicy === "review" || joinPolicy === "public",
         [joinPolicy]
     );
+    const originalEditJoinPolicy = useMemo<JoinPolicy>(() => {
+        if (!editingSpace?.visibility) return joinPolicy;
+        if (editingSpace.visibility === VisibilityType.PUBLIC) return "public";
+        if (editingSpace.visibility === VisibilityType.PRIVATE) return "private";
+        if (editingSpace.visibility === VisibilityType.APPROVAL) return "review";
+        return joinPolicy;
+    }, [editingSpace?.visibility, joinPolicy]);
+    const originalEditPublishToSquare = useMemo<PublishToSquare>(() => {
+        if (!editingSpace || typeof editingSpace.isReleased !== "boolean") return publishToSquare;
+        return editingSpace.isReleased ? "yes" : "no";
+    }, [editingSpace, publishToSquare]);
     const { data: createOptions } = useQuery({
         queryKey: ["knowledgeSpaces", "createOptions"],
         queryFn: getCreateSpaceOptionsApi,
@@ -183,7 +194,7 @@ export function CreateKnowledgeSpaceDrawer({
         if (mode !== "create") return true;
         return Boolean(levelOptions.find((option) => option.value === spaceLevel)?.enabled);
     }, [levelOptions, mode, spaceLevel]);
-    const shouldShowVisibilityControls = mode !== "create";
+    const shouldShowVisibilityControls = false;
     const shouldShowPublishOption = shouldShowVisibilityControls && needPublishOption;
     const shouldShowDepartmentSelector = mode === "create"
         && spaceLevel === SpaceLevel.DEPARTMENT
@@ -405,13 +416,13 @@ export function CreateKnowledgeSpaceDrawer({
                 effectiveAutoTagCustomTags = customTags;
             }
         }
-        const effectiveJoinPolicy: JoinPolicy = mode === "create" ? "review" : joinPolicy;
+        const effectiveJoinPolicy: JoinPolicy = mode === "edit" ? originalEditJoinPolicy : "review";
         const payload: CreateKnowledgeSpaceFormData = {
             name: name.trim(),
             description: description.trim(),
             reason: mode === "create" && showApprovalReason ? reason.trim() || undefined : undefined,
             joinPolicy: effectiveJoinPolicy,
-            publishToSquare: mode === "create" ? "no" : needPublishOption ? publishToSquare : "no",
+            publishToSquare: mode === "edit" ? originalEditPublishToSquare : "no",
             spaceLevel,
             departmentId: shouldShowDepartmentSelector ? selectedDepartmentId : undefined,
             userGroupId: undefined,

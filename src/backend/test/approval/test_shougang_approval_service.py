@@ -1989,10 +1989,12 @@ def test_shougang_scenarios_registered_in_default_presets():
     assert presets["knowledge_space_create_request"].condition_fields == [
         "applicant_role",
         "space_level",
+        "applicant_department_id",
     ]
     assert presets["knowledge_space_create_request"].approver_source_types == [
         "direct_user",
         "department_admin",
+        "role_user",
     ]
     assert presets["knowledge_space_file_publish_request"].condition_fields == [
         "applicant_role",
@@ -2004,12 +2006,16 @@ def test_shougang_scenarios_registered_in_default_presets():
         "department_admin",
         "knowledge_space_owner",
         "knowledge_space_manager",
+        "target_knowledge_space_owner",
+        "target_knowledge_space_manager",
+        "target_knowledge_space_owner_department_admin",
+        "target_knowledge_space_manager_department_admin",
     ]
     create_field_options = {
         option.field: option.model_dump()
         for option in presets["knowledge_space_create_request"].condition_field_options
     }
-    assert set(create_field_options) == {"applicant_role", "space_level"}
+    assert set(create_field_options) == {"applicant_role", "space_level", "applicant_department_id"}
     assert create_field_options["space_level"]["label"] == "知识空间类型"
     assert create_field_options["space_level"]["type"] == "select"
     assert [item["value"] for item in create_field_options["space_level"]["values"]] == [
@@ -2045,17 +2051,38 @@ def test_shougang_scenarios_registered_in_default_presets():
         "department_admin",
         "knowledge_space_owner",
         "knowledge_space_manager",
+        "target_knowledge_space_owner",
+        "target_knowledge_space_manager",
+        "target_knowledge_space_owner_department_admin",
+        "target_knowledge_space_manager_department_admin",
     ]
+    publish_source_options = {
+        option.source_type: option.label
+        for option in presets["knowledge_space_file_publish_request"].approver_source_options
+    }
+    assert publish_source_options["knowledge_space_owner"] == "知识空间 Owner"
+    assert publish_source_options["knowledge_space_manager"] == "知识空间 Manager"
+    assert publish_source_options["target_knowledge_space_owner"] == "目标知识空间 Owner"
+    assert publish_source_options["target_knowledge_space_manager"] == "目标知识空间 Manager"
+    assert publish_source_options["target_knowledge_space_owner_department_admin"] == "目标知识空间 Owner 的部门管理员"
+    assert publish_source_options["target_knowledge_space_manager_department_admin"] == "目标知识空间 Manager 的部门管理员"
 
 
 @pytest.mark.asyncio
-async def test_file_publish_handler_resolves_target_space_owner_and_manager(monkeypatch):
+async def test_file_publish_handler_resolves_space_role_sources_by_side(monkeypatch):
     from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
 
     handler = KnowledgeSpaceFilePublishApprovalHandler()
+
+    async def fake_resolve_space_roles(space_id: int):
+        return {
+            10: ([31], [32, 33]),
+            20: ([41], [42, 33]),
+        }[space_id]
+
     monkeypatch.setattr(
         "bisheng.approval.domain.services.shougang_approval_handler._resolve_space_roles_via_fga",
-        AsyncMock(return_value=([31], [32, 33])),
+        fake_resolve_space_roles,
     )
 
     approvers = await handler.resolve_approvers(
@@ -2064,14 +2091,84 @@ async def test_file_publish_handler_resolves_target_space_owner_and_manager(monk
                 {"type": "direct_user", "user_ids": [33, 34]},
                 {"type": "knowledge_space_owner"},
                 {"type": "knowledge_space_manager"},
+                {"type": "target_knowledge_space_owner"},
+                {"type": "target_knowledge_space_manager"},
             ]
         },
         SimpleNamespace(
             tenant_id=1,
             applicant_user_id=11,
             applicant_department_id=None,
-            payload_snapshot={"target_space_id": 20},
+            payload_snapshot={
+                "source_space_id": 10,
+                "target_space_id": 20,
+            },
         ),
     )
 
-    assert approvers == [33, 34, 31, 32]
+    assert approvers == [33, 34, 31, 32, 41, 42]
+
+
+@pytest.mark.asyncio
+async def test_file_publish_handler_resolves_target_role_department_admins(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+
+    async def fake_resolve_space_roles(space_id: int):
+        assert space_id == 20
+        return [41], [42, 43]
+
+    async def fake_get_user_departments(user_ids: list[int]):
+        return [
+            SimpleNamespace(user_id=41, department_id=300, is_primary=1),
+            SimpleNamespace(user_id=42, department_id=400, is_primary=1),
+            SimpleNamespace(user_id=43, department_id=500, is_primary=1),
+        ]
+
+    async def fake_get_departments(department_ids: list[int]):
+        departments = {
+            300: SimpleNamespace(id=300, path="/100/200/300/"),
+            400: SimpleNamespace(id=400, path="/100/400/"),
+            500: SimpleNamespace(id=500, path="/900/500/"),
+        }
+        return [departments[department_id] for department_id in department_ids if department_id in departments]
+
+    async def fake_get_admins_by_departments(department_ids: list[int]):
+        return {
+            300: [],
+            200: [2001, 2002],
+            100: [1001],
+            400: [4001],
+            500: [],
+        }
+
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.shougang_approval_handler._resolve_space_roles_via_fga",
+        fake_resolve_space_roles,
+    )
+    monkeypatch.setattr(UserDepartmentDao, "aget_by_user_ids", fake_get_user_departments)
+    monkeypatch.setattr(DepartmentDao, "aget_by_ids", fake_get_departments)
+    monkeypatch.setattr(DepartmentAdminGrantDao, "aget_user_ids_by_departments", fake_get_admins_by_departments)
+
+    approvers = await handler.resolve_approvers(
+        {
+            "sources": [
+                {"type": "target_knowledge_space_owner_department_admin"},
+                {"type": "target_knowledge_space_manager_department_admin"},
+            ]
+        },
+        SimpleNamespace(
+            tenant_id=1,
+            applicant_user_id=11,
+            applicant_department_id=None,
+            payload_snapshot={
+                "source_space_id": 10,
+                "target_space_id": 20,
+            },
+        ),
+    )
+
+    assert approvers == [2001, 2002, 4001]

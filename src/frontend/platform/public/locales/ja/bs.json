@@ -2329,8 +2329,14 @@
       "channel_owner": "チャンネルオーナー",
       "channel_manager": "チャンネルマネージャー",
       "space_admin": "スペース管理者",
-      "knowledge_space_owner": "スペースオーナー",
-      "knowledge_space_manager": "スペースマネージャー"
+      "knowledge_space_owner": "ナレッジスペースオーナー",
+      "knowledge_space_manager": "ナレッジスペースマネージャー",
+      "filePublishSourceKnowledgeSpaceOwner": "元ナレッジスペースオーナー",
+      "filePublishSourceKnowledgeSpaceManager": "元ナレッジスペースマネージャー",
+      "target_knowledge_space_owner": "対象ナレッジスペースオーナー",
+      "target_knowledge_space_manager": "対象ナレッジスペースマネージャー",
+      "target_knowledge_space_owner_department_admin": "対象ナレッジスペースオーナーの部署管理者",
+      "target_knowledge_space_manager_department_admin": "対象ナレッジスペースマネージャーの部署管理者"
     },
     "roleValue": {
       "admin": "システム管理者",
@@ -2429,6 +2435,9 @@
     "genericSortFailed": "並び替え失敗",
     "genericUpdateFailed": "更新失敗",
     "hint": "お知らせ",
+    "addCondition": "条件を追加",
+    "removeCondition": "条件を削除",
+    "conditionOperatorAnd": "かつ",
     "inputApproverIds": "ユーザー ID を入力（複数はカンマ区切り）",
     "inputConditionValue": "条件値を入力",
     "invalidUserId": "有効なユーザー ID を入力してください",

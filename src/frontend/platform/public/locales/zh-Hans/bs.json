@@ -2330,7 +2330,13 @@
       "channel_manager": "频道 Manager",
       "space_admin": "知识空间管理员",
       "knowledge_space_owner": "知识空间 Owner",
-      "knowledge_space_manager": "知识空间 Manager"
+      "knowledge_space_manager": "知识空间 Manager",
+      "filePublishSourceKnowledgeSpaceOwner": "来源知识空间 Owner",
+      "filePublishSourceKnowledgeSpaceManager": "来源知识空间 Manager",
+      "target_knowledge_space_owner": "目标知识空间 Owner",
+      "target_knowledge_space_manager": "目标知识空间 Manager",
+      "target_knowledge_space_owner_department_admin": "目标知识空间 Owner 的部门管理员",
+      "target_knowledge_space_manager_department_admin": "目标知识空间 Manager 的部门管理员"
     },
     "roleValue": {
       "admin": "系统管理员",
@@ -2429,6 +2435,9 @@
     "genericSortFailed": "排序失败",
     "genericUpdateFailed": "更新失败",
     "hint": "提示",
+    "addCondition": "添加条件",
+    "removeCondition": "删除条件",
+    "conditionOperatorAnd": "且",
     "inputApproverIds": "输入用户 ID，多个用逗号分隔",
     "inputConditionValue": "请输入条件值",
     "invalidUserId": "请输入有效的用户 ID",

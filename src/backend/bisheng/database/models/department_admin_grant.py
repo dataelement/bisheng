@@ -73,6 +73,23 @@ class DepartmentAdminGrantDao:
             return [int(row[0] if isinstance(row, tuple) else row) for row in result.all()]
 
     @classmethod
+    async def aget_user_ids_by_departments(
+        cls, department_ids: List[int],
+    ) -> dict[int, List[int]]:
+        if not department_ids:
+            return {}
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(DepartmentAdminGrant.department_id, DepartmentAdminGrant.user_id).where(
+                    DepartmentAdminGrant.department_id.in_(department_ids),
+                )
+            )
+            grouped: dict[int, List[int]] = {}
+            for department_id, user_id in result.all():
+                grouped.setdefault(int(department_id), []).append(int(user_id))
+            return grouped
+
+    @classmethod
     async def aget_by_user_and_departments(
         cls, user_id: int, department_ids: List[int],
     ) -> List[DepartmentAdminGrant]:

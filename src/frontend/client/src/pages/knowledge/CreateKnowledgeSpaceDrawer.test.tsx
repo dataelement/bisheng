@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { CreateKnowledgeSpaceDrawer } from "./CreateKnowledgeSpaceDrawer";
-import { getCreateSpaceOptionsApi, getKnowledgeSpaceAutoTagVisibilityApi, SpaceLevel } from "~/api/knowledge";
+import { getCreateSpaceOptionsApi, getKnowledgeSpaceAutoTagVisibilityApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
 
 jest.mock("~/Providers", () => ({
     useToastContext: () => ({ showToast: jest.fn() }),
@@ -13,9 +13,10 @@ jest.mock("~/hooks", () => ({
     useLocalize: () => (key: string) => {
         const dict: Record<string, string> = {
             "com_subscription.create_konwledge_space": "创建知识空间",
+            "com_subscription.edit_knowledge_space": "编辑知识空间",
             "com_knowledge.space_level": "空间层级",
             "com_knowledge.public_spaces": "公共知识库",
-            "com_knowledge.department_spaces": "业务域知识库",
+            "com_knowledge.department_spaces": "部门知识库",
             "com_knowledge.team_spaces": "团队知识库",
             "com_knowledge.personal_spaces": "个人知识库",
             "com_subscription.create_knowledge_space_success": "创建知识空间成功",
@@ -23,6 +24,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.member_management": "成员管理",
             "com_knowledge.cancel": "取消",
             "com_knowledge.confirm_create": "确认创建",
+            "com_knowledge.save": "保存",
             "com_subscription.premission_settings": "权限设置",
             "com_knowledge.publish_to_square": "发布到广场",
             "com_knowledge.publish_desc": "可在知识广场展示",
@@ -192,7 +194,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
         expect(screen.queryByText("公共知识库")).not.toBeInTheDocument();
-        expect(screen.queryByText("业务域知识库")).not.toBeInTheDocument();
+        expect(screen.queryByText("部门知识库")).not.toBeInTheDocument();
         expect(screen.queryByText("团队知识库")).not.toBeInTheDocument();
         expect(screen.getByText("个人知识库")).toBeInTheDocument();
     });
@@ -215,7 +217,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.queryByRole("radio", { name: "个人知识库" })).not.toBeInTheDocument();
     });
 
-    test("业务域知识库创建需要选择部门并提交部门", async () => {
+    test("部门知识库创建需要选择部门并提交部门", async () => {
         const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: false,
@@ -230,7 +232,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         renderDrawer({ initialSpaceLevel: SpaceLevel.DEPARTMENT, onConfirm });
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
-        expect(screen.getByRole("radio", { name: "业务域知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByRole("radio", { name: "部门知识库" })).toHaveAttribute("aria-checked", "true");
         expect(screen.getByTestId("department-selector")).toBeInTheDocument();
 
         fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
@@ -251,7 +253,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         }));
     });
 
-    test("业务域知识库创建加载租户全部激活部门时请求参数符合后端限制", async () => {
+    test("部门知识库创建加载租户全部激活部门时请求参数符合后端限制", async () => {
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: false,
             canCreateDepartment: true,
@@ -333,6 +335,66 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(getKnowledgeSpaceAutoTagVisibilityApi).not.toHaveBeenCalled();
     });
 
+    test("编辑模式隐藏权限设置和发布到广场并保留原权限发布状态", async () => {
+        const onConfirm = jest.fn().mockResolvedValue(true);
+
+        renderDrawer({
+            mode: "edit",
+            editingSpace: {
+                id: "team-1",
+                name: "团队资料库",
+                description: "原简介",
+                visibility: VisibilityType.PUBLIC,
+                isReleased: true,
+                spaceLevel: SpaceLevel.TEAM,
+                autoTagEnabled: false,
+                autoTagLibraryId: null,
+                autoTagMode: "library",
+                autoTagCustomTags: null,
+            } as any,
+            onConfirm,
+        });
+
+        expect(screen.getByText("编辑知识空间")).toBeInTheDocument();
+        expect(screen.queryByText("权限设置")).not.toBeInTheDocument();
+        expect(screen.queryByText("发布到广场")).not.toBeInTheDocument();
+        expect(screen.getByText("自动标签生成")).toBeInTheDocument();
+
+        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+            target: { value: "团队资料库更新" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+            name: "团队资料库更新",
+            joinPolicy: "public",
+            publishToSquare: "yes",
+            spaceLevel: SpaceLevel.TEAM,
+        }));
+    });
+
+    test("编辑部门层级知识空间时显示部门知识库", async () => {
+        renderDrawer({
+            mode: "edit",
+            editingSpace: {
+                id: "department-1",
+                name: "部门资料库",
+                description: "原简介",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.DEPARTMENT,
+                autoTagEnabled: false,
+                autoTagLibraryId: null,
+                autoTagMode: "library",
+                autoTagCustomTags: null,
+            } as any,
+        });
+
+        expect(screen.getByText("编辑知识空间")).toBeInTheDocument();
+        expect(screen.getByText("部门知识库")).toBeInTheDocument();
+    });
+
     test("入口层级无创建权限时回退到第一个有权限层级", async () => {
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: false,
@@ -367,7 +429,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         renderDrawer({ initialSpaceLevel: SpaceLevel.DEPARTMENT });
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
-        expect(screen.queryByText("业务域知识库")).not.toBeInTheDocument();
+        expect(screen.queryByText("部门知识库")).not.toBeInTheDocument();
         expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
         await waitFor(() => {
             expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");

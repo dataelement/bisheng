@@ -2380,7 +2380,13 @@
       "channel_manager": "Channel Manager",
       "space_admin": "Space Admin",
       "knowledge_space_owner": "Space Owner",
-      "knowledge_space_manager": "Space Manager"
+      "knowledge_space_manager": "Space Manager",
+      "filePublishSourceKnowledgeSpaceOwner": "Source Space Owner",
+      "filePublishSourceKnowledgeSpaceManager": "Source Space Manager",
+      "target_knowledge_space_owner": "Target Space Owner",
+      "target_knowledge_space_manager": "Target Space Manager",
+      "target_knowledge_space_owner_department_admin": "Target Space Owner's Dept Admin",
+      "target_knowledge_space_manager_department_admin": "Target Space Manager's Dept Admin"
     },
     "roleValue": {
       "admin": "System Admin",
@@ -2479,6 +2485,9 @@
     "genericSortFailed": "Sort failed",
     "genericUpdateFailed": "Update failed",
     "hint": "Notice",
+    "addCondition": "Add condition",
+    "removeCondition": "Remove condition",
+    "conditionOperatorAnd": "AND",
     "inputApproverIds": "Enter user IDs, comma-separated",
     "inputConditionValue": "Enter condition value",
     "invalidUserId": "Please enter valid user ID(s)",

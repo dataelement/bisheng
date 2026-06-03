@@ -41,7 +41,7 @@ export function usePortalSpaces({ activeSpace, setActiveSpace }: UsePortalSpaces
     const groups = useMemo<SpaceGroup[]>(() => {
         return [
             { key: "public", title: "公共知识库", level: SpaceLevel.PUBLIC, iconSrc: GROUP_ICON_SRC.public, spaces: groupedSpaces.publicSpaces },
-            { key: "department", title: "业务域知识库", level: SpaceLevel.DEPARTMENT, iconSrc: GROUP_ICON_SRC.department, spaces: groupedSpaces.departmentSpaces },
+            { key: "department", title: "部门知识库", level: SpaceLevel.DEPARTMENT, iconSrc: GROUP_ICON_SRC.department, spaces: groupedSpaces.departmentSpaces },
             { key: "team", title: "团队知识库", level: SpaceLevel.TEAM, iconSrc: GROUP_ICON_SRC.team, spaces: groupedSpaces.teamSpaces },
             { key: "personal", title: "个人知识库", level: SpaceLevel.PERSONAL, iconSrc: GROUP_ICON_SRC.personal, spaces: groupedSpaces.personalSpaces },
         ];

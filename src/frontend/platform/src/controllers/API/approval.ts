@@ -33,13 +33,30 @@ export interface ApprovalScenarioItem {
   enabled?: boolean;
 }
 
+export interface ApprovalRouteMatchCondition {
+  field?: string;
+  value?: string;
+}
+
+export interface ApprovalRouteSingleMatchConfig {
+  field?: string;
+  value?: string;
+}
+
+export interface ApprovalRouteAndMatchConfig {
+  operator: "and" | string;
+  conditions: ApprovalRouteMatchCondition[];
+}
+
+export type ApprovalRouteMatchConfig = ApprovalRouteSingleMatchConfig | ApprovalRouteAndMatchConfig;
+
 export interface ApprovalRouteItem {
   id: number;
   route_type?: string;
   route_name?: string;
   enabled?: boolean;
   flow_definition_id?: number | null;
-  match_config?: { field?: string; value?: string } | null;
+  match_config?: ApprovalRouteMatchConfig | null;
 }
 
 export interface ApprovalFlowItem {

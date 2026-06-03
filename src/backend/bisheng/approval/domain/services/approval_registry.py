@@ -106,6 +106,22 @@ _APPROVER_SOURCE_OPTIONS: dict[str, ApprovalPresetApproverSource] = {
     'space_admin': ApprovalPresetApproverSource(source_type='space_admin', label='知识空间管理员'),
     'knowledge_space_owner': ApprovalPresetApproverSource(source_type='knowledge_space_owner', label='知识空间 Owner'),
     'knowledge_space_manager': ApprovalPresetApproverSource(source_type='knowledge_space_manager', label='知识空间 Manager'),
+    'target_knowledge_space_owner': ApprovalPresetApproverSource(
+        source_type='target_knowledge_space_owner',
+        label='目标知识空间 Owner',
+    ),
+    'target_knowledge_space_manager': ApprovalPresetApproverSource(
+        source_type='target_knowledge_space_manager',
+        label='目标知识空间 Manager',
+    ),
+    'target_knowledge_space_owner_department_admin': ApprovalPresetApproverSource(
+        source_type='target_knowledge_space_owner_department_admin',
+        label='目标知识空间 Owner 的部门管理员',
+    ),
+    'target_knowledge_space_manager_department_admin': ApprovalPresetApproverSource(
+        source_type='target_knowledge_space_manager_department_admin',
+        label='目标知识空间 Manager 的部门管理员',
+    ),
 }
 
 
@@ -182,6 +198,10 @@ class ApprovalRegistry:
                     'department_admin',
                     'knowledge_space_owner',
                     'knowledge_space_manager',
+                    'target_knowledge_space_owner',
+                    'target_knowledge_space_manager',
+                    'target_knowledge_space_owner_department_admin',
+                    'target_knowledge_space_manager_department_admin',
                 ],
             )
         )

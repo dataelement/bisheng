@@ -4,7 +4,10 @@ import asyncio
 from types import SimpleNamespace
 from typing import Any
 
-from bisheng.approval.domain.services.approver_resolver import resolve_approvers_from_sources
+from bisheng.approval.domain.services.approver_resolver import (
+    resolve_approvers_from_sources,
+    resolve_department_admins_for_user_ids,
+)
 from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import _resolve_space_roles_via_fga
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -89,22 +92,45 @@ async def _resolve_file_publish_approvers(node_config: dict, req) -> list[int]:
             seen.add(uid)
             result.append(uid)
 
-    space_source_types = {'knowledge_space_owner', 'knowledge_space_manager', 'space_admin'}
-    has_space_source = any(source.get('type') in space_source_types for source in sources)
-    owner_ids: list[int] = []
-    manager_ids: list[int] = []
-    if has_space_source:
-        target_space_id = (getattr(req, 'payload_snapshot', {}) or {}).get('target_space_id')
+    source_space_role_types = {'knowledge_space_owner', 'knowledge_space_manager'}
+    target_space_role_types = {'target_knowledge_space_owner', 'target_knowledge_space_manager', 'space_admin'}
+    target_department_admin_types = {
+        'target_knowledge_space_owner_department_admin',
+        'target_knowledge_space_manager_department_admin',
+    }
+    payload_snapshot = getattr(req, 'payload_snapshot', {}) or {}
+    source_owner_ids: list[int] = []
+    source_manager_ids: list[int] = []
+    target_owner_ids: list[int] = []
+    target_manager_ids: list[int] = []
+    if any(source.get('type') in source_space_role_types for source in sources):
+        source_space_id = payload_snapshot.get('source_space_id')
+        if source_space_id:
+            source_owner_ids, source_manager_ids = await _resolve_space_roles_via_fga(int(source_space_id))
+    if any(source.get('type') in target_space_role_types | target_department_admin_types for source in sources):
+        target_space_id = payload_snapshot.get('target_space_id')
         if target_space_id:
-            owner_ids, manager_ids = await _resolve_space_roles_via_fga(int(target_space_id))
+            target_owner_ids, target_manager_ids = await _resolve_space_roles_via_fga(int(target_space_id))
 
     for source in sources:
         source_type = source.get('type', '')
         if source_type == 'knowledge_space_owner':
-            for uid in owner_ids:
+            for uid in source_owner_ids:
                 _add(int(uid))
-        elif source_type in ('knowledge_space_manager', 'space_admin'):
-            for uid in manager_ids:
+        elif source_type == 'knowledge_space_manager':
+            for uid in source_manager_ids:
+                _add(int(uid))
+        elif source_type == 'target_knowledge_space_owner':
+            for uid in target_owner_ids:
+                _add(int(uid))
+        elif source_type in ('target_knowledge_space_manager', 'space_admin'):
+            for uid in target_manager_ids:
+                _add(int(uid))
+        elif source_type == 'target_knowledge_space_owner_department_admin':
+            for uid in await resolve_department_admins_for_user_ids([int(uid) for uid in target_owner_ids]):
+                _add(int(uid))
+        elif source_type == 'target_knowledge_space_manager_department_admin':
+            for uid in await resolve_department_admins_for_user_ids([int(uid) for uid in target_manager_ids]):
                 _add(int(uid))
         else:
             for uid in await resolve_approvers_from_sources([source], req):

@@ -675,6 +675,97 @@ async def test_gate_creates_approver_empty_exception():
     instance_repository.create_task.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_gate_creates_file_publish_target_role_department_admin_empty_exception(monkeypatch):
+    from bisheng.approval.domain.services.shougang_approval_handler import KnowledgeSpaceFilePublishApprovalHandler
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
+
+    async def fake_resolve_space_roles(space_id: int):
+        assert space_id == 20
+        return [41], []
+
+    async def fake_get_user_departments(user_ids: list[int]):
+        assert user_ids == [41]
+        return [SimpleNamespace(user_id=41, department_id=300, is_primary=1)]
+
+    async def fake_get_departments(department_ids: list[int]):
+        assert department_ids == [300]
+        return [SimpleNamespace(id=300, path='/100/200/300/')]
+
+    async def fake_get_admins_by_departments(department_ids: list[int]):
+        assert department_ids == [100, 200, 300]
+        return {}
+
+    monkeypatch.setattr(
+        'bisheng.approval.domain.services.shougang_approval_handler._resolve_space_roles_via_fga',
+        fake_resolve_space_roles,
+    )
+    monkeypatch.setattr(UserDepartmentDao, 'aget_by_user_ids', fake_get_user_departments)
+    monkeypatch.setattr(DepartmentDao, 'aget_by_ids', fake_get_departments)
+    monkeypatch.setattr(DepartmentAdminGrantDao, 'aget_user_ids_by_departments', fake_get_admins_by_departments)
+
+    handler = KnowledgeSpaceFilePublishApprovalHandler()
+    registry = SimpleNamespace(get_handler=AsyncMock(return_value=handler))
+    node = SimpleNamespace(
+        node_code='first_node',
+        node_name='一级审批',
+        node_order=1,
+        node_mode='or',
+        approver_config={'sources': [{'type': 'target_knowledge_space_owner_department_admin'}]},
+    )
+    scenario_repository = SimpleNamespace(
+        get_scenario_by_code=AsyncMock(
+            return_value=SimpleNamespace(
+                id=2,
+                scenario_code='knowledge_space_file_publish_request',
+                scenario_name='知识空间文件发布审批',
+                enabled=True,
+            )
+        ),
+        list_route_rules=AsyncMock(return_value=[SimpleNamespace(id=31, route_type='flow', flow_definition_id=9)]),
+        get_active_flow_version=AsyncMock(return_value=SimpleNamespace(id=21)),
+        list_node_definitions=AsyncMock(return_value=[node]),
+    )
+    instance_repository = SimpleNamespace(
+        find_duplicate_active_instance=AsyncMock(return_value=None),
+        create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={'id': 701})),
+        create_exception=AsyncMock(),
+        create_task=AsyncMock(),
+    )
+    gate = ApprovalGate(
+        registry=registry,
+        scenario_repository=scenario_repository,
+        instance_repository=instance_repository,
+        route_matcher=AsyncMock(return_value=SimpleNamespace(id=31, route_type='flow', flow_definition_id=9)),
+    )
+
+    result = await gate.request_or_pass(
+        ApprovalGateRequest(
+            tenant_id=1,
+            scenario_code='knowledge_space_file_publish_request',
+            business_key='file:900:publish:20:user:7',
+            business_resource_type='knowledge_file',
+            business_resource_id='900',
+            business_name='文件发布',
+            applicant_user_id=7,
+            applicant_user_name='alice',
+            payload_snapshot={
+                'source_space_id': 10,
+                'source_file_id': 900,
+                'source_file_name': 'a.pdf',
+                'target_space_id': 20,
+                'target_space_name': '目标空间',
+            },
+        )
+    )
+
+    assert result.decision == ApprovalGateDecision.EXCEPTION
+    assert result.exception_type == ApprovalExceptionType.APPROVER_EMPTY
+    instance_repository.create_task.assert_not_awaited()
+
+
+
 # ── _match_first_route unit tests ────────────────────────────────────────────
 
 
@@ -683,10 +774,15 @@ def _make_gate() -> ApprovalGate:
     return ApprovalGate(registry=registry)
 
 
-def _req(user_id: int = 7, tenant_id: int = 1, payload: dict | None = None) -> ApprovalGateRequest:
+def _req(
+    user_id: int = 7,
+    tenant_id: int = 1,
+    payload: dict | None = None,
+    scenario_code: str = "menu_access_request",
+) -> ApprovalGateRequest:
     return ApprovalGateRequest(
         tenant_id=tenant_id,
-        scenario_code="menu_access_request",
+        scenario_code=scenario_code,
         business_key=f"menu:k:user:{user_id}",
         business_resource_type="web_menu",
         business_resource_id="k",
@@ -807,6 +903,137 @@ async def test_match_first_route_payload_condition(monkeypatch):
     result = await gate._match_first_route([menu_route, other_route], req)
     assert result is not None
     assert result.route_type == "pass"
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_file_publish_all_conditions_match(monkeypatch):
+    import bisheng.approval.domain.services.approval_gate as gm
+
+    monkeypatch.setattr(gm, "_get_user_role_labels", AsyncMock(return_value=frozenset({"dept_admin", "regular_user"})))
+    gate = _make_gate()
+    route = _route(
+        route_type="flow",
+        match_config={
+            "operator": "and",
+            "conditions": [
+                {"field": "applicant_role", "value": "dept_admin"},
+                {"field": "source_space_level", "value": "team"},
+                {"field": "target_space_level", "value": "public"},
+            ],
+        },
+    )
+    fallback = _route(route_type="pass", match_config={})
+    req = _req(
+        scenario_code="knowledge_space_file_publish_request",
+        payload={"source_space_level": "team", "target_space_level": "public"},
+    )
+
+    result = await gate._match_first_route([route, fallback], req)
+
+    assert result is route
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_file_publish_requires_every_condition(monkeypatch):
+    import bisheng.approval.domain.services.approval_gate as gm
+
+    monkeypatch.setattr(gm, "_get_user_role_labels", AsyncMock(return_value=frozenset({"dept_admin", "regular_user"})))
+    gate = _make_gate()
+    route = _route(
+        route_type="flow",
+        match_config={
+            "operator": "and",
+            "conditions": [
+                {"field": "applicant_role", "value": "dept_admin"},
+                {"field": "source_space_level", "value": "team"},
+                {"field": "target_space_level", "value": "public"},
+            ],
+        },
+    )
+    fallback = _route(route_type="pass", match_config={})
+    req = _req(
+        scenario_code="knowledge_space_file_publish_request",
+        payload={"source_space_level": "team", "target_space_level": "department"},
+    )
+
+    result = await gate._match_first_route([route, fallback], req)
+
+    assert result is fallback
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_non_file_publish_conditions_do_not_match_as_catchall(monkeypatch):
+    import bisheng.approval.domain.services.approval_gate as gm
+
+    monkeypatch.setattr(gm, "_get_user_role_labels", AsyncMock(return_value=frozenset({"admin", "regular_user"})))
+    gate = _make_gate()
+    route = _route(
+        route_type="flow",
+        match_config={
+            "operator": "and",
+            "conditions": [
+                {"field": "applicant_role", "value": "admin"},
+            ],
+        },
+    )
+    fallback = _route(route_type="pass", match_config={})
+
+    result = await gate._match_first_route([route, fallback], _req(scenario_code="menu_access_request"))
+
+    assert result is fallback
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_file_publish_rejects_unsupported_condition_field(monkeypatch):
+    import bisheng.approval.domain.services.approval_gate as gm
+
+    monkeypatch.setattr(gm, "_get_user_role_labels", AsyncMock(return_value=frozenset({"regular_user"})))
+    gate = _make_gate()
+    route = _route(
+        route_type="flow",
+        match_config={
+            "operator": "and",
+            "conditions": [
+                {"field": "applicant_department_id", "value": "7"},
+            ],
+        },
+    )
+    fallback = _route(route_type="pass", match_config={})
+    req = _req(
+        scenario_code="knowledge_space_file_publish_request",
+        payload={"source_space_level": "team", "target_space_level": "public"},
+    )
+
+    result = await gate._match_first_route([route, fallback], req)
+
+    assert result is fallback
+
+
+@pytest.mark.asyncio
+async def test_match_first_route_file_publish_unsupported_field_does_not_relax_and(monkeypatch):
+    import bisheng.approval.domain.services.approval_gate as gm
+
+    monkeypatch.setattr(gm, "_get_user_role_labels", AsyncMock(return_value=frozenset({"regular_user"})))
+    gate = _make_gate()
+    route = _route(
+        route_type="flow",
+        match_config={
+            "operator": "and",
+            "conditions": [
+                {"field": "source_space_level", "value": "team"},
+                {"field": "applicant_department_id", "value": "7"},
+            ],
+        },
+    )
+    fallback = _route(route_type="pass", match_config={})
+    req = _req(
+        scenario_code="knowledge_space_file_publish_request",
+        payload={"source_space_level": "team", "target_space_level": "public"},
+    )
+
+    result = await gate._match_first_route([route, fallback], req)
+
+    assert result is fallback
 
 
 @pytest.mark.asyncio
