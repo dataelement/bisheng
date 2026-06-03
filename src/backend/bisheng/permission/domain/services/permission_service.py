@@ -274,6 +274,19 @@ class PermissionService:
         if not operations:
             return
 
+        # If the same tuple is both written and deleted in one call (e.g. switching
+        # a subject's relation model without changing the underlying relation), the
+        # desired end state is "present" — the write must win, otherwise the delete
+        # would cancel the grant and silently drop the subject's access.
+        write_keys = {
+            (op.user, op.relation, op.object) for op in operations if op.action == 'write'
+        }
+        if write_keys:
+            operations = [
+                op for op in operations
+                if not (op.action == 'delete' and (op.user, op.relation, op.object) in write_keys)
+            ]
+
         await cls.batch_write_tuples(
             operations,
             raise_on_failure=enforce_fga_success,
