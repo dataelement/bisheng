@@ -235,6 +235,74 @@ async def test_binding_failure_compensates_fga_before_membership_sync():
     assert mock_authorize.await_args_list[1].kwargs['revokes'][0].subject_id == 11
 
 
+_FINE_GRAINED_PERMISSIONS = (
+    'bisheng.channel.domain.services.channel_authorization_service'
+    '.FineGrainedPermissionService.get_effective_permission_ids_async'
+)
+
+
+@pytest.mark.asyncio
+async def test_grantable_models_excludes_owner_without_manage_channel_owner():
+    # Role carries delete + manage_manager + manage_user but NOT manage_channel_owner.
+    service = _service(ChannelRelationEnum.OWNER)
+    service._get_relation_models = AsyncMock(
+        return_value=ChannelAuthorizationService._default_relation_models()
+    )
+    effective = {
+        'view_channel',
+        'edit_channel',
+        'delete_channel',
+        'manage_channel_manager',
+        'manage_channel_user',
+    }
+
+    with patch(_FINE_GRAINED_PERMISSIONS, new_callable=AsyncMock, return_value=effective):
+        models = await service.grantable_relation_models('channel-1', _User())
+
+    relations = {m.relation.value for m in models}
+    assert 'owner' not in relations
+    assert {'manager', 'editor', 'viewer'} <= relations
+
+
+@pytest.mark.asyncio
+async def test_authorize_denied_owner_grant_without_manage_channel_owner():
+    service = _service(ChannelRelationEnum.OWNER)
+    effective = {'delete_channel', 'manage_channel_manager', 'manage_channel_user'}
+    request = ChannelAuthorizeRequest(grants=[
+        ChannelGrantItem(subject_type='user', subject_id=11, relation=ChannelRelationEnum.OWNER),
+    ])
+
+    with patch(_FINE_GRAINED_PERMISSIONS, new_callable=AsyncMock, return_value=effective), patch(
+        'bisheng.channel.domain.services.channel_authorization_service.PermissionService.authorize',
+        new_callable=AsyncMock,
+    ) as mock_authorize:
+        with pytest.raises(ChannelPermissionDeniedError):
+            await service.authorize_channel('channel-1', request, _User())
+
+    mock_authorize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_authorize_allows_manager_grant_with_manage_channel_manager():
+    service = _service(ChannelRelationEnum.OWNER)
+    effective = {'manage_channel_manager', 'manage_channel_user'}
+    request = ChannelAuthorizeRequest(grants=[
+        ChannelGrantItem(subject_type='user', subject_id=11, relation=ChannelRelationEnum.MANAGER),
+    ])
+
+    with patch(_FINE_GRAINED_PERMISSIONS, new_callable=AsyncMock, return_value=effective), patch(
+        'bisheng.channel.domain.services.channel_authorization_service.PermissionService.authorize',
+        new_callable=AsyncMock,
+    ) as mock_authorize, patch.object(
+        service,
+        '_save_binding_changes_from_snapshot',
+        new_callable=AsyncMock,
+    ):
+        await service.authorize_channel('channel-1', request, _User())
+
+    mock_authorize.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_cross_tenant_subject_validation_rejects_before_fga_write():
     service = ChannelAuthorizationService(
