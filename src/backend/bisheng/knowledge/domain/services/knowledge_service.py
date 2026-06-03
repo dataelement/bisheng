@@ -1244,6 +1244,7 @@ class KnowledgeService(KnowledgeUtils):
         file_info: KnowledgeFileOne,
         split_rule: dict,
         file_kwargs: dict = None,
+        skip_dedup: bool = False,
     ) -> KnowledgeFile:
         """Process uploaded files"""
         # download original file
@@ -1265,7 +1266,11 @@ class KnowledgeService(KnowledgeUtils):
         str_split_rule = json.dumps(split_rule)
         minio_client = get_minio_storage_sync()
 
-        if content_repeat or name_repeat:
+        # ``skip_dedup``: callers that have already resolved a guaranteed-unique
+        # filename (e.g. F028 conversation export → import, which appends "(N)")
+        # force a fresh insert. Otherwise re-importing the same conversation
+        # collides on content md5 here and is silently rejected as a duplicate.
+        if (content_repeat or name_repeat) and not skip_dedup:
             db_file = content_repeat[0] if content_repeat else name_repeat[0]
             old_name = db_file.file_name
             file_type = file_name.rsplit(".", 1)[-1]

@@ -1022,6 +1022,10 @@ class ConversationExportService:
                 file_path=[file_path],
                 parent_id=parent_id,
                 file_source=FileSource.SPACE_UPLOAD,
+                # F028 already resolved a unique "(N)" filename; bypass the
+                # platform's md5/name dedup so re-importing the same conversation
+                # creates a new file instead of being rejected as a duplicate.
+                skip_dedup=True,
             )
         except SpaceFileNameDuplicateError:
             # Race window between our dedup scan and add_file: another row
@@ -1038,6 +1042,7 @@ class ConversationExportService:
                     file_path=[file_path],
                     parent_id=parent_id,
                     file_source=FileSource.SPACE_UPLOAD,
+                    skip_dedup=True,
                 )
             except SpaceFileNameDuplicateError as e:
                 raise ConversationImportFailedError(
