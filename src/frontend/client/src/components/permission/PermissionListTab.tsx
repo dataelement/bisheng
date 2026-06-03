@@ -573,8 +573,11 @@ export function PermissionListTab({
                 const entryModelOptions = entry.subject_type === "user"
                   ? grantableModelOptions
                   : grantableModelOptions.filter((model) => model.relation !== "owner");
-                const canModifyEntry = canManageEntry(entry) && entryModelOptions.length > 0;
-                const canDeleteEntrySubject = canDeleteSubject(entry);
+                // The channel creator's permission level is permanent: never
+                // show the modify/remove dropdown — render the level as static text.
+                const isCreatorEntry = entry.is_creator === true;
+                const canModifyEntry = !isCreatorEntry && canManageEntry(entry) && entryModelOptions.length > 0;
+                const canDeleteEntrySubject = !isCreatorEntry && canDeleteSubject(entry);
                 const displayName = getEntryDisplayName(entry);
                 const entryCaption = getEntryCaption(entry);
 

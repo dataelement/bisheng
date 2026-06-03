@@ -138,6 +138,8 @@ class ChannelAuthorizationService:
 
     async def list_permissions(self, channel_id: str, login_user: UserPayload) -> List[ChannelPermissionEntry]:
         await self._require_manage_access(channel_id, login_user)
+        channel = await self._ensure_channel(channel_id)
+        creator_id = int(channel.user_id) if getattr(channel, 'user_id', None) is not None else None
         permissions = await PermissionService.get_resource_permissions('channel', channel_id)
         bindings = [
             b for b in await self._get_bindings()
@@ -167,6 +169,11 @@ class ChannelAuthorizationService:
                 include_children=binding.get('include_children') if binding else getattr(item, 'include_children', None),
                 model_id=model_id,
                 model_name=model.get('name') if model else getattr(item, 'model_name', None),
+                is_creator=(
+                    item.subject_type == 'user'
+                    and creator_id is not None
+                    and int(item.subject_id) == creator_id
+                ),
             ))
         return out
 
