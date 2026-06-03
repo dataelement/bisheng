@@ -40,6 +40,8 @@ interface AiAssistantPanelProps {
     articleDocId?: string;
     /** Knowledge space file chat — when provided, switches to file chat mode */
     fileChat?: { spaceId: string; fileId: string };
+    /** 门户文档预览右侧抽屉模式 */
+    portalDrawer?: boolean;
 }
 
 /**
@@ -52,6 +54,7 @@ export function AiAssistantPanel({
     noBorder,
     articleDocId,
     fileChat,
+    portalDrawer = false,
 }: AiAssistantPanelProps) {
     const localize = useLocalize();
 
@@ -143,45 +146,47 @@ export function AiAssistantPanel({
     );
 
     return (
-        <div className="flex flex-col h-full bg-white relative">
+        <div className={cn("flex flex-col h-full bg-white relative", portalDrawer && "portalAiPanel")}>
             {/* Header：标题左、中间空、右侧清空 + 收起（与知识空间 KnowledgeAiPanel 一致） */}
-            <div
-                className={cn(
-                    'relative flex shrink-0 items-center gap-2 px-3 py-[15px]',
-                    noBorder ? '' : 'border-b border-gray-100',
-                )}
-            >
-                <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-6 text-gray-900">
-                    {localize(
-                        fileChat
-                            ? "com_knowledge.ai_assistant"
-                            : "com_subscription.ai_assistant",
+            {!portalDrawer ? (
+                <div
+                    className={cn(
+                        'relative flex shrink-0 items-center gap-2 px-3 py-[15px]',
+                        noBorder ? '' : 'border-b border-gray-100',
                     )}
-                </h3>
-                <div className="min-w-0 flex-1" aria-hidden />
-                <div className="flex shrink-0 items-center gap-2">
-                    {clearChatControl}
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    type="button"
-                                    size="icon"
-                                    className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
-                                    onClick={onClose}
-                                    aria-label={localize("com_ui_collapse")}
-                                >
-                                    <ChevronsRight className="size-4 shrink-0" strokeWidth={2} aria-hidden />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom">
-                                <p>{localize("com_ui_collapse")}</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                >
+                    <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-6 text-gray-900">
+                        {localize(
+                            fileChat
+                                ? "com_knowledge.ai_assistant"
+                                : "com_subscription.ai_assistant",
+                        )}
+                    </h3>
+                    <div className="min-w-0 flex-1" aria-hidden />
+                    <div className="flex shrink-0 items-center gap-2">
+                        {clearChatControl}
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        type="button"
+                                        size="icon"
+                                        className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
+                                        onClick={onClose}
+                                        aria-label={localize("com_ui_collapse")}
+                                    >
+                                        <ChevronsRight className="size-4 shrink-0" strokeWidth={2} aria-hidden />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom">
+                                    <p>{localize("com_ui_collapse")}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
                 </div>
-            </div>
+            ) : null}
 
             {/* Messages Area */}
             <AiChatMessages
@@ -195,18 +200,19 @@ export function AiAssistantPanel({
                 hideHeaderTitle
                 flatMode={isSimpleMode}
                 knowledgeChatLayout
-                contentWidthClassName="max-w-none px-4"
+                portalDrawerLayout={portalDrawer}
+                contentWidthClassName={portalDrawer ? "max-w-none px-4 pt-4" : "max-w-none px-4"}
                 onPresetClick={(q) => setInputText(q)}
                 onRegenerate={regenerate}
             />
 
             {/* Input Area */}
-            <div className="px-2">
+            <div className={portalDrawer ? "portalAiInput" : "px-2"}>
                 <AiChatInput
                     size="mini"
                     features={features}
                     disabled={allowModelSelect ? !bsConfig?.models?.length : false}
-                    placeholder={localize("com_subscription.input_question_placeholder")}
+                    placeholder={portalDrawer ? "请输入您的问题" : localize("com_subscription.input_question_placeholder")}
                     isStreaming={isStreaming}
                     onScrollToBottom={() => { }}
                     modelOptions={allowModelSelect ? bsConfig?.models : undefined}
@@ -227,6 +233,7 @@ export function AiAssistantPanel({
                     onSelectedOrgKbsChange={allowAdvancedSelectors ? setSelectedOrgKbs : undefined}
                     searchType={allowAdvancedSelectors ? searchType : undefined}
                     onSearchTypeChange={allowAdvancedSelectors ? setSearchType : undefined}
+                    portalDrawer={portalDrawer}
                 />
             </div>
         </div>

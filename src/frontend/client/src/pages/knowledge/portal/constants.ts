@@ -24,11 +24,42 @@ export const DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS: PortalFileCategoryOption[] = 
     { code: "TRN", label: "培训资源" },
 ];
 
-export const GROUP_ICON_SRC: Record<SpaceGroupKey, string> = {
-    public: "/assets/knowledge-portal/space-public.png",
-    department: "/assets/knowledge-portal/space-department.png",
-    team: "/assets/knowledge-portal/space-team.png",
-    personal: "/assets/knowledge-portal/space-personal.png",
+const KNOWLEDGE_PORTAL_ASSET_BASE = "/assets/knowledge-portal";
+
+export const PORTAL_SIDEBAR_TITLE_ICON_SRC = `${KNOWLEDGE_PORTAL_ASSET_BASE}/sidebar-title.png`;
+
+export const KNOWLEDGE_SPACE_ICON_SRC = {
+    default: `${KNOWLEDGE_PORTAL_ASSET_BASE}/knowledge-space.png`,
+    active: `${KNOWLEDGE_PORTAL_ASSET_BASE}/knowledge-space-active.png`,
+};
+
+export const SIDEBAR_TOGGLE_ICON_SRC = {
+    collapse: `${KNOWLEDGE_PORTAL_ASSET_BASE}/sidebar-collapse.png`,
+    expand: `${KNOWLEDGE_PORTAL_ASSET_BASE}/sidebar-expand.png`,
+};
+
+export const FOLDER_ICON_SRC = {
+    collapsed: `${KNOWLEDGE_PORTAL_ASSET_BASE}/folder-collapsed.png`,
+    expanded: `${KNOWLEDGE_PORTAL_ASSET_BASE}/folder-expanded.png`,
+};
+
+export const GROUP_ICON_SRC: Record<SpaceGroupKey, { collapsed: string; expanded: string }> = {
+    public: {
+        collapsed: `${KNOWLEDGE_PORTAL_ASSET_BASE}/group-public-collapsed.png`,
+        expanded: `${KNOWLEDGE_PORTAL_ASSET_BASE}/group-public-expanded.png`,
+    },
+    department: {
+        collapsed: `${KNOWLEDGE_PORTAL_ASSET_BASE}/group-department-collapsed.png`,
+        expanded: `${KNOWLEDGE_PORTAL_ASSET_BASE}/group-department-expanded.png`,
+    },
+    team: {
+        collapsed: `${KNOWLEDGE_PORTAL_ASSET_BASE}/group-team-collapsed.png`,
+        expanded: `${KNOWLEDGE_PORTAL_ASSET_BASE}/group-team-expanded.png`,
+    },
+    personal: {
+        collapsed: `${KNOWLEDGE_PORTAL_ASSET_BASE}/group-personal-collapsed.png`,
+        expanded: `${KNOWLEDGE_PORTAL_ASSET_BASE}/group-personal-expanded.png`,
+    },
 };
 
 export const STATUS_FILTER_OPTIONS: Array<{ status: FileStatus; label: string }> = [

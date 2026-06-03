@@ -57,6 +57,7 @@ import {
 import { DocumentPreview } from "./components/DocumentPreview";
 import { EditEncodingModal } from "../SpaceDetail/EditEncodingModal";
 import { FilePane } from "./components/FilePane";
+import { PortalAiDrawer } from "./components/PortalAiDialog";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalInfoDrawer } from "./components/PortalInfoDrawer";
 import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawer";
@@ -90,7 +91,7 @@ export default function PortalKnowledgeWorkbench() {
     const [searchText, setSearchText] = useState("");
     const [folderDraft, setFolderDraft] = useState("新建文件夹");
     const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
-    const [aiDialogOpen, setAiDialogOpen] = useState(false);
+    const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
     const [summaryExpanded, setSummaryExpanded] = useState(false);
     const [tagModalOpen, setTagModalOpen] = useState(false);
     const [permissionOpen, setPermissionOpen] = useState(false);
@@ -566,7 +567,7 @@ export default function PortalKnowledgeWorkbench() {
     useEffect(() => {
         setSelectedFile(null);
         setActivePanel(null);
-        setAiDialogOpen(false);
+        setAiDrawerOpen(false);
         setSummaryExpanded(false);
         setSearchText("");
         setSearchMode(false);
@@ -603,7 +604,7 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         setSummaryExpanded(false);
-        setAiDialogOpen(false);
+        setAiDrawerOpen(false);
     }, [selectedFile?.id]);
 
     useEffect(() => {
@@ -890,7 +891,7 @@ export default function PortalKnowledgeWorkbench() {
             if (isFolder(file)) {
                 setSelectedFile(null);
                 setActivePanel(null);
-                setAiDialogOpen(false);
+                setAiDrawerOpen(false);
                 return;
             }
             setSelectedFile(file);
@@ -1223,87 +1224,91 @@ export default function PortalKnowledgeWorkbench() {
 
     return (
         <div className={s.workbench}>
-            <SpaceSidebar
-                groups={groups}
-                activeSpaceId={activeSpace?.id}
-                collapsed={spaceSidebarCollapsed}
-                expandedGroups={expandedGroups}
-                groupRefs={groupRefs}
-                createOptionsLoading={createOptionsLoading}
-                createPermissionByLevel={createPermissionByLevel}
-                spaceLoading={spaceLoading}
-                spaceMenuOpenId={spaceMenuOpenId}
-                getSpacePermissions={getSpacePermissions}
-                onRestoreSidebar={handleRestoreSidebar}
-                onCollapseSidebar={() => setSpaceSidebarCollapsed(true)}
-                onToggleGroup={(groupKey) => setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))}
-                onOpenCreateSpace={handleOpenCreateSpace}
-                onSelectSpace={setActiveSpace}
-                onSpaceMenuOpenChange={(spaceId, open) => setSpaceMenuOpenId(open ? spaceId : null)}
-                onOpenSpaceSettings={(space) => void handleOpenSpaceSettings(space)}
-                onOpenSpaceMembers={handleOpenSpaceMembers}
-                onPinSpace={(space, pinned, group) => void handlePinSpace(space, pinned, group)}
-                onDeleteSpace={(space) => void handleDeleteSpace(space)}
-                onLeaveSpace={(space) => void handleLeaveSpace(space)}
-            />
+            {!aiDrawerOpen ? (
+                <>
+                    <SpaceSidebar
+                        groups={groups}
+                        activeSpaceId={activeSpace?.id}
+                        collapsed={spaceSidebarCollapsed}
+                        expandedGroups={expandedGroups}
+                        groupRefs={groupRefs}
+                        createOptionsLoading={createOptionsLoading}
+                        createPermissionByLevel={createPermissionByLevel}
+                        spaceLoading={spaceLoading}
+                        spaceMenuOpenId={spaceMenuOpenId}
+                        getSpacePermissions={getSpacePermissions}
+                        onRestoreSidebar={handleRestoreSidebar}
+                        onCollapseSidebar={() => setSpaceSidebarCollapsed(true)}
+                        onToggleGroup={(groupKey) => setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))}
+                        onOpenCreateSpace={handleOpenCreateSpace}
+                        onSelectSpace={setActiveSpace}
+                        onSpaceMenuOpenChange={(spaceId, open) => setSpaceMenuOpenId(open ? spaceId : null)}
+                        onOpenSpaceSettings={(space) => void handleOpenSpaceSettings(space)}
+                        onOpenSpaceMembers={handleOpenSpaceMembers}
+                        onPinSpace={(space, pinned, group) => void handlePinSpace(space, pinned, group)}
+                        onDeleteSpace={(space) => void handleDeleteSpace(space)}
+                        onLeaveSpace={(space) => void handleLeaveSpace(space)}
+                    />
 
-            <FilePane
-                activeSpaceName={activeSpace?.name}
-                hasActiveSpace={Boolean(activeSpace)}
-                searchText={searchText}
-                searchMode={searchMode}
-                searchLoading={searchLoading}
-                treeLoading={treeLoading}
-                treeRootLoadingMore={treeRootLoadingMore}
-                treeRootHasMore={treeNodes.length < treeRootTotal}
-                visibleTreeNodes={visibleTreeNodes}
-                searchResults={searchResults}
-                selectedFileId={selectedFile?.id}
-                selectedFileIds={selectedFileIds}
-                selectedFolderIds={selectedFolderIds}
-                selectedCount={selectedCount}
-                selectedDownloadable={selectedDownloadable}
-                selectedDeletable={selectedDeletable}
-                canBatchRetry={canBatchRetry}
-                canUploadInPortal={canUploadInPortal}
-                canCreateFolderInPortal={canCreateFolderInPortal}
-                statusFilter={statusFilter}
-                folderDraft={folderDraft}
-                onFolderDraftChange={setFolderDraft}
-                onSearchTextChange={(nextValue) => {
-                    setSearchText(nextValue);
-                    if (!nextValue.trim()) {
-                        setSearchMode(false);
-                        setSearchResults([]);
-                        setSelectedFileIds(new Set());
-                        setSelectedFolderIds(new Set());
-                    }
-                }}
-                onSearch={() => void handleSearch()}
-                onOpenUploadDialog={handleOpenUploadDialog}
-                onOpenUploadedFiles={() => setUploadedFilesOpen(true)}
-                onShowUnavailable={showUnavailable}
-                onCreateFolder={() => fileUpload.handleCreateFolder()}
-                onToggleStatusFilter={handleToggleStatusFilter}
-                onBatchDownload={() => void handleBatchDownload()}
-                onBatchRetry={() => void handleBatchRetry()}
-                onBatchDelete={() => void handleBatchDelete()}
-                onLoadMoreRoot={() => void loadRootTree(treeRootPage + 1, true)}
-                onConfirmCreateFolder={confirmCreateFolder}
-                onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
-                onSelectFile={handleSelectFile}
-                onToggleFileSelection={handleToggleFileSelection}
-                permissionEntryIds={visiblePermissionEntryIds}
-                onOpenPermission={(file) => {
-                    if (isActiveSpacePersonal) return;
-                    setPermissionTarget(file);
-                    setPermissionOpen(true);
-                }}
-                canShowPublishFile={canShowPublishFile}
-                onPublishFile={setPublishingFile}
-                onToggleFolder={(node) => void handleToggleFolder(node)}
-                onLoadMoreChildren={(node) => void handleLoadMoreChildren(node)}
-            />
+                    <FilePane
+                        activeSpaceName={activeSpace?.name}
+                        hasActiveSpace={Boolean(activeSpace)}
+                        searchText={searchText}
+                        searchMode={searchMode}
+                        searchLoading={searchLoading}
+                        treeLoading={treeLoading}
+                        treeRootLoadingMore={treeRootLoadingMore}
+                        treeRootHasMore={treeNodes.length < treeRootTotal}
+                        visibleTreeNodes={visibleTreeNodes}
+                        searchResults={searchResults}
+                        selectedFileId={selectedFile?.id}
+                        selectedFileIds={selectedFileIds}
+                        selectedFolderIds={selectedFolderIds}
+                        selectedCount={selectedCount}
+                        selectedDownloadable={selectedDownloadable}
+                        selectedDeletable={selectedDeletable}
+                        canBatchRetry={canBatchRetry}
+                        canUploadInPortal={canUploadInPortal}
+                        canCreateFolderInPortal={canCreateFolderInPortal}
+                        statusFilter={statusFilter}
+                        folderDraft={folderDraft}
+                        onFolderDraftChange={setFolderDraft}
+                        onSearchTextChange={(nextValue) => {
+                            setSearchText(nextValue);
+                            if (!nextValue.trim()) {
+                                setSearchMode(false);
+                                setSearchResults([]);
+                                setSelectedFileIds(new Set());
+                                setSelectedFolderIds(new Set());
+                            }
+                        }}
+                        onSearch={() => void handleSearch()}
+                        onOpenUploadDialog={handleOpenUploadDialog}
+                        onOpenUploadedFiles={() => setUploadedFilesOpen(true)}
+                        onShowUnavailable={showUnavailable}
+                        onCreateFolder={() => fileUpload.handleCreateFolder()}
+                        onToggleStatusFilter={handleToggleStatusFilter}
+                        onBatchDownload={() => void handleBatchDownload()}
+                        onBatchRetry={() => void handleBatchRetry()}
+                        onBatchDelete={() => void handleBatchDelete()}
+                        onLoadMoreRoot={() => void loadRootTree(treeRootPage + 1, true)}
+                        onConfirmCreateFolder={confirmCreateFolder}
+                        onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
+                        onSelectFile={handleSelectFile}
+                        onToggleFileSelection={handleToggleFileSelection}
+                        permissionEntryIds={visiblePermissionEntryIds}
+                        onOpenPermission={(file) => {
+                            if (isActiveSpacePersonal) return;
+                            setPermissionTarget(file);
+                            setPermissionOpen(true);
+                        }}
+                        canShowPublishFile={canShowPublishFile}
+                        onPublishFile={setPublishingFile}
+                        onToggleFolder={(node) => void handleToggleFolder(node)}
+                        onLoadMoreChildren={(node) => void handleLoadMoreChildren(node)}
+                    />
+                </>
+            ) : null}
 
             <main className={s.documentArea}>
                 <DocumentPreview
@@ -1311,10 +1316,6 @@ export default function PortalKnowledgeWorkbench() {
                     documentPath={documentPath}
                     preview={preview}
                     summaryExpanded={summaryExpanded}
-                    onOpenAi={() => {
-                        setActivePanel(null);
-                        setAiDialogOpen(true);
-                    }}
                     onOpenTags={() => setTagModalOpen(true)}
                     // onOpenShare={() => setActivePanel("share")}
                     onDownload={() => void handleDownloadSelected()}
@@ -1331,7 +1332,7 @@ export default function PortalKnowledgeWorkbench() {
                     }}
                 />
 
-                {selectedFile ? (
+                {selectedFile && !aiDrawerOpen ? (
                     <PortalInfoDrawer
                         activePanel={activePanel}
                         activeSpace={activeSpace}
@@ -1349,12 +1350,31 @@ export default function PortalKnowledgeWorkbench() {
                     />
                 ) : null}
 
+                <PortalAiDrawer
+                    open={aiDrawerOpen}
+                    activeSpace={activeSpace}
+                    selectedFile={selectedFile}
+                    documentPath={documentPath}
+                    onOpenChange={setAiDrawerOpen}
+                />
+
                 {selectedFile ? (
                     <ToolRail
                         activePanel={activePanel}
+                        aiOpen={aiDrawerOpen}
                         showPermissionPanel={!isActiveSpacePersonal}
-                        onTogglePanel={() => setActivePanel((current) => current ? null : "properties")}
-                        onOpenPanel={setActivePanel}
+                        onTogglePanel={() => {
+                            setAiDrawerOpen(false);
+                            setActivePanel((current) => current ? null : "properties");
+                        }}
+                        onOpenAi={() => {
+                            setActivePanel(null);
+                            setAiDrawerOpen(true);
+                        }}
+                        onOpenPanel={(panel) => {
+                            setAiDrawerOpen(false);
+                            setActivePanel(panel);
+                        }}
                     />
                 ) : null}
             </main>
@@ -1382,8 +1402,6 @@ export default function PortalKnowledgeWorkbench() {
                 onApprovalDialogTargetChange={approvalBridge.setApprovalDialogTarget}
                 notificationsOpen={approvalBridge.notificationsOpen}
                 onNotificationsOpenChange={approvalBridge.setNotificationsOpen}
-                aiDialogOpen={aiDialogOpen}
-                onAiDialogOpenChange={setAiDialogOpen}
                 publishingFile={publishingFile}
                 onPublishingFileChange={setPublishingFile}
                 spacePermissionDialogSpace={spacePermissionDialogSpace}

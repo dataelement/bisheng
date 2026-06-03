@@ -2,11 +2,6 @@ import type { MutableRefObject } from "react";
 import {
     ChevronDown,
     ChevronRight,
-    ChevronsLeft,
-    ChevronsRight,
-    FileText,
-    Folder,
-    FolderPlus,
     LogOut,
     MoreHorizontal,
     Pin,
@@ -32,6 +27,11 @@ import {
     sidebarListMoreMenuLabelClassName,
 } from "~/components/SidebarListMoreMenu";
 import type { KnowledgeSpace, SpaceLevel } from "~/api/knowledge";
+import {
+    KNOWLEDGE_SPACE_ICON_SRC,
+    PORTAL_SIDEBAR_TITLE_ICON_SRC,
+    SIDEBAR_TOGGLE_ICON_SRC,
+} from "../constants";
 import type { SpaceGroup, SpaceGroupKey } from "../types";
 import { resolveAssetUrl } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
@@ -205,7 +205,7 @@ export function SpaceSidebar({
                                 data-testid={`collapsed-space-group-${group.key}`}
                                 onClick={() => onRestoreSidebar(group.key)}
                             >
-                                <img className={s.collapsedGroupIcon} src={resolveAssetUrl(group.iconSrc)} alt="" aria-hidden="true" />
+                                <img className={s.collapsedGroupIcon} src={resolveAssetUrl(group.iconSrc.collapsed)} alt="" aria-hidden="true" />
                             </button>
                         ))}
                     </div>
@@ -216,14 +216,25 @@ export function SpaceSidebar({
                         title="展开"
                         onClick={() => onRestoreSidebar()}
                     >
-                        <ChevronsRight size={18} />
+                        <img
+                            className={s.sidebarToggleIcon}
+                            src={resolveAssetUrl(SIDEBAR_TOGGLE_ICON_SRC.expand)}
+                            alt=""
+                            aria-hidden="true"
+                            data-testid="space-sidebar-expand-icon"
+                        />
                     </button>
                 </div>
             ) : (
                 <>
                     <div className={s.spaceHeader}>
                         <span className={s.spaceHeaderIcon}>
-                            <Folder size={17} />
+                            <img
+                                src={resolveAssetUrl(PORTAL_SIDEBAR_TITLE_ICON_SRC)}
+                                alt=""
+                                aria-hidden="true"
+                                data-testid="space-sidebar-title-icon"
+                            />
                         </span>
                         <span>我的知识库</span>
                         <ChevronDown size={13} style={{ marginLeft: "auto" }} />
@@ -248,7 +259,7 @@ export function SpaceSidebar({
                                         >
                                             <img
                                                 className={s.groupIcon}
-                                                src={resolveAssetUrl(group.iconSrc)}
+                                                src={resolveAssetUrl(expanded ? group.iconSrc.expanded : group.iconSrc.collapsed)}
                                                 alt=""
                                                 aria-hidden="true"
                                                 data-testid={`space-group-icon-${group.key}`}
@@ -291,7 +302,13 @@ export function SpaceSidebar({
                                                             className={s.spaceSelectButton}
                                                             onClick={() => onSelectSpace(space)}
                                                         >
-                                                            <FileText size={14} />
+                                                            <img
+                                                                className={s.spaceIcon}
+                                                                src={resolveAssetUrl(activeSpaceId === space.id ? KNOWLEDGE_SPACE_ICON_SRC.active : KNOWLEDGE_SPACE_ICON_SRC.default)}
+                                                                alt=""
+                                                                aria-hidden="true"
+                                                                data-testid={`space-row-icon-${space.id}`}
+                                                            />
                                                             <span className={s.spaceName} title={space.name}>{space.name}</span>
                                                         </button>
                                                         <div className={s.spaceMenuArea}>
@@ -319,7 +336,12 @@ export function SpaceSidebar({
                                                     className={s.createSpaceRow}
                                                     onClick={() => onOpenCreateSpace(group)}
                                                 >
-                                                    <FolderPlus size={14} />
+                                                    <img
+                                                        className={s.spaceIcon}
+                                                        src={resolveAssetUrl(KNOWLEDGE_SPACE_ICON_SRC.default)}
+                                                        alt=""
+                                                        aria-hidden="true"
+                                                    />
                                                     <span className={s.spaceName}>新建知识库</span>
                                                 </button>
                                             ) : null}
@@ -335,7 +357,13 @@ export function SpaceSidebar({
                         aria-label="收起知识库侧栏"
                         onClick={onCollapseSidebar}
                     >
-                        <ChevronsLeft size={14} />
+                        <img
+                            className={s.sidebarToggleIcon}
+                            src={resolveAssetUrl(SIDEBAR_TOGGLE_ICON_SRC.collapse)}
+                            alt=""
+                            aria-hidden="true"
+                            data-testid="space-sidebar-collapse-icon"
+                        />
                         <span>收起</span>
                     </button>
                 </>

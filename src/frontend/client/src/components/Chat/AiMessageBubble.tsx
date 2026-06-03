@@ -8,7 +8,8 @@ import {
     ChevronRightIcon,
     CopyIcon,
     Loader2,
-    RefreshCwIcon
+    RefreshCwIcon,
+    UserIcon
 } from "lucide-react";
 import { memo, useCallback, useMemo, useState } from "react";
 import Thinking from "~/components/Artifacts/Thinking";
@@ -38,6 +39,8 @@ interface AiMessageBubbleProps {
     setSiblingIdx?: (idx: number) => void;
     /** Knowledge space AI: gray user bubble, borderless assistant, 14px body, full width */
     knowledgeChatLayout?: boolean;
+    /** 门户文档预览右侧抽屉消息布局 */
+    portalDrawerLayout?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
 }
@@ -228,6 +231,7 @@ const AiMessageBubble = memo(
         siblingCount,
         setSiblingIdx,
         knowledgeChatLayout,
+        portalDrawerLayout,
         onOpenCitationPanel,
         activeCitationMessageId,
     }: AiMessageBubbleProps) => {
@@ -241,6 +245,7 @@ const AiMessageBubble = memo(
                     siblingCount={siblingCount}
                     setSiblingIdx={setSiblingIdx}
                     knowledgeChatLayout={knowledgeChatLayout}
+                    portalDrawerLayout={portalDrawerLayout}
                 />
             );
         }
@@ -254,6 +259,7 @@ const AiMessageBubble = memo(
                 siblingCount={siblingCount}
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
+                portalDrawerLayout={portalDrawerLayout}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
             />
@@ -270,12 +276,14 @@ function UserBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    portalDrawerLayout,
 }: {
     message: ChatMessage;
     siblingIdx?: number;
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    portalDrawerLayout?: boolean;
 }) {
     const { user } = useAuthContext();
 
@@ -285,47 +293,112 @@ function UserBubble({
         [message.text]
     );
 
+    const filesNode = message.files && message.files.length > 0 ? (
+        <div className="flex flex-wrap gap-2 mb-2 mt-1">
+            {message.files.map((file, i) => {
+                const fileName = file.name || file.file_name || "File";
+                const fileType = getFileTypebyFileName(fileName);
+                const isImage = ["jpg", "jpeg", "png", "bmp", "gif", "webp"].includes(fileType);
+                const fileUrl = file.filepath || file.file_url;
+
+                if (isImage && fileUrl) {
+                    return (
+                        <div key={i} className="flex border bg-white p-1 rounded-xl max-w-sm">
+                            <Image
+                                imagePath={fileUrl}
+                                altText={fileName}
+                                height={100}
+                                width={100}
+                            />
+                        </div>
+                    );
+                }
+
+                return (
+                    <div key={i} className="flex items-center gap-2 border bg-white p-2 rounded-xl cursor-pointer hover:bg-gray-50 max-w-sm" onClick={() => fileUrl && window.open(fileUrl, '_blank')}>
+                        <FileIcon type={fileType} className="" />
+                        <div className="overflow-hidden">
+                            <div className="truncate text-sm font-bold" title={fileName}>
+                                {fileName}
+                            </div>
+                            <div className="truncate text-xs text-text-secondary" title={fileName}>
+                                {fileName && getFileTypebyFileName(fileName)}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    ) : null;
+
+    const tagNode = tag ? (
+        <span
+            className={cn(
+                "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
+                knowledgeChatLayout
+                    ? "text-[14px] font-normal leading-[22px]"
+                    : "h-5 text-xs font-medium leading-none align-middle"
+            )}
+            style={{ backgroundColor: "#335CFF59" }}
+            title={`#${tag.name}`}
+        >
+            <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                #{tag.name}
+            </span>
+        </span>
+    ) : null;
+
+    const actionsNode = (
+        <div className="flex items-center justify-end gap-1 mt-1.5">
+            <CopyButton text={tag ? `#${tag.name} ${bodyText}` : message.text} />
+            {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
+                <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
+            )}
+        </div>
+    );
+
+    if (portalDrawerLayout) {
+        return (
+            <div
+                data-testid="portal-ai-user-message"
+                className="flex w-full justify-end py-3"
+            >
+                <div className="min-w-0 max-w-[calc(100%-52px)]">
+                    {filesNode}
+                    <div className="flex flex-row-reverse items-center justify-start gap-4">
+                        <div className="flex shrink-0 justify-center">
+                            <Avatar
+                                aria-label="用户头像"
+                                className="h-9 w-9 bg-[#f0f2f5] text-base"
+                            >
+                                {user?.avatar ? (
+                                    <AvatarImage src={user?.avatar} alt="User" />
+                                ) : (
+                                    <span className="flex h-full w-full items-center justify-center rounded-full bg-[#f0f2f5]">
+                                        <UserIcon size={22} className="text-[#273142]" strokeWidth={2} aria-hidden />
+                                    </span>
+                                )}
+                            </Avatar>
+                        </div>
+                        <div
+                            data-testid="portal-ai-user-bubble"
+                            className="min-w-0 rounded-[8px] bg-[#3662e3] px-4 py-3 text-[16px] leading-[22px] text-white shadow-none whitespace-pre-wrap break-words"
+                        >
+                            {tagNode}
+                            {bodyText}
+                        </div>
+                    </div>
+                    {actionsNode}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className={cn("flex justify-end py-3", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
             <div className={cn("min-w-0", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Render uploaded files if any */}
-                {message.files && message.files.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2 mt-1">
-                        {message.files.map((file, i) => {
-                            const fileName = file.name || file.file_name || "File";
-                            const fileType = getFileTypebyFileName(fileName);
-                            const isImage = ["jpg", "jpeg", "png", "bmp", "gif", "webp"].includes(fileType);
-                            const fileUrl = file.filepath || file.file_url;
-
-                            if (isImage && fileUrl) {
-                                return (
-                                    <div key={i} className="flex border bg-white p-1 rounded-xl max-w-sm">
-                                        <Image
-                                            imagePath={fileUrl}
-                                            altText={fileName}
-                                            height={100}
-                                            width={100}
-                                        />
-                                    </div>
-                                );
-                            }
-
-                            return (
-                                <div key={i} className="flex items-center gap-2 border bg-white p-2 rounded-xl cursor-pointer hover:bg-gray-50 max-w-sm" onClick={() => fileUrl && window.open(fileUrl, '_blank')}>
-                                    <FileIcon type={fileType} className="" />
-                                    <div className="overflow-hidden">
-                                        <div className="truncate text-sm font-bold" title={fileName}>
-                                            {fileName}
-                                        </div>
-                                        <div className="truncate text-xs text-text-secondary" title={fileName}>
-                                            {fileName && getFileTypebyFileName(fileName)}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
+                {filesNode}
                 <div className="flex gap-3">
                     {/* Avatar (hidden by style only) */}
                     <div className="hidden shrink-0 flex justify-center">
@@ -345,33 +418,13 @@ function UserBubble({
                                     : "rounded-[10px] bg-[#E6EDFC] text-[#1d2129] text-sm"
                             )}
                         >
-                            {tag && (
-                                <span
-                                    className={cn(
-                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
-                                        knowledgeChatLayout
-                                            ? "text-[14px] font-normal leading-[22px]"
-                                            : "h-5 text-xs font-medium leading-none align-middle"
-                                    )}
-                                    style={{ backgroundColor: "#335CFF59" }}
-                                    title={`#${tag.name}`}
-                                >
-                                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
-                                        #{tag.name}
-                                    </span>
-                                </span>
-                            )}
+                            {tagNode}
                             {bodyText}
                         </div>
                     </div>
                 </div>
                 {/* Action buttons */}
-                <div className="flex items-center justify-end gap-1 mt-1.5">
-                    <CopyButton text={tag ? `#${tag.name} ${bodyText}` : message.text} />
-                    {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
-                        <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
-                    )}
-                </div>
+                {actionsNode}
             </div>
         </div>
     );
@@ -387,6 +440,7 @@ function AssistantBubble({
     siblingCount,
     setSiblingIdx,
     knowledgeChatLayout,
+    portalDrawerLayout,
     onOpenCitationPanel,
     activeCitationMessageId,
 }: {
@@ -398,6 +452,7 @@ function AssistantBubble({
     siblingCount?: number;
     setSiblingIdx?: (idx: number) => void;
     knowledgeChatLayout?: boolean;
+    portalDrawerLayout?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
 }) {
@@ -473,125 +528,173 @@ function AssistantBubble({
         !regularContent &&
         !(Array.isArray(message.events) && message.events.length > 0);
 
-    return (
-        <div className={cn("flex justify-start py-3", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
-            <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
-                {/* Avatar + name kept but hidden via style only */}
-                <div className="hidden gap-3">
-                    <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center">
-                        {bsConfig?.assistantIcon.image ? <img src={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image} alt="" />
-                            : <BotIcon size={16} className="text-black" />}
-                    </div>
-                    <div className="model-name select-none font-semibold text-base">{modelName}</div>
+    const hiddenAvatarNode = (
+        <div className="hidden gap-3">
+            <div className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center">
+                {bsConfig?.assistantIcon.image ? <img src={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image} alt="" />
+                    : <BotIcon size={16} className="text-black" />}
+            </div>
+            <div className="model-name select-none font-semibold text-base">{modelName}</div>
+        </div>
+    );
+
+    const portalAvatarNode = (
+        <div
+            data-testid="portal-ai-assistant-avatar"
+            aria-label="AI头像"
+            className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#3662e3] text-white"
+        >
+            {bsConfig?.assistantIcon.image ? (
+                <img
+                    className="h-full w-full rounded-full object-cover"
+                    src={__APP_ENV__.BASE_URL + bsConfig?.assistantIcon.image}
+                    alt=""
+                />
+            ) : (
+                <BotIcon size={20} strokeWidth={2} aria-hidden />
+            )}
+        </div>
+    );
+
+    const messageBodyNode = (
+        <>
+            {/* Pre-stream "正在思考" indicator — pulsing black dot. */}
+            {showWaiting && (
+                <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                    <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                 </div>
+            )}
 
-                {/* Pre-stream "正在思考" indicator — pulsing black dot. */}
-                {showWaiting && (
-                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
-                        <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
-                    </div>
-                )}
+            {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
+            {isAgentNative ? (
+                <div className="mb-3 w-full min-w-0">
+                    <AgentTimeline
+                        events={message.events || []}
+                        isStreaming={Boolean(isStreaming && isLatest)}
+                        finalTextIdx={finalTextIdx}
+                        messageId={message.messageId}
+                    />
+                </div>
+            ) : (
+                <>
+                    {/* Legacy :::thinking::: reuse Thinking component */}
+                    {thinkingContent && <Thinking>{thinkingContent}</Thinking>}
+                    {/* Legacy :::web::: → SearchWebUrls */}
+                    {webContent.length > 0 && <SearchWebUrls webs={webContent} />}
+                </>
+            )}
 
-                {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
-                {isAgentNative ? (
-                    <div className="mb-3 w-full min-w-0">
-                        <AgentTimeline
-                            events={message.events || []}
-                            isStreaming={Boolean(isStreaming && isLatest)}
-                            finalTextIdx={finalTextIdx}
-                            messageId={message.messageId}
-                        />
-                    </div>
-                ) : (
-                    <>
-                        {/* Legacy :::thinking::: reuse Thinking component */}
-                        {thinkingContent && <Thinking>{thinkingContent}</Thinking>}
-                        {/* Legacy :::web::: → SearchWebUrls */}
-                        {webContent.length > 0 && <SearchWebUrls webs={webContent} />}
-                    </>
-                )}
-
-                {/* Error state */}
-                {showWaiting ? null : message.error ? (
-                    <div
-                        className={cn(
-                            "text-red-500 bg-red-50 px-3 py-2",
-                            knowledgeChatLayout
+            {/* Error state */}
+            {showWaiting ? null : message.error ? (
+                <div
+                    className={cn(
+                        "text-red-500 bg-red-50 px-3 py-2",
+                        portalDrawerLayout
+                            ? "rounded-[8px] text-[15px] leading-[22px]"
+                            : knowledgeChatLayout
                                 ? "rounded-[2px] text-[14px] leading-[22px]"
                                 : "text-sm rounded-[10px]"
-                        )}
-                    >
-                        {regularContent || "发生错误，请重试"}
-                    </div>
-                ) : (
-                    /* Main content — uses existing Markdown with citation support */
-                    <div
-                        className={cn(
-                            "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
-                            knowledgeChatLayout
+                    )}
+                >
+                    {regularContent || "发生错误，请重试"}
+                </div>
+            ) : (
+                /* Main content — uses existing Markdown with citation support */
+                <div
+                    data-testid={portalDrawerLayout ? "portal-ai-assistant-bubble" : undefined}
+                    className={cn(
+                        "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
+                        portalDrawerLayout
+                            ? "rounded-[8px] border border-[#d7e3f1] bg-white px-4 py-3 text-[16px] leading-[24px] text-[#273142] shadow-none [--markdown-font-size:16px]"
+                            : knowledgeChatLayout
                                 ? "rounded-[2px] border-0 bg-transparent px-0 py-1 text-[14px] leading-[22px] [--markdown-font-size:14px]"
                                 : "rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 text-sm"
-                        )}
-                    >
+                    )}
+                >
 
-                        {isWaitingFirstToken ? (
-                            <div className="flex items-center py-0.5" aria-label="AI 正在思考">
-                                <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
-                            </div>
-                        ) : (
-                            <Markdown
-                                content={regularContent}
-                                webContent={webContent}
-                                citations={message.citations}
-                                messageId={message.messageId}
-                                onOpenCitationPanel={onOpenCitationPanel}
-                                showCursor={showCursor}
-                                isLatestMessage={!!isLatest}
-                            />
-                        )}
-                    </div>
-                )}
-
-                {/* Action buttons (only show when not streaming) */}
-                {!isStreaming && regularContent && (
-                    <div className="flex items-center gap-1 mt-1.5 text-gray-400">
-                        <CitationReferencesDrawer
+                    {isWaitingFirstToken ? (
+                        <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                            <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
+                        </div>
+                    ) : (
+                        <Markdown
                             content={regularContent}
                             webContent={webContent}
                             citations={message.citations}
                             messageId={message.messageId}
-                            desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
-                            open={onOpenCitationPanel ? activeCitationMessageId === message.messageId : undefined}
-                            onOpenChange={onOpenCitationPanel ? ((nextOpen) => {
-                                if (!nextOpen && activeCitationMessageId === message.messageId) {
-                                    onOpenCitationPanel({
-                                        messageId: message.messageId,
-                                        content: regularContent,
-                                        webContent,
-                                        citations: message.citations,
-                                        referenceItems: [],
-                                    });
-                                }
-                            }) : undefined}
-                            onDesktopOpen={onOpenCitationPanel}
-                            actionButtons={
-                                <>
-                                    <CopyButton text={regularContent} />
-
-                                    <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
-                                        messageId={message.messageId || ""}
-                                        text={regularContent}
-                                    />
-                                </>
-                            }
+                            onOpenCitationPanel={onOpenCitationPanel}
+                            showCursor={showCursor}
+                            isLatestMessage={!!isLatest}
                         />
-                        {/* Sibling paging */}
-                        {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
-                            <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
-                        )}
+                    )}
+                </div>
+            )}
+
+            {/* Action buttons (only show when not streaming) */}
+            {!isStreaming && regularContent && (
+                <div className="flex items-center gap-1 mt-1.5 text-gray-400">
+                    <CitationReferencesDrawer
+                        content={regularContent}
+                        webContent={webContent}
+                        citations={message.citations}
+                        messageId={message.messageId}
+                        desktopMode={onOpenCitationPanel ? "inline-panel" : "overlay"}
+                        open={onOpenCitationPanel ? activeCitationMessageId === message.messageId : undefined}
+                        onOpenChange={onOpenCitationPanel ? ((nextOpen) => {
+                            if (!nextOpen && activeCitationMessageId === message.messageId) {
+                                onOpenCitationPanel({
+                                    messageId: message.messageId,
+                                    content: regularContent,
+                                    webContent,
+                                    citations: message.citations,
+                                    referenceItems: [],
+                                });
+                            }
+                        }) : undefined}
+                        onDesktopOpen={onOpenCitationPanel}
+                        actionButtons={
+                            <>
+                                <CopyButton text={regularContent} />
+
+                                <TextToSpeechButton
+                                    className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+                                    messageId={message.messageId || ""}
+                                    text={regularContent}
+                                />
+                            </>
+                        }
+                    />
+                    {/* Sibling paging */}
+                    {siblingIdx !== undefined && siblingCount !== undefined && setSiblingIdx && (
+                        <SiblingSwitch siblingIdx={siblingIdx} siblingCount={siblingCount} setSiblingIdx={setSiblingIdx} />
+                    )}
+                </div>
+            )}
+        </>
+    );
+
+    if (portalDrawerLayout) {
+        return (
+            <div
+                data-testid="portal-ai-assistant-message"
+                className="flex w-full justify-start py-3"
+            >
+                <div className="flex max-w-[calc(100%-52px)] items-start gap-4">
+                    {portalAvatarNode}
+                    <div className="min-w-0 flex-1">
+                        {messageBodyNode}
                     </div>
-                )}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className={cn("flex justify-start py-3", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+            <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
+                {/* Avatar + name kept but hidden via style only */}
+                {hiddenAvatarNode}
+                {messageBodyNode}
             </div>
         </div>
     );

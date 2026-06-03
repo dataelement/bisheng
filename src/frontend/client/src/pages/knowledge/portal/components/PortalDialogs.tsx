@@ -11,7 +11,6 @@ import { KnowledgeSpaceShareDialog } from "../../SpaceDetail/KnowledgeSpaceShare
 import { useVersionManagementEnabled } from "~/hooks";
 import type { ResourceType } from "~/api/permission";
 import s from "../PortalKnowledgeWorkbench.module.css";
-import { PortalAiDialog } from "./PortalAiDialog";
 import { PortalUploadDialog } from "./PortalUploadDialog";
 
 type DuplicateFile = {
@@ -37,8 +36,6 @@ type PortalDialogsProps = {
     onApprovalDialogTargetChange: (target: { tab?: ApprovalCenterTab; instanceId?: number; taskId?: number }) => void;
     notificationsOpen: boolean;
     onNotificationsOpenChange: (open: boolean) => void;
-    aiDialogOpen: boolean;
-    onAiDialogOpenChange: (open: boolean) => void;
     publishingFile: KnowledgeFile | null;
     onPublishingFileChange: (file: KnowledgeFile | null) => void;
     spacePermissionDialogSpace: KnowledgeSpace | null;
@@ -76,8 +73,6 @@ export function PortalDialogs({
     onApprovalDialogTargetChange,
     notificationsOpen,
     onNotificationsOpenChange,
-    aiDialogOpen,
-    onAiDialogOpenChange,
     publishingFile,
     onPublishingFileChange,
     spacePermissionDialogSpace,
@@ -124,14 +119,6 @@ export function PortalDialogs({
                     showPermissionTab
                 />
             ) : null}
-
-            <PortalAiDialog
-                open={aiDialogOpen}
-                activeSpace={activeSpace}
-                selectedFile={selectedFile}
-                documentPath={documentPath}
-                onOpenChange={onAiDialogOpenChange}
-            />
 
             <NotificationsDialog
                 open={notificationsOpen}

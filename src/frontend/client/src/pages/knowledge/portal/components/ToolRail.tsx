@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, Clock, FileText, Link2, LockKeyhole, PanelRight } from "lucide-react";
+import { Bot, BriefcaseBusiness, Clock, FileText, Link2, LockKeyhole, PanelRight } from "lucide-react";
 import type { PanelKey, PortalToolRailKey } from "../types";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -14,19 +14,24 @@ const TOOLBAR_ITEMS: Array<{
     { key: "source", title: "来源", icon: Link2, panelKey: "source" },
     { key: "usage", title: "使用", icon: BriefcaseBusiness, panelKey: "usage" },
     { key: "permission", title: "权限", icon: LockKeyhole, panelKey: "permission" },
+    { key: "ai", title: "AI 对话", icon: Bot },
 ];
 
 interface ToolRailProps {
     activePanel: PanelKey | null;
+    aiOpen: boolean;
     showPermissionPanel?: boolean;
     onTogglePanel: () => void;
+    onOpenAi: () => void;
     onOpenPanel: (panel: Extract<PanelKey, "properties" | "time" | "source" | "usage" | "permission">) => void;
 }
 
 export function ToolRail({
     activePanel,
+    aiOpen,
     showPermissionPanel = true,
     onTogglePanel,
+    onOpenAi,
     onOpenPanel,
 }: ToolRailProps) {
     const toolbarItems = showPermissionPanel
@@ -37,7 +42,9 @@ export function ToolRail({
         <aside className={s.toolRail} data-testid="portal-tool-rail">
             {toolbarItems.map((item) => {
                 const Icon = item.icon;
-                const active = Boolean(item.panelKey && activePanel === item.panelKey);
+                const active = item.key === "ai"
+                    ? aiOpen
+                    : Boolean(item.panelKey && activePanel === item.panelKey);
                 return (
                     <button
                         type="button"
@@ -49,6 +56,10 @@ export function ToolRail({
                         onClick={() => {
                             if (item.key === "toggle") {
                                 onTogglePanel();
+                                return;
+                            }
+                            if (item.key === "ai") {
+                                onOpenAi();
                                 return;
                             }
                             if (item.panelKey) {

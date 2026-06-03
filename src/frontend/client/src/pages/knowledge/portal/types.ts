@@ -7,13 +7,16 @@ import type {
 
 export type SpaceGroupKey = "public" | "department" | "team" | "personal";
 export type PanelKey = "properties" | "time" | "source" | "usage" | "permission" | "share";
-export type PortalToolRailKey = "toggle" | "properties" | "time" | "source" | "usage" | "permission";
+export type PortalToolRailKey = "toggle" | "properties" | "time" | "source" | "usage" | "permission" | "ai";
 
 export interface SpaceGroup {
     key: SpaceGroupKey;
     title: string;
     level: SpaceLevel;
-    iconSrc: string;
+    iconSrc: {
+        collapsed: string;
+        expanded: string;
+    };
     spaces: KnowledgeSpace[];
 }
 

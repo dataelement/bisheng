@@ -155,6 +155,8 @@ interface AiChatInputProps {
     onSearchTypeChange?: (type: string) => void;
     /** Support Lingsi mode UI differences */
     isLingsi?: boolean;
+    /** 门户文档预览右侧抽屉模式 */
+    portalDrawer?: boolean;
 }
 
 const AiChatInput = memo(
@@ -179,6 +181,7 @@ const AiChatInput = memo(
         searchType = "",
         onSearchTypeChange,
         isLingsi = false,
+        portalDrawer = false,
     }: AiChatInputProps) => {
         const {
             modelSelect = true,
@@ -319,7 +322,12 @@ const AiChatInput = memo(
 
         const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
         return (
-            <div className="px-4 sm:px-0 pb-2 touch-mobile:px-0 touch-mobile:pb-2 shrink-0 relative">
+            <div
+                className={cn(
+                    "shrink-0 relative",
+                    portalDrawer ? "px-0 pb-0" : "px-4 sm:px-0 pb-2 touch-mobile:px-0 touch-mobile:pb-2"
+                )}
+            >
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -338,10 +346,12 @@ const AiChatInput = memo(
 
                 <div
                     className={cn(
-                        "relative flex w-full flex-col items-start gap-0 overflow-hidden bg-surface-tertiary p-3 touch-mobile:bg-[#f4f5f7]",
+                        portalDrawer
+                            ? "relative flex h-20 w-full flex-col items-start justify-between gap-0 overflow-hidden rounded-lg border border-[#d7e3f1] bg-white p-3"
+                            : "relative flex w-full flex-col items-start gap-0 overflow-hidden bg-surface-tertiary p-3 touch-mobile:bg-[#f4f5f7]",
                         // 有「附件 / 知识」标签时收紧顶部，避免 0 高度的 InputFiles 占位 + gap + pt 叠出一大块空区（移动端尤明显）
-                        hasSelectionTags && "touch-mobile:pt-1.5",
-                        size === "mini" ? "rounded-xl" : "rounded-3xl touch-mobile:rounded-2xl"
+                        !portalDrawer && hasSelectionTags && "touch-mobile:pt-1.5",
+                        !portalDrawer && (size === "mini" ? "rounded-xl" : "rounded-3xl touch-mobile:rounded-2xl")
                     )}
                 >
                     {/* File upload area: file list only. Upload entry lives in the
@@ -429,20 +439,27 @@ const AiChatInput = memo(
                         data-testid="ai-chat-input"
                         data-scrolling={isTextareaScrollable && isTextareaScrolling ? "true" : "false"}
                         rows={1}
-                        style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
+                        style={{ height: portalDrawer ? 16 : 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
-                            "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0",
-                            hasSelectionTags ? "pt-0" : "pt-1.5",
-                            "placeholder-black/50 dark:placeholder-white/50",
-                            "max-h-[240px] scrollbar-gutter-stable",
-                            size === 'mini' ? 'min-h-0' : 'min-h-12',
+                            portalDrawer
+                                ? "m-0 w-full min-h-4 resize-none bg-transparent p-0 text-[15px] leading-4 text-[#273142] placeholder:text-[#9ea3af]"
+                                : "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0",
+                            !portalDrawer && (hasSelectionTags ? "pt-0" : "pt-1.5"),
+                            !portalDrawer && "placeholder-black/50 dark:placeholder-white/50",
+                            portalDrawer ? "max-h-10" : "max-h-[240px] scrollbar-gutter-stable",
+                            !portalDrawer && (size === 'mini' ? 'min-h-0' : 'min-h-12'),
                             removeFocusRings,
                             "transition-[max-height] duration-200",
                             isTextareaScrollable && "scroll-on-scroll"
                         )}
                     />
 
-                    <div className="flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
+                    <div
+                        className={cn(
+                            "flex w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5",
+                            portalDrawer ? "h-6 min-h-6" : "h-7 min-h-7"
+                        )}
+                    >
                         {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}
                         <div className="input-bottom-left flex min-w-0 flex-1 items-center gap-2 touch-mobile:-ml-1 touch-mobile:gap-1 touch-mobile:pl-0 overflow-hidden">
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
@@ -513,7 +530,10 @@ const AiChatInput = memo(
                             {isStreaming ? (
                                 <button
                                     type="button"
-                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
+                                    className={cn(
+                                        "rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100",
+                                        portalDrawer ? "p-0" : "p-1"
+                                    )}
                                     onClick={onStop}
                                     aria-label="Stop generating"
                                 >
@@ -544,7 +564,10 @@ const AiChatInput = memo(
                                         disabled ||
                                         fileUploading
                                     }
-                                    className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                                    className={cn(
+                                        "rounded-full bg-primary text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]",
+                                        portalDrawer ? "p-0" : "p-1"
+                                    )}
                                     aria-label="Send message"
                                     data-testid="send-button"
                                 >

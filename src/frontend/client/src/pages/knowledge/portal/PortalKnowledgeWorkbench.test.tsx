@@ -140,9 +140,10 @@ jest.mock("../SpaceDetail/AiChat/KnowledgeAiPanel", () => ({
 }));
 
 jest.mock("~/pages/Subscription/AiChat/AiAssistantPanel", () => ({
-    AiAssistantPanel: ({ fileChat, onClose }: any) => (
+    AiAssistantPanel: ({ fileChat, onClose, portalDrawer }: any) => (
         <div data-testid="ai-assistant-panel">
             文件AI:{fileChat?.spaceId}:{fileChat?.fileId}
+            门户抽屉模式:{String(Boolean(portalDrawer))}
             <button type="button" onClick={onClose}>关闭AI组件</button>
         </div>
     ),
@@ -498,21 +499,91 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(teamGroup).getByText("团队空间01")).toBeInTheDocument();
         expect(within(teamGroup).queryByText("公共空间01")).not.toBeInTheDocument();
 
+        expect(screen.getByTestId("space-sidebar-title-icon")).toHaveAttribute(
+            "src",
+            "/assets/knowledge-portal/sidebar-title.png",
+        );
         expect(screen.getByTestId("space-group-icon-public")).toHaveAttribute(
             "src",
-            "/assets/knowledge-portal/space-public.png",
+            "/assets/knowledge-portal/group-public-expanded.png",
         );
         expect(screen.getByTestId("space-group-icon-department")).toHaveAttribute(
             "src",
-            "/assets/knowledge-portal/space-department.png",
+            "/assets/knowledge-portal/group-department-expanded.png",
         );
         expect(screen.getByTestId("space-group-icon-team")).toHaveAttribute(
             "src",
-            "/assets/knowledge-portal/space-team.png",
+            "/assets/knowledge-portal/group-team-expanded.png",
         );
         expect(screen.getByTestId("space-group-icon-personal")).toHaveAttribute(
             "src",
-            "/assets/knowledge-portal/space-personal.png",
+            "/assets/knowledge-portal/group-personal-expanded.png",
+        );
+        await waitFor(() => {
+            expect(screen.getByTestId("space-row-icon-public-1")).toHaveAttribute(
+                "src",
+                "/assets/knowledge-portal/knowledge-space-active.png",
+            );
+        });
+        expect(screen.getByTestId("space-row-icon-team-1")).toHaveAttribute(
+            "src",
+            "/assets/knowledge-portal/knowledge-space.png",
+        );
+
+        fireEvent.click(within(publicGroup).getByRole("button", { name: "收起公共知识库" }));
+        expect(screen.getByTestId("space-group-icon-public")).toHaveAttribute(
+            "src",
+            "/assets/knowledge-portal/group-public-collapsed.png",
+        );
+    });
+
+    test("stores the Lanhu portal icons as static assets", () => {
+        const assetNames = [
+            "sidebar-title.png",
+            "knowledge-space.png",
+            "knowledge-space-active.png",
+            "group-public-collapsed.png",
+            "group-public-expanded.png",
+            "group-department-collapsed.png",
+            "group-department-expanded.png",
+            "group-team-collapsed.png",
+            "group-team-expanded.png",
+            "group-personal-collapsed.png",
+            "group-personal-expanded.png",
+            "folder-collapsed.png",
+            "folder-expanded.png",
+            "sidebar-collapse.png",
+            "sidebar-expand.png",
+        ];
+
+        assetNames.forEach((assetName) => {
+            const assetPath = path.join(__dirname, "../../../../public/assets/knowledge-portal", assetName);
+            expect(readFileSync(assetPath).byteLength).toBeGreaterThan(0);
+        });
+    });
+
+    test("uses Lanhu icons for collapsing and restoring the knowledge sidebar", async () => {
+        const publicSpace = makeSpace("public-1", "公共空间01");
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [publicSpace],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+
+        renderWorkbench();
+
+        await screen.findByTestId("space-group-public");
+        expect(screen.getByTestId("space-sidebar-collapse-icon")).toHaveAttribute(
+            "src",
+            "/assets/knowledge-portal/sidebar-collapse.png",
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "收起知识库侧栏" }));
+
+        expect(screen.getByTestId("space-sidebar-expand-icon")).toHaveAttribute(
+            "src",
+            "/assets/knowledge-portal/sidebar-expand.png",
         );
     });
 
@@ -1226,7 +1297,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(await screen.findByTestId("notifications-dialog")).toBeInTheDocument();
     });
 
-    test("uses existing Bisheng file type icons in the portal file tree", async () => {
+    test("uses Lanhu folder icons and keeps existing Bisheng file type icons in the portal file tree", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
         });
@@ -1262,7 +1333,10 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         const folderRow = await screen.findByTestId("file-tree-row-101");
-        expect(within(folderRow).getByTestId("legacy-file-icon-dir")).toBeInTheDocument();
+        expect(within(folderRow).getByTestId("portal-folder-icon-101")).toHaveAttribute(
+            "src",
+            "/assets/knowledge-portal/folder-collapsed.png",
+        );
         expect(within(folderRow).getByText("(1/7)")).toBeInTheDocument();
         expect(within(screen.getByTestId("file-tree-row-201")).getByTestId("legacy-file-icon-md")).toBeInTheDocument();
         expect(within(screen.getByTestId("file-tree-row-202")).getByTestId("legacy-file-icon-pdf")).toBeInTheDocument();
@@ -1301,6 +1375,10 @@ describe("PortalKnowledgeWorkbench", () => {
         const folderRow = await screen.findByTestId("file-tree-row-101");
         fireEvent.click(within(folderRow).getByRole("button", { name: "展开技术文档" }));
 
+        expect(within(folderRow).getByTestId("portal-folder-icon-101")).toHaveAttribute(
+            "src",
+            "/assets/knowledge-portal/folder-expanded.png",
+        );
         const childRow = await screen.findByTestId("file-tree-row-301");
         expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
             space_id: "personal-1",
@@ -1471,23 +1549,12 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(
             within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label")),
         ).toEqual([
-            "AI 对话",
             "编辑标签",
             "下载",
             "权限管理",
             "复制",
         ]);
-
-        fireEvent.click(within(actions).getByRole("button", { name: "AI 对话" }));
-        const aiDialog = await screen.findByTestId("portal-ai-dialog");
-        expect(aiDialog).toHaveTextContent("后端开发.md");
-        expect(aiDialog).toHaveTextContent("全部知识库/团队知识库/我的技术文档/后端开发.md");
-        expect(aiDialog).toHaveTextContent("2.0 KB");
-        expect(within(aiDialog).getByTestId("ai-assistant-panel")).toHaveTextContent("文件AI:team-1:201");
-        expect(screen.queryByTestId("portal-info-drawer")).not.toBeInTheDocument();
-
-        fireEvent.click(within(aiDialog).getByRole("button", { name: "关闭AI弹窗" }));
-        expect(screen.queryByTestId("portal-ai-dialog")).not.toBeInTheDocument();
+        expect(within(actions).queryByRole("button", { name: "AI 对话" })).not.toBeInTheDocument();
 
         fireEvent.click(within(actions).getByRole("button", { name: "编辑标签" }));
         expect(screen.getByTestId("edit-tags-modal")).toBeInTheDocument();
@@ -1501,6 +1568,54 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(within(actions).getByRole("button", { name: "权限管理" }));
         expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:knowledge_file:后端开发.md");
+    });
+
+    test("opens document AI from the right rail as a drawer and hides left panes until closed", async () => {
+        const teamSpace = makeSpace("team-1", "我的技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
+            fileEncoding: "RPT-PP-00000001",
+            size: 2048,
+            updatedAt: "2026-05-20T12:30:00",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-201");
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
+
+        const rail = await screen.findByTestId("portal-tool-rail");
+        fireEvent.click(within(rail).getByRole("button", { name: "AI 对话" }));
+
+        const aiDrawer = await screen.findByTestId("portal-ai-drawer");
+        expect(aiDrawer).toHaveTextContent("AI对话");
+        expect(aiDrawer).not.toHaveTextContent("后端开发.md");
+        expect(aiDrawer).not.toHaveTextContent("全部知识库/团队知识库/我的技术文档/后端开发.md");
+        expect(aiDrawer).not.toHaveTextContent("2.0 KB");
+        expect(within(aiDrawer).getByTestId("ai-assistant-panel")).toHaveTextContent("文件AI:team-1:201");
+        expect(within(aiDrawer).getByTestId("ai-assistant-panel")).toHaveTextContent("门户抽屉模式:true");
+        expect(screen.queryByTestId("portal-info-drawer")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("active-space-title")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("space-group-team")).not.toBeInTheDocument();
+
+        fireEvent.click(within(aiDrawer).getByRole("button", { name: "关闭AI抽屉" }));
+
+        expect(screen.queryByTestId("portal-ai-drawer")).not.toBeInTheDocument();
+        expect(await screen.findByTestId("active-space-title")).toHaveTextContent("我的技术文档");
+        expect(screen.getByTestId("space-group-team")).toBeInTheDocument();
     });
 
     test("keeps the document preview share entry commented out", () => {
@@ -1578,6 +1693,7 @@ describe("PortalKnowledgeWorkbench", () => {
             "时间",
             "来源",
             "使用",
+            "AI 对话",
         ]);
         expect(within(rail).queryByRole("button", { name: "摘要" })).not.toBeInTheDocument();
         expect(within(rail).queryByRole("button", { name: "分享" })).not.toBeInTheDocument();
@@ -1900,6 +2016,44 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(previewHostRule).not.toMatch(/overflow-y\s*:\s*auto/);
     });
 
+    test("sizes the knowledge space sidebar and file pane to the reference layout ratio", () => {
+        const css = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.module.css"), "utf8");
+        const sidebarRule = css.match(/\.spaceSidebar\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const filePaneRule = css.match(/\.filePane\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const collapsedRule = css.match(/\.spaceSidebar\.spaceSidebarCollapsed\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+
+        expect(sidebarRule).toMatch(/width\s*:\s*216px/);
+        expect(sidebarRule).toMatch(/min-width\s*:\s*216px/);
+        expect(filePaneRule).toMatch(/width\s*:\s*360px/);
+        expect(filePaneRule).toMatch(/min-width\s*:\s*360px/);
+        expect(collapsedRule).toMatch(/width\s*:\s*72px/);
+    });
+
+    test("keeps the knowledge sidebar content compact and aligned left", () => {
+        const css = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.module.css"), "utf8");
+        const spaceHeaderRule = css.match(/\.spaceHeader\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const spaceHeaderIconRule = css.match(/\.spaceHeaderIcon\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const groupRowRule = css.match(/\.groupRow\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const groupIconRule = css.match(/\.groupIcon\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const groupLabelRule = css.match(/\.groupToggleButton strong\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const spaceSelectRule = css.match(/\.spaceSelectButton\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const createSpaceRule = css.match(/\.createSpaceRow\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const spaceNameRule = css.match(/\.spaceName\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+
+        expect(spaceHeaderRule).toMatch(/height\s*:\s*46px/);
+        expect(spaceHeaderRule).toMatch(/padding\s*:\s*0 10px/);
+        expect(spaceHeaderRule).toMatch(/font-size\s*:\s*15px/);
+        expect(spaceHeaderIconRule).toMatch(/width\s*:\s*24px/);
+        expect(spaceHeaderIconRule).toMatch(/height\s*:\s*24px/);
+        expect(groupRowRule).toMatch(/padding\s*:\s*0 10px 0 32px/);
+        expect(groupIconRule).toMatch(/width\s*:\s*14px/);
+        expect(groupIconRule).toMatch(/height\s*:\s*14px/);
+        expect(groupLabelRule).toMatch(/font-size\s*:\s*12\.5px/);
+        expect(spaceSelectRule).toMatch(/padding\s*:\s*0 0 0 42px/);
+        expect(createSpaceRule).toMatch(/padding\s*:\s*0 10px 0 42px/);
+        expect(spaceNameRule).toMatch(/font-size\s*:\s*12\.5px/);
+    });
+
     test("keeps upload review table inside a wide dialog instead of overflowing the modal", () => {
         const css = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.module.css"), "utf8");
         const reviewContentRule = css.match(/\.uploadReviewContent\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
@@ -1914,13 +2068,21 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(reviewTableRule).toMatch(/overflow\s*:\s*auto/);
     });
 
-    test("uses a large AI dialog that overrides the default dialog max width", () => {
+    test("uses a right-side AI drawer sized to the reference layout", () => {
         const css = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.module.css"), "utf8");
-        const aiDialogContentRule = css.match(/\.aiDialogContent\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const aiDrawerRule = css.match(/\.aiDrawer\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const aiDrawerHeaderRule = css.match(/\.aiDrawerHeader\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const aiDrawerBodyRule = css.match(/\.aiDrawerBody\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
 
-        expect(aiDialogContentRule).toMatch(/width\s*:\s*min\(1360px,\s*calc\(100vw - 120px\)\)\s*!important/);
-        expect(aiDialogContentRule).toMatch(/max-width\s*:\s*min\(1360px,\s*calc\(100vw - 120px\)\)\s*!important/);
-        expect(aiDialogContentRule).toMatch(/height\s*:\s*min\(920px,\s*calc\(100dvh - 64px\)\)\s*!important/);
+        expect(aiDrawerRule).toMatch(/width\s*:\s*560px/);
+        expect(aiDrawerRule).toMatch(/box-shadow\s*:\s*-6px 0 10px rgba\(0,\s*0,\s*0,\s*0\.1\)/);
+        expect(aiDrawerRule).toMatch(/border-left\s*:\s*1px solid #dfe7f2/);
+        expect(aiDrawerHeaderRule).toMatch(/height\s*:\s*46px/);
+        expect(aiDrawerHeaderRule).toMatch(/padding\s*:\s*12px 16px 0/);
+        expect(aiDrawerHeaderRule).toMatch(/border-bottom\s*:\s*1px solid #edf1f7/);
+        expect(aiDrawerBodyRule).toMatch(/display\s*:\s*flex/);
+        expect(css).toContain("portalAiPanel");
+        expect(css).toContain("portalAiInput");
     });
 
     test("keeps the portal workbench entrypoint below the maintenance size limit", () => {

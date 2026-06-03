@@ -1,4 +1,4 @@
-import { Bot, ChevronDown, Copy, Download, FileText, ShieldCheck, SquarePen } from "lucide-react";
+import { ChevronDown, Copy, Download, FileText, ShieldCheck, SquarePen } from "lucide-react";
 // import { Share2 } from "lucide-react";
 import type { KnowledgeFile } from "~/api/knowledge";
 import FilePreview from "../../FilePreview";
@@ -10,7 +10,6 @@ interface DocumentPreviewProps {
     documentPath: string;
     preview: PreviewState;
     summaryExpanded: boolean;
-    onOpenAi: () => void;
     onOpenTags: () => void;
     // onOpenShare: () => void;
     onDownload: () => void;
@@ -25,7 +24,6 @@ export function DocumentPreview({
     documentPath,
     preview,
     summaryExpanded,
-    onOpenAi,
     onOpenTags,
     // onOpenShare,
     onDownload,
@@ -47,9 +45,6 @@ export function DocumentPreview({
                             <div className={s.docPath}>{documentPath}</div>
                         </div>
                         <div className={s.docActions} data-testid="portal-document-actions">
-                            <button type="button" className={s.iconAction} title="AI 对话" aria-label="AI 对话" onClick={onOpenAi}>
-                                <Bot size={16} />
-                            </button>
                             <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={onOpenTags}>
                                 <SquarePen size={16} />
                             </button>

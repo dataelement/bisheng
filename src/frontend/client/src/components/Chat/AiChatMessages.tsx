@@ -35,6 +35,8 @@ interface AiChatMessagesProps {
     flatMode?: boolean;
     /** Knowledge space AI panel: full-width column, 14px body, gray user / borderless assistant */
     knowledgeChatLayout?: boolean;
+    /** 门户文档预览右侧抽屉消息布局 */
+    portalDrawerLayout?: boolean;
     /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
     emptyStateHint?: string;
     /** Optional width utility classes for the inner message column */
@@ -56,6 +58,7 @@ function MessageTreeNode({
     currentIndex,
     onRegenerate,
     knowledgeChatLayout,
+    portalDrawerLayout,
     onOpenCitationPanel,
     activeCitationMessageId,
 }: {
@@ -65,6 +68,7 @@ function MessageTreeNode({
     currentIndex: number;
     onRegenerate?: (parentMessageId: string) => void;
     knowledgeChatLayout?: boolean;
+    portalDrawerLayout?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
 }) {
@@ -109,6 +113,7 @@ function MessageTreeNode({
                 siblingCount={siblings.length}
                 setSiblingIdx={setSiblingIdx}
                 knowledgeChatLayout={knowledgeChatLayout}
+                portalDrawerLayout={portalDrawerLayout}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
             />
@@ -121,6 +126,7 @@ function MessageTreeNode({
                     currentIndex={currentIndex + 1}
                     onRegenerate={onRegenerate}
                     knowledgeChatLayout={knowledgeChatLayout}
+                    portalDrawerLayout={portalDrawerLayout}
                     onOpenCitationPanel={onOpenCitationPanel}
                     activeCitationMessageId={activeCitationMessageId}
                 />
@@ -141,6 +147,7 @@ export default function AiChatMessages({
     hideHeaderTitle = false,
     flatMode = false,
     knowledgeChatLayout = false,
+    portalDrawerLayout = false,
     emptyStateHint,
     contentWidthClassName,
     onPresetClick,
@@ -342,6 +349,7 @@ export default function AiChatMessages({
                                             : undefined
                                     }
                                     knowledgeChatLayout={knowledgeChatLayout}
+                                    portalDrawerLayout={portalDrawerLayout}
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
                                 />
@@ -357,6 +365,7 @@ export default function AiChatMessages({
                                 currentIndex={0}
                                 onRegenerate={onRegenerate}
                                 knowledgeChatLayout={knowledgeChatLayout}
+                                portalDrawerLayout={portalDrawerLayout}
                                 onOpenCitationPanel={onOpenCitationPanel}
                                 activeCitationMessageId={activeCitationMessageId}
                             />

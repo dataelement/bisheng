@@ -8,12 +8,13 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
-import type { LegacyFileIconType } from "../constants";
+import { FOLDER_ICON_SRC, type LegacyFileIconType } from "../constants";
 import type { PortalFileTreeNode } from "../types";
 import {
     folderCountText,
     getPortalFileIconType,
     isFolder,
+    resolveAssetUrl,
     statusText,
 } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
@@ -124,10 +125,20 @@ export function FileTree({
                         onSelectFile(file);
                     }}
                 >
-                    <LegacyFileIcon
-                        type={getPortalFileIconType(file) as LegacyFileIconType}
-                        className={s.treeFileTypeIcon}
-                    />
+                    {isFolder(file) ? (
+                        <img
+                            className={s.treeFileTypeIcon}
+                            src={resolveAssetUrl(node?.expanded ? FOLDER_ICON_SRC.expanded : FOLDER_ICON_SRC.collapsed)}
+                            alt=""
+                            aria-hidden="true"
+                            data-testid={`portal-folder-icon-${file.id}`}
+                        />
+                    ) : (
+                        <LegacyFileIcon
+                            type={getPortalFileIconType(file) as LegacyFileIconType}
+                            className={s.treeFileTypeIcon}
+                        />
+                    )}
                     {file.isCreating ? (
                         <input
                             autoFocus
