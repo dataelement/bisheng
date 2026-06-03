@@ -7,9 +7,16 @@ import {
     type InformationSource,
 } from "~/api/channels";
 import { generateUUID } from "~/utils";
+import { useLocalize } from "~/hooks";
+import { useToastContext } from "~/Providers";
+import { NotificationSeverity } from "~/common";
 import { extractApiStatusCode } from "../errorUtils";
+import { crawlErrorMessageKey } from "../CreateChannel/crawlErrorUtils";
 
 const CONCURRENCY = 3;
+
+/** Account-level API-key crawl quota exceeded — must surface as a popup, not a queue tooltip. */
+const API_KEY_LIMIT_CODE = 19006;
 
 export type CrawlStatus = "pending" | "crawling" | "success" | "failed";
 
@@ -70,6 +77,23 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
     const onSourceAddedRef = useRef(onSourceAdded);
     onSourceAddedRef.current = onSourceAdded;
 
+    const localize = useLocalize();
+    const { showToast } = useToastContext();
+    const showToastRef = useRef(showToast);
+    showToastRef.current = showToast;
+    const localizeRef = useRef(localize);
+    localizeRef.current = localize;
+
+    // 19006 is an account-level quota error: every further crawl also fails, so
+    // surface it as an error toast instead of (only) a queue-item tooltip.
+    const notifyIfLimitExceeded = useCallback((errorCode: number) => {
+        if (errorCode !== API_KEY_LIMIT_CODE) return;
+        showToastRef.current?.({
+            message: localizeRef.current(crawlErrorMessageKey(API_KEY_LIMIT_CODE)),
+            severity: NotificationSeverity.ERROR,
+        });
+    }, []);
+
     useEffect(() => {
         mountedRef.current = true;
         return () => {
@@ -113,10 +137,9 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
             const root: any = res ?? {};
             const codeRaw = root?.status_code ?? root?.code;
             if (codeRaw && codeRaw !== 200) {
-                updateItem(id, {
-                    status: "failed",
-                    errorCode: mapCrawlError({ status_code: Number(codeRaw) }),
-                });
+                const errorCode = mapCrawlError({ status_code: Number(codeRaw) });
+                notifyIfLimitExceeded(errorCode);
+                updateItem(id, { status: "failed", errorCode });
                 return;
             }
             const raw: any = root.data ?? root;
@@ -140,7 +163,9 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
             preview = { name: name || url, icon: raw.icon, articles };
         } catch (error) {
             if (signal.aborted || (error as any)?.name === "AbortError") return;
-            updateItem(id, { status: "failed", errorCode: mapCrawlError(error) });
+            const errorCode = mapCrawlError(error);
+            notifyIfLimitExceeded(errorCode);
+            updateItem(id, { status: "failed", errorCode });
             return;
         }
 
@@ -173,7 +198,7 @@ export function useCrawlQueue({ onSourceAdded }: UseCrawlQueueOptions): UseCrawl
             if (signal.aborted || (error as any)?.name === "AbortError") return;
             updateItem(id, { status: "failed", errorCode: 19003 });
         }
-    }, [updateItem]);
+    }, [updateItem, notifyIfLimitExceeded]);
 
     const enqueue = useCallback((url: string) => {
         const id = generateUUID(8);
