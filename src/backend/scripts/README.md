@@ -59,6 +59,37 @@ Options:
 
 - `--apply`: perform writes; default is dry-run
 
+### `migrate_channel_permissions_for_relation_models.py`
+
+Backfills channel-module default permissions into legacy **custom** relation
+models (资源权限模板) that were created before the channel module existed.
+
+Behavior:
+
+- reads the global `config.key = "permission_relation_models_v1"` JSON list
+- for each custom (`is_system = false`) model with **no** channel permission ids,
+  appends the channel defaults for its inherited level
+  (`owner` / `manager` / `editor` / `viewer`), sourced from
+  `channel_permission_template.default_permission_ids_for_relation`
+- skips system models (they compute channel defaults from the template at runtime)
+- skips custom models that already hold any channel permission id (never
+  overwrites an admin's explicit channel customization)
+- preserves all non-channel permissions
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_channel_permissions_for_relation_models.py
+PYTHONPATH=./ .venv/bin/python scripts/migrate_channel_permissions_for_relation_models.py --apply
+
+bash scripts/migrate_channel_permissions_for_relation_models.sh
+bash scripts/migrate_channel_permissions_for_relation_models.sh apply
+```
+
+Options:
+
+- `--apply`: perform writes; default is dry-run
+
 ### `permission_migration.sh`
 
 Manual runner for the F006 historical permission migration from RBAC to ReBAC.
