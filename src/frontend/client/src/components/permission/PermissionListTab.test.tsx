@@ -138,6 +138,61 @@ describe("Client PermissionListTab", () => {
     expect(screen.getAllByLabelText("com_permission.remove")).toHaveLength(2);
   });
 
+  it("hides the owner option for a user group entry", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user_group",
+        subject_id: 9,
+        subject_name: "zz",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="channel"
+        resourceId="channel-1"
+        refreshKey={0}
+        fixedSubjectType="user_group"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("zz").length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
+    expect(screen.getByText("com_permission.level_editor")).toBeInTheDocument();
+  });
+
+  it("keeps the owner option for a user entry", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 9,
+        subject_name: "Carol",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="channel"
+        resourceId="channel-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Carol").length).toBeGreaterThan(0);
+    });
+    expect(screen.getByText("com_permission.level_owner")).toBeInTheDocument();
+  });
+
   it("deletes all relations for the selected subject", async () => {
     mockedGetResourcePermissions.mockResolvedValue([
       {
