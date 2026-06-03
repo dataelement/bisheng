@@ -1,7 +1,8 @@
 """DB-backed tests for KnowledgeFileDao.async_count_files_by_domain_codes.
 
-Counts SUCCESS document files per business-domain code (the 3rd '-'-segment of
-file_encoding) across ALL knowledge bases, ignoring space/login filters.
+Counts SUCCESS document files per business-domain code (the second-from-last
+'-'-segment of file_encoding) across ALL knowledge bases, ignoring space/login
+filters.
 """
 from contextlib import asynccontextmanager
 from unittest.mock import patch
@@ -44,7 +45,7 @@ async def _insert(session, **kwargs):
 
 
 @pytest.mark.asyncio
-async def test_count_files_by_domain_codes_uses_third_segment_exactly(async_db_session):
+async def test_count_files_by_domain_codes_uses_second_from_last_segment_exactly(async_db_session):
     # Spread across DIFFERENT knowledge_ids to prove the filter ignores space.
     await _insert(async_db_session, knowledge_id=10, file_name='a', file_encoding='GF-STD-PP-001')
     await _insert(async_db_session, knowledge_id=11, file_name='b', file_encoding='GF-RPT-PP-002')
@@ -57,13 +58,44 @@ async def test_count_files_by_domain_codes_uses_third_segment_exactly(async_db_s
                   file_encoding='GF-STD-PP-005', file_type=FileType.DIR.value)
     # NULL encoding -> not counted
     await _insert(async_db_session, knowledge_id=10, file_name='f', file_encoding=None)
-    # 'PP' only appears in 2nd segment; 3rd segment is SA -> counts as SA, not PP.
+    # 'PP' only appears in 1st segment; second-from-last segment is SA -> counts as SA, not PP.
     await _insert(async_db_session, knowledge_id=13, file_name='g', file_encoding='PP-STD-SA-006')
 
     with _patch_session_factory(async_db_session):
         result = await KnowledgeFileDao.async_count_files_by_domain_codes(['PP', 'QM', 'SA'])
 
     assert result == {'PP': 2, 'QM': 1, 'SA': 1}
+
+
+@pytest.mark.asyncio
+async def test_count_files_by_domain_codes_rejects_like_overfetch_on_non_business_segment(async_db_session):
+    # 'PP' sits in a dash-surrounded NON-business segment, so the
+    # LIKE '%-PP-%' prefilter WILL fetch this row -- but the business code
+    # (second-from-last segment) is QM. The Python guard must reject the
+    # over-fetch and count it as QM only, never PP.
+    await _insert(async_db_session, knowledge_id=30, file_name='a', file_encoding='GF-PP-QM-001')
+    # Multi-segment, operator-configured prefix ('GF-PP'): the business code is
+    # still the second-from-last segment (QM). Counting parts[2] here would
+    # wrongly pick 'QM' for one row but generally breaks once the prefix grows;
+    # the dash-surrounded 'PP' again tempts the LIKE prefilter to over-fetch.
+    await _insert(async_db_session, knowledge_id=31, file_name='b', file_encoding='GF-PP-EXTRA-QM-002')
+
+    with _patch_session_factory(async_db_session):
+        result = await KnowledgeFileDao.async_count_files_by_domain_codes(['PP', 'QM'])
+
+    assert result == {'PP': 0, 'QM': 2}
+
+
+@pytest.mark.asyncio
+async def test_count_files_by_domain_codes_dedupes_mixed_case_codes(async_db_session):
+    await _insert(async_db_session, knowledge_id=40, file_name='a', file_encoding='GF-STD-PP-001')
+    await _insert(async_db_session, knowledge_id=41, file_name='b', file_encoding='GF-RPT-PP-002')
+
+    with _patch_session_factory(async_db_session):
+        result = await KnowledgeFileDao.async_count_files_by_domain_codes(['PP', 'pp', 'PP'])
+
+    # Duplicate/mixed-case requests collapse to a single normalized key.
+    assert result == {'PP': 2}
 
 
 @pytest.mark.asyncio

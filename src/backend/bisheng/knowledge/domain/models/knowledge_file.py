@@ -234,7 +234,10 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def async_count_files_by_domain_codes(cls, codes: List[str]) -> dict:
         """Async: count SUCCESS document files per business-domain code across ALL knowledge bases.
 
-        Business-domain code = the 3rd '-'-separated segment of file_encoding
+        Business code = second-from-last segment (robust to multi-segment prefixes).
+        file_encoding is '{prefix}-{type}-{business}-{ym}{seq}'; the operator-configured
+        prefix may contain dashes, but the trailing serial '{ym}{seq}' is always a single
+        dash-free segment, so the business code is always the second-from-last '-'-segment
         (e.g. 'GF-STD-SC-2026...' -> 'SC'). Counts only file_type==FILE and
         status==SUCCESS files. Returns {code: count} for every requested code
         (codes with no match -> 0). Login/space filters are intentionally ignored.
@@ -259,7 +262,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
         for encoding in rows:
             parts = (encoding or '').split('-')
             if len(parts) >= 3:
-                domain = parts[2].strip().upper()
+                # business code = second-from-last segment (robust to multi-segment prefixes)
+                domain = parts[-2].strip().upper()
                 if domain in code_set:
                     counts[domain] += 1
         return counts
