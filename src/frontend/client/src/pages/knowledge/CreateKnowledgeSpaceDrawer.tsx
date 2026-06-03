@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { useQuery } from "@tanstack/react-query";
 import { Upload, XIcon } from "lucide-react";
@@ -19,6 +19,7 @@ import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
 import {
     getCreateSpaceOptionsApi,
+    getCreateSpaceDepartmentsApi,
     getKnowledgeSpaceTagLibrariesApi,
     getKnowledgeSpaceTagLibraryDetailApi,
     SpaceLevel,
@@ -27,8 +28,10 @@ import {
     type KnowledgeSpace,
     type KnowledgeSpaceTagLibraryListItem,
 } from "~/api/knowledge";
+import type { SelectedSubject } from "~/api/permission";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
+import { SubjectSearchDepartment, type DepartmentNode } from "~/components/permission/SubjectSearchDepartment";
 
 const MAX_SPACE_NAME = 20;
 const MAX_SPACE_DESC = 200;
@@ -130,6 +133,7 @@ export function CreateKnowledgeSpaceDrawer({
     const [joinPolicy, setJoinPolicy] = useState<JoinPolicy>("review");
     const [publishToSquare, setPublishToSquare] = useState<PublishToSquare>("no");
     const [spaceLevel, setSpaceLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
+    const [departmentSelection, setDepartmentSelection] = useState<SelectedSubject[]>([]);
     const [businessDomainCodes, setBusinessDomainCodes] = useState<BusinessDomainCode[]>([]);
     const [autoTagEnabled, setAutoTagEnabled] = useState(false);
     const [autoTagMode, setAutoTagMode] = useState<AutoTagMode>("library");
@@ -200,10 +204,14 @@ export function CreateKnowledgeSpaceDrawer({
     }, [levelOptions, mode, spaceLevel]);
     const shouldShowVisibilityControls = mode !== "create";
     const shouldShowPublishOption = shouldShowVisibilityControls && needPublishOption;
+    const shouldShowDepartmentSelector = mode === "create"
+        && spaceLevel === SpaceLevel.DEPARTMENT
+        && selectedLevelCreateEnabled;
     const shouldShowBusinessDomainSelector = mode === "create"
         && spaceLevel === SpaceLevel.TEAM
         && selectedLevelCreateEnabled;
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
+    const selectedDepartmentId = departmentSelection[0]?.id;
 
     const resetForm = () => {
         setName("");
@@ -212,6 +220,7 @@ export function CreateKnowledgeSpaceDrawer({
         setJoinPolicy("review");
         setPublishToSquare("no");
         setSpaceLevel(SpaceLevel.PERSONAL);
+        setDepartmentSelection([]);
         setBusinessDomainCodes([]);
         setAutoTagEnabled(false);
         setAutoTagMode("library");
@@ -225,10 +234,23 @@ export function CreateKnowledgeSpaceDrawer({
 
     const handleSpaceLevelChange = (value: SpaceLevel) => {
         setSpaceLevel(value);
+        if (value !== SpaceLevel.DEPARTMENT) {
+            setDepartmentSelection([]);
+        }
         if (value !== SpaceLevel.TEAM) {
             setBusinessDomainCodes([]);
         }
     };
+
+    const loadCreateDepartments = useCallback(async (config?: { signal?: AbortSignal }): Promise<DepartmentNode[]> => {
+        const res = await getCreateSpaceDepartmentsApi({
+            page: 1,
+            pageSize: 200,
+            approvalRequest: showApprovalReason,
+            signal: config?.signal,
+        });
+        return res.data;
+    }, [showApprovalReason]);
 
     const handleBusinessDomainChange = (code: BusinessDomainCode, checked: boolean) => {
         setBusinessDomainCodes((prev) => {
@@ -380,6 +402,13 @@ export function CreateKnowledgeSpaceDrawer({
         if (mode === "create" && !selectedLevelCreateEnabled) {
             return;
         }
+        if (shouldShowDepartmentSelector && !selectedDepartmentId) {
+            showToast({
+                message: "请选择部门",
+                severity: NotificationSeverity.WARNING
+            });
+            return;
+        }
         if (shouldShowBusinessDomainSelector && businessDomainCodes.length === 0) {
             showToast({
                 message: "请选择业务域类型",
@@ -426,7 +455,7 @@ export function CreateKnowledgeSpaceDrawer({
             joinPolicy: effectiveJoinPolicy,
             publishToSquare: mode === "create" ? "no" : needPublishOption ? publishToSquare : "no",
             spaceLevel,
-            departmentId: undefined,
+            departmentId: shouldShowDepartmentSelector ? selectedDepartmentId : undefined,
             userGroupId: undefined,
             businessDomainCodes: spaceLevel === SpaceLevel.TEAM ? businessDomainCodes : [],
             autoTagEnabled: effectiveAutoTagEnabled,
@@ -553,6 +582,22 @@ export function CreateKnowledgeSpaceDrawer({
                                             </label>
                                         ))}
                                     </RadioGroup.Root>
+                                )}
+                                {shouldShowDepartmentSelector && (
+                                    <div className="space-y-2">
+                                        <Label className="text-sm text-[#1D2129] font-medium">
+                                            <span className="text-[#F53F3F] mr-1">*</span>
+                                            选择部门
+                                        </Label>
+                                        <SubjectSearchDepartment
+                                            value={departmentSelection}
+                                            onChange={setDepartmentSelection}
+                                            includeChildren
+                                            onIncludeChildrenChange={() => undefined}
+                                            selectionMode="single"
+                                            loadDepartments={loadCreateDepartments}
+                                        />
+                                    </div>
                                 )}
                                 {shouldShowBusinessDomainSelector && (
                                     <div className="space-y-2">

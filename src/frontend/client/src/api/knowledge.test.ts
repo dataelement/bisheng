@@ -1,14 +1,18 @@
 import request from "~/api/request";
 import {
   FileType,
+  SpaceLevel,
   VisibilityType,
   batchDeleteApi,
   batchDownloadApi,
   createFolderApi,
   deleteFolderApi,
   getSquareSpacesApi,
+  listMyUploadedFilesApi,
   mapChild,
+  moveUploadedFileFolderApi,
   renameFolderApi,
+  recommendUploadFoldersApi,
 } from "./knowledge";
 
 jest.mock("~/api/request", () => ({
@@ -195,6 +199,125 @@ describe("addFilesApi", () => {
     });
 
     await expect(addFilesApi("101", { file_path: ["/tmp/doc.txt"] })).rejects.toThrow("Permission denied");
+  });
+});
+
+describe("recommendUploadFoldersApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("posts local file ids and returns folder recommendations", async () => {
+    mockPost.mockResolvedValue({
+      status_code: 200,
+      data: {
+        items: [
+          {
+            client_file_id: "local-1",
+            file_name: "能源管理标准.pdf",
+            recommended_folder_id: 37,
+            recommended_folder_name: "能源管理",
+            recommended_folder_path: "技术文档/能源管理",
+            reason: "命中文件名",
+          },
+        ],
+      },
+    });
+
+    const result = await recommendUploadFoldersApi("101", {
+      files: [{ client_file_id: "local-1", file_name: "能源管理标准.pdf" }],
+    });
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/101/upload-folder-recommendations",
+      { files: [{ client_file_id: "local-1", file_name: "能源管理标准.pdf" }] },
+    );
+    expect(result.items[0]).toMatchObject({
+      clientFileId: "local-1",
+      recommendedFolderId: "37",
+      recommendedFolderName: "能源管理",
+      recommendedFolderPath: "技术文档/能源管理",
+    });
+  });
+});
+
+describe("listMyUploadedFilesApi", () => {
+  beforeEach(() => {
+    mockGet.mockReset();
+  });
+
+  it("maps current user uploaded file records", async () => {
+    mockGet.mockResolvedValue({
+      status_code: 200,
+      data: {
+        data: [
+          {
+            id: 501,
+            knowledge_id: 10,
+            knowledge_name: "设备知识库",
+            space_level: SpaceLevel.TEAM,
+            file_name: "能源管理标准.pdf",
+            file_level_path: "/37",
+            folder_path_name: "能源管理",
+            status: 1,
+            file_encoding: "SGGF-STD-EM-20260600000001",
+            tags: [{ id: 1, name: "能源" }],
+            abstract: "摘要",
+            create_time: "2026-06-02 10:00:00",
+            update_time: "2026-06-02 10:03:00",
+          },
+        ],
+        total: 1,
+      },
+    });
+
+    const result = await listMyUploadedFilesApi({ page: 1, pageSize: 20, keyword: "能源" });
+
+    expect(mockGet).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/my-uploaded-files",
+      expect.objectContaining({
+        params: expect.objectContaining({ page: 1, page_size: 20, keyword: "能源" }),
+      }),
+    );
+    expect(result.total).toBe(1);
+    expect(result.data[0]).toMatchObject({
+      id: "501",
+      spaceId: "10",
+      spaceName: "设备知识库",
+      spaceLevel: SpaceLevel.TEAM,
+      name: "能源管理标准.pdf",
+      folderPathName: "能源管理",
+      fileEncoding: "SGGF-STD-EM-20260600000001",
+    });
+  });
+});
+
+describe("moveUploadedFileFolderApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("posts target folder id and maps updated file", async () => {
+    mockPost.mockResolvedValue({
+      status_code: 200,
+      data: {
+        id: 501,
+        knowledge_id: 10,
+        file_name: "能源管理标准.pdf",
+        file_type: 1,
+        file_level_path: "/37",
+        status: 2,
+      },
+    });
+
+    const result = await moveUploadedFileFolderApi("10", "501", "37");
+
+    expect(mockPost).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/10/files/501/move-folder",
+      { target_folder_id: 37 },
+    );
+    expect(result.id).toBe("501");
+    expect(result.path).toBe("/37");
   });
 });
 

@@ -50,6 +50,7 @@ interface FilePaneProps {
     onSearchTextChange: (value: string) => void;
     onSearch: () => void;
     onOpenUploadDialog: () => void;
+    onOpenUploadedFiles: () => void;
     onShowUnavailable: () => void;
     onCreateFolder: () => void;
     onToggleStatusFilter: (status: FileStatus, checked: boolean) => void;
@@ -95,6 +96,7 @@ export function FilePane({
     onSearchTextChange,
     onSearch,
     onOpenUploadDialog,
+    onOpenUploadedFiles,
     onShowUnavailable,
     onCreateFolder,
     onToggleStatusFilter,
@@ -139,6 +141,15 @@ export function FilePane({
                         aria-label="上传"
                     >
                         <Upload size={14} />
+                    </button>
+                    <button
+                        type="button"
+                        className={s.folderAction}
+                        onClick={onOpenUploadedFiles}
+                        title="上传记录"
+                        aria-label="上传记录"
+                    >
+                        <History size={14} />
                     </button>
                     <button
                         type="button"

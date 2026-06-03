@@ -12,6 +12,7 @@ import type {
     PortalFileCategoryOption,
     PortalUploadFileItem,
     PortalUploadFolderNode,
+    PortalUploadFolderSelection,
     PortalUploadReviewRow,
     PortalUploadStep,
 } from "../types";
@@ -28,6 +29,7 @@ interface PortalUploadDialogProps {
     uploadLocalFolderName: string | null;
     uploadFolderId: string | null;
     uploadFolderName: string;
+    uploadFolderSelection: PortalUploadFolderSelection;
     uploadFolderNodes: PortalUploadFolderNode[];
     uploadFolderLoading: boolean;
     uploadSubmitting: boolean;
@@ -43,6 +45,7 @@ interface PortalUploadDialogProps {
     onRemoveUploadFile: (fileId: string) => void;
     onSelectFileCategory: (code: string) => void;
     onSelectUploadFolder: (folderId: string | null, folderName: string) => void;
+    onUseAiUploadFolder: () => void;
     onToggleUploadFolder: (node: PortalUploadFolderNode) => void;
     onUploadNext: () => void;
     onReviewRowsChange: Dispatch<SetStateAction<PortalUploadReviewRow[]>>;
@@ -113,6 +116,7 @@ export function PortalUploadDialog({
     uploadLocalFolderName,
     uploadFolderId,
     uploadFolderName,
+    uploadFolderSelection,
     uploadFolderNodes,
     uploadFolderLoading,
     uploadSubmitting,
@@ -128,6 +132,7 @@ export function PortalUploadDialog({
     onRemoveUploadFile,
     onSelectFileCategory,
     onSelectUploadFolder,
+    onUseAiUploadFolder,
     onToggleUploadFolder,
     onUploadNext,
     onReviewRowsChange,
@@ -135,6 +140,8 @@ export function PortalUploadDialog({
     onStartUploadImport,
 }: PortalUploadDialogProps) {
     const selectedReviewCount = uploadReviewRows.filter((row) => row.selected).length;
+    const isAiFolderSelection = uploadFolderSelection.mode === "ai";
+    const selectedUploadFolderName = isAiFolderSelection ? "未选择目录（AI推荐）" : uploadFolderName;
 
     return (
         <Dialog
@@ -240,16 +247,28 @@ export function PortalUploadDialog({
                                 </label>
                                 <div className={s.uploadField}>
                                     <span>上传目标目录</span>
-                                    <div className={s.uploadFolderPicker}>
+                                        <div className={s.uploadFolderPicker}>
                                         <div className={s.uploadFolderSelected} data-testid="selected-upload-folder">
-                                            {uploadFolderName}
+                                            {selectedUploadFolderName}
                                         </div>
                                         <div className={s.uploadFolderTree}>
                                             <div className={s.uploadFolderRow}>
                                                 <span className={s.uploadFolderExpandPlaceholder} />
                                                 <button
                                                     type="button"
-                                                    className={`${s.uploadFolderSelectButton} ${uploadFolderId === null ? s.uploadFolderSelectButtonActive : ""}`}
+                                                    className={`${s.uploadFolderSelectButton} ${isAiFolderSelection ? s.uploadFolderSelectButtonActive : ""}`}
+                                                    aria-label="未选择目录AI推荐"
+                                                    onClick={onUseAiUploadFolder}
+                                                >
+                                                    <Folder size={14} />
+                                                    <span>未选择目录（AI推荐）</span>
+                                                </button>
+                                            </div>
+                                            <div className={s.uploadFolderRow}>
+                                                <span className={s.uploadFolderExpandPlaceholder} />
+                                                <button
+                                                    type="button"
+                                                    className={`${s.uploadFolderSelectButton} ${uploadFolderSelection.mode === "manual" && uploadFolderId === null ? s.uploadFolderSelectButtonActive : ""}`}
                                                     aria-label="选择上传目录根目录"
                                                     onClick={() => onSelectUploadFolder(null, "根目录")}
                                                 >
@@ -277,7 +296,7 @@ export function PortalUploadDialog({
                                     </div>
                                 </div>
                                 <div className={s.uploadHint}>
-                                    文件将上传到所选知识空间目录，下一步会进入待入库确认。
+                                    未选择目录时，系统会根据当前知识空间已有目录推荐上传目录，并直接上传到推荐目录。
                                 </div>
                             </div>
 
@@ -315,7 +334,7 @@ export function PortalUploadDialog({
                                 取消
                             </Button>
                             <Button className="h-8" disabled={!uploadFiles.length || uploadSubmitting} onClick={onUploadNext}>
-                                {uploadSubmitting ? "上传中..." : "下一步"}
+                                {uploadSubmitting ? "上传中..." : "上传"}
                             </Button>
                         </DialogFooter>
                     </div>

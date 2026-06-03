@@ -59,6 +59,7 @@ import { EditEncodingModal } from "../SpaceDetail/EditEncodingModal";
 import { FilePane } from "./components/FilePane";
 import { PortalDialogs } from "./components/PortalDialogs";
 import { PortalInfoDrawer } from "./components/PortalInfoDrawer";
+import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawer";
 import { SpaceSidebar } from "./components/SpaceSidebar";
 import { ToolRail } from "./components/ToolRail";
 import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
@@ -99,6 +100,7 @@ export default function PortalKnowledgeWorkbench() {
     const [createDrawerOpen, setCreateDrawerOpen] = useState(false);
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [pendingCreateLevel, setPendingCreateLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
+    const [uploadedFilesOpen, setUploadedFilesOpen] = useState(false);
     const [spaceMenuOpenId, setSpaceMenuOpenId] = useState<string | null>(null);
     const [treeNodes, setTreeNodes] = useState<PortalFileTreeNode[]>([]);
     const [treeLoading, setTreeLoading] = useState(false);
@@ -520,6 +522,7 @@ export default function PortalKnowledgeWorkbench() {
         uploadLocalFolderName,
         uploadFolderId,
         uploadFolderName,
+        uploadFolderSelection,
         uploadFolderNodes,
         uploadFolderLoading,
         uploadSubmitting,
@@ -539,6 +542,7 @@ export default function PortalKnowledgeWorkbench() {
         handleRemoveUploadFile,
         handleSelectFileCategory,
         handleSelectUploadFolder,
+        handleUseAiUploadFolder,
         handleToggleUploadFolder,
         handleUploadNext,
         handleStartUploadImport,
@@ -555,6 +559,7 @@ export default function PortalKnowledgeWorkbench() {
         statusFilterNumbers,
         fileCategoryOptions,
         reloadFiles,
+        onUploaded: () => setUploadedFilesOpen(true),
         showToast,
     });
 
@@ -1275,6 +1280,7 @@ export default function PortalKnowledgeWorkbench() {
                 }}
                 onSearch={() => void handleSearch()}
                 onOpenUploadDialog={handleOpenUploadDialog}
+                onOpenUploadedFiles={() => setUploadedFilesOpen(true)}
                 onShowUnavailable={showUnavailable}
                 onCreateFolder={() => fileUpload.handleCreateFolder()}
                 onToggleStatusFilter={handleToggleStatusFilter}
@@ -1407,6 +1413,7 @@ export default function PortalKnowledgeWorkbench() {
                     uploadLocalFolderName,
                     uploadFolderId,
                     uploadFolderName,
+                    uploadFolderSelection,
                     uploadFolderNodes,
                     uploadFolderLoading,
                     uploadSubmitting,
@@ -1422,6 +1429,7 @@ export default function PortalKnowledgeWorkbench() {
                     onRemoveUploadFile: handleRemoveUploadFile,
                     onSelectFileCategory: handleSelectFileCategory,
                     onSelectUploadFolder: handleSelectUploadFolder,
+                    onUseAiUploadFolder: handleUseAiUploadFolder,
                     onToggleUploadFolder: (node) => void handleToggleUploadFolder(node),
                     onUploadNext: () => void handleUploadNext(),
                     onReviewRowsChange: setUploadReviewRows,
@@ -1431,6 +1439,12 @@ export default function PortalKnowledgeWorkbench() {
                 duplicateFiles={duplicateFiles}
                 onDuplicateSkip={handleDuplicateSkip}
                 onDuplicateOverwrite={handleDuplicateOverwrite}
+            />
+            <PortalUploadedFilesDrawer
+                open={uploadedFilesOpen}
+                onOpenChange={setUploadedFilesOpen}
+                onRecordsChanged={() => reloadFiles()}
+                showToast={showToast}
             />
             <EditEncodingModal
                 file={editingEncodingFile}

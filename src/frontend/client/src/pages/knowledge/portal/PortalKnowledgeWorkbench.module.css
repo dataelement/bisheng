@@ -1306,8 +1306,16 @@
   overflow: hidden;
 }
 
+.uploadRecordsDialog {
+  width: min(1120px, calc(100vw - 72px)) !important;
+  max-width: min(1120px, calc(100vw - 72px)) !important;
+  max-height: calc(100dvh - 96px);
+  overflow: hidden;
+}
+
 .uploadDialogInner,
-.uploadReviewInner {
+.uploadReviewInner,
+.uploadRecordsInner {
   width: 100%;
   max-width: 100%;
   display: flex;
@@ -1315,6 +1323,250 @@
   max-height: calc(100dvh - 120px);
   flex-direction: column;
   overflow: hidden;
+}
+
+.uploadReviewInner {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.uploadRecordsToolbar {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #edf1f7;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.uploadRecordsPager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.uploadRecordsPager span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.uploadRecordsTable {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #edf1f7;
+  border-radius: 6px;
+}
+
+.uploadRecordsHead,
+.uploadRecordsRow {
+  min-width: 920px;
+  display: grid;
+  grid-template-columns: minmax(170px, 1.3fr) minmax(190px, 1.2fr) 92px minmax(150px, 1fr) minmax(150px, 1fr) minmax(120px, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+}
+
+.uploadRecordsHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fbff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.uploadRecordsRow {
+  min-height: 48px;
+  border-top: 1px solid #edf1f7;
+  color: #273142;
+  font-size: 13px;
+}
+
+.uploadRecordsRow > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadRecordStatusBadge {
+  justify-self: start;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 11px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 22px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.uploadRecordStatusSuccess {
+  color: #22a06b;
+  background: #e8ffea;
+}
+
+.uploadRecordStatusInfo {
+  color: #2c76f4;
+  background: #e8f3ff;
+}
+
+.uploadRecordStatusDanger {
+  color: #f04438;
+  background: #fff2f0;
+}
+
+.uploadRecordFolderButton {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #165dff;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadRecordFolderButton:hover {
+  text-decoration: underline;
+}
+
+.uploadRecordInlineEditButton {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #165dff;
+  cursor: pointer;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadRecordInlineEditButton:hover {
+  text-decoration: underline;
+}
+
+.uploadRecordsEmpty {
+  padding: 34px 12px;
+  color: #768499;
+  text-align: center;
+  font-size: 13px;
+}
+
+.uploadRecordFolderPicker {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid #edf1f7;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fbfdff;
+}
+
+.uploadRecordFolderPickerHeader {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #273142;
+  font-size: 13px;
+}
+
+.uploadRecordFolderPickerHeader span {
+  min-width: 0;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadRecordFolderTree {
+  min-height: 96px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid #edf1f7;
+  border-radius: 6px;
+  background: #fff;
+  padding: 6px;
+}
+
+.uploadRecordFolderRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+}
+
+.uploadRecordFolderExpandButton,
+.uploadRecordFolderExpandPlaceholder {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
+.uploadRecordFolderExpandButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.uploadRecordFolderExpandButton:hover {
+  background: #f1f5fb;
+  color: #165dff;
+}
+
+.uploadRecordFolderSelectButton {
+  min-width: 0;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  padding: 0 8px;
+  background: transparent;
+  color: #273142;
+  cursor: pointer;
+}
+
+.uploadRecordFolderSelectButton span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadRecordFolderSelectButton:hover,
+.uploadRecordFolderSelectButtonActive {
+  background: #e8f3ff;
+  color: #165dff;
+}
+
+.uploadRecordFolderLoading,
+.uploadRecordFolderEmpty {
+  padding: 8px;
+  color: #768499;
+  font-size: 12px;
 }
 
 .uploadStepBody {

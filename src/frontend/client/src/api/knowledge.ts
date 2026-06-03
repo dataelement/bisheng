@@ -320,6 +320,26 @@ export interface KnowledgeFile {
     isCreating?: boolean;
 }
 
+export interface UploadedFileRecord extends KnowledgeFile {
+    spaceName: string;
+    spaceLevel?: SpaceLevel;
+    folderPathName: string;
+}
+
+export interface UploadFolderRecommendationFileReq {
+    client_file_id: string;
+    file_name: string;
+}
+
+export interface UploadFolderRecommendationItem {
+    clientFileId: string;
+    fileName: string;
+    recommendedFolderId: string | null;
+    recommendedFolderName: string;
+    recommendedFolderPath: string;
+    reason: string;
+}
+
 // ─────────────────────────────────────────────
 // Backend raw types (snake_case from API responses)
 // ─────────────────────────────────────────────
@@ -704,7 +724,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         tags,
         path: raw?.path ?? raw?.file_level_path ?? String(nameVal),
         parentId: raw?.parent_id !== undefined && raw?.parent_id !== null ? String(raw.parent_id) : undefined,
-        spaceId: raw?.space_id ?? raw?.knowledge_id ?? spaceId,
+        spaceId: String(raw?.space_id ?? raw?.knowledge_id ?? spaceId),
         createdAt: raw?.create_time ?? "",
         updatedAt: raw?.update_time ?? "",
         thumbnail: raw?.thumbnail ?? raw?.thumbnails,
@@ -1729,6 +1749,83 @@ export async function addFilesApi(
         }
         return file;
     });
+}
+
+export async function recommendUploadFoldersApi(
+    space_id: string,
+    data: { files: UploadFolderRecommendationFileReq[] },
+): Promise<{ items: UploadFolderRecommendationItem[] }> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/upload-folder-recommendations`,
+        data,
+    ) as ApiResponse<{ items: any[] }> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "recommend upload folders failed");
+    }
+    const items = Array.isArray(res?.data?.items) ? res.data.items : [];
+    return {
+        items: items.map((item: any) => ({
+            clientFileId: String(item?.client_file_id ?? ""),
+            fileName: String(item?.file_name ?? ""),
+            recommendedFolderId: item?.recommended_folder_id !== undefined && item?.recommended_folder_id !== null
+                ? String(item.recommended_folder_id)
+                : null,
+            recommendedFolderName: String(item?.recommended_folder_name ?? "根目录"),
+            recommendedFolderPath: String(item?.recommended_folder_path ?? "根目录"),
+            reason: String(item?.reason ?? ""),
+        })),
+    };
+}
+
+export async function listMyUploadedFilesApi(params: {
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+    status?: number;
+} = {}): Promise<{ data: UploadedFileRecord[]; total: number }> {
+    const res = await request.get<ApiResponse<{ data: any[]; total: number }>>(
+        "/api/v1/knowledge/space/my-uploaded-files",
+        {
+            params: {
+                page: params.page,
+                page_size: params.pageSize,
+                keyword: params.keyword || undefined,
+                status: params.status,
+            },
+            paramsSerializer: request.paramsSerializer,
+        },
+    );
+    const payload: any = res?.data ?? {};
+    const list = extractList<any>(payload);
+    return {
+        data: list.map((raw) => ({
+            ...mapChild(raw, String(raw?.knowledge_id ?? raw?.space_id ?? "")),
+            spaceName: String(raw?.knowledge_name ?? raw?.space_name ?? ""),
+            spaceLevel: raw?.space_level ? raw.space_level as SpaceLevel : undefined,
+            folderPathName: String(raw?.folder_path_name ?? raw?.recommended_folder_path ?? "根目录"),
+        })),
+        total: Number(payload?.total ?? list.length),
+    };
+}
+
+export async function moveUploadedFileFolderApi(
+    space_id: string,
+    file_id: string,
+    target_folder_id: string | null,
+): Promise<KnowledgeFile> {
+    const numericFolderId = target_folder_id !== null ? Number(target_folder_id) : null;
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/files/${file_id}/move-folder`,
+        {
+            target_folder_id: numericFolderId !== null && Number.isFinite(numericFolderId)
+                ? numericFolderId
+                : null,
+        },
+    ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "move uploaded file folder failed");
+    }
+    return mapChild(res?.data ?? {}, space_id);
 }
 
 /**

@@ -78,7 +78,17 @@ jest.mock("~/components/icons/channels", () => ({
 }));
 
 jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
-    SubjectSearchDepartment: () => <div data-testid="department-selector" />,
+    SubjectSearchDepartment: ({ value, onChange }: any) => (
+        <div data-testid="department-selector">
+            <span>{value?.[0]?.name ?? "未选择部门"}</span>
+            <button
+                type="button"
+                onClick={() => onChange([{ type: "department", id: 9, name: "炼铁部" }])}
+            >
+                选择炼铁部
+            </button>
+        </div>
+    ),
 }));
 
 jest.mock("~/components/permission/SubjectSearchUserGroup", () => ({
@@ -166,7 +176,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.queryByRole("radio", { name: "个人知识库" })).not.toBeInTheDocument();
     });
 
-    test("业务域知识库创建不展示部门选择且提交不带部门", async () => {
+    test("业务域知识库创建需要选择部门并提交部门", async () => {
         const onConfirm = jest.fn().mockResolvedValue({ showSuccess: false });
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: false,
@@ -182,18 +192,23 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
         expect(screen.getByRole("radio", { name: "业务域知识库" })).toHaveAttribute("aria-checked", "true");
-        expect(screen.queryByTestId("department-selector")).not.toBeInTheDocument();
+        expect(screen.getByTestId("department-selector")).toBeInTheDocument();
 
         fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
             target: { value: "业务域资料库" },
         });
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
+        expect(onConfirm).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "选择炼铁部" }));
+        fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
+
         await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
         expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
             name: "业务域资料库",
             spaceLevel: SpaceLevel.DEPARTMENT,
-            departmentId: undefined,
+            departmentId: 9,
         }));
     });
 

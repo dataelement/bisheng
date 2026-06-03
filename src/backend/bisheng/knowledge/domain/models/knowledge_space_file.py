@@ -92,6 +92,30 @@ class SpaceFileDao(KnowledgeFileDao):
             return await session.scalar(statement)
 
     @classmethod
+    async def count_file_by_name_in_path(
+            cls,
+            knowledge_id: int,
+            file_name: str,
+            file_level_path: str,
+            exclude_id: Optional[int] = None,
+    ) -> int:
+        """Count files with the same name under the same parent folder."""
+        if file_level_path:
+            path_filter = KnowledgeFile.file_level_path == file_level_path
+        else:
+            path_filter = cls._root_path_filter()
+        statement = select(func.count(KnowledgeFile.id)).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.file_name == file_name,
+            path_filter,
+        )
+        if exclude_id is not None:
+            statement = statement.where(KnowledgeFile.id != exclude_id)
+        async with get_async_db_session() as session:
+            return await session.scalar(statement)
+
+    @classmethod
     async def get_children_by_prefix(cls, knowledge_id: int, prefix: str, file_status: KnowledgeFileStatus = None) \
             -> List[KnowledgeFile]:
         """ Get all files/folders whose file_level_path starts with the given prefix """

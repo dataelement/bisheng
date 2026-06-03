@@ -402,6 +402,53 @@ class FileCreateReq(BaseModel):
     file_category_code: Optional[str] = Field(None, max_length=16, description="Selected business file category code")
 
 
+class UploadFolderRecommendFileReq(BaseModel):
+    client_file_id: str = Field(..., min_length=1, max_length=128, description="Frontend local file ID")
+    file_name: str = Field(..., min_length=1, max_length=255, description="Upload file name")
+
+
+class UploadFolderRecommendationReq(BaseModel):
+    files: List[UploadFolderRecommendFileReq] = Field(
+        default_factory=list,
+        max_length=100,
+        description="Files that need upload folder recommendations",
+    )
+
+
+class UploadFolderRecommendationItemResp(BaseModel):
+    client_file_id: str
+    file_name: str
+    recommended_folder_id: Optional[int] = None
+    recommended_folder_name: str = "根目录"
+    recommended_folder_path: str = "根目录"
+    reason: str = ""
+
+
+class UploadFolderRecommendationResp(BaseModel):
+    items: List[UploadFolderRecommendationItemResp] = Field(default_factory=list)
+
+
+class MoveFileFolderReq(BaseModel):
+    target_folder_id: Optional[int] = Field(default=None, description="Target folder ID; null means root")
+
+
+class ShougangPortalUploadedFileResp(BaseModel):
+    id: int
+    knowledge_id: int
+    knowledge_name: str = ""
+    space_level: Optional[KnowledgeSpaceLevelEnum] = None
+    file_name: str
+    file_level_path: str = ""
+    parent_id: Optional[int] = None
+    folder_path_name: str = "根目录"
+    status: Optional[int] = None
+    file_encoding: Optional[str] = None
+    tags: List[Dict] = Field(default_factory=list)
+    abstract: str = ""
+    create_time: str = ""
+    update_time: str = ""
+
+
 class FileRenameReq(BaseModel):
     name: str = Field(..., description="New File Name")
 

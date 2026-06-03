@@ -22,6 +22,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FileCreateReq,
     FileRenameReq,
     FileEncodingUpdateReq,
+    MoveFileFolderReq,
+    UploadFolderRecommendationReq,
     BatchDeleteReq,
     BatchDownloadReq,
     UpdateSpaceMemberRoleRequest,
@@ -275,6 +277,25 @@ async def get_knowledge_square(
     return resp_200(result)
 
 
+@router.get("/my-uploaded-files")
+async def list_my_uploaded_files(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    space_id: Optional[int] = Query(default=None),
+    status: Optional[int] = Query(default=None),
+    keyword: Optional[str] = Query(default=None),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.list_my_uploaded_files(
+        page=page,
+        page_size=page_size,
+        space_id=space_id,
+        status=status,
+        keyword=keyword,
+    )
+    return resp_200(result)
+
+
 # ──────────────────────────── Members ─────────────────────────────────────────
 
 
@@ -488,6 +509,16 @@ async def get_folder_parent(
 # ──────────────────────────── Files ───────────────────────────────────────────
 
 
+@router.post("/{space_id}/upload-folder-recommendations")
+async def recommend_upload_folders(
+    space_id: int,
+    req: UploadFolderRecommendationReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.recommend_upload_folders(space_id, req.files)
+    return resp_200(result)
+
+
 @router.post("/{space_id}/files")
 async def add_file(
     space_id: int,
@@ -533,6 +564,17 @@ async def update_file_encoding(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     file_record = await svc.update_file_encoding(file_id, req.encoding)
+    return resp_200(file_record)
+
+
+@router.post("/{space_id}/files/{file_id}/move-folder")
+async def move_file_folder(
+    space_id: int,
+    file_id: int,
+    req: MoveFileFolderReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    file_record = await svc.move_file_folder(space_id, file_id, req.target_folder_id)
     return resp_200(file_record)
 
 

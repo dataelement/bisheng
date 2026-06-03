@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 import tempfile
@@ -10,10 +11,11 @@ from typing import List, Optional, Dict, TYPE_CHECKING
 
 from fastapi import Request
 from loguru import logger
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlmodel import select
 
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – kept for type hints
 from bisheng.common.errcode.knowledge_space import (
     SpaceBusinessDomainInvalidError,
@@ -40,6 +42,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceTenantMismatchError,
 )
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.schemas.api import PageData
 from bisheng.common.utils import util as common_util
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
@@ -126,6 +129,10 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalShareVisibility,
     ShougangPortalSpaceInfoError,
     ShougangPortalSpaceInfoItemResp,
+    ShougangPortalUploadedFileResp,
+    UploadFolderRecommendFileReq,
+    UploadFolderRecommendationItemResp,
+    UploadFolderRecommendationResp,
 )
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
@@ -532,9 +539,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if user_group_id is not None:
                 raise SpaceInvalidScopeOwnerError()
             if department_id is None:
-                if not self.login_user.is_admin():
-                    raise SpaceCreateDepartmentDeniedError()
-                return level, KnowledgeSpaceOwnerTypeEnum.USER, int(self.login_user.user_id)
+                raise SpaceInvalidScopeOwnerError()
             dept = await DepartmentDao.aget_by_id(int(department_id))
             if dept is None or getattr(dept, 'status', 'active') != 'active':
                 raise SpaceInvalidScopeOwnerError(msg='Department does not exist or is archived')
@@ -605,7 +610,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         *,
         level: KnowledgeSpaceLevelEnum,
-        owner_type: KnowledgeSpaceOwnerTypeEnum,
         owner_id: int,
         space_id: int,
     ) -> None:
@@ -617,7 +621,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 relation='viewer',
                 include_children=True,
             )
-        elif level == KnowledgeSpaceLevelEnum.DEPARTMENT and owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT:
+        elif level == KnowledgeSpaceLevelEnum.DEPARTMENT:
             grant = AuthorizeGrantItem(
                 subject_type='department',
                 subject_id=owner_id,
@@ -2029,7 +2033,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         await self._grant_default_scope_permissions(
             level=level,
-            owner_type=owner_type,
             owner_id=owner_id,
             space_id=int(knowledge_space.id),
         )
@@ -4685,6 +4688,390 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 }
             )
         return res
+
+    @staticmethod
+    def _format_datetime(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return str(value)
+
+    @staticmethod
+    def _folder_ids_from_level_path(file_level_path: Optional[str]) -> List[int]:
+        return [int(part) for part in (file_level_path or "").split("/") if part.isdigit()]
+
+    @classmethod
+    def _parent_folder_id_from_level_path(cls, file_level_path: Optional[str]) -> Optional[int]:
+        folder_ids = cls._folder_ids_from_level_path(file_level_path)
+        return folder_ids[-1] if folder_ids else None
+
+    @classmethod
+    def _folder_path_name_from_map(cls, file_level_path: Optional[str], folder_map: Dict[int, KnowledgeFile]) -> str:
+        folder_ids = cls._folder_ids_from_level_path(file_level_path)
+        if not folder_ids:
+            return "根目录"
+        names = [
+            folder_map[folder_id].file_name if folder_map.get(folder_id) else str(folder_id)
+            for folder_id in folder_ids
+        ]
+        return "/".join(names) if names else "根目录"
+
+    @classmethod
+    def _upload_folder_candidate_path(cls, folder: KnowledgeFile, folder_map: Dict[int, KnowledgeFile]) -> str:
+        folder_ids = [*cls._folder_ids_from_level_path(folder.file_level_path), int(folder.id)]
+        names = [
+            folder_map[folder_id].file_name if folder_map.get(folder_id) else str(folder_id)
+            for folder_id in folder_ids
+        ]
+        return "/".join(names) if names else folder.file_name
+
+    @staticmethod
+    def _extract_llm_json_text(raw: str) -> str:
+        text = (raw or "").strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
+        return text
+
+    @staticmethod
+    def _resolve_upload_recommend_model_id(workbench_llm) -> Optional[int]:
+        if not workbench_llm:
+            return None
+        candidates = [
+            getattr(workbench_llm, "chat_title_llm", None),
+            getattr(workbench_llm, "task_model", None),
+        ]
+        models = getattr(workbench_llm, "models", None) or []
+        if models:
+            candidates.append(models[0])
+        for model in candidates:
+            model_id = getattr(model, "id", None)
+            if model_id:
+                try:
+                    return int(model_id)
+                except (TypeError, ValueError):
+                    return model_id
+        return None
+
+    @staticmethod
+    def _root_upload_folder_recommendation(
+        file: UploadFolderRecommendFileReq,
+        reason: str,
+    ) -> UploadFolderRecommendationItemResp:
+        return UploadFolderRecommendationItemResp(
+            client_file_id=file.client_file_id,
+            file_name=file.file_name,
+            recommended_folder_id=None,
+            recommended_folder_name="根目录",
+            recommended_folder_path="根目录",
+            reason=reason,
+        )
+
+    async def _filter_recommendable_upload_folders(
+        self,
+        space_id: int,
+        folders: List[KnowledgeFile],
+    ) -> List[KnowledgeFile]:
+        recommendable_folders: List[KnowledgeFile] = []
+        for folder in folders:
+            folder_id = getattr(folder, "id", None)
+            if folder_id is None:
+                continue
+            try:
+                await self._require_permission_id("folder", int(folder_id), "view_folder", space_id=space_id)
+                await self._require_permission_id("folder", int(folder_id), "upload_file", space_id=space_id)
+            except SpacePermissionDeniedError:
+                continue
+            recommendable_folders.append(folder)
+        return recommendable_folders
+
+    def _build_upload_folder_recommend_messages(
+        self,
+        files: List[UploadFolderRecommendFileReq],
+        folder_candidates: List[Dict],
+    ) -> List[Dict[str, str]]:
+        system_prompt = (
+            "你是企业知识空间文件目录推荐助手。"
+            "只能从已有目录候选中为每个文件选择最合适的目录；"
+            "不能创造新目录；没有合适目录时推荐根目录，folder_id 使用 null；"
+            "每个文件都必须返回结果；只输出 JSON。"
+        )
+        user_prompt = (
+            "已有目录候选：\n"
+            f"{json.dumps(folder_candidates, ensure_ascii=False)}\n\n"
+            "待推荐文件：\n"
+            f"{json.dumps([file.model_dump() for file in files], ensure_ascii=False)}\n\n"
+            "输出格式：\n"
+            '{"items":[{"client_file_id":"local-1","recommended_folder_id":37,"reason":"简短原因"}]}'
+        )
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+    async def recommend_upload_folders(
+        self,
+        space_id: int,
+        files: List[UploadFolderRecommendFileReq],
+    ) -> UploadFolderRecommendationResp:
+        await self._require_permission_id("knowledge_space", space_id, "upload_file")
+        if not files:
+            return UploadFolderRecommendationResp(items=[])
+
+        folders = await KnowledgeFileDao.aget_folders_by_space(space_id)
+        folders = await self._filter_recommendable_upload_folders(space_id, folders)
+        folder_map = {int(folder.id): folder for folder in folders if getattr(folder, "id", None) is not None}
+        if not folder_map:
+            return UploadFolderRecommendationResp(
+                items=[self._root_upload_folder_recommendation(file, "当前知识空间暂无目录，降级到根目录") for file in files]
+            )
+
+        folder_candidates = [
+            {
+                "folder_id": int(folder.id),
+                "folder_name": folder.file_name,
+                "folder_path": self._upload_folder_candidate_path(folder, folder_map),
+            }
+            for folder in folders
+            if getattr(folder, "id", None) is not None
+        ]
+
+        raw_items: Dict[str, Dict] = {}
+        try:
+            workbench_llm = await LLMService.get_workbench_llm()
+            model_id = self._resolve_upload_recommend_model_id(workbench_llm)
+            if not model_id:
+                raise RuntimeError("workbench chat model is not configured")
+            llm = await LLMService.get_bisheng_llm(
+                model_id=model_id,
+                app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                app_name="shougang_upload_folder_recommend",
+                app_type=ApplicationTypeEnum.DAILY_CHAT,
+                user_id=self.login_user.user_id,
+            )
+            response = await llm.ainvoke(self._build_upload_folder_recommend_messages(files, folder_candidates))
+            payload = json.loads(self._extract_llm_json_text(getattr(response, "content", "") or ""))
+            raw_items = {
+                str(item.get("client_file_id")): item
+                for item in payload.get("items", [])
+                if isinstance(item, dict) and item.get("client_file_id") is not None
+            }
+        except Exception as exc:
+            logger.warning(
+                "upload folder recommendation fallback to root: space_id={} user_id={} error={}",
+                space_id,
+                self.login_user.user_id,
+                exc,
+            )
+            return UploadFolderRecommendationResp(
+                items=[self._root_upload_folder_recommendation(file, "AI 推荐目录失败，降级到根目录") for file in files]
+            )
+
+        items: List[UploadFolderRecommendationItemResp] = []
+        for file in files:
+            raw_item = raw_items.get(file.client_file_id) or {}
+            raw_folder_id = raw_item.get("recommended_folder_id")
+            try:
+                recommended_folder_id = int(raw_folder_id) if raw_folder_id is not None else None
+            except (TypeError, ValueError):
+                recommended_folder_id = None
+            reason = str(raw_item.get("reason") or "").strip()
+            if recommended_folder_id is None:
+                items.append(self._root_upload_folder_recommendation(file, reason or "未匹配到已有目录，降级到根目录"))
+                continue
+            folder = folder_map.get(recommended_folder_id)
+            if not folder:
+                items.append(self._root_upload_folder_recommendation(file, "AI 返回目录不存在，降级到根目录"))
+                continue
+            items.append(UploadFolderRecommendationItemResp(
+                client_file_id=file.client_file_id,
+                file_name=file.file_name,
+                recommended_folder_id=recommended_folder_id,
+                recommended_folder_name=folder.file_name,
+                recommended_folder_path=self._upload_folder_candidate_path(folder, folder_map),
+                reason=reason,
+            ))
+        return UploadFolderRecommendationResp(items=items)
+
+    async def list_my_uploaded_files(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        space_id: Optional[int] = None,
+        status: Optional[int] = None,
+        keyword: Optional[str] = None,
+    ) -> PageData[ShougangPortalUploadedFileResp]:
+        files, total = await KnowledgeFileDao.alist_user_uploaded_files(
+            user_id=self.login_user.user_id,
+            page=page,
+            page_size=page_size,
+            space_id=space_id,
+            status=status,
+            keyword=keyword,
+        )
+        if not files:
+            return PageData(data=[], total=total)
+
+        space_ids = sorted({int(file.knowledge_id) for file in files if file.knowledge_id})
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids) if space_ids else []
+        space_name_map = {int(space.id): space.name for space in spaces if getattr(space, "id", None) is not None}
+        space_level_map = {}
+        for space in spaces:
+            if getattr(space, "id", None) is None:
+                continue
+            space_id = int(space.id)
+            space_level = getattr(space, "space_level", None)
+            if space_level is None:
+                space_level = await self._get_space_level(space_id)
+            space_level_map[space_id] = space_level
+
+        folder_ids: set[int] = set()
+        for file in files:
+            folder_ids.update(self._folder_ids_from_level_path(file.file_level_path))
+        folder_records = await KnowledgeFileDao.aget_file_by_ids(list(folder_ids)) if folder_ids else []
+        folder_map = {int(folder.id): folder for folder in folder_records if getattr(folder, "id", None) is not None}
+
+        data = [
+            ShougangPortalUploadedFileResp(
+                id=int(file.id),
+                knowledge_id=int(file.knowledge_id),
+                knowledge_name=space_name_map.get(int(file.knowledge_id), ""),
+                space_level=space_level_map.get(int(file.knowledge_id)),
+                file_name=file.file_name,
+                file_level_path=file.file_level_path or "",
+                parent_id=self._parent_folder_id_from_level_path(file.file_level_path),
+                folder_path_name=self._folder_path_name_from_map(file.file_level_path, folder_map),
+                status=file.status,
+                file_encoding=file.file_encoding,
+                tags=getattr(file, "tags", []) or [],
+                abstract=file.abstract or "",
+                create_time=self._format_datetime(file.create_time),
+                update_time=self._format_datetime(file.update_time),
+            )
+            for file in files
+        ]
+        return PageData(data=data, total=total)
+
+    @classmethod
+    def _parent_tuple_ref_from_level_path(
+        cls,
+        file_level_path: Optional[str],
+        space_id: int,
+    ) -> tuple[str, int]:
+        parent_folder_id = cls._parent_folder_id_from_level_path(file_level_path)
+        if parent_folder_id is not None:
+            return "folder", parent_folder_id
+        return "knowledge_space", space_id
+
+    async def _replace_resource_parent_tuple(
+        self,
+        *,
+        object_type: str,
+        object_id: int,
+        old_parent_type: str,
+        old_parent_id: int,
+        new_parent_type: str,
+        new_parent_id: int,
+    ) -> None:
+        if old_parent_type == new_parent_type and old_parent_id == new_parent_id:
+            return
+        await PermissionService.batch_write_tuples(
+            [
+                TupleOperation(
+                    action="delete",
+                    user=f"{old_parent_type}:{old_parent_id}",
+                    relation="parent",
+                    object=f"{object_type}:{object_id}",
+                ),
+                TupleOperation(
+                    action="write",
+                    user=f"{new_parent_type}:{new_parent_id}",
+                    relation="parent",
+                    object=f"{object_type}:{object_id}",
+                ),
+            ],
+            crash_safe=True,
+            raise_on_failure=True,
+            stop_on_failure=True,
+        )
+
+    async def _sync_document_folder_for_file(self, file_id: int, file_level_path: str, level: int) -> None:
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(KnowledgeDocumentVersion.document_id).where(
+                    KnowledgeDocumentVersion.knowledge_file_id == file_id,
+                )
+            )
+            document_id = result.first()
+            if not document_id:
+                return
+            await session.exec(
+                update(KnowledgeDocument)
+                .where(KnowledgeDocument.id == int(document_id))
+                .values(file_level_path=file_level_path, level=level)
+            )
+            await session.commit()
+
+    async def move_file_folder(
+        self,
+        space_id: int,
+        file_id: int,
+        target_folder_id: Optional[int],
+    ) -> KnowledgeSpaceFileResponse:
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
+        file_record = self._ensure_space_file(file_record, space_id)
+        await self._require_permission_id("knowledge_file", file_id, "rename_file", space_id=space_id)
+
+        old_file_level_path = file_record.file_level_path or ""
+        old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(old_file_level_path, space_id)
+        if target_folder_id is None:
+            await self._require_permission_id("knowledge_space", space_id, "upload_file")
+            next_file_level_path = ""
+            next_level = 0
+            new_parent_type = "knowledge_space"
+            new_parent_id = space_id
+        else:
+            target_folder = await KnowledgeFileDao.query_by_id(target_folder_id)
+            target_folder = self._ensure_space_folder(target_folder, space_id)
+            await self._require_permission_id("folder", target_folder_id, "upload_file", space_id=space_id)
+            next_file_level_path = f"{target_folder.file_level_path or ''}/{target_folder_id}"
+            next_level = (target_folder.level or 0) + 1
+            new_parent_type = "folder"
+            new_parent_id = target_folder_id
+
+        duplicate_count = await SpaceFileDao.count_file_by_name_in_path(
+            space_id,
+            file_record.file_name,
+            next_file_level_path,
+            exclude_id=file_id,
+        )
+        if duplicate_count > 0:
+            raise SpaceFileNameDuplicateError()
+
+        file_record.file_level_path = next_file_level_path
+        file_record.level = next_level
+        file_record.updater_id = self.login_user.user_id
+        file_record.updater_name = self.login_user.user_name
+        updated_file = await KnowledgeFileDao.async_update(file_record)
+        await self._replace_resource_parent_tuple(
+            object_type="knowledge_file",
+            object_id=file_id,
+            old_parent_type=old_parent_type,
+            old_parent_id=old_parent_id,
+            new_parent_type=new_parent_type,
+            new_parent_id=new_parent_id,
+        )
+        await self._sync_document_folder_for_file(file_id, next_file_level_path, next_level)
+        await self.update_folder_update_time(old_file_level_path)
+        if next_file_level_path != old_file_level_path:
+            await self.update_folder_update_time(next_file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        return KnowledgeSpaceFileResponse(**updated_file.model_dump())
 
     # ──────────────────────────── Files ───────────────────────────────────────
 

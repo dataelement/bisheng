@@ -5,9 +5,12 @@ import {
     getSimilarCandidatesApi,
     linkAsNewVersionApi,
     listKnowledgeFolders,
+    recommendUploadFoldersApi,
     retryDuplicateFilesApi,
     uploadFileToServerApi,
     type KnowledgeSpace,
+    type KnowledgeFile,
+    type UploadFolderRecommendationItem,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
@@ -24,6 +27,7 @@ import type {
     PortalFileTreeNode,
     PortalUploadFileItem,
     PortalUploadFolderNode,
+    PortalUploadFolderSelection,
     PortalUploadReviewRow,
     PortalUploadStep,
 } from "../types";
@@ -48,6 +52,7 @@ interface UsePortalUploadDialogParams {
     statusFilterNumbers: number[];
     fileCategoryOptions?: PortalFileCategoryOption[];
     reloadFiles: () => Promise<void>;
+    onUploaded?: () => void;
     showToast: (toast: { message: string; severity: NotificationSeverity }) => void;
 }
 
@@ -56,12 +61,10 @@ export function usePortalUploadDialog({
     setActiveSpace,
     uploadTargetSpace,
     canUploadInPortal,
-    currentFolderId,
-    currentFolderNode,
-    currentPath,
     statusFilterNumbers,
     fileCategoryOptions = DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS,
     reloadFiles,
+    onUploaded,
     showToast,
 }: UsePortalUploadDialogParams) {
     const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -72,12 +75,14 @@ export function usePortalUploadDialog({
     const [uploadLocalFolderName, setUploadLocalFolderName] = useState<string | null>(null);
     const [uploadFolderId, setUploadFolderId] = useState<string | null>(null);
     const [uploadFolderName, setUploadFolderName] = useState("根目录");
+    const [uploadFolderSelection, setUploadFolderSelection] = useState<PortalUploadFolderSelection>({ mode: "ai" });
     const [uploadFolderNodes, setUploadFolderNodes] = useState<PortalUploadFolderNode[]>([]);
     const [uploadFolderLoading, setUploadFolderLoading] = useState(false);
     const [uploadSubmitting, setUploadSubmitting] = useState(false);
     const [uploadImporting, setUploadImporting] = useState(false);
     const [uploadReviewRows, setUploadReviewRows] = useState<PortalUploadReviewRow[]>([]);
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
+    const [duplicateFileCategoryCode, setDuplicateFileCategoryCode] = useState<string | undefined>();
     const [fileCategoryCode, setFileCategoryCode] = useState("");
 
     const uploadFolderOptions = useMemo(
@@ -115,12 +120,14 @@ export function usePortalUploadDialog({
         setUploadLocalFolderName(null);
         setUploadFolderId(null);
         setUploadFolderName("根目录");
+        setUploadFolderSelection({ mode: "ai" });
         setUploadFolderNodes([]);
         setUploadFolderLoading(false);
         setUploadSubmitting(false);
         setUploadImporting(false);
         setUploadReviewRows([]);
         setDuplicateFiles([]);
+        setDuplicateFileCategoryCode(undefined);
         setFileCategoryCode("");
         if (uploadInputRef.current) {
             uploadInputRef.current.value = "";
@@ -135,19 +142,18 @@ export function usePortalUploadDialog({
         if (!activeSpace) {
             setActiveSpace(uploadTargetSpace);
         }
-        const currentFolderName = currentFolderId
-            ? currentPath[currentPath.length - 1]?.name || currentFolderNode?.file.name || "根目录"
-            : "根目录";
         setUploadStep("select");
         setUploadFiles([]);
         setUploadLocalFolderName(null);
         setUploadReviewRows([]);
         setDuplicateFiles([]);
+        setDuplicateFileCategoryCode(undefined);
         setFileCategoryCode("");
-        setUploadFolderId(currentFolderId ?? null);
-        setUploadFolderName(currentFolderName);
+        setUploadFolderId(null);
+        setUploadFolderName("根目录");
+        setUploadFolderSelection({ mode: "ai" });
         setUploadDialogOpen(true);
-    }, [activeSpace, canUploadInPortal, currentFolderId, currentFolderNode?.file.name, currentPath, setActiveSpace, uploadTargetSpace]);
+    }, [activeSpace, canUploadInPortal, setActiveSpace, uploadTargetSpace]);
 
     useEffect(() => {
         if (!fileCategoryCode) return;
@@ -261,6 +267,13 @@ export function usePortalUploadDialog({
     const handleSelectUploadFolder = useCallback((folderId: string | null, folderName: string) => {
         setUploadFolderId(folderId);
         setUploadFolderName(folderName);
+        setUploadFolderSelection({ mode: "manual", folderId, folderName });
+    }, []);
+
+    const handleUseAiUploadFolder = useCallback(() => {
+        setUploadFolderId(null);
+        setUploadFolderName("根目录");
+        setUploadFolderSelection({ mode: "ai" });
     }, []);
 
     const handleSelectFileCategory = useCallback((code: string) => {
@@ -345,6 +358,96 @@ export function usePortalUploadDialog({
         return registeredFiles.filter((file) => !duplicateIds.has(String(file.id)));
     }, []);
 
+    const finishUploadedFiles = useCallback(async (registeredFiles: KnowledgeFile[]) => {
+        const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
+        const hasDuplicateFiles = visibleRegisteredFiles.length !== registeredFiles.length;
+        if (hasDuplicateFiles) {
+            setDuplicateFileCategoryCode(fileCategoryCode || undefined);
+            if (visibleRegisteredFiles.length) {
+                await reloadFiles();
+            }
+            setUploadDialogOpen(false);
+            setUploadStep("select");
+            setUploadFiles([]);
+            setUploadLocalFolderName(null);
+            setUploadFolderId(null);
+            setUploadFolderName("根目录");
+            setUploadFolderSelection({ mode: "ai" });
+            setUploadReviewRows([]);
+            setFileCategoryCode("");
+            return;
+        }
+        setDuplicateFileCategoryCode(undefined);
+        await reloadFiles();
+        setUploadDialogOpen(false);
+        setUploadStep("select");
+        setUploadFiles([]);
+        setUploadLocalFolderName(null);
+        setUploadFolderId(null);
+        setUploadFolderName("根目录");
+        setUploadFolderSelection({ mode: "ai" });
+        setUploadReviewRows([]);
+        setFileCategoryCode("");
+        onUploaded?.();
+        showToast({ message: "上传成功", severity: NotificationSeverity.SUCCESS });
+    }, [fileCategoryCode, getVisibleRegisteredFiles, onUploaded, reloadFiles, showToast]);
+
+    const resolveManualParentId = useCallback(() => {
+        if (uploadFolderSelection.mode !== "manual") return null;
+        const parsed = uploadFolderSelection.folderId === null ? null : Number(uploadFolderSelection.folderId);
+        return parsed !== null && Number.isFinite(parsed) ? parsed : null;
+    }, [uploadFolderSelection]);
+
+    const recommendUploadTargetMap = useCallback(async (
+        items: Array<{ id: string; name: string }>,
+    ): Promise<Map<string, UploadFolderRecommendationItem>> => {
+        if (!activeSpace || uploadFolderSelection.mode === "manual") {
+            return new Map();
+        }
+        const result = await recommendUploadFoldersApi(activeSpace.id, {
+            files: items.map((item) => ({
+                client_file_id: item.id,
+                file_name: item.name,
+            })),
+        });
+        return new Map(result.items.map((item) => [item.clientFileId, item]));
+    }, [activeSpace, uploadFolderSelection.mode]);
+
+    const recommendationParentId = useCallback((recommendation?: UploadFolderRecommendationItem) => {
+        if (!recommendation?.recommendedFolderId) return null;
+        const parsed = Number(recommendation.recommendedFolderId);
+        return Number.isFinite(parsed) ? parsed : null;
+    }, []);
+
+    const registerUploadedFiles = useCallback(async (
+        uploadItems: PortalUploadFileItem[],
+        filePaths: string[],
+        recommendations: Map<string, UploadFolderRecommendationItem>,
+        fileCategoryPayload: { file_category_code?: string },
+    ) => {
+        const groups = new Map<string, { parentId: number | null; filePaths: string[] }>();
+        uploadItems.forEach((item, index) => {
+            const parentId = uploadFolderSelection.mode === "manual"
+                ? resolveManualParentId()
+                : recommendationParentId(recommendations.get(item.id));
+            const key = parentId === null ? "root" : String(parentId);
+            const group = groups.get(key) ?? { parentId, filePaths: [] };
+            group.filePaths.push(filePaths[index]);
+            groups.set(key, group);
+        });
+
+        const registeredFiles: KnowledgeFile[] = [];
+        for (const group of groups.values()) {
+            const files = await addFilesApi(activeSpace!.id, {
+                file_path: group.filePaths,
+                parent_id: group.parentId,
+                ...fileCategoryPayload,
+            });
+            registeredFiles.push(...files);
+        }
+        return registeredFiles;
+    }, [activeSpace, recommendationParentId, resolveManualParentId, uploadFolderSelection.mode]);
+
     const handleUploadNext = useCallback(async () => {
         if (uploadReviewRows.length) {
             setUploadStep("review");
@@ -359,12 +462,13 @@ export function usePortalUploadDialog({
         setUploadSubmitting(true);
         try {
             if (uploadLocalFolderName) {
-                const targetParentId = uploadFolderId === null ? null : Number(uploadFolderId);
-                const normalizedParentId = uploadFolderId === null
-                    ? null
-                    : Number.isFinite(targetParentId)
-                        ? targetParentId
-                        : uploadFolderId;
+                const recommendations = await recommendUploadTargetMap([
+                    { id: `folder:${uploadLocalFolderName}`, name: uploadLocalFolderName },
+                ]);
+                const recommendedParentId = recommendationParentId(recommendations.get(`folder:${uploadLocalFolderName}`));
+                const normalizedParentId = uploadFolderSelection.mode === "manual"
+                    ? resolveManualParentId()
+                    : recommendedParentId;
                 const { items } = await listKnowledgeFolders({
                     space_id: activeSpace.id,
                     parent_id: normalizedParentId,
@@ -379,7 +483,7 @@ export function usePortalUploadDialog({
 
                 const createdFolder = await createFolderApi(activeSpace.id, {
                     name: uploadLocalFolderName,
-                    parent_id: uploadFolderId,
+                    parent_id: normalizedParentId === null ? null : String(normalizedParentId),
                 });
                 const createdFolderId = Number(createdFolder.id);
                 if (!Number.isFinite(createdFolderId)) {
@@ -395,81 +499,44 @@ export function usePortalUploadDialog({
                     parent_id: createdFolderId,
                     ...fileCategoryPayload,
                 });
-                const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
-                const createdFolderOptionId = String(createdFolder.id);
-                const rows: PortalUploadReviewRow[] = visibleRegisteredFiles.map((file) => ({
-                    file,
-                    selected: true,
-                    recommendedFolderId: createdFolderOptionId,
-                    recommendedFolderName: createdFolder.name,
-                    storageFolderId: createdFolderOptionId,
-                    storageFolderName: createdFolder.name,
-                    candidates: [],
-                    candidatesLoading: true,
-                    candidateError: false,
-                    selectedTargetDocumentId: null,
-                }));
-                if (!rows.length) {
-                    return;
-                }
-                setUploadReviewRows(rows);
-                setUploadStep("review");
-                loadUploadReviewCandidates(rows);
+                await finishUploadedFiles(registeredFiles);
                 return;
             }
 
+            const recommendations = await recommendUploadTargetMap(uploadFiles.map((item) => ({
+                id: item.id,
+                name: item.file.name,
+            })));
             const uploadResults = await Promise.all(
                 uploadFiles.map((item) => uploadFileToServerApi(activeSpace.id, item.file)),
             );
             const filePaths = uploadResults.map((item) => item.file_path);
-            const parentId = uploadFolderId === null ? null : Number(uploadFolderId);
-            const registeredFiles = await addFilesApi(activeSpace.id, {
-                file_path: filePaths,
-                parent_id: parentId !== null && Number.isFinite(parentId) ? parentId : null,
-                ...fileCategoryPayload,
-            });
-            const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
-            const rows: PortalUploadReviewRow[] = visibleRegisteredFiles.map((file) => ({
-                file,
-                selected: true,
-                recommendedFolderId: uploadFolderId,
-                recommendedFolderName: uploadFolderName,
-                storageFolderId: uploadFolderId,
-                storageFolderName: uploadFolderName,
-                candidates: [],
-                candidatesLoading: true,
-                candidateError: false,
-                selectedTargetDocumentId: null,
-            }));
-            if (!rows.length) {
-                return;
-            }
-            setUploadReviewRows(rows);
-            setUploadStep("review");
-            loadUploadReviewCandidates(rows);
+            const registeredFiles = await registerUploadedFiles(uploadFiles, filePaths, recommendations, fileCategoryPayload);
+            await finishUploadedFiles(registeredFiles);
         } catch (error) {
             const message = error instanceof Error && error.message ? error.message : "上传失败";
             showToast({ message, severity: NotificationSeverity.ERROR });
         } finally {
             setUploadSubmitting(false);
         }
-    }, [activeSpace, fileCategoryCode, getVisibleRegisteredFiles, loadUploadReviewCandidates, showToast, uploadFiles, uploadFolderId, uploadFolderName, uploadLocalFolderName, uploadReviewRows.length]);
+    }, [activeSpace, fileCategoryCode, finishUploadedFiles, recommendationParentId, recommendUploadTargetMap, registerUploadedFiles, resolveManualParentId, showToast, uploadFiles, uploadFolderSelection.mode, uploadLocalFolderName, uploadReviewRows.length]);
 
     const handleDuplicateSkip = useCallback(() => {
         setDuplicateFiles([]);
+        setDuplicateFileCategoryCode(undefined);
     }, []);
 
     const handleDuplicateOverwrite = useCallback(async () => {
         if (!activeSpace || duplicateFiles.length === 0) return;
         const fileObjs = duplicateFiles.map((file) => file.rawObj).filter(Boolean);
         try {
-            await retryDuplicateFilesApi(activeSpace.id, fileObjs, fileCategoryCode || undefined);
+            await retryDuplicateFilesApi(activeSpace.id, fileObjs, duplicateFileCategoryCode);
             await reloadFiles();
             resetUploadDialog();
         } catch {
             showToast({ message: "文件覆盖失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace, duplicateFiles, fileCategoryCode, reloadFiles, resetUploadDialog, showToast]);
+    }, [activeSpace, duplicateFileCategoryCode, duplicateFiles, reloadFiles, resetUploadDialog, showToast]);
 
     const handleStartUploadImport = useCallback(async () => {
         const rows = uploadReviewRows.filter((row) => row.selected);
@@ -507,6 +574,7 @@ export function usePortalUploadDialog({
         uploadLocalFolderName,
         uploadFolderId,
         uploadFolderName,
+        uploadFolderSelection,
         uploadFolderNodes,
         uploadFolderLoading,
         uploadSubmitting,
@@ -525,6 +593,7 @@ export function usePortalUploadDialog({
         handleAddUploadFolder,
         handleRemoveUploadFile,
         handleSelectUploadFolder,
+        handleUseAiUploadFolder,
         handleSelectFileCategory,
         handleToggleUploadFolder,
         handleUploadNext,

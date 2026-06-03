@@ -56,6 +56,10 @@ export interface PortalUploadFolderNode {
     loading: boolean;
 }
 
+export type PortalUploadFolderSelection =
+    | { mode: "ai" }
+    | { mode: "manual"; folderId: string | null; folderName: string };
+
 export interface PortalUploadReviewRow {
     file: KnowledgeFile;
     selected: boolean;

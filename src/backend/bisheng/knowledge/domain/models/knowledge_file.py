@@ -420,6 +420,19 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return (await session.exec(stat)).all()
 
     @classmethod
+    async def aget_folders_by_space(cls, knowledge_id: int) -> List[KnowledgeFile]:
+        statement = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.knowledge_id == knowledge_id,
+                KnowledgeFile.file_type == FileType.DIR.value,
+            )
+            .order_by(col(KnowledgeFile.level).asc(), col(KnowledgeFile.id).asc())
+        )
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     def _build_file_filters_statement(cls, statement, file_name: str = None, status: List[int] = None,
                                       file_ids: List[int] = None, file_level_path: str = None,
                                       extra_file_ids: List[int] = None,
@@ -518,6 +531,47 @@ class KnowledgeFileDao(KnowledgeFileBase):
             statement = statement.where(func.lower(KnowledgeFile.file_name).like(f'%.{normalized_ext}'))
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
+
+    @classmethod
+    async def alist_user_uploaded_files(
+            cls,
+            *,
+            user_id: int,
+            page: int = 1,
+            page_size: int = 20,
+            space_id: Optional[int] = None,
+            status: Optional[int] = None,
+            keyword: Optional[str] = None,
+            file_source: str = FileSource.SPACE_UPLOAD.value,
+    ) -> tuple[List[KnowledgeFile], int]:
+        safe_page = max(int(page or 1), 1)
+        safe_page_size = min(max(int(page_size or 20), 1), 100)
+        filters = [
+            KnowledgeFile.user_id == user_id,
+            KnowledgeFile.file_type == FileType.FILE.value,
+        ]
+        if file_source:
+            filters.append(KnowledgeFile.file_source == file_source)
+        if space_id is not None:
+            filters.append(KnowledgeFile.knowledge_id == space_id)
+        if status is not None:
+            filters.append(KnowledgeFile.status == status)
+        cleaned_keyword = (keyword or '').strip()
+        if cleaned_keyword:
+            filters.append(KnowledgeFile.file_name.like(f'%{cleaned_keyword}%'))
+
+        count_statement = select(func.count()).where(*filters)
+        statement = (
+            select(KnowledgeFile)
+            .where(*filters)
+            .order_by(col(KnowledgeFile.create_time).desc(), col(KnowledgeFile.id).desc())
+            .offset((safe_page - 1) * safe_page_size)
+            .limit(safe_page_size)
+        )
+        async with get_async_db_session() as session:
+            total = await session.scalar(count_statement) or 0
+            rows = (await session.exec(statement)).all()
+        return rows, int(total)
 
     @classmethod
     async def acount_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,

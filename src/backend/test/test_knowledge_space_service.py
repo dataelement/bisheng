@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import importlib
+import json
 import sys
 from datetime import datetime, timedelta
 from types import ModuleType
@@ -42,6 +43,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
     ShougangPortalSpaceInfoItemResp,
+    UploadFolderRecommendFileReq,
     SpaceSubscriptionStatusEnum,
 )
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
@@ -653,13 +655,12 @@ async def test_create_team_space_writes_user_scope_without_default_group_grant()
 
 
 @pytest.mark.asyncio
-async def test_create_department_space_without_department_writes_user_scope_without_default_grant():
+async def test_validate_department_space_create_requires_department_id():
     KnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(user_id=7)
     login_user.is_admin = lambda: True
     svc = KnowledgeSpaceService(request=SimpleNamespace(), login_user=login_user)
     svc._ensure_space_name_unique_in_scope = AsyncMock(return_value=None)
-    created_space = _make_space(space_id=11, user_id=7)
 
     with patch(
         'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user',
@@ -669,39 +670,12 @@ async def test_create_department_space_without_department_writes_user_scope_with
         'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
         new_callable=AsyncMock,
         return_value=SimpleNamespace(embedding_model=SimpleNamespace(id='embedding-1')),
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.create_knowledge_base',
-        return_value=created_space,
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_insert_member',
-        new_callable=AsyncMock,
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
-        new_callable=AsyncMock,
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceScopeDao.acreate',
-        new_callable=AsyncMock,
-    ) as mock_create_scope, patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.authorize',
-        new_callable=AsyncMock,
-    ) as mock_authorize, patch(
-        'bisheng.tenant.domain.services.resource_share_service.ResourceShareService.share_on_create',
-        new_callable=AsyncMock,
-    ), patch(
-        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeAuditTelemetryService.audit_create_knowledge_space',
-        new_callable=AsyncMock,
     ):
-        result = await svc.create_knowledge_space(
-            name='业务域空间',
-            space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
-        )
-
-    assert result.id == 11
-    mock_create_scope.assert_awaited_once()
-    assert mock_create_scope.await_args.kwargs['level'] == KnowledgeSpaceLevelEnum.DEPARTMENT
-    assert mock_create_scope.await_args.kwargs['owner_type'] == KnowledgeSpaceOwnerTypeEnum.USER
-    assert mock_create_scope.await_args.kwargs['owner_id'] == 7
-    mock_authorize.assert_not_awaited()
+        with pytest.raises(SpaceInvalidScopeOwnerError):
+            await svc.validate_knowledge_space_create(
+                name='业务域空间',
+                space_level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            )
 
 
 @pytest.mark.asyncio
@@ -773,6 +747,8 @@ def _make_file(
         file_name: str = 'doc.txt',
         file_level_path: str = '',
         level: int = 0,
+        user_id: int = 7,
+        status: int = KnowledgeFileStatus.SUCCESS.value,
 ) -> KnowledgeFile:
     return KnowledgeFile(
         id=file_id,
@@ -782,7 +758,425 @@ def _make_file(
         file_level_path=file_level_path,
         level=level,
         object_name='minio/object',
+        user_id=user_id,
+        user_name='tester',
+        file_source='space_upload',
+        status=status,
     )
+
+
+@pytest.mark.asyncio
+async def test_recommend_upload_folders_uses_existing_space_folders(service):
+    parent_folder = _make_file(
+        file_id=11,
+        knowledge_id=1,
+        file_type=FileType.DIR.value,
+        file_name='技术文档',
+        file_level_path='',
+        level=0,
+    )
+    folder = _make_file(
+        file_id=37,
+        knowledge_id=1,
+        file_type=FileType.DIR.value,
+        file_name='能源管理',
+        file_level_path='/11',
+        level=1,
+    )
+
+    class _FakeLLM:
+        async def ainvoke(self, messages):
+            payload = json.dumps({
+                'items': [
+                    {
+                        'client_file_id': 'local-1',
+                        'recommended_folder_id': 37,
+                        'reason': '命中文件名关键词',
+                    },
+                ],
+            })
+            self.messages = messages
+            return SimpleNamespace(content=payload)
+
+    fake_llm = _FakeLLM()
+
+    with patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ) as mock_require_permission_id, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_folders_by_space',
+        new_callable=AsyncMock,
+        return_value=[parent_folder, folder],
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(chat_title_llm=SimpleNamespace(id=8)),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_llm',
+        new_callable=AsyncMock,
+        return_value=fake_llm,
+        create=True,
+    ):
+        result = await service.recommend_upload_folders(
+            1,
+            [UploadFolderRecommendFileReq(client_file_id='local-1', file_name='能源管理标准.pdf')],
+        )
+
+    mock_require_permission_id.assert_any_await('knowledge_space', 1, 'upload_file')
+    mock_require_permission_id.assert_any_await('folder', 11, 'view_folder', space_id=1)
+    mock_require_permission_id.assert_any_await('folder', 11, 'upload_file', space_id=1)
+    mock_require_permission_id.assert_any_await('folder', 37, 'view_folder', space_id=1)
+    mock_require_permission_id.assert_any_await('folder', 37, 'upload_file', space_id=1)
+    assert result.items[0].client_file_id == 'local-1'
+    assert result.items[0].recommended_folder_id == 37
+    assert result.items[0].recommended_folder_name == '能源管理'
+    assert result.items[0].recommended_folder_path == '技术文档/能源管理'
+    assert '能源管理标准.pdf' in fake_llm.messages[-1]['content']
+
+
+@pytest.mark.asyncio
+async def test_recommend_upload_folders_falls_back_to_root_when_llm_returns_unknown_folder(service):
+    folder = _make_file(
+        file_id=37,
+        knowledge_id=1,
+        file_type=FileType.DIR.value,
+        file_name='能源管理',
+    )
+
+    class _FakeLLM:
+        async def ainvoke(self, _messages):
+            return SimpleNamespace(content=json.dumps({
+                'items': [
+                    {
+                        'client_file_id': 'local-1',
+                        'recommended_folder_id': 999,
+                        'reason': '不存在的目录',
+                    },
+                ],
+            }))
+
+    with patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_folders_by_space',
+        new_callable=AsyncMock,
+        return_value=[folder],
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(chat_title_llm=SimpleNamespace(id=8)),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_llm',
+        new_callable=AsyncMock,
+        return_value=_FakeLLM(),
+        create=True,
+    ):
+        result = await service.recommend_upload_folders(
+            1,
+            [UploadFolderRecommendFileReq(client_file_id='local-1', file_name='未知文件.pdf')],
+        )
+
+    assert result.items[0].recommended_folder_id is None
+    assert result.items[0].recommended_folder_name == '根目录'
+    assert result.items[0].recommended_folder_path == '根目录'
+
+
+@pytest.mark.asyncio
+async def test_recommend_upload_folders_excludes_folders_without_upload_permission(service):
+    allowed_folder = _make_file(
+        file_id=37,
+        knowledge_id=1,
+        file_type=FileType.DIR.value,
+        file_name='能源管理',
+    )
+    restricted_folder = _make_file(
+        file_id=38,
+        knowledge_id=1,
+        file_type=FileType.DIR.value,
+        file_name='保密目录',
+    )
+
+    class _FakeLLM:
+        async def ainvoke(self, messages):
+            self.messages = messages
+            return SimpleNamespace(content=json.dumps({
+                'items': [
+                    {
+                        'client_file_id': 'local-1',
+                        'recommended_folder_id': 37,
+                        'reason': '命中可上传目录',
+                    },
+                ],
+            }))
+
+    fake_llm = _FakeLLM()
+
+    async def fake_require_permission(object_type, object_id, permission_id, **_kwargs):
+        if object_type == 'folder' and object_id == 38:
+            raise SpacePermissionDeniedError()
+        return None
+
+    with patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+        side_effect=fake_require_permission,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_folders_by_space',
+        new_callable=AsyncMock,
+        return_value=[allowed_folder, restricted_folder],
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_workbench_llm',
+        new_callable=AsyncMock,
+        return_value=SimpleNamespace(chat_title_llm=SimpleNamespace(id=8)),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_llm',
+        new_callable=AsyncMock,
+        return_value=fake_llm,
+        create=True,
+    ):
+        result = await service.recommend_upload_folders(
+            1,
+            [UploadFolderRecommendFileReq(client_file_id='local-1', file_name='能源管理标准.pdf')],
+        )
+
+    assert result.items[0].recommended_folder_id == 37
+    prompt = fake_llm.messages[-1]['content']
+    assert '能源管理' in prompt
+    assert '保密目录' not in prompt
+
+
+@pytest.mark.asyncio
+async def test_list_my_uploaded_files_queries_uploader_records_without_read_permission(service):
+    source_file = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name='能源管理标准.pdf',
+        file_level_path='/37/38',
+        level=2,
+        user_id=service.login_user.user_id,
+        status=KnowledgeFileStatus.PROCESSING.value,
+    )
+    folders = [
+        _make_file(file_id=37, knowledge_id=10, file_type=FileType.DIR.value, file_name='技术文档'),
+        _make_file(file_id=38, knowledge_id=10, file_type=FileType.DIR.value, file_name='能源管理'),
+    ]
+    space = _make_space(space_id=10, space_level=KnowledgeSpaceLevelEnum.TEAM)
+    space.name = '设备知识库'
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.alist_user_uploaded_files',
+        new_callable=AsyncMock,
+        return_value=([source_file], 1),
+        create=True,
+    ) as mock_list, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+        new_callable=AsyncMock,
+        return_value=folders,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ) as mock_require_permission_id:
+        result = await service.list_my_uploaded_files(page=1, page_size=20)
+
+    mock_list.assert_awaited_once()
+    assert mock_list.await_args.kwargs['user_id'] == service.login_user.user_id
+    mock_require_permission_id.assert_not_awaited()
+    assert result.total == 1
+    assert result.data[0].id == 501
+    assert result.data[0].knowledge_name == '设备知识库'
+    assert result.data[0].space_level == KnowledgeSpaceLevelEnum.TEAM
+    assert result.data[0].folder_path_name == '技术文档/能源管理'
+    assert result.data[0].parent_id == 38
+
+
+@pytest.mark.asyncio
+async def test_list_my_uploaded_files_defaults_missing_space_level_to_personal(service):
+    source_file = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name='个人文档.pdf',
+        file_level_path='',
+        level=0,
+        user_id=service.login_user.user_id,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+    space = Knowledge(
+        id=10,
+        user_id=service.login_user.user_id,
+        name='个人知识空间',
+        type=KnowledgeTypeEnum.SPACE.value,
+        description='desc',
+        model='model-1',
+        state=KnowledgeState.PUBLISHED.value,
+        auth_type=AuthTypeEnum.PUBLIC,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.alist_user_uploaded_files',
+        new_callable=AsyncMock,
+        return_value=([source_file], 1),
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch.object(
+        service,
+        '_get_space_level',
+        new_callable=AsyncMock,
+        return_value=KnowledgeSpaceLevelEnum.PERSONAL,
+    ) as mock_get_space_level:
+        result = await service.list_my_uploaded_files(page=1, page_size=20)
+
+    mock_get_space_level.assert_awaited_once_with(10)
+    assert result.data[0].knowledge_name == '个人知识空间'
+    assert result.data[0].space_level == KnowledgeSpaceLevelEnum.PERSONAL
+
+
+@pytest.mark.asyncio
+async def test_move_file_folder_updates_file_and_document_folder(service):
+    file_record = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name='能源管理标准.pdf',
+        file_level_path='',
+        level=0,
+    )
+    target_folder = _make_file(
+        file_id=37,
+        knowledge_id=10,
+        file_type=FileType.DIR.value,
+        file_name='能源管理',
+        file_level_path='/11',
+        level=1,
+    )
+
+    async def fake_query_by_id(file_id):
+        return {501: file_record, 37: target_folder}.get(file_id)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        side_effect=fake_query_by_id,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ) as mock_require_permission_id, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_file_by_name_in_path',
+        new_callable=AsyncMock,
+        return_value=0,
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update',
+        new_callable=AsyncMock,
+        side_effect=lambda file: file,
+    ) as mock_update, patch.object(
+        service,
+        '_sync_document_folder_for_file',
+        new_callable=AsyncMock,
+    ) as mock_sync_document, patch.object(
+        service,
+        'update_folder_update_time',
+        new_callable=AsyncMock,
+    ) as mock_update_folder_time, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples',
+        new_callable=AsyncMock,
+    ):
+        result = await service.move_file_folder(10, 501, 37)
+
+    mock_require_permission_id.assert_any_await('knowledge_file', 501, 'rename_file', space_id=10)
+    mock_require_permission_id.assert_any_await('folder', 37, 'upload_file', space_id=10)
+    assert file_record.file_level_path == '/11/37'
+    assert file_record.level == 2
+    mock_update.assert_awaited_once_with(file_record)
+    mock_sync_document.assert_awaited_once_with(501, '/11/37', 2)
+    mock_update_folder_time.assert_any_await('')
+    mock_update_folder_time.assert_any_await('/11/37')
+    assert result.id == 501
+    assert result.file_level_path == '/11/37'
+
+
+@pytest.mark.asyncio
+async def test_move_file_folder_replaces_permission_parent_tuple(service):
+    file_record = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name='能源管理标准.pdf',
+        file_level_path='/11',
+        level=1,
+    )
+    target_folder = _make_file(
+        file_id=37,
+        knowledge_id=10,
+        file_type=FileType.DIR.value,
+        file_name='能源管理',
+        file_level_path='',
+        level=0,
+    )
+
+    async def fake_query_by_id(file_id):
+        return {501: file_record, 37: target_folder}.get(file_id)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id',
+        new_callable=AsyncMock,
+        side_effect=fake_query_by_id,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_file_by_name_in_path',
+        new_callable=AsyncMock,
+        return_value=0,
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update',
+        new_callable=AsyncMock,
+        side_effect=lambda file: file,
+    ), patch.object(
+        service,
+        '_sync_document_folder_for_file',
+        new_callable=AsyncMock,
+    ), patch.object(
+        service,
+        'update_folder_update_time',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples',
+        new_callable=AsyncMock,
+    ) as mock_write_tuples:
+        await service.move_file_folder(10, 501, 37)
+
+    mock_write_tuples.assert_awaited_once()
+    operations = mock_write_tuples.await_args.args[0]
+    assert [(op.action, op.user, op.relation, op.object) for op in operations] == [
+        ('delete', 'folder:11', 'parent', 'knowledge_file:501'),
+        ('write', 'folder:37', 'parent', 'knowledge_file:501'),
+    ]
 
 
 @pytest.mark.asyncio
