@@ -230,17 +230,30 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     severity: ok ? NotificationSeverity.SUCCESS : NotificationSeverity.INFO,
   });
 
-  const loadTasks = async (preferredId?: number | null) => {
+  const loadTasks = async (preferredId?: number | null, preferredInstanceId?: number | null) => {
     setLoadingList(true);
     try {
       const resp = await listMyApprovalTasksApi();
       setTaskItems(resp.data);
-      const allIds = new Set(resp.data.map((t) => getId(t, "task")));
-      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
-      const visibleItems = taskFilter === "pending_me"
+      // Prefer the explicit task id; otherwise resolve the task from the notification's
+      // instance id. Channel/space subscribe approval notifications only carry instance_id,
+      // so without this fallback the jump would land on the first task instead of the right one.
+      let resolvedTask: ApprovalTaskItem | null =
+        preferredId ? resp.data.find((t) => getId(t, "task") === preferredId) ?? null : null;
+      if (!resolvedTask && preferredInstanceId) {
+        const matches = resp.data.filter((t) => t.instance_id === preferredInstanceId);
+        resolvedTask = matches.find((t) => t.status === "pending") ?? matches[0] ?? null;
+      }
+      // Switch the sub-filter so the resolved task is actually visible in the left list.
+      let targetFilter = taskFilter;
+      if (resolvedTask) {
+        targetFilter = resolvedTask.status === "pending" ? "pending_me" : "processed";
+        if (targetFilter !== taskFilter) setTaskFilter(targetFilter);
+      }
+      const visibleItems = targetFilter === "pending_me"
         ? resp.data.filter((t) => t.status === "pending")
         : resp.data.filter((t) => t.status !== "pending");
-      const nextId = validPreferred ?? getId(visibleItems[0], "task");
+      const nextId = (resolvedTask ? getId(resolvedTask, "task") : null) ?? getId(visibleItems[0], "task");
       setSelectedTaskId(nextId);
       if (nextId) { setLoadingDetail(true); setTaskDetail(await getMyApprovalTaskDetailApi(nextId)); }
       else setTaskDetail(null);
@@ -284,7 +297,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   useEffect(() => {
     if (!open) return;
-    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? null);
+    if (activeTab === "my_tasks") void loadTasks(target?.taskId ?? null, target?.instanceId ?? null);
     else void loadRequests(target?.instanceId ?? null);
   }, [open, activeTab]);
 

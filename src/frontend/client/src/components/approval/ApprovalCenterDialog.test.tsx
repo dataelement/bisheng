@@ -3,7 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { ApprovalCenterDialog } from "./ApprovalCenterDialog";
 import {
   getApprovalInstanceDetailApi,
+  getMyApprovalTaskDetailApi,
   listMyApprovalRequestsApi,
+  listMyApprovalTasksApi,
 } from "~/api/approval";
 
 jest.mock("~/hooks/useLocalize", () => ({
@@ -69,5 +71,34 @@ describe("ApprovalCenterDialog", () => {
       expect(getApprovalInstanceDetailApi).toHaveBeenCalled();
     });
     expect(screen.queryByText("com_approval_action_resubmit")).toBeNull();
+  });
+
+  it("selects the my-task matching the target instance id when no task id is provided", async () => {
+    // Channel/space subscribe approval notifications only carry instance_id (no task_id);
+    // the dialog must resolve the correct task from instance_id instead of picking the first.
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({
+      data: [
+        { task_id: 901, instance_id: 500, status: "pending", business_name: "频道A" },
+        { task_id: 902, instance_id: 777, status: "pending", business_name: "频道B" },
+      ],
+      total: 2,
+    });
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue({
+      task_id: 902,
+      instance_id: 777,
+      status: "pending",
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_tasks", instanceId: 777 }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getMyApprovalTaskDetailApi).toHaveBeenCalledWith(902);
+    });
   });
 });
