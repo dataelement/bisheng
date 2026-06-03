@@ -108,6 +108,18 @@ export async function importMessagesToKnowledgeApi(
         '/api/v1/chat/messages/import-to-knowledge',
         body,
     )) as ApiResponse<ImportMessagesResult>;
+    // The shared interceptor resolves (does NOT reject) on business errors when
+    // the request opts out of both skip403Redirect and showError, so guard here:
+    // surface 12065/12066/12067/12068… as a thrown error carrying the backend
+    // message, otherwise the caller's try-block would falsely toast "success".
+    if (res.status_code !== 200) {
+        const err = new Error(
+            res.status_message || `import failed (${res.status_code})`,
+        ) as Error & { status_code?: number; status_message?: string };
+        err.status_code = res.status_code;
+        err.status_message = res.status_message;
+        throw err;
+    }
     return res.data;
 }
 

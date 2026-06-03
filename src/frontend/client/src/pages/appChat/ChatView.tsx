@@ -131,9 +131,11 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
                 });
                 setImportModalOpen(false);
                 exitSelectionMode();
-            } catch {
+            } catch (e: any) {
+                // Surface the backend business message (12065/12066/12067/...)
+                // instead of a generic failure, and never a false "success".
                 showToast({
-                    message: localize("workstation.messageExport.renderFailed"),
+                    message: e?.status_message || localize("workstation.messageExport.renderFailed"),
                     severity: NotificationSeverity.ERROR,
                 });
             }

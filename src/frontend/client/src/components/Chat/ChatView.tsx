@@ -208,10 +208,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
         });
         setImportModalOpen(false);
         exitSelectionMode();
-      } catch {
-        // Toast text is generic — error code-specific copy is wired in T020.
+      } catch (e: any) {
+        // Prefer the backend business message (e.g. 12065 知识空间不存在 /
+        // 12066 文件夹不存在 / 12067 暂无权限) so the user sees the real reason
+        // instead of a generic failure — and never a false "success".
         showToast({
-          message: t('workstation.messageExport.renderFailed'),
+          message: e?.status_message || t('workstation.messageExport.renderFailed'),
           severity: NotificationSeverity.ERROR,
         });
       }
