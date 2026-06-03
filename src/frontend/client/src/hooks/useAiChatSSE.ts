@@ -20,6 +20,7 @@ import { useEffect, useRef } from "react";
 import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
+import { translateApiErrorMessage } from "~/api/request";
 
 /**
  * Structured update emitted as agent SSE events stream in. Consumers merge
@@ -365,7 +366,11 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
         sse.addEventListener("error", (e: MessageEvent) => {
             try {
                 const data = JSON.parse(e.data);
-                onError(data?.text || data?.message || "Stream error");
+                // Resolve the SSE error envelope ({ status_code, status_message,
+                // data }) through the shared api_errors.<code> i18n logic, falling
+                // back to legacy plain-text shapes, then a generic message.
+                const resolved = translateApiErrorMessage(data);
+                onError(resolved || data?.text || data?.message || "Stream error");
             } catch {
                 onError("Connection error");
             }
