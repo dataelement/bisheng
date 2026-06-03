@@ -98,6 +98,39 @@ async def test_owner_grant_writes_permission_tuple_without_membership_sync():
 
 
 @pytest.mark.asyncio
+async def test_authorize_channel_dispatches_permission_notifications_after_sync():
+    service = _service(ChannelRelationEnum.OWNER)
+    request = ChannelAuthorizeRequest(grants=[
+        ChannelGrantItem(subject_type='user', subject_id=11, relation=ChannelRelationEnum.MANAGER),
+    ])
+    notify_context = object()
+
+    with patch(
+        'bisheng.channel.domain.services.channel_authorization_service.PermissionService.authorize',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.channel.domain.services.channel_authorization_service.'
+        'ResourcePermissionNotificationService.build_context',
+        new_callable=AsyncMock,
+        return_value=notify_context,
+    ) as mock_build_context, patch(
+        'bisheng.channel.domain.services.channel_authorization_service.'
+        'ResourcePermissionNotificationService.dispatch_after_authorize',
+        new_callable=AsyncMock,
+    ) as mock_dispatch:
+        await service.authorize_channel('channel-1', request, _User())
+
+    assert mock_build_context.await_args.kwargs['resource_type'] == 'channel'
+    assert mock_build_context.await_args.kwargs['resource_id'] == 'channel-1'
+    assert mock_build_context.await_args.kwargs['grants'][0].relation == 'manager'
+    assert mock_dispatch.await_args.kwargs == {
+        'context': notify_context,
+        'operator_user_id': _User.user_id,
+        'operator_user_name': getattr(_User, 'user_name', None),
+    }
+
+
+@pytest.mark.asyncio
 async def test_owner_cannot_grant_organization_owner():
     service = _service(ChannelRelationEnum.OWNER)
     request = ChannelAuthorizeRequest(grants=[

@@ -105,6 +105,7 @@ CHANNEL_ADMIN_REVOKED_MESSAGE = "revoked_channel_admin"
 CHANNEL_MEMBER_REMOVED_MESSAGE = "removed_channel_member"
 CHANNEL_MADE_PRIVATE_MESSAGE = "channel_made_private"
 CHANNEL_DISMISSED_MESSAGE = "channel_dismissed"
+CHANNEL_MEMBER_RELATIONS = {"owner", "manager", "editor", "viewer"}
 
 
 def _self_channel_binding_key(channel_id: str, user_id: int, relation: ChannelRelationEnum) -> str:
@@ -910,6 +911,23 @@ class ChannelService:
             object_id=channel_id,
         )
 
+    @staticmethod
+    async def _authorized_channel_user_ids(channel_id: str) -> set[int]:
+        permissions = await PermissionService.get_resource_permissions("channel", channel_id)
+        user_ids: set[int] = set()
+        for permission in permissions:
+            if getattr(permission, "relation", None) not in CHANNEL_MEMBER_RELATIONS:
+                continue
+            include_children = getattr(permission, "include_children", None)
+            user_ids.update(
+                await PermissionService._affected_user_ids_for_subject(
+                    getattr(permission, "subject_type", ""),
+                    int(getattr(permission, "subject_id", 0) or 0),
+                    True if include_children is None else bool(include_children),
+                )
+            )
+        return user_ids
+
     async def remove_member(self, req: RemoveMemberRequest, login_user: UserPayload) -> bool:
         """
         Remove a member (hard delete).
@@ -1702,12 +1720,15 @@ class ChannelService:
         members = await self.space_channel_member_repository.find_all(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL
         )
-        original_member_ids = [member.user_id for member in members if member.status == MembershipStatusEnum.ACTIVE]
+        original_member_ids = {
+            member.user_id for member in members if member.status == MembershipStatusEnum.ACTIVE
+        }
+        original_member_ids.update(await self._authorized_channel_user_ids(channel_id))
         await self._send_channel_event_notification(
             action_code=CHANNEL_DISMISSED_MESSAGE,
             operator_user_id=login_user.user_id,
             operator_user_name=getattr(login_user, "user_name", None),
-            receiver_user_ids=original_member_ids,
+            receiver_user_ids=sorted(original_member_ids),
             channel_id=channel_id,
             channel_name=channel.name,
             navigable=False,
