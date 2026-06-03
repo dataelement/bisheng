@@ -227,6 +227,38 @@ def test_space_create_upload_list(client):
         client.delete(f"{V2}/{sid}")  # AC-30: space delete dispatch (cascade)
 
 
+def test_qa_add_then_clear_removes_pairs(client):
+    """add_qa tenant-context fix + QA clear fix: add a QA pair, clear, verify gone.
+
+    Exercises two F030 follow-up fixes end-to-end:
+    - add_qa now seeds the tenant ContextVar (no more 20004 in multi-tenant)
+    - clear on a QA KB now removes the QAKnowledge rows (not just files/vectors)
+    """
+    model_id = _discover_embedding_model(client)
+    if not model_id:
+        pytest.skip("no embedding model available")
+    kb = _ok(client.post(V2 + "/", json={"name": PREFIX + "qa", "type": TYPE_QA, "model": model_id}))
+    kid = kb["id"]
+    try:
+        added = assert_resp_200(client.post(V2 + "/add_qa", json={
+            "knowledge_id": kid,
+            "data": [{"question": PREFIX + "q", "answer": ["a1"]}],
+        }))
+        assert added and added[0].get("id"), f"add_qa returned no id: {added}"
+        qa_id = added[0]["id"]
+
+        # present before clear
+        d1 = assert_resp_200(client.get(V2 + "/detail_qa", params={"id": qa_id}))
+        assert d1 and d1.get("id") == qa_id
+
+        # clear → QA pairs must be removed
+        assert_resp_200(client.delete(f"{V2}/clear/{kid}"))
+        d2 = client.get(V2 + "/detail_qa", params={"id": qa_id}).json()
+        assert not d2.get("data"), f"QA pair still present after clear: {d2.get('data')}"
+    finally:
+        client.delete(f"{V2}/{kid}")
+
+
 def test_retrieve_accepts_knowledge_base(client):
     """F030 fix: /retrieve must accept a knowledge base id (type 0/1), not only spaces.
 
@@ -252,6 +284,48 @@ def test_retrieve_accepts_knowledge_base(client):
             break
     if not verified:
         pytest.skip("no indexed knowledge base available to confirm a 200 retrieve")
+
+
+def test_clear_kb_keeps_index_queryable(client):
+    """Option A: after clear, a KB stays queryable (retrieve 200, empty) — not 500 index_not_found.
+
+    Create a fresh doc KB (creation builds the index), clear it (drops + recreates
+    the empty index), then retrieve → must be 200 with an empty chunks list.
+    """
+    model_id = _discover_embedding_model(client)
+    if not model_id:
+        pytest.skip("no embedding model available")
+    kb = _ok(client.post(V2 + "/", json={"name": PREFIX + "clearidx", "type": TYPE_NORMAL, "model": model_id}))
+    kid = kb["id"]
+    try:
+        assert_resp_200(client.delete(f"{V2}/clear/{kid}"))
+        data = assert_resp_200(client.post(V2 + "/retrieve", json={
+            "query": "测试", "knowledge_base_ids": [kid], "top_k": 3,
+        }))
+        assert data["chunks"] == []  # queryable, empty — index exists, no index_not_found 500
+    finally:
+        client.delete(f"{V2}/{kid}")
+
+
+def test_retrieve_rejects_qa_kb(client):
+    """Option B: QA knowledge base retrieval is not yet supported → 10962.
+
+    QA stores answer-oriented data with a different schema; routing it through the
+    document path would return mismatched results, so it's explicitly rejected
+    until a dedicated QA recall path lands.
+    """
+    model_id = _discover_embedding_model(client)
+    if not model_id:
+        pytest.skip("no embedding model available")
+    qa = _ok(client.post(V2 + "/", json={"name": PREFIX + "qaret", "type": TYPE_QA, "model": model_id}))
+    kid = qa["id"]
+    try:
+        resp = client.post(V2 + "/retrieve", json={
+            "query": "测试", "knowledge_base_ids": [kid], "top_k": 3,
+        })
+        assert_resp_error(resp, ERR_TYPE_UNSUPPORTED)
+    finally:
+        client.delete(f"{V2}/{kid}")
 
 
 def test_space_keyword_search_existing(client):

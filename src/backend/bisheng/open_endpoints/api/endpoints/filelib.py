@@ -15,7 +15,6 @@ from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.services import telemetry_service
-from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import async_file_download, save_download_file
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.api.dependencies import (
@@ -496,7 +495,9 @@ def add_qa(*,
            knowledge_id: int = Body(embed=True),
            data: list[APIAddQAParam] = Body(embed=True),
            user_id: int | None = Body(default=None, embed=True)):
-    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+    # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
+    login_user = get_default_operator()
+    user_id = user_id if user_id else login_user.user_id
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     logger.info('add_qa_data knowledge_id={} size={}', knowledge_id, len(data))
     res = []
@@ -518,7 +519,8 @@ def append_qa(*,
               knowledge_id: int = Body(embed=True),
               data: APIAppendQAParam = Body(embed=True),
               user_id: int | None = Body(default=None, embed=True)):
-    user_id = user_id if user_id else settings.get_from_db('default_operator').get('user')
+    # Seed the tenant ContextVar (multi-tenant safe) — QAKnowledge is tenant-aware.
+    get_default_operator()
     knowledge = KnowledgeDao.query_by_id(knowledge_id)
     qa_db = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(data.id)
     if not qa_db:
@@ -535,8 +537,9 @@ def append_qa(*,
 @router.delete('/qa/{qa_id}', status_code=200)
 def delete_qa_data(*, qa_id: int, question: str | None = None):
     """ Deleteqa Question to Information """
-    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
+    # Seed the tenant ContextVar before any tenant-aware read/write.
     login_user = get_default_operator()
+    qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(qa_id)
     if not qa:
         raise HTTPException(status_code=404, detail='qa Does not exist')
 
@@ -567,6 +570,8 @@ def update_qa(
         answer: list[str] | None = Body(default=None, embed=True),
 ):
     """ Deleteqa Question to Information """
+    # Seed the tenant ContextVar before any tenant-aware read/write.
+    get_default_operator()
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
 
     if not qa:
@@ -593,6 +598,8 @@ def update_qa(
 @router.get('/detail_qa', status_code=200)
 def detail_qa(*, id: int):
     """ Get questions on information """
+    # Seed the tenant ContextVar before the tenant-aware read.
+    get_default_operator()
     qa = QAKnoweldgeDao.get_qa_knowledge_by_primary_id(id)
     return resp_200(qa)
 
@@ -652,6 +659,8 @@ async def retrieve_chunks(
 @router.post('/query_qa', status_code=200)
 def query_qa(QueryQAParam: QueryQAParam):
     """ Deleteqa Question to Information """
+    # Seed the tenant ContextVar before the tenant-aware read.
+    get_default_operator()
     sources = [1, 2]  # 3 Yes apiInverted
     qa_list = QAKnoweldgeDao.query_by_condition_v1(source=sources,
                                                    create_start=QueryQAParam.timeRange[0],

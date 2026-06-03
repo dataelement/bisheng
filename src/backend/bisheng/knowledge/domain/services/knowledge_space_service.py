@@ -1434,6 +1434,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Remove child file/folder rows only (only_clear keeps the space row).
         await KnowledgeDao.async_delete_knowledge(knowledge_id=space_id, only_clear=True)
 
+        # The vector drop above removed the Milvus collection + ES index; recreate
+        # empty ones so the cleared space stays queryable (empty result, not 500).
+        await asyncio.to_thread(
+            KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, space
+        )
+
         # F008: drop FGA tuples for child resources only; keep the space's tuple.
         await self._cleanup_resource_tuples(child_resources)
 

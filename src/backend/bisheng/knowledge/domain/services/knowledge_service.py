@@ -69,6 +69,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
     ParseType,
+    QAKnoweldgeDao,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_repository import KnowledgeRepository
@@ -552,30 +553,45 @@ class KnowledgeService(KnowledgeUtils):
         db_knowledge.tenant_id = login_user.tenant_id
         db_knowledge = KnowledgeDao.insert_one(db_knowledge)
 
-        # qa knowledge will be init index when add question
-        # todo change qa and other knowledge one metadata_schema
-        if db_knowledge.type != KnowledgeTypeEnum.QA.value:
-            try:
-                vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-                    login_user.user_id, knowledge=db_knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
-                )
-                cls.ensure_milvus_schema_ready(
-                    invoke_user_id=login_user.user_id,
-                    knowledge=db_knowledge,
-                    vector_client=vector_client,
-                )
-
-                es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
-                    knowledge=db_knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
-                )
-                es_client._store._create_index_if_not_exists()
-            except Exception:
-                logger.exception("create knowledge index name error")
+        # qa knowledge builds its index lazily on first Q&A add (different schema)
+        cls._init_knowledge_indices_sync(login_user.user_id, db_knowledge)
 
         # Handling the next steps in creating a Knowledge Base
         if not skip_hook:
             cls.create_knowledge_hook(request, login_user, db_knowledge)
         return db_knowledge
+
+    @classmethod
+    def _init_knowledge_indices_sync(cls, invoke_user_id: int, db_knowledge: Knowledge) -> None:
+        """Create the Milvus collection + ES index for a (non-QA) knowledge resource.
+
+        Shared by knowledge creation and by clear (only_clear), where the prior
+        ``delete_knowledge_file_in_vector`` drops both stores — recreating empty
+        indices keeps the resource queryable (returns empty results instead of an
+        ``index_not_found`` 500).
+
+        QA knowledge bases use a **different metadata schema** and build their
+        index lazily on first Q&A add (via ``QA_save_knowledge``), so they are
+        explicitly skipped here — never recreate a QA index with the document
+        ``KNOWLEDGE_RAG_METADATA_SCHEMA``.
+        """
+        if db_knowledge.type == KnowledgeTypeEnum.QA.value:
+            return
+        try:
+            vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+                invoke_user_id, knowledge=db_knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+            )
+            cls.ensure_milvus_schema_ready(
+                invoke_user_id=invoke_user_id,
+                knowledge=db_knowledge,
+                vector_client=vector_client,
+            )
+            es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(
+                knowledge=db_knowledge, metadata_schemas=KNOWLEDGE_RAG_METADATA_SCHEMA
+            )
+            es_client._store._create_index_if_not_exists()
+        except Exception:
+            logger.exception("init knowledge index error knowledge_id=%s", db_knowledge.id)
 
     @classmethod
     async def acreate_knowledge_base(
@@ -695,6 +711,20 @@ class KnowledgeService(KnowledgeUtils):
 
         # DeletemysqlDATA
         KnowledgeDao.delete_knowledge(knowledge_id, only_clear)
+
+        # QA knowledge bases keep their Q&A pairs in the QAKnowledge table (not
+        # KnowledgeFile), so the deletion above doesn't touch them. Remove them
+        # explicitly for both clear and full delete to avoid orphaned rows.
+        if knowledge.type == KnowledgeTypeEnum.QA.value:
+            qa_rows = QAKnoweldgeDao.get_qa_knowledge_by_knowledge_ids([knowledge_id])
+            if qa_rows:
+                QAKnoweldgeDao.delete_batch([qa.id for qa in qa_rows])
+
+        # Clear dropped the Milvus collection + ES index above; recreate empty
+        # indices so the cleared (still-existing) resource stays queryable instead
+        # of returning index_not_found. QA is skipped (lazy, different schema).
+        if only_clear:
+            cls._init_knowledge_indices_sync(login_user.user_id, knowledge)
 
         cls.audit_telemetry_service.telemetry_delete_knowledge(login_user)
 
