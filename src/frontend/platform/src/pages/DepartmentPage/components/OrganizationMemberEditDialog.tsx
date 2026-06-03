@@ -165,6 +165,48 @@ export function OrganizationMemberEditDialog({
     }))
   }, [form, primaryAssignableList])
 
+  // Role grants are stored per (user, role) with no department dimension, so the
+  // per-department dropdowns share one underlying grant. A role offered in several
+  // dropdowns — a global role, or a parent-department role also selectable in a
+  // child department — is re-granted on save as long as it stays selected in any
+  // one of them, which makes it impossible to delete from a single dropdown.
+  // Removing it from one dropdown therefore clears it from every other dropdown
+  // that also offers it; roles exclusive to one department are left untouched.
+  const pruneSharedRoleEverywhere = useCallback(
+    (removedIds: number[]) => {
+      if (!removedIds.length || !form) return
+      const rm = new Set(removedIds)
+      const removeOffered = (prev: Set<number>, optionIds: Set<number>) => {
+        let changed = false
+        const next = new Set(prev)
+        rm.forEach((id) => {
+          if (optionIds.has(id) && next.delete(id)) changed = true
+        })
+        return changed ? next : prev
+      }
+      const primaryOptionIds = new Set(primaryRoleOptions.map((r) => r.id))
+      setPrimaryRoles((prev) => removeOffered(prev, primaryOptionIds))
+      const ctxOptionIds = new Set(
+        (form.assignable_roles_catalog[form.context.dept_id] ?? []).map((r) => r.id)
+      )
+      setCtxRoles((prev) => removeOffered(prev, ctxOptionIds))
+      setAffRoleByDept((prev) => {
+        let changed = false
+        const next: Record<string, Set<number>> = {}
+        for (const [deptKey, sel] of Object.entries(prev)) {
+          const optionIds = new Set(
+            (form.assignable_roles_catalog[deptKey] ?? []).map((r) => r.id)
+          )
+          const pruned = removeOffered(sel, optionIds)
+          if (pruned !== sel) changed = true
+          next[deptKey] = pruned
+        }
+        return changed ? next : prev
+      })
+    },
+    [form, primaryRoleOptions]
+  )
+
   const handleDeleteLocalMember = useCallback(() => {
     if (!member || !form) return
     bsConfirm({
@@ -289,7 +331,15 @@ export function OrganizationMemberEditDialog({
         className="mt-1"
         options={options.map((r) => ({ label: r.role_name, value: String(r.id) }))}
         value={Array.from(selected).map(String)}
-        onChange={(vals) => onSelectionChange(new Set((vals as string[]).map((id) => Number(id))))}
+        onChange={(vals) => {
+          const next = new Set((vals as string[]).map((id) => Number(id)))
+          onSelectionChange(next)
+          // Sync-delete a removed role from every other dropdown that offers it,
+          // so shared/global roles can actually be removed instead of being
+          // re-granted on save from another still-selected dropdown.
+          const removed = Array.from(selected).filter((id) => !next.has(id))
+          pruneSharedRoleEverywhere(removed)
+        }}
         placeholder={t("bs:department.multiSelectRolesPlaceholder")}
         searchPlaceholder={t("system.searchRoles")}
       />
