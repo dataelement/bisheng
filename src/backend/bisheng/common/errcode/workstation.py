@@ -86,3 +86,10 @@ class ConversationImportQuotaExceededError(BaseErrorCode):
 class ConversationImportFailedError(BaseErrorCode):
     Code: int = 12069
     Msg: str = '导入失败，请稍后重试'
+
+
+class ConversationImportFileTooLargeError(BaseErrorCode):
+    # Per-file size limit (env.uploaded_files_maximum_size). Distinct from the
+    # quota error (12068) so the frontend shows the size reason, not "空间已满".
+    Code: int = 12070
+    Msg: str = '文件大小超过上传限制'
