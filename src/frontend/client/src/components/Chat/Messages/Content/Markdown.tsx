@@ -547,7 +547,12 @@ const Citation = ({
       window.clearTimeout(closeTimerRef.current);
       closeTimerRef.current = null;
     }
-    onActivePopoverKeyChange(null);
+    // Clicking the hover card itself (forceDocument) should keep the popover
+    // visible — only dismiss it when the citation marker is what was clicked.
+    // Mouse-leave still closes it via scheduleClose.
+    if (!options?.forceDocument) {
+      onActivePopoverKeyChange(null);
+    }
     onOpenDocumentPreview(nextDetail, data.itemId, true);
   };
 
@@ -603,6 +608,12 @@ const Citation = ({
           sideOffset={8}
           avoidCollisions
           collisionPadding={16}
+          // Mark as a citation popover surface so the document-preview /
+          // references-panel outside-click handlers treat clicks here as
+          // "inside" — clicking the hover card must NOT collapse the preview
+          // (same as clicking the citation marker itself).
+          data-citation-popover-surface
+          data-citation-trigger="true"
           onMouseEnter={() => {
             if (!citationPreviewUsesHover) return;
             handleOpenChange(true);
