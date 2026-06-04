@@ -663,6 +663,7 @@ async def retrieve_chunks(
             document_id=int(doc.metadata.get("document_id", 0)),
             document_name=str(doc.metadata.get("document_name", "")),
             chunk_index=int(doc.metadata.get("chunk_index", 0)),
+            document_update_time=str(doc.metadata.get("document_update_time", "")),
         )
         for kb_id, doc in results
     ]

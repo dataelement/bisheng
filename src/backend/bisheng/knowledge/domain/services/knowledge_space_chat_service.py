@@ -27,6 +27,7 @@ from bisheng.database.models.session import MessageSessionDao, MessageSession
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain.utils import extract_reasoning_content
@@ -794,7 +795,35 @@ class KnowledgeSpaceChatService:
         flattened: List[Tuple[int, Document]] = []
         for chunks in per_kb_results:
             flattened.extend(chunks)
-        return flattened[:top_k]
+        flattened = flattened[:top_k]
+        await self._attach_document_update_time(flattened)
+        return flattened
+
+    async def _attach_document_update_time(self, results: List[Tuple[int, Document]]) -> None:
+        """Annotate each chunk's metadata with its source file's latest update time.
+
+        The metadata ``document_id`` equals the ``KnowledgeFile`` id, so a single
+        batched lookup resolves the update time for every distinct document. The
+        value is formatted as ``YYYY-MM-DD HH:mm:ss``; documents without a record
+        or update time get an empty string.
+        """
+        document_ids = {
+            int(doc.metadata.get("document_id", 0))
+            for _, doc in results
+            if doc.metadata.get("document_id")
+        }
+        document_ids.discard(0)
+        if not document_ids:
+            return
+
+        files = await KnowledgeFileDao.aget_file_by_ids(list(document_ids))
+        update_time_by_id = {
+            f.id: f.update_time.strftime("%Y-%m-%d %H:%M:%S") if f.update_time else ""
+            for f in files
+        }
+        for _, doc in results:
+            doc_id = int(doc.metadata.get("document_id", 0))
+            doc.metadata["document_update_time"] = update_time_by_id.get(doc_id, "")
 
     async def _aretrieve_chunks_for_kb(
         self,
