@@ -16,6 +16,7 @@ import {
     FileSearch
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
+import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import {
@@ -144,6 +145,14 @@ export function KnowledgeSpaceHeader({
         return () => ro.disconnect();
     }, []);
 
+    // System super-admin joins a space as a plain MEMBER, so space.role hides
+    // member-gated UI. The status-filter is read-only, so surface it for
+    // super-admins regardless of their in-space role. (Does NOT widen
+    // create/delete which still keys off `isAdmin` below.)
+    // Bisheng super-admin = /api/v1/user/info role === 'admin' (lowercase),
+    // same check platformAccess.ts uses. NOT SystemRoles.ADMIN ('ADMIN').
+    const { user } = useAuthContext();
+    const isSystemAdmin = user?.role === 'admin';
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
@@ -182,7 +191,7 @@ export function KnowledgeSpaceHeader({
                 </div>
             )}
 
-            {space.role !== SpaceRole.MEMBER && (
+            {(space.role !== SpaceRole.MEMBER || isSystemAdmin) && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
