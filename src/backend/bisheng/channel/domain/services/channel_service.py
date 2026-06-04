@@ -533,6 +533,13 @@ class ChannelService:
             )
             if listed_ids is not None:
                 accessible_ids = [str(channel_id) for channel_id in listed_ids]
+            else:
+                # Admins short-circuit list_accessible_ids to None ("can read all"), which
+                # would otherwise drop channels the admin was specifically authorized to via
+                # member management (direct user grant: ReBAC + binding, no membership row).
+                # Recover those from the admin's own direct channel bindings so they still
+                # surface in the followed list — without dumping every channel.
+                accessible_ids = await self._directly_granted_channel_ids(login_user.user_id)
 
         # Batch query channels by IDs
         channel_ids = list(
@@ -1948,6 +1955,24 @@ class ChannelService:
 
         bindings = await _get_bindings()
         return any(self._is_direct_channel_user_binding(binding, channel_id, user_id) for binding in bindings)
+
+    async def _directly_granted_channel_ids(self, user_id: int) -> list[str]:
+        """Channel ids the user holds a direct 'user' authorization binding on.
+
+        Used to recover an admin's explicitly-authorized channels for the followed list,
+        since ``list_accessible_ids`` returns None (can-read-all) for admins and would
+        otherwise hide channels the admin was granted but is not a member of.
+        """
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+
+        bindings = await _get_bindings()
+        return [
+            str(binding.get("resource_id"))
+            for binding in bindings
+            if binding.get("resource_type") == "channel"
+            and binding.get("subject_type") == "user"
+            and str(binding.get("subject_id")) == str(user_id)
+        ]
 
     @classmethod
     async def sync_direct_channel_user_permissions(
