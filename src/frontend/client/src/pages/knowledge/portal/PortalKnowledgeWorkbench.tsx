@@ -72,6 +72,10 @@ import { usePortalSpaces } from "./hooks/usePortalSpaces";
 import { usePortalUploadDialog } from "./hooks/usePortalUploadDialog";
 import s from "./PortalKnowledgeWorkbench.module.css";
 
+const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
+    space?.spaceLevel ?? (space as any)?.space_level
+);
+
 export default function PortalKnowledgeWorkbench() {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -298,7 +302,7 @@ export default function PortalKnowledgeWorkbench() {
         () => currentFolderId ? findTreeNodePath(treeNodes, currentFolderId) : [],
         [currentFolderId, treeNodes],
     );
-    const isActiveSpacePersonal = activeSpace?.spaceLevel === SpaceLevel.PERSONAL;
+    const isActiveSpacePersonal = getPortalSpaceLevel(activeSpace) === SpaceLevel.PERSONAL;
     const statusFilterNumbers = useMemo(
         () => toStatusNumbers(statusFilter),
         [statusFilter],
@@ -1512,6 +1516,7 @@ export default function PortalKnowledgeWorkbench() {
                                                     hideNativeAddMenu
                                                     hideNativeStatusFilter
                                                     hideShareButton
+                                                    hideFilePermissionActions={isActiveSpacePersonal}
                                                     markPendingDeletion={markPendingDeletion}
                                                     clearPendingDeletion={clearPendingDeletion}
                                                     setFiles={setCurrentFolderFiles}

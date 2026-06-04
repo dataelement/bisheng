@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent, type ReactNode } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useMemo, type MouseEvent, type ReactNode } from "react";
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
@@ -88,6 +88,7 @@ interface KnowledgeSpaceContentProps {
     hideNativeAddMenu?: boolean;
     hideNativeStatusFilter?: boolean;
     hideShareButton?: boolean;
+    hideFilePermissionActions?: boolean;
     markPendingDeletion: (ids: Array<string | number>) => void;
     clearPendingDeletion: (ids: Array<string | number>) => void;
     setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
@@ -130,6 +131,7 @@ export function KnowledgeSpaceContent({
     hideNativeAddMenu,
     hideNativeStatusFilter,
     hideShareButton = false,
+    hideFilePermissionActions = false,
     markPendingDeletion,
     clearPendingDeletion,
     setFiles,
@@ -322,6 +324,10 @@ export function KnowledgeSpaceContent({
         .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
+    const visiblePermissionEntryIds = useMemo(
+        () => hideFilePermissionActions ? new Set<string>() : permissionEntryIds,
+        [hideFilePermissionActions, permissionEntryIds],
+    );
     const canUseAddActions = canCreateFolder && !isSearching;
 
     const { showToast } = useToastContext();
@@ -383,6 +389,14 @@ export function KnowledgeSpaceContent({
             (file) => !file.isCreating && /^\d+$/.test(String(file.id))
         );
 
+        if (hideFilePermissionActions) {
+            setPermissionEntryIds(new Set());
+            return () => {
+                cancelled = true;
+                controller.abort();
+            };
+        }
+
         if (isAdmin) {
             setPermissionEntryIds(new Set(candidates.map((file) => file.id)));
             return () => {
@@ -418,6 +432,7 @@ export function KnowledgeSpaceContent({
             controller.abort();
         };
     }, [
+        hideFilePermissionActions,
         isAdmin,
         permissionEntryProbeKey,
     ]);
@@ -1153,7 +1168,7 @@ export function KnowledgeSpaceContent({
                                             onPreview={handlePreviewFile}
                                             onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                             onCancelCreate={onCancelCreateFolder}
-                                            onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
+                                            onManagePermission={visiblePermissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
                                             canDownload={downloadEntryIds.has(file.id)}
@@ -1193,12 +1208,12 @@ export function KnowledgeSpaceContent({
                                     onPreview={(id) => handlePreviewFile(id)}
                                     onValidateName={validateFileName}
                                     onCancelCreate={onCancelCreateFolder}
-                                    permissionEntryIds={permissionEntryIds}
+                                    permissionEntryIds={visiblePermissionEntryIds}
                                     renameEntryIds={renameEntryIds}
                                     deleteEntryIds={deleteEntryIds}
                                     downloadEntryIds={downloadEntryIds}
                                     publishEntryIds={publishEntryIds}
-                                    onManagePermission={handleManagePermission}
+                                    onManagePermission={hideFilePermissionActions ? undefined : handleManagePermission}
                                     onPublishFile={setPublishingFile}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}

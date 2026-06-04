@@ -440,6 +440,7 @@ function renderWorkbench() {
 describe("PortalKnowledgeWorkbench", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        localStorage.removeItem("knowledge-view-mode");
         mockCreateSpaceConfirmResult = undefined;
         Object.defineProperty(navigator, "clipboard", {
             configurable: true,
@@ -1654,8 +1655,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
     test("hides file and folder permission management actions for personal spaces", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
-            role: SpaceRole.MEMBER,
-            spaceLevel: SpaceLevel.PERSONAL,
+            role: SpaceRole.ADMIN,
+            spaceLevel: undefined,
+            space_level: SpaceLevel.PERSONAL,
         });
         const folder = makeFile("101", "个人目录", {
             type: FileType.FOLDER,
@@ -1682,10 +1684,16 @@ describe("PortalKnowledgeWorkbench", () => {
         const fileRow = await screen.findByTestId("file-tree-row-201");
 
         await act(async () => undefined);
+        fireEvent.mouseEnter(folderRow);
+        fireEvent.mouseEnter(fileRow);
+        await waitFor(() => {
+            expect(screen.getAllByRole("button", { name: /下载|download|com_knowledge\.download/i }).length).toBeGreaterThan(0);
+        });
 
         expect(canOpenPermissionDialog).not.toHaveBeenCalled();
         expect(within(folderRow).queryByRole("button", { name: "权限管理" })).not.toBeInTheDocument();
         expect(within(fileRow).queryByRole("button", { name: "权限管理" })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "权限管理" })).not.toBeInTheDocument();
 
         fireEvent.click(within(fileRow).getByRole("button", { name: "打开个人文档.md" }));
         const actions = await screen.findByTestId("portal-document-actions");
@@ -1693,6 +1701,64 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const rail = await screen.findByTestId("portal-tool-rail");
         expect(within(rail).queryByRole("button", { name: "权限" })).not.toBeInTheDocument();
+    });
+
+    test("hides card view file and folder permission management actions for personal spaces", async () => {
+        class MockResizeObserver {
+            observe = jest.fn();
+            unobserve = jest.fn();
+            disconnect = jest.fn();
+        }
+        Object.defineProperty(window, "ResizeObserver", {
+            configurable: true,
+            writable: true,
+            value: MockResizeObserver,
+        });
+        Object.defineProperty(global, "ResizeObserver", {
+            configurable: true,
+            writable: true,
+            value: MockResizeObserver,
+        });
+        localStorage.setItem("knowledge-view-mode", "card");
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: undefined,
+            space_level: SpaceLevel.PERSONAL,
+        });
+        const folder = makeFile("101", "个人目录", {
+            type: FileType.FOLDER,
+            successFileNum: 1,
+            fileNum: 2,
+        });
+        const file = makeFile("201", "个人文档.md");
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [folder, file],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const folderName = await screen.findByText("个人目录");
+        const fileName = await screen.findByText("个人文档.md");
+        const folderCard = folderName.closest(".group");
+        const fileCard = fileName.closest(".group");
+        expect(folderCard).not.toBeNull();
+        expect(fileCard).not.toBeNull();
+
+        fireEvent.mouseEnter(folderCard!);
+        fireEvent.mouseEnter(fileCard!);
+
+        await waitFor(() => {
+            expect(screen.getAllByRole("button", { name: /下载|download|com_knowledge\.download/i }).length).toBeGreaterThan(0);
+        });
+
+        expect(screen.queryByRole("button", { name: "权限管理" })).not.toBeInTheDocument();
     });
 
     test("renders document preview actions with the share action hidden", async () => {
