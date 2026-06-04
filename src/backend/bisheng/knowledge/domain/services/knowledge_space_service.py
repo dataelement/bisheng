@@ -681,6 +681,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             and str(binding.get("subject_id")) == str(user_id)
         )
 
+    async def _directly_granted_space_ids(self, user_id: int) -> list[str]:
+        """Space ids the user holds a direct 'user' authorization binding on.
+
+        Used to recover an admin's explicitly-authorized spaces for the followed list,
+        since ``list_accessible_ids`` returns None (can-read-all) for admins and would
+        otherwise hide spaces the admin was granted but is not a member of.
+        """
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+
+        bindings = await _get_bindings()
+        return [
+            str(binding.get("resource_id"))
+            for binding in bindings
+            if binding.get("resource_type") == "knowledge_space"
+            and binding.get("subject_type") == "user"
+            and str(binding.get("subject_id")) == str(user_id)
+        ]
+
     @classmethod
     async def sync_direct_space_user_permissions(
         cls,
@@ -1697,6 +1715,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             object_type="knowledge_space",
             login_user=self.login_user,
         )
+        if accessible_ids is None:
+            # Admins short-circuit list_accessible_ids to None ("can read all"), which would
+            # otherwise drop spaces the admin was specifically authorized to (direct user
+            # grant: ReBAC + binding, no membership row). Recover those from the admin's own
+            # direct space bindings so they still surface in the followed list.
+            accessible_ids = await self._directly_granted_space_ids(self.login_user.user_id)
         space_ids = {int(member.business_id) for member in members}
         if accessible_ids is not None:
             space_ids |= {int(space_id) for space_id in accessible_ids if str(space_id).isdigit()}
