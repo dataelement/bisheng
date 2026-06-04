@@ -496,6 +496,9 @@ export default function MainLayout() {
                 : innerScrollShell
                   ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
                   : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+              // While the system menu is revealed, clip content to the rounded corners so the
+              // exposed left edge shows the radius (e.g. knowledge uses overflow-visible otherwise).
+              systemMenuRevealing && 'overflow-hidden',
             )}
           >
             {/* 移动端应用中心顶栏：与频道页一致 — 菜单按钮触发系统主菜单(整页右滑) */}

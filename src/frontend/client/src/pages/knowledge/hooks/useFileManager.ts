@@ -207,6 +207,10 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
 
     // Reload files whenever active space or deep-link folder changes
     useEffect(() => {
+        // Stale-guard: when the space changes mid-flight, the previous run's async breadcrumb
+        // resolution must not overwrite currentPath (e.g. a getFolderParentPathApi call made
+        // under the OLD space fails for a folder of the NEW space and would clobber the title).
+        let cancelled = false;
         if (enabled && activeSpace) {
             setCurrentPage(1);
             setSearchQuery("");
@@ -220,34 +224,48 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             setTotal(0);
             setLoading(true);
 
-            // If there's an unconsumed initial folder from URL, navigate there
-            if (initialFolderId && consumedFolderIdRef.current !== initialFolderId) {
-                consumedFolderIdRef.current = initialFolderId;
+            // Key the "consumed" guard by space+folder. When deep-linking to a folder of a
+            // DIFFERENT space, the URL folder id updates one render before activeSpace catches
+            // up, so the folder would get consumed under the OLD space and then skipped (→ root)
+            // once the new space arrives. A composite key re-consumes it for the new space.
+            if (initialFolderId && consumedFolderIdRef.current !== `${activeSpace.id}::${initialFolderId}`) {
+                consumedFolderIdRef.current = `${activeSpace.id}::${initialFolderId}`;
                 setCurrentFolderId(initialFolderId);
                 // Fetch parent chain for breadcrumb path
                 getFolderParentPathApi(activeSpace.id, initialFolderId)
                     .then((parentPath) => {
-                        // parentPath excludes the folder itself — use last parent's children API
-                        // to find the actual folder name. Fallback to the ID string.
-                        const lastParentId = parentPath.length > 0
-                            ? parentPath[parentPath.length - 1].id
-                            : undefined;
+                        // If the parent-path API already includes the target folder as the last
+                        // item (it carries the folder's name), use it directly — searching its
+                        // own children for itself would fail and fall back to the raw ID.
+                        if (cancelled) return;
+                        const last = parentPath[parentPath.length - 1];
+                        if (last && String(last.id) === String(initialFolderId)) {
+                            setCurrentPath(parentPath);
+                            return;
+                        }
+                        // Otherwise the API returns only ancestors — resolve the folder's name
+                        // from its parent's children. Fallback to the ID string.
+                        const lastParentId = last?.id;
                         return getSpaceChildrenApi({
                             space_id: activeSpace.id,
                             parent_id: lastParentId,
                             page: 1,
                             page_size: 100,
                         }).then((res) => {
-                            const folder = res.data.find(f => f.id === initialFolderId);
+                            if (cancelled) return;
+                            const folder = res.data.find(f => String(f.id) === String(initialFolderId));
                             const folderName = folder?.name || initialFolderId;
                             setCurrentPath([...parentPath, { id: initialFolderId, name: folderName }]);
                         });
                     })
                     .catch(() => {
+                        if (cancelled) return;
                         setCurrentPath([{ id: initialFolderId, name: initialFolderId }]);
                     });
                 // Don't call loadFiles here — the currentFolderId change watcher effect will trigger it
             } else {
+                // Reset the guard so re-entering the same folder later re-consumes it.
+                consumedFolderIdRef.current = undefined;
                 setCurrentFolderId(undefined);
                 setCurrentPath([]);
                 // Bump token to trigger the filter effect on the NEXT render
@@ -256,6 +274,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 setReloadToken(t => t + 1);
             }
         }
+        return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when space or deep-link folder changes
     }, [enabled, activeSpace?.id, initialFolderId]);
 

@@ -262,22 +262,26 @@ export default function MobileNav({
                 <span className="sr-only">{localize('com_ui_new_chat')}</span>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={() => setHistoryDropdownOpen((o) => !o)}
-                aria-expanded={historyDropdownOpen}
-                className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
-              >
-                <span className="truncate text-base font-medium leading-6 text-[#212121]">
-                  {localize('com_ui_chat_list')}
-                </span>
-                <Outlined.Down
-                  className={cn(
-                    'size-5 shrink-0 text-[#86909C] transition-transform',
-                    historyDropdownOpen && 'rotate-180',
-                  )}
-                />
-              </button>
+              // Wrapper centers within the bar; the button itself is content-width so only
+              // the title + caret is tappable (avoids mis-tapping the ≡ / + on the edges).
+              <div className="flex min-w-0 flex-1 justify-center px-1">
+                <button
+                  type="button"
+                  onClick={() => setHistoryDropdownOpen((o) => !o)}
+                  aria-expanded={historyDropdownOpen}
+                  className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
+                >
+                  <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                    {localize('com_ui_chat_list')}
+                  </span>
+                  <Outlined.Down
+                    className={cn(
+                      'size-5 shrink-0 text-[#86909C] transition-transform',
+                      historyDropdownOpen && 'rotate-180',
+                    )}
+                  />
+                </button>
+              </div>
             )}
             <button
               type="button"

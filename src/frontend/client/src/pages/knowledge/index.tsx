@@ -686,13 +686,19 @@ export default function Knowledge() {
             )}
 
             {/* File page: the top Title ▾ opens this drawer to switch spaces (unchanged behaviour). */}
-            {isH5 && activeSpace && spaceListDrawerOpen && typeof document !== "undefined"
+            {/* Kept mounted while a space is active and toggled via `hidden` (not unmounted) so
+                the dropdown preserves its last state — cycled type / scroll — across re-opens. */}
+            {isH5 && activeSpace && typeof document !== "undefined"
                 ? createPortal(
                     <div
-                        className="fixed inset-x-0 bottom-0 z-[80] flex flex-col bg-white"
+                        className={cn(
+                            "fixed inset-x-0 bottom-0 z-[80] flex flex-col bg-white",
+                            !spaceListDrawerOpen && "hidden",
+                        )}
                         style={{ top: "calc(env(safe-area-inset-top, 0px) + 52px)" }}
                         role="dialog"
                         aria-modal="true"
+                        aria-hidden={!spaceListDrawerOpen}
                         aria-label={localize("com_knowledge.knowledge_space")}
                     >
                         <div className="min-h-0 flex-1 overflow-hidden">
