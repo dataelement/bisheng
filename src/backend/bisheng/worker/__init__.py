@@ -1,6 +1,7 @@
 # register tasks
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
+from bisheng.worker.information.reconcile import reconcile_all_tenants
 from bisheng.worker.knowledge.file_worker import (
     file_copy_celery,
     parse_knowledge_file_celery,
