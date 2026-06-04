@@ -11,7 +11,7 @@ import { useLocalize } from "~/hooks";
 import { extractApiStatusCode } from "../errorUtils";
 import { normalizeUrlForSearch } from "../urlNormalize";
 
-const MAX_SOURCES = 50;
+const MAX_SOURCES = 200;
 const PAGE_SIZE = 20;
 
 function looksLikeUrl(s: string): boolean {

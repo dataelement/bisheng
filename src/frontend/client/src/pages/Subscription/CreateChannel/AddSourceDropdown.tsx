@@ -20,7 +20,7 @@ import {
     AlertDialogTitle
 } from "~/components/ui/AlertDialog";
 
-const MAX_SOURCES = 50;
+const MAX_SOURCES = 200;
 const MAX_NAME_DISPLAY = 20;
 
 /** 网站行：文本只展示（无超链接样式与点击），跳转入口收口到末尾箭头按钮上；箭头仅 hover 时露出 */
