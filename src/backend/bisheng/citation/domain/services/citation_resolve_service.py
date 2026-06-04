@@ -2,6 +2,8 @@ import asyncio
 import json
 from typing import Dict, List, Optional
 
+from loguru import logger
+
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository
 from bisheng.citation.domain.schemas.citation_schema import (
     CitationRegistryItemSchema,
@@ -14,8 +16,8 @@ from bisheng.citation.domain.services.citation_registry_service import CitationR
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.database.models.role_access import AccessType
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
 
@@ -27,13 +29,43 @@ class CitationResolveService:
         self.runtime_cache_service = runtime_cache_service or CitationRuntimeCacheService()
 
     @staticmethod
-    async def _has_file_access(login_user: UserPayload, knowledge_id: Optional[int]) -> bool:
-        """Check whether the current user can access a knowledge citation."""
-        if knowledge_id is None:
+    async def _has_file_access(login_user: UserPayload, file_info: Optional[KnowledgeFile]) -> bool:
+        """Check whether the current user can access a knowledge citation.
+
+        Knowledge bases (NORMAL / QA / PRIVATE) keep the legacy RBAC
+        ``AccessType.KNOWLEDGE`` check. Knowledge spaces
+        (``KnowledgeTypeEnum.SPACE``) are governed by membership / resource
+        bindings rather than the knowledge-base ACL, so they require the
+        fine-grained per-file ``view_file`` permission — checking the base
+        ACL would incorrectly deny legitimate space members.
+        """
+        if file_info is None or file_info.knowledge_id is None:
             return False
+        knowledge_id = file_info.knowledge_id
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if knowledge is None:
             return False
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            if login_user.is_admin():
+                return True
+            # Lazy import to avoid a circular dependency at module load.
+            from bisheng.knowledge.domain.services.knowledge_space_service import (
+                KnowledgeSpaceService,
+            )
+            space_service = KnowledgeSpaceService(request=None, login_user=login_user)
+            try:
+                context = await space_service._build_child_permission_context(knowledge_id)
+                effective = await space_service._get_child_item_effective_permission_ids(
+                    file_info, space_id=knowledge_id, context=context,
+                )
+            except Exception:
+                logger.exception(
+                    "citation resolve: view_file resolution failed for file_id={} space_id={}",
+                    file_info.id,
+                    knowledge_id,
+                )
+                return False
+            return 'view_file' in effective
         return await login_user.async_access_check(knowledge.user_id, str(knowledge.id), AccessType.KNOWLEDGE)
 
     @staticmethod
@@ -65,7 +97,7 @@ class CitationResolveService:
                 payload.knowledgeId = payload.knowledgeId or file_info.knowledge_id
                 payload.documentName = payload.documentName or file_info.file_name
 
-                has_access = login_user is None or await self._has_file_access(login_user, file_info.knowledge_id)
+                has_access = login_user is None or await self._has_file_access(login_user, file_info)
                 if has_access:
                     download_url, preview_url = await asyncio.to_thread(
                         KnowledgeService.get_file_share_url,
