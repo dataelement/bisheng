@@ -5,6 +5,8 @@ import {
     FileType,
     KnowledgeFile,
     KnowledgeSpace,
+    SortDirection,
+    SortType,
     SpaceLevel,
     SpaceRole,
     VisibilityType,
@@ -27,7 +29,9 @@ import { checkPermission, canOpenPermissionDialog } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useConfirm, useToastContext } from "~/Providers";
+import { usePrefersMobileLayout } from "~/hooks";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
+import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { triggerUrlDownload } from "../knowledgeUtils";
 import { TREE_PAGE_SIZE } from "./constants";
@@ -54,15 +58,15 @@ import {
     toStatusNumbers,
     updateTreeNode,
 } from "./utils";
-import { DocumentPreview } from "./components/DocumentPreview";
 import { EditEncodingModal } from "../SpaceDetail/EditEncodingModal";
-import { FilePane } from "./components/FilePane";
-import { PortalAiDrawer } from "./components/PortalAiDialog";
+import { KnowledgeSpaceContent } from "../SpaceDetail";
+import { KnowledgeAiPanel } from "../SpaceDetail/AiChat/KnowledgeAiPanel";
+import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { PortalDialogs } from "./components/PortalDialogs";
-import { PortalInfoDrawer } from "./components/PortalInfoDrawer";
+import { PortalHeaderActions } from "./components/PortalHeaderActions";
+import { PortalPreviewWorkspace } from "./components/PortalPreviewWorkspace";
 import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawer";
 import { SpaceSidebar } from "./components/SpaceSidebar";
-import { ToolRail } from "./components/ToolRail";
 import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
 import { usePortalSpaces } from "./hooks/usePortalSpaces";
 import { usePortalUploadDialog } from "./hooks/usePortalUploadDialog";
@@ -73,6 +77,8 @@ export default function PortalKnowledgeWorkbench() {
     const confirm = useConfirm();
     const queryClient = useQueryClient();
     const { data: bsConfig } = useGetBsConfig();
+    const isH5 = usePrefersMobileLayout();
+    const aiPane = useAiSplitPane();
     const groupRefs = useRef<Record<SpaceGroupKey, HTMLDivElement | null>>({
         public: null,
         department: null,
@@ -107,11 +113,14 @@ export default function PortalKnowledgeWorkbench() {
     const [treeLoading, setTreeLoading] = useState(false);
     const [treeRootPage, setTreeRootPage] = useState(1);
     const [treeRootTotal, setTreeRootTotal] = useState(0);
+    const [treeRootHasMore, setTreeRootHasMore] = useState(false);
     const [treeRootLoadingMore, setTreeRootLoadingMore] = useState(false);
     const [searchMode, setSearchMode] = useState(false);
     const [searchResults, setSearchResults] = useState<KnowledgeFile[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
+    const [sortBy, setSortBy] = useState<SortType | undefined>();
+    const [sortDirection, setSortDirection] = useState<SortDirection | undefined>();
     const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
     const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
@@ -369,6 +378,28 @@ export default function PortalKnowledgeWorkbench() {
         }));
     }, [currentFolderId, setRootFiles]);
 
+    const setCurrentFileListTotal = useCallback<Dispatch<SetStateAction<number>>>((value) => {
+        const folderId = currentFolderId;
+        if (!folderId) {
+            setTreeRootTotal(value);
+            return;
+        }
+        setTreeNodes((prev) => updateTreeNode(prev, folderId, (node) => ({
+            ...node,
+            total: typeof value === "function"
+                ? (value as (prev: number) => number)(node.total)
+                : value,
+        })));
+    }, [currentFolderId]);
+
+    const markPendingDeletion = useCallback((_ids: Array<string | number>) => {
+        // 门户侧文件列表由当前页面状态驱动，删除后的抑制逻辑交给原生列表乐观更新。
+    }, []);
+
+    const clearPendingDeletion = useCallback((_ids: Array<string | number>) => {
+        // 与 markPendingDeletion 成对传入，供原生知识空间列表的批量删除流程调用。
+    }, []);
+
     const patchFileById = useCallback((fileId: string, updater: (file: KnowledgeFile) => KnowledgeFile) => {
         setTreeNodes((prev) => updateTreeNode(prev, fileId, (node) => ({
             ...node,
@@ -382,6 +413,7 @@ export default function PortalKnowledgeWorkbench() {
         if (!spaceId) {
             setTreeNodes([]);
             setTreeRootTotal(0);
+            setTreeRootHasMore(false);
             return;
         }
         if (append) {
@@ -394,19 +426,24 @@ export default function PortalKnowledgeWorkbench() {
                 space_id: spaceId,
                 page,
                 page_size: TREE_PAGE_SIZE,
+                order_field: sortBy,
+                order_sort: sortDirection,
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
+            const total = (res as any).total ?? res.data.length;
             setTreeNodes((prev) => append
                 ? [...prev, ...res.data.map(createTreeNode)]
                 : res.data.map(createTreeNode));
             setTreeRootPage(page);
-            setTreeRootTotal(res.total);
+            setTreeRootTotal(total);
+            setTreeRootHasMore(Boolean((res as any).has_more ?? (page * TREE_PAGE_SIZE < total)));
         } catch {
             if (activeSpaceIdRef.current !== spaceId) return;
             if (!append) {
                 setTreeNodes([]);
                 setTreeRootTotal(0);
+                setTreeRootHasMore(false);
             }
             showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
         } finally {
@@ -415,7 +452,7 @@ export default function PortalKnowledgeWorkbench() {
                 setTreeRootLoadingMore(false);
             }
         }
-    }, [activeSpace?.id, showToast, statusFilterNumbers]);
+    }, [activeSpace?.id, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
     const reloadFiles = useCallback(async () => {
         setSearchMode(false);
@@ -433,6 +470,8 @@ export default function PortalKnowledgeWorkbench() {
                 parent_id: folderId,
                 page: 1,
                 page_size: TREE_PAGE_SIZE,
+                order_field: sortBy,
+                order_sort: sortDirection,
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
@@ -443,13 +482,13 @@ export default function PortalKnowledgeWorkbench() {
                 loaded: true,
                 loading: false,
                 page: 1,
-                total: res.total,
+                total: (res as any).total ?? res.data.length,
             })));
         } catch {
             if (activeSpaceIdRef.current !== spaceId) return;
             showToast({ message: "文件列表加载失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, currentFolderId, loadRootTree, showToast, statusFilterNumbers]);
+    }, [activeSpace?.id, currentFolderId, loadRootTree, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
     const fileUpload = useFileUpload({
         activeSpace,
@@ -457,9 +496,11 @@ export default function PortalKnowledgeWorkbench() {
         currentPath,
         files: currentFolderNode ? currentFolderNode.children.map((node) => node.file) : treeNodes.map((node) => node.file),
         setFiles: setCurrentFolderFiles,
-        setTotal: () => undefined,
+        setTotal: setCurrentFileListTotal,
         loadFiles: reloadFiles,
         currentPage: 1,
+        markPendingDeletion,
+        clearPendingDeletion,
     });
 
     const transientRootFiles = useMemo(
@@ -496,6 +537,18 @@ export default function PortalKnowledgeWorkbench() {
         () => flattenTreeFiles(visibleTreeNodes),
         [visibleTreeNodes],
     );
+    const currentFolderFiles = useMemo(
+        () => currentFolderNode ? currentFolderNode.children.map((node) => node.file) : treeNodes.map((node) => node.file),
+        [currentFolderNode, treeNodes],
+    );
+    const currentFileListPage = currentFolderNode?.page ?? treeRootPage;
+    const currentFileListTotal = currentFolderNode?.total ?? treeRootTotal;
+    const currentFileListHasMore = searchMode
+        ? false
+        : currentFolderNode
+            ? currentFolderNode.children.length < currentFolderNode.total
+            : treeRootHasMore || treeNodes.length < treeRootTotal;
+    const currentFileListLoading = treeLoading || searchLoading || treeRootLoadingMore || Boolean(currentFolderNode?.loading);
     const displayedFiles = searchMode ? searchResults : visibleTreeFiles;
     const selectedFiles = useMemo(
         () => displayedFiles.filter((file) => selectedFileIds.has(file.id) || selectedFolderIds.has(file.id)),
@@ -577,6 +630,7 @@ export default function PortalKnowledgeWorkbench() {
         setTreeNodes([]);
         setTreeRootPage(1);
         setTreeRootTotal(0);
+        setTreeRootHasMore(false);
         setCurrentFolderId(undefined);
         setCanCreateFolder(false);
         setCanUploadFile(false);
@@ -737,7 +791,6 @@ export default function PortalKnowledgeWorkbench() {
             eligibleSourceSpace
             && !file.isCreating
             && file.type !== FileType.FOLDER
-            && file.status === FileStatus.SUCCESS
             && /^\d+$/.test(String(file.id))
         ));
         if (!activeSpace || candidates.length === 0) {
@@ -869,6 +922,63 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [activeSpace?.id, searchText, showToast, statusFilterNumbers]);
 
+    const handleNativeSearch = useCallback(async (params: SearchParams) => {
+        const spaceId = activeSpace?.id;
+        if (!spaceId) return;
+        const keyword = params.keyword.trim();
+        setSearchText(keyword);
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
+        if (!keyword && params.tagIds.length === 0) {
+            setSearchMode(false);
+            setSearchResults([]);
+            return;
+        }
+        setSearchMode(true);
+        setSearchLoading(true);
+        try {
+            const res = await searchSpaceChildrenApi({
+                space_id: spaceId,
+                parent_id: currentFolderId,
+                keyword,
+                tag_ids: params.tagIds,
+                page: 1,
+                page_size: TREE_PAGE_SIZE,
+                order_field: sortBy,
+                order_sort: sortDirection,
+                file_status: statusFilterNumbers,
+            });
+            if (activeSpaceIdRef.current !== spaceId) return;
+            setSearchResults(res.data);
+            setTreeRootTotal(res.total);
+        } catch {
+            if (activeSpaceIdRef.current !== spaceId) return;
+            setSearchResults([]);
+            showToast({ message: "搜索文件失败", severity: NotificationSeverity.ERROR });
+        } finally {
+            if (activeSpaceIdRef.current === spaceId) {
+                setSearchLoading(false);
+            }
+        }
+    }, [activeSpace?.id, currentFolderId, showToast, sortBy, sortDirection, statusFilterNumbers]);
+
+    const handleNativeStatusFilter = useCallback((nextStatus: FileStatus[]) => {
+        setStatusFilter(nextStatus);
+        setSearchText("");
+        setSearchMode(false);
+        setSearchResults([]);
+        setSelectedFile(null);
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
+    }, []);
+
+    const handleNativeSort = useCallback((nextSortBy: SortType | undefined, nextDirection: SortDirection | undefined) => {
+        setSortBy(nextSortBy);
+        setSortDirection(nextDirection);
+        setSearchMode(false);
+        setSearchResults([]);
+    }, []);
+
     const handleToggleStatusFilter = useCallback((status: FileStatus, checked: boolean) => {
         setStatusFilter((prev) => {
             const exists = prev.includes(status);
@@ -898,6 +1008,14 @@ export default function PortalKnowledgeWorkbench() {
         },
         [],
     );
+
+    const handleBackToFileList = useCallback(() => {
+        setSelectedFile(null);
+        setActivePanel(null);
+        setAiDrawerOpen(false);
+        setSummaryExpanded(false);
+        setPreview({ loading: false, fileUrl: "", fileType: "", error: "" });
+    }, []);
 
     const handleToggleFileSelection = useCallback((file: KnowledgeFile, checked: boolean) => {
         const update = (prev: Set<string>) => {
@@ -951,9 +1069,12 @@ export default function PortalKnowledgeWorkbench() {
                 parent_id: node.file.id,
                 page: 1,
                 page_size: TREE_PAGE_SIZE,
+                order_field: sortBy,
+                order_sort: sortDirection,
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
+            const total = (res as any).total ?? res.data.length;
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
                 ...item,
                 children: res.data.map(createTreeNode),
@@ -961,7 +1082,7 @@ export default function PortalKnowledgeWorkbench() {
                 loaded: true,
                 loading: false,
                 page: 1,
-                total: res.total,
+                total,
             })));
         } catch {
             if (activeSpaceIdRef.current !== spaceId) return;
@@ -972,7 +1093,7 @@ export default function PortalKnowledgeWorkbench() {
             })));
             showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, showToast, statusFilterNumbers]);
+    }, [activeSpace?.id, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
     const handleLoadMoreChildren = useCallback(async (node: PortalFileTreeNode) => {
         const spaceId = activeSpace?.id;
@@ -986,23 +1107,100 @@ export default function PortalKnowledgeWorkbench() {
                 parent_id: node.file.id,
                 page: nextPage,
                 page_size: TREE_PAGE_SIZE,
+                order_field: sortBy,
+                order_sort: sortDirection,
                 file_status: statusFilterNumbers,
             });
             if (activeSpaceIdRef.current !== spaceId) return;
+            const total = (res as any).total ?? node.total;
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({
                 ...item,
                 children: [...item.children, ...res.data.map(createTreeNode)],
                 loading: false,
                 loaded: true,
                 page: nextPage,
-                total: res.total,
+                total,
             })));
         } catch {
             if (activeSpaceIdRef.current !== spaceId) return;
             setTreeNodes((prev) => updateTreeNode(prev, node.file.id, (item) => ({ ...item, loading: false })));
             showToast({ message: "加载更多失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace?.id, showToast, statusFilterNumbers]);
+    }, [activeSpace?.id, showToast, sortBy, sortDirection, statusFilterNumbers]);
+
+    const handleNavigateFolder = useCallback(async (folderId?: string) => {
+        const spaceId = activeSpace?.id;
+        if (!spaceId) return;
+        setSearchMode(false);
+        setSearchResults([]);
+        setSearchText("");
+        setSelectedFile(null);
+        setSelectedFileIds(new Set());
+        setSelectedFolderIds(new Set());
+
+        if (!folderId) {
+            setCurrentFolderId(undefined);
+            if (treeNodes.length === 0) {
+                await loadRootTree(1, false, spaceId);
+            }
+            return;
+        }
+
+        setCurrentFolderId(folderId);
+        const node = findTreeNode(treeNodes, folderId);
+        if (node?.loaded) {
+            setTreeNodes((prev) => updateTreeNode(prev, folderId, (item) => ({
+                ...item,
+                expanded: true,
+            })));
+            return;
+        }
+
+        setTreeNodes((prev) => updateTreeNode(prev, folderId, (item) => ({
+            ...item,
+            expanded: true,
+            loading: true,
+        })));
+        try {
+            const res = await getSpaceChildrenApi({
+                space_id: spaceId,
+                parent_id: folderId,
+                page: 1,
+                page_size: TREE_PAGE_SIZE,
+                order_field: sortBy,
+                order_sort: sortDirection,
+                file_status: statusFilterNumbers,
+            });
+            if (activeSpaceIdRef.current !== spaceId) return;
+            const total = (res as any).total ?? res.data.length;
+            setTreeNodes((prev) => updateTreeNode(prev, folderId, (item) => ({
+                ...item,
+                children: res.data.map(createTreeNode),
+                expanded: true,
+                loaded: true,
+                loading: false,
+                page: 1,
+                total,
+            })));
+        } catch {
+            if (activeSpaceIdRef.current !== spaceId) return;
+            setCurrentFolderId(undefined);
+            setTreeNodes((prev) => updateTreeNode(prev, folderId, (item) => ({
+                ...item,
+                loading: false,
+            })));
+            showToast({ message: "文件夹加载失败", severity: NotificationSeverity.ERROR });
+        }
+    }, [activeSpace?.id, loadRootTree, showToast, sortBy, sortDirection, statusFilterNumbers, treeNodes]);
+
+    const handleNativePageChange = useCallback((page: number) => {
+        if (searchMode) return;
+        if (currentFolderNode) {
+            void handleLoadMoreChildren(currentFolderNode);
+            return;
+        }
+        void loadRootTree(page, page > 1);
+    }, [currentFolderNode, handleLoadMoreChildren, loadRootTree, searchMode]);
 
     const confirmCreateFolder = useCallback(() => {
         if (!fileUpload.creatingFolder) return;
@@ -1155,7 +1353,6 @@ export default function PortalKnowledgeWorkbench() {
             activeSpace
             && activeSpace.spaceLevel !== SpaceLevel.PUBLIC
             && file.type !== FileType.FOLDER
-            && file.status === FileStatus.SUCCESS
             && publishEntryIds.has(file.id),
         );
     }, [activeSpace, publishEntryIds]);
@@ -1221,6 +1418,7 @@ export default function PortalKnowledgeWorkbench() {
         ].filter(Boolean);
         return names.join("/");
     }, [activeGroup?.title, activeSpace?.name, selectedFile?.name, selectedFile?.path]);
+    const aiContextLabel = currentFolderId ? "文件夹" : "知识空间";
 
     return (
         <div className={s.workbench}>
@@ -1250,134 +1448,146 @@ export default function PortalKnowledgeWorkbench() {
                         onLeaveSpace={(space) => void handleLeaveSpace(space)}
                     />
 
-                    <FilePane
-                        activeSpaceName={activeSpace?.name}
-                        hasActiveSpace={Boolean(activeSpace)}
-                        searchText={searchText}
-                        searchMode={searchMode}
-                        searchLoading={searchLoading}
-                        treeLoading={treeLoading}
-                        treeRootLoadingMore={treeRootLoadingMore}
-                        treeRootHasMore={treeNodes.length < treeRootTotal}
-                        visibleTreeNodes={visibleTreeNodes}
-                        searchResults={searchResults}
-                        selectedFileId={selectedFile?.id}
-                        selectedFileIds={selectedFileIds}
-                        selectedFolderIds={selectedFolderIds}
-                        selectedCount={selectedCount}
-                        selectedDownloadable={selectedDownloadable}
-                        selectedDeletable={selectedDeletable}
-                        canBatchRetry={canBatchRetry}
-                        canUploadInPortal={canUploadInPortal}
-                        canCreateFolderInPortal={canCreateFolderInPortal}
-                        statusFilter={statusFilter}
-                        folderDraft={folderDraft}
-                        onFolderDraftChange={setFolderDraft}
-                        onSearchTextChange={(nextValue) => {
-                            setSearchText(nextValue);
-                            if (!nextValue.trim()) {
-                                setSearchMode(false);
-                                setSearchResults([]);
-                                setSelectedFileIds(new Set());
-                                setSelectedFolderIds(new Set());
-                            }
-                        }}
-                        onSearch={() => void handleSearch()}
-                        onOpenUploadDialog={handleOpenUploadDialog}
-                        onOpenUploadedFiles={() => setUploadedFilesOpen(true)}
-                        onShowUnavailable={showUnavailable}
-                        onCreateFolder={() => fileUpload.handleCreateFolder()}
-                        onToggleStatusFilter={handleToggleStatusFilter}
-                        onBatchDownload={() => void handleBatchDownload()}
-                        onBatchRetry={() => void handleBatchRetry()}
-                        onBatchDelete={() => void handleBatchDelete()}
-                        onLoadMoreRoot={() => void loadRootTree(treeRootPage + 1, true)}
-                        onConfirmCreateFolder={confirmCreateFolder}
-                        onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
-                        onSelectFile={handleSelectFile}
-                        onToggleFileSelection={handleToggleFileSelection}
-                        permissionEntryIds={visiblePermissionEntryIds}
-                        onOpenPermission={(file) => {
-                            if (isActiveSpacePersonal) return;
-                            setPermissionTarget(file);
-                            setPermissionOpen(true);
-                        }}
-                        canShowPublishFile={canShowPublishFile}
-                        onPublishFile={setPublishingFile}
-                        onToggleFolder={(node) => void handleToggleFolder(node)}
-                        onLoadMoreChildren={(node) => void handleLoadMoreChildren(node)}
-                    />
+                    {!selectedFile ? (
+                        <main className={s.portalNativeWorkspace} data-testid="portal-file-workspace">
+                            {activeSpace ? (
+                                <div ref={aiPane.splitContainerRef} className="flex h-full min-w-0 flex-1 overflow-hidden">
+                                    {isH5 && aiPane.showAiAssistant ? (
+                                        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+                                            <KnowledgeAiPanel
+                                                spaceId={String(activeSpace.id)}
+                                                folderId={currentFolderId}
+                                                contextLabel={aiContextLabel}
+                                                onClose={() => aiPane.setShowAiAssistant(false)}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div
+                                                style={{ width: aiPane.showAiAssistant ? `${aiPane.aiSplitWidth}px` : "100%" }}
+                                                className="flex h-full min-h-0 min-w-0 flex-shrink-0 flex-col overflow-hidden"
+                                            >
+                                                <KnowledgeSpaceContent
+                                                    space={activeSpace}
+                                                    files={searchMode ? searchResults : currentFolderFiles}
+                                                    currentPage={currentFileListPage}
+                                                    pageSize={TREE_PAGE_SIZE}
+                                                    total={currentFileListTotal}
+                                                    hasMore={currentFileListHasMore}
+                                                    onPageChange={handleNativePageChange}
+                                                    loading={currentFileListLoading}
+                                                    onSearch={(params) => void handleNativeSearch(params)}
+                                                    onFilterStatus={handleNativeStatusFilter}
+                                                    onSort={handleNativeSort}
+                                                    onNavigateFolder={(folderId) => void handleNavigateFolder(folderId)}
+                                                    onUploadFile={(files) => fileUpload.handleUploadFile(files)}
+                                                    onUploadFolder={(files, options) => fileUpload.handleUploadFolder(files, options)}
+                                                    onCreateFolder={() => fileUpload.handleCreateFolder()}
+                                                    onDownloadFile={() => undefined}
+                                                    onRenameFile={(fileId, newName) => void fileUpload.handleRenameFile(fileId, newName)}
+                                                    onDeleteFile={(fileId) => void fileUpload.handleDeleteFile(fileId)}
+                                                    onEditTags={(fileId) => void fileUpload.handleEditTags(fileId)}
+                                                    onRetryFile={() => void reloadFiles()}
+                                                    currentPath={currentPath}
+                                                    currentFolderId={currentFolderId}
+                                                    uploadingFiles={fileUpload.uploadingFiles}
+                                                    creatingFolder={fileUpload.creatingFolder}
+                                                    onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
+                                                    onToggleAiAssistant={aiPane.handleToggleAiAssistant}
+                                                    isAiAssistantOpen={aiPane.showAiAssistant}
+                                                    onGoKnowledgeSquare={showUnavailable}
+                                                    onPreviewFile={handleSelectFile}
+                                                    afterSearchActions={(
+                                                        <PortalHeaderActions
+                                                            canUpload={canUploadInPortal}
+                                                            canCreateFolder={canCreateFolderInPortal}
+                                                            statusFilter={statusFilter}
+                                                            onOpenUploadDialog={handleOpenUploadDialog}
+                                                            onOpenUploadedFiles={() => setUploadedFilesOpen(true)}
+                                                            onShowUnavailable={showUnavailable}
+                                                            onCreateFolder={() => fileUpload.handleCreateFolder()}
+                                                            onToggleStatusFilter={handleToggleStatusFilter}
+                                                        />
+                                                    )}
+                                                    hideNativeAddMenu
+                                                    hideNativeStatusFilter
+                                                    hideShareButton
+                                                    markPendingDeletion={markPendingDeletion}
+                                                    clearPendingDeletion={clearPendingDeletion}
+                                                    setFiles={setCurrentFolderFiles}
+                                                    setTotal={setCurrentFileListTotal}
+                                                />
+                                            </div>
+
+                                            {!isH5 && aiPane.showAiAssistant && (
+                                                <div className="relative z-20 w-px min-w-px max-w-px flex-none shrink-0">
+                                                    <div
+                                                        onMouseDown={aiPane.startSplitResize}
+                                                        className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
+                                                    >
+                                                        <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-colors duration-150 group-hover:bg-primary group-active:bg-primary" />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {!isH5 && aiPane.showAiAssistant && (
+                                                <div className="flex h-full min-w-[360px] flex-1 bg-white">
+                                                    <KnowledgeAiPanel
+                                                        spaceId={String(activeSpace.id)}
+                                                        folderId={currentFolderId}
+                                                        contextLabel={aiContextLabel}
+                                                        onClose={() => aiPane.setShowAiAssistant(false)}
+                                                    />
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className={s.stateBox}>
+                                    <div className={s.stateTitle}>暂无可用知识库</div>
+                                    <div>请先创建或加入知识空间。</div>
+                                </div>
+                            )}
+                        </main>
+                    ) : null}
                 </>
             ) : null}
 
-            <main className={s.documentArea}>
-                <DocumentPreview
-                    selectedFile={selectedFile}
-                    documentPath={documentPath}
-                    preview={preview}
-                    summaryExpanded={summaryExpanded}
-                    onOpenTags={() => setTagModalOpen(true)}
-                    // onOpenShare={() => setActivePanel("share")}
-                    onDownload={() => void handleDownloadSelected()}
+            {selectedFile ? (
+                <PortalPreviewWorkspace
+                    activePanel={activePanel}
+                    activeSpace={activeSpace}
+                    aiDrawerOpen={aiDrawerOpen}
+                    canEditEncoding={canEditSelectedFileEncoding}
                     canManagePermission={canManageSelectedFilePermission}
+                    documentPath={documentPath}
+                    isPersonalSpace={isActiveSpacePersonal}
+                    preview={preview}
+                    selectedFile={selectedFile}
+                    summaryExpanded={summaryExpanded}
+                    onAiDrawerOpenChange={setAiDrawerOpen}
+                    onBackToFileList={handleBackToFileList}
+                    onCopyEncoding={() => void handleCopyFileEncoding()}
+                    onCopyShareLink={() => void copyShareLink()}
+                    onDownload={() => void handleDownloadSelected()}
+                    onEditEncoding={() => {
+                        if (!canEditSelectedFileEncoding) return;
+                        setEditingEncodingFile(selectedFile);
+                    }}
                     onOpenPermission={() => {
                         if (!canManageSelectedFilePermission) return;
                         setPermissionTarget(selectedFile);
                         setPermissionOpen(true);
                     }}
-                    onCopyEncoding={() => void handleCopyFileEncoding()}
+                    onOpenTags={() => setTagModalOpen(true)}
+                    onPanelChange={setActivePanel}
                     onToggleSummary={() => {
                         setActivePanel(null);
                         setSummaryExpanded((expanded) => !expanded);
                     }}
                 />
-
-                {selectedFile && !aiDrawerOpen ? (
-                    <PortalInfoDrawer
-                        activePanel={activePanel}
-                        activeSpace={activeSpace}
-                        selectedFile={selectedFile}
-                        documentPath={documentPath}
-                        showPermissionPanel={!isActiveSpacePersonal}
-                        canEditEncoding={canEditSelectedFileEncoding}
-                        onClose={() => setActivePanel(null)}
-                        onCopyShareLink={() => void copyShareLink()}
-                        onEditEncoding={() => {
-                            if (!canEditSelectedFileEncoding) return;
-                            setEditingEncodingFile(selectedFile);
-                        }}
-                        onPanelChange={setActivePanel}
-                    />
-                ) : null}
-
-                <PortalAiDrawer
-                    open={aiDrawerOpen}
-                    activeSpace={activeSpace}
-                    selectedFile={selectedFile}
-                    documentPath={documentPath}
-                    onOpenChange={setAiDrawerOpen}
-                />
-
-                {selectedFile ? (
-                    <ToolRail
-                        activePanel={activePanel}
-                        aiOpen={aiDrawerOpen}
-                        showPermissionPanel={!isActiveSpacePersonal}
-                        onTogglePanel={() => {
-                            setAiDrawerOpen(false);
-                            setActivePanel((current) => current ? null : "properties");
-                        }}
-                        onOpenAi={() => {
-                            setActivePanel(null);
-                            setAiDrawerOpen(true);
-                        }}
-                        onOpenPanel={(panel) => {
-                            setAiDrawerOpen(false);
-                            setActivePanel(panel);
-                        }}
-                    />
-                ) : null}
-            </main>
+            ) : null}
 
             <PortalDialogs
                 activeSpace={activeSpace}

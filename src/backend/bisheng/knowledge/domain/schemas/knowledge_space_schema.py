@@ -312,6 +312,11 @@ class ShougangPortalFileItemResp(BaseModel):
                     "Empty when the file has no resolvable source (e.g. uploaded "
                     "directly to the public space without publish metadata).",
     )
+    source_path: str = Field(
+        default="",
+        description="Readable document source path '<source space>><folder>/<file>'; "
+                    "root-level source files use only '<source space>'.",
+    )
 
 
 class ShougangPortalFileSearchResp(BaseModel):

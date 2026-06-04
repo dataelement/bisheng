@@ -35,6 +35,7 @@ import {
     getMineSpacesApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
+    getSpaceTagsApi,
     linkAsNewVersionApi,
     listMyUploadedFilesApi,
     listKnowledgeFolders,
@@ -72,6 +73,7 @@ jest.mock("~/hooks/queries/endpoints/queries", () => ({
     useGetBsConfig: () => ({
         data: {
             shougang: {
+                enabled: true,
                 file_encoding: {
                     document_types: [
                         { code: "RPT", label: "报告" },
@@ -85,11 +87,29 @@ jest.mock("~/hooks/queries/endpoints/queries", () => ({
 
 jest.mock("~/components/ui", () => ({
     Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+    Checkbox: ({ checked, onCheckedChange, ...props }: any) => (
+        <input
+            type="checkbox"
+            checked={checked === true}
+            aria-checked={checked === "indeterminate" ? "mixed" : Boolean(checked)}
+            onChange={() => onCheckedChange?.(!(checked === true))}
+            {...props}
+        />
+    ),
     Dialog: ({ open, children }: any) => (open ? <div>{children}</div> : null),
     DialogContent: ({ children }: any) => <div>{children}</div>,
     DialogFooter: ({ children }: any) => <div>{children}</div>,
     DialogHeader: ({ children }: any) => <div>{children}</div>,
     DialogTitle: ({ children }: any) => <div>{children}</div>,
+    DropdownMenu: ({ children }: any) => <div>{children}</div>,
+    DropdownMenuTrigger: ({ children }: any) => <div>{children}</div>,
+    DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
+    DropdownMenuItem: ({ children, disabled, onClick }: any) => (
+        <button type="button" disabled={disabled} onClick={onClick}>
+            {children}
+        </button>
+    ),
+    DropdownMenuSeparator: () => <hr />,
     Input: (props: any) => <input {...props} />,
 }));
 
@@ -136,7 +156,14 @@ jest.mock("../SpaceDetail/EditTagsModal", () => ({
 }));
 
 jest.mock("../SpaceDetail/AiChat/KnowledgeAiPanel", () => ({
-    KnowledgeAiPanel: () => <div data-testid="knowledge-ai-panel" />,
+    KnowledgeAiPanel: ({ spaceId, folderId, contextLabel, onClose }: any) => (
+        <div data-testid="knowledge-ai-panel">
+            <span>space:{spaceId}</span>
+            <span>folder:{folderId || ""}</span>
+            <span>context:{contextLabel}</span>
+            <button type="button" onClick={onClose}>关闭知识AI</button>
+        </div>
+    ),
 }));
 
 jest.mock("~/pages/Subscription/AiChat/AiAssistantPanel", () => ({
@@ -243,8 +270,11 @@ jest.mock("../hooks/useFileUpload", () => ({
         duplicateFiles: [],
         handleCreateFolder: jest.fn(),
         handleUploadFile: mockHandleUploadFile,
+        handleUploadFolder: jest.fn(),
         handleCancelCreateFolder: jest.fn(),
         handleRenameFile: jest.fn(),
+        handleDeleteFile: jest.fn(),
+        handleEditTags: jest.fn(),
         handleDuplicateSkip: jest.fn(),
         handleDuplicateOverwrite: jest.fn(),
     }),
@@ -289,6 +319,16 @@ jest.mock("~/api/knowledge", () => ({
     SpaceSortType: {
         UPDATE_TIME: "update_time",
     },
+    SortType: {
+        NAME: "file_name",
+        TYPE: "file_type",
+        SIZE: "file_size",
+        UPDATE_TIME: "update_time",
+    },
+    SortDirection: {
+        ASC: "asc",
+        DESC: "desc",
+    },
     SpaceLevel: {
         PUBLIC: "public",
         DEPARTMENT: "department",
@@ -314,6 +354,7 @@ jest.mock("~/api/knowledge", () => ({
     unsubscribeSpaceApi: jest.fn(),
     pinSpaceApi: jest.fn(),
     getSpaceChildrenApi: jest.fn(),
+    getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
     uploadFileToServerApi: jest.fn(),
     addFilesApi: jest.fn(),
@@ -423,6 +464,7 @@ describe("PortalKnowledgeWorkbench", () => {
         } as any);
         jest.mocked(getSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([] as any);
         jest.mocked(getFilePreviewApi).mockResolvedValue({
             preview_url: "/preview.md",
             original_url: "/origin.md",
@@ -1087,6 +1129,140 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(noStatusRow).queryByText("0/0")).not.toBeInTheDocument();
     });
 
+    test("uses the main work area as a full file list and covers it with preview until back", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("201", "C0_2施肥对设施油桃生物学特性.pdf", {
+            type: FileType.PDF,
+            size: 236718,
+            tags: [{ id: 1, name: "技术文档" }, { id: 2, name: "其他" }],
+            fileEncoding: "SGGF-CAS-PP-2026060001",
+            updatedAt: "2026-06-01T00:43:00",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        await waitFor(() => {
+            expect(within(workspace).getByTestId("active-space-title")).toHaveTextContent("信息");
+        });
+        expect(within(workspace).getByTestId("portal-file-table")).toBeInTheDocument();
+        expect(within(workspace).getByText("C0_2施肥对设施油桃生物学特性.pdf")).toBeInTheDocument();
+        expect(within(workspace).getByText("SGGF-CAS-PP-2026060001")).toBeInTheDocument();
+        const actions = within(workspace).getByTestId("portal-file-actions");
+        expect(
+            within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label")).filter(Boolean),
+        ).toEqual([
+            "上传",
+            "上传记录",
+            "网页链接",
+            "在线创建文档",
+            "新建文件夹",
+            "筛选",
+        ]);
+        expect(within(workspace).queryByRole("button", { name: /新增|add|add new|com_knowledge\.add_new/i })).not.toBeInTheDocument();
+        expect(within(workspace).queryByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).not.toBeInTheDocument();
+        expect(within(workspace).queryByRole("button", { name: /分享|share|com_knowledge\.share/i })).not.toBeInTheDocument();
+        expect(screen.queryByText("请选择一个文件")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("portal-tool-rail")).not.toBeInTheDocument();
+
+        fireEvent.click(within(workspace).getByRole("button", { name: "打开C0_2施肥对设施油桃生物学特性.pdf" }));
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("C0_2施肥对设施油桃生物学特性.pdf");
+        expect(screen.queryByTestId("portal-file-table")).not.toBeInTheDocument();
+
+        fireEvent.click(within(preview).getByRole("button", { name: "返回文件列表" }));
+
+        const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
+        expect(within(restoredWorkspace).getByTestId("portal-file-table")).toBeInTheDocument();
+        expect(screen.queryByTestId("portal-preview-page")).not.toBeInTheDocument();
+    });
+
+    test("opens Bisheng knowledge AI assistant with the current folder context", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "CS11", {
+            type: FileType.FOLDER,
+            successFileNum: 3,
+            fileNum: 3,
+        });
+        const rectSpy = jest.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+            x: 0,
+            y: 0,
+            width: 1280,
+            height: 720,
+            top: 0,
+            left: 0,
+            right: 1280,
+            bottom: 720,
+            toJSON: () => ({}),
+        } as DOMRect);
+        const originalResizeObserver = global.ResizeObserver;
+        class MockResizeObserver {
+            observe = jest.fn();
+            disconnect = jest.fn();
+        }
+        (global as any).ResizeObserver = MockResizeObserver;
+
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockImplementation((params: any) => Promise.resolve({
+            data: params?.parent_id === "101" ? [] : [folder],
+            total: params?.parent_id === "101" ? 0 : 1,
+        }) as any);
+
+        try {
+            renderWorkbench();
+
+            const workspace = await screen.findByTestId("portal-file-workspace");
+            fireEvent.click(await within(workspace).findByRole("button", { name: "打开CS11" }));
+
+            await waitFor(() => {
+                expect(getSpaceChildrenApi).toHaveBeenCalledWith(expect.objectContaining({
+                    space_id: "personal-1",
+                    parent_id: "101",
+                }));
+            });
+
+            fireEvent.click(within(workspace).getByRole("button", { name: /AI 助手|ai assistant|com_knowledge\.ai_assistant/i }));
+
+            const panel = await screen.findByTestId("knowledge-ai-panel");
+            expect(panel).toHaveTextContent("space:personal-1");
+            expect(panel).toHaveTextContent("folder:101");
+            expect(panel).toHaveTextContent("context:文件夹");
+            expect(mockShowToast).not.toHaveBeenCalledWith(expect.objectContaining({ message: "暂未开放" }));
+
+            fireEvent.click(within(panel).getByRole("button", { name: "关闭知识AI" }));
+            await waitFor(() => {
+                expect(screen.queryByTestId("knowledge-ai-panel")).not.toBeInTheDocument();
+            });
+        } finally {
+            rectSpy.mockRestore();
+            if (originalResizeObserver) {
+                global.ResizeObserver = originalResizeObserver;
+            } else {
+                delete (global as any).ResizeObserver;
+            }
+        }
+    });
+
     test("shows publish action for a successful team space file and submits approval", async () => {
         const teamSpace = makeSpace("team-1", "团队空间01", {
             role: SpaceRole.ADMIN,
@@ -1410,10 +1586,10 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         const fileRow = await screen.findByTestId("file-tree-row-201");
-        fireEvent.click(within(fileRow).getByRole("checkbox", { name: "选择后端开发.md" }));
+        fireEvent.click(within(fileRow).getByRole("checkbox"));
 
         expect(getFilePreviewApi).not.toHaveBeenCalled();
-        expect(screen.getByRole("button", { name: "批量操作" })).toBeEnabled();
+        expect(screen.queryByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).not.toBeInTheDocument();
 
         fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
 
@@ -1615,18 +1791,20 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(aiDrawer).getByRole("button", { name: "关闭AI抽屉" }));
 
         expect(screen.queryByTestId("portal-ai-drawer")).not.toBeInTheDocument();
-        expect(await screen.findByTestId("active-space-title")).toHaveTextContent("我的技术文档");
+        expect(await screen.findByTestId("portal-preview-page")).toHaveTextContent("后端开发.md");
+        expect(screen.queryByTestId("active-space-title")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("portal-file-table")).not.toBeInTheDocument();
         expect(screen.getByTestId("space-group-team")).toBeInTheDocument();
     });
 
     test("keeps the document preview share entry commented out", () => {
         const previewSource = readFileSync(path.join(__dirname, "components/DocumentPreview.tsx"), "utf8");
-        const workbenchSource = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.tsx"), "utf8");
+        const previewWorkspaceSource = readFileSync(path.join(__dirname, "components/PortalPreviewWorkspace.tsx"), "utf8");
 
         expect(previewSource).toContain('title="分享"');
         expect(stripComments(previewSource)).not.toContain('title="分享"');
-        expect(workbenchSource).toContain('onOpenShare={() => setActivePanel("share")}');
-        expect(stripComments(workbenchSource)).not.toContain('onOpenShare={() => setActivePanel("share")}');
+        expect(previewWorkspaceSource).toContain('onOpenShare={() => setActivePanel("share")}');
+        expect(stripComments(previewWorkspaceSource)).not.toContain('onOpenShare={() => setActivePanel("share")}');
     });
 
     test("hides document preview permission action without file management permission", async () => {
@@ -2124,7 +2302,6 @@ describe("PortalKnowledgeWorkbench", () => {
             "在线创建文档",
             "新建文件夹",
             "筛选",
-            "批量操作",
         ]);
     });
 
@@ -2737,7 +2914,7 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(await screen.findByRole("button", { name: "筛选" }));
         fireEvent.click(screen.getByRole("button", { name: "失败" }));
 
-        const input = screen.getByPlaceholderText("搜索文件...");
+        const input = screen.getByPlaceholderText("在当前知识空间进行搜索");
         fireEvent.change(input, { target: { value: "后端" } });
         fireEvent.keyDown(input, { key: "Enter" });
 
@@ -2779,12 +2956,11 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("后端开发.md")).toBeInTheDocument();
 
-        const input = screen.getByPlaceholderText("搜索文件...");
+        const input = screen.getByPlaceholderText("在当前知识空间进行搜索");
         fireEvent.change(input, { target: { value: "搜索" } });
         fireEvent.keyDown(input, { key: "Enter" });
 
-        expect(await screen.findByText("搜索结果")).toBeInTheDocument();
-        expect(screen.getByText("搜索结果.md")).toBeInTheDocument();
+        expect(await screen.findByText("搜索结果.md")).toBeInTheDocument();
         expect(screen.queryByText("后端开发.md")).not.toBeInTheDocument();
 
         fireEvent.change(input, { target: { value: "" } });
@@ -2818,14 +2994,17 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        expect(await screen.findByRole("button", { name: "批量操作" })).toBeDisabled();
+        await screen.findByTestId("portal-file-workspace");
+        expect(screen.queryByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).not.toBeInTheDocument();
 
         const folderRow = await screen.findByTestId("file-tree-row-101");
         const fileRow = screen.getByTestId("file-tree-row-201");
-        fireEvent.click(within(folderRow).getByRole("checkbox", { name: "选择技术文档" }));
-        fireEvent.click(within(fileRow).getByRole("checkbox", { name: "选择失败文档.md" }));
+        fireEvent.click(within(folderRow).getByRole("checkbox"));
+        fireEvent.click(within(fileRow).getByRole("checkbox"));
 
-        fireEvent.click(screen.getByRole("button", { name: "批量下载" }));
+        expect(await screen.findByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).toBeEnabled();
+
+        fireEvent.click(screen.getByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i }));
         await waitFor(() => {
             expect(batchDownloadApi).toHaveBeenCalledWith("personal-1", {
                 file_ids: [201],
@@ -2833,14 +3012,16 @@ describe("PortalKnowledgeWorkbench", () => {
             });
         });
 
-        fireEvent.click(screen.getByRole("button", { name: "批量重试" }));
+        fireEvent.click(screen.getByRole("button", { name: /批量重试|Batch retry|com_knowledge\.batch_retry|^retry$/i }));
         await waitFor(() => {
             expect(batchRetryApi).toHaveBeenCalledWith("personal-1", [101, 201]);
         });
 
-        fireEvent.click(within(folderRow).getByRole("checkbox", { name: "选择技术文档" }));
-        fireEvent.click(within(fileRow).getByRole("checkbox", { name: "选择失败文档.md" }));
-        fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+        const refreshedFolderRow = await screen.findByTestId("file-tree-row-101");
+        const refreshedFileRow = screen.getByTestId("file-tree-row-201");
+        fireEvent.click(within(refreshedFolderRow).getByRole("checkbox"));
+        fireEvent.click(within(refreshedFileRow).getByRole("checkbox"));
+        fireEvent.click(screen.getByRole("button", { name: /批量删除|Batch delete|com_knowledge\.batch_delete|^delete$/i }));
         await waitFor(() => {
             expect(batchDeleteApi).toHaveBeenCalledWith("personal-1", {
                 file_ids: [201],

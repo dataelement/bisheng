@@ -39,6 +39,7 @@ const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: Reac
         };
 
         calculateVisibleTags();
+        if (typeof ResizeObserver === "undefined") return;
         const observer = new ResizeObserver(calculateVisibleTags);
         if (containerRef.current) {
             observer.observe(containerRef.current);

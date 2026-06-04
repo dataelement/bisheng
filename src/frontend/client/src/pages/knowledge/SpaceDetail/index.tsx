@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent, type ReactNode } from "react";
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
@@ -83,6 +83,11 @@ interface KnowledgeSpaceContentProps {
     isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
+    onPreviewFile?: (file: KnowledgeFile) => void;
+    afterSearchActions?: ReactNode;
+    hideNativeAddMenu?: boolean;
+    hideNativeStatusFilter?: boolean;
+    hideShareButton?: boolean;
     markPendingDeletion: (ids: Array<string | number>) => void;
     clearPendingDeletion: (ids: Array<string | number>) => void;
     setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
@@ -120,6 +125,11 @@ export function KnowledgeSpaceContent({
     isAiAssistantOpen,
     onCreateSpace,
     onGoKnowledgeSquare,
+    onPreviewFile,
+    afterSearchActions,
+    hideNativeAddMenu,
+    hideNativeStatusFilter,
+    hideShareButton = false,
     markPendingDeletion,
     clearPendingDeletion,
     setFiles,
@@ -808,6 +818,10 @@ export function KnowledgeSpaceContent({
             setViolationFile(file);
             return;
         }
+        if (file && onPreviewFile) {
+            onPreviewFile(file);
+            return;
+        }
         const fileName = nameOverride || file?.name || localize("com_knowledge.unknown_file");
         // Use extension from filename for preview viewer dispatch instead of API type field
         const ext = fileName.split('.').pop()?.toLowerCase() || "";
@@ -1049,7 +1063,10 @@ export function KnowledgeSpaceContent({
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}
-                canShareSpace={canShareSpace}
+                canShareSpace={!hideShareButton && canShareSpace}
+                afterSearchActions={afterSearchActions}
+                hideNativeAddMenu={hideNativeAddMenu}
+                hideNativeStatusFilter={hideNativeStatusFilter}
                 versionManagementEnabled={versionManagementEnabled}
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}

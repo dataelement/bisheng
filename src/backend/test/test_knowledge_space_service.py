@@ -1231,6 +1231,153 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
 
 
 @pytest.mark.asyncio
+async def test_shougang_portal_file_search_returns_full_source_path(service):
+    public_space = _make_space(space_id=12, user_id=7)
+    public_space.name = '信息发布库'
+    source_space = _make_space(space_id=14, user_id=7)
+    source_space.name = '信息'
+    files = [
+        _make_file(file_id=100, knowledge_id=12, file_name='CO_2施肥对设施油桃生物学特性的影响.pdf'),
+        _make_file(file_id=101, knowledge_id=12, file_name='根目录制度.pdf'),
+    ]
+    source_files = [
+        _make_file(
+            file_id=42,
+            knowledge_id=14,
+            file_name='CO_2施肥对设施油桃生物学特性的影响.pdf',
+            file_level_path='/37',
+            level=1,
+        ),
+        _make_file(file_id=43, knowledge_id=14, file_name='根目录制度.pdf', file_level_path='', level=0),
+    ]
+    folders = [
+        _make_file(
+            file_id=37,
+            knowledge_id=14,
+            file_type=FileType.DIR.value,
+            file_name='桃树栽培',
+            file_level_path='',
+        )
+    ]
+
+    async def fake_get_spaces_by_ids(space_ids, **_kwargs):
+        id_set = {int(i) for i in space_ids}
+        if 14 in id_set:
+            return [source_space]
+        return [public_space]
+
+    async def fake_get_files_by_ids(file_ids):
+        id_set = {int(i) for i in file_ids}
+        if {42, 43} & id_set:
+            return [f for f in source_files if int(f.id) in id_set]
+        return [f for f in folders if int(f.id) in id_set]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        side_effect=fake_get_spaces_by_ids,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=files,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+        new_callable=AsyncMock,
+        side_effect=fake_get_files_by_ids,
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                **files[0].model_dump(),
+                'tags': [],
+                'user_metadata': {
+                    'shougang_portal_publish': {'source_space_id': 14, 'source_file_id': 42}
+                },
+            },
+            {
+                **files[1].model_dump(),
+                'tags': [],
+                'user_metadata': {
+                    'shougang_portal_publish': {'source_space_id': 14, 'source_file_id': 43}
+                },
+            },
+        ],
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(space_ids=[12], page=1, page_size=10, sort='updated_at')
+        )
+
+    assert result['data'][0]['source_path'] == '信息>桃树栽培/CO_2施肥对设施油桃生物学特性的影响.pdf'
+    assert result['data'][1]['source_path'] == '信息'
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_file_search_uses_current_file_path_without_publish_metadata(service):
+    space = _make_space(space_id=12, user_id=7)
+    space.name = '信息'
+    file_record = _make_file(
+        file_id=100,
+        knowledge_id=12,
+        file_name='CO_2施肥对设施油桃生物学特性的影响.pdf',
+        file_level_path='/37',
+        level=1,
+    )
+    folder = _make_file(
+        file_id=37,
+        knowledge_id=12,
+        file_type=FileType.DIR.value,
+        file_name='桃树栽培',
+        file_level_path='',
+    )
+
+    async def fake_get_files_by_ids(file_ids):
+        id_set = {int(i) for i in file_ids}
+        return [folder] if 37 in id_set else []
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=[file_record],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
+        new_callable=AsyncMock,
+        side_effect=fake_get_files_by_ids,
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                **file_record.model_dump(),
+                'tags': [],
+                'user_metadata': {},
+            }
+        ],
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(space_ids=[12], page=1, page_size=10, sort='updated_at')
+        )
+
+    assert result['data'][0]['source_path'] == '信息>桃树栽培/CO_2施肥对设施油桃生物学特性的影响.pdf'
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_source_folder_paths_resolves_breadcrumb(service):
     # Published file 100 traces back to source file 42 in space 14, nested under
     # folders 37 (C011) -> 38 (C0001). File 88 has no publish metadata.

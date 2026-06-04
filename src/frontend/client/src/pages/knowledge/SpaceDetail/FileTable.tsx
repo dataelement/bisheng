@@ -4,7 +4,7 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from "@/components/ui/Table";
+} from "~/components/ui/Table";
 import {
     Download,
     Edit,
@@ -150,6 +150,12 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
 
         update();
         el.addEventListener("scroll", update, { passive: true });
+
+        if (typeof ResizeObserver === "undefined") {
+            return () => {
+                el.removeEventListener("scroll", update);
+            };
+        }
 
         // 监听容器尺寸变化
         const ro = new ResizeObserver(update);
@@ -594,7 +600,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
 
     return (
-        <div className="relative max-w-full min-w-0 overflow-hidden">
+        <div className="relative max-w-full min-w-0 overflow-hidden" data-testid="portal-file-table">
             {/* 横向滚动限制在容器内，不撑开整页 */}
             <div
                 ref={(el) => {
@@ -923,6 +929,7 @@ function FileRow({
     return (
         <TableRow
             data-knowledge-file-item
+            data-testid={`file-tree-row-${file.id}`}
             className={cn(
                 "group border-b border-b-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
@@ -962,12 +969,13 @@ function FileRow({
                                 <img
                                     src={`${__APP_ENV__.BASE_URL}/assets/channel/folder-close.svg`}
                                     alt=""
+                                    data-testid={`portal-folder-icon-${file.id}`}
                                     className="size-[14px] object-contain"
                                 />
                             )
                             : (['png', 'jpg', 'jpeg', 'bmp', 'gif', 'webp'].includes(file.name.split('.').pop()?.toLowerCase() || "")
-                                ? <FileImageIcon className="size-[14px]" />
-                                : <FileUserIcon className="size-[14px]" />)
+                                ? <FileImageIcon className="size-[14px]" data-testid={`legacy-file-icon-${file.name.split('.').pop()?.toLowerCase() || "file"}`} />
+                                : <FileUserIcon className="size-[14px]" data-testid={`legacy-file-icon-${file.name.split('.').pop()?.toLowerCase() || "file"}`} />)
                         }
                     </div>
                     {isRenaming ? (
@@ -1002,6 +1010,9 @@ function FileRow({
                                 </button>
                             )}
                             <span
+                                role={isFolder || namePreviewable ? "button" : undefined}
+                                tabIndex={isFolder || namePreviewable ? 0 : undefined}
+                                aria-label={isFolder || namePreviewable ? `打开${file.name}` : undefined}
                                 className={cn(
                                     "text-sm truncate flex-1",
                                     namePreviewable
@@ -1010,6 +1021,16 @@ function FileRow({
                                 )}
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    if (isFolder) {
+                                        onNavigateFolder?.();
+                                        return;
+                                    }
+                                    if (!namePreviewable) return;
+                                    onPreview?.();
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key !== "Enter" && e.key !== " ") return;
+                                    e.preventDefault();
                                     if (isFolder) {
                                         onNavigateFolder?.();
                                         return;

@@ -437,6 +437,11 @@
   flex-wrap: nowrap;
 }
 
+.portalHeaderFileActions {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
 .folderAction {
   width: 29px;
   height: 29px;
@@ -735,6 +740,304 @@
 .pagerButton:disabled {
   color: #b8c2d2;
   cursor: not-allowed;
+}
+
+.portalWorkspace {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 26px 24px 18px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.portalNativeWorkspace {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  overflow: hidden;
+  background: #fff;
+}
+
+.portalWorkspaceHeader {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 0 0 auto;
+}
+
+.portalTitleBlock {
+  min-width: 0;
+  flex: 1;
+}
+
+.portalWorkspaceTitle {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1d2129;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.portalHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex: 0 0 auto;
+}
+
+.portalHeaderButton {
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: #1d2b55;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.portalHeaderButton:hover {
+  color: #2c76f4;
+}
+
+.portalToolbar {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 18px;
+  flex: 0 0 auto;
+}
+
+.portalSearchBox {
+  width: min(620px, 44vw);
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid #dfe5ee;
+  border-radius: 6px;
+  background: #fff;
+  color: #7b8798;
+}
+
+.portalSearchInput {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #1d2129;
+  font-size: 15px;
+}
+
+.portalSearchInput::placeholder {
+  color: #8b97a8;
+}
+
+.portalViewActions {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #dfe5ee;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.portalIconButton {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #4e5969;
+}
+
+.portalIconButtonActive {
+  background: #e9f1ff;
+  color: #2c76f4;
+}
+
+.portalTableShell {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-top: 22px;
+  border-top: 1px solid #e5e8ef;
+  overflow: hidden;
+}
+
+.portalTableHeader,
+.portalTableRow {
+  display: grid;
+  grid-template-columns: 48px minmax(260px, 1.8fr) minmax(110px, 0.55fr) minmax(110px, 0.55fr) minmax(180px, 0.8fr) minmax(210px, 1fr) minmax(160px, 0.8fr) 54px;
+  align-items: center;
+  min-width: 1120px;
+}
+
+.portalTableHeader {
+  height: 52px;
+  flex: 0 0 auto;
+  color: #4e5969;
+  background: #fbfcff;
+  border-bottom: 1px solid #e5e8ef;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.portalTableBody {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.portalTableRow {
+  min-height: 56px;
+  border-bottom: 1px solid #edf0f5;
+  color: #1d2129;
+  background: #fff;
+  font-size: 14px;
+}
+
+.portalTableRow:hover,
+.portalTableRowActive {
+  background: #f7fbff;
+}
+
+.portalCheckboxCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.portalNameCell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 12px;
+}
+
+.portalFileNameButton {
+  min-width: 0;
+  flex: 1;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: #165dff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.portalFileNameButton:hover .fileName {
+  text-decoration: underline;
+}
+
+.portalTableCell,
+.portalEncodingCell,
+.portalStatusCell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding-right: 18px;
+  color: #7f8a9d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portalEncodingCell {
+  color: #7b8798;
+}
+
+.portalStatusCell {
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.portalTagList {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.portalTag {
+  max-width: 88px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: #f1f3f6;
+  color: #4e5969;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.portalMutedText {
+  color: #a5afbf;
+}
+
+.portalLoadMoreBar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border-top: 1px solid #edf0f5;
+}
+
+.previewContent {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+
+.backToListButton {
+  align-self: flex-start;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  margin: 16px 20px 0;
+  padding: 0 12px;
+  border: 1px solid #dfe5ee;
+  border-radius: 6px;
+  background: #fff;
+  color: #2c76f4;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.backToListButton:hover {
+  background: #f4f8ff;
 }
 
 .documentArea {

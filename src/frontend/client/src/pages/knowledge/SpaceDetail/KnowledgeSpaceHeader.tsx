@@ -33,7 +33,7 @@ import { AiChatIcon } from "~/components/icons";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
-import { Fragment, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
 
 /** 工具栏实际宽度小于此值时：搜索独占一行，第二行为视图/筛选（左）与新增/批量（右）。阈值偏大以免中等宽度仍挤在一行。 */
@@ -77,6 +77,9 @@ interface KnowledgeSpaceHeaderProps {
     isAiAssistantOpen?: boolean;
     enableCardMode?: boolean;
     canShareSpace?: boolean;
+    afterSearchActions?: ReactNode;
+    hideNativeAddMenu?: boolean;
+    hideNativeStatusFilter?: boolean;
     // Version management
     versionManagementEnabled?: boolean;
     pendingSimilarCount?: number;
@@ -120,6 +123,9 @@ export function KnowledgeSpaceHeader({
     isAiAssistantOpen,
     enableCardMode = true,
     canShareSpace = false,
+    afterSearchActions,
+    hideNativeAddMenu = false,
+    hideNativeStatusFilter = false,
     versionManagementEnabled = false,
     pendingSimilarCount = 0,
     onProcessSimilar,
@@ -139,6 +145,7 @@ export function KnowledgeSpaceHeader({
             setToolbarCompact(w > 0 && w < TOOLBAR_COMPACT_MAX_WIDTH);
         };
         update();
+        if (typeof ResizeObserver === "undefined") return;
         const ro = new ResizeObserver(() => update());
         ro.observe(el);
         return () => ro.disconnect();
@@ -147,7 +154,7 @@ export function KnowledgeSpaceHeader({
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
-    const showAddMenu = canCreateFolder || canUploadFile;
+    const showAddMenu = !hideNativeAddMenu && (canCreateFolder || canUploadFile);
     const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
     const showViewModeTabs = enableCardMode && !isNarrow576;
 
@@ -182,7 +189,7 @@ export function KnowledgeSpaceHeader({
                 </div>
             )}
 
-            {space.role !== SpaceRole.MEMBER && (
+            {!hideNativeStatusFilter && space.role !== SpaceRole.MEMBER && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
@@ -456,7 +463,10 @@ export function KnowledgeSpaceHeader({
                 <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                     {currentPath.length === 0 ? (
                         <div className="flex min-w-0 flex-1 items-center gap-1">
-                            <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                            <h1
+                                className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6"
+                                data-testid="active-space-title"
+                            >
                                 {space.name}
                             </h1>
                             {space.spaceKind === "department" && (
@@ -520,7 +530,10 @@ export function KnowledgeSpaceHeader({
                                             /
                                         </span>
                                         {idx === currentPath.length - 1 ? (
-                                            <span className="min-w-0 truncate text-base font-medium text-[#1d2129]">
+                                            <span
+                                                className="min-w-0 truncate text-base font-medium text-[#1d2129]"
+                                                data-testid="active-space-title"
+                                            >
                                                 {seg.name}
                                             </span>
                                         ) : (
@@ -567,12 +580,15 @@ export function KnowledgeSpaceHeader({
             <div ref={toolbarMeasureRef} className="w-full min-w-0">
                 {toolbarCompact ? (
                     <div className="flex flex-col gap-3">
-                        <div className={searchFieldClassName}>
-                            <CompoundSearchInput
-                                spaceId={space.id}
-                                isRoot={currentPath.length === 0}
-                                onSearch={onSearch}
-                            />
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className={searchFieldClassName}>
+                                <CompoundSearchInput
+                                    spaceId={space.id}
+                                    isRoot={currentPath.length === 0}
+                                    onSearch={onSearch}
+                                />
+                            </div>
+                            {afterSearchActions}
                         </div>
                         <div className="max-[767px]:-mx-4 max-[767px]:sticky max-[767px]:top-0 max-[767px]:z-20 max-[767px]:bg-white max-[767px]:px-4 max-[767px]:py-2">
                             <div className="flex min-w-0 items-center justify-between gap-2">
@@ -591,6 +607,7 @@ export function KnowledgeSpaceHeader({
                                     onSearch={onSearch}
                                 />
                             </div>
+                            {afterSearchActions}
                             {viewFilterSortCluster}
                         </div>
                         {batchAndAddActions}
