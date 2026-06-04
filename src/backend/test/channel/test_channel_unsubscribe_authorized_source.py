@@ -80,16 +80,83 @@ async def test_unsubscribe_direct_user_source_removes_source_and_revokes_fga():
     ])
     service = _service(repo)
 
+    existing_bindings = [{
+        'key': 'channel:channel-1:user:7:viewer:-',
+        'resource_type': 'channel',
+        'resource_id': 'channel-1',
+        'subject_type': 'user',
+        'subject_id': 7,
+        'relation': 'viewer',
+        'include_children': None,
+        'model_id': 'viewer',
+    }]
+    save_mock = AsyncMock()
+
     with patch(
         'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
         new=AsyncMock(),
-    ) as mock_authorize:
+    ) as mock_authorize, patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
+        new=AsyncMock(return_value=[]),
+    ), patch(
+        'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+        new=AsyncMock(return_value=existing_bindings),
+    ), patch(
+        'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+        new=save_mock,
+    ):
         result = await service.unsubscribe_channel('channel-1', _User())
 
     assert result is True
     assert repo.deleted_binding_keys == ['channel:channel-1:user:7:viewer:-']
+    # ReBAC relations for the user must be revoked so unsubscribe drops access.
     mock_authorize.assert_awaited_once()
-    assert mock_authorize.await_args.kwargs['revokes'][0].subject_id == 7
+    revokes = mock_authorize.await_args.kwargs['revokes']
+    assert revokes and all(item.subject_id == 7 for item in revokes)
+    # The direct user binding must be removed so the user no longer surfaces in
+    # the channel authorization list after unsubscribe.
+    save_mock.assert_awaited_once()
+    saved_bindings = save_mock.await_args.args[0]
+    assert all(
+        not (b['subject_type'] == 'user' and b['subject_id'] == 7)
+        for b in saved_bindings
+    )
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_self_subscribe_source_revokes_fga_and_binding():
+    # Self-subscribe (own application) rows carry no grant_subject_type; subscribe
+    # still mirrors a ReBAC viewer grant + UI binding, so unsubscribe must revoke
+    # both, otherwise the user keeps access and stays in the authorization list.
+    repo = _Repo([
+        _member(member_id=1, subject_type=None, subject_id=None, binding_key=None)
+    ])
+    service = _service(repo)
+
+    save_mock = AsyncMock()
+
+    with patch(
+        'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+        new=AsyncMock(),
+    ) as mock_authorize, patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
+        new=AsyncMock(return_value=[]),
+    ), patch(
+        'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+        new=AsyncMock(return_value=[]),
+    ), patch(
+        'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+        new=save_mock,
+    ):
+        result = await service.unsubscribe_channel('channel-1', _User())
+
+    assert result is True
+    # No grant_binding_key -> the membership row itself is deleted.
+    assert repo.deleted_ids == [1]
+    mock_authorize.assert_awaited_once()
+    revokes = mock_authorize.await_args.kwargs['revokes']
+    assert revokes and all(item.subject_id == 7 for item in revokes)
+    save_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio

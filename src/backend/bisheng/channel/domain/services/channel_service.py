@@ -1978,22 +1978,20 @@ class ChannelService:
         await _save_bindings(updated_bindings)
 
     async def _remove_channel_direct_source(self, channel_id: str, source) -> None:
-        if getattr(source, 'grant_subject_type', None) == 'user' and getattr(source, 'grant_subject_id', None):
-            relation = getattr(source, 'grant_relation', None) or resolve_channel_relation(source)
-            await PermissionService.authorize(
-                object_type='channel',
-                object_id=channel_id,
-                grants=[],
-                revokes=[
-                    AuthorizeRevokeItem(
-                        subject_type='user',
-                        subject_id=int(source.grant_subject_id),
-                        relation=ChannelRelationEnum(relation).value,
-                        include_children=getattr(source, 'grant_include_children', None),
-                        model_id=getattr(source, 'grant_model_id', None),
-                    )
-                ],
-                enforce_fga_success=True,
+        # Subscribe mirrors a direct membership into an explicit ReBAC grant
+        # (viewer/editor/manager) plus a UI binding via
+        # sync_direct_channel_user_permissions. Unsubscribe must tear both down,
+        # otherwise the user keeps channel access through ReBAC and still surfaces
+        # in the authorization list after the membership row is deleted. This
+        # covers self-subscribe (grant_subject_type None/'self') and admin-direct
+        # user grants (grant_subject_type 'user') alike.
+        revoke_user_id = getattr(source, 'grant_subject_id', None) or getattr(source, 'user_id', None)
+        if revoke_user_id is not None:
+            await self.__class__.sync_direct_channel_user_permissions(
+                channel_id,
+                int(revoke_user_id),
+                None,
+                is_active=False,
             )
 
         binding_key = getattr(source, 'grant_binding_key', None)
