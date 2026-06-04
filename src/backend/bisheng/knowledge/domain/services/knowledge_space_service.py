@@ -4053,50 +4053,98 @@ class KnowledgeSpaceService(KnowledgeUtils):
         so their original folder structure is recovered from
         user_metadata.shougang_portal_publish.{source_space_id, source_file_id}.
         Files without publish metadata fall back to their own knowledge_id and
-        file_level_path.
+        file_level_path. If the physical file path is root but the file is the
+        primary version of a logical document, the document's folder path is
+        used before falling back to a root source path.
 
         Returns maps for published file id -> "<source space>/<folder>/<folder>"
         and published file id -> "<source space>><folder>/<file>".
-        Files without a resolvable source (e.g. uploaded directly to the public
-        space, no publish metadata) are omitted so the caller defaults to "".
+        Root source files use only "<source space>" in source_path.
         Folder ids in file_level_path are resolved to names in one batch query.
         """
         source_file_by_item: Dict[int, int] = {}
         source_file_ids: set[int] = set()
-        fallback_source_by_item: Dict[int, tuple[int, str, str]] = {}
+        current_source_by_item: Dict[int, tuple[int, str, str]] = {}
         for item in items:
             item_id = int(item.get("id") or 0)
+            knowledge_id = int(item.get("knowledge_id") or item.get("space_id") or 0)
+            if item_id and knowledge_id:
+                current_source_by_item[item_id] = (
+                    knowledge_id,
+                    str(item.get("file_level_path") or ""),
+                    str(item.get("file_name") or item.get("title") or ""),
+                )
+
             metadata = item.get("user_metadata") or {}
             publish = metadata.get("shougang_portal_publish") if isinstance(metadata, dict) else None
             source_file_id = publish.get("source_file_id") if isinstance(publish, dict) else None
             if source_file_id:
                 source_file_by_item[item_id] = int(source_file_id)
                 source_file_ids.add(int(source_file_id))
-                continue
-
-            knowledge_id = int(item.get("knowledge_id") or item.get("space_id") or 0)
-            if knowledge_id:
-                fallback_source_by_item[item_id] = (
-                    knowledge_id,
-                    str(item.get("file_level_path") or ""),
-                    str(item.get("file_name") or item.get("title") or ""),
-                )
 
         source_files = await KnowledgeFileDao.aget_file_by_ids(list(source_file_ids)) if source_file_ids else []
         source_file_map = {int(f.id): f for f in source_files}
 
-        source_record_by_item: Dict[int, tuple[int, str, str]] = {}
+        published_source_by_item: Dict[int, tuple[int, str, str]] = {}
         for item_id, source_file_id in source_file_by_item.items():
             source_file = source_file_map.get(source_file_id)
             if source_file is None:
                 continue
-            source_record_by_item[item_id] = (
+            published_source_by_item[item_id] = (
                 int(source_file.knowledge_id),
                 str(source_file.file_level_path or ""),
                 str(source_file.file_name or ""),
             )
-        for item_id, source_record in fallback_source_by_item.items():
-            source_record_by_item.setdefault(item_id, source_record)
+
+        document_source_by_item: Dict[int, tuple[int, str, str]] = {}
+        if current_source_by_item and self.version_repo and self.doc_repo:
+            versions = await self.version_repo.find_primary_versions_by_file_ids(
+                list(current_source_by_item.keys())
+            )
+            version_by_file = {
+                int(version.knowledge_file_id): version
+                for version in versions
+                if getattr(version, "knowledge_file_id", None) is not None
+            }
+            document_ids = list({
+                int(version.document_id)
+                for version in version_by_file.values()
+                if getattr(version, "document_id", None) is not None
+            })
+            documents = await self.doc_repo.find_by_ids(document_ids) if document_ids else []
+            document_map = {
+                int(document.id): document
+                for document in documents
+                if getattr(document, "id", None) is not None
+            }
+            for item_id, (knowledge_id, _file_level_path, file_name) in current_source_by_item.items():
+                version = version_by_file.get(item_id)
+                document = document_map.get(int(version.document_id)) if version else None
+                document_path = str(getattr(document, "file_level_path", "") or "") if document else ""
+                if document_path:
+                    document_source_by_item[item_id] = (
+                        int(getattr(document, "knowledge_id", knowledge_id) or knowledge_id),
+                        document_path,
+                        file_name,
+                    )
+
+        source_record_by_item: Dict[int, tuple[int, str, str]] = {}
+        for item_id in set(current_source_by_item) | set(published_source_by_item) | set(document_source_by_item):
+            published_source = published_source_by_item.get(item_id)
+            current_source = current_source_by_item.get(item_id)
+            document_source = document_source_by_item.get(item_id)
+            if published_source and published_source[1]:
+                source_record_by_item[item_id] = published_source
+            elif current_source and current_source[1]:
+                source_record_by_item[item_id] = current_source
+            elif document_source and document_source[1]:
+                source_record_by_item[item_id] = document_source
+            elif published_source:
+                source_record_by_item[item_id] = published_source
+            elif current_source:
+                source_record_by_item[item_id] = current_source
+            elif document_source:
+                source_record_by_item[item_id] = document_source
 
         if not source_record_by_item:
             return {}, {}
