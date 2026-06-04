@@ -73,26 +73,22 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
     const renderTab = (id: number | string, label: string) => {
         const isActive = activeCategory === id;
         return (
-            <div
+            <button
                 key={id}
+                type="button"
                 onClick={() => {
                     onCategoryChange(id);
                     setActiveCategory(id);
                 }}
                 className={cn(
-                    "flex items-center justify-center px-[16px] py-1 relative rounded-[6px] shrink-0 cursor-pointer transition-all",
+                    "flex shrink-0 items-center whitespace-nowrap border-b-2 px-2 py-[5px] font-['PingFang_SC'] text-[14px] leading-[22px] transition-colors",
                     isActive
-                        ? "backdrop-blur-[4px] bg-[rgba(51,92,255,0.2)] border border-[#335cff] border-solid"
-                        : "hover:bg-gray-100 border border-transparent"
+                        ? "border-[#335CFF] text-[#335CFF]"
+                        : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
                 )}
             >
-                <p className={cn(
-                    "font-['PingFang_SC'] text-[14px] leading-[22px] whitespace-nowrap",
-                    isActive ? "text-[#335cff]" : "text-[#212121]"
-                )}>
-                    {label}
-                </p>
-            </div>
+                {label}
+            </button>
         )
     };
 

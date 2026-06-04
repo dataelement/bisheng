@@ -243,7 +243,7 @@ function ResizeHandle({ columnKey, onResizeStart }: { columnKey: ColumnKey; onRe
             onMouseDown={(e) => onResizeStart(columnKey, e)}
         >
             {/* 高亮线与列分界线对齐：手柄跨在相邻两列边界上，避免命中区偏在分割线左侧 */}
-            <div className="h-full w-0.5 bg-transparent group-hover/handle:bg-[#165dff] transition-colors" />
+            <div className="h-full w-0.5 bg-transparent group-hover/handle:bg-[#999] transition-colors" />
         </div>
     );
 }
@@ -485,17 +485,8 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.update_time")}</SortableHeader>
 
-                {/* 状态 — 管理员始终可见；普通成员仅在存在审批状态时展示 */}
-                {showStatusColumn && (
-                    <TableHead
-                        className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
-                        style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
-                    >
-                        <div className="flex items-center gap-1.5 border-l pl-3">
-                            {localize("com_knowledge.status")}</div>
-                        <ResizeHandle columnKey="status" onResizeStart={onResizeStart} />
-                    </TableHead>
-                )}
+                {/* Status column removed — non-success status pills now render inline
+                    next to the file name (see row cell). */}
 
                 {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
                 <TableHead
@@ -959,6 +950,10 @@ function FileRow({
                             <span className="block truncate">{renderHighlightedName(file.name, highlightKeyword)}</span>
                         </span>
                     )}
+                    {/* Inline status tag — non-folder files in any non-success state. */}
+                    {!isFolder && file.status && file.status !== FileStatus.SUCCESS && (
+                        <StatusBadge status={file.status} file={file} />
+                    )}
                 </div>
                 {/* 固定列右侧阴影 */}
                 <StickyColumnShadow show={showLeftShadow} />
@@ -1063,24 +1058,7 @@ function FileRow({
                 <span className="block truncate whitespace-nowrap">{formatTime(file.updatedAt)}</span>
             </TableCell>
 
-            {/* 状态：管理员看解析状态；普通成员只看审批状态 */}
-            {showStatusColumn && (
-                <TableCell
-                    className={cn("relative overflow-visible py-3 align-middle", rowBg)}
-                    style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
-                >
-                    {isFolder ? (
-                        isAdmin ? <span className="whitespace-nowrap text-sm">
-                            <span className="text-[#00b42a]">{file.successFileNum ?? 0}</span>
-                            <span className="text-[#86909c]">/{file.fileNum ?? 0}</span>
-                        </span> : null
-                    ) : (
-                        isAdmin || file.approvalStatus
-                            ? <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />
-                            : null
-                    )}
-                </TableCell>
-            )}
+            {/* Status column removed; non-success pills now render inline next to the file name. */}
             {/* 行末锚点：固定在可视区最右侧，按钮距右侧 12px，不受横向滚动影响 */}
             <TableCell
                 className="sticky right-0 z-[34] overflow-visible border-none bg-transparent p-0"

@@ -161,16 +161,6 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
         }
     };
 
-    const unreadCounts = useMemo(() => {
-        const allUnread = notifications.filter(isVisuallyUnread).length;
-        const requestUnread = notifications.filter(
-            n => isApprovalMessageType(n.message_type, n.action_code) && isVisuallyUnread(n)
-        ).length;
-        return { all: allUnread, request: requestUnread };
-    }, [notifications]);
-
-    const formatBadge = (n: number) => (n > 99 ? "99+" : String(n));
-
     useEffect(() => {
         if (typeof window === "undefined") return;
         const detect = () => {
@@ -1027,28 +1017,18 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
                                             <TabsTrigger
                                                 value="all"
                                                 className={cn(
-                                                    "relative h-8 shrink-0 min-h-0 min-w-fit appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]",
+                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-[#335CFF] data-[state=active]:border-[#335CFF] data-[state=active]:bg-transparent data-[state=active]:text-[#335CFF] data-[state=active]:shadow-none",
                                                 )}
                                             >
                                                 {localize("com_notifications_tab_all")}
-                                                {unreadCounts.all > 0 && (
-                                                    <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isNarrowMobileLayout ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
-                                                        {formatBadge(unreadCounts.all)}
-                                                    </span>
-                                                )}
                                             </TabsTrigger>
                                             <TabsTrigger
                                                 value="request"
                                                 className={cn(
-                                                    "relative h-8 shrink-0 min-h-0 min-w-fit appearance-none rounded-lg border border-transparent px-4 py-[5px] text-[14px] leading-none shadow-none transition-colors active:translate-y-0 data-[state=active]:gap-2 data-[state=active]:border-[#024DE3] data-[state=active]:bg-[#E6EDFC] data-[state=active]:font-medium data-[state=active]:text-[#024DE3] data-[state=active]:[backdrop-filter:blur(8px)] data-[state=active]:shadow-none data-[state=inactive]:gap-1 data-[state=inactive]:font-normal data-[state=inactive]:text-[#4E5969]",
+                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-[#335CFF] data-[state=active]:border-[#335CFF] data-[state=active]:bg-transparent data-[state=active]:text-[#335CFF] data-[state=active]:shadow-none",
                                                 )}
                                             >
                                                 {localize("com_notifications_tab_request")}
-                                                {unreadCounts.request > 0 && (
-                                                    <span className={cn("absolute flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] text-white ring-2 ring-white", isNarrowMobileLayout ? "-right-2 -top-2.5" : "-right-1 -top-1")}>
-                                                        {formatBadge(unreadCounts.request)}
-                                                    </span>
-                                                )}
                                             </TabsTrigger>
                                         </TabsList>
 
@@ -1067,7 +1047,7 @@ export function NotificationsDialog({ open = false, onOpenChange, focusedMessage
                                                     onClick={() => setOnlyUnread((v) => !v)}
                                                     className={
                                                         onlyUnread
-                                                            ? "h-8 rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] px-3 py-0 text-[14px] font-normal leading-none text-[#335CFF] [backdrop-filter:blur(4px)] hover:bg-[rgba(51,92,255,0.28)] hover:text-[#2236D9] active:translate-y-0"
+                                                            ? "h-8 rounded-[6px] border border-transparent bg-[rgba(51,92,255,0.2)] px-3 py-0 text-[14px] font-normal leading-none text-[#335CFF] [backdrop-filter:blur(4px)] hover:bg-[rgba(51,92,255,0.28)] hover:text-[#2236D9] active:translate-y-0"
                                                             : "h-8 rounded-[6px] border border-[#e5e6eb] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] hover:bg-[#f7f8fa] active:translate-y-0"
                                                     }
                                                 >

@@ -321,9 +321,11 @@ export default function MainLayout() {
   );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
-  /** 订阅 / 应用中心：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
+  /** 订阅 / 应用中心 / 应用对话：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
   const innerScrollShell =
-    isChannelRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
+    isChannelRoute ||
+    isAppChatRoute ||
+    (isAppsArea && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -493,7 +495,7 @@ export default function MainLayout() {
                   : 'h-auto min-h-[100dvh] overflow-visible'
                 : innerScrollShell
                   ? 'flex h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden overscroll-y-none'
-                  : 'h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
+                  : 'scrollbar-os h-[calc(100dvh-16px)] overflow-y-auto overscroll-y-none',
             )}
           >
             {/* 移动端应用中心顶栏：与频道页一致 — 菜单按钮触发系统主菜单(整页右滑) */}
