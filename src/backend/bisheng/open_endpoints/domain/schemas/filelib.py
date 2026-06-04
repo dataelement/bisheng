@@ -62,6 +62,10 @@ class RetrieveChunk(BaseModel):
     document_id: int
     document_name: str
     chunk_index: int
+    document_update_time: str = Field(
+        default="",
+        description="Latest update time of the source document (YYYY-MM-DD HH:mm:ss)",
+    )
 
 
 class RetrieveResp(BaseModel):

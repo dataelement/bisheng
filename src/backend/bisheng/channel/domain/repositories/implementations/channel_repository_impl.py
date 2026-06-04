@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import List, Optional, Tuple, Any
 
 from sqlalchemy import case, func, or_
-from bisheng.core.database.dialect_helpers import json_array_contains
 from sqlmodel import select, col, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -135,16 +134,15 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         result = await self.session.exec(query)
         return result.one()
 
-    async def find_channels_by_source_id(self, source_id: str) -> List[Channel]:
-        """Find channels whose source_list contains the specified source_id."""
-        if not source_id:
-            return []
-        dialect = self.session.get_bind().dialect.name
-        query = select(Channel).where(
-            json_array_contains(Channel.source_list, f'"{source_id}"', dialect)
-        )
+    async def find_all_referenced_source_ids(self) -> set[str]:
+        """Union of all source_ids referenced by any channel in the current tenant."""
+        query = select(Channel.source_list)
         result = await self.session.exec(query)
-        return list(result.all())
+        referenced: set[str] = set()
+        for source_list in result.all():
+            if source_list:
+                referenced.update(source_list)
+        return referenced
 
     def update_channel_latest_article_update_time(self, channles: List[Channel]) -> List[Channel]:
         for channel in channles:

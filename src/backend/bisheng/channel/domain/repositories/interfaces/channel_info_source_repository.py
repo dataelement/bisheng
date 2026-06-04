@@ -20,3 +20,13 @@ class ChannelInfoSourceRepository(BaseRepository[ChannelInfoSource, str], ABC):
     def get_by_page(self, page: int = 1, page_size: int = 20) -> List[ChannelInfoSource]:
         """Get all channel information sources by page."""
         pass
+
+    @abstractmethod
+    async def find_all(self) -> List[ChannelInfoSource]:
+        """Return all channel information source rows for the current tenant (reconcile use)."""
+        pass
+
+    @abstractmethod
+    async def delete_by_ids(self, source_ids: List[str]) -> None:
+        """Delete metadata rows for the given source ids (reconcile cleanup)."""
+        pass

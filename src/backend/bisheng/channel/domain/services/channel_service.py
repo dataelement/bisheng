@@ -110,7 +110,7 @@ CHANNEL_MEMBER_RELATIONS = {"owner", "manager", "editor", "viewer"}
 
 
 def _self_channel_binding_key(channel_id: str, user_id: int, relation: ChannelRelationEnum) -> str:
-    return f'channel:{channel_id}:self:{user_id}:{relation.value}:-'
+    return f"channel:{channel_id}:self:{user_id}:{relation.value}:-"
 
 
 def _member_relation_value(member) -> Optional[str]:
@@ -126,19 +126,19 @@ def _legacy_role_value_for_member(member) -> str:
 
 
 def _is_direct_channel_source(member, user_id: int) -> bool:
-    subject_type = getattr(member, 'grant_subject_type', None)
-    subject_id = getattr(member, 'grant_subject_id', None)
+    subject_type = getattr(member, "grant_subject_type", None)
+    subject_id = getattr(member, "grant_subject_id", None)
     if subject_type is None:
         return True
-    return subject_type in {'self', 'user'} and (subject_id is None or int(subject_id) == int(user_id))
+    return subject_type in {"self", "user"} and (subject_id is None or int(subject_id) == int(user_id))
 
 
 def _is_organization_channel_source(member) -> bool:
-    return getattr(member, 'grant_subject_type', None) in {'department', 'user_group'}
+    return getattr(member, "grant_subject_type", None) in {"department", "user_group"}
 
 
 def _is_authorized_channel_source(member) -> bool:
-    return getattr(member, 'grant_subject_type', None) in {'user', 'department', 'user_group'}
+    return getattr(member, "grant_subject_type", None) in {"user", "department", "user_group"}
 
 
 def _sorted_channel_permission_ids(permission_ids: set[str]) -> list[str]:
@@ -200,12 +200,12 @@ class ChannelService:
             permission_ids = set(
                 await FineGrainedPermissionService.get_effective_permission_ids_async(
                     login_user,
-                    'channel',
+                    "channel",
                     channel_id,
                 )
             )
         except Exception:
-            logger.exception('failed to resolve channel permission ids: channel_id=%s', channel_id)
+            logger.exception("failed to resolve channel permission ids: channel_id=%s", channel_id)
             permission_ids = set()
         permission_ids.update(_business_member_permission_ids(membership))
         return permission_ids
@@ -217,9 +217,9 @@ class ChannelService:
     ) -> set[str]:
         return await FineGrainedPermissionService.get_matching_binding_subject_types_async(
             login_user,
-            'channel',
+            "channel",
             channel_id,
-            {'department', 'user_group'},
+            {"department", "user_group"},
         )
 
     @staticmethod
@@ -344,6 +344,75 @@ class ChannelService:
             sensitive_review=article.sensitive_review,
         )
 
+    async def _sync_channel_info_source_metadata(
+        self, bisheng_information_client, source_ids: list[str]
+    ) -> list[ChannelInfoSource]:
+        """Fetch metadata for newly-subscribed sources and insert their channel_info_source rows.
+
+        Shared by create_channel / update_channel / reconcile. Returns the inserted rows so
+        callers can schedule follow-up work (e.g. article sync) on them.
+        """
+        if not source_ids:
+            return []
+        information_sources = await bisheng_information_client.get_information_source_by_ids(source_ids)
+        new_rows = [
+            ChannelInfoSource(
+                id=info_source.id,
+                source_name=info_source.name,
+                source_icon=info_source.icon,
+                source_type=info_source.business_type,
+                description=info_source.description,
+            )
+            for info_source in information_sources
+        ]
+        if new_rows:
+            await self.channel_info_source_repository.batch_add(new_rows)
+        return new_rows
+
+    async def reconcile_information_subscriptions(self) -> dict:
+        """Reconcile information-service subscriptions for the current tenant.
+
+        The desired subscription set is the union of every channel's ``source_list``;
+        the materialized view is the ``channel_info_source`` table. This converges the two
+        (and the external information service) on the eventual-consistency path:
+
+        - ``current - desired`` (orphans): unsubscribe at the information service + delete row.
+        - ``desired - current`` (missing): subscribe + fetch metadata + insert row
+          (heals subscribes that were missed or failed on the synchronous hot path).
+
+        Per-source failures are isolated (logged + counted) so one bad source never aborts
+        the rest; the next run retries it. Must run inside the target tenant's context — the
+        ``channel`` / ``channel_info_source`` queries are tenant-scoped automatically.
+
+        Returns ``{"to_sub", "to_unsub", "failed"}`` for observability.
+        """
+        bisheng_information_client = await get_bisheng_information_client()
+        desired = await self.channel_repository.find_all_referenced_source_ids()
+        current_rows = await self.channel_info_source_repository.find_all()
+        current = {row.id for row in current_rows}
+
+        to_unsub = current - desired
+        to_sub = desired - current
+        failed = 0
+
+        for source_id in to_unsub:
+            try:
+                await bisheng_information_client.unsubscribe_information_source([source_id])
+                await self.channel_info_source_repository.delete_by_ids([source_id])
+            except Exception:
+                logger.exception("reconcile: failed to unsubscribe information source %s", source_id)
+                failed += 1
+
+        for source_id in to_sub:
+            try:
+                await bisheng_information_client.subscribe_information_source([source_id])
+                await self._sync_channel_info_source_metadata(bisheng_information_client, [source_id])
+            except Exception:
+                logger.exception("reconcile: failed to subscribe information source %s", source_id)
+                failed += 1
+
+        return {"to_sub": len(to_sub), "to_unsub": len(to_unsub), "failed": failed}
+
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload, request=None):
         """Create a new channel based on the provided data and the logged-in user."""
         # Check if the user has reached the maximum limit for creating channels
@@ -354,37 +423,25 @@ class ChannelService:
             raise ChannelCreateLimitExceededError()
 
         bisheng_information_client = await get_bisheng_information_client()
-        # Subscribe to the information sources BEFORE persisting the channel.
-        # The subscribe call enforces the API-key source-count limit (19007);
-        # doing it first guarantees that a limit error aborts creation instead
-        # of leaving an orphaned channel / membership / OpenFGA owner tuple.
         if channel_data.source_list:
-            await bisheng_information_client.subscribe_information_source(channel_data.source_list)
-
-            # Sync information sources to local database
+            # A source already present in the local channel_info_source table has been
+            # subscribed before. The row and the information-service subscription share a
+            # lifecycle (both created on first subscribe, both removed together by the
+            # daily reconcile), so a present row means "already subscribed" — we skip
+            # re-subscribing it. Only sources missing from the table are new subscriptions.
             existing_sources = await self.channel_info_source_repository.find_by_ids(channel_data.source_list)
             existing_source_ids = {source.id for source in existing_sources}
-
-            missing_source_ids = [sid for sid in channel_data.source_list if sid not in existing_source_ids]
+            missing_source_ids = [
+                sid for sid in dict.fromkeys(channel_data.source_list) if sid not in existing_source_ids
+            ]
 
             if missing_source_ids:
-                missing_information_sources = await bisheng_information_client.get_information_source_by_ids(
-                    missing_source_ids
-                )
-
-                new_channel_info_sources = []
-                for info_source in missing_information_sources:
-                    new_source = ChannelInfoSource(
-                        id=info_source.id,
-                        source_name=info_source.name,
-                        source_icon=info_source.icon,
-                        source_type=info_source.business_type,
-                        description=info_source.description,
-                    )
-                    new_channel_info_sources.append(new_source)
-
-                if new_channel_info_sources:
-                    await self.channel_info_source_repository.batch_add(new_channel_info_sources)
+                # Subscribe the not-yet-subscribed sources BEFORE persisting the channel.
+                # The subscribe call enforces the API-key source-count limit (19007); doing
+                # it first guarantees that a limit error aborts creation instead of leaving
+                # an orphaned channel / membership / OpenFGA owner tuple.
+                await bisheng_information_client.subscribe_information_source(missing_source_ids)
+                await self._sync_channel_info_source_metadata(bisheng_information_client, missing_source_ids)
 
         channel_model = Channel(
             name=channel_data.name,
@@ -405,7 +462,7 @@ class ChannelService:
             user_id=login_user.user_id,
             role=UserRoleEnum.CREATOR,
             relation=ChannelRelationEnum.OWNER,
-            grant_subject_type='self',
+            grant_subject_type="self",
             grant_subject_id=login_user.user_id,
             grant_relation=ChannelRelationEnum.OWNER,
             grant_model_id=ChannelRelationEnum.OWNER.value,
@@ -470,18 +527,22 @@ class ChannelService:
         if query_data.query_type == QueryTypeEnum.FOLLOWED:
             listed_ids = await PermissionService.list_accessible_ids(
                 user_id=login_user.user_id,
-                relation='can_read',
-                object_type='channel',
+                relation="can_read",
+                object_type="channel",
                 login_user=login_user,
             )
             if listed_ids is not None:
                 accessible_ids = [str(channel_id) for channel_id in listed_ids]
 
         # Batch query channels by IDs
-        channel_ids = list(dict.fromkeys([
-            *(m.business_id for m in memberships),
-            *accessible_ids,
-        ]))
+        channel_ids = list(
+            dict.fromkeys(
+                [
+                    *(m.business_id for m in memberships),
+                    *accessible_ids,
+                ]
+            )
+        )
         if not channel_ids:
             return []
         channels = await self.channel_repository.find_channels_by_ids(channel_ids)
@@ -505,8 +566,7 @@ class ChannelService:
             ]
         )
         permission_ids_map = {
-            channel.id: permission_ids
-            for channel, permission_ids in zip(channels, permission_id_results)
+            channel.id: permission_ids for channel, permission_ids in zip(channels, permission_id_results)
         }
 
         # Construct the result list, filtering out non-authorized private channels for "followed" query type
@@ -520,18 +580,15 @@ class ChannelService:
             permission_ids = permission_ids_map.get(channel_id, set())
 
             if query_data.query_type == QueryTypeEnum.FOLLOWED:
-                if getattr(channel, 'user_id', None) == login_user.user_id:
+                if getattr(channel, "user_id", None) == login_user.user_id:
                     continue
-                has_view_permission = 'view_channel' in permission_ids
+                has_view_permission = "view_channel" in permission_ids
                 has_business_membership = bool(membership and not _is_authorized_channel_source(membership))
                 if not has_business_membership and not has_view_permission:
                     continue
                 if membership and _is_authorized_channel_source(membership) and not has_view_permission:
                     continue
-                if (
-                    channel.visibility == ChannelVisibilityEnum.PRIVATE
-                    and not has_view_permission
-                ):
+                if channel.visibility == ChannelVisibilityEnum.PRIVATE and not has_view_permission:
                     continue
 
             channels_to_process.append((channel, membership, permission_ids))
@@ -1309,9 +1366,9 @@ class ChannelService:
 
         current_relation = resolve_channel_relation(current_membership)
         if current_relation not in {
-                ChannelRelationEnum.OWNER,
-                ChannelRelationEnum.MANAGER,
-                ChannelRelationEnum.EDITOR,
+            ChannelRelationEnum.OWNER,
+            ChannelRelationEnum.MANAGER,
+            ChannelRelationEnum.EDITOR,
         }:
             raise ChannelPermissionDeniedError(
                 msg="Only the owner, manager, or editor can update the channel information"
@@ -1353,8 +1410,7 @@ class ChannelService:
                         removed_user_ids = [
                             member.user_id
                             for member in existing_members
-                            if member.status == MembershipStatusEnum.ACTIVE
-                            and member.user_id not in owner_user_ids
+                            if member.status == MembershipStatusEnum.ACTIVE and member.user_id not in owner_user_ids
                         ]
                     # 1. Drop every non-owner membership row.
                     await self.space_channel_member_repository.remove_non_creator_members(channel_id)
@@ -1365,7 +1421,8 @@ class ChannelService:
                     except Exception as e:
                         logger.warning(
                             "Failed to revoke non-owner FGA tuples after PRIVATE switch for channel %s: %s",
-                            channel_id, e,
+                            channel_id,
+                            e,
                         )
                     # 3. Drop their relation-model bindings so a later re-grant
                     #    cannot resurrect a stale model.
@@ -1373,12 +1430,13 @@ class ChannelService:
                         from bisheng.channel.domain.services.channel_authorization_service import (
                             ChannelAuthorizationService,
                         )
+
                         await ChannelAuthorizationService.clear_non_owner_bindings(channel_id)
                     except Exception as e:
                         logger.warning(
-                            "Failed to clear non-owner relation-model bindings after PRIVATE switch "
-                            "for channel %s: %s",
-                            channel_id, e,
+                            "Failed to clear non-owner relation-model bindings after PRIVATE switch for channel %s: %s",
+                            channel_id,
+                            e,
                         )
                     # 4. Re-assert owner FGA tuples defensively.
                     try:
@@ -1441,9 +1499,16 @@ class ChannelService:
                 source_list_changed = True
 
             if to_add_sources:
-                await bisheng_information_client.subscribe_information_source(to_add_sources)
-            if to_remove_sources:
-                await bisheng_information_client.unsubscribe_information_source(to_remove_sources)
+                # Subscribe only sources not already subscribed (missing from
+                # channel_info_source). Already-subscribed sources are skipped.
+                existing_add = await self.channel_info_source_repository.find_by_ids(to_add_sources)
+                existing_add_ids = {source.id for source in existing_add}
+                missing_add = [sid for sid in to_add_sources if sid not in existing_add_ids]
+                if missing_add:
+                    await bisheng_information_client.subscribe_information_source(missing_add)
+            # Removed sources are NOT unsubscribed here: unsubscription is deferred to
+            # the daily reconcile, which unsubscribes a source only once no channel
+            # references it (avoids over-unsubscribing sources shared by other channels).
 
             channel.source_list = req.source_list
 
@@ -1457,33 +1522,18 @@ class ChannelService:
             # Sync information sources to local database
             existing_sources = await self.channel_info_source_repository.find_by_ids(channel.source_list)
             existing_source_ids = {source.id for source in existing_sources}
-
             missing_source_ids = [sid for sid in channel.source_list if sid not in existing_source_ids]
 
-            if missing_source_ids:
-                missing_information_sources = await bisheng_information_client.get_information_source_by_ids(
-                    missing_source_ids
-                )
+            new_channel_info_sources = await self._sync_channel_info_source_metadata(
+                bisheng_information_client, missing_source_ids
+            )
+            if new_channel_info_sources:
+                from bisheng.worker.information.article import sync_information_article
 
-                new_channel_info_sources = []
-                for info_source in missing_information_sources:
-                    new_source = ChannelInfoSource(
-                        id=info_source.id,
-                        source_name=info_source.name,
-                        source_icon=info_source.icon,
-                        source_type=info_source.business_type,
-                        description=info_source.description,
-                    )
-                    new_channel_info_sources.append(new_source)
-
-                if new_channel_info_sources:
-                    from bisheng.worker.information.article import sync_information_article
-
-                    await self.channel_info_source_repository.batch_add(new_channel_info_sources)
-                    for one in new_channel_info_sources:
-                        # Sync articles for the new information source one hour later
-                        exec_time = datetime.now() + timedelta(hours=1)
-                        sync_information_article.apply_async(args=(one.id,), eta=exec_time)
+                for one in new_channel_info_sources:
+                    # Sync articles for the new information source one hour later
+                    exec_time = datetime.now() + timedelta(hours=1)
+                    sync_information_article.apply_async(args=(one.id,), eta=exec_time)
 
         # Replace knowledge-sync config atomically if caller provided one.
         if req.knowledge_sync is not None:
@@ -1516,7 +1566,7 @@ class ChannelService:
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
             # If private, only members can view unless special requirement
-            if channel.visibility == ChannelVisibilityEnum.PRIVATE and 'view_channel' not in permission_ids:
+            if channel.visibility == ChannelVisibilityEnum.PRIVATE and "view_channel" not in permission_ids:
                 raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
 
         # 3. Get Creator Name
@@ -1570,8 +1620,7 @@ class ChannelService:
         # the feature is creator-only (Module D). Members don't need to see it.
         knowledge_sync_cfg: Optional[KnowledgeSyncConfig] = None
         is_creator = (
-            current_membership is not None
-            and resolve_channel_relation(current_membership) == ChannelRelationEnum.OWNER
+            current_membership is not None and resolve_channel_relation(current_membership) == ChannelRelationEnum.OWNER
         )
         if is_creator:
             knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
@@ -1750,7 +1799,7 @@ class ChannelService:
         - Must be creator
         - Delete all user relationships
         - Delete channel
-        - Call bisheng_information_client.unsubscribe_information_source
+        - Information sources are unsubscribed lazily by the daily reconcile, not here
         """
         # 1. Verify channel existence
         channels = await self.channel_repository.find_channels_by_ids([channel_id])
@@ -1769,10 +1818,8 @@ class ChannelService:
             and current_membership.user_role == UserRoleEnum.CREATOR
         )
         if not is_active_creator:
-            permission_ids = await self._get_channel_permission_ids(
-                channel_id, login_user, current_membership
-            )
-            if 'delete_channel' not in permission_ids:
+            permission_ids = await self._get_channel_permission_ids(channel_id, login_user, current_membership)
+            if "delete_channel" not in permission_ids:
                 raise ChannelPermissionDeniedError(
                     msg="Only the creator or a user with delete permission can dismiss the channel"
                 )
@@ -1781,9 +1828,7 @@ class ChannelService:
         members = await self.space_channel_member_repository.find_all(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL
         )
-        original_member_ids = {
-            member.user_id for member in members if member.status == MembershipStatusEnum.ACTIVE
-        }
+        original_member_ids = {member.user_id for member in members if member.status == MembershipStatusEnum.ACTIVE}
         original_member_ids.update(await self._authorized_channel_user_ids(channel_id))
         await self._send_channel_event_notification(
             action_code=CHANNEL_DISMISSED_MESSAGE,
@@ -1806,10 +1851,10 @@ class ChannelService:
         # 4. Delete channel
         await self.channel_repository.delete(channel_id)
 
-        # 5. Unsubscribe information source
-        if channel.source_list:
-            bisheng_information_client = await get_bisheng_information_client()
-            await bisheng_information_client.unsubscribe_information_source(channel.source_list)
+        # 5. Information sources are NOT unsubscribed here. Unsubscription is deferred to
+        #    the daily reconcile, which unsubscribes a source only once no channel
+        #    references it — dismissing one channel must not unsubscribe a source still
+        #    used by other channels.
 
         # Audit log
         from bisheng.api.services.audit_log import AuditLogService
@@ -1846,19 +1891,11 @@ class ChannelService:
         if not sources:
             sources = [current_membership]
 
-        direct_sources = [
-            source for source in sources
-            if _is_direct_channel_source(source, login_user.user_id)
-        ]
-        organization_sources = [
-            source for source in sources
-            if _is_organization_channel_source(source)
-        ]
+        direct_sources = [source for source in sources if _is_direct_channel_source(source, login_user.user_id)]
+        organization_sources = [source for source in sources if _is_organization_channel_source(source)]
 
         member_organization_subject_types = {
-            source.grant_subject_type
-            for source in organization_sources
-            if source.grant_subject_type
+            source.grant_subject_type for source in organization_sources if source.grant_subject_type
         }
         if member_organization_subject_types:
             raise ChannelOrganizationGrantUnsubscribeDeniedError(
@@ -1882,10 +1919,10 @@ class ChannelService:
     @staticmethod
     def _is_direct_channel_user_binding(binding: dict, channel_id: str, user_id: int) -> bool:
         return (
-            binding.get('resource_type') == 'channel'
-            and str(binding.get('resource_id')) == str(channel_id)
-            and binding.get('subject_type') == 'user'
-            and str(binding.get('subject_id')) == str(user_id)
+            binding.get("resource_type") == "channel"
+            and str(binding.get("resource_id")) == str(channel_id)
+            and binding.get("subject_type") == "user"
+            and str(binding.get("subject_id")) == str(user_id)
         )
 
     @classmethod
@@ -1926,7 +1963,7 @@ class ChannelService:
 
         revokes = [
             AuthorizeRevokeItem(
-                subject_type='user',
+                subject_type="user",
                 subject_id=int(user_id),
                 relation=relation,
                 include_children=False,
@@ -1935,16 +1972,18 @@ class ChannelService:
         ]
         grants = []
         if desired_relation:
-            grants.append(AuthorizeGrantItem(
-                subject_type='user',
-                subject_id=int(user_id),
-                relation=desired_relation,
-                include_children=False,
-                model_id=desired_relation,
-            ))
+            grants.append(
+                AuthorizeGrantItem(
+                    subject_type="user",
+                    subject_id=int(user_id),
+                    relation=desired_relation,
+                    include_children=False,
+                    model_id=desired_relation,
+                )
+            )
 
         await PermissionService.authorize(
-            object_type='channel',
+            object_type="channel",
             object_id=str(channel_id),
             grants=grants,
             revokes=revokes,
@@ -1953,50 +1992,49 @@ class ChannelService:
 
         bindings = await _get_bindings()
         updated_bindings = [
-            binding for binding in bindings
-            if not cls._is_direct_channel_user_binding(binding, channel_id, user_id)
+            binding for binding in bindings if not cls._is_direct_channel_user_binding(binding, channel_id, user_id)
         ]
         if desired_relation:
             key = _binding_key_with_scope(
-                'channel',
+                "channel",
                 str(channel_id),
-                'user',
+                "user",
                 int(user_id),
                 desired_relation,
                 None,
             )
-            updated_bindings.append({
-                'key': key,
-                'resource_type': 'channel',
-                'resource_id': str(channel_id),
-                'subject_type': 'user',
-                'subject_id': int(user_id),
-                'relation': desired_relation,
-                'include_children': None,
-                'model_id': desired_relation,
-            })
+            updated_bindings.append(
+                {
+                    "key": key,
+                    "resource_type": "channel",
+                    "resource_id": str(channel_id),
+                    "subject_type": "user",
+                    "subject_id": int(user_id),
+                    "relation": desired_relation,
+                    "include_children": None,
+                    "model_id": desired_relation,
+                }
+            )
         await _save_bindings(updated_bindings)
 
     async def _remove_channel_direct_source(self, channel_id: str, source) -> None:
-        if getattr(source, 'grant_subject_type', None) == 'user' and getattr(source, 'grant_subject_id', None):
-            relation = getattr(source, 'grant_relation', None) or resolve_channel_relation(source)
-            await PermissionService.authorize(
-                object_type='channel',
-                object_id=channel_id,
-                grants=[],
-                revokes=[
-                    AuthorizeRevokeItem(
-                        subject_type='user',
-                        subject_id=int(source.grant_subject_id),
-                        relation=ChannelRelationEnum(relation).value,
-                        include_children=getattr(source, 'grant_include_children', None),
-                        model_id=getattr(source, 'grant_model_id', None),
-                    )
-                ],
-                enforce_fga_success=True,
+        # Subscribe mirrors a direct membership into an explicit ReBAC grant
+        # (viewer/editor/manager) plus a UI binding via
+        # sync_direct_channel_user_permissions. Unsubscribe must tear both down,
+        # otherwise the user keeps channel access through ReBAC and still surfaces
+        # in the authorization list after the membership row is deleted. This
+        # covers self-subscribe (grant_subject_type None/'self') and admin-direct
+        # user grants (grant_subject_type 'user') alike.
+        revoke_user_id = getattr(source, "grant_subject_id", None) or getattr(source, "user_id", None)
+        if revoke_user_id is not None:
+            await self.__class__.sync_direct_channel_user_permissions(
+                channel_id,
+                int(revoke_user_id),
+                None,
+                is_active=False,
             )
 
-        binding_key = getattr(source, 'grant_binding_key', None)
+        binding_key = getattr(source, "grant_binding_key", None)
         if binding_key:
             await self.space_channel_member_repository.delete_channel_membership_source(channel_id, binding_key)
             return
