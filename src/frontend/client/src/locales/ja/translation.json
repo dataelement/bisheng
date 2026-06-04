@@ -1301,6 +1301,8 @@
     "confirm_create": "作成の確認",
     "confirm_delete_file": "現在のファイルを削除してもよろしいですか？",
     "confirm_delete_selected_items": "選択した {{0}} 件のアイテムを削除してもよろしいですか？",
+    "confirm_delete_space": "このナレッジスペースを削除してもよろしいですか？",
+    "confirm_delete_space_name": "ナレッジスペース「{{0}}」を削除してもよろしいですか？",
     "confirm_exit_space": "このナレッジスペースを退出してもよろしいですか？",
     "confirm_operation": "操作を確認しますか？",
     "copy_failed_retry": "コピーに失敗しました。もう一度お試しください",

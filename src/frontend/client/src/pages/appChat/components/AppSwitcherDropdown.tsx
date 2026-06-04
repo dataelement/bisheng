@@ -57,7 +57,7 @@ export function AppSwitcherDropdown() {
       >
         {/* Search input */}
         <div className="px-[12px] pt-[12px] pb-[8px] shrink-0">
-          <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-[#ebecf0] rounded-[6px] focus-within:border-[#335cff] transition-colors">
+          <div className="flex items-center gap-[6px] h-[28px] px-[8px] border border-[#ebecf0] rounded-[6px] focus-within:border-[#DDDDDD] focus-within:shadow-[0_0_0_2px_#F1F5F9] transition-[border-color,box-shadow]">
             <Search size={14} className="text-[#a9aeb8] shrink-0" />
             <input
               value={searchQuery}

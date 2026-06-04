@@ -550,11 +550,10 @@ export default function Knowledge() {
     // Delete the current space from the file-page top-bar menu, then return to the list.
     const handleDeleteActiveSpace = async (sp: KnowledgeSpace | null) => {
         if (!sp) return;
+        // Align with file-delete confirm (Figma "删除操作确认"): destructive variant.
         const ok = await confirm({
-            title: localize("com_knowledge.prompt"),
-            description: localize("com_knowledge.confirm_operation"),
-            confirmText: localize("com_knowledge.delete"),
-            cancelText: localize("com_knowledge.cancel"),
+            description: `${localize("com_knowledge.confirm_delete_space")}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
         });
         if (!ok) return;
         try {
@@ -701,6 +700,7 @@ export default function Knowledge() {
                                 mobileDrawerMode
                                 compactMode
                                 onDrawerClose={() => setSpaceListDrawerOpen(false)}
+                                onNavigateAway={() => setSpaceListDrawerOpen(false)}
                                 activeSpaceId={activeSpace?.id}
                                 onSpaceSelect={(space) => {
                                     handleSpaceSelect(space);

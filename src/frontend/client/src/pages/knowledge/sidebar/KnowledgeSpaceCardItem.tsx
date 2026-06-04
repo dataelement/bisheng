@@ -141,15 +141,19 @@ export default function KnowledgeSpaceCardItem({
                     {(canDeleteSpace || type === "joined") && (
                         <DropdownMenuItem
                             onClick={async () => {
-                                const description = canDeleteSpace
-                                    ? localize("com_knowledge.confirm_operation")
-                                    : localize("com_knowledge.confirm_exit_space");
-                                const ok = await confirm({
-                                    title: localize("com_knowledge.prompt"),
-                                    description,
-                                    confirmText: canDeleteSpace ? localize("com_knowledge.delete") : localize("com_knowledge.exit"),
-                                    cancelText: localize("com_knowledge.cancel"),
-                                });
+                                // Delete-space uses the destructive variant (matches file-delete).
+                                // Exit-space keeps the default prompt — it's not destructive.
+                                const ok = canDeleteSpace
+                                    ? await confirm({
+                                        description: `${localize("com_knowledge.confirm_delete_space")}${localize("com_knowledge.delete_irreversible_warning")}`,
+                                        variant: "destructive",
+                                    })
+                                    : await confirm({
+                                        title: localize("com_knowledge.prompt"),
+                                        description: localize("com_knowledge.confirm_exit_space"),
+                                        confirmText: localize("com_knowledge.exit"),
+                                        cancelText: localize("com_knowledge.cancel"),
+                                    });
                                 if (ok) {
                                     canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
                                 }

@@ -217,7 +217,7 @@ export function FileCard({
                         onBlur={handleRenameSubmit}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full h-6 px-1.5 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal"
+                        className="w-full h-6 px-1.5 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal"
                     />
                 </div>
             );
@@ -290,12 +290,12 @@ export function FileCard({
                 }
                 onClick={handleCardClick}
             >
-                {/* File icon 48x48 */}
-                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[6px] bg-white">
-                    <FileIconRenderer file={file} isFolder={isFolder} iconClassName="size-12 shrink-0" thumbBordered />
+                {/* File icon 48x48 — colored icons render without backdrop on H5 */}
+                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[6px]">
+                    <FileIconRenderer file={file} isFolder={isFolder} iconClassName="size-12 shrink-0" thumbBordered transparentBg />
                 </div>
 
-                {/* Text block: title + (date + tags) */}
+                {/* Text block: title (+ status) / (date + tags) */}
                 <div className="flex min-w-0 flex-1 flex-col">
                     {isRenaming ? (
                         <input
@@ -306,17 +306,23 @@ export function FileCard({
                             onBlur={handleRenameSubmit}
                             onKeyDown={handleKeyDown}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-6 w-full rounded border border-[#165dff] bg-white px-1.5 text-sm font-normal shadow-[0_0_0_2px_rgba(22,93,255,0.2)] outline-none"
+                            className="h-6 w-full rounded border border-[#DDDDDD] bg-white px-1.5 text-sm font-normal shadow-[0_0_0_2px_#F1F5F9] outline-none"
                         />
                     ) : (
-                        <span className={cn("truncate text-sm", nameToneClass)}>
-                            {renderHighlightedName(file.name, highlightKeyword)}
-                        </span>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                            <span className={cn("min-w-0 truncate text-sm leading-5", nameToneClass)}>
+                                {renderHighlightedName(file.name, highlightKeyword)}
+                            </span>
+                            {mobileStatusPill && (
+                                <span className="inline-flex shrink-0 items-center self-center leading-5">
+                                    {mobileStatusPill}
+                                </span>
+                            )}
+                        </div>
                     )}
 
-                    {/* Status (non-success only) + date + tags on a single line */}
+                    {/* Date + tags on a single line */}
                     <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
-                        {mobileStatusPill && <span className="shrink-0">{mobileStatusPill}</span>}
                         <span className="shrink-0 text-xs leading-5 text-[#818181] tabular-nums">
                             {formatTimeCard(file.updatedAt)}
                         </span>

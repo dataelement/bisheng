@@ -56,7 +56,7 @@ const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
     name: { minWidth: 140, initialWidth: 280 },
     fileType: { minWidth: 100, initialWidth: 120 },
-    size: { minWidth: 80, initialWidth: 120 },
+    size: { minWidth: 120, initialWidth: 120 },
     tags: { minWidth: 140, initialWidth: 200 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
     updateTime: { minWidth: 140, initialWidth: 180 },
@@ -393,7 +393,7 @@ function FileTableHeader({
     };
 
     return (
-        <TableHeader className="border-b border-[#e5e6eb] bg-[rgb(251,251,251)]">
+        <TableHeader className="sticky top-0 z-30 bg-[rgb(251,251,251)] [&_th]:border-b [&_th]:border-[#e5e6eb]">
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
@@ -541,9 +541,13 @@ interface FileTableProps {
     highlightedTagIds?: number[];
     /** Keyword hit by the active search; matching substring in the file name is highlighted. */
     highlightKeyword?: string;
+    /** Scroll handler attached to the table's internal scroll container (for infinite scroll). */
+    onScroll?: React.UIEventHandler<HTMLDivElement>;
+    /** Extra spacing reserved below the last row (e.g. to clear a floating bottom dock). */
+    bottomSpacing?: number;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -598,17 +602,19 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
 
     return (
-        <div className="relative max-w-full min-w-0 overflow-hidden">
-            {/* 横向滚动限制在容器内，不撑开整页 */}
+        <div className="relative flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
+            {/* Single scroll container — both axes here so the sticky <thead> tracks
+                vertical scroll without being trapped by an inner-only x-scroll wrapper. */}
             <div
                 ref={(el) => {
                     scrollRef.current = el;
                     hScrollRevealRef(el);
                 }}
-                className="max-w-full overflow-x-auto overflow-y-visible scrollbar-on-scroll"
+                onScroll={onScroll}
+                className="min-h-0 max-w-full flex-1 overflow-auto scrollbar-on-scroll"
             >
                 <table
-                    className="w-full caption-bottom text-sm border-collapse"
+                    className="w-full caption-bottom border-separate border-spacing-0 text-sm"
                     style={{
                         tableLayout: "fixed",
                         width: totalWidth,
@@ -668,6 +674,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         ))}
                     </TableBody>
                 </table>
+                {bottomSpacing > 0 && <div style={{ height: bottomSpacing }} aria-hidden />}
             </div>
 
             {/* 右侧溢出阴影 */}
@@ -872,7 +879,9 @@ function FileRow({
         <TableRow
             data-knowledge-file-item
             className={cn(
-                "group border-b border-b-[#e5e6eb]",
+                // border-separate on the table means <tr>.border-b doesn't paint —
+                // push the row separator onto each direct <td> instead.
+                "group [&>td]:border-b [&>td]:border-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
                 "bg-transparent hover:bg-transparent"
             )}
@@ -927,7 +936,7 @@ function FileRow({
                             onBlur={handleRenameSubmit}
                             onKeyDown={handleKeyDown}
                             onClick={(e) => e.stopPropagation()}
-                            className="flex-1 h-7 px-2 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal text-[#1d2129]"
+                            className="flex-1 h-7 px-2 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal text-[#1d2129]"
                         />
                     ) : (
                         <span

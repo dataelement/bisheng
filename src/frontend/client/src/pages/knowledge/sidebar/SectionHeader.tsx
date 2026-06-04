@@ -29,12 +29,9 @@ interface SectionHeaderProps {
     /** When provided, renders a knowledge-square entry icon in the right group. */
     onSquare?: () => void;
     squareLabel?: string;
-    /** When provided, renders a cycle (⇄) icon after the title that switches space type. */
-    onCycle?: () => void;
-    cycleLabel?: string;
     /** Mobile full-page list styling: larger title/padding, dark icons, always-visible chevron. */
     mobile?: boolean;
-    /** Compact dropdown styling: dark right-side icons, grey cycle icon. */
+    /** Compact dropdown styling: dark right-side icons. */
     compact?: boolean;
 }
 
@@ -50,8 +47,6 @@ export function SectionHeader({
     addLabel,
     onSquare,
     squareLabel,
-    onCycle,
-    cycleLabel,
     mobile = false,
     compact = false,
 }: SectionHeaderProps) {
@@ -63,7 +58,7 @@ export function SectionHeader({
     const rightIconBtn = mobile
         ? mobileIconBtnClassName
         : compact
-            ? "flex size-5 items-center justify-center rounded text-[#212121] outline-none hover:bg-[#f2f3f5]"
+            ? "flex size-5 items-center justify-center rounded text-[#212121] outline-none"
             : "flex size-5 items-center justify-center rounded text-[#999] outline-none hover:bg-[#f2f3f5] hover:text-[#4e5969]";
     return (
         // group: enables hover-reveal for the collapse chevron.
@@ -93,39 +88,28 @@ export function SectionHeader({
             className={
                 mobile
                     ? "group sticky top-0 left-0 z-[2] flex w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-5 py-2"
-                    : "group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4 transition-colors hover:bg-[#F4F4F4]"
+                    : compact
+                        ? "group sticky top-0 left-0 z-[2] mb-2 flex h-[38px] w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4"
+                        : "group sticky top-0 left-0 z-[2] mb-2 flex h-7 w-[100cqi] cursor-pointer items-center justify-between bg-[#FBFBFB] px-4 transition-colors hover:bg-[#F4F4F4]"
             }
         >
             <div
                 className={
                     mobile
                         ? "flex items-center gap-1 text-[14px] leading-5 text-[#212121]"
-                        : "flex h-full items-center gap-1 text-[12px] text-[#999] group-hover:text-[#4e5969]"
+                        : compact
+                            ? "flex h-full items-center gap-1 text-[14px] text-[#999]"
+                            : "flex h-full items-center gap-1 text-[12px] text-[#999] group-hover:text-[#4e5969]"
                 }
             >
                 <span>{title}</span>
-                {onCycle ? (
-                    /* Cycle space type (⇄). Replaces the collapse chevron in the compact dropdown. */
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onCycle();
-                        }}
-                        title={cycleLabel}
-                        aria-label={cycleLabel}
-                        className="flex size-4 items-center justify-center text-[#999] outline-none"
-                    >
-                        <Outlined.Exchange className="size-4" />
-                    </button>
-                ) : (
-                    /* Collapse arrow: placed after the title; hidden by default, revealed on row hover. */
-                    <Outlined.Down
-                        className={`size-4 transition-[opacity,transform] group-hover:opacity-100 ${
-                            mobile ? "opacity-100" : "opacity-0"
-                        } ${collapsed ? "-rotate-90" : ""}`}
-                    />
-                )}
+                {/* Collapse arrow: placed after the title. Always visible in mobile/compact modes;
+                    hidden by default on PC and revealed on row hover. */}
+                <Outlined.Down
+                    className={`size-4 transition-[opacity,transform] group-hover:opacity-100 ${
+                        mobile || compact ? "opacity-100" : "opacity-0"
+                    } ${collapsed ? "-rotate-90" : ""}`}
+                />
             </div>
             <div className={mobile ? "flex items-center gap-2" : "flex items-center gap-1"}>
                 {onAdd && (

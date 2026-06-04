@@ -121,7 +121,7 @@ export default function NewChat({
           <div>
             <div className="border-b border-[#e5e6eb] pb-4">
               <div className="flex items-center text-[16px] font-medium">
-                <span className="leading-6 text-[#212121]">{localize('com_nav_home')}</span>
+                <span className="leading-[32px] text-[#212121]">{localize('com_nav_home')}</span>
               </div>
               <div className="mt-4 flex w-full gap-1">
                 {/* 新建btn */}

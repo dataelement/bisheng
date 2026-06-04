@@ -355,7 +355,7 @@ export function ChannelMemberDialog({
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                                 placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
-                                className="h-8 w-full rounded-[6px] border border-[#EBECF0] pl-9 pr-3 text-[14px] text-[#212121] placeholder:text-[#818181] focus:border-[#165DFF] focus:outline-none"
+                                className="h-8 w-full rounded-[6px] border border-[#EBECF0] pl-9 pr-3 text-[14px] text-[#212121] placeholder:text-[#818181] focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
                             />
                         </div>
 

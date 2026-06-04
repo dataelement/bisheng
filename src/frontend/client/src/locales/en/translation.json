@@ -1377,6 +1377,8 @@
     "confirm_create": "Confirm creation",
     "confirm_delete_file": "Confirm delete current file?",
     "confirm_delete_selected_items": "Confirm delete selected {{0}} items?",
+    "confirm_delete_space": "Are you sure you want to delete this knowledge space?",
+    "confirm_delete_space_name": "Are you sure you want to delete knowledge space \"{{0}}\"?",
     "confirm_exit_space": "Are you sure you want to exit this knowledge space?",
     "confirm_operation": "Confirm operation?",
     "copy_failed_retry": "Copy failed, please try again",

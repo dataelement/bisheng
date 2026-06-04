@@ -313,7 +313,7 @@ export function AccountInfoDialog({
     };
 
     const inputClassName =
-        "h-9 rounded-md border border-[#ECECEC] bg-white pr-10 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] focus-visible:border-[#165dff] focus-visible:ring-1 focus-visible:ring-[#165dff]";
+        "h-9 rounded-md border border-[#ECECEC] bg-white pr-10 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] focus-visible:border-[#DDDDDD] focus-visible:ring-2 focus-visible:ring-[#F1F5F9]";
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>

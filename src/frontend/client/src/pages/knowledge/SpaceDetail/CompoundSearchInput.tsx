@@ -27,9 +27,11 @@ export interface CompoundSearchInputProps {
     collapsible?: boolean;
     /** Full-page search: scope + tags always visible, tags rendered inline below the box. */
     pageMode?: boolean;
+    /** pageMode only: element rendered to the right of the search box inside the 64px header row. */
+    trailing?: React.ReactNode;
 }
 
-export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, pageMode = false }: CompoundSearchInputProps) {
+export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, pageMode = false, trailing }: CompoundSearchInputProps) {
     const localize = useLocalize();
     const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
@@ -150,47 +152,33 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
     const scopeLabel = scope === 'current' ? localize("com_knowledge.current_location") : localize("com_knowledge.current_space");
 
-    return (
+    const searchField = (
         <div
-            ref={containerRef}
-            data-expanded={isExpanded ? 'true' : 'false'}
             className={cn(
-                "relative",
+                "flex flex-nowrap items-center w-full h-8 min-h-8 max-h-8 overflow-hidden",
+                "bg-white border rounded-md",
                 collapsible
                     ? cn(
-                        "shrink-0 transition-[width] duration-200 ease-out",
-                        collapsed ? "w-8" : "w-[min(340px,60vw)] sm:w-[340px]"
+                        // Animate gap so icon → input transition feels continuous, not snapped.
+                        "transition-[gap,background-color,border-color,box-shadow] duration-200 ease-out px-2",
+                        collapsed ? "gap-0 cursor-pointer" : "gap-1"
                     )
-                    : "w-full",
-                className
+                    : "gap-1 px-2 sm:px-3 transition-[border-color,box-shadow]",
+                // Active state per Figma 11495:16479 — gray border + gray ring (not blue).
+                // Collapsed = behaves like the sibling icon buttons (bg change on hover, border steady);
+                // expanded = behaves like an input field (border darkens on hover before focus).
+                isFocused
+                    ? "border-[#ddd] shadow-[0_0_0_2px_#f1f5f9]"
+                    : collapsed
+                        ? "border-[#e5e6eb] hover:bg-[#f7f8fa]"
+                        : "border-[#e5e6eb] hover:border-[#ddd]"
             )}
+            onClick={() => {
+                inputRef.current?.focus();
+                if (!isFocused) refreshTags();
+                setIsFocused(true);
+            }}
         >
-            <div
-                className={cn(
-                    "flex flex-nowrap items-center w-full h-8 min-h-8 max-h-8 overflow-hidden",
-                    "bg-white border rounded-md",
-                    collapsible
-                        ? cn(
-                            // Animate gap so icon → input transition feels continuous, not snapped.
-                            "transition-[gap,background-color,border-color,box-shadow] duration-200 ease-out px-2",
-                            collapsed ? "gap-0 cursor-pointer" : "gap-1"
-                        )
-                        : "gap-1 px-2 sm:px-3 transition-[border-color,box-shadow]",
-                    // Active state per Figma 11495:16479 — gray border + gray ring (not blue).
-                    // Collapsed = behaves like the sibling icon buttons (bg change on hover, border steady);
-                    // expanded = behaves like an input field (border darkens on hover before focus).
-                    isFocused
-                        ? "border-[#ddd] shadow-[0_0_0_2px_#f1f5f9]"
-                        : collapsed
-                            ? "border-[#e5e6eb] hover:bg-[#f7f8fa]"
-                            : "border-[#e5e6eb] hover:border-[#ddd]"
-                )}
-                onClick={() => {
-                    inputRef.current?.focus();
-                    if (!isFocused) refreshTags();
-                    setIsFocused(true);
-                }}
-            >
                 <Outlined.Search className="size-4 text-[#818181] shrink-0" />
 
                 {/* 范围选择：仅在输入框聚焦（或菜单已打开）时显示，高亮表示已选范围；仅文案随 current / all 切换 */}
@@ -238,73 +226,107 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     onFocus={() => { if (!isFocused) refreshTags(); setIsFocused(true); }}
                 />
 
-                {/* Clear button */}
-                {isSearching && (
-                    <button
-                        className="ml-auto w-4 h-4 rounded-full bg-[#f2f3f5] flex items-center justify-center hover:bg-[#e5e6eb] shrink-0 transition-colors"
-                        onMouseDown={(e) => {
-                            // Keep input focused to avoid focus-within width flicker.
-                            e.preventDefault();
-                        }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleClearAll();
-                        }}
-                        type="button"
-                    >
-                        <X className="size-3 text-[#86909c]" />
-                    </button>
-                )}
-            </div>
-
-            {/* Dropdown Panel — space tags. Page mode renders it inline (static) below the box. */}
-            {(pageMode || (isFocused && !isScopeMenuOpen)) && (
-                <div className={cn(
-                    pageMode
-                        ? "mt-3 w-full"
-                        : "absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3 max-[767px]:min-w-0 max-[767px]:w-full",
-                )}>
-                    <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
-                    <div className="flex flex-wrap gap-2">
-                        {spaceTags.length === 0 && (
-                            <span className="text-sm text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
-                        )}
-                        {spaceTags.map((tag) => {
-                            const isSelected = selectedTags.some((t) => t.id === tag.id);
-                            const atLimit = !isSelected && selectedTags.length >= 5;
-                            return (
-                                <button
-                                    key={tag.id}
-                                    className={cn(
-                                        "px-2 rounded text-sm transition-colors border outline-none",
-                                        isSelected
-                                            ? "bg-primary/10 text-primary border-transparent hover:bg-primary/15"
-                                            : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] hover:bg-[#e5e6eb]",
-                                        atLimit && "opacity-50 cursor-not-allowed hover:bg-[#f2f3f5]"
-                                    )}
-                                    onMouseDown={(e) => {
-                                        // Keep focus on input to avoid focus-within width flicker.
-                                        e.preventDefault();
-                                    }}
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        if (isSelected) {
-                                            handleRemoveTag(tag.id);
-                                        } else if (!atLimit) {
-                                            handleAddTag(tag);
-                                        }
-                                    }}
-                                    disabled={atLimit}
-                                    type="button"
-                                >
-                                    {tag.name}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
+            {/* Clear button */}
+            {isSearching && (
+                <button
+                    className="ml-auto w-4 h-4 rounded-full bg-[#f2f3f5] flex items-center justify-center hover:bg-[#e5e6eb] shrink-0 transition-colors"
+                    onMouseDown={(e) => {
+                        // Keep input focused to avoid focus-within width flicker.
+                        e.preventDefault();
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleClearAll();
+                    }}
+                    type="button"
+                >
+                    <X className="size-3 text-[#86909c]" />
+                </button>
             )}
+        </div>
+    );
+
+    const tagsPanel = (pageMode || (isFocused && !isScopeMenuOpen)) ? (
+        <div className={cn(
+            pageMode
+                ? "w-full"
+                : "absolute top-full left-0 mt-1 min-w-[320px] max-w-full bg-white shadow-[0_4px_10px_rgba(0,0,0,0.1)] rounded-md z-50 p-3 max-[767px]:min-w-0 max-[767px]:w-full",
+        )}>
+            <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
+            <div className="flex flex-wrap gap-2">
+                {spaceTags.length === 0 && (
+                    <span className="text-sm text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
+                )}
+                {spaceTags.map((tag) => {
+                    const isSelected = selectedTags.some((t) => t.id === tag.id);
+                    const atLimit = !isSelected && selectedTags.length >= 5;
+                    return (
+                        <button
+                            key={tag.id}
+                            className={cn(
+                                "px-2 rounded text-sm transition-colors border outline-none",
+                                // Hover is restricted to fine-pointer (mouse) devices so that
+                                // touch taps don't leave the chip stuck in a hover/selected-looking
+                                // in-between state. On touch we only show default vs selected.
+                                isSelected
+                                    ? "bg-primary/10 text-primary border-transparent fine-pointer:hover:bg-primary/15"
+                                    : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] fine-pointer:hover:bg-[#e5e6eb]",
+                                atLimit && "opacity-50 cursor-not-allowed fine-pointer:hover:bg-[#f2f3f5]"
+                            )}
+                            onMouseDown={(e) => {
+                                // Keep focus on input to avoid focus-within width flicker.
+                                e.preventDefault();
+                            }}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (isSelected) {
+                                    handleRemoveTag(tag.id);
+                                } else if (!atLimit) {
+                                    handleAddTag(tag);
+                                }
+                            }}
+                            disabled={atLimit}
+                            type="button"
+                        >
+                            {tag.name}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    ) : null;
+
+    // Page mode: search field + trailing slot sit in a fixed 64px row, with tags flowing immediately below.
+    if (pageMode) {
+        return (
+            <div ref={containerRef} data-expanded="true" className={cn("w-full", className)}>
+                <div className="flex h-16 items-center gap-3">
+                    <div className="min-w-0 flex-1">{searchField}</div>
+                    {trailing}
+                </div>
+                {tagsPanel}
+            </div>
+        );
+    }
+
+    return (
+        <div
+            ref={containerRef}
+            data-expanded={isExpanded ? 'true' : 'false'}
+            className={cn(
+                "relative",
+                collapsible
+                    ? cn(
+                        "shrink-0 transition-[width] duration-200 ease-out",
+                        collapsed ? "w-8" : "w-[min(340px,60vw)] sm:w-[340px]"
+                    )
+                    : "w-full",
+                className
+            )}
+        >
+            {searchField}
+            {tagsPanel}
         </div>
     );
 }

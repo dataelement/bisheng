@@ -45,10 +45,14 @@ const TYPE_TO_ICON: Record<FileTypeKey, React.ReactNode> = {
     md: <Colored.FileMd className={iconSlotClass} />,
 };
 
-const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered }: { file: any; isFolder: boolean; iconClassName?: string; thumbBordered?: boolean }) => {
+const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transparentBg }: { file: any; isFolder: boolean; iconClassName?: string; thumbBordered?: boolean; transparentBg?: boolean }) => {
+    // H5 mobile list: suppress the per-type gradient backdrop so colored icons
+    // sit on a transparent slot (desktop card path stays untouched).
+    const bgFor = (key: FileTypeKey) => (transparentBg ? '' : FILE_TYPE_BG[key]);
+
     if (isFolder) {
         return (
-            <div className={cn(wrapperClass, FILE_TYPE_BG.folder)}>
+            <div className={cn(wrapperClass, bgFor('folder'))}>
                 <Colored.Folder className={iconClassName ?? iconSlotClass} />
             </div>
         );
@@ -61,7 +65,7 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered }: { fi
     // colored placeholder icon — never a thumbnail, regardless of parse state.
     if (typeKey === 'md' || typeKey === 'txt' || typeKey === 'csv') {
         return (
-            <div className={cn(wrapperClass, FILE_TYPE_BG[typeKey])}>
+            <div className={cn(wrapperClass, bgFor(typeKey))}>
                 {TYPE_TO_ICON[typeKey]}
             </div>
         );
@@ -88,7 +92,7 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered }: { fi
     const resolvedKey: FileTypeKey = typeKey ?? 'txt';
 
     return (
-        <div className={cn(wrapperClass, FILE_TYPE_BG[resolvedKey])}>
+        <div className={cn(wrapperClass, bgFor(resolvedKey))}>
             {TYPE_TO_ICON[resolvedKey]}
         </div>
     );

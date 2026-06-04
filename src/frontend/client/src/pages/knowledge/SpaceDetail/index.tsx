@@ -916,29 +916,29 @@ export function KnowledgeSpaceContent({
                 onChange={handleFileChange}
                 accept={fileInputAccept}
             />
-            {/* Mobile full-page search header: inline search box (scope + keyword + tags) + 取消. */}
+            {/* Mobile full-page search header: inline search box (scope + keyword + tags) + 取消.
+                Per design (Figma 11495:16476): the search-box+cancel row is 64px tall, no top padding;
+                tags flow immediately below. The 64px row is owned by CompoundSearchInput pageMode. */}
             {isH5 && searchMode && (
-                <div className="shrink-0 rounded-t-xl bg-white px-4 pt-[calc(env(safe-area-inset-top,0px)+8px)] pb-2">
-                    <div className="flex items-start gap-3">
-                        <div className="min-w-0 flex-1">
-                            <CompoundSearchInput
-                                pageMode
-                                spaceId={space.id}
-                                isRoot={currentPath.length === 0}
-                                onSearch={handleSearch}
-                            />
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                handleSearch({ scope: currentPath.length === 0 ? "all" : "current", tagIds: [], keyword: "" });
-                                onCloseSearch?.();
-                            }}
-                            className="flex h-8 shrink-0 items-center text-sm text-[#999]"
-                        >
-                            {localize("com_knowledge.cancel")}
-                        </button>
-                    </div>
+                <div className="shrink-0 rounded-t-xl bg-white px-4">
+                    <CompoundSearchInput
+                        pageMode
+                        spaceId={space.id}
+                        isRoot={currentPath.length === 0}
+                        onSearch={handleSearch}
+                        trailing={
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    handleSearch({ scope: currentPath.length === 0 ? "all" : "current", tagIds: [], keyword: "" });
+                                    onCloseSearch?.();
+                                }}
+                                className="shrink-0 text-sm text-[#999]"
+                            >
+                                {localize("com_knowledge.cancel")}
+                            </button>
+                        }
+                    />
                 </div>
             )}
 
@@ -947,25 +947,35 @@ export function KnowledgeSpaceContent({
             {isH5 && !searchMode && (
                 /* Root has no padding on mobile; the inner row's px-4 gives the 16px gutter. */
                 <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                    <div className="flex h-11 w-full min-w-0 items-center justify-between gap-3 px-4">
-                        <button
-                            type="button"
-                            aria-label={localize("com_nav_open_sidebar")}
-                            onClick={() => onOpenSystemMenu?.()}
-                            className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
-                        >
-                            <Outlined.SidebarMenu className="size-5" />
-                        </button>
+                    <div className="flex h-11 w-full min-w-0 items-center gap-3 px-4">
+                        {/* Left group — fixed width that mirrors the right group, so the
+                            center title stays screen-centered even when truncated.
+                            84px = search(20) + gap(12) + sort(20) + gap(12) + more(20). */}
+                        <div className="flex min-w-[84px] shrink-0 items-center justify-start">
+                            <button
+                                type="button"
+                                aria-label={localize("com_nav_open_sidebar")}
+                                onClick={() => onOpenSystemMenu?.()}
+                                disabled={spaceListOpen}
+                                className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121]", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                            >
+                                <Outlined.SidebarMenu className="size-5" />
+                            </button>
+                        </div>
+                        {/* Center group — title grows then truncates while staying centered */}
                         <button
                             type="button"
                             onClick={() => onToggleSpaceList?.()}
                             aria-expanded={spaceListOpen}
                             className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
                         >
-                            <span className="truncate text-base font-medium leading-6 text-[#212121]">{space.name}</span>
+                            <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                                {currentPath.length > 0 ? currentPath[currentPath.length - 1].name : space.name}
+                            </span>
                             <Outlined.Down className={cn("size-5 shrink-0 text-[#86909C] transition-transform", spaceListOpen && "rotate-180")} />
                         </button>
-                        <div className="flex shrink-0 items-center gap-3">
+                        {/* Right group — same fixed width as the left group */}
+                        <div className="flex min-w-[84px] shrink-0 items-center justify-end gap-3">
                             <button
                                 type="button"
                                 aria-label={localize("com_knowledge.search")}
@@ -1192,11 +1202,12 @@ export function KnowledgeSpaceContent({
                         </div>
                     ) : (
                         <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} onScroll={handleListScroll} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll border-t border-[#e5e6eb]">
-                                {/* Spacer below the table reserves 112px for the bottom AI dock so the
-                                    last row clears with a 40px visual gap above the input. */}
-                                <div className="pb-[112px]">
+                            <div ref={tableScrollRevealRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
+                                    onScroll={handleListScroll}
+                                    /* Reserve 112px under the last row so the bottom AI dock leaves
+                                       a 40px visual gap above the input. */
+                                    bottomSpacing={112}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
@@ -1222,7 +1233,6 @@ export function KnowledgeSpaceContent({
                                     highlightedTagIds={searchTagIds}
                                     highlightKeyword={searchQuery}
                                 />
-                                </div>
                             </div>
                         </div>
                     )}

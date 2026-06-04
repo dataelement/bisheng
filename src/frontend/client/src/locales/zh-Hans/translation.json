@@ -1304,6 +1304,8 @@
     "confirm_create": "确认创建",
     "confirm_delete_file": "确认删除当前文件吗？",
     "confirm_delete_selected_items": "确认删除选中的 {{0}} 项内容吗？",
+    "confirm_delete_space": "确认删除该知识空间吗？",
+    "confirm_delete_space_name": "确认删除知识空间 \"{{0}}\" 吗？",
     "confirm_exit_space": "确定退出该知识空间吗？",
     "confirm_operation": "确认操作吗？",
     "copy_failed_retry": "复制失败，请重试",

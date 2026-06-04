@@ -1,5 +1,4 @@
 import {
-    ArrowLeftRightIcon,
     ChevronDown,
     Plus,
     X
@@ -45,6 +44,9 @@ interface KnowledgeSpaceSidebarProps {
     compactMode?: boolean;
     /** H5 整页列表：占满父容器、卡片式行、无折叠把手/拖拽,且不自动选中首个空间 */
     mobilePageMode?: boolean;
+    /** Fired when a tree row navigates the page (e.g. folder click in compactMode),
+     *  so the host drawer can close itself. */
+    onNavigateAway?: () => void;
 }
 
 export function KnowledgeSpaceSidebar({
@@ -61,6 +63,7 @@ export function KnowledgeSpaceSidebar({
     onDrawerClose,
     compactMode = false,
     mobilePageMode = false,
+    onNavigateAway,
 }: KnowledgeSpaceSidebarProps) {
     const localize = useLocalize();
     // Drawer and full-page list both occupy the full parent width (no resize/toggle).
@@ -140,9 +143,6 @@ export function KnowledgeSpaceSidebar({
     const [createdSortBy, setCreatedSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
     const [joinedSortBy, setJoinedSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
     const [departmentSortBy, setDepartmentSortBy] = useState<SpaceSortType>(SpaceSortType.UPDATE_TIME);
-    // Compact dropdown (file-page title menu): one section whose type cycles 部门→我创建的→我加入的.
-    const COMPACT_TYPE_ORDER = ["department", "created", "joined"] as const;
-    const [compactTypeIdx, setCompactTypeIdx] = useState(1);
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Scrolling container ref — drives the dynamic, scroll-following name ellipsis.
@@ -308,41 +308,26 @@ export function KnowledgeSpaceSidebar({
     // Mobile: 8px gap above each section group.
     const sectionWrapClassName = mobilePageMode ? "pt-2" : "pb-4";
 
-    // ─── Compact dropdown: a single, type-cycling section ───────────────
-    const compactType = COMPACT_TYPE_ORDER[compactTypeIdx % COMPACT_TYPE_ORDER.length];
-    const compactSpaces = compactType === "department"
-        ? departmentSpaces
-        : compactType === "created"
-            ? filteredCreatedSpaces
-            : filteredJoinedSpaces;
-    const compactSortBy = compactType === "department"
-        ? departmentSortBy
-        : compactType === "created"
-            ? createdSortBy
-            : joinedSortBy;
-    const compactTitle = localize(
-        compactType === "department"
-            ? "com_knowledge.department_spaces"
-            : compactType === "created"
-                ? "com_knowledge.created_by_me"
-                : "com_knowledge.joined_by_me",
-    );
-    const renderCompactItem = (s: KnowledgeSpace) => (
+    // ─── Compact dropdown: tree-style list (mirrors the PC sidebar). Each
+    // section keeps its own collapse + sort state; per-row "..." menu is
+    // hidden because the dropdown is a navigation surface, not a manager.
+    const renderCompactItem = (s: KnowledgeSpace, sectionType: "created" | "joined" | "department") => (
         <KnowledgeSpaceItem
             key={s.id}
             space={s}
-            type={compactType}
+            type={sectionType}
             isActive={s.id === activeSpaceId}
             onSelect={onSpaceSelect}
             onUpdate={handleUpdateSpace}
             onDelete={handleDeleteSpace}
             onLeave={handleLeaveSpace}
-            onPin={(id, pinned) => handlePinSpace(id, pinned, compactType)}
+            onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
             onSettings={onSpaceSettings}
             onManageMembers={onManageMembers}
             hideMoreMenu
             compact
-            {...getItemPermissions(s, compactType)}
+            onAfterNavigate={onNavigateAway}
+            {...getItemPermissions(s, sectionType)}
         />
     );
 
@@ -360,7 +345,7 @@ export function KnowledgeSpaceSidebar({
         <div className={cn("relative h-full min-h-0 shrink-0", fullWidthMode && "w-full")}>
             <div
                 className={[
-                    `h-full ${mobilePageMode ? "bg-white" : "bg-[#FBFBFB]"} flex flex-col overflow-hidden ${collapsed || fullWidthMode ? "" : "border-r-[0.5px] border-[#e5e6eb]"}`,
+                    `h-full ${mobilePageMode || compactMode ? "bg-white" : "bg-[#FBFBFB]"} flex flex-col overflow-hidden ${collapsed || fullWidthMode ? "" : "border-r-[0.5px] border-[#e5e6eb]"}`,
                     fullWidthMode ? "w-full" : collapsed ? "w-0" : "",
                 ].join(" ")}
                 style={fullWidthMode ? undefined : {
@@ -391,7 +376,7 @@ export function KnowledgeSpaceSidebar({
                             <Button
                                 variant="secondary"
                                 onClick={onCreateSpace}
-                                className="h-9 w-full gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#212121] hover:bg-[#F7F8FA]"
+                                className="h-9 w-full gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#666666] hover:bg-[#F7F8FA]"
                             >
                                 <Plus className="size-4" />
                                 {localize("com_knowledge.create")}
@@ -402,7 +387,7 @@ export function KnowledgeSpaceSidebar({
                         collapsed ? "flex items-center justify-center h-7" : "",
                         mobileDrawerMode && "hidden"
                     )}>
-                        {!collapsed && !mobileDrawerMode && <div className="flex justify-between items-center text-[16px] font-medium">
+                        {!collapsed && !mobileDrawerMode && <div className="flex justify-between items-center text-[16px] font-medium leading-[32px]">
                             <span className="text-[#1d2129]">{localize("com_knowledge.knowledge_space")}</span>
                         </div>}
                     </div>
@@ -433,32 +418,74 @@ export function KnowledgeSpaceSidebar({
                             horizontally overflow. */}
                         <div className="w-max min-w-full">
                             {compactMode ? (
-                                /* File-page title dropdown: a single section; the ⇄ icon cycles
-                                   the space type. Tree rows hide their per-row "..." menu. */
-                                <div className="pb-4">
-                                    <SectionHeader
-                                        title={compactTitle}
-                                        collapsed={false}
-                                        onToggle={() => { }}
-                                        sortValue={compactSortBy}
-                                        sortOptions={sortOptions}
-                                        sortFieldLabel={localize("com_knowledge.sort_field")}
-                                        onSortChange={(v) => setSort(compactType, v as SpaceSortType)}
-                                        onAdd={compactType === "created" ? onCreateSpace : undefined}
-                                        addLabel={localize("com_knowledge.create")}
-                                        onSquare={compactType === "joined" ? () => onKnowledgeSquare?.() : undefined}
-                                        squareLabel={localize("com_knowledge.go_to_square")}
-                                        onCycle={() => setCompactTypeIdx((i) => (i + 1) % COMPACT_TYPE_ORDER.length)}
-                                        cycleLabel={localize("com_knowledge.knowledge_space")}
-                                        compact
-                                    />
-                                    <div className="space-y-2 px-3">
-                                        {compactSpaces.map(renderCompactItem)}
-                                        {!compactSpaces.length && (
-                                            <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>
+                                /* File-page title dropdown: same 3-section tree as the PC sidebar,
+                                   ordered 部门 → 我创建的 → 我加入的. Per-row "..." menus stay hidden
+                                   via renderCompactItem so the dropdown only navigates. */
+                                <>
+                                    {departmentSpaces.length > 0 && (
+                                        <div className="pb-4">
+                                            <SectionHeader
+                                                title={localize("com_knowledge.department_spaces")}
+                                                collapsed={departmentCollapsed}
+                                                onToggle={() => setDepartmentCollapsed(!departmentCollapsed)}
+                                                sortValue={departmentSortBy}
+                                                sortOptions={sortOptions}
+                                                sortFieldLabel={localize("com_knowledge.sort_field")}
+                                                onSortChange={(v) => setSort("department", v as SpaceSortType)}
+                                                compact
+                                            />
+                                            {!departmentCollapsed && (
+                                                <div className="space-y-2 px-3">
+                                                    {departmentSpaces.map(s => renderCompactItem(s, "department"))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    <div className="pb-4">
+                                        <SectionHeader
+                                            title={localize("com_knowledge.created_by_me")}
+                                            collapsed={createdCollapsed}
+                                            onToggle={() => setCreatedCollapsed(!createdCollapsed)}
+                                            sortValue={createdSortBy}
+                                            sortOptions={sortOptions}
+                                            sortFieldLabel={localize("com_knowledge.sort_field")}
+                                            onSortChange={(v) => setSort("created", v as SpaceSortType)}
+                                            onAdd={onCreateSpace}
+                                            addLabel={localize("com_knowledge.create")}
+                                            compact
+                                        />
+                                        {!createdCollapsed && (
+                                            <div className="space-y-2 px-3">
+                                                {filteredCreatedSpaces.map(s => renderCompactItem(s, "created"))}
+                                                {!filteredCreatedSpaces.length && (
+                                                    <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
-                                </div>
+                                    <div className="pb-4">
+                                        <SectionHeader
+                                            title={localize("com_knowledge.joined_by_me")}
+                                            collapsed={joinedCollapsed}
+                                            onToggle={() => setJoinedCollapsed(!joinedCollapsed)}
+                                            sortValue={joinedSortBy}
+                                            sortOptions={sortOptions}
+                                            sortFieldLabel={localize("com_knowledge.sort_field")}
+                                            onSortChange={(v) => setSort("joined", v as SpaceSortType)}
+                                            onSquare={() => onKnowledgeSquare?.()}
+                                            squareLabel={localize("com_knowledge.go_to_square")}
+                                            compact
+                                        />
+                                        {!joinedCollapsed && (
+                                            <div className="space-y-2 px-3">
+                                                {filteredJoinedSpaces.map(s => renderCompactItem(s, "joined"))}
+                                                {!filteredJoinedSpaces.length && (
+                                                    <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
                             ) : (
                             <>
                             {/* Department spaces — always on top per PRD */}
@@ -535,7 +562,7 @@ export function KnowledgeSpaceSidebar({
                         <Button
                             variant="secondary"
                             onClick={() => onKnowledgeSquare?.()}
-                            className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#212121] hover:bg-[#F4F4F4]"
+                            className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                         >
                             <Outlined.BlocksAndArrows className="size-4" />
                             {localize("com_knowledge.go_to_square")}
@@ -563,8 +590,8 @@ export function KnowledgeSpaceSidebar({
                         "absolute top-0 z-[35] h-full w-[6px] -translate-x-1/2 cursor-col-resize",
                         // Subtle visual feedback: thin accent line on hover/active.
                         "after:absolute after:right-1/2 after:top-0 after:h-full after:w-px after:translate-x-1/2",
-                        "after:bg-transparent hover:after:bg-[#165dff]/40",
-                        isResizing && "after:bg-[#165dff]",
+                        "after:bg-transparent hover:after:w-[2px] hover:after:bg-[#999999]",
+                        isResizing && "after:w-[2px] after:bg-[#999999]",
                     )}
                     style={{ left: sidebarWidth }}
                 />

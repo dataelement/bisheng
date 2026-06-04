@@ -209,7 +209,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
         ? ((user as any).plugins as string[]).includes('knowledge_space')
         : true;
     return (
-        <div className={`flex px-4 pt-5 flex-col h-full  ${screenFull ? '' : 'border-l border-gray-100'}`}>
+        <div className="flex px-4 pt-5 flex-col h-full">
             {/* Top Toolbar */}
             <div className="border-b border-black pb-4">
                 {/* Mobile-only back button; the article title is intentionally hidden here

@@ -138,7 +138,7 @@ export function ChannelLayout({
                         onMouseDown={startResizing}
                         className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
                     >
-                        <div className="pointer-events-none w-px self-stretch bg-[#f2f3f5] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
+                        <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-[2px] group-hover:bg-[#999999] group-active:w-[2px] group-active:bg-[#999999]" />
                     </div>
                 </div>
             )}

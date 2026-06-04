@@ -273,7 +273,7 @@ export default function KnowledgeSquare({
                             onChange={handleSearch}
                             onCompositionStart={handleSearchCompositionStart}
                             onCompositionEnd={handleSearchCompositionEnd}
-                            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#165DFF]"
+                            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
                         />
                     </div>
                 </div>

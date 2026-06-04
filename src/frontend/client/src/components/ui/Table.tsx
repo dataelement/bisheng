@@ -1,9 +1,18 @@
 import * as React from 'react';
 import { cn } from '~/utils';
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
+interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+  /**
+   * Class names applied to the outer wrapper div. Use this to override the
+   * default `overflow-auto` (e.g. pass `overflow-visible` so a sticky `<thead>`
+   * tracks an outer scroll container instead of being trapped by the wrapper).
+   */
+  wrapperClassName?: string;
+}
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+  ({ className, wrapperClassName, ...props }, ref) => (
+    <div className={cn('relative w-full overflow-auto', wrapperClassName)}>
       <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   ),

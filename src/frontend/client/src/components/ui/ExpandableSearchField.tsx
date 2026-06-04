@@ -138,7 +138,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     expanded
                         ? cn(
                             expandedWidthClassName,
-                            showActiveChrome ? "border-[#024DE3]" : "border-[#E5E6EB]"
+                            showActiveChrome ? "border-[#DDDDDD] shadow-[0_0_0_2px_#F1F5F9]" : "border-[#E5E6EB]"
                         )
                         : "w-8 border-[#E5E6EB] cursor-pointer hover:bg-[#F7F8FA]",
                     disabled && "pointer-events-none opacity-50",
@@ -155,7 +155,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                 <div
                     className={cn(
                         "flex items-center justify-center px-[7px] h-full shrink-0 transition-colors duration-300 ease-out",
-                        showActiveChrome ? "text-[#024DE3]" : "text-[#86909C]"
+                        showActiveChrome ? "text-[#4E5969]" : "text-[#86909C]"
                     )}
                 >
                     <Search className="size-4 shrink-0" aria-hidden />

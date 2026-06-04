@@ -42,6 +42,8 @@ interface KnowledgeSpaceItemProps {
     hideMoreMenu?: boolean;
     /** Compact dropdown styling: 14px space/folder icons, slightly looser tree node spacing. */
     compact?: boolean;
+    /** Fired after a folder is navigated to (so a host drawer can close itself). */
+    onAfterNavigate?: () => void;
 }
 
 export default function KnowledgeSpaceItem({
@@ -60,6 +62,7 @@ export default function KnowledgeSpaceItem({
     canManageMembers = false,
     hideMoreMenu = false,
     compact = false,
+    onAfterNavigate,
 }: KnowledgeSpaceItemProps) {
     const localize = useLocalize();
     const [isEditing, setIsEditing] = useState(false);
@@ -91,6 +94,7 @@ export default function KnowledgeSpaceItem({
         } else {
             navigate(`/knowledge/space/${space.id}`);
         }
+        onAfterNavigate?.();
     };
 
     const rename = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -255,14 +259,19 @@ export default function KnowledgeSpaceItem({
                             {(canDeleteSpace || type === "joined") && (
                                 <DropdownMenuItem
                                     onClick={async () => {
-                                        const actionName = canDeleteSpace ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");
-                                        const description = canDeleteSpace ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
-                                        const ok = await confirm({
-                                            title: localize("com_knowledge.prompt"),
-                                            description,
-                                            confirmText: canDeleteSpace ? localize("com_knowledge.delete") : localize("com_knowledge.exit"),
-                                            cancelText: localize("com_knowledge.cancel")
-                                        });
+                                        // Delete-space uses the destructive variant (matches file-delete).
+                                        // Exit-space keeps the default prompt — it's not destructive.
+                                        const ok = canDeleteSpace
+                                            ? await confirm({
+                                                description: `${localize("com_knowledge.confirm_delete_space_name", { 0: space.name })}${localize("com_knowledge.delete_irreversible_warning")}`,
+                                                variant: "destructive",
+                                            })
+                                            : await confirm({
+                                                title: localize("com_knowledge.prompt"),
+                                                description: localize("com_knowledge.confirm_exit_space"),
+                                                confirmText: localize("com_knowledge.exit"),
+                                                cancelText: localize("com_knowledge.cancel"),
+                                            });
 
                                         if (ok) {
                                             canDeleteSpace ? onDelete(space.id) : onLeave(space.id);

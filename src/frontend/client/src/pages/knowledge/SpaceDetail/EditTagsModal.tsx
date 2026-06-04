@@ -85,21 +85,25 @@ export function EditTagsModal({
         });
     };
 
-    // Enter key: create a new space tag, then select it
-    const handleKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
-        if (e.key !== "Enter") return;
-        e.preventDefault();
+    // Commit the current input as a tag (creating it in the space if new, or
+    // selecting the existing one). Shared by the Enter key and by Save, so that
+    // clicking 确认 with un-entered text still captures it.
+    //
+    // Returns whether it's safe to proceed, plus the committed tag id — callers
+    // that immediately read tag ids need it because setSelectedTagIds is async
+    // and won't have re-rendered within the same handler.
+    const commitInput = async (): Promise<{ ok: boolean; tagId?: number }> => {
         const trimmed = inputValue.trim();
-        if (!trimmed) return;
+        if (!trimmed) return { ok: true };
 
         if (getFullWidthLength(trimmed) > 8) {
             showToast({ message: localize("com_knowledge.tags_char_limit_exceeded"), status: "error" });
-            return;
+            return { ok: false };
         }
 
         if (selectedTagIds.size >= 10) {
             showToast({ message: localize("com_knowledge.tags_count_limit_exceeded"), status: "error" });
-            return;
+            return { ok: false };
         }
 
         // Check if the tag already exists in the space
@@ -108,12 +112,12 @@ export function EditTagsModal({
             // Just select it
             setSelectedTagIds((prev) => new Set(prev).add(existing.id));
             setInputValue("");
-            return;
+            return { ok: true, tagId: existing.id };
         }
 
         if (spaceTags.length >= 50) {
             showToast({ message: localize("com_knowledge.space_tags_limit_exceeded"), status: "error" });
-            return;
+            return { ok: false };
         }
 
         // Create a new tag in the space
@@ -121,26 +125,41 @@ export function EditTagsModal({
             const newTag = await addSpaceTagApi(spaceId, trimmed);
             if (!newTag || newTag.id === undefined || newTag.id === null) {
                 showToast({ message: localize("com_knowledge.create_tag_failed_abnormal"), status: "error" });
-                return;
+                return { ok: false };
             }
             setSpaceTags((prev) => [...prev, newTag]);
             setSelectedTagIds((prev) => new Set(prev).add(newTag.id));
             setInputValue("");
             // Invalidate shared cache so search dropdown updates
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
+            return { ok: true, tagId: newTag.id };
         } catch {
             showToast({ message: localize("com_knowledge.create_tag_failed"), status: "error" });
+            return { ok: false };
         }
+    };
+
+    // Enter key: commit the typed text as a tag.
+    const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        void commitInput();
     };
 
     // Save: update file tags via API
     const handleSave = async () => {
-        const pendingText = inputValue.trim();
+        // First turn any un-entered input into a tag so 确认 captures it.
+        const committed = await commitInput();
+        if (!committed.ok) return; // validation/creation failed — let the user fix it
 
         setLoading(true);
 
         try {
             const tagIds = Array.from(selectedTagIds);
+            // selectedTagIds hasn't re-rendered yet, so add the just-committed id.
+            if (committed.tagId != null && !tagIds.includes(committed.tagId)) {
+                tagIds.push(committed.tagId);
+            }
             if (isBatchMode && fileIds) {
                 // Batch append mode
                 await batchUpdateTagsApi(spaceId, {
@@ -151,7 +170,7 @@ export function EditTagsModal({
             } else if (fileId) {
                 // Single file overwrite mode
                 await updateFileTagsApi(spaceId, fileId, tagIds);
-                !pendingText && showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
+                showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
             }
             onSaved?.();
             // Invalidate shared spaceTags cache so search dropdown picks up new tags
@@ -202,7 +221,7 @@ export function EditTagsModal({
                 onInteractOutside={(e) => e.preventDefault()}
                 className="flex w-[600px] flex-col items-stretch gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none [&>button]:hidden"
             >
-                <DialogHeader className="h-auto shrink-0 space-y-0 px-6 py-4 text-left touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
+                <DialogHeader className="h-12 shrink-0 justify-center space-y-0 px-6 py-3 text-left touch-mobile:h-auto touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
                     <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
                         {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>
@@ -216,7 +235,7 @@ export function EditTagsModal({
                     </button>
                 </DialogHeader>
 
-                <div className="flex flex-1 flex-col gap-4 px-6 py-6 pb-2 touch-mobile:px-4 touch-mobile:py-4">
+                <div className="flex flex-1 flex-col gap-3 px-6 py-6 touch-mobile:px-4 touch-mobile:py-4">
                     {/* Tags Input Box */}
                     <div
                         className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors focus-within:border-primary"
@@ -261,8 +280,8 @@ export function EditTagsModal({
                     {/* <div className="w-full h-px bg-[#ebecf0] my-[-1px]" /> */}
 
                     {/* Existing Space Tags */}
-                    <div className="flex flex-col gap-2 pt-1">
-                        <div className="text-[14px] leading-5 font-medium text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
+                    <div className="flex flex-col gap-3">
+                        <div className="text-[14px] leading-[22px] font-medium text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
                         <div className="flex flex-wrap gap-1">
                             {spaceTags.length === 0 && (
                                 <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
@@ -273,15 +292,16 @@ export function EditTagsModal({
                                     <span
                                         key={tag.id}
                                         onClick={() => toggleTag(tag)}
-                                        className={`px-2 h-7 flex items-center justify-center gap-1 text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
+                                        className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-[4px] transition-colors ${isSelected
                                             ? "text-[#165dff] cursor-default bg-primary/10"
                                             : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
                                             }`}
                                     >
                                         {tag.name}
+                                        {/* Trash reveals on hover so resting pills stay clean per design. */}
                                         <button
                                             type="button"
-                                            className="flex items-center justify-center text-[#86909c] hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-[#c9cdd4]"
+                                            className="hidden group-hover:flex items-center justify-center text-[#86909c] hover:text-[#f53f3f] disabled:cursor-not-allowed disabled:text-[#c9cdd4]"
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 void handleDeleteSpaceTag(tag);
@@ -298,12 +318,16 @@ export function EditTagsModal({
                     </div>
                 </div>
 
-                <DialogFooter className="mt-2 flex h-16 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 touch-mobile:!mt-auto touch-mobile:!h-auto touch-mobile:!flex-row touch-mobile:!justify-stretch touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3 sm:space-x-0">
-                    <Button variant="outline" className="h-8 rounded-[6px] px-4 font-normal touch-mobile:flex-1" onClick={handleClose}>
+                <DialogFooter className="flex h-14 shrink-0 items-center justify-end gap-3 border-none px-6 py-3 touch-mobile:!mt-auto touch-mobile:!h-auto touch-mobile:!flex-row touch-mobile:!justify-stretch touch-mobile:border-t touch-mobile:border-[#ECECEC] touch-mobile:px-4 touch-mobile:py-3 sm:space-x-0">
+                    <Button
+                        variant="outline"
+                        className="h-8 min-w-[60px] rounded-[6px] border-[#ebecf0] bg-white/50 px-4 font-normal text-[#070038] backdrop-blur-[8px] hover:bg-white/70 touch-mobile:flex-1"
+                        onClick={handleClose}
+                    >
                         {localize("com_knowledge.cancel")}</Button>
                     <Button
                         variant="default"
-                        className="h-8 rounded-[6px] px-4 font-normal touch-mobile:flex-1"
+                        className="h-8 min-w-[60px] rounded-[6px] px-4 font-normal touch-mobile:flex-1"
                         onClick={handleSave}
                         disabled={loading}
                     >
