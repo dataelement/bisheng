@@ -1882,6 +1882,19 @@ class ChannelService:
                 raise ChannelOrganizationGrantUnsubscribeDeniedError(
                     blocked_by=sorted(model_organization_subject_types),
                 )
+            # A member-management direct USER authorization grants a ReBAC relation + UI
+            # binding but no membership row (F026 keeps authorization separate from
+            # membership), yet the channel still appears in the user's followed list, which
+            # includes ReBAC-accessible channels. Mirror knowledge_space.unsubscribe_space:
+            # revoke the direct grant instead of failing with "not subscribed".
+            if await self._has_direct_channel_user_grant(channel_id, login_user.user_id):
+                await self.__class__.sync_direct_channel_user_permissions(
+                    channel_id,
+                    login_user.user_id,
+                    None,
+                    is_active=False,
+                )
+                return True
             raise ValueError("You are not subscribed to this channel")
 
         sources = await self.space_channel_member_repository.find_channel_membership_sources(
@@ -1924,6 +1937,17 @@ class ChannelService:
             and binding.get("subject_type") == "user"
             and str(binding.get("subject_id")) == str(user_id)
         )
+
+    async def _has_direct_channel_user_grant(self, channel_id: str, user_id: int) -> bool:
+        """Whether the user holds a direct 'user' authorization binding on the channel.
+
+        Detects member-management grants that exist only as ReBAC tuples + a UI binding
+        (no membership row), so unsubscribe can revoke them like a self-subscribe.
+        """
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+
+        bindings = await _get_bindings()
+        return any(self._is_direct_channel_user_binding(binding, channel_id, user_id) for binding in bindings)
 
     @classmethod
     async def sync_direct_channel_user_permissions(

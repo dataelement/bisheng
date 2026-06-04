@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { Search, ArrowLeft } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
@@ -41,7 +41,7 @@ interface ChannelSquareProps {
   refreshKey?: number;
 }
 
-export default function ChannelSquare({
+function ChannelSquare({
   onBack,
   title,
   subtitle,
@@ -333,3 +333,8 @@ export default function ChannelSquare({
     </div>
   );
 }
+
+// memo: skip re-render when parent (Subscription) re-renders due to navigate/
+// location changes. Combined with useCallback'd onPreviewChannel/onBack in the
+// parent, this stops the card list from repainting (flashing) on card click.
+export default memo(ChannelSquare);

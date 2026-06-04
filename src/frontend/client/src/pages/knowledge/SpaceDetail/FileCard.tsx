@@ -325,8 +325,8 @@ export function FileCard({
                                 !revealCardActionsOnHoverOnly
                                     ? "opacity-100"
                                     : isSelected
-                                    ? "opacity-100"
-                                    : "opacity-0 group-hover:opacity-100"
+                                        ? "opacity-100"
+                                        : "opacity-0 group-hover:opacity-100"
                             )}
                         >
                             <Checkbox
@@ -347,8 +347,8 @@ export function FileCard({
                                 !revealCardActionsOnHoverOnly
                                     ? "pointer-events-auto opacity-100"
                                     : showCardActions
-                                    ? "pointer-events-auto opacity-100"
-                                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+                                        ? "pointer-events-auto opacity-100"
+                                        : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                             )}
                         >
                             {showInlineDownloadButton && (
@@ -477,7 +477,7 @@ export function FileCard({
                     {/* 底部信息 (标签、数量和时间) */}
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
                         <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
-                            {isAdmin && isFolder && file.fileNum != null && (
+                            {/* {isAdmin && isFolder && file.fileNum != null && (
                                 <span className="text-xs text-[#86909c] whitespace-nowrap">
                                     {localize("com_knowledge_items_count", { count: file.fileNum ?? 0 })}
                                 </span>
@@ -486,7 +486,7 @@ export function FileCard({
                                 <span className="text-xs text-[#86909c] whitespace-nowrap">
                                     {localize("com_knowledge_items_count", { count: file.successFileNum ?? 0 })}
                                 </span>
-                            )}
+                            )} */}
                             {(!isFolder && file.tags && file.tags.length > 0) && (
                                 <TagGroup tags={file.tags} />
                             )}
@@ -502,118 +502,118 @@ export function FileCard({
                             !revealCardActionsOnHoverOnly
                                 ? "pointer-events-auto opacity-100"
                                 : showCardActions
-                                  ? "pointer-events-auto opacity-100"
-                                  : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
+                                    ? "pointer-events-auto opacity-100"
+                                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
                         )}
                     >
-                    {showMenuDownloadItem && (
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
-                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                            title={localize("com_knowledge.download")}
-                        >
-                            <Download className="size-3.5 text-[#4e5969]" />
-                        </Button>
-                    )}
-                    {showMoreMenu && (
-                        <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-5 w-5 shrink-0 rounded-md"
+                        {showMenuDownloadItem && (
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
+                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                title={localize("com_knowledge.download")}
+                            >
+                                <Download className="size-3.5 text-[#4e5969]" />
+                            </Button>
+                        )}
+                        {showMoreMenu && (
+                            <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-5 w-5 shrink-0 rounded-md"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <MoreVertical className="size-4 text-[#4e5969]" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    align="end"
+                                    className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    <MoreVertical className="size-4 text-[#4e5969]" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                                align="end"
-                                className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                        {showMenuDownloadItem && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                                className="flex items-center"
-                                            >
-                                        <Download className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.download")}
-                                            </DropdownMenuItem>
-                                        )}
+                                    {showMenuDownloadItem && (
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                            className="flex items-center"
+                                        >
+                                            <Download className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.download")}
+                                        </DropdownMenuItem>
+                                    )}
 
-                                {onManagePermission && (
-                                    <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                        className="flex items-center"
-                                    >
-                                        <Shield className="mr-2 size-4 shrink-0" />
-                                        {localize("com_permission.manage_permission")}
-                                    </DropdownMenuItem>
-                                )}
+                                    {onManagePermission && (
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                                            className="flex items-center"
+                                        >
+                                            <Shield className="mr-2 size-4 shrink-0" />
+                                            {localize("com_permission.manage_permission")}
+                                        </DropdownMenuItem>
+                                    )}
 
-                                {isAdmin && !isFolder && (
-                                    <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                        className="flex items-center"
-                                    >
-                                        <Tag className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.edit_tags")}
-                                    </DropdownMenuItem>
-                                )}
-                                {canRename && (
-                                    <DropdownMenuItem
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            startRenaming();
-                                        }}
-                                        className="flex items-center"
-                                    >
-                                        <Edit className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.rename")}
-                                    </DropdownMenuItem>
-                                )}
-                                {isAdmin && hasRetryOption && (
-                                    <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                        className="flex items-center"
-                                    >
-                                        <RefreshCw className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.retry")}
-                                    </DropdownMenuItem>
-                                )}
-                                {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
-                                    <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                                        className="flex items-center"
-                                    >
-                                        <GitBranch className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.version.menu_version_management")}
-                                    </DropdownMenuItem>
-                                )}
-                                {versionManagementEnabled && !isFolder && file.is_multi_version && (
-                                    <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                                        className="flex items-center"
-                                    >
-                                        <History className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.version.menu_version_history")}
-                                    </DropdownMenuItem>
-                                )}
-                                {canDelete && (
-                                    <DropdownMenuItem
-                                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                        className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
-                                    >
-                                        <Trash2 className="mr-2 size-4 shrink-0" />
-                                        {localize("com_knowledge.delete")}
-                                    </DropdownMenuItem>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
+                                    {isAdmin && !isFolder && (
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                            className="flex items-center"
+                                        >
+                                            <Tag className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.edit_tags")}
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canRename && (
+                                        <DropdownMenuItem
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                startRenaming();
+                                            }}
+                                            className="flex items-center"
+                                        >
+                                            <Edit className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.rename")}
+                                        </DropdownMenuItem>
+                                    )}
+                                    {isAdmin && hasRetryOption && (
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                            className="flex items-center"
+                                        >
+                                            <RefreshCw className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.retry")}
+                                        </DropdownMenuItem>
+                                    )}
+                                    {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                                            className="flex items-center"
+                                        >
+                                            <GitBranch className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.version.menu_version_management")}
+                                        </DropdownMenuItem>
+                                    )}
+                                    {versionManagementEnabled && !isFolder && file.is_multi_version && (
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                                            className="flex items-center"
+                                        >
+                                            <History className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.version.menu_version_history")}
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canDelete && (
+                                        <DropdownMenuItem
+                                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                            className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
+                                        >
+                                            <Trash2 className="mr-2 size-4 shrink-0" />
+                                            {localize("com_knowledge.delete")}
+                                        </DropdownMenuItem>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
                     </div>
                 )}
             </CardContent>

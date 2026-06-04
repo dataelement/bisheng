@@ -248,6 +248,73 @@ async def test_unsubscribe_permission_model_user_group_without_membership_is_blo
 
 
 @pytest.mark.asyncio
+async def test_unsubscribe_member_management_user_grant_without_membership_revokes():
+    # Member-management direct USER authorization: ReBAC + UI binding, no membership row.
+    # The channel still shows in the user's followed list (ReBAC-accessible), so unsubscribe
+    # must revoke the grant — like knowledge_space.unsubscribe_space — not fail "not subscribed".
+    repo = _Repo([])
+    service = _service(repo)
+
+    existing_bindings = [{
+        'key': 'channel:channel-1:user:7:viewer:-',
+        'resource_type': 'channel',
+        'resource_id': 'channel-1',
+        'subject_type': 'user',
+        'subject_id': 7,
+        'relation': 'viewer',
+        'include_children': None,
+        'model_id': 'viewer',
+    }]
+    save_mock = AsyncMock()
+
+    with patch(
+        'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+        new=AsyncMock(),
+    ) as mock_authorize, patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
+        new=AsyncMock(return_value=existing_bindings),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_current_user_subject_strings',
+        new=AsyncMock(return_value={'user:7'}),
+    ), patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_binding_department_paths',
+        new=AsyncMock(return_value={}),
+    ), patch(
+        'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+        new=AsyncMock(return_value=existing_bindings),
+    ), patch(
+        'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+        new=save_mock,
+    ):
+        result = await service.unsubscribe_channel('channel-1', _User())
+
+    assert result is True
+    # ReBAC viewer/editor/manager for the user revoked + the direct user binding removed.
+    mock_authorize.assert_awaited_once()
+    revokes = mock_authorize.await_args.kwargs['revokes']
+    assert revokes and all(item.subject_id == 7 for item in revokes)
+    save_mock.assert_awaited_once()
+    saved = save_mock.await_args.args[0]
+    assert all(not (b.get('subject_type') == 'user' and b.get('subject_id') == 7) for b in saved)
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_without_membership_or_grant_raises_not_subscribed():
+    repo = _Repo([])
+    service = _service(repo)
+
+    with patch(
+        'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
+        new=AsyncMock(return_value=[]),
+    ), patch(
+        'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+        new=AsyncMock(return_value=[]),
+    ):
+        with pytest.raises(ValueError, match='not subscribed'):
+            await service.unsubscribe_channel('channel-1', _User())
+
+
+@pytest.mark.asyncio
 async def test_unsubscribe_mixed_sources_is_blocked_when_organization_source_exists():
     repo = _Repo([
         _member(member_id=1, subject_type='user', subject_id=7, binding_key='user-viewer'),

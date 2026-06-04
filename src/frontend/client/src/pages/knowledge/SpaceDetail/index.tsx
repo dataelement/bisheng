@@ -1039,7 +1039,10 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : (isH5 || viewMode === "card") ? (
-                        <div ref={fileListScrollRevealRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
+                        // key forces React to fully unmount/remount on card<->list
+                        // toggle instead of reusing the same <div> — avoids the
+                        // stale paint where card items linger over the list view.
+                        <div key="ksp-view-card" ref={fileListScrollRevealRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
                             <div
                                 ref={cardGridRef}
                                 className={cn(
@@ -1091,7 +1094,7 @@ export function KnowledgeSpaceContent({
                             )}
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
+                        <div key="ksp-view-list" className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
                             <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}

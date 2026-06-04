@@ -81,6 +81,12 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     // returned yet (folders with many files can take a long time on the API).
     const pendingDeletionIdsRef = useRef<Set<string>>(new Set());
 
+    // Serialises concurrent loadFiles calls: each call bumps this counter and
+    // remembers its own id; when the response returns, it only applies state
+    // if it's still the latest request. Fixes status-filter race where rapid
+    // clicks let a stale response overwrite a newer one (mangled list state).
+    const loadRequestIdRef = useRef(0);
+
     const markPendingDeletion = useCallback((ids: Array<string | number>) => {
         ids.forEach(id => pendingDeletionIdsRef.current.add(String(id)));
     }, []);
@@ -100,6 +106,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         async (page: number = 1): Promise<KnowledgeFile[]> => {
             if (!enabled || !activeSpace?.id) return [];
 
+            const reqId = ++loadRequestIdRef.current;
             setLoading(true);
             try {
                 const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
@@ -138,6 +145,11 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                         file_status: fileStatusNums,
                     });
 
+                // Stale-response guard: a newer loadFiles started while this
+                // one was in flight (e.g. user clicked a different status
+                // filter). Drop this result entirely — don't touch any state.
+                if (reqId !== loadRequestIdRef.current) return [];
+
                 const incomingData = res.data;
 
                 // Update pagination tokens per envelope shape.
@@ -168,10 +180,14 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 setCurrentPage(page);
                 return filteredData;
             } catch {
-                showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
+                if (reqId === loadRequestIdRef.current) {
+                    showToast({ message: localize("com_knowledge.load_file_list_failed"), severity: NotificationSeverity.ERROR });
+                }
                 return [];
             } finally {
-                setLoading(false);
+                // Only the latest request clears the loading flag, otherwise a
+                // stale response would hide the spinner of the in-flight one.
+                if (reqId === loadRequestIdRef.current) setLoading(false);
             }
         },
         [enabled, activeSpace?.id, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, pageSize, nextCursor, nextSearchPage, showToast, localize]
