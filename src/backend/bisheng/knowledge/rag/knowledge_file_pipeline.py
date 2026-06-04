@@ -48,7 +48,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             updater = UserDao.get_user(self.db_file.updater_id)
             updater = updater.user_name if updater else None
 
-        return Metadata(
+        metadata = Metadata(
             document_id=self.db_file.id,
             document_name=self.file_name,
             knowledge_id=self.db_file.knowledge_id,
@@ -58,6 +58,17 @@ class KnowledgeFilePipeline(BaseFilePipeline):
             updater=updater,
             user_metadata=self.db_file.user_metadata,
         ).model_dump(exclude_none=True)
+
+        # Always emit `abstract`, even when summary extraction is off. The
+        # AbstractTransformer only adds this key when an abstract LLM is
+        # configured, so `exclude_none` would otherwise drop it entirely.
+        # Legacy collections (created before `abstract` became nullable in
+        # KNOWLEDGE_RAG_METADATA_SCHEMA) declare `abstract` as a required field;
+        # omitting it makes Milvus reject the insert with "Insert missed an
+        # field `abstract`". Keeping the key always present (default "") keeps
+        # those legacy collections writable and matches the rebuild path.
+        metadata.setdefault("abstract", self.db_file.abstract or "")
+        return metadata
 
     def prepare_local_file(self):
         self.local_file_path, _ = download_minio_file(
