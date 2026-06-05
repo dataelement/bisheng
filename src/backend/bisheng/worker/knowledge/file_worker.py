@@ -325,8 +325,8 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
                 else:
                     # DB row is gone (file deleted mid-parse) or invisible under
                     # the current tenant context. Release the in-flight slot
-                    # anyway, otherwise it leaks and blocks the per-user queue
-                    # forever (fatal with max_per_user_inflight=1).
+                    # anyway, otherwise it leaks and the queue's global
+                    # concurrency counter never gets the slot back.
                     sched.release_file(file_id=str(file_id))
                 file_scheduler.trigger_dispatch_task.delay()
             except Exception:

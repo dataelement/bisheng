@@ -276,19 +276,29 @@ class FairSchedulerConf(BaseModel):
     """
 
     dispatch_lock_ttl_seconds: int = Field(default=24, ge=1, le=300)
-    max_per_user_inflight: int = Field(default=1, ge=1)
+    # Global per-queue concurrency cap = the only hard limit on simultaneous
+    # parses. Should mirror the sum of `--concurrency` across the workers that
+    # consume each queue (see scheduler design spec, decision D2).
+    queue_concurrency: dict[str, int] = Field(default_factory=lambda: {"knowledge_celery": 20, "ocr_celery": 5})
+    # Fairness weight, NOT an in-flight ceiling. A user's steady-state in-flight
+    # share is proportional to its weight; default 1 means equal shares.
+    per_user_pick_size: int = Field(default=1, ge=1)
     user_overrides: dict[str, int] = Field(default_factory=dict)
     inflight_ttl_seconds: int = Field(default=7200, ge=60)
 
     @model_validator(mode="after")
     def validate(self):
-        for user_id, limit in self.user_overrides.items():
-            if limit < 1:
-                raise ValueError(f"user_overrides[{user_id}] must be >= 1, got {limit}")
+        for user_id, weight in self.user_overrides.items():
+            if weight < 1:
+                raise ValueError(f"user_overrides[{user_id}] must be >= 1, got {weight}")
         return self
 
-    def limit_for(self, user_id: str) -> int:
-        return self.user_overrides.get(str(user_id), self.max_per_user_inflight)
+    def concurrency_for(self, queue: str) -> int:
+        # Unknown queues fall back to per_user_pick_size so backfill stays bounded.
+        return self.queue_concurrency.get(queue, self.per_user_pick_size)
+
+    def weight_for(self, user_id: str) -> int:
+        return self.user_overrides.get(str(user_id), self.per_user_pick_size)
 
 
 class KnowledgeFileWorkerConf(BaseModel):
@@ -348,11 +358,8 @@ class KnowledgeQAFilterConf(BaseModel):
     @model_validator(mode="after")
     def validate(self):
         if self.retrieval_expansion_multiplier < self.retrieval_initial_multiplier:
-            raise ValueError(
-                "retrieval_expansion_multiplier must be >= retrieval_initial_multiplier"
-            )
+            raise ValueError("retrieval_expansion_multiplier must be >= retrieval_initial_multiplier")
         return self
-
 
 
 class LinsightConf(BaseModel):

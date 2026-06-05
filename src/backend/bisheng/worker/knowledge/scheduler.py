@@ -19,6 +19,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.worker.knowledge.lua_scripts import (
     COMPLETE_FILE,
+    CONFIRM_DISPATCH,
     DISPATCH_ONE,
     ENQUEUE_FILE,
     RELEASE_LOCK,
@@ -84,6 +85,7 @@ def decide_queue(file_name_or_ext: str) -> str:
 PREFIX = "{bisheng_fs}:"
 ACTIVE_USERS_KEY = f"{PREFIX}active_users"
 INFLIGHT_USERS_KEY = f"{PREFIX}inflight_users"
+INFLIGHT_QUEUE_KEY = f"{PREFIX}inflight_queue"
 DISPATCH_LOCK_KEY = f"{PREFIX}dispatch_lock"
 
 
@@ -97,6 +99,10 @@ def _payload_key(file_id: str) -> str:
 
 def _inflight_key(user_id: str) -> str:
     return f"{PREFIX}inflight:{user_id}"
+
+
+def _inflight_total_key(queue: str) -> str:
+    return f"{PREFIX}inflight_total:{queue}"
 
 
 class FileScheduler:
@@ -115,6 +121,7 @@ class FileScheduler:
             self._conn = get_redis_client_sync().connection
         self._enqueue = self._conn.register_script(ENQUEUE_FILE)
         self._dispatch_one = self._conn.register_script(DISPATCH_ONE)
+        self._confirm = self._conn.register_script(CONFIRM_DISPATCH)
         self._rollback = self._conn.register_script(ROLLBACK_DISPATCH)
         self._complete = self._conn.register_script(COMPLETE_FILE)
         self._release_lock_script = self._conn.register_script(RELEASE_LOCK)
@@ -141,11 +148,35 @@ class FileScheduler:
             ],
         )
 
-    def dispatch_one(self, *, user_id: str, limit: int) -> str | None:
-        result = self._dispatch_one(keys=[str(user_id)], args=[int(limit)])
+    def dispatch_one(self, *, user_id: str) -> str | None:
+        result = self._dispatch_one(keys=[str(user_id)])
         if result is None:
             return None
         return result.decode() if isinstance(result, bytes) else str(result)
+
+    def confirm_dispatch(self, *, file_id: str, queue: str) -> None:
+        """Confirm a successful dispatch: record queue, bump the queue's global
+        in-flight counter, drop the payload. Called only after apply_async OK."""
+        self._confirm(keys=[str(file_id)], args=[str(queue)])
+
+    def inflight_count(self, *, user_id: str) -> int:
+        return int(self._conn.scard(_inflight_key(user_id)))
+
+    def inflight_total(self, *, queue: str) -> int:
+        raw = self._conn.get(_inflight_total_key(queue))
+        return int(raw) if raw else 0
+
+    def recompute_inflight_totals(self, *, queues: list[str]) -> None:
+        """Authoritatively rebuild every queue's in-flight counter from the
+        ``inflight_queue`` map. Self-heals counter drift caused by lost
+        confirm/complete callbacks (reconcile safety net)."""
+        raw = self._conn.hgetall(INFLIGHT_QUEUE_KEY)
+        counts: dict[str, int] = {}
+        for _fid, q in (raw or {}).items():
+            q = q.decode() if isinstance(q, bytes) else q
+            counts[q] = counts.get(q, 0) + 1
+        for q in set(queues) | set(counts):
+            self._conn.set(_inflight_total_key(q), counts.get(q, 0))
 
     def rollback_dispatch(self, *, user_id: str, file_id: str) -> None:
         self._rollback(keys=[str(user_id)], args=[str(file_id)])
@@ -158,9 +189,9 @@ class FileScheduler:
 
         Safety net for when the file's DB row is gone (deleted) or invisible
         under the current tenant context: without this, a lost completion
-        leaks the in-flight slot and blocks the per-user queue forever (with
-        ``max_per_user_inflight=1`` a single leaked slot stalls the whole
-        user). Returns True if a slot was released.
+        leaks the in-flight slot — the user keeps a phantom in-flight entry and
+        the queue's global concurrency counter never gets its slot back.
+        Returns True if a slot was released.
         """
         target = str(file_id)
         for uid in self.inflight_users():
@@ -180,6 +211,13 @@ class FileScheduler:
         self._conn.lrem(_queue_key(uid), 0, fid)
         self._conn.srem(_inflight_key(uid), fid)
         self._conn.delete(_payload_key(fid))
+        # If the file was already confirmed in-flight, return its slot to the
+        # queue counter so deleting a parsing file doesn't leak capacity.
+        q = self._conn.hget(INFLIGHT_QUEUE_KEY, fid)
+        if q:
+            q = q.decode() if isinstance(q, bytes) else q
+            self._conn.decr(_inflight_total_key(q))
+            self._conn.hdel(INFLIGHT_QUEUE_KEY, fid)
         if self._conn.scard(_inflight_key(uid)) == 0:
             self._conn.srem(INFLIGHT_USERS_KEY, uid)
         if self._conn.llen(_queue_key(uid)) == 0:
@@ -193,9 +231,6 @@ class FileScheduler:
             (k.decode() if isinstance(k, bytes) else k): (v.decode() if isinstance(v, bytes) else v)
             for k, v in raw.items()
         }
-
-    def delete_payload(self, *, file_id: str) -> None:
-        self._conn.delete(_payload_key(file_id))
 
     def active_users(self) -> list[str]:
         members = self._conn.smembers(ACTIVE_USERS_KEY)
@@ -240,7 +275,16 @@ def _parse_apply_async(*, args, queue):
 
 
 def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
-    """Dispatch up to one file per active user in a single round."""
+    """Fill each queue up to its global concurrency cap, fairly.
+
+    Algorithm — weighted least-in-flight backfill (see design spec §7):
+    repeatedly pick the active user with the smallest ``in_flight / weight``
+    and dispatch one of its files, until every target queue is at capacity or
+    no user has a dispatchable file left. There is NO per-user in-flight
+    ceiling; fairness comes from always serving the user currently holding the
+    fewest slots, so a freed slot goes to whoever is most starved (not to the
+    user with the longest queue).
+    """
     conf = _fair_scheduler_conf()
     sched = scheduler if scheduler is not None else FileScheduler()
 
@@ -248,11 +292,34 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
     if not token:
         return  # another worker already running a round
     try:
-        for user_id in sched.active_users():
-            limit = conf.limit_for(user_id)
-            file_id = sched.dispatch_one(user_id=user_id, limit=limit)
+        users = sched.active_users()
+        if not users:
+            return
+
+        # Current in-flight share per user (local snapshot, bumped as we go).
+        share = {u: sched.inflight_count(user_id=u) for u in users}
+        cap: dict[str, int] = {}
+        inflight: dict[str, int] = {}
+        saturated: set[str] = set()
+        skipped: set[str] = set()
+
+        def _queue_state(q: str) -> tuple[int, int]:
+            if q not in cap:
+                cap[q] = conf.concurrency_for(q)
+                inflight[q] = sched.inflight_total(queue=q)
+            return cap[q], inflight[q]
+
+        while True:
+            eligible = [u for u in users if u not in skipped]
+            if not eligible:
+                break
+            user_id = min(eligible, key=lambda u: share[u] / conf.weight_for(u))
+
+            file_id = sched.dispatch_one(user_id=user_id)
             if file_id is None:
+                skipped.add(user_id)  # user's queue is empty
                 continue
+
             payload = sched.get_payload(file_id=file_id)
             if not payload:
                 sched.rollback_dispatch(user_id=user_id, file_id=file_id)
@@ -260,14 +327,24 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
                     "file_scheduler: missing payload for file_id={}; rolled back",
                     file_id,
                 )
+                skipped.add(user_id)
                 continue
+
             queue = decide_queue(payload.get("file_ext", ""))
-            # Stamp the dispatched parse task with the file's OWNING tenant
-            # (captured at enqueue time), not the tenant that happens to be
-            # driving this dispatch round. Beat-driven rounds run under the
-            # default tenant, so without this a file owned by another tenant
-            # would be parsed under the wrong tenant context, get_file_by_ids
-            # would return empty, and the file would never be processed.
+            q_cap, q_inflight = _queue_state(queue)
+            if queue in saturated or q_inflight >= q_cap:
+                # Target queue is full. The user's FIFO head is stuck behind it,
+                # so put the file back and skip this user for the round (avoids
+                # repeatedly popping/rolling back the same file).
+                saturated.add(queue)
+                sched.rollback_dispatch(user_id=user_id, file_id=file_id)
+                skipped.add(user_id)
+                continue
+
+            # Stamp the parse task with the file's OWNING tenant (captured at
+            # enqueue time), not the tenant driving this round. Beat-driven
+            # rounds run under the default tenant; without this a cross-tenant
+            # file would be parsed under the wrong context and never found.
             payload_tenant = payload.get("tenant_id") or ""
             tenant_token = current_tenant_id.set(int(payload_tenant)) if payload_tenant else None
             try:
@@ -279,7 +356,6 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
                     ],
                     queue=queue,
                 )
-                sched.delete_payload(file_id=file_id)
             except Exception as exc:
                 sched.rollback_dispatch(user_id=user_id, file_id=file_id)
                 logger.exception(
@@ -287,9 +363,16 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
                     file_id,
                     exc,
                 )
+                skipped.add(user_id)
+                continue
             finally:
                 if tenant_token is not None:
                     current_tenant_id.reset(tenant_token)
+
+            # apply_async succeeded → confirm (record queue + INCR counter + drop payload)
+            sched.confirm_dispatch(file_id=file_id, queue=queue)
+            inflight[queue] += 1
+            share[user_id] += 1
     finally:
         sched.release_dispatch_lock(token)
 
@@ -440,3 +523,10 @@ def reconcile_file_scheduler_task() -> None:
         inflight_empty = sched._conn.scard(_inflight_key(user_id)) == 0
         if queue_empty and inflight_empty:
             sched._conn.srem(ACTIVE_USERS_KEY, user_id)
+
+    # Authoritatively rebuild per-queue in-flight counters from the
+    # inflight_queue map, healing any drift from lost confirm/complete calls.
+    queues = list(conf.queue_concurrency.keys()) or [KNOWLEDGE_QUEUE]
+    if KNOWLEDGE_QUEUE not in queues:
+        queues.append(KNOWLEDGE_QUEUE)
+    sched.recompute_inflight_totals(queues=queues)

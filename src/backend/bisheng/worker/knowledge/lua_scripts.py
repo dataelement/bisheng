@@ -31,16 +31,14 @@ return 1
 DISPATCH_ONE = r"""
 local prefix = '{bisheng_fs}:'
 local user_id = KEYS[1]
-local limit = tonumber(ARGV[1])
 
 local inflight_key = prefix .. 'inflight:' .. user_id
 local queue_key    = prefix .. 'queue:'    .. user_id
 local active_key   = prefix .. 'active_users'
 
-if redis.call('SCARD', inflight_key) >= limit then
-    return nil
-end
-
+-- No per-user in-flight ceiling: the only hard limit is the per-queue global
+-- concurrency cap, enforced by the Python dispatch round (which knows the
+-- target queue after reading the payload). This script just pops one file.
 local file_id = redis.call('RPOP', queue_key)
 if not file_id then
     redis.call('SREM', active_key, user_id)
@@ -54,6 +52,20 @@ end
 redis.call('SADD', inflight_key, file_id)
 redis.call('SADD', prefix .. 'inflight_users', user_id)
 return file_id
+"""
+
+CONFIRM_DISPATCH = r"""
+local prefix = '{bisheng_fs}:'
+local file_id = KEYS[1]
+local queue   = ARGV[1]
+
+-- Atomically: remember which queue the file went to, bump that queue's global
+-- in-flight counter, and drop the now-consumed payload. Called only AFTER
+-- apply_async succeeds, so the INCR pairs exactly with COMPLETE_FILE's DECR.
+redis.call('HSET', prefix .. 'inflight_queue', file_id, queue)
+redis.call('INCR', prefix .. 'inflight_total:' .. queue)
+redis.call('DEL',  prefix .. 'payload:' .. file_id)
+return 1
 """
 
 ROLLBACK_DISPATCH = r"""
@@ -75,6 +87,14 @@ local user_id = KEYS[1]
 local file_id = ARGV[1]
 
 redis.call('SREM', prefix .. 'inflight:' .. user_id, file_id)
+
+-- Return the file's slot to whichever queue it was dispatched on.
+local queue = redis.call('HGET', prefix .. 'inflight_queue', file_id)
+if queue then
+    redis.call('DECR', prefix .. 'inflight_total:' .. queue)
+    redis.call('HDEL', prefix .. 'inflight_queue', file_id)
+end
+
 if redis.call('SCARD', prefix .. 'inflight:' .. user_id) == 0 then
     redis.call('SREM', prefix .. 'inflight_users', user_id)
 end

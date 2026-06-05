@@ -175,6 +175,23 @@ def test_case4_user_with_queued_files_not_removed(monkeypatch):
     fake_conn.srem.assert_not_called()
 
 
+def test_reconcile_recomputes_inflight_totals(monkeypatch):
+    """Reconcile must authoritatively rebuild the per-queue in-flight counters
+    so lost confirm/complete callbacks don't leave the counters drifting."""
+    _patch_fair_enabled(monkeypatch)
+    sched = MagicMock()
+    sched.inflight_users.return_value = []
+    sched.active_users.return_value = []
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+
+    reconcile_file_scheduler_task.run()
+
+    sched.recompute_inflight_totals.assert_called_once()
+    # must pass the configured queues so absent queues get reset to 0
+    _, kwargs = sched.recompute_inflight_totals.call_args
+    assert "knowledge_celery" in kwargs["queues"]
+
+
 def test_reconcile_task_returns_early_when_fair_disabled(monkeypatch):
     """When fair_scheduler_enabled=False the Beat task must not instantiate FileScheduler."""
     monkeypatch.setattr(
