@@ -12,9 +12,13 @@ def test_knowledge_file_worker_conf_defaults():
     assert conf.ocr_queue == "ocr_celery"
     assert conf.fair_scheduler_enabled is False
     assert conf.fair_scheduler.dispatch_lock_ttl_seconds == 24
-    assert conf.fair_scheduler.max_per_user_inflight == 1
+    assert conf.fair_scheduler.per_user_pick_size == 1
     assert conf.fair_scheduler.user_overrides == {}
     assert conf.fair_scheduler.inflight_ttl_seconds == 7200
+    assert conf.fair_scheduler.queue_concurrency == {
+        "knowledge_celery": 20,
+        "ocr_celery": 5,
+    }
 
 
 def test_fair_scheduler_lock_ttl_upper_bound():
@@ -23,11 +27,10 @@ def test_fair_scheduler_lock_ttl_upper_bound():
         FairSchedulerConf(dispatch_lock_ttl_seconds=301)
 
 
-def test_fair_scheduler_max_per_user_inflight_minimum_one():
+def test_fair_scheduler_per_user_pick_size_minimum_one():
     with pytest.raises(ValueError) as exc_info:
-        FairSchedulerConf(max_per_user_inflight=0)
-    # Pydantic ge=1 constraint, not the model validator
-    assert "greater_than_equal" in str(exc_info.value) or "max_per_user_inflight" in str(exc_info.value)
+        FairSchedulerConf(per_user_pick_size=0)
+    assert "greater_than_equal" in str(exc_info.value) or "per_user_pick_size" in str(exc_info.value)
 
 
 def test_fair_scheduler_user_overrides_must_be_at_least_one():
@@ -37,8 +40,15 @@ def test_fair_scheduler_user_overrides_must_be_at_least_one():
     assert "must be >= 1" in str(exc_info.value)
 
 
-def test_fair_scheduler_user_overrides_accepts_string_ids():
+def test_weight_for_uses_user_overrides_then_default():
     conf = FairSchedulerConf(user_overrides={"123": 3, "456": 5})
-    assert conf.limit_for("123") == 3
-    assert conf.limit_for("456") == 5
-    assert conf.limit_for("999") == conf.max_per_user_inflight
+    assert conf.weight_for("123") == 3
+    assert conf.weight_for("456") == 5
+    assert conf.weight_for("999") == conf.per_user_pick_size
+
+
+def test_concurrency_for_known_and_unknown_queue():
+    conf = FairSchedulerConf(queue_concurrency={"knowledge_celery": 30})
+    assert conf.concurrency_for("knowledge_celery") == 30
+    # unknown queue falls back to per_user_pick_size so backfill stays bounded
+    assert conf.concurrency_for("some_other_celery") == conf.per_user_pick_size
