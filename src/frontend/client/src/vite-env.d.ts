@@ -27,10 +27,21 @@ interface Window {
   BRAND_CONFIG?: {
     brandName?: { zh?: string; en?: string };
     linsightAgentName?: { zh?: string; en?: string };
-    linsightFullName?: { zh?: string; en?: string };
-    dailyFullName?: { zh?: string; en?: string };
     loadingIcon?: string;
+    URLLoadingIcon?: string;
     loadingAnimation?: string;
+    loading?: {
+      icon?: { url?: string; relative_path?: string; file_name?: string } | null;
+      iconOptions?: Array<{ url?: string; relative_path?: string; file_name?: string }>;
+      animation?: string;
+    };
+    assets?: {
+      favicon?: { url?: string };
+      loginHeroLight?: { url?: string };
+      loginHeroDark?: { url?: string };
+      headerLogoLight?: { url?: string };
+      headerLogoDark?: { url?: string };
+    };
   };
   /** Runtime app config injected by public/assets/bisheng/config.js. */
   APP_CONFIG?: {

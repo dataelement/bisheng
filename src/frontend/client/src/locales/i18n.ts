@@ -52,12 +52,12 @@ i18n
       defaultVariables: {
         bisheng: config.brandName?.en,
         bishengZh: config.brandName?.zh,
-        linsight: config.linsightAgentName?.en,
-        linsightZh: config.linsightAgentName?.zh,
-        linsightFull: config.linsightFullName?.en,
-        linsightFullZh: config.linsightFullName?.zh,
-        dailyFullName: config.dailyFullName?.en,
-        dailyFullNameZh: config.dailyFullName?.zh,
+        linsight: config.linsightAgentName?.en || 'Linsight',
+        linsightZh: config.linsightAgentName?.zh || '灵思',
+        linsightFull: 'Linsight',
+        linsightFullZh: '灵思 Linsight',
+        dailyFullName: 'Daily Mode',
+        dailyFullNameZh: '日常模式',
       }
     },
   });

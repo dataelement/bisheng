@@ -209,7 +209,7 @@ export function KnowledgeSpaceSidebar({
             >
                 {mobileDrawerMode ? (
                     <MobileSidebarHeaderTabs
-                        logoSrc={bsConfig?.sidebarIcon?.image}
+                        logoSrc={bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : undefined}
                         onClose={onDrawerClose}
                         onLinkClick={(link) => {
                             if (link.closeDrawerOnNavigate) onDrawerClose?.();

@@ -6,6 +6,21 @@ import { getKnowledgeStatusApi } from '~/api';
 import { BsConfig, QueryKeys, TEndpointsConfig, TStartupConfig, dataService } from '~/types/chat';
 import store from '~/store';
 
+const externalUrlRE = /^(?:https?:|data:|blob:|\/\/)/i;
+
+function getAppBaseUrl() {
+  return (__APP_ENV__.BASE_URL || '').replace(/\/$/, '');
+}
+
+function withAppBaseUrl(url?: string) {
+  if (!url) return '';
+  if (externalUrlRE.test(url)) return url;
+
+  const baseUrl = getAppBaseUrl();
+  if (!baseUrl || url.startsWith(`${baseUrl}/`)) return url;
+  return url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
+}
+
 export const useGetEndpointsQuery = <TData = TEndpointsConfig>(
   config?: UseQueryOptions<TEndpointsConfig, unknown, TData>,
 ): QueryObserverResult<TData> => {
@@ -64,14 +79,14 @@ export const useGetBsConfig = (
         const favicon = document.createElement('link');
         favicon.type = 'image/x-icon';
         favicon.rel = 'shortcut icon';
-        favicon.href = __APP_ENV__.BASE_URL + data.assistantIcon.image;
+        favicon.href = withAppBaseUrl(data.assistantIcon.image);
         document.head.appendChild(favicon);
       }
       return data;
     }),
     {
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
       refetchOnMount: 'always',
       ...config,
       enabled: (config?.enabled ?? true) === true && queriesEnabled,

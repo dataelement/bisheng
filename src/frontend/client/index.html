@@ -18,7 +18,11 @@
       };
     }
   </script>
-  <script src="PROTOCAL_IGNORE/assets/bisheng/config.js?v=<%= Date.now() %>"></script>
+  <script>
+    var brandBaseUrl = '<%- baseUrl %>';
+    document.write('<script src="' + brandBaseUrl + '/assets/bisheng/config.js?v=<%= Date.now() %>"><\/script>');
+    document.write('<script src="' + brandBaseUrl + '/api/v1/brand/runtime.js?v=<%= Date.now() %>"><\/script>');
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
   <meta name="referrer" content="never">
   <style>
@@ -31,7 +35,20 @@
   </style>
   <!-- <script src="http://192.168.2.224:9000/vditor.js" defer></script> -->
   <script>
-    document.title = window.BRAND_CONFIG.brandName.en
+    function getBrandLanguage() {
+      const savedLanguage = localStorage.getItem('i18nextLng') || '';
+      const language = savedLanguage || navigator.language || 'en';
+      return language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    }
+
+    function getBrandTitle(brandName) {
+      const language = getBrandLanguage();
+      return language === 'zh'
+        ? (brandName.zh || brandName.en || '')
+        : (brandName.en || brandName.zh || '');
+    }
+
+    document.title = getBrandTitle(window.BRAND_CONFIG.brandName || {})
 
     const theme = localStorage.getItem('color-theme');
     const loadingContainerStyle = document.createElement('style');

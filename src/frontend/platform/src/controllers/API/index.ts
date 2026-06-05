@@ -186,6 +186,74 @@ export async function getAppConfig(): Promise<AppConfig> {
 export async function saveThemeApi(data: string): Promise<any> {
     return await axios.post(`/api/v1/web/config`, { value: data });
 }
+
+export interface BrandText {
+    zh: string;
+    en: string;
+}
+
+export interface BrandAsset {
+    url: string;
+    relative_path?: string;
+    file_name?: string;
+}
+
+export interface BrandAssetOption extends BrandAsset {
+    is_default?: boolean;
+}
+
+export interface BrandAssets {
+    favicon: BrandAsset;
+    loginHeroLight: BrandAsset;
+    loginHeroDark: BrandAsset;
+    headerLogoLight: BrandAsset;
+    headerLogoDark: BrandAsset;
+}
+
+export interface BrandLoading {
+    icon?: BrandAsset | null;
+    iconOptions?: BrandAsset[];
+    animation: "" | "animate-spin" | "animate-pulse" | "animate-bounce";
+}
+
+export interface BrandConfig {
+    brandName: BrandText;
+    linsightAgentName: BrandText;
+    assets: BrandAssets;
+    loading: BrandLoading;
+    URLLoadingIcon?: string;
+}
+
+export type BrandConfigUpdate = Omit<BrandConfig, "linsightAgentName">;
+
+export type BrandAssetCategory = keyof BrandAssets | "loadingIcon";
+
+export async function getBrandConfigApi(): Promise<BrandConfig> {
+    return await axios.get(`/api/v1/brand/config`);
+}
+
+export async function saveBrandConfigApi(data: BrandConfigUpdate): Promise<BrandConfig> {
+    return await axios.put(`/api/v1/brand/config`, data);
+}
+
+export async function getBrandAssetOptionsApi(category: BrandAssetCategory): Promise<BrandAssetOption[]> {
+    return await axios.get(`/api/v1/brand/assets/options`, { params: { category } });
+}
+
+export async function uploadBrandAssetApi(data: FormData): Promise<BrandAsset> {
+    return await axios.post(`/api/v1/brand/assets`, data, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+}
+
+export async function deleteBrandAssetApi(
+    category: BrandAssetCategory,
+    relativePath: string
+): Promise<BrandAsset> {
+    return await axios.delete(`/api/v1/brand/assets`, {
+        params: { category, relative_path: relativePath },
+    });
+}
 /**
  * Reads all templates from the database.
  *

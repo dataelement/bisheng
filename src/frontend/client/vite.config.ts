@@ -186,13 +186,13 @@ export default defineConfig(({ command, mode }) => {
       compression({
         threshold: 10240,
       }),
-      createHtmlPlugin({}),
-      {
-        name: 'clear-placeholder',
-        transformIndexHtml(html) {
-          return html.replace('PROTOCAL_IGNORE/', '/');
-        }
-      },
+      createHtmlPlugin({
+        inject: {
+          data: {
+            baseUrl: app_env.BASE_URL.replace(/\/$/, ''),
+          },
+        },
+      }),
       viteStaticCopy({
         targets: [
           {

@@ -30,6 +30,7 @@ import { userContext } from "../contexts/userContext";
 import { logoutApi } from "../controllers/API/user";
 import { captureAndAlertRequestErrorHoc } from "../controllers/request";
 import { User } from "../types/api/user";
+import { getBrandAssetUrl } from "../utils/brand";
 import HeaderMenu from "./HeaderMenu";
 
 export default function MainLayout() {
@@ -113,7 +114,8 @@ export default function MainLayout() {
                 <div className="flex h-9 my-[14px]">
                     <div className="inline-block" >
                         {/* @ts-ignore */}
-                        <img src={__APP_ENV__.BASE_URL + '/assets/bisheng/login-logo-small.png'} className="w-[104px] ml-[38px] rounded dark:w-[104px]" alt="" />
+                        <img src={getBrandAssetUrl('headerLogoLight', '/assets/bisheng/login-logo-small.png')} className="w-[104px] ml-[38px] rounded dark:hidden" alt="" />
+                        <img src={getBrandAssetUrl('headerLogoDark', '/assets/bisheng/logo-small-dark.png')} className="w-[104px] ml-[38px] rounded hidden dark:block" alt="" />
                     </div>
                 </div>
                 <div>
