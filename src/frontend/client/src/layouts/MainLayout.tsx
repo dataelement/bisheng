@@ -324,6 +324,7 @@ export default function MainLayout() {
     isChannelRoute || isAppChatRoute || (isAppsArea && !isAppChatRoute && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const { data: workstationConfig } = useGetBsConfig({ enabled: Boolean(user) });
   // 移动端：应用会话、/apps、/channel、/knowledge 都隐藏 MainLayout 左栏。
   // /apps 保留本布局内菜单按钮；/channel、/knowledge 使用各自页面的抽屉入口。
   const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute);
@@ -352,7 +353,14 @@ export default function MainLayout() {
     getBysConfigApi().then((res: any) => {
       setConfig(res.data);
     });
-  }, []);
+  }, [setConfig]);
+  useEffect(() => {
+    if (!workstationConfig) return;
+    setConfig((current: any) => ({
+      ...(current || {}),
+      ...workstationConfig,
+    }));
+  }, [setConfig, workstationConfig]);
 
   // System notice popup — single instance above KeepAlive so dismissal is global.
   const remoteNotice = (config as { system_notification?: string } | undefined)?.system_notification ?? '';

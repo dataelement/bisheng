@@ -109,7 +109,7 @@ export default function NewChat({
       <div className="" style={{ transform: 'none' }}>
         {isSmallScreen ? (
           <MobileSidebarHeaderTabs
-            logoSrc={bsConfig?.sidebarIcon?.image}
+            logoSrc={bsConfig?.sidebarIcon?.image ? __APP_ENV__.BASE_URL + bsConfig.sidebarIcon.image : undefined}
             onClose={toggleNav}
             onLinkClick={(link) => {
               if (link.closeDrawerOnNavigate) {

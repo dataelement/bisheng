@@ -76,7 +76,7 @@ export default function index() {
             <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
           )}
           {canAccessSystemConfig && (
-            <TabsTrigger value="theme">{t("system.themeColor")}</TabsTrigger>
+            <TabsTrigger value="theme">{t("system.appearanceSettings")}</TabsTrigger>
           )}
         </TabsList>
         {showOrgTab && (
