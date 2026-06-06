@@ -77,3 +77,24 @@ def test_auto_tag_should_run_only_for_successful_uploaded_space_file():
     db_file.status = KnowledgeFileStatus.SUCCESS.value
     knowledge.type = KnowledgeTypeEnum.NORMAL.value
     assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+
+
+def test_auto_tag_should_skip_manual_upload_tags():
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=True,
+        auto_tag_library_id=10,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+        user_metadata={"manual_upload_tags_applied": True},
+    )
+
+    assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)

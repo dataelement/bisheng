@@ -33,7 +33,8 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeExistError,
     KnowledgeInvalidCursorError,
     KnowledgeNoEmbeddingError, KnowledgeNotQAError, KnowledgeFileFailedError,
-    KnowledgeTagExistError, KnowledgeTagNotExistError, KnowledgeTenantMismatchError
+    KnowledgeTagExistError, KnowledgeTagNotExistError, KnowledgeTenantMismatchError,
+    KnowledgeFileTagLimitError,
 )
 from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
 from bisheng.common.schemas.api import PageInfiniteCursorData
@@ -82,6 +83,10 @@ _KNOWLEDGE_LIST_PERMISSION_IDS = [
     'manage_kb_manager',
     'manage_kb_viewer',
 ]
+
+MANUAL_UPLOAD_TAGS_APPLIED_KEY = "manual_upload_tags_applied"
+MANUAL_UPLOAD_TAGS_KEY = "manual_upload_tags"
+MANUAL_UPLOAD_TAG_LIMIT = 5
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -176,18 +181,155 @@ class KnowledgeService(KnowledgeUtils):
     def _deduplicate_tag_ids(tag_ids: List[int]) -> List[int]:
         return list(dict.fromkeys(tag_ids))
 
+    @staticmethod
+    def _get_tag_scope(knowledge: Knowledge) -> Tuple[TagBusinessTypeEnum, ResourceTypeEnum]:
+        if knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            return TagBusinessTypeEnum.KNOWLEDGE_SPACE, ResourceTypeEnum.SPACE_FILE
+        return TagBusinessTypeEnum.KNOWLEDGE, ResourceTypeEnum.KNOWLEDGE_FILE
+
     @classmethod
-    async def _validate_knowledge_tag_ids(cls, knowledge_id: int, tag_ids: List[int]) -> None:
+    async def _validate_knowledge_tag_ids(
+        cls,
+        knowledge_id: int,
+        tag_ids: List[int],
+        knowledge: Optional[Knowledge] = None,
+    ) -> None:
         if not tag_ids:
             return
 
+        if knowledge is None:
+            knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+            if not knowledge:
+                raise NotFoundError(msg="knowledge not found")
+        business_type, _ = cls._get_tag_scope(knowledge)
         tags = await TagDao.aget_tags_by_ids(tag_ids)
         if len(tags) != len(tag_ids):
             raise KnowledgeTagNotExistError()
 
         for tag in tags:
-            if tag.business_type != TagBusinessTypeEnum.KNOWLEDGE or tag.business_id != str(knowledge_id):
+            if tag.business_type != business_type or tag.business_id != str(knowledge_id):
                 raise KnowledgeTagNotExistError()
+
+    @staticmethod
+    def _normalize_manual_tag_names(tag_names: Optional[List[str]]) -> List[str]:
+        normalized = []
+        seen = set()
+        for tag_name in tag_names or []:
+            name = str(tag_name).strip()
+            key = name.lower()
+            if not name or key in seen:
+                continue
+            normalized.append(name)
+            seen.add(key)
+        return normalized
+
+    @classmethod
+    async def _resolve_manual_upload_tag_ids(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        manual_tag_ids: Optional[List[int]],
+        manual_tag_names: Optional[List[str]],
+    ) -> List[int]:
+        business_type, _ = cls._get_tag_scope(knowledge)
+        tag_ids = cls._deduplicate_tag_ids([int(tag_id) for tag_id in manual_tag_ids or []])
+        tag_names = cls._normalize_manual_tag_names(manual_tag_names)
+        if not tag_ids and not tag_names:
+            return []
+
+        if len(tag_ids) + len(tag_names) > MANUAL_UPLOAD_TAG_LIMIT:
+            raise KnowledgeFileTagLimitError()
+
+        if tag_ids:
+            await cls._validate_knowledge_tag_ids(knowledge.id, tag_ids, knowledge)
+
+        scope_tags = await TagDao.get_tags_by_business(
+            business_type=business_type,
+            business_id=str(knowledge.id),
+        )
+        tags_by_lower_name = {
+            (tag.name or "").strip().lower(): tag
+            for tag in scope_tags
+            if (tag.name or "").strip()
+        }
+
+        resolved_ids = list(tag_ids)
+        for tag_name in tag_names:
+            existing = tags_by_lower_name.get(tag_name.lower())
+            if existing:
+                tag_id = existing.id
+            else:
+                created = await TagDao.ainsert_tag(
+                    Tag(
+                        name=tag_name,
+                        user_id=login_user.user_id,
+                        tenant_id=knowledge.tenant_id,
+                        business_type=business_type,
+                        business_id=str(knowledge.id),
+                    )
+                )
+                tags_by_lower_name[tag_name.lower()] = created
+                tag_id = created.id
+            if tag_id and tag_id not in resolved_ids:
+                resolved_ids.append(tag_id)
+
+        if len(resolved_ids) > MANUAL_UPLOAD_TAG_LIMIT:
+            raise KnowledgeFileTagLimitError()
+        return resolved_ids
+
+    @classmethod
+    async def apply_manual_upload_tags(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        files: List[KnowledgeFile],
+        manual_tag_ids: Optional[List[int]],
+        manual_tag_names: Optional[List[str]],
+    ) -> List[int]:
+        valid_files = [file for file in files or [] if getattr(file, "id", None)]
+        if not valid_files:
+            return []
+
+        resolved_tag_ids = await cls._resolve_manual_upload_tag_ids(
+            login_user=login_user,
+            knowledge=knowledge,
+            manual_tag_ids=manual_tag_ids,
+            manual_tag_names=manual_tag_names,
+        )
+        if not resolved_tag_ids:
+            return []
+
+        _, resource_type = cls._get_tag_scope(knowledge)
+        for file in valid_files:
+            await TagDao.add_tags(
+                resolved_tag_ids,
+                str(file.id),
+                resource_type,
+                login_user.user_id,
+            )
+            metadata = dict(file.user_metadata or {})
+            metadata[MANUAL_UPLOAD_TAGS_APPLIED_KEY] = True
+            metadata[MANUAL_UPLOAD_TAGS_KEY] = {"tag_ids": resolved_tag_ids}
+            file.user_metadata = metadata
+            await KnowledgeFileDao.async_update(file)
+        return resolved_tag_ids
+
+    @classmethod
+    def apply_manual_upload_tags_sync(
+        cls,
+        login_user: UserPayload,
+        knowledge: Knowledge,
+        files: List[KnowledgeFile],
+        manual_tag_ids: Optional[List[int]],
+        manual_tag_names: Optional[List[str]],
+    ) -> List[int]:
+        return asyncio.run(cls.apply_manual_upload_tags(
+            login_user=login_user,
+            knowledge=knowledge,
+            files=files,
+            manual_tag_ids=manual_tag_ids,
+            manual_tag_names=manual_tag_names,
+        ))
 
     @classmethod
     def get_all_knowledge_by_time_range(cls, start_data: datetime, end_data: datetime, page: int = 1,
@@ -1073,6 +1215,14 @@ class KnowledgeService(KnowledgeUtils):
             cls.save_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
         )
 
+        cls.apply_manual_upload_tags_sync(
+            login_user=login_user,
+            knowledge=knowledge,
+            files=process_files,
+            manual_tag_ids=req_data.manual_tag_ids,
+            manual_tag_names=req_data.manual_tag_names,
+        )
+
         # Asynchronous processing of file parsing and warehousing, To voters if approvedcache_keyIf data can be obtained, use thecachefor inbound operations
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
@@ -1096,6 +1246,14 @@ class KnowledgeService(KnowledgeUtils):
             await cls.asave_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
         )
 
+        await cls.apply_manual_upload_tags(
+            login_user=login_user,
+            knowledge=knowledge,
+            files=process_files,
+            manual_tag_ids=req_data.manual_tag_ids,
+            manual_tag_names=req_data.manual_tag_names,
+        )
+
         for index, one in enumerate(process_files):
             file_worker.parse_knowledge_file_celery.delay(one.id, preview_cache_keys[index], req_data.callback_url)
 
@@ -1116,6 +1274,14 @@ class KnowledgeService(KnowledgeUtils):
         """Sync uploaded files"""
         knowledge, failed_files, process_files, preview_cache_keys = (
             cls.save_knowledge_file(login_user, req_data, upload_limit_bytes=upload_limit_bytes)
+        )
+
+        cls.apply_manual_upload_tags_sync(
+            login_user=login_user,
+            knowledge=knowledge,
+            files=process_files,
+            manual_tag_ids=req_data.manual_tag_ids,
+            manual_tag_names=req_data.manual_tag_names,
         )
 
         if process_files:
@@ -1191,6 +1357,14 @@ class KnowledgeService(KnowledgeUtils):
         req_data["knowledge_id"] = knowledge.id
 
         tmp, file_level_path = await cls.process_retry_files(db_files, id2input, login_user)
+
+        await cls.apply_manual_upload_tags(
+            login_user=login_user,
+            knowledge=knowledge,
+            files=tmp,
+            manual_tag_ids=req_data.get("manual_tag_ids"),
+            manual_tag_names=req_data.get("manual_tag_names"),
+        )
 
         cls.upload_knowledge_file_hook(request, login_user, knowledge, tmp)
         for one in file_level_path:
@@ -2121,27 +2295,29 @@ class KnowledgeService(KnowledgeUtils):
         page: int = 1,
         limit: int = 10,
     ) -> Tuple[List[Tag], int]:
-        await cls._get_readable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        knowledge = await cls._get_readable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        business_type, _ = cls._get_tag_scope(knowledge)
         keyword = keyword.strip() if keyword else None
         tags = await TagDao.asearch_tags(
             keyword=keyword,
             page=page,
             limit=limit,
-            business_type=TagBusinessTypeEnum.KNOWLEDGE,
+            business_type=business_type,
             business_id=str(knowledge_id),
         )
         total = await TagDao.acount_tags(
             keyword=keyword,
-            business_type=TagBusinessTypeEnum.KNOWLEDGE,
+            business_type=business_type,
             business_id=str(knowledge_id),
         )
         return tags, total
 
     @classmethod
     async def add_knowledge_tag(cls, login_user: UserPayload, knowledge_id: int, tag_name: str) -> Tag:
-        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        business_type, _ = cls._get_tag_scope(knowledge)
 
-        existing_tags = await TagDao.get_tags_by_business(business_type=TagBusinessTypeEnum.KNOWLEDGE,
+        existing_tags = await TagDao.get_tags_by_business(business_type=business_type,
                                                           business_id=str(knowledge_id), name=tag_name)
         if any(t.name == tag_name for t in existing_tags):
             raise KnowledgeTagExistError()
@@ -2149,42 +2325,45 @@ class KnowledgeService(KnowledgeUtils):
         new_tag = Tag(
             name=tag_name,
             user_id=login_user.user_id,
-            business_type=TagBusinessTypeEnum.KNOWLEDGE,
+            tenant_id=knowledge.tenant_id,
+            business_type=business_type,
             business_id=str(knowledge_id),
         )
         return await TagDao.ainsert_tag(new_tag)
 
     @classmethod
     async def update_knowledge_tag(cls, login_user: UserPayload, knowledge_id: int, tag_id: int, tag_name: str) -> Tag:
-        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        business_type, _ = cls._get_tag_scope(knowledge)
 
         tag = await TagDao.get_tag(tag_id)
-        if not tag or tag.business_id != str(knowledge_id) or tag.business_type != TagBusinessTypeEnum.KNOWLEDGE:
+        if not tag or tag.business_id != str(knowledge_id) or tag.business_type != business_type:
             raise KnowledgeTagNotExistError()
 
         return await TagDao.aupdate_tag(tag_id, name=tag_name)
 
     @classmethod
     async def delete_knowledge_tag(cls, login_user: UserPayload, knowledge_id: int, tag_id: int):
-        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        business_type, _ = cls._get_tag_scope(knowledge)
         return await TagDao.delete_business_tag(tag_id, business_id=str(knowledge_id),
-                                                business_type=TagBusinessTypeEnum.KNOWLEDGE)
+                                                business_type=business_type)
 
     @classmethod
     async def update_file_tags(cls, login_user: UserPayload, knowledge_id: int, file_id: int, tag_ids: List[int]):
         """ 设置单文件的标签 (全量替换) """
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
 
-        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
 
         file_record = await KnowledgeFileDao.query_by_id(file_id)
         if not file_record or file_record.knowledge_id != knowledge_id:
             raise NotFoundError(msg="文档不存在")
 
-        await cls._validate_knowledge_tag_ids(knowledge_id, tag_ids)
+        await cls._validate_knowledge_tag_ids(knowledge_id, tag_ids, knowledge=knowledge)
 
         resource_id = str(file_id)
-        resource_type = ResourceTypeEnum.KNOWLEDGE_FILE
+        resource_type = cls._get_tag_scope(knowledge)[1]
         await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, login_user.user_id)
 
     @classmethod
@@ -2193,19 +2372,19 @@ class KnowledgeService(KnowledgeUtils):
         """ 批量添加标签到文档 """
         tag_ids = cls._deduplicate_tag_ids(tag_ids)
 
-        await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
+        knowledge = await cls._get_writable_knowledge(login_user=login_user, knowledge_id=knowledge_id)
 
         if not file_ids or not tag_ids:
             return
 
-        await cls._validate_knowledge_tag_ids(knowledge_id, tag_ids)
+        await cls._validate_knowledge_tag_ids(knowledge_id, tag_ids, knowledge=knowledge)
 
         files = await KnowledgeFileDao.aget_file_by_ids(file_ids)
         valid_file_ids = [f.id for f in files if f.knowledge_id == knowledge_id]
         if not valid_file_ids:
             return
 
-        resource_type = ResourceTypeEnum.KNOWLEDGE_FILE
+        resource_type = cls._get_tag_scope(knowledge)[1]
         for file_id in valid_file_ids:
             await TagDao.add_tags(tag_ids, str(file_id), resource_type, login_user.user_id)
 
@@ -2219,7 +2398,9 @@ class KnowledgeService(KnowledgeUtils):
         if not tag_ids:
             return None
 
-        links = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.KNOWLEDGE_FILE)
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        resource_type = cls._get_tag_scope(knowledge)[1] if knowledge else ResourceTypeEnum.KNOWLEDGE_FILE
+        links = await TagDao.aget_resources_by_tags(tag_ids, resource_type)
 
         # We need the resource IDs from links, but we must verify they belong to knowledge_id
         # To avoid extra DB queries, if we assume tags are already scoped to knowledge_id,

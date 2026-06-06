@@ -118,7 +118,13 @@ class KnowledgeSpaceAutoTagService:
             and db_file.status == KnowledgeFileStatus.SUCCESS.value
             and db_file.file_source
             in {FileSource.UPLOAD.value, FileSource.SPACE_UPLOAD.value}
+            and not KnowledgeSpaceAutoTagService._has_manual_upload_tags(db_file)
         )
+
+    @staticmethod
+    def _has_manual_upload_tags(db_file: KnowledgeFile) -> bool:
+        metadata = db_file.user_metadata or {}
+        return bool(metadata.get("manual_upload_tags_applied"))
 
     @staticmethod
     def _collect_content(

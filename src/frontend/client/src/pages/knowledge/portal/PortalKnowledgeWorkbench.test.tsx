@@ -31,6 +31,8 @@ import {
     getFilePreviewApi,
     getGroupedSpacesApi,
     getJoinedSpacesApi,
+    getKnowledgeSpaceTagLibrariesApi,
+    getKnowledgeSpaceTagLibraryDetailApi,
     getSimilarCandidatesApi,
     getMineSpacesApi,
     getSpaceChildrenApi,
@@ -341,6 +343,8 @@ jest.mock("~/api/knowledge", () => ({
         APPROVAL: "approval",
     },
     getGroupedSpacesApi: jest.fn(),
+    getKnowledgeSpaceTagLibrariesApi: jest.fn(),
+    getKnowledgeSpaceTagLibraryDetailApi: jest.fn(),
     getCreateSpaceOptionsApi: jest.fn(),
     createSpaceApi: jest.fn(),
     createFolderApi: jest.fn(),
@@ -466,6 +470,8 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(getSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([] as any);
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({ data: [] } as any);
+        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({ tags: [] } as any);
         jest.mocked(getFilePreviewApi).mockResolvedValue({
             preview_url: "/preview.md",
             original_url: "/origin.md",
@@ -2395,6 +2401,9 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(dialog).getByLabelText("文件分类")).toHaveDisplayValue("请选择文件分类");
         expect(within(dialog).queryByText("*")).not.toBeInTheDocument();
         expect(within(dialog).getByRole("option", { name: "报告" })).toHaveValue("RPT");
+        expect(within(dialog).getByLabelText("业务域")).toHaveDisplayValue("AI 自动生成");
+        expect(within(dialog).getByRole("option", { name: "PP / 生产" })).toHaveValue("PP");
+        expect(within(dialog).getByText("文件标签")).toBeInTheDocument();
         expect(within(dialog).getByLabelText("目标知识库")).toHaveValue("设备部");
         expect(within(dialog).getByTestId("selected-upload-folder")).toHaveTextContent("未选择目录（AI推荐）");
         expect(within(dialog).getByRole("button", { name: "选择上传目录根目录" })).toBeInTheDocument();
@@ -2408,6 +2417,45 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(dialog).getByText("已选择的文件 (1)")).toBeInTheDocument();
         expect(within(dialog).getByText("测试文档.pdf")).toBeInTheDocument();
         expect(within(dialog).getByRole("button", { name: "移除测试文档.pdf" })).toBeInTheDocument();
+        const selectedFilesLabel = within(dialog).getByText("已选择的文件 (1)");
+        const fileCategoryLabel = within(dialog).getByText("文件分类");
+        expect(selectedFilesLabel.compareDocumentPosition(fileCategoryLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    test("loads existing and common tags in portal upload dialog", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [],
+            total: 0,
+        } as any);
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([{ id: 1, name: "已有标签" }] as any);
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({
+            data: [{ id: 9, name: "通用标签库", tag_count: 2, is_builtin: true }],
+            total: 1,
+        } as any);
+        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({
+            id: 9,
+            name: "通用标签库",
+            tag_count: 2,
+            is_builtin: true,
+            tags: ["制度", "已有标签"],
+        } as any);
+
+        renderWorkbench();
+
+        fireEvent.click(await screen.findByRole("button", { name: "上传" }));
+        const dialog = await screen.findByTestId("portal-upload-dialog");
+
+        expect(await within(dialog).findByLabelText("选择标签已有标签")).toBeInTheDocument();
+        expect(within(dialog).getByLabelText("选择标签制度")).toBeInTheDocument();
     });
 
     test("opens upload records after successful upload and supports moving uploaded file folder", async () => {

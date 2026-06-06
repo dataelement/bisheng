@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import {
     addFilesApi,
     createFolderApi,
+    getKnowledgeSpaceTagLibrariesApi,
+    getKnowledgeSpaceTagLibraryDetailApi,
     getSimilarCandidatesApi,
+    getSpaceTagsApi,
     linkAsNewVersionApi,
     listKnowledgeFolders,
     recommendUploadFoldersApi,
@@ -10,6 +13,7 @@ import {
     uploadFileToServerApi,
     type KnowledgeSpace,
     type KnowledgeFile,
+    type UploadFileRegistrationMetadata,
     type UploadFolderRecommendationItem,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -40,6 +44,13 @@ import {
     extractDuplicateFileEntries,
     type DuplicateFileEntry,
 } from "../../hooks/duplicateFiles";
+import {
+    buildPortalUploadMetadataPayload,
+    buildUploadTagOptions,
+    EMPTY_PORTAL_UPLOAD_METADATA,
+    type PortalUploadMetadataPayload,
+    type PortalUploadTagOption,
+} from "../uploadMetadata";
 
 interface UsePortalUploadDialogParams {
     activeSpace: KnowledgeSpace | null;
@@ -83,7 +94,12 @@ export function usePortalUploadDialog({
     const [uploadReviewRows, setUploadReviewRows] = useState<PortalUploadReviewRow[]>([]);
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
     const [duplicateFileCategoryCode, setDuplicateFileCategoryCode] = useState<string | undefined>();
+    const [duplicateUploadMetadataPayload, setDuplicateUploadMetadataPayload] = useState<PortalUploadMetadataPayload>({});
     const [fileCategoryCode, setFileCategoryCode] = useState("");
+    const [businessDomainCode, setBusinessDomainCode] = useState(EMPTY_PORTAL_UPLOAD_METADATA.businessDomainCode);
+    const [selectedUploadTagValues, setSelectedUploadTagValues] = useState<string[]>([]);
+    const [uploadTagOptions, setUploadTagOptions] = useState<PortalUploadTagOption[]>([]);
+    const [uploadTagLoading, setUploadTagLoading] = useState(false);
 
     const uploadFolderOptions = useMemo(
         () => {
@@ -128,7 +144,12 @@ export function usePortalUploadDialog({
         setUploadReviewRows([]);
         setDuplicateFiles([]);
         setDuplicateFileCategoryCode(undefined);
+        setDuplicateUploadMetadataPayload({});
         setFileCategoryCode("");
+        setBusinessDomainCode("");
+        setSelectedUploadTagValues([]);
+        setUploadTagOptions([]);
+        setUploadTagLoading(false);
         if (uploadInputRef.current) {
             uploadInputRef.current.value = "";
         }
@@ -148,7 +169,10 @@ export function usePortalUploadDialog({
         setUploadReviewRows([]);
         setDuplicateFiles([]);
         setDuplicateFileCategoryCode(undefined);
+        setDuplicateUploadMetadataPayload({});
         setFileCategoryCode("");
+        setBusinessDomainCode("");
+        setSelectedUploadTagValues([]);
         setUploadFolderId(null);
         setUploadFolderName("根目录");
         setUploadFolderSelection({ mode: "ai" });
@@ -280,6 +304,70 @@ export function usePortalUploadDialog({
         setFileCategoryCode(code);
     }, []);
 
+    const handleSelectBusinessDomain = useCallback((code: string) => {
+        setBusinessDomainCode(code);
+    }, []);
+
+    const handleToggleUploadTag = useCallback((value: string) => {
+        setSelectedUploadTagValues((prev) => (
+            prev.includes(value)
+                ? prev.filter((item) => item !== value)
+                : [...prev, value]
+        ));
+    }, []);
+
+    const handleClearUploadTags = useCallback(() => {
+        setSelectedUploadTagValues([]);
+    }, []);
+
+    useEffect(() => {
+        if (!uploadDialogOpen || !activeSpace?.id) {
+            return;
+        }
+        let cancelled = false;
+        const loadUploadTagOptions = async () => {
+            setUploadTagLoading(true);
+            const [existingTagsResult, librariesResult] = await Promise.allSettled([
+                getSpaceTagsApi(activeSpace.id),
+                getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: 200 }),
+            ]);
+            if (cancelled) return;
+
+            const existingTags = existingTagsResult.status === "fulfilled" ? existingTagsResult.value : [];
+            let commonTagNames: string[] = [];
+            if (librariesResult.status === "fulfilled") {
+                const libraries = librariesResult.value.data ?? [];
+                const commonLibrary = libraries.find((item) => item.name === "通用标签库")
+                    ?? libraries.find((item) => item.is_builtin)
+                    ?? libraries[0];
+                if (commonLibrary?.id) {
+                    try {
+                        const detail = await getKnowledgeSpaceTagLibraryDetailApi(commonLibrary.id);
+                        if (!cancelled) {
+                            commonTagNames = Array.isArray(detail.tags) ? detail.tags : [];
+                        }
+                    } catch {
+                        commonTagNames = [];
+                    }
+                }
+            }
+
+            if (!cancelled) {
+                setUploadTagOptions(buildUploadTagOptions(existingTags, commonTagNames));
+                setUploadTagLoading(false);
+            }
+        };
+        void loadUploadTagOptions().catch(() => {
+            if (!cancelled) {
+                setUploadTagOptions([]);
+                setUploadTagLoading(false);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [activeSpace?.id, uploadDialogOpen]);
+
     const handleToggleUploadFolder = useCallback(async (node: PortalUploadFolderNode) => {
         const spaceId = activeSpace?.id;
         if (!spaceId) return;
@@ -358,11 +446,15 @@ export function usePortalUploadDialog({
         return registeredFiles.filter((file) => !duplicateIds.has(String(file.id)));
     }, []);
 
-    const finishUploadedFiles = useCallback(async (registeredFiles: KnowledgeFile[]) => {
+    const finishUploadedFiles = useCallback(async (
+        registeredFiles: KnowledgeFile[],
+        uploadMetadataPayload: PortalUploadMetadataPayload,
+    ) => {
         const visibleRegisteredFiles = getVisibleRegisteredFiles(registeredFiles);
         const hasDuplicateFiles = visibleRegisteredFiles.length !== registeredFiles.length;
         if (hasDuplicateFiles) {
-            setDuplicateFileCategoryCode(fileCategoryCode || undefined);
+            setDuplicateFileCategoryCode(uploadMetadataPayload.file_category_code);
+            setDuplicateUploadMetadataPayload(uploadMetadataPayload);
             if (visibleRegisteredFiles.length) {
                 await reloadFiles();
             }
@@ -375,9 +467,12 @@ export function usePortalUploadDialog({
             setUploadFolderSelection({ mode: "ai" });
             setUploadReviewRows([]);
             setFileCategoryCode("");
+            setBusinessDomainCode("");
+            setSelectedUploadTagValues([]);
             return;
         }
         setDuplicateFileCategoryCode(undefined);
+        setDuplicateUploadMetadataPayload({});
         await reloadFiles();
         setUploadDialogOpen(false);
         setUploadStep("select");
@@ -388,9 +483,11 @@ export function usePortalUploadDialog({
         setUploadFolderSelection({ mode: "ai" });
         setUploadReviewRows([]);
         setFileCategoryCode("");
+        setBusinessDomainCode("");
+        setSelectedUploadTagValues([]);
         onUploaded?.();
         showToast({ message: "上传成功", severity: NotificationSeverity.SUCCESS });
-    }, [fileCategoryCode, getVisibleRegisteredFiles, onUploaded, reloadFiles, showToast]);
+    }, [getVisibleRegisteredFiles, onUploaded, reloadFiles, showToast]);
 
     const resolveManualParentId = useCallback(() => {
         if (uploadFolderSelection.mode !== "manual") return null;
@@ -423,7 +520,7 @@ export function usePortalUploadDialog({
         uploadItems: PortalUploadFileItem[],
         filePaths: string[],
         recommendations: Map<string, UploadFolderRecommendationItem>,
-        fileCategoryPayload: { file_category_code?: string },
+        uploadMetadataPayload: UploadFileRegistrationMetadata,
     ) => {
         const groups = new Map<string, { parentId: number | null; filePaths: string[] }>();
         uploadItems.forEach((item, index) => {
@@ -441,7 +538,7 @@ export function usePortalUploadDialog({
             const files = await addFilesApi(activeSpace!.id, {
                 file_path: group.filePaths,
                 parent_id: group.parentId,
-                ...fileCategoryPayload,
+                ...uploadMetadataPayload,
             });
             registeredFiles.push(...files);
         }
@@ -458,7 +555,10 @@ export function usePortalUploadDialog({
             showToast({ message: "请先选择文件", severity: NotificationSeverity.INFO });
             return;
         }
-        const fileCategoryPayload = fileCategoryCode ? { file_category_code: fileCategoryCode } : {};
+        const uploadMetadataPayload = buildPortalUploadMetadataPayload(
+            { businessDomainCode, selectedTagValues: selectedUploadTagValues },
+            fileCategoryCode,
+        );
         setUploadSubmitting(true);
         try {
             if (uploadLocalFolderName) {
@@ -497,9 +597,9 @@ export function usePortalUploadDialog({
                 const registeredFiles = await addFilesApi(activeSpace.id, {
                     file_path: filePaths,
                     parent_id: createdFolderId,
-                    ...fileCategoryPayload,
+                    ...uploadMetadataPayload,
                 });
-                await finishUploadedFiles(registeredFiles);
+                await finishUploadedFiles(registeredFiles, uploadMetadataPayload);
                 return;
             }
 
@@ -511,32 +611,36 @@ export function usePortalUploadDialog({
                 uploadFiles.map((item) => uploadFileToServerApi(activeSpace.id, item.file)),
             );
             const filePaths = uploadResults.map((item) => item.file_path);
-            const registeredFiles = await registerUploadedFiles(uploadFiles, filePaths, recommendations, fileCategoryPayload);
-            await finishUploadedFiles(registeredFiles);
+            const registeredFiles = await registerUploadedFiles(uploadFiles, filePaths, recommendations, uploadMetadataPayload);
+            await finishUploadedFiles(registeredFiles, uploadMetadataPayload);
         } catch (error) {
             const message = error instanceof Error && error.message ? error.message : "上传失败";
             showToast({ message, severity: NotificationSeverity.ERROR });
         } finally {
             setUploadSubmitting(false);
         }
-    }, [activeSpace, fileCategoryCode, finishUploadedFiles, recommendationParentId, recommendUploadTargetMap, registerUploadedFiles, resolveManualParentId, showToast, uploadFiles, uploadFolderSelection.mode, uploadLocalFolderName, uploadReviewRows.length]);
+    }, [activeSpace, businessDomainCode, fileCategoryCode, finishUploadedFiles, recommendationParentId, recommendUploadTargetMap, registerUploadedFiles, resolveManualParentId, selectedUploadTagValues, showToast, uploadFiles, uploadFolderSelection.mode, uploadLocalFolderName, uploadReviewRows.length]);
 
     const handleDuplicateSkip = useCallback(() => {
         setDuplicateFiles([]);
         setDuplicateFileCategoryCode(undefined);
+        setDuplicateUploadMetadataPayload({});
     }, []);
 
     const handleDuplicateOverwrite = useCallback(async () => {
         if (!activeSpace || duplicateFiles.length === 0) return;
         const fileObjs = duplicateFiles.map((file) => file.rawObj).filter(Boolean);
+        const retryMetadata = Object.keys(duplicateUploadMetadataPayload).length
+            ? duplicateUploadMetadataPayload
+            : (duplicateFileCategoryCode ? { file_category_code: duplicateFileCategoryCode } : undefined);
         try {
-            await retryDuplicateFilesApi(activeSpace.id, fileObjs, duplicateFileCategoryCode);
+            await retryDuplicateFilesApi(activeSpace.id, fileObjs, retryMetadata);
             await reloadFiles();
             resetUploadDialog();
         } catch {
             showToast({ message: "文件覆盖失败", severity: NotificationSeverity.ERROR });
         }
-    }, [activeSpace, duplicateFileCategoryCode, duplicateFiles, reloadFiles, resetUploadDialog, showToast]);
+    }, [activeSpace, duplicateFileCategoryCode, duplicateFiles, duplicateUploadMetadataPayload, reloadFiles, resetUploadDialog, showToast]);
 
     const handleStartUploadImport = useCallback(async () => {
         const rows = uploadReviewRows.filter((row) => row.selected);
@@ -584,6 +688,10 @@ export function usePortalUploadDialog({
         duplicateFiles,
         fileCategoryCode,
         fileCategoryOptions,
+        businessDomainCode,
+        uploadTagOptions,
+        selectedUploadTagValues,
+        uploadTagLoading,
         setUploadDialogOpen,
         setUploadStep,
         setUploadReviewRows,
@@ -595,6 +703,9 @@ export function usePortalUploadDialog({
         handleSelectUploadFolder,
         handleUseAiUploadFolder,
         handleSelectFileCategory,
+        handleSelectBusinessDomain,
+        handleToggleUploadTag,
+        handleClearUploadTags,
         handleToggleUploadFolder,
         handleUploadNext,
         handleStartUploadImport,

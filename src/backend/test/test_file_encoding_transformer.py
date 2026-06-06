@@ -217,6 +217,42 @@ async def test_do_work_uses_selected_document_type_from_split_rule():
 
 
 @pytest.mark.asyncio
+async def test_do_work_uses_selected_business_domain_from_split_rule():
+    kf = SimpleNamespace(
+        id=1, file_encoding=None, file_name="x", abstract="x",
+        knowledge_id=10,
+        create_time=datetime(2026, 4, 15),
+        split_rule=json.dumps({"business_domain_code": "IT"}),
+    )
+    t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
+    fake_conf = SimpleNamespace(enabled=True, prefix="SGGF", file_encoding=None)
+    fake_settings = SimpleNamespace(aget_shougang_conf=AsyncMock(return_value=fake_conf))
+    with patch.object(_enc_mod, 'bisheng_settings', fake_settings), \
+            patch.object(t, '_classify_with_llm', AsyncMock(return_value="STD-PP")), \
+            patch.object(t, '_compute_seq', AsyncMock(return_value=7)):
+        await t._do_work()
+    assert kf.file_encoding == "SGGF-STD-IT-20260400000007"
+
+
+@pytest.mark.asyncio
+async def test_do_work_combines_selected_document_type_and_business_domain():
+    kf = SimpleNamespace(
+        id=1, file_encoding=None, file_name="x", abstract="x",
+        knowledge_id=10,
+        create_time=datetime(2026, 4, 15),
+        split_rule=json.dumps({"file_category_code": "RPT", "business_domain_code": "QM"}),
+    )
+    t = FileEncodingTransformer(invoke_user_id=42, knowledge_file=kf)
+    fake_conf = SimpleNamespace(enabled=True, prefix="SGGF", file_encoding=None)
+    fake_settings = SimpleNamespace(aget_shougang_conf=AsyncMock(return_value=fake_conf))
+    with patch.object(_enc_mod, 'bisheng_settings', fake_settings), \
+            patch.object(t, '_classify_with_llm', AsyncMock(return_value="STD-PP")), \
+            patch.object(t, '_compute_seq', AsyncMock(return_value=7)):
+        await t._do_work()
+    assert kf.file_encoding == "SGGF-RPT-QM-20260400000007"
+
+
+@pytest.mark.asyncio
 async def test_do_work_skips_when_encoding_already_present():
     kf = SimpleNamespace(
         id=1, file_encoding="GF-STD-SC-20260300000001", file_name="x", abstract="x",

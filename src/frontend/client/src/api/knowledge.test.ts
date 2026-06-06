@@ -13,6 +13,7 @@ import {
   moveUploadedFileFolderApi,
   renameFolderApi,
   recommendUploadFoldersApi,
+  retryDuplicateFilesApi,
 } from "./knowledge";
 
 jest.mock("~/api/request", () => ({
@@ -237,6 +238,40 @@ describe("recommendUploadFoldersApi", () => {
       recommendedFolderId: "37",
       recommendedFolderName: "能源管理",
       recommendedFolderPath: "技术文档/能源管理",
+    });
+  });
+});
+
+describe("retryDuplicateFilesApi", () => {
+  beforeEach(() => {
+    mockPost.mockReset();
+  });
+
+  it("keeps legacy file category string payload compatible", async () => {
+    mockPost.mockResolvedValue({ status_code: 200, data: null });
+
+    await retryDuplicateFilesApi("101", [{ id: 1, file_name: "doc.pdf" }], "RPT");
+
+    expect(mockPost).toHaveBeenCalledWith("/api/v1/knowledge/space/101/files/retry", {
+      file_objs: [{ id: 1, file_name: "doc.pdf" }],
+      file_category_code: "RPT",
+    });
+  });
+
+  it("posts selected upload metadata for duplicate overwrite", async () => {
+    mockPost.mockResolvedValue({ status_code: 200, data: null });
+
+    await retryDuplicateFilesApi("101", [{ id: 1, file_name: "doc.pdf" }], {
+      business_domain_code: "PP",
+      manual_tag_ids: [2],
+      manual_tag_names: ["制度"],
+    });
+
+    expect(mockPost).toHaveBeenCalledWith("/api/v1/knowledge/space/101/files/retry", {
+      file_objs: [{ id: 1, file_name: "doc.pdf" }],
+      business_domain_code: "PP",
+      manual_tag_ids: [2],
+      manual_tag_names: ["制度"],
     });
   });
 });

@@ -11,6 +11,7 @@ from bisheng.database.models.flow import FlowCreate, FlowRead, FlowType
 from bisheng.database.models.message import ChatMessageRead
 from bisheng.database.models.tag import Tag
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
+from bisheng.knowledge.domain.constants import normalize_business_domain_code
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata
 from bisheng.tool.domain.models.gpts_tools import GptsToolsRead
@@ -508,8 +509,24 @@ class FileProcessBase(BaseModel):
     enable_formula: Optional[int] = Field(default=1, description='latexFormula Recognition')
     filter_page_header_footer: Optional[int] = Field(default=0, description='Filter Header Footer')
     excel_rule: Optional[ExcelRule] = Field(default=None, description="excel rule")
+    business_domain_code: Optional[str] = Field(
+        default=None,
+        description='Optional selected business domain code for file encoding',
+    )
     cache: Optional[bool] = Field(default=True,
                                   description='Whether to fetch data from the cache when previewing the document')
+
+    @field_validator('business_domain_code', mode='before')
+    @classmethod
+    def normalize_business_domain_code_field(cls, value: Any):
+        if value is None:
+            return None
+        if isinstance(value, str) and not value.strip():
+            return None
+        normalized = normalize_business_domain_code(value)
+        if not normalized:
+            raise ValueError('business_domain_code is invalid')
+        return normalized
 
     @model_validator(mode='before')
     @classmethod
@@ -578,6 +595,28 @@ class KnowledgeFileProcess(FileProcessBase):
     file_list: List[KnowledgeFileOne] = Field(..., description='List of files')
     callback_url: Optional[str] = Field(default=None, description='Asynchronous Task Callback Address')
     extra: Optional[str] = Field(default=None, description='Additional Information')
+    manual_tag_ids: List[int] = Field(
+        default_factory=list,
+        description='Optional selected existing tag IDs for upload files',
+    )
+    manual_tag_names: List[str] = Field(
+        default_factory=list,
+        description='Optional selected tag names for upload files',
+    )
+
+    @field_validator('manual_tag_ids', mode='before')
+    @classmethod
+    def normalize_manual_tag_ids(cls, value: Any):
+        if value is None:
+            return []
+        return value
+
+    @field_validator('manual_tag_names', mode='before')
+    @classmethod
+    def normalize_manual_tag_names(cls, value: Any):
+        if value is None:
+            return []
+        return value
 
 
 # Knowledge Base Re-Segment Adjustment

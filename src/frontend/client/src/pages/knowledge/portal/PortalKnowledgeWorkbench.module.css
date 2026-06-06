@@ -2000,6 +2000,78 @@
   outline: 2px solid rgba(44, 118, 244, 0.16);
 }
 
+.uploadMetadataGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.uploadTagField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.uploadTagHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.uploadTagClear {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.uploadTagPicker {
+  min-height: 36px;
+  max-height: 92px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow-y: auto;
+  border: 1px solid #dbe4f0;
+  border-radius: 6px;
+  padding: 8px;
+  background: #fff;
+}
+
+.uploadTagOption {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d7e0ec;
+  border-radius: 5px;
+  padding: 4px 8px;
+  color: #334155;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.uploadTagOption span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadTagOption input {
+  flex: 0 0 auto;
+}
+
+.uploadTagEmpty {
+  min-height: 20px;
+  display: inline-flex;
+  align-items: center;
+  color: #8a94a6;
+  font-size: 12px;
+}
+
 .uploadReadonlyInput {
   height: 36px;
   border: 1px solid #dfe5ee;
@@ -2109,6 +2181,7 @@
 .uploadSelectedFiles {
   display: grid;
   gap: 10px;
+  margin-bottom: 18px;
   padding-top: 14px;
   border-top: 1px solid #edf1f7;
 }

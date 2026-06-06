@@ -376,6 +376,13 @@ export interface KnowledgeSpaceTagLibraryPage {
     total: number;
 }
 
+export interface UploadFileRegistrationMetadata {
+    file_category_code?: string;
+    business_domain_code?: string;
+    manual_tag_ids?: number[];
+    manual_tag_names?: string[];
+}
+
 interface RawSpaceChild {
     id: number;
     name: string;
@@ -1713,7 +1720,7 @@ export async function uploadFileToServerApi(
  */
 export async function addFilesApi(
     space_id: string,
-    data: { file_path: string[]; parent_id?: number | null; file_category_code?: string }
+    data: UploadFileRegistrationMetadata & { file_path: string[]; parent_id?: number | null }
 ): Promise<KnowledgeFile[]> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/files`,
@@ -1918,11 +1925,14 @@ export async function batchDownloadApi(
 export async function retryDuplicateFilesApi(
     space_id: string,
     file_objs: any[],
-    file_category_code?: string,
+    metadata?: string | UploadFileRegistrationMetadata,
 ): Promise<void> {
+    const uploadMetadata = typeof metadata === "string"
+        ? (metadata ? { file_category_code: metadata } : {})
+        : (metadata ?? {});
     await request.post(`/api/v1/knowledge/space/${space_id}/files/retry`, {
         file_objs,
-        ...(file_category_code ? { file_category_code } : {}),
+        ...uploadMetadata,
     });
 }
 

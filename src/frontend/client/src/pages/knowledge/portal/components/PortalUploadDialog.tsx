@@ -16,6 +16,10 @@ import type {
     PortalUploadReviewRow,
     PortalUploadStep,
 } from "../types";
+import {
+    BUSINESS_DOMAIN_OPTIONS,
+    type PortalUploadTagOption,
+} from "../uploadMetadata";
 import { formatFileSize } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -38,12 +42,19 @@ interface PortalUploadDialogProps {
     uploadFolderOptions: Array<{ id: string | null; name: string }>;
     fileCategoryCode: string;
     fileCategoryOptions: PortalFileCategoryOption[];
+    businessDomainCode: string;
+    uploadTagOptions: PortalUploadTagOption[];
+    selectedUploadTagValues: string[];
+    uploadTagLoading: boolean;
     onOpen: () => void;
     onClose: () => void;
     onAddUploadFiles: (files?: FileList | File[]) => void;
     onAddUploadFolder: (files?: FileList | File[]) => void;
     onRemoveUploadFile: (fileId: string) => void;
     onSelectFileCategory: (code: string) => void;
+    onSelectBusinessDomain: (code: string) => void;
+    onToggleUploadTag: (value: string) => void;
+    onClearUploadTags: () => void;
     onSelectUploadFolder: (folderId: string | null, folderName: string) => void;
     onUseAiUploadFolder: () => void;
     onToggleUploadFolder: (node: PortalUploadFolderNode) => void;
@@ -125,12 +136,19 @@ export function PortalUploadDialog({
     uploadFolderOptions,
     fileCategoryCode,
     fileCategoryOptions,
+    businessDomainCode,
+    uploadTagOptions,
+    selectedUploadTagValues,
+    uploadTagLoading,
     onOpen,
     onClose,
     onAddUploadFiles,
     onAddUploadFolder,
     onRemoveUploadFile,
     onSelectFileCategory,
+    onSelectBusinessDomain,
+    onToggleUploadTag,
+    onClearUploadTags,
     onSelectUploadFolder,
     onUseAiUploadFolder,
     onToggleUploadFolder,
@@ -218,25 +236,103 @@ export function PortalUploadDialog({
                                 />
                             </div>
 
+                            {uploadFiles.length ? (
+                                <div className={s.uploadSelectedFiles}>
+                                    <div className={s.uploadLabel}>已选择的文件 ({uploadFiles.length})</div>
+                                    {uploadLocalFolderName ? (
+                                        <div className={s.uploadFolderNotice}>
+                                            <strong>将创建文件夹：{uploadLocalFolderName}</strong>
+                                            <span>仅上传所选文件夹根目录下的支持文件，子目录文件不会上传。</span>
+                                        </div>
+                                    ) : null}
+                                    {uploadFiles.map((item) => (
+                                        <div key={item.id} className={s.uploadSelectedFile}>
+                                            <FileText size={16} />
+                                            <div className={s.uploadFileMeta}>
+                                                <span>{item.file.name}</span>
+                                                <small>{formatFileSize(item.file.size)}</small>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className={s.uploadRemoveButton}
+                                                aria-label={`移除${item.file.name}`}
+                                                onClick={() => onRemoveUploadFile(item.id)}
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : null}
+
                             <div className={s.uploadSection}>
-                                <label className={s.uploadField}>
-                                    <span>
-                                        文件分类
-                                    </span>
-                                    <select
-                                        aria-label="文件分类"
-                                        className={s.uploadSelect}
-                                        value={fileCategoryCode}
-                                        onChange={(event) => onSelectFileCategory(event.currentTarget.value)}
-                                    >
-                                        <option value="">请选择文件分类</option>
-                                        {fileCategoryOptions.map((option) => (
-                                            <option key={option.code} value={option.code}>
-                                                {option.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </label>
+                                <div className={s.uploadMetadataGrid}>
+                                    <label className={s.uploadField}>
+                                        <span>
+                                            文件分类
+                                        </span>
+                                        <select
+                                            aria-label="文件分类"
+                                            className={s.uploadSelect}
+                                            value={fileCategoryCode}
+                                            onChange={(event) => onSelectFileCategory(event.currentTarget.value)}
+                                        >
+                                            <option value="">请选择文件分类</option>
+                                            {fileCategoryOptions.map((option) => (
+                                                <option key={option.code} value={option.code}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <label className={s.uploadField}>
+                                        <span>
+                                            业务域
+                                        </span>
+                                        <select
+                                            aria-label="业务域"
+                                            className={s.uploadSelect}
+                                            value={businessDomainCode}
+                                            onChange={(event) => onSelectBusinessDomain(event.currentTarget.value)}
+                                        >
+                                            <option value="">AI 自动生成</option>
+                                            {BUSINESS_DOMAIN_OPTIONS.map((option) => (
+                                                <option key={option.code} value={option.code}>
+                                                    {option.code} / {option.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                </div>
+                                <div className={s.uploadTagField}>
+                                    <div className={s.uploadTagHeader}>
+                                        <span className={s.uploadLabel}>文件标签</span>
+                                        {selectedUploadTagValues.length ? (
+                                            <button type="button" className={s.uploadTagClear} onClick={onClearUploadTags}>
+                                                清空
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                    <div className={s.uploadTagPicker}>
+                                        {uploadTagLoading ? (
+                                            <span className={s.uploadTagEmpty}>标签加载中...</span>
+                                        ) : uploadTagOptions.length ? (
+                                            uploadTagOptions.map((option) => (
+                                                <label key={option.value} className={s.uploadTagOption}>
+                                                    <input
+                                                        type="checkbox"
+                                                        aria-label={`选择标签${option.label}`}
+                                                        checked={selectedUploadTagValues.includes(option.value)}
+                                                        onChange={() => onToggleUploadTag(option.value)}
+                                                    />
+                                                    <span>{option.label}</span>
+                                                </label>
+                                            ))
+                                        ) : (
+                                            <span className={s.uploadTagEmpty}>暂无可选标签</span>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
 
                             <div className={s.uploadSection}>
@@ -299,35 +395,6 @@ export function PortalUploadDialog({
                                     未选择目录时，系统会根据当前知识空间已有目录推荐上传目录，并直接上传到推荐目录。
                                 </div>
                             </div>
-
-                            {uploadFiles.length ? (
-                                <div className={s.uploadSelectedFiles}>
-                                    <div className={s.uploadLabel}>已选择的文件 ({uploadFiles.length})</div>
-                                    {uploadLocalFolderName ? (
-                                        <div className={s.uploadFolderNotice}>
-                                            <strong>将创建文件夹：{uploadLocalFolderName}</strong>
-                                            <span>仅上传所选文件夹根目录下的支持文件，子目录文件不会上传。</span>
-                                        </div>
-                                    ) : null}
-                                    {uploadFiles.map((item) => (
-                                        <div key={item.id} className={s.uploadSelectedFile}>
-                                            <FileText size={16} />
-                                            <div className={s.uploadFileMeta}>
-                                                <span>{item.file.name}</span>
-                                                <small>{formatFileSize(item.file.size)}</small>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className={s.uploadRemoveButton}
-                                                aria-label={`移除${item.file.name}`}
-                                                onClick={() => onRemoveUploadFile(item.id)}
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
                         </div>
                         <DialogFooter>
                             <Button variant="outline" className="h-8" onClick={onClose}>

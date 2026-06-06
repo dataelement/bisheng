@@ -5,6 +5,8 @@ import {
     addFilesApi,
     createFolderApi,
     getSimilarCandidatesApi,
+    getKnowledgeSpaceTagLibrariesApi,
+    getKnowledgeSpaceTagLibraryDetailApi,
     listKnowledgeFolders,
     recommendUploadFoldersApi,
     retryDuplicateFilesApi,
@@ -25,6 +27,8 @@ jest.mock("~/api/knowledge", () => ({
     addFilesApi: jest.fn(),
     createFolderApi: jest.fn(),
     getSimilarCandidatesApi: jest.fn(),
+    getKnowledgeSpaceTagLibrariesApi: jest.fn(),
+    getKnowledgeSpaceTagLibraryDetailApi: jest.fn(),
     linkAsNewVersionApi: jest.fn(),
     listKnowledgeFolders: jest.fn(),
     recommendUploadFoldersApi: jest.fn(),
@@ -74,6 +78,8 @@ describe("usePortalUploadDialog", () => {
         jest.clearAllMocks();
         jest.mocked(uploadFileToServerApi).mockResolvedValue({ file_path: "/tmp/uploaded.pdf" } as any);
         jest.mocked(getSimilarCandidatesApi).mockResolvedValue([] as any);
+        jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({ data: [] } as any);
+        jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({ tags: [] } as any);
         jest.mocked(listKnowledgeFolders).mockResolvedValue({ items: [], total: 0 } as any);
         jest.mocked(createFolderApi).mockResolvedValue({ id: 1, name: "研发资料" } as any);
         jest.mocked(recommendUploadFoldersApi).mockResolvedValue({ items: [] } as any);
@@ -265,6 +271,32 @@ describe("usePortalUploadDialog", () => {
         });
     });
 
+    test("passes selected business domain and tags when registering uploaded files", async () => {
+        jest.mocked(addFilesApi).mockResolvedValue([makeFile()] as any);
+        const { hook } = renderUploadDialogHook();
+
+        act(() => {
+            (hook.result.current as any).handleSelectBusinessDomain?.("PP");
+            (hook.result.current as any).handleToggleUploadTag?.("id:1");
+            (hook.result.current as any).handleToggleUploadTag?.("name:制度");
+            hook.result.current.handleAddUploadFiles([
+                new File(["report"], "报告.pdf", { type: "application/pdf" }),
+            ]);
+        });
+
+        await act(async () => {
+            await hook.result.current.handleUploadNext();
+        });
+
+        expect(addFilesApi).toHaveBeenCalledWith("space-1", {
+            file_path: ["/tmp/uploaded.pdf"],
+            parent_id: null,
+            business_domain_code: "PP",
+            manual_tag_ids: [1],
+            manual_tag_names: ["制度"],
+        });
+    });
+
     test("keeps non-duplicate review rows when user skips duplicate files", async () => {
         const duplicateFile = makeFile({
             id: "101",
@@ -342,10 +374,50 @@ describe("usePortalUploadDialog", () => {
 
         expect(retryDuplicateFilesApi).toHaveBeenCalledWith("space-1", [
             { id: "101", file_name: "重复.pdf" },
-        ], "RPT");
+        ], { file_category_code: "RPT" });
         expect(reloadFiles).toHaveBeenCalledTimes(1);
         expect(hook.result.current.duplicateFiles).toEqual([]);
         expect(hook.result.current.uploadDialogOpen).toBe(false);
         expect(hook.result.current.uploadReviewRows).toEqual([]);
+    });
+
+    test("preserves selected upload metadata when overwriting duplicate files", async () => {
+        const duplicateFile = makeFile({
+            id: "101",
+            name: "重复.pdf",
+            status: FileStatus.FAILED,
+            oldFileLevelPath: "/制度库",
+        }) as any;
+        duplicateFile._raw = { id: "101", file_name: "重复.pdf" };
+        jest.mocked(addFilesApi).mockResolvedValue([duplicateFile] as any);
+        jest.mocked(retryDuplicateFilesApi).mockResolvedValue(undefined as any);
+        const { hook } = renderUploadDialogHook();
+
+        act(() => {
+            (hook.result.current as any).handleSelectBusinessDomain?.("PP");
+            (hook.result.current as any).handleToggleUploadTag?.("id:1");
+            (hook.result.current as any).handleToggleUploadTag?.("name:制度");
+            hook.result.current.handleAddUploadFiles([
+                new File(["duplicate"], "重复.pdf", { type: "application/pdf" }),
+            ]);
+        });
+        await act(async () => {
+            await hook.result.current.handleUploadNext();
+        });
+        await waitFor(() => {
+            expect(hook.result.current.duplicateFiles).toHaveLength(1);
+        });
+
+        await act(async () => {
+            await hook.result.current.handleDuplicateOverwrite();
+        });
+
+        expect(retryDuplicateFilesApi).toHaveBeenCalledWith("space-1", [
+            { id: "101", file_name: "重复.pdf" },
+        ], {
+            business_domain_code: "PP",
+            manual_tag_ids: [1],
+            manual_tag_names: ["制度"],
+        });
     });
 });

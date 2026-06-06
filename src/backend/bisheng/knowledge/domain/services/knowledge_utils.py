@@ -9,6 +9,7 @@ from loguru import logger
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.base import BaseService
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.knowledge.domain.constants import BUSINESS_DOMAIN_CODE_KEY, normalize_business_domain_code
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.schemas import KnowledgeLLMConfig
@@ -22,6 +23,7 @@ class KnowledgeUtils(BaseService):
     schema_ready_wait_seconds = 20
     schema_ready_poll_interval = 0.5
     file_category_code_key = "file_category_code"
+    business_domain_code_key = BUSINESS_DOMAIN_CODE_KEY
 
     @classmethod
     def normalize_file_category_code(cls, value) -> Optional[str]:
@@ -59,6 +61,38 @@ class KnowledgeUtils(BaseService):
         if not isinstance(split_rule, dict):
             return None
         return cls.normalize_file_category_code(split_rule.get(cls.file_category_code_key))
+
+    @classmethod
+    def normalize_business_domain_code(cls, value) -> Optional[str]:
+        return normalize_business_domain_code(value)
+
+    @classmethod
+    def with_business_domain_code_in_split_rule(cls, split_rule, business_domain_code: str | None) -> str:
+        normalized_code = cls.normalize_business_domain_code(business_domain_code)
+        rule_data = {}
+        if isinstance(split_rule, str) and split_rule.strip():
+            try:
+                parsed = json.loads(split_rule)
+                if isinstance(parsed, dict):
+                    rule_data = parsed
+            except Exception:
+                rule_data = {}
+        elif isinstance(split_rule, dict):
+            rule_data = dict(split_rule)
+        if normalized_code:
+            rule_data[cls.business_domain_code_key] = normalized_code
+        return json.dumps(rule_data, ensure_ascii=False)
+
+    @classmethod
+    def get_business_domain_code_from_split_rule(cls, split_rule) -> Optional[str]:
+        if isinstance(split_rule, str) and split_rule.strip():
+            try:
+                split_rule = json.loads(split_rule)
+            except Exception:
+                return None
+        if not isinstance(split_rule, dict):
+            return None
+        return cls.normalize_business_domain_code(split_rule.get(cls.business_domain_code_key))
 
     @classmethod
     def get_preview_cache_key(cls, knowledge_id: int, file_path: str, md5_value=None) -> str:
@@ -457,7 +491,10 @@ class KnowledgeUtils(BaseService):
             file.remark = ""
             file.split_rule = input_file["split_rule"]
             file.status = KnowledgeFileStatus.WAITING.value  # Parsing
-            if cls.get_file_category_code_from_split_rule(file.split_rule):
+            if (
+                cls.get_file_category_code_from_split_rule(file.split_rule)
+                or cls.get_business_domain_code_from_split_rule(file.split_rule)
+            ):
                 file.file_encoding = None
             # Content has been replaced (overwrite path) — the previous
             # similar-document marker and simhash were computed against the

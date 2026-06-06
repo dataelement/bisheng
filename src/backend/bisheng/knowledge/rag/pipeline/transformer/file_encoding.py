@@ -75,6 +75,11 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.config.settings import DEFAULT_SHOUGANG_FILE_DOCUMENT_TYPES
 from bisheng.core.database import get_async_db_session
+from bisheng.knowledge.domain.constants import (
+    BUSINESS_DOMAIN_CODE_KEY,
+    BUSINESS_DOMAIN_CODES,
+    normalize_business_domain_code,
+)
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
 CLASSIFY_PROMPT = """# 角色
@@ -174,6 +179,7 @@ class FileEncodingRuntimeConfig:
     fallback_code: str
     seq_cap: int
     document_type_codes: frozenset[str]
+    business_domain_codes: frozenset[str]
 
 
 class FileEncodingTransformer(BaseDocumentTransformer):
@@ -208,6 +214,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         encoding_config = self._resolve_encoding_config(shougang_conf)
         company_code = self._resolve_company_code(shougang_conf)
         selected_document_type_code = self._resolve_selected_document_type_code(encoding_config)
+        selected_business_domain_code = self._resolve_selected_business_domain_code(encoding_config)
 
         if self.knowledge_file.file_encoding:
             return
@@ -217,6 +224,11 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             type_business_code = self._apply_selected_document_type_code(
                 type_business_code,
                 selected_document_type_code,
+                encoding_config,
+            )
+            type_business_code = self._apply_selected_business_domain_code(
+                type_business_code,
+                selected_business_domain_code,
                 encoding_config,
             )
             seq = await self._compute_seq(encoding_config.seq_cap)
@@ -237,6 +249,11 @@ class FileEncodingTransformer(BaseDocumentTransformer):
                 fallback_code = self._apply_selected_document_type_code(
                     encoding_config.fallback_code,
                     selected_document_type_code,
+                    encoding_config,
+                )
+                fallback_code = self._apply_selected_business_domain_code(
+                    fallback_code,
+                    selected_business_domain_code,
                     encoding_config,
                 )
                 self.knowledge_file.file_encoding = self._compose_encoding(
@@ -315,6 +332,7 @@ class FileEncodingTransformer(BaseDocumentTransformer):
             fallback_code=fallback_code,
             seq_cap=seq_cap,
             document_type_codes=document_type_codes,
+            business_domain_codes=BUSINESS_DOMAIN_CODES,
         )
 
     def _build_classify_messages(self, encoding_config: FileEncodingRuntimeConfig) -> list[dict[str, str]]:
@@ -439,6 +457,37 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         )
         return None
 
+    def _resolve_selected_business_domain_code(
+        self,
+        encoding_config: FileEncodingRuntimeConfig,
+    ) -> str | None:
+        split_rule = getattr(self.knowledge_file, 'split_rule', None)
+        if not split_rule:
+            return None
+        try:
+            if isinstance(split_rule, str):
+                rule_data = json.loads(split_rule)
+            elif isinstance(split_rule, dict):
+                rule_data = split_rule
+            else:
+                return None
+        except Exception as e:
+            logger.warning(
+                f"[shougang.encoding] file_id={self.knowledge_file.id} "
+                f"invalid split_rule when resolving business domain: {e}"
+            )
+            return None
+        selected_code = normalize_business_domain_code(rule_data.get(BUSINESS_DOMAIN_CODE_KEY))
+        if not selected_code:
+            return None
+        if selected_code in encoding_config.business_domain_codes:
+            return selected_code
+        logger.warning(
+            f"[shougang.encoding] file_id={self.knowledge_file.id} "
+            f"invalid business domain code ignored: {selected_code}"
+        )
+        return None
+
     def _apply_selected_document_type_code(
         self,
         type_business_code: str,
@@ -456,6 +505,26 @@ class FileEncodingTransformer(BaseDocumentTransformer):
         logger.warning(
             f"[shougang.encoding] file_id={self.knowledge_file.id} "
             f"selected file category conflicts with valid_pattern: {candidate}"
+        )
+        return type_business_code
+
+    def _apply_selected_business_domain_code(
+        self,
+        type_business_code: str,
+        selected_business_domain_code: str | None,
+        encoding_config: FileEncodingRuntimeConfig,
+    ) -> str:
+        if not selected_business_domain_code:
+            return type_business_code
+        parts = [part.strip() for part in (type_business_code or "").split("-", 1)]
+        if len(parts) != 2 or not parts[0]:
+            return type_business_code
+        candidate = f"{parts[0]}-{selected_business_domain_code}"
+        if encoding_config.valid_pattern.match(candidate):
+            return candidate
+        logger.warning(
+            f"[shougang.encoding] file_id={self.knowledge_file.id} "
+            f"selected business domain conflicts with valid_pattern: {candidate}"
         )
         return type_business_code
 
