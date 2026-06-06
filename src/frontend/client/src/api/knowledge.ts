@@ -1993,10 +1993,14 @@ export async function updateFileEncoding(
     fileId: string,
     encoding: string,
 ): Promise<KnowledgeFile> {
-    return await request.put(
+    const res = await request.put(
         `/api/v1/knowledge/space/${spaceId}/files/${fileId}/encoding`,
         { encoding },
-    );
+    ) as ApiResponse<any> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        throw new Error(res.status_message || res.message || res.msg || "update file encoding failed");
+    }
+    return mapChild(res?.data ?? {}, spaceId);
 }
 
 // ─────────────────────────────────────────────────────────────

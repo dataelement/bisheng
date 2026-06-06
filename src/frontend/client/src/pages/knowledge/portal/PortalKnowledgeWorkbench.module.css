@@ -1677,9 +1677,9 @@
 
 .uploadRecordsHead,
 .uploadRecordsRow {
-  min-width: 920px;
+  min-width: 1240px;
   display: grid;
-  grid-template-columns: minmax(170px, 1.3fr) minmax(190px, 1.2fr) 92px minmax(150px, 1fr) minmax(150px, 1fr) minmax(120px, 1fr);
+  grid-template-columns: minmax(160px, 1.2fr) minmax(170px, 1fr) 92px minmax(130px, .9fr) minmax(130px, .9fr) minmax(120px, .8fr) minmax(180px, 1.1fr) minmax(110px, .8fr);
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
@@ -1771,6 +1771,21 @@
 
 .uploadRecordInlineEditButton:hover {
   text-decoration: underline;
+}
+
+.uploadRecordSelect {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #d8e1ee;
+  border-radius: 4px;
+  background: #fff;
+  color: #273142;
+  font-size: 12px;
+}
+
+.uploadRecordReadonlyText {
+  color: #273142;
 }
 
 .uploadRecordsEmpty {

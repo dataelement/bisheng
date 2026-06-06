@@ -1,4 +1,4 @@
-import { FolderPlus, FunnelIcon, Globe2, History, SquarePen, Upload } from "lucide-react";
+import { FolderPlus, FunnelIcon, Globe2, SquarePen, Upload } from "lucide-react";
 import type { FileStatus } from "~/api/knowledge";
 import {
     DropdownMenu,
@@ -14,7 +14,6 @@ interface PortalHeaderActionsProps {
     canCreateFolder: boolean;
     statusFilter: FileStatus[];
     onOpenUploadDialog: () => void;
-    onOpenUploadedFiles: () => void;
     onShowUnavailable: () => void;
     onCreateFolder: () => void;
     onToggleStatusFilter: (status: FileStatus, checked: boolean) => void;
@@ -25,7 +24,6 @@ export function PortalHeaderActions({
     canCreateFolder,
     statusFilter,
     onOpenUploadDialog,
-    onOpenUploadedFiles,
     onShowUnavailable,
     onCreateFolder,
     onToggleStatusFilter,
@@ -41,15 +39,6 @@ export function PortalHeaderActions({
                 aria-label="上传"
             >
                 <Upload size={14} />
-            </button>
-            <button
-                type="button"
-                className={s.folderAction}
-                onClick={onOpenUploadedFiles}
-                title="上传记录"
-                aria-label="上传记录"
-            >
-                <History size={14} />
             </button>
             <button
                 type="button"

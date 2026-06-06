@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import BaseModel
 
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
     SpaceCreateDepartmentDeniedError,
     SpaceFileDuplicateError,
@@ -1042,6 +1043,42 @@ async def test_list_my_uploaded_files_defaults_missing_space_level_to_personal(s
     mock_get_space_level.assert_awaited_once_with(10)
     assert result.data[0].knowledge_name == '个人知识空间'
     assert result.data[0].space_level == KnowledgeSpaceLevelEnum.PERSONAL
+
+
+@pytest.mark.asyncio
+async def test_update_file_encoding_rejects_duplicate_across_all_spaces(service):
+    file_record = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name='编码文档.pdf',
+    )
+    file_record.file_encoding = 'SGGF-STD-EM-20260600000001'
+
+    with patch.object(
+        service,
+        '_get_file_for_action',
+        new_callable=AsyncMock,
+        return_value=file_record,
+    ), patch.object(
+        service,
+        '_require_permission_id',
+        new_callable=AsyncMock,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.acount_by_file_encoding',
+        new_callable=AsyncMock,
+        return_value=1,
+        create=True,
+    ) as mock_count, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update',
+        new_callable=AsyncMock,
+        return_value=file_record,
+    ):
+        with pytest.raises(BaseErrorCode) as exc_info:
+            await service.update_file_encoding(501, 'SGGF-RPT-PP-20260600000001')
+
+    mock_count.assert_awaited_once_with('SGGF-RPT-PP-20260600000001', exclude_id=501)
+    assert exc_info.value.Code == 18025
+    assert '文件编码已存在' in exc_info.value.Msg
 
 
 @pytest.mark.asyncio

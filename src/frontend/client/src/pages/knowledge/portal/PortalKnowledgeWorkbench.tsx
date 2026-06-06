@@ -571,6 +571,22 @@ export default function PortalKnowledgeWorkbench() {
         () => normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types),
         [bsConfig],
     );
+    const fileEncodingPrefix = useMemo(() => {
+        const prefix = (bsConfig as any)?.shougang?.prefix;
+        return typeof prefix === "string" && prefix.trim() ? prefix.trim() : "SGGF";
+    }, [bsConfig]);
+
+    useEffect(() => {
+        const handlePortalMessage = (event: MessageEvent) => {
+            const type = event.data?.type;
+            if (type === "shougang-portal:open-my-upload" || type === "shougang-portal:open-my-uploads") {
+                setUploadedFilesOpen(true);
+            }
+        };
+        window.addEventListener("message", handlePortalMessage);
+        return () => window.removeEventListener("message", handlePortalMessage);
+    }, []);
+
     const {
         uploadInputRef,
         uploadFolderInputRef,
@@ -1514,7 +1530,6 @@ export default function PortalKnowledgeWorkbench() {
                                                             canCreateFolder={canCreateFolderInPortal}
                                                             statusFilter={statusFilter}
                                                             onOpenUploadDialog={handleOpenUploadDialog}
-                                                            onOpenUploadedFiles={() => setUploadedFilesOpen(true)}
                                                             onShowUnavailable={showUnavailable}
                                                             onCreateFolder={() => fileUpload.handleCreateFolder()}
                                                             onToggleStatusFilter={handleToggleStatusFilter}
@@ -1693,6 +1708,8 @@ export default function PortalKnowledgeWorkbench() {
                 onOpenChange={setUploadedFilesOpen}
                 onRecordsChanged={() => reloadFiles()}
                 showToast={showToast}
+                fileCategoryOptions={fileCategoryOptions}
+                encodingPrefix={fileEncodingPrefix}
             />
             <EditEncodingModal
                 file={editingEncodingFile}

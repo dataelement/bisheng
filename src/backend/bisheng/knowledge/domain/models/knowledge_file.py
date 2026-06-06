@@ -612,6 +612,20 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return rows, int(total)
 
     @classmethod
+    async def acount_by_file_encoding(cls, file_encoding: str, exclude_id: Optional[int] = None) -> int:
+        cleaned = (file_encoding or '').strip()
+        if not cleaned:
+            return 0
+        statement = select(func.count()).where(
+            KnowledgeFile.file_type == FileType.FILE.value,
+            KnowledgeFile.file_encoding == cleaned,
+        )
+        if exclude_id is not None:
+            statement = statement.where(KnowledgeFile.id != exclude_id)
+        async with get_async_db_session() as session:
+            return int(await session.scalar(statement) or 0)
+
+    @classmethod
     async def acount_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
                                      file_ids: List[int] = None, extra_file_ids: List[int] = None,
                                      file_level_path: str = None) -> int:

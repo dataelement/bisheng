@@ -31,6 +31,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFileExtensionError,
     SpaceFileNameDuplicateError,
     SpaceFileDuplicateError,
+    SpaceFileEncodingDuplicateError,
     SpaceSubscribePrivateError,
     SpaceSubscribeLimitError,
     SpacePermissionDeniedError,
@@ -6158,6 +6159,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cleaned = encoding.strip()
         if not cleaned:
             raise ValueError("encoding cannot be empty after strip")
+        if await KnowledgeFileDao.acount_by_file_encoding(cleaned, exclude_id=file_id) > 0:
+            raise SpaceFileEncodingDuplicateError()
 
         file_record.file_encoding = cleaned
         file_record.updater_id = self.login_user.user_id

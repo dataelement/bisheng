@@ -11,11 +11,26 @@ import {
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
-import { EditEncodingModal } from "../../SpaceDetail/EditEncodingModal";
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
+import type { PortalFileCategoryOption } from "../types";
+import { BUSINESS_DOMAIN_OPTIONS } from "../uploadMetadata";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
 const PAGE_SIZE = 20;
+const DEFAULT_ENCODING_PREFIX = "SGGF";
+const DEFAULT_ENCODING_SERIAL = "00000000000001";
+
+type EncodingDraft = {
+    fileCategoryCode?: string;
+    businessDomainCode?: string;
+};
+
+type ParsedUploadRecordEncoding = {
+    prefix: string;
+    fileCategoryCode: string;
+    businessDomainCode: string;
+    serial: string;
+};
 
 function uploadStatusLabel(status?: FileStatus): string {
     switch (status) {
@@ -78,6 +93,55 @@ function uploadRecordSpaceName(record: UploadedFileRecord): string {
 
 function uploadRecordTagText(record: UploadedFileRecord): string {
     return record.tags.length ? record.tags.map((tag) => tag.name).join("、") : "-";
+}
+
+function normalizeEncodingCode(value?: string | null): string {
+    return String(value ?? "").trim().toUpperCase();
+}
+
+function parseUploadRecordEncoding(
+    encoding?: string | null,
+    fallbackPrefix = DEFAULT_ENCODING_PREFIX,
+): ParsedUploadRecordEncoding {
+    const cleaned = String(encoding ?? "").trim();
+    const parts = cleaned.split("-").map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 4) {
+        return {
+            prefix: parts[0] || fallbackPrefix,
+            fileCategoryCode: normalizeEncodingCode(parts[1]),
+            businessDomainCode: normalizeEncodingCode(parts[2]),
+            serial: parts.slice(3).join("-") || DEFAULT_ENCODING_SERIAL,
+        };
+    }
+    const numericSerial = cleaned.replace(/\D/g, "");
+    return {
+        prefix: fallbackPrefix,
+        fileCategoryCode: "",
+        businessDomainCode: "",
+        serial: numericSerial || DEFAULT_ENCODING_SERIAL,
+    };
+}
+
+function composeUploadRecordEncoding(
+    record: UploadedFileRecord,
+    fileCategoryCode: string,
+    businessDomainCode: string,
+    fallbackPrefix: string,
+) {
+    const parsed = parseUploadRecordEncoding(record.fileEncoding, fallbackPrefix);
+    return `${parsed.prefix || fallbackPrefix}-${fileCategoryCode}-${businessDomainCode}-${parsed.serial || DEFAULT_ENCODING_SERIAL}`;
+}
+
+function uploadRecordCategoryLabel(code: string, options: PortalFileCategoryOption[]): string {
+    if (!code) return "未识别";
+    const option = options.find((item) => item.code === code);
+    return option ? `${code} / ${option.label}` : `${code} / 未配置类型`;
+}
+
+function uploadRecordBusinessDomainLabel(code: string): string {
+    if (!code) return "未识别";
+    const option = BUSINESS_DOMAIN_OPTIONS.find((item) => item.code === code);
+    return option ? `${code} / ${option.name}` : `${code} / 未配置业务域`;
 }
 
 type FolderTreeNode = {
@@ -173,6 +237,8 @@ interface PortalUploadedFilesDrawerProps {
     onOpenChange: (open: boolean) => void;
     onRecordsChanged?: () => void | Promise<void>;
     showToast: (toast: { message: string; severity: NotificationSeverity }) => void;
+    fileCategoryOptions: PortalFileCategoryOption[];
+    encodingPrefix?: string;
 }
 
 export function PortalUploadedFilesDrawer({
@@ -180,6 +246,8 @@ export function PortalUploadedFilesDrawer({
     onOpenChange,
     onRecordsChanged,
     showToast,
+    fileCategoryOptions,
+    encodingPrefix = DEFAULT_ENCODING_PREFIX,
 }: PortalUploadedFilesDrawerProps) {
     const [records, setRecords] = useState<UploadedFileRecord[]>([]);
     const [total, setTotal] = useState(0);
@@ -191,8 +259,9 @@ export function PortalUploadedFilesDrawer({
     const [targetFolderName, setTargetFolderName] = useState("根目录");
     const [foldersLoading, setFoldersLoading] = useState(false);
     const [savingFileId, setSavingFileId] = useState<string | null>(null);
-    const [editingEncodingRecord, setEditingEncodingRecord] = useState<UploadedFileRecord | null>(null);
+    const [savingEncodingFileId, setSavingEncodingFileId] = useState<string | null>(null);
     const [editingTagsRecord, setEditingTagsRecord] = useState<UploadedFileRecord | null>(null);
+    const [encodingDrafts, setEncodingDrafts] = useState<Record<string, EncodingDraft>>({});
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
     const loadRecords = useCallback(async (pageToLoad: number) => {
@@ -217,8 +286,8 @@ export function PortalUploadedFilesDrawer({
             setPage(1);
             setEditingFileId(null);
             setFolderTreeNodes([]);
-            setEditingEncodingRecord(null);
             setEditingTagsRecord(null);
+            setEncodingDrafts({});
             return;
         }
         void loadRecords(page);
@@ -230,7 +299,6 @@ export function PortalUploadedFilesDrawer({
     );
 
     const handleStartEdit = useCallback(async (record: UploadedFileRecord) => {
-        setEditingEncodingRecord(null);
         setEditingTagsRecord(null);
         setEditingFileId(record.id);
         setTargetFolderId(record.parentId ?? null);
@@ -316,30 +384,59 @@ export function PortalUploadedFilesDrawer({
         }
     }, [editingRecord, loadRecords, onRecordsChanged, page, showToast, targetFolderId]);
 
-    const handleStartEncodingEdit = useCallback((record: UploadedFileRecord) => {
+    const handleEncodingPartChange = useCallback(async (
+        record: UploadedFileRecord,
+        nextDraft: EncodingDraft,
+    ) => {
+        const parsed = parseUploadRecordEncoding(record.fileEncoding, encodingPrefix);
+        const currentDraft = encodingDrafts[record.id] ?? {};
+        const fileCategoryCode = normalizeEncodingCode(
+            nextDraft.fileCategoryCode ?? currentDraft.fileCategoryCode ?? parsed.fileCategoryCode,
+        );
+        const businessDomainCode = normalizeEncodingCode(
+            nextDraft.businessDomainCode ?? currentDraft.businessDomainCode ?? parsed.businessDomainCode,
+        );
+        setEncodingDrafts((prev) => ({
+            ...prev,
+            [record.id]: {
+                fileCategoryCode,
+                businessDomainCode,
+            },
+        }));
+        if (!fileCategoryCode || !businessDomainCode) return;
+
+        const newEncoding = composeUploadRecordEncoding(
+            record,
+            fileCategoryCode,
+            businessDomainCode,
+            encodingPrefix,
+        );
+        if (newEncoding === record.fileEncoding?.trim()) return;
+
         setEditingFileId(null);
         setFolderTreeNodes([]);
         setEditingTagsRecord(null);
-        setEditingEncodingRecord(record);
-    }, []);
-
-    const handleSubmitEncoding = useCallback(async (newEncoding: string) => {
-        if (!editingEncodingRecord) return;
+        setSavingEncodingFileId(record.id);
         try {
-            await updateFileEncoding(editingEncodingRecord.spaceId, editingEncodingRecord.id, newEncoding);
+            await updateFileEncoding(record.spaceId, record.id, newEncoding);
             await loadRecords(page);
             await onRecordsChanged?.();
+            setEncodingDrafts((prev) => {
+                const { [record.id]: _, ...rest } = prev;
+                return rest;
+            });
             showToast({ message: "编码已更新", severity: NotificationSeverity.SUCCESS });
         } catch (error) {
-            showToast({ message: "编码更新失败", severity: NotificationSeverity.ERROR });
-            throw error;
+            const message = error instanceof Error && error.message ? error.message : "编码更新失败";
+            showToast({ message, severity: NotificationSeverity.ERROR });
+        } finally {
+            setSavingEncodingFileId(null);
         }
-    }, [editingEncodingRecord, loadRecords, onRecordsChanged, page, showToast]);
+    }, [encodingDrafts, encodingPrefix, loadRecords, onRecordsChanged, page, showToast]);
 
     const handleStartTagsEdit = useCallback((record: UploadedFileRecord) => {
         setEditingFileId(null);
         setFolderTreeNodes([]);
-        setEditingEncodingRecord(null);
         setEditingTagsRecord(record);
     }, []);
 
@@ -387,6 +484,8 @@ export function PortalUploadedFilesDrawer({
                             <span>知识空间</span>
                             <span>状态</span>
                             <span>上传目录</span>
+                            <span>文件类型</span>
+                            <span>业务域类型</span>
                             <span>文件编码</span>
                             <span>标签</span>
                         </div>
@@ -394,6 +493,11 @@ export function PortalUploadedFilesDrawer({
                             <div className={s.uploadRecordsEmpty}>正在加载上传记录...</div>
                         ) : records.length ? records.map((record) => {
                             const encodingText = record.fileEncoding?.trim() || "-";
+                            const parsedEncoding = parseUploadRecordEncoding(record.fileEncoding, encodingPrefix);
+                            const draft = encodingDrafts[record.id] ?? {};
+                            const selectedFileCategoryCode = normalizeEncodingCode(draft.fileCategoryCode ?? parsedEncoding.fileCategoryCode);
+                            const selectedBusinessDomainCode = normalizeEncodingCode(draft.businessDomainCode ?? parsedEncoding.businessDomainCode);
+                            const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
                             const tagText = uploadRecordTagText(record);
                             return (
                                 <div key={record.id} className={s.uploadRecordsRow}>
@@ -412,15 +516,49 @@ export function PortalUploadedFilesDrawer({
                                         </button>
                                     </span>
                                     <span>
-                                        <button
-                                            type="button"
-                                            className={s.uploadRecordInlineEditButton}
-                                            title={encodingText}
-                                            aria-label={`修改${record.name}文件编码 当前编码：${encodingText}`}
-                                            onClick={() => handleStartEncodingEdit(record)}
+                                        <select
+                                            className={s.uploadRecordSelect}
+                                            aria-label={`修改${record.name}文件类型 当前类型：${selectedFileCategoryCode || "未识别"}`}
+                                            value={selectedFileCategoryCode}
+                                            disabled={savingEncodingFileId === record.id}
+                                            onChange={(event) => void handleEncodingPartChange(record, { fileCategoryCode: event.currentTarget.value })}
                                         >
-                                            {encodingText}
-                                        </button>
+                                            <option value="">未识别</option>
+                                            {selectedFileCategoryCode && !hasCurrentCategoryOption ? (
+                                                <option value={selectedFileCategoryCode}>
+                                                    {uploadRecordCategoryLabel(selectedFileCategoryCode, fileCategoryOptions)}
+                                                </option>
+                                            ) : null}
+                                            {fileCategoryOptions.map((option) => (
+                                                <option key={option.code} value={option.code}>
+                                                    {option.code} / {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </span>
+                                    <span>
+                                        <select
+                                            className={s.uploadRecordSelect}
+                                            aria-label={`修改${record.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
+                                            value={selectedBusinessDomainCode}
+                                            disabled={savingEncodingFileId === record.id}
+                                            onChange={(event) => void handleEncodingPartChange(record, { businessDomainCode: event.currentTarget.value })}
+                                        >
+                                            <option value="">未识别</option>
+                                            {selectedBusinessDomainCode && !BUSINESS_DOMAIN_OPTIONS.some((option) => option.code === selectedBusinessDomainCode) ? (
+                                                <option value={selectedBusinessDomainCode}>
+                                                    {uploadRecordBusinessDomainLabel(selectedBusinessDomainCode)}
+                                                </option>
+                                            ) : null}
+                                            {BUSINESS_DOMAIN_OPTIONS.map((option) => (
+                                                <option key={option.code} value={option.code}>
+                                                    {option.code} / {option.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </span>
+                                    <span className={s.uploadRecordReadonlyText} title={encodingText}>
+                                        {encodingText}
                                     </span>
                                     <span>
                                         <button
@@ -503,12 +641,6 @@ export function PortalUploadedFilesDrawer({
                             关闭
                         </Button>
                     </DialogFooter>
-                    <EditEncodingModal
-                        file={editingEncodingRecord}
-                        open={Boolean(editingEncodingRecord)}
-                        onClose={() => setEditingEncodingRecord(null)}
-                        onSubmit={handleSubmitEncoding}
-                    />
                     {editingTagsRecord ? (
                         <EditTagsModal
                             isOpen={Boolean(editingTagsRecord)}

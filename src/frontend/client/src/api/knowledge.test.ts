@@ -14,6 +14,7 @@ import {
   renameFolderApi,
   recommendUploadFoldersApi,
   retryDuplicateFilesApi,
+  updateFileEncoding,
 } from "./knowledge";
 
 jest.mock("~/api/request", () => ({
@@ -353,6 +354,48 @@ describe("moveUploadedFileFolderApi", () => {
     );
     expect(result.id).toBe("501");
     expect(result.path).toBe("/37");
+  });
+});
+
+describe("updateFileEncoding", () => {
+  beforeEach(() => {
+    mockPut.mockReset();
+  });
+
+  it("puts the new encoding and maps updated file data", async () => {
+    mockPut.mockResolvedValue({
+      status_code: 200,
+      data: {
+        id: 501,
+        knowledge_id: 10,
+        file_name: "能源管理标准.pdf",
+        file_type: 1,
+        file_encoding: "SGGF-RPT-PP-20260600000001",
+      },
+    });
+
+    const result = await updateFileEncoding("10", "501", "SGGF-RPT-PP-20260600000001");
+
+    expect(mockPut).toHaveBeenCalledWith(
+      "/api/v1/knowledge/space/10/files/501/encoding",
+      { encoding: "SGGF-RPT-PP-20260600000001" },
+    );
+    expect(result).toMatchObject({
+      id: "501",
+      spaceId: "10",
+      fileEncoding: "SGGF-RPT-PP-20260600000001",
+    });
+  });
+
+  it("rejects backend duplicate encoding errors", async () => {
+    mockPut.mockResolvedValue({
+      status_code: 18025,
+      status_message: "文件编码已存在",
+      data: null,
+    });
+
+    await expect(updateFileEncoding("10", "501", "SGGF-RPT-PP-20260600000001"))
+      .rejects.toThrow("文件编码已存在");
   });
 });
 

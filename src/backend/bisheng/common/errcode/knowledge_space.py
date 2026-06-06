@@ -62,6 +62,11 @@ class SpaceFileSizeLimitError(BaseErrorCode):
     Msg: str = 'File size limit exceeded'
 
 
+class SpaceFileEncodingDuplicateError(BaseErrorCode):
+    Code: int = 18025
+    Msg: str = '文件编码已存在'
+
+
 # ── Subscribe ────────────────────────────────────────────────────────────────
 
 class SpaceSubscribePrivateError(BaseErrorCode):

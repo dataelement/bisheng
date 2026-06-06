@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { readFileSync } from "fs";
 import path from "path";
 import { RecoilRoot } from "recoil";
+import { NotificationSeverity } from "~/common";
 import PortalKnowledgeWorkbench from "./PortalKnowledgeWorkbench";
 import {
     getShougangFilePublishSimilarCandidatesApi,
@@ -439,6 +440,14 @@ function renderWorkbench() {
             </RecoilRoot>
         </QueryClientProvider>,
     );
+}
+
+function openMyUploadsFromPortalShell() {
+    act(() => {
+        window.dispatchEvent(new MessageEvent("message", {
+            data: { type: "shougang-portal:open-my-upload" },
+        }));
+    });
 }
 
 describe("PortalKnowledgeWorkbench", () => {
@@ -1172,7 +1181,6 @@ describe("PortalKnowledgeWorkbench", () => {
             within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label")).filter(Boolean),
         ).toEqual([
             "上传",
-            "上传记录",
             "网页链接",
             "在线创建文档",
             "新建文件夹",
@@ -1479,6 +1487,24 @@ describe("PortalKnowledgeWorkbench", () => {
             }));
         });
         expect(await screen.findByTestId("notifications-dialog")).toBeInTheDocument();
+    });
+
+    test("opens my uploads from portal shell user menu message", async () => {
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [], total: 0 } as any);
+
+        renderWorkbench();
+
+        openMyUploadsFromPortalShell();
+
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+        expect(within(drawer).getByText("上传记录")).toBeInTheDocument();
+        expect(listMyUploadedFilesApi).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 20 }));
     });
 
     test("uses Lanhu folder icons and keeps existing Bisheng file type icons in the portal file tree", async () => {
@@ -2369,7 +2395,6 @@ describe("PortalKnowledgeWorkbench", () => {
             within(actions).getAllByRole("button").map((button) => button.getAttribute("aria-label")).filter(Boolean),
         ).toEqual([
             "上传",
-            "上传记录",
             "网页链接",
             "在线创建文档",
             "新建文件夹",
@@ -2509,6 +2534,8 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
         expect(listMyUploadedFilesApi).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 20 }));
+        expect(within(drawer).getByText("文件类型")).toBeInTheDocument();
+        expect(within(drawer).getByText("业务域类型")).toBeInTheDocument();
         expect(within(drawer).getByText("文件编码")).toBeInTheDocument();
         expect(within(drawer).getByText("标签")).toBeInTheDocument();
         expect(within(drawer).queryByText("AI推荐文件类型")).not.toBeInTheDocument();
@@ -2518,6 +2545,8 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(drawer).getByText("解析中")).toHaveClass("uploadRecordStatusInfo");
         expect(within(drawer).getByText("根目录")).toBeInTheDocument();
         expect(within(drawer).getByText("SGGF-STD-EM-20260600000001")).toBeInTheDocument();
+        expect(within(drawer).getByLabelText("修改测试文档.pdf文件类型 当前类型：STD")).toHaveDisplayValue("STD / 标准规范");
+        expect(within(drawer).getByLabelText("修改测试文档.pdf业务域类型 当前业务域：EM")).toHaveDisplayValue("EM / 能源");
         expect(within(drawer).getByText("能源")).toBeInTheDocument();
         expect(within(drawer).queryByText("个人知识库 / 设备部")).not.toBeInTheDocument();
         expect(within(drawer).queryByText("AI业务域")).not.toBeInTheDocument();
@@ -2567,7 +2596,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        fireEvent.click(await screen.findByRole("button", { name: "上传记录" }));
+        openMyUploadsFromPortalShell();
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
         fireEvent.click(within(drawer).getByRole("button", { name: "修改嵌套目录文档.pdf上传目录 当前目录：技术文档/能源管理" }));
 
@@ -2575,7 +2604,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(picker).getByText("已选择：技术文档/能源管理")).toBeInTheDocument();
     });
 
-    test("edits an uploaded record encoding from the current value", async () => {
+    test("edits uploaded record encoding by selecting file type and business domain", async () => {
         const personalSpace = makeSpace("personal-1", "设备部", {
             role: SpaceRole.ADMIN,
         });
@@ -2590,7 +2619,7 @@ describe("PortalKnowledgeWorkbench", () => {
             fileEncoding: "SGGF-STD-EM-20260600000001",
             tags: [],
         };
-        const nextEncoding = "SGGF-STD-EM-20260600000002";
+        const nextEncoding = "SGGF-RPT-PP-20260600000001";
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
@@ -2599,6 +2628,7 @@ describe("PortalKnowledgeWorkbench", () => {
         } as any);
         jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(listMyUploadedFilesApi).mockResolvedValueOnce({ data: [uploadedRecord], total: 1 } as any)
+            .mockResolvedValueOnce({ data: [{ ...uploadedRecord, fileEncoding: "SGGF-RPT-EM-20260600000001" }], total: 1 } as any)
             .mockResolvedValue({ data: [{ ...uploadedRecord, fileEncoding: nextEncoding }], total: 1 } as any);
         jest.mocked(updateFileEncoding).mockResolvedValue({
             ...uploadedRecord,
@@ -2607,22 +2637,124 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        fireEvent.click(await screen.findByRole("button", { name: "上传记录" }));
+        openMyUploadsFromPortalShell();
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
-        fireEvent.click(within(drawer).getByRole("button", {
+        expect(within(drawer).queryByRole("button", {
             name: "修改编码文档.pdf文件编码 当前编码：SGGF-STD-EM-20260600000001",
-        }));
+        })).not.toBeInTheDocument();
+        expect(screen.queryByDisplayValue("SGGF-STD-EM-20260600000001")).not.toBeInTheDocument();
 
-        fireEvent.change(screen.getByDisplayValue("SGGF-STD-EM-20260600000001"), {
-            target: { value: nextEncoding },
+        fireEvent.change(within(drawer).getByLabelText("修改编码文档.pdf文件类型 当前类型：STD"), {
+            target: { value: "RPT" },
         });
-        fireEvent.click(screen.getByRole("button", { name: /保存|Save|com_knowledge\.save/ }));
+
+        await waitFor(() => {
+            expect(updateFileEncoding).toHaveBeenCalledWith("personal-1", "501", "SGGF-RPT-EM-20260600000001");
+        });
+
+        fireEvent.change(within(drawer).getByLabelText("修改编码文档.pdf业务域类型 当前业务域：EM"), {
+            target: { value: "PP" },
+        });
 
         await waitFor(() => {
             expect(updateFileEncoding).toHaveBeenCalledWith("personal-1", "501", nextEncoding);
         });
         await waitFor(() => {
             expect(within(drawer).getByText(nextEncoding)).toBeInTheDocument();
+        });
+    });
+
+    test("normalizes a non-standard uploaded record encoding from selected type and domain", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const uploadedRecord = {
+            ...makeFile("501", "历史编码文档.pdf", {
+                type: FileType.PDF,
+                status: FileStatus.SUCCESS,
+            }),
+            spaceName: "设备部",
+            spaceLevel: SpaceLevel.PERSONAL,
+            folderPathName: "根目录",
+            fileEncoding: "202512160001",
+            tags: [],
+        };
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(listMyUploadedFilesApi).mockResolvedValueOnce({ data: [uploadedRecord], total: 1 } as any)
+            .mockResolvedValue({ data: [{ ...uploadedRecord, fileEncoding: "SGGF-RPT-PP-202512160001" }], total: 1 } as any);
+        jest.mocked(updateFileEncoding).mockResolvedValue({
+            ...uploadedRecord,
+            fileEncoding: "SGGF-RPT-PP-202512160001",
+        } as any);
+
+        renderWorkbench();
+
+        openMyUploadsFromPortalShell();
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+        expect(within(drawer).getByLabelText("修改历史编码文档.pdf文件类型 当前类型：未识别")).toHaveDisplayValue("未识别");
+        expect(within(drawer).getByLabelText("修改历史编码文档.pdf业务域类型 当前业务域：未识别")).toHaveDisplayValue("未识别");
+
+        fireEvent.change(within(drawer).getByLabelText("修改历史编码文档.pdf文件类型 当前类型：未识别"), {
+            target: { value: "RPT" },
+        });
+
+        await waitFor(() => {
+            expect(updateFileEncoding).not.toHaveBeenCalled();
+        });
+
+        fireEvent.change(within(drawer).getByLabelText("修改历史编码文档.pdf业务域类型 当前业务域：未识别"), {
+            target: { value: "PP" },
+        });
+
+        await waitFor(() => {
+            expect(updateFileEncoding).toHaveBeenCalledWith("personal-1", "501", "SGGF-RPT-PP-202512160001");
+        });
+    });
+
+    test("shows duplicate encoding error when updating uploaded record classification", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const uploadedRecord = {
+            ...makeFile("501", "重复编码文档.pdf", {
+                type: FileType.PDF,
+                status: FileStatus.SUCCESS,
+            }),
+            spaceName: "设备部",
+            spaceLevel: SpaceLevel.PERSONAL,
+            folderPathName: "根目录",
+            fileEncoding: "SGGF-STD-EM-20260600000001",
+            tags: [],
+        };
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [uploadedRecord], total: 1 } as any);
+        jest.mocked(updateFileEncoding).mockRejectedValue(new Error("文件编码已存在"));
+
+        renderWorkbench();
+
+        openMyUploadsFromPortalShell();
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+        fireEvent.change(within(drawer).getByLabelText("修改重复编码文档.pdf文件类型 当前类型：STD"), {
+            target: { value: "RPT" },
+        });
+
+        await waitFor(() => {
+            expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
+                message: "文件编码已存在",
+                severity: NotificationSeverity.ERROR,
+            }));
         });
     });
 
@@ -2652,7 +2784,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        fireEvent.click(await screen.findByRole("button", { name: "上传记录" }));
+        openMyUploadsFromPortalShell();
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
         fireEvent.click(within(drawer).getByRole("button", {
             name: "修改标签文档.pdf标签 当前标签：能源、安全",
@@ -2700,7 +2832,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        fireEvent.click(await screen.findByRole("button", { name: "上传记录" }));
+        openMyUploadsFromPortalShell();
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
         expect(within(drawer).getByText("第一页文档.pdf")).toBeInTheDocument();
 
