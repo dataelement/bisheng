@@ -46,6 +46,11 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendFileReq,
     SpaceSubscriptionStatusEnum,
 )
+from bisheng.knowledge.domain.services.knowledge_space_service import (
+    PORTAL_SEARCH_ES_RECALL_LIMIT,
+    PORTAL_SEARCH_OVERSAMPLE_FACTOR,
+    PORTAL_SEARCH_VECTOR_RECALL_LIMIT,
+)
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
 from bisheng.database.models.user_group import UserGroupDao
 
@@ -1228,6 +1233,504 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
     assert mock_batch_files.await_args.kwargs['knowledge_ids'] == [12, 18]
     assert result['total'] == 2
     assert [item['space_id'] for item in result['data']] == [12, 18]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_file_search_uses_semantic_chunk_recall_and_file_permissions(service):
+    space = _make_space(space_id=12, user_id=7)
+    space.name = '热轧知识库'
+    files = [
+        _make_file(file_id=1580, knowledge_id=12, file_name='热轧精轧机振动纹治理.pdf'),
+        _make_file(file_id=1801, knowledge_id=12, file_name='热轧板面缺陷处理.pdf'),
+        _make_file(file_id=1902, knowledge_id=12, file_name='热轧设备点检规程.pdf'),
+    ]
+    file_map = {int(file.id): file for file in files}
+
+    es_chunks = [
+        SimpleNamespace(
+            file_id=1580,
+            knowledge_id=12,
+            content='精轧机振动纹治理案例',
+            source='es',
+            retriever='es',
+            rank=1,
+            score=12.0,
+            metadata={'document_id': 1580},
+        ),
+        SimpleNamespace(
+            file_id=1801,
+            knowledge_id=12,
+            content='板面缺陷与振动纹关联分析',
+            source='es',
+            retriever='es',
+            rank=2,
+            score=9.0,
+            metadata={'document_id': 1801},
+        ),
+        SimpleNamespace(
+            file_id=1580,
+            knowledge_id=12,
+            content='同一文件的另一个 chunk 不能重复返回',
+            source='es',
+            retriever='es',
+            rank=3,
+            score=8.0,
+            metadata={'document_id': 1580},
+        ),
+    ]
+    vector_chunks = [
+        SimpleNamespace(
+            file_id=1801,
+            knowledge_id=12,
+            content='语义相似命中板面缺陷处理',
+            source='vector',
+            retriever='vector',
+            rank=1,
+            score=0.93,
+            metadata={'document_id': 1801},
+        ),
+        SimpleNamespace(
+            file_id=1902,
+            knowledge_id=12,
+            content='用户无权限的设备点检文件',
+            source='vector',
+            retriever='vector',
+            rank=2,
+            score=0.88,
+            metadata={'document_id': 1902},
+        ),
+    ]
+
+    async def fake_get_files(**kwargs):
+        return [file_map[file_id] for file_id in kwargs['extra_file_ids'] if file_id in file_map]
+
+    async def fake_enrich(input_files):
+        return [{**file.model_dump(), 'tags': []} for file in input_files]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch.object(
+        service,
+        '_get_shougang_portal_keyword_file_ids',
+        new_callable=AsyncMock,
+        side_effect=AssertionError('semantic search should not use legacy keyword file-id aggregation'),
+    ), patch.object(
+        service,
+        '_search_shougang_portal_es_chunks',
+        new_callable=AsyncMock,
+        return_value=es_chunks,
+        create=True,
+    ) as mock_es_search, patch.object(
+        service,
+        '_search_shougang_portal_vector_chunks',
+        new_callable=AsyncMock,
+        return_value=vector_chunks,
+        create=True,
+    ) as mock_vector_search, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        side_effect=fake_get_files,
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: [file for file in items if int(file.id) != 1902],
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        side_effect=fake_enrich,
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                q='热轧振动纹',
+                space_ids=[12],
+                page=3,
+                page_size=20,
+                sort='relevance',
+            )
+        )
+
+    mock_es_search.assert_awaited_once()
+    assert mock_es_search.await_args.kwargs['limit'] == PORTAL_SEARCH_ES_RECALL_LIMIT * PORTAL_SEARCH_OVERSAMPLE_FACTOR
+    mock_vector_search.assert_awaited_once()
+    assert mock_vector_search.await_args.kwargs['limit'] == (
+        PORTAL_SEARCH_VECTOR_RECALL_LIMIT * PORTAL_SEARCH_OVERSAMPLE_FACTOR
+    )
+    assert result['page'] == 1
+    assert result['page_size'] == 50
+    assert result['total'] == 2
+    assert [item['id'] for item in result['data']] == [1801, 1580]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_search_emits_permission_performance_log(service):
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.logger.info',
+    ) as mock_info:
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(q='热轧', space_ids=[12], sort='relevance')
+        )
+
+    assert result == {'data': [], 'total': 0, 'page': 1, 'page_size': 50}
+    perf_calls = [
+        call for call in mock_info.call_args_list
+        if call.args and '[perf][portal.search]' in str(call.args[0])
+    ]
+    assert perf_calls
+    payload = perf_calls[-1].args[1]
+    assert {
+        'space_count',
+        'candidate_count',
+        'visible_check_count',
+        'fga_read_count',
+        'cache_hit_count',
+        'singleflight_wait_count',
+        'fast_path_public_space_count',
+        'duration_ms',
+    } <= set(payload)
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_visible_search_spaces_uses_short_ttl_cache(service):
+    from bisheng.knowledge.domain.services import knowledge_space_service as service_module
+
+    cache = getattr(service_module, '_PORTAL_VISIBLE_SPACE_CACHE', None)
+    if cache is not None:
+        cache.clear()
+    private_space = _make_space(space_id=12, user_id=99, auth_type=AuthTypeEnum.PRIVATE)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[private_space],
+    ), patch.object(
+        service,
+        '_get_effective_permission_ids',
+        new_callable=AsyncMock,
+        return_value={'view_space'},
+    ) as mock_permissions:
+        first = await service._get_shougang_portal_visible_search_spaces([12], None)
+        second = await service._get_shougang_portal_visible_search_spaces([12], None)
+
+    assert [int(space.id) for space in first] == [12]
+    assert [int(space.id) for space in second] == [12]
+    assert mock_permissions.await_count == 1
+    if cache is not None:
+        cache.clear()
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_vector_search_reuses_embedding_for_spaces_with_same_model(service):
+    spaces = [
+        _make_space(space_id=12, user_id=7),
+        _make_space(space_id=18, user_id=7),
+    ]
+    for space in spaces:
+        space.model = '42'
+        space.collection_name = f'col_{space.id}'
+
+    embedding_calls = []
+    text_search_calls = []
+    vector_search_calls = []
+
+    class FakeEmbedding:
+        def embed_query(self, text):
+            embedding_calls.append(text)
+            return [0.1, 0.2, 0.3]
+
+    fake_embedding = FakeEmbedding()
+
+    class FakeVectorStore:
+        def __init__(self, collection_name, embedding):
+            self.collection_name = collection_name
+            self.embedding_func = embedding
+
+        async def asimilarity_search_with_relevance_scores(self, query, **kwargs):
+            text_search_calls.append((self.collection_name, query, kwargs))
+            self.embedding_func.embed_query(query)
+            return self._results()
+
+        async def asimilarity_search_with_score_by_vector(self, embedding, **kwargs):
+            vector_search_calls.append((self.collection_name, embedding, kwargs))
+            return self._results()
+
+        async def asimilarity_search_with_relevance_scores_by_vector(self, embedding, **kwargs):
+            vector_search_calls.append((self.collection_name, embedding, kwargs))
+            return self._results()
+
+        def _results(self):
+            if self.collection_name == 'col_12':
+                return [
+                    (
+                        SimpleNamespace(
+                            page_content='精轧机振动纹治理案例',
+                            metadata={'document_id': 1580, 'knowledge_id': 12},
+                        ),
+                        0.78,
+                    )
+                ]
+            return [
+                (
+                    SimpleNamespace(
+                        page_content='板面缺陷与振动纹关联分析',
+                        metadata={'document_id': 1801, 'knowledge_id': 18},
+                    ),
+                    0.91,
+                )
+            ]
+
+    def fake_init_vectorstore(collection_name, embeddings, **_):
+        return FakeVectorStore(collection_name, embeddings)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_knowledge_embedding',
+        new_callable=AsyncMock,
+        return_value=fake_embedding,
+    ) as mock_get_embedding, patch(
+        'bisheng.knowledge.rag.milvus_factory.MilvusFactory.init_vectorstore',
+        side_effect=fake_init_vectorstore,
+    ):
+        chunks = await service._search_shougang_portal_vector_chunks(
+            spaces=spaces,
+            keyword='热轧振动纹',
+            filter_file_ids=[1580, 1801],
+            limit=24,
+        )
+
+    assert mock_get_embedding.await_count == 1
+    assert embedding_calls == ['热轧振动纹']
+    assert text_search_calls == []
+    assert [call[0] for call in vector_search_calls] == ['col_12', 'col_18']
+    assert all(call[2]['expr'] == 'document_id in [1580, 1801]' for call in vector_search_calls)
+    assert [chunk.file_id for chunk in chunks] == [1801, 1580]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_file_search_returns_top_50_without_pagination(service):
+    space = _make_space(space_id=12, user_id=7)
+    files = [
+        _make_file(file_id=2000 + index, knowledge_id=12, file_name=f'语义检索文件{index}.pdf')
+        for index in range(60)
+    ]
+    file_map = {int(file.id): file for file in files}
+    es_chunks = [
+        SimpleNamespace(
+            file_id=int(file.id),
+            knowledge_id=12,
+            content=file.file_name,
+            source='es',
+            retriever='es',
+            rank=index + 1,
+            score=float(100 - index),
+            metadata={'document_id': int(file.id)},
+        )
+        for index, file in enumerate(files)
+    ]
+
+    async def fake_get_files(**kwargs):
+        return [file_map[file_id] for file_id in kwargs['extra_file_ids'] if file_id in file_map]
+
+    async def fake_enrich(input_files):
+        return [{**file.model_dump(), 'tags': []} for file in input_files]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch.object(
+        service,
+        '_get_shougang_portal_keyword_file_ids',
+        new_callable=AsyncMock,
+        side_effect=AssertionError('semantic search should not use legacy keyword file-id aggregation'),
+    ), patch.object(
+        service,
+        '_search_shougang_portal_es_chunks',
+        new_callable=AsyncMock,
+        return_value=es_chunks,
+        create=True,
+    ), patch.object(
+        service,
+        '_search_shougang_portal_vector_chunks',
+        new_callable=AsyncMock,
+        return_value=[],
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        side_effect=fake_get_files,
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        side_effect=fake_enrich,
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(
+                q='语义检索',
+                space_ids=[12],
+                page=2,
+                page_size=20,
+                sort='relevance',
+            )
+        )
+
+    assert result['page'] == 1
+    assert result['page_size'] == 50
+    assert result['total'] == 50
+    assert len(result['data']) == 50
+    assert result['data'][0]['id'] == 2000
+    assert result['data'][-1]['id'] == 2049
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_semantic_search_filters_candidates_in_batches(service):
+    space = _make_space(space_id=12, user_id=7)
+    files = [
+        _make_file(file_id=3000 + index, knowledge_id=12, file_name=f'候选文件{index}.pdf')
+        for index in range(120)
+    ]
+    file_map = {int(file.id): file for file in files}
+    es_chunks = [
+        SimpleNamespace(
+            file_id=int(file.id),
+            knowledge_id=12,
+            content=file.file_name,
+            source='es',
+            retriever='es',
+            rank=index + 1,
+            score=float(200 - index),
+            metadata={'document_id': int(file.id)},
+        )
+        for index, file in enumerate(files)
+    ]
+    loaded_batches = []
+
+    async def fake_get_files(**kwargs):
+        loaded_batches.append(list(kwargs['extra_file_ids']))
+        return [file_map[file_id] for file_id in kwargs['extra_file_ids'] if file_id in file_map]
+
+    async def fake_enrich(input_files):
+        return [{**file.model_dump(), 'tags': []} for file in input_files]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch.object(
+        service,
+        '_search_shougang_portal_es_chunks',
+        new_callable=AsyncMock,
+        return_value=es_chunks,
+        create=True,
+    ), patch.object(
+        service,
+        '_search_shougang_portal_vector_chunks',
+        new_callable=AsyncMock,
+        return_value=[],
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        side_effect=fake_get_files,
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        side_effect=fake_enrich,
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(q='候选', space_ids=[12], sort='relevance')
+        )
+
+    assert loaded_batches
+    assert len(loaded_batches[0]) == 50
+    assert len(loaded_batches) == 1
+    assert result['total'] == 50
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_public_space_fast_path_skips_child_permission_filter(service):
+    public_space = _make_space(
+        space_id=12,
+        user_id=7,
+        space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+    )
+    file_record = _make_file(file_id=4100, knowledge_id=12, file_name='公共空间文件.pdf')
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[public_space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=[file_record],
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=AssertionError('public space files should bypass child permission filter'),
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        return_value=[{**file_record.model_dump(), 'tags': []}],
+    ):
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(space_ids=[12], sort='updated_at')
+        )
+
+    assert result['total'] == 1
+    assert result['data'][0]['id'] == 4100
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_non_public_space_keeps_child_permission_filter(service):
+    private_space = _make_space(
+        space_id=12,
+        user_id=7,
+        auth_type=AuthTypeEnum.PRIVATE,
+        space_level=KnowledgeSpaceLevelEnum.PERSONAL,
+    )
+    file_record = _make_file(file_id=4101, knowledge_id=12, file_name='私有空间文件.pdf')
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[private_space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=[file_record],
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        return_value=[],
+    ) as mock_filter:
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(space_ids=[12], sort='updated_at')
+        )
+
+    assert result['total'] == 0
+    mock_filter.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -2807,6 +3310,18 @@ class _FakeReadTuplesFGA:
 @pytest.fixture
 def service():
     return _load_service_class()(MagicMock(), _make_login_user())
+
+
+@pytest.fixture(autouse=True)
+def clear_portal_visible_space_cache():
+    from bisheng.knowledge.domain.services import knowledge_space_service as service_module
+
+    cache = getattr(service_module, '_PORTAL_VISIBLE_SPACE_CACHE', None)
+    if cache is not None:
+        cache.clear()
+    yield
+    if cache is not None:
+        cache.clear()
 
 
 class TestGetSpaceInfo:

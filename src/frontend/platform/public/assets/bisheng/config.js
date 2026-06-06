@@ -1,8 +1,8 @@
 window.BRAND_CONFIG = {
     // 1. 系统品牌名称
     brandName: {
-        zh: "BISHENG",
-        en: "BISHENG"
+        zh: "首钢股份知库工作台",
+        en: "首钢股份知库工作台"
     },
 
     // 2. 灵思智能体
