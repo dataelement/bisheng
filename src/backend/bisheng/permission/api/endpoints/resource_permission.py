@@ -1002,6 +1002,21 @@ def _filter_department_tree_by_ids(nodes: list[dict], allowed_ids: set[int]) -> 
     return filtered
 
 
+def _collect_department_tree_ids(nodes: list[dict]) -> set[int]:
+    ids: set[int] = set()
+    stack = list(nodes)
+    while stack:
+        node = stack.pop()
+        if node.get('id') is not None:
+            ids.add(int(node['id']))
+        stack.extend(node.get('children') or [])
+    return ids
+
+
+def _is_team_knowledge_space_level(space_level) -> bool:
+    return getattr(space_level, 'value', space_level) == 'team'
+
+
 async def _resolve_child_resource_space_id_for_grant_scope(resource_type: str, resource_id: str) -> str | None:
     if resource_type not in {'folder', 'knowledge_file'} or not str(resource_id).isdigit():
         return None
@@ -1199,6 +1214,20 @@ async def _validate_knowledge_space_authorize_scope(
 
     department_items = [item for item in items if item.subject_type == 'department']
     if department_items and not await _can_view_all_grant_subject_departments(login_user):
+        if _is_team_knowledge_space_level(level):
+            tenant_id = await _resolve_grant_subject_tenant_id(
+                resource_type=resource_type,
+                resource_id=resource_id,
+                login_user=login_user,
+            )
+            if tenant_id is None:
+                return SpaceAuthorizeScopeDeniedError
+            tree = await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
+            tenant_department_ids = _collect_department_tree_ids(tree)
+            if any(int(item.subject_id) not in tenant_department_ids for item in department_items):
+                return SpaceAuthorizeScopeDeniedError
+            return None
+
         allowed_department_ids = await _knowledge_space_grant_department_ids(
             resource_id=resource_id,
             login_user=login_user,
@@ -1659,11 +1688,20 @@ async def get_grant_subject_departments(
             and 'department' not in _allowed_subject_types_for_space_level(scope_space_level)
         ):
             return resp_200([])
+    resource_space_level = None
     if resource_type == 'knowledge_space':
-        level = await _get_knowledge_space_level(resource_id)
-        if level is not None and 'department' not in _allowed_subject_types_for_space_level(level):
+        resource_space_level = await _get_knowledge_space_level(resource_id)
+        if (
+            resource_space_level is not None
+            and 'department' not in _allowed_subject_types_for_space_level(resource_space_level)
+        ):
             return resp_200([])
     tree = await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
+    if (
+        _is_team_knowledge_space_level(scope_space_level)
+        or _is_team_knowledge_space_level(resource_space_level)
+    ):
+        return resp_200(tree)
     if grant_scope_space_id is not None and not await _can_view_all_grant_subject_departments(login_user):
         allowed_ids = await _knowledge_space_grant_department_ids(
             resource_id=grant_scope_space_id,
@@ -1752,6 +1790,8 @@ async def get_knowledge_space_grant_subject_departments(
         return resp_200([])
 
     tree = await _list_knowledge_space_grant_departments(tenant_id=tenant_id)
+    if _is_team_knowledge_space_level(level):
+        return resp_200(tree)
     if await _can_view_all_grant_subject_departments(login_user):
         return resp_200(tree)
 

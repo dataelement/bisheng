@@ -343,6 +343,47 @@ class FineGrainedPermissionService:
         return [(object_type, str(object_id))]
 
     @staticmethod
+    async def _public_knowledge_space_viewer_permission_ids(
+        lineage: list[tuple[str, str | int]],
+    ) -> set[str]:
+        space_id = next(
+            (
+                lineage_id
+                for lineage_type, lineage_id in lineage
+                if lineage_type == 'knowledge_space'
+            ),
+            None,
+        )
+        if space_id is None:
+            return set()
+
+        try:
+            from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+            from bisheng.knowledge.domain.models.knowledge_space_scope import (
+                KnowledgeSpaceLevelEnum,
+                KnowledgeSpaceScopeDao,
+            )
+
+            space = await KnowledgeDao.aquery_by_id(int(space_id))
+            if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+                return set()
+
+            space_level = getattr(space, 'space_level', None)
+            if space_level is None:
+                scope = await KnowledgeSpaceScopeDao.aget_by_space_id(int(space_id))
+                space_level = getattr(scope, 'level', None) if scope else None
+
+            if getattr(space_level, 'value', space_level) == KnowledgeSpaceLevelEnum.PUBLIC.value:
+                return default_knowledge_space_permissions('viewer')
+        except Exception as exc:
+            logger.debug(
+                'Could not resolve public knowledge-space permissions for %s: %s',
+                space_id,
+                exc,
+            )
+        return set()
+
+    @staticmethod
     async def _tuple_resource_types(resource_type: str, resource_id: str) -> list[str]:
         resource_types = [resource_type]
         if resource_type == 'knowledge_library':
@@ -465,6 +506,9 @@ class FineGrainedPermissionService:
         implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or '')
         effective_permissions.update(
             cls.default_permission_ids_for_relation(object_type, implicit_relation or ''),
+        )
+        effective_permissions.update(
+            await cls._public_knowledge_space_viewer_permission_ids(lineage),
         )
         if effective_permissions or saw_bound_model_tuple or saw_legacy_subscription_viewer_tuple:
             if return_match_metadata:

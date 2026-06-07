@@ -302,6 +302,8 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.getByRole("radio", { name: "个人知识库" })).toHaveAttribute("aria-checked", "true");
         expect(screen.queryByText("权限设置")).not.toBeInTheDocument();
         expect(screen.queryByText("发布到广场")).not.toBeInTheDocument();
+        expect(screen.queryByText("申请理由")).not.toBeInTheDocument();
+        expect(screen.queryByText("申请意见")).not.toBeInTheDocument();
 
         fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
             target: { value: "个人资料库" },
@@ -314,6 +316,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
             publishToSquare: "no",
             spaceLevel: SpaceLevel.PERSONAL,
         }));
+        expect(onConfirm.mock.calls[0][0]).not.toHaveProperty("reason");
     });
 
     test("创建模式隐藏权限和发布选项时始终保留自动标签生成", async () => {
@@ -462,6 +465,8 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
         expect(screen.getByRole("radio", { name: "团队知识库" })).toHaveAttribute("aria-checked", "true");
+        expect(screen.getByText("申请理由")).toBeInTheDocument();
+        expect(screen.queryByText("申请意见")).not.toBeInTheDocument();
         expect(screen.queryByTestId("user-group-selector")).not.toBeInTheDocument();
         expect(screen.queryByText("业务域类型")).not.toBeInTheDocument();
         expect(screen.queryByRole("checkbox", { name: "生产 PP" })).not.toBeInTheDocument();
@@ -469,6 +474,9 @@ describe("CreateKnowledgeSpaceDrawer", () => {
 
         fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
             target: { value: "团队资料库" },
+        });
+        fireEvent.change(screen.getByPlaceholderText("请输入申请理由"), {
+            target: { value: "申请团队协作知识库" },
         });
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
@@ -478,6 +486,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
             name: "团队资料库",
             spaceLevel: SpaceLevel.TEAM,
             userGroupId: undefined,
+            reason: "申请团队协作知识库",
         }));
         expect(payload).not.toHaveProperty("businessDomainCodes");
     });

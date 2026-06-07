@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Download, FileText, ShieldCheck, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Download, FileText, ShieldCheck, SquarePen } from "lucide-react";
 // import { Share2 } from "lucide-react";
 import type { KnowledgeFile } from "~/api/knowledge";
 import FilePreview from "../../FilePreview";
@@ -67,24 +67,27 @@ export function DocumentPreview({
                     <div className={s.divider} />
                     <button
                         type="button"
-                        className={s.summaryBar}
-                        aria-label="查看文档摘要"
+                        className={`${s.summaryBar} ${summaryExpanded ? s.summaryBarExpanded : ""}`}
+                        aria-label={summaryExpanded ? "收起文档摘要" : "查看文档摘要"}
                         aria-expanded={summaryExpanded}
-                        aria-controls="portal-summary-detail"
+                        aria-controls="portal-summary-content"
                         onClick={onToggleSummary}
                     >
-                        <div className={s.summaryTitle}>
-                            <FileText size={16} />
-                            文档摘要
+                        <div className={s.summaryHeader} data-testid="portal-summary-header">
+                            <span className={s.summaryIcon}>
+                                <FileText size={16} />
+                            </span>
+                            <span className={s.summaryLabel}>
+                                文档摘要
+                            </span>
+                            <span className={s.summaryToggleIcon}>
+                                {summaryExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </span>
                         </div>
-                        <div className={s.summaryText}>{selectedFile.summary || "暂无摘要"}</div>
-                        <ChevronDown size={14} />
-                    </button>
-                    {summaryExpanded ? (
-                        <div id="portal-summary-detail" data-testid="portal-summary-detail" className={s.summaryDetail}>
+                        <div id="portal-summary-content" data-testid="portal-summary-content" className={s.summaryText}>
                             {selectedFile.summary || "暂无摘要"}
                         </div>
-                    ) : null}
+                    </button>
                     <div className={s.previewHost}>
                         {preview.loading ? (
                             <div className={s.stateBox}>正在加载预览...</div>

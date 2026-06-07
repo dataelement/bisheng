@@ -160,7 +160,7 @@ export function triggerUrlDownload(url: string, filename?: string) {
     document.body.removeChild(a);
 }
 
-/** Format ISO date string for display — shows time if today, otherwise date */
+/** 格式化知识空间文件更新时间，统一展示完整日期时间。 */
 export function formatTime(dateString: string): string {
     const date = new Date(dateString);
     const yyyy = date.getFullYear();
@@ -169,28 +169,12 @@ export function formatTime(dateString: string): string {
     const HH = String(date.getHours()).padStart(2, "0");
     const min = String(date.getMinutes()).padStart(2, "0");
 
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-
-    const todayStr = i18next.t("com_ui_date_today");
-    return isToday ? `${todayStr} ${HH}:${min}` : `${yyyy}-${mm}-${dd} ${HH}:${min}`;
+    return `${yyyy}-${mm}-${dd} ${HH}:${min}`;
 }
 
-/**
- * Card-mode compact date display.
- * Today  → "HH:mm"
- * Others → "YYYY-MM-DD"
- */
+/** 平铺模式与列表模式保持同一更新时间展示格式。 */
 export function formatTimeCard(dateString: string): string {
-    const date = new Date(dateString);
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    const HH = String(date.getHours()).padStart(2, "0");
-    const min = String(date.getMinutes()).padStart(2, "0");
-
-    const isToday = date.toDateString() === new Date().toDateString();
-    return isToday ? `${HH}:${min}` : `${yyyy}-${mm}-${dd}`;
+    return formatTime(dateString);
 }
 
 /** True if the leading segment of a name is hidden (dot-prefixed, e.g. `.git`). */

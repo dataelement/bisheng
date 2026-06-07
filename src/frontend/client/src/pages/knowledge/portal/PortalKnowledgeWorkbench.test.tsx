@@ -424,6 +424,19 @@ const makeFile = (id: string, name: string, overrides: Record<string, any> = {})
     ...overrides,
 });
 
+function formatLocalDateTime(date: Date) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const HH = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd} ${HH}:${min}`;
+}
+
+function toLocalDateTimeInput(date: Date) {
+    return `${formatLocalDateTime(date).replace(" ", "T")}:00`;
+}
+
 function renderWorkbench() {
     const queryClient = new QueryClient({
         defaultOptions: {
@@ -1339,6 +1352,88 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByTestId("portal-preview-page")).not.toBeInTheDocument();
     });
 
+    test("formats table update times as full date time without relative labels", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const today = new Date();
+        today.setHours(9, 5, 0, 0);
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        yesterday.setHours(17, 45, 0, 0);
+        const todayFile = makeFile("201", "今日文档.md", {
+            updatedAt: toLocalDateTimeInput(today),
+        });
+        const yesterdayFile = makeFile("202", "昨日文档.md", {
+            updatedAt: toLocalDateTimeInput(yesterday),
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [todayFile, yesterdayFile],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const workspace = await screen.findByTestId("portal-file-workspace");
+        await waitFor(() => {
+            expect(within(workspace).getByTestId("portal-file-table")).toBeInTheDocument();
+        });
+        expect(within(workspace).getByText(formatLocalDateTime(today))).toBeInTheDocument();
+        expect(within(workspace).getByText(formatLocalDateTime(yesterday))).toBeInTheDocument();
+        expect(within(workspace).queryByText(/今天|昨天/)).not.toBeInTheDocument();
+    });
+
+    test("formats card update times as full date time without compact dates", async () => {
+        class MockResizeObserver {
+            observe = jest.fn();
+            unobserve = jest.fn();
+            disconnect = jest.fn();
+        }
+        Object.defineProperty(window, "ResizeObserver", {
+            configurable: true,
+            writable: true,
+            value: MockResizeObserver,
+        });
+        Object.defineProperty(global, "ResizeObserver", {
+            configurable: true,
+            writable: true,
+            value: MockResizeObserver,
+        });
+        localStorage.setItem("knowledge-view-mode", "card");
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(17, 45, 0, 0);
+        const file = makeFile("201", "平铺昨日文档.md", {
+            updatedAt: toLocalDateTimeInput(yesterday),
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileName = await screen.findByText("平铺昨日文档.md");
+        const fileCard = fileName.closest(".group");
+        expect(fileCard).not.toBeNull();
+        expect(fileCard).toHaveTextContent(formatLocalDateTime(yesterday));
+    });
+
     test("opens Bisheng knowledge AI assistant with the current folder context", async () => {
         const personalSpace = makeSpace("personal-1", "信息", {
             role: SpaceRole.ADMIN,
@@ -1762,6 +1857,96 @@ describe("PortalKnowledgeWorkbench", () => {
 
         await waitFor(() => {
             expect(getFilePreviewApi).toHaveBeenCalledWith("personal-1", "201");
+        });
+    });
+
+    test("does not show an empty batch menu when selected entries have no batch actions", async () => {
+        const teamSpace = makeSpace("team-1", "团队技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
+            role: SpaceRole.MEMBER,
+        });
+        const firstFile = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
+        });
+        const secondFile = makeFile("202", "前端开发.md", {
+            spaceId: "team-1",
+        });
+        mockCheckPermission.mockResolvedValue({ allowed: false });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [firstFile, secondFile],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const firstRow = await screen.findByTestId("file-tree-row-201");
+        const secondRow = screen.getByTestId("file-tree-row-202");
+        fireEvent.click(within(firstRow).getByRole("checkbox"));
+        fireEvent.click(within(secondRow).getByRole("checkbox"));
+
+        await waitFor(() => {
+            expect(mockCheckPermission).toHaveBeenCalled();
+        });
+        expect(screen.queryByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).not.toBeInTheDocument();
+    });
+
+    test("shows only batch download for read-only selected files and folders", async () => {
+        const teamSpace = makeSpace("team-1", "团队技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
+            role: SpaceRole.MEMBER,
+        });
+        const folder = makeFile("101", "技术文档", {
+            type: FileType.FOLDER,
+            successFileNum: 0,
+            fileNum: 1,
+            spaceId: "team-1",
+        });
+        const file = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
+        });
+        mockCheckPermission.mockImplementation((objectType, _objectId, relation, permissionId) => (
+            Promise.resolve({
+                allowed: relation === "can_read" &&
+                    ((objectType === "folder" && permissionId === "download_folder") ||
+                        (objectType === "knowledge_file" && permissionId === "download_file")),
+            })
+        ));
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [folder, file],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        const fileRow = screen.getByTestId("file-tree-row-201");
+        fireEvent.click(within(folderRow).getByRole("checkbox"));
+        fireEvent.click(within(fileRow).getByRole("checkbox"));
+
+        expect(await screen.findByRole("button", { name: /批量操作|Batch operation|com_knowledge\.batch_operation/i })).toBeEnabled();
+        expect(screen.getByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /批量删除|Batch delete|com_knowledge\.batch_delete|^delete$/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /批量重试|Batch retry|com_knowledge\.batch_retry|^retry$/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: /批量添加标签|Batch add tags|com_knowledge\.batch_add_tags|^tag$/i })).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: /批量下载|Batch download|com_knowledge\.batch_download|^download$/i }));
+        await waitFor(() => {
+            expect(batchDownloadApi).toHaveBeenCalledWith("team-1", {
+                file_ids: [201],
+                folder_ids: [101],
+            });
         });
     });
 
@@ -2384,7 +2569,7 @@ describe("PortalKnowledgeWorkbench", () => {
         }));
     });
 
-    test("expands summary details inline from the summary bar without rendering save action", async () => {
+    test("expands summary content in a stacked original summary bar and toggles button state", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
         });
@@ -2413,9 +2598,35 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(summaryButton);
 
         expect(summaryButton).toHaveAttribute("aria-expanded", "true");
-        const summaryDetail = screen.getByTestId("portal-summary-detail");
-        expect(summaryDetail).toHaveTextContent("这是一段完整的文档摘要内容");
+        expect(summaryButton).toHaveAccessibleName("收起文档摘要");
+        const summaryHeader = within(summaryButton).getByTestId("portal-summary-header");
+        const summaryContent = within(summaryButton).getByTestId("portal-summary-content");
+        expect(summaryHeader).toHaveTextContent("文档摘要");
+        expect(summaryContent).toHaveTextContent("这是一段完整的文档摘要内容");
+        expect(Array.from(summaryButton.children)).toEqual([summaryHeader, summaryContent]);
+        expect(screen.queryByTestId("portal-summary-detail")).not.toBeInTheDocument();
+
+        fireEvent.click(summaryButton);
+
+        expect(summaryButton).toHaveAttribute("aria-expanded", "false");
+        expect(summaryButton).toHaveAccessibleName("查看文档摘要");
         expect(screen.queryByText("摘要内容")).not.toBeInTheDocument();
+    });
+
+    test("styles expanded summary as a stacked pale blue block without height limit", () => {
+        const css = readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.module.css"), "utf8");
+        const expandedRule = css.match(/\.summaryBarExpanded\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const expandedHeaderRule = css.match(/\.summaryBarExpanded\s+\.summaryHeader\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const expandedTextRule = css.match(/\.summaryBarExpanded\s+\.summaryText\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+
+        expect(expandedRule).toMatch(/flex-direction\s*:\s*column/);
+        expect(expandedRule).toMatch(/background\s*:\s*#eef4ff/);
+        expect(expandedHeaderRule).not.toMatch(/display\s*:\s*contents/);
+        expect(expandedTextRule).toMatch(/margin-left\s*:\s*calc\(var\(--summary-icon-size\)\s*\+\s*var\(--summary-title-gap\)\)/);
+        expect(expandedTextRule).toMatch(/white-space\s*:\s*pre-wrap/);
+        expect(expandedTextRule).not.toMatch(/padding-left\s*:/);
+        expect(expandedTextRule).not.toMatch(/grid-column\s*:/);
+        expect(expandedTextRule).not.toMatch(/max-height\s*:/);
     });
 
     test("keeps the active file row from changing tree indentation", () => {

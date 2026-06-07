@@ -199,6 +199,9 @@ export function CreateKnowledgeSpaceDrawer({
     const shouldShowDepartmentSelector = mode === "create"
         && spaceLevel === SpaceLevel.DEPARTMENT
         && selectedLevelCreateEnabled;
+    const shouldShowApprovalReason = mode === "create"
+        && showApprovalReason
+        && spaceLevel === SpaceLevel.TEAM;
     const confirmDisabled = submitting || (mode === "create" && !selectedLevelCreateEnabled);
     const selectedDepartmentId = departmentSelection[0]?.id;
 
@@ -420,7 +423,7 @@ export function CreateKnowledgeSpaceDrawer({
         const payload: CreateKnowledgeSpaceFormData = {
             name: name.trim(),
             description: description.trim(),
-            reason: mode === "create" && showApprovalReason ? reason.trim() || undefined : undefined,
+            ...(shouldShowApprovalReason && reason.trim() ? { reason: reason.trim() } : {}),
             joinPolicy: effectiveJoinPolicy,
             publishToSquare: mode === "edit" ? originalEditPublishToSquare : "no",
             spaceLevel,
@@ -661,15 +664,15 @@ export function CreateKnowledgeSpaceDrawer({
                                 </div>
                             </div>
 
-                            {mode === "create" && showApprovalReason && (
+                            {shouldShowApprovalReason && (
                                 <div className="space-y-2">
                                     <Label className="text-sm text-[#1D2129] font-medium">
-                                        申请意见
+                                        申请理由
                                     </Label>
                                     <Textarea
                                         value={reason}
                                         onChange={(e) => setReason(e.target.value)}
-                                        placeholder="请输入申请意见"
+                                        placeholder="请输入申请理由"
                                         className="min-h-[88px] rounded-[6px] border-[#E5E6EB] bg-[#fff] text-[14px]"
                                     />
                                 </div>

@@ -157,6 +157,12 @@ export function KnowledgeSpaceHeader({
     const showAddMenu = !hideNativeAddMenu && (canCreateFolder || canUploadFile);
     const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
     const showViewModeTabs = enableCardMode && !isNarrow576;
+    const hasBatchActions = (
+        canBatchDownload ||
+        (isAdmin && !hasFoldersSelected) ||
+        (isAdmin && hasFailedFiles) ||
+        canBatchDelete
+    );
 
     const viewFilterSortCluster = (
         <div className="flex min-w-0 shrink-0 items-center gap-3">
@@ -312,7 +318,7 @@ export function KnowledgeSpaceHeader({
                     </span>
                 </Button>
             )}
-            {selectedCount > selectedThreshold && (
+            {selectedCount > selectedThreshold && hasBatchActions && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button size="sm" variant="outline" className="h-8 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
