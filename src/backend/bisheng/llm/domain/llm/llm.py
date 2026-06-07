@@ -26,6 +26,9 @@ from ..utils import wrapper_bisheng_model_limit_check, wrapper_bisheng_model_lim
     wrapper_bisheng_model_generator, wrapper_bisheng_model_generator_async, normalize_reasoning_content
 
 
+OPENAI_REQUIRED_TOOL_CHOICE = 'required'
+
+
 def _get_user_kwargs(model_config: dict) -> dict:
     user_kwargs = model_config.get('user_kwargs', {})
     if isinstance(user_kwargs, str) and user_kwargs:
@@ -322,7 +325,23 @@ class BishengLLM(BishengBase, BaseChatModel):
         #                 elif one.get('type') == 'image_url' and one.get('image_url'):
         #                     one['type'] = 'image'
         #                     one['image'] = one.pop('image_url', {}).get('url')
+        kwargs = self._with_required_tool_choice(kwargs)
         return messages, kwargs
+
+    def _with_required_tool_choice(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        if not self._should_require_tool_choice(kwargs):
+            return kwargs
+        return {
+            **kwargs,
+            'tool_choice': OPENAI_REQUIRED_TOOL_CHOICE,
+        }
+
+    def _should_require_tool_choice(self, kwargs: Dict[str, Any]) -> bool:
+        return (
+            getattr(self.server_info, 'type', None) == LLMServerType.OPENAI.value
+            and bool(kwargs.get('tools'))
+            and 'tool_choice' not in kwargs
+        )
 
     @wrapper_bisheng_model_limit_check
     def _generate(
@@ -418,7 +437,12 @@ class BishengLLM(BishengBase, BaseChatModel):
             **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         formatted_tools = [convert_to_openai_tool(tool) for tool in tools]
-        return super().bind(tools=formatted_tools, **kwargs)
+        kwargs = self._with_required_tool_choice({'tools': formatted_tools, **kwargs})
+        return super().bind(**kwargs)
+
+    def bind(self, **kwargs: Any) -> Runnable[LanguageModelInput, BaseMessage]:
+        kwargs = self._with_required_tool_choice(kwargs)
+        return super().bind(**kwargs)
 
     def convert_qwen_result(self, message: BaseMessageChunk | BaseMessage) -> BaseMessageChunk | BaseMessage:
         # ChatTongYi model vl model message.content is list
@@ -434,6 +458,7 @@ class BishengLLM(BishengBase, BaseChatModel):
             run_manager: Optional[CallbackManagerForLLMRun] = None,
             **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
+        messages, kwargs = self.parse_kwargs(messages, kwargs)
         for one in self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs):
             if self.server_info.type == LLMServerType.QWEN.value:
                 one.message = self.convert_qwen_result(one.message)
@@ -447,6 +472,7 @@ class BishengLLM(BishengBase, BaseChatModel):
             run_manager: Optional[AsyncCallbackManagerForLLMRun] = None,
             **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        messages, kwargs = self.parse_kwargs(messages, kwargs)
         async for one in self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs):
             if self.server_info.type == LLMServerType.QWEN.value:
                 one.message = self.convert_qwen_result(one.message)
