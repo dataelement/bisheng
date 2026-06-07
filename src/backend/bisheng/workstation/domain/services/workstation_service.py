@@ -911,18 +911,19 @@ class WorkStationService(BaseService):
         """
         failures: list[dict] = []
         try:
-            knowledge_ids = []
-            if use_knowledge_param.organization_knowledge_ids:
-                knowledge_ids.extend(use_knowledge_param.organization_knowledge_ids)
+            organization_ids, space_ids = await cls._split_retrieval_knowledge_ids_by_type(
+                organization_knowledge_ids=use_knowledge_param.organization_knowledge_ids or [],
+                knowledge_space_ids=use_knowledge_param.knowledge_space_ids or [],
+            )
 
             knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
                 invoke_user_id=login_user.user_id,
-                knowledge_ids=knowledge_ids,
+                knowledge_ids=organization_ids,
                 user_name=login_user.user_name,
             )
             knowledge_space_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
                 invoke_user_id=login_user.user_id,
-                knowledge_ids=use_knowledge_param.knowledge_space_ids,
+                knowledge_ids=space_ids,
                 check_auth=False,
             )
             knowledge_vector_list.update(knowledge_space_list)
@@ -1023,6 +1024,56 @@ class WorkStationService(BaseService):
         except Exception as exc:
             logger.exception(f'queryChunksFromDB error: {exc}')
             return [], None, failures
+
+    @classmethod
+    async def _split_retrieval_knowledge_ids_by_type(
+        cls,
+        organization_knowledge_ids: list[int],
+        knowledge_space_ids: list[int],
+    ) -> tuple[list[int], list[int]]:
+        """按数据库真实类型重新归类检索 ID。
+
+        前端或旧本地缓存可能把知识空间 ID 放进 organization_knowledge_ids。
+        后端必须以 knowledge.type 为准，避免公共知识空间误走普通知识库权限过滤，
+        同时也避免普通知识库被传进 knowledge_space_ids 后绕过权限。
+        """
+        requested_ids: list[int] = []
+        seen: set[int] = set()
+        for raw_id in [*(organization_knowledge_ids or []), *(knowledge_space_ids or [])]:
+            try:
+                knowledge_id = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            if knowledge_id in seen:
+                continue
+            seen.add(knowledge_id)
+            requested_ids.append(knowledge_id)
+
+        if not requested_ids:
+            return [], []
+
+        knowledge_rows = await KnowledgeDao.aget_list_by_ids(requested_ids)
+        knowledge_by_id = {int(row.id): row for row in knowledge_rows if row.id is not None}
+        organization_ids: list[int] = []
+        space_ids: list[int] = []
+        missing_ids: list[int] = []
+        for knowledge_id in requested_ids:
+            knowledge = knowledge_by_id.get(knowledge_id)
+            if knowledge is None:
+                missing_ids.append(knowledge_id)
+                continue
+            knowledge_type = getattr(knowledge.type, 'value', knowledge.type)
+            if int(knowledge_type) == KnowledgeTypeEnum.SPACE.value:
+                space_ids.append(knowledge_id)
+            else:
+                organization_ids.append(knowledge_id)
+
+        if missing_ids:
+            logger.warning(f'[queryChunksFromDB] skip missing knowledge ids={missing_ids}')
+        logger.info(
+            f'[queryChunksFromDB] route ids organization={organization_ids} spaces={space_ids}'
+        )
+        return organization_ids, space_ids
 
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 4,

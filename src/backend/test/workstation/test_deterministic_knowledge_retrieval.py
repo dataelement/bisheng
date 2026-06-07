@@ -1,8 +1,9 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.workstation.domain.services import chat_service
 
 
@@ -46,3 +47,57 @@ async def test_prepare_tools_does_not_expose_selected_kbs_as_model_tool():
 
     assert failures == []
     assert [tool.name for tool in tools] == []
+
+
+def test_split_selected_knowledge_ids_prefers_database_type_over_request_source():
+    selected_kbs = [
+        {
+            'id': 9,
+            'source': 'organization',
+            'type': KnowledgeTypeEnum.SPACE.value,
+        },
+        {
+            'id': 8,
+            'source': 'space',
+            'type': KnowledgeTypeEnum.NORMAL.value,
+        },
+    ]
+
+    space_ids, organization_ids = chat_service._split_selected_knowledge_ids(selected_kbs)
+
+    assert space_ids == [9]
+    assert organization_ids == [8]
+
+
+@pytest.mark.asyncio
+async def test_pre_retrieve_routes_knowledge_space_by_database_type_when_request_source_is_wrong(monkeypatch):
+    query_chunks = AsyncMock(return_value=([], [], []))
+    monkeypatch.setattr(
+        chat_service.WorkStationService,
+        'queryChunksFromDB',
+        query_chunks,
+        raising=False,
+    )
+
+    await chat_service._retrieve_selected_knowledge_context(
+        question='总结公共知识空间',
+        knowledge_bases_info=[
+            {
+                'id': 9,
+                'source': 'organization',
+                'type': KnowledgeTypeEnum.SPACE.value,
+            },
+            {
+                'id': 8,
+                'source': 'space',
+                'type': KnowledgeTypeEnum.NORMAL.value,
+            },
+        ],
+        max_token=15000,
+        login_user=_login_user(),
+        citation_collector=MagicMock(),
+    )
+
+    use_knowledge_param = query_chunks.await_args.kwargs['use_knowledge_param']
+    assert use_knowledge_param.knowledge_space_ids == [9]
+    assert use_knowledge_param.organization_knowledge_ids == [8]

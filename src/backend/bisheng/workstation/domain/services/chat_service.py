@@ -179,7 +179,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     select_registry_items_for_persistence,
 )
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 
 DEFAULT_AGENT_MAX_ITERATIONS = 50
 DAILY_CHAT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
@@ -843,6 +843,23 @@ async def _build_knowledge_search_tool(
     )
 
 
+def _kb_field(kb, field: str, default=None):
+    if isinstance(kb, dict):
+        return kb.get(field, default)
+    return getattr(kb, field, default)
+
+
+def _is_knowledge_space_kb(kb) -> bool:
+    kb_type = _kb_field(kb, 'type')
+    if kb_type is not None:
+        raw_type = getattr(kb_type, 'value', kb_type)
+        try:
+            return int(raw_type) == KnowledgeTypeEnum.SPACE.value
+        except (TypeError, ValueError):
+            return str(raw_type).lower() == 'space'
+    return _kb_field(kb, 'source') == 'space'
+
+
 def _split_selected_knowledge_ids(knowledge_bases_info: list[dict]) -> tuple[list[int], list[int]]:
     space_ids: list[int] = []
     organization_ids: list[int] = []
@@ -851,7 +868,7 @@ def _split_selected_knowledge_ids(knowledge_bases_info: list[dict]) -> tuple[lis
             kb_id = int(kb.get('id'))
         except (TypeError, ValueError):
             continue
-        if kb.get('source') == 'space':
+        if _is_knowledge_space_kb(kb):
             space_ids.append(kb_id)
         else:
             organization_ids.append(kb_id)
@@ -950,15 +967,13 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
     ids = org_ids + space_ids
     if not ids:
         return []
-    # Preserve the bucket each ID came from so `queryChunksFromDB` can route
-    # space-type KBs past the auth check (they're personal) while org-type
-    # still enforce permissions.
-    space_id_set = set(space_ids)
+    request_space_id_set = set(space_ids)
     try:
         kbs = await KnowledgeDao.aget_list_by_ids(ids)
     except Exception as exc:
         logger.warning(f'Failed to load Knowledge rows for {ids}: {exc}')
         return []
+    actual_space_id_set = {int(kb.id) for kb in kbs if _is_knowledge_space_kb(kb)}
 
     # Best-effort aggregation of file-level tags per KB. A KB with many files
     # can have a large tag set; we cap the total tags advertised per KB at 50
@@ -980,12 +995,10 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
                 tags_by_kb[kb.id] = []
                 continue
             try:
-                # Route by KB source: knowledge space files use SPACE_FILE,
-                # organization knowledge base files use KNOWLEDGE_FILE. Without
-                # this, tags on org-KB files never reach the prompt.
+                # 按数据库真实类型选择标签资源类型，避免前端传错分组导致空间标签丢失。
                 resource_type = (
                     ResourceTypeEnum.SPACE_FILE
-                    if kb.id in space_id_set
+                    if int(kb.id) in actual_space_id_set
                     else ResourceTypeEnum.KNOWLEDGE_FILE
                 )
                 tag_map = TagDao.get_tags_by_resource(resource_type, file_ids)
@@ -1013,13 +1026,15 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
             'name': kb.name,
             'description': kb.description or '',
             'tags': tags_by_kb.get(kb.id, []),
-            'source': 'space' if kb.id in space_id_set else 'organization',
+            'type': kb.type,
+            'source': 'space' if int(kb.id) in actual_space_id_set else 'organization',
         }
         for kb in kbs
     ]
     logger.info(
         f'[resolve_user_kb] resolved {len(resolved)} kbs'
         f' ids={[kb["id"] for kb in resolved]}'
+        f' request_space_ids={list(request_space_id_set)}'
         f' tag_counts={[len(kb["tags"]) for kb in resolved]}'
     )
     return resolved
