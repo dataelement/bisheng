@@ -468,6 +468,8 @@ spring:
 
 ### 11.1 本地开发
 
+> 前提：bisheng 后端启动前必须 `export BISHENG_PRO=true`，否则商业版接口（如 `/api/v1/user/sso`）不会注册。
+
 ```bash
 # 1. 克隆项目
 git clone https://github.com/dataelement/bisheng-gateway.git
@@ -539,4 +541,4 @@ Gateway 中注册了 4 个 GlobalFilter，按 order 值从小到大执行：
 - [系统架构总览](./01-architecture-overview.md) -- 整体请求数据流和组件关系
 - [用户与权限体系](./10-permission-rbac.md) -- bisheng 后端的认证与授权机制
 - [部署架构与配置](./08-deployment.md) -- Docker Compose 编排和配置系统
-- [v2.5 权限管理体系改造 PRD](../PRD/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md) -- ReBAC 权限体系设计
+- [v2.5 权限管理体系改造 PRD](../archive/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md) -- ReBAC 权限体系设计

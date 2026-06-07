@@ -3,15 +3,15 @@
 # 触发：Claude Code PostToolUse hook（同步）
 # 原则：无违规时零输出，不阻塞正常开发
 #
-# 规则清单：
-#   RULE-1: common/core 不导入 domain/api（VIOLATION）
-#   RULE-2: database/models 不导入 domain（VIOLATION）
-#   RULE-3: Endpoint 不直接导入 database/models（WARNING，迁移期）
-#   RULE-4: domain.models 不导入 domain.services（VIOLATION）
-#   RULE-5: API 层不跨模块互相导入（VIOLATION）
-#   RULE-6: 前端 store 不直接调 HTTP（WARNING）
-#   RULE-7: 硬编码敏感信息检测（WARNING）
-#   RULE-8: DAO/Model 层不得直读 RoleAccessDao 做权限过滤（INV-T19，VIOLATION）
+# 规则清单（每条对应 docs/constitution.md 的条款 Cx — 改 RULE 须同步宪法）：
+#   RULE-1: common/core 不导入 domain/api（C1，VIOLATION）
+#   RULE-2: database/models 不导入 domain（C1，VIOLATION）
+#   RULE-3: Endpoint 不直接导入 database/models（C1，WARNING，迁移期）
+#   RULE-4: domain.models 不导入 domain.services（C1，VIOLATION）
+#   RULE-5: API 层不跨模块互相导入（C1，VIOLATION）
+#   RULE-6: 前端 store 不直接调 HTTP（C7，WARNING）
+#   RULE-7: 硬编码敏感信息检测（C6，WARNING）
+#   RULE-8: DAO/Model 层不得直读 RoleAccessDao 做权限过滤（C4，INV-T19，VIOLATION）
 
 FILE="$1"
 [ -z "$FILE" ] && exit 0

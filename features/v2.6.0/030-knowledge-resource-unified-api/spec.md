@@ -1,6 +1,6 @@
 # Feature: F030-knowledge-resource-unified-api（知识资源统一对外 API · v2 filelib 改造）
 
-**关联 PRD**: [../../../docs/PRD/知识空间优化/知识库接口文档.md](../../../docs/PRD/%E7%9F%A5%E8%AF%86%E7%A9%BA%E9%97%B4%E4%BC%98%E5%8C%96/%E7%9F%A5%E8%AF%86%E5%BA%93%E6%8E%A5%E5%8F%A3%E6%96%87%E6%A1%A3.md)
+**关联 PRD**: [../../../docs/api/知识库接口文档.md](../../../docs/api/知识库接口文档.md)
 **优先级**: P1（对外集成接口，统一文档知识库 / QA 知识库 / 知识空间的 RPC 契约）
 **所属版本**: v2.6.0
 **模块编码**: 沿用 109（`knowledge`，`common/errcode/knowledge.py`）与 180（`knowledge_space`，`common/errcode/knowledge_space.py`）；本 spec 不新增模块编码，新增错误码见 §6
@@ -338,4 +338,4 @@ POST /api/v2/filelib/retrieve
 
 - 版本契约: [../release-contract.md](../release-contract.md)（写 spec 前必须先阅读）
 - 前序 Feature: [../029-knowledge-qa-permission-filter/spec.md](../029-knowledge-qa-permission-filter/spec.md)（本特性闭合其遗留的 RPC 代用户检索项）
-- PRD: `docs/PRD/知识空间优化/知识库接口文档.md`
+- PRD: `docs/api/知识库接口文档.md`

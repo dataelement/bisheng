@@ -1,8 +1,5 @@
 # AGENTS.md
 
-Guidance for AI agents and Claude Code. Loaded every session — only P0 rules live here.
-Deeper backend reference (module map, subsystems): `src/backend/AGENTS.md` (auto-loaded when editing backend files).
-
 ---
 
 ## 1. Project Identity
@@ -19,174 +16,81 @@ Deeper backend reference (module map, subsystems): `src/backend/AGENTS.md` (auto
 
 ## 2. Commands
 
-Backend commands (test, lint, start, Celery, Alembic) → `src/backend/CLAUDE.md`.
+Dev / test / build commands live in each sub-project's `AGENTS.md`: `src/backend/AGENTS.md` · `src/frontend/platform/AGENTS.md` · `src/frontend/client/AGENTS.md`.
 
-```bash
-# Frontend
-cd src/frontend/platform && npm install && npm start -- --host 0.0.0.0   # :3001
-cd src/frontend/client  && npm install && npm run dev                     # :4001
-# Commercial Gateway proxy mode:
-VITE_PROXY_TARGET=http://localhost:8180 npm start -- --host 0.0.0.0
-
-# Middleware (Docker only)
-bash docker/local-dev/start-middleware.sh   # MySQL / Redis / Milvus / ES / MinIO / OpenFGA
-```
+Middleware (MySQL / Redis / Milvus / ES / MinIO / OpenFGA): integration tests run in **CI**; per-developer middleware machines are pending.
 
 ---
 
 ## 3. Backend Rules (P0)
 
-### 3.1 Layered Architecture (DDD)
-
-Call chain — never skip layers:
-```
-Router → Endpoint → Service → Repository → DB
-```
-
-- **Never** `import bisheng.database.models.*` in endpoints (arch-guard RULE-3 WARNING).
-- **Never** write ORM queries in Service; **never** add new DAO entry points for new features.
-- New module layout: `<module>/{api/router.py, api/endpoints/, domain/services/, domain/models/, domain/schemas/, domain/repositories/}`
-- Register the router in `bisheng/api/router.py`.
-
-### 3.2 Dual-DB Compatibility (MySQL + DM8) ⚠️
-
-Every new feature must work on both dialects. DM8 is not optional.
-
-| ✅ Use | ❌ Never use |
-|--------|-------------|
-| `dialect_helpers.JsonType` | `sqlalchemy.JSON`, `mysql.JSON` |
-| `dialect_helpers.LargeText` | `LONGTEXT`, `MEDIUMTEXT` |
-| `dialect_helpers.UPDATE_TIME_SERVER_DEFAULT` | `ON UPDATE CURRENT_TIMESTAMP` |
-| `SQLAlchemy inspect()` | `information_schema`, `DATABASE()` |
-| Explicit relational columns | `JSON_EXTRACT` / `JSON_CONTAINS` / `JSON_SEARCH` |
-
-macOS: DM8 driver (`dmPython`/`dmAsync`) is not installed (`sys_platform != 'darwin'`). Real DM8 validation runs on CI/Linux only.
-
-### 3.3 Multi-Tenancy — Auto-Injected, Never Manual
-
-**Never write `WHERE tenant_id = X` manually.** SQLAlchemy events handle it automatically for 23+ tables.
-`multi_tenant.enabled=false` behaves identically to single-tenant (default `tenant_id=1`).
-
-### 3.4 Permissions — Unified Entry Point
-
-```python
-from bisheng.permission.domain.services.permission_service import PermissionService
-await PermissionService.check(...)      # check access
-await PermissionService.authorize(...)  # write OpenFGA owner tuple on resource creation (required)
-```
-
-**Never** query `role_access` directly for resource authorization (arch-guard RULE-8 VIOLATION).
-Resource creation **must** call `PermissionService.authorize()`; failures go to the `failed_tuples` retry table.
-
-Five-level short-circuit: `super_admin` → tenant mismatch deny → tenant admin → ReBAC (OpenFGA) → RBAC menu.
-
-### 3.5 API Conventions
-
-```python
-from bisheng.common.dependencies.user_deps import UserPayload
-user: UserPayload = Depends(UserPayload.get_login_user)   # WebSocket: get_login_user_from_ws
-
-from bisheng.common.schemas.api import resp_200, resp_500
-return resp_200(data)        # success
-return resp_500(code, msg)   # business error
-```
-
-Error codes: 5-digit `MMMEE` (3-digit module + 2-digit error), defined in `common/errcode/`.
-Module numbers: 100=server, 104=assistant, 105=flow, 106=user, 108=llm, 109=knowledge, 110=linsight, 120=workstation, 130=chat, 140=message, 150=tool, 180=knowledge_space.
-
-Pagination: `PageData[T]` (new code) with fields `data` + `total`; `PageList[T]` is legacy-compat only.
+- **Architectural laws** (DDD layering / dual-DB / multi-tenancy / permissions / error codes / security) → [`docs/constitution.md`](docs/constitution.md) (C1–C7); enforced by `scripts/arch-guard.sh` + Constitution Check in `/sdd-review design`.
+- **Backend coding conventions** (module layout, API/response helpers, pagination, error handling) + subsystem quick map → `src/backend/AGENTS.md` (auto-loads when editing backend files).
 
 ---
 
 ## 4. Frontend Rules (P0)
 
-The two React apps **must not be mixed**. Apply rules by directory:
-
-| Dimension | Platform (`src/frontend/platform/`) | Client (`src/frontend/client/`) |
-|-----------|-------------------------------------|--------------------------------|
-| State | **Zustand** (`@/store/`) + Context for local UI | **Recoil** (`~/store/`) |
-| Server state | react-query **v3** (`useQuery({ queryFn })`) | react-query **v5** |
-| Path alias | `@/` → `src/` | `~/` (or `@/`) → `src/` |
-| HTTP layer | `@/controllers/request.ts` | `~/api/request.ts` |
-| UI library | `@/components/bs-ui/` (Radix-based) | `~/components/ui/` (shadcn) |
-| Icons | `@/components/bs-icons/` | `lucide-react` |
-| i18n hook | `useTranslation()` → `t()` | `useLocalize()` → `localize()` |
-| i18n files | `public/locales/{lang}/{ns}.json` (multi-namespace) | `src/locales/{lang}/translation.json` (single file) |
-| Toast | `toast({ title, variant: 'error'\|'success', description })` | `showToast({ message, severity: 'error'\|'success' })` |
-| Confirm dialog | `bsConfirm(...)` (bs-ui) | — |
-| Workflow editor | `@xyflow/react` (**not** `react-flow-renderer`), nodes in `src/CustomNodes/` | — |
+Two React apps that **must not be mixed**. Per-app rules auto-load from each sub-project's `AGENTS.md`:
+- `src/frontend/platform/AGENTS.md` — Admin/builder UI (Zustand, react-query v3, bs-ui, `@/`)
+- `src/frontend/client/AGENTS.md` — End-user chat UI (Recoil, react-query v5, shadcn, `~/`)
 
 **Hard rules (both apps):**
 - TypeScript only (`.ts` / `.tsx`); functional components only; no class components.
 - Single file ≤ 600 lines. Extract sub-components or hooks when exceeded.
-- `interface` for Props; `type` for internal types.
-- `handleXxx` for internal handlers; `onXxx` for props.
-- **Never** `import axios` directly — always use the wrapped request module above.
-- **Never** introduce new UI libraries or state management libraries.
+- `interface` for Props; `type` for internal types. `handleXxx` internal handlers / `onXxx` props.
+- **Never** `import axios` directly — use the wrapped request module. (store must not call HTTP = constitution **C7**)
+- **Never** introduce new UI or state-management libraries.
 - All code comments in English.
-- 403: handled automatically by response interceptors. Never add 403 branches in business code.
+- 403 handled automatically by response interceptors — never add 403 branches in business code.
 
 ---
 
 ## 5. Architecture Guard (Auto-enforced)
 
-`scripts/arch-guard.sh` runs after every Write/Edit via PostToolUse hook:
-
-| # | Rule | Severity |
-|---|------|----------|
-| 1 | `common/`, `core/` must not import `domain/`, `api/` | VIOLATION |
-| 2 | `database/models/` must not import `domain/` | VIOLATION |
-| 3 | Endpoints must not directly import `database/models/` | WARNING (migration period) |
-| 4 | `domain/models/` must not import `domain/services/` | VIOLATION |
-| 5 | API layer must not cross-import between modules | VIOLATION |
-| 6 | Frontend store must not call HTTP directly (use `controllers/API/` or `api/`) | WARNING |
-| 7 | No hardcoded secrets (password/secret/token literals) | WARNING |
-| 8 | DAO/Model must not read `RoleAccessDao` for permission filtering | VIOLATION |
-
-**VIOLATION rules must be fixed immediately** — these are v2.5 refactor boundaries.
+`scripts/arch-guard.sh` runs after every Write/Edit via a PostToolUse hook (through `.claude/hooks/arch-guard-hook.sh`, which feeds violations back to the agent as `additionalContext` for self-correction).
+The 8 RULEs are the machine-enforcement arm of constitution **C1 / C4 / C6 / C7** — the clause↔RULE anchor table lives in [`docs/constitution.md`](docs/constitution.md). **VIOLATION must be fixed immediately.**
 
 ---
 
-## 6. SDD Workflow (Required for non-trivial features)
+## 6. SDD Workflow (non-trivial features)
+
+**Full guide — track selection, ★ pause points, deviation re-confirm rule, document roles, constitution gate, harness → [`docs/SDD-Guide.md`](docs/SDD-Guide.md).**
 
 ```
-0. release-contract.md (once per version)
-1. Spec Discovery  →  ★ user confirms
-2. spec.md  →  /sdd-review <dir> spec  →  ★ user confirms
-3. tasks.md  →  /sdd-review <dir> tasks
-4. branch: feat/<version>/{NNN}-{name}
-5. implement task-by-task  →  /task-review <dir> <id>  →  check off
-6. /e2e-test <dir>  (mandatory)
-7. /code-review --base <main branch>
-8. merge
+0. release-contract.md + read constitution.md
+1. Spec Discovery                          → ★ user confirms
+2. spec.md   → /sdd-review <dir> spec       → ★ user confirms
+3. design.md → /sdd-review <dir> design     → ★ user confirms (Constitution Check)
+4. tasks.md  → /sdd-review <dir> tasks
+5. branch feat/<version>/{NNN}-{name}  (create early; docs + code on the branch)
+6. implement wave-by-wave → /task-review <dir> <id> → check off
+7. /e2e-test <dir>  (mandatory)
+8. /code-review --base <main>  (+ CI auto-review)
+9. merge
 ```
 
-Artifacts: `features/v{X.Y.Z}/{NNN}-{name}/spec.md` and `tasks.md`. Templates: `features/_templates/`.
-**★ pause points cannot be skipped.** Deviations must be recorded in `tasks.md §实际偏差记录`.
+Artifacts: `features/v{X.Y.Z}/{NNN}-{name}/{spec,design,tasks}.md`. Templates: `features/_templates/`.
+**★ cannot be skipped.** Trivial/hotfix changes use a lighter track — see SDD-Guide §1.
 
-Tests: file new backend tests under `test/<module>/` (e.g., `test/approval/`), not in `test/` root. `asyncio_mode=auto`.
+Tests: new backend tests under `test/<module>/` (e.g., `test/approval/`), not `test/` root. `asyncio_mode=auto`.
 
 ---
 
 ## 7. Common Pitfalls
 
+Runtime/deploy pitfalls (MinIO `sharepoint`, Celery Beat × multi-tenant, DB config Redis TTL) → `src/backend/AGENTS.md`. Commercial edition (`BISHENG_PRO` env, gateway proxy, SSO) → `docs/architecture/11-gateway.md`.
+
 | Pitfall | Reality |
 |---------|---------|
 | `/api/v1/env` version field | Hardcoded `2.4.0` in source — unreliable. Use route probing instead. |
-| MinIO image 403 | Vite `fileServiceTarget` must exactly match `config.yaml` `object_storage.minio.sharepoint`. |
 | Passwords in config.yaml | Fernet-encrypted. Never write plaintext passwords into the YAML. |
 | First registered user | Becomes `super_admin` automatically. In multi-tenant mode, create the tenant first. |
-| `BISHENG_PRO=true` | Must be set **before** starting the backend, or `/api/v1/user/sso` endpoint won't exist. |
-| DB config changes | 100s Redis TTL — wait or flush Redis after changing DB-stored config. |
-| Celery Beat + multi-tenant | Beat iterates all active tenants; adding a task multiplies load by N tenants. |
-| API proxy modes | Default: Vite → `:7860`. Commercial: set `VITE_PROXY_TARGET=http://localhost:8180`. |
 
 ---
 
 ## 8. Reference
 
-- **Backend module map, subsystem internals** → `src/backend/CLAUDE.md`
-- **Architecture docs** → `docs/architecture/` (`10-permission-rbac.md`, `11-gateway.md`)
-- **SDD guide** → `docs/SDD-Guide.md`
-- **v2.5 permission/multi-tenant PRD** → `docs/PRD/`
+- **Architecture docs** → `docs/architecture/` (overview, permission, gateway, multi-tenant, data-models, …)
 - **Skills**: `/sdd-review`, `/task-review`, `/code-review`, `/e2e-test`, `/i18n-localizer`, `/react-component-refactor`
+

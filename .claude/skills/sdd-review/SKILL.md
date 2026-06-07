@@ -2,9 +2,10 @@
 name: sdd-review
 description: 对 BiSheng 项目的 SDD 文档执行审查。
   - spec：写完 spec.md 后调用，同时检查 PRD gap 和架构合规性，生成报告供用户参考
+  - design：写完 design.md 后调用，检查"接手测试"四要素（现状/决策/坑/契约），生成报告供用户参考
   - tasks：写完 tasks.md 后自动调用，检查 AC 追溯、任务拆解质量和技术债预防
-  用法：/sdd-review <feature_dir> <doc_type>，doc_type 为 spec / tasks。
-  TRIGGER when: 用户完成了 SDD 的 spec.md / tasks.md 编写，或者用户使用 /sdd-review 命令，或者 Claude 完成了这些文件的编写后需要审查。
+  用法：/sdd-review <feature_dir> <doc_type>，doc_type 为 spec / design / tasks。
+  TRIGGER when: 用户完成了 SDD 的 spec.md / design.md / tasks.md 编写，或者用户使用 /sdd-review 命令，或者 Claude 完成了这些文件的编写后需要审查。
 ---
 
 # SDD Review Skill
@@ -27,7 +28,7 @@ description: 对 BiSheng 项目的 SDD 文档执行审查。
 
 从用户输入或调用上下文中提取：
 - `feature_dir`：特性目录路径（如 `features/v2.5.0/004-rebac-core`）
-- `doc_type`：文档类型，必须是 `spec` 或 `tasks`
+- `doc_type`：文档类型，必须是 `spec` / `design` / `tasks`
 
 若参数缺失或无效，向用户报告错误后停止。
 
@@ -58,6 +59,31 @@ spec.md 合并了需求规范和技术设计，因此 spec 审查同时覆盖需
 
 ---
 
+### design 模式（辅助审查，不自动推进）
+
+design.md 是"现状快照 + 关键决策"文档，决定新 agent 接手时能否在不读代码情况下快速建立认知。审查重点是**接手测试**四要素：现状、决策、坑、契约。
+
+**第二步（design）：执行审查**
+
+读取文件：
+- `<feature_dir>/design.md`（已写的设计文档）
+- `<feature_dir>/spec.md`（校验 design 没偏离需求）
+- `<feature_dir>/tasks.md`（若存在；校验偏差记录已回写）
+- `features/_templates/design.md`（模板结构基线）
+- `features/v{X.Y.Z}/release-contract.md`（关键约束、不变量）
+
+按 `references/design-checklist.md` 中的检查清单执行 24 项检查。
+
+**第三步（design）：展示报告，等待用户确认**
+
+向用户展示分析结果：
+- 无问题：告知"审查通过，可继续确认"
+- 有问题：展示每个问题（ISSUE 含 SEVERITY 和 LOC），供用户决定是否修改
+
+**等待用户确认**（唯一手动暂停点）。用户确认后，将 `<feature_dir>/tasks.md` 状态表中 design.md 行更新为 `✅ 已评审`（若状态表尚无该行，提示用户补一行 `| design.md | 🔲 草稿 | ... |`）。
+
+---
+
 ### tasks 模式（自动审查）
 
 **第二步（tasks）：执行审查**
@@ -84,6 +110,7 @@ spec.md 合并了需求规范和技术设计，因此 spec 审查同时覆盖需
 ## 错误处理
 
 - feature_dir 不存在 → 报告路径错误，停止
-- doc_type 不是 spec / tasks → 报告参数错误，停止
+- doc_type 不是 spec / design / tasks → 报告参数错误，停止
 - spec.md 不存在 → 报告"找不到 spec.md，请先完成 spec"，停止
+- design.md 不存在（design 模式）→ 报告"找不到 design.md，请先按 features/_templates/design.md 完成 design"，停止
 - tasks.md 不存在（tasks 模式）→ 报告"找不到 tasks.md，请先完成 tasks"，停止

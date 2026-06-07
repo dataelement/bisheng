@@ -544,13 +544,80 @@ def _strip_citation_marks(text: str) -> str:
 
 - **偏差 N**: <实际开发中与 spec / tasks 不一致的地方 + 原因>
 
+- **偏差 WF-1（2026-06-03）：工作流/助手会话导出答案为空**。
+  - **现象**：工作流/助手会话导出，问题在、大模型答案整块空（测试反馈，repro chat `326fc42649812821399af6c777f1d040`）。
+  - **根因**：F028 抽取逻辑按工作台 agent 格式（`answer` 纯文本 / `agent_answer` 的 `msg`+events）写死。实测工作流/助手答案落库 category 是 **`stream_msg`/`output_msg`**，文本在 JSON 的 `msg` 字段；QA 答案是 `{"content":...}`；工作流提问是 `is_bot=1` 的纯字符串。`_extract_answer_text` 对 `stream_msg` 返回空。
+  - **改动**：`conversation_export_service.py:_extract_answer_text` 重写 —— 统一按"丢弃集（reasoning_answer/input/agent_thinking/agent_tool_call）→ 纯字符串 raw → `{"content"}` → `msg`+events" 处理，覆盖 stream_msg/output_msg/agent_answer/answer/QA 全部格式。
+  - **验证**：测试机用 repro chat 实跑 `_extract_answer_text`，stream_msg 取到答案、input 丢弃、question 正常；热补丁 + 重启，health 200。
+  - **落档**：design.md §5 #12 已加。
+
+- **偏差 WF-2（2026-06-03）：工作流/助手"实时新会话导出整篇空"（缺提问 → 0 轮）**。
+  - **现象**：刚聊完的工作流会话导出空。抓包 live 发 `message_ids:[430820,430821]`（两个答案，**缺提问 430819**）；刷新后发 `[430819,430820,430821]` 正常。
+  - **根因**：工作流提问的前端实时 id 是 `'u-'+uuid`（`createSendMsg`），导出按 `parseInt` 转 int 时变 NaN 被过滤 → 只发答案。后端 `_build_turns` 按 `queries=[category==question]` 分组，无提问 → 0 轮 → 整篇空（孤儿答案在 `queries` 为空时被丢弃）。
+  - **修复（后端兜底，方案B）**：`_load_and_validate_messages` 末尾新增 `_backfill_paired_questions`：选中答案若缺同组提问，按 chat_id 取该 chat 的 question 列表（复用 `ChatMessageDao.aget_messages_by_chat_id`，limit 500），为每条孤儿答案补回 id 最近的前置提问。chat 归属已校验，无 IDOR 风险；刷新后已带提问则 no-op。
+  - **未修（症状3）**：工作流答案前端临时 id（`unique_id+output_key`，parseInt 截出开头数字如 `7`）在 `end` 未回传 message_id 时不回填真实 id → 12060。属前端 `useChatHelpers`/`skillMethod` 流式 id 回填，待前端构建修复。
+  - **部署**：两处后端改动（WF-1 抽取 + WF-2 兜底）已热补丁到测试机 116（`.bak`/`.bak2` 备份在容器内），重启 health 200。持久化在本地分支。
+
+- **偏差 WF-3（2026-06-03）：重复导入同一会话到知识空间，列表只剩一份、`(1)` 序号永不出现**。
+  - **现象**：同一会话多次导入同空间，只看到一份；F028 的同名追加 `(1)` 没生效。
+  - **根因（热补丁日志确认）**：平台 `KnowledgeService.process_one_file`（`knowledge_service.py:1259`）按 **内容 md5 / 文件名** 去重 —— 重导同一会话 markdown 一字不差 → md5 命中 → 把已存在文件标 `FAILED` 返回、**不新建**。F028 的 `_resolve_unique_filename`(`(N)`) 是文件名级，**绕不过内容 md5 去重**。日志显示第 2/3 次导入命中 `REUSE existing -> FAILED`，且全程无 `adelete_batch`（不是删除，是拒收不新增）。
+  - **改动**：`process_one_file` 加 `skip_dedup` 参数，去重判定改 `if (content_repeat or name_repeat) and not skip_dedup`；`add_file` 加 `skip_dedup` 透传；F028 `_upload_and_add_file` 两处 add_file（含 retry）传 `skip_dedup=True`。F028 已保证文件名唯一，跳过平台去重安全。
+  - **部署**：热补丁到测试机（涉及 `knowledge_service.py`/`knowledge_space_service.py`/`conversation_export_service.py`，`.ddbak` 备份在容器内），调试日志已撤（`.dbgbak` 还原），重启 health 200。持久化在本地分支。
+  - **落档**：design.md §5 #13 已加。
+
+- **偏差 WF-4（2026-06-03）：docx 导出图片不显示（txt/md 正常）**。
+  - **现象**：工作流会话 docx 导出，答案里的图片不显示;txt/md 有图片链接内容。
+  - **根因**：答案图片是 `/bisheng/knowledge/images/...` 根相对路径(前端 nginx 代理路径,后端无此代理)→ `_fetch_image_bytes` 旧逻辑当"不支持 scheme"丢弃；且 MinIO 返回 `application/octet-stream` → 扩展名猜成 `.bin` → pandoc 认不出图片嵌不进。txt/md 只输出链接文本,不抓图,故不受影响。
+  - **改动**：`_fetch_image_bytes` 加 `minio_host` 参数,相对路径补 `get_minio_share_host()`(实测 `http://host:9000/bisheng/...` 直连可取 200);content-type 为泛型(`bin`)时用 URL 后缀兜底扩展名;`_preprocess_images` 先解析 host 传入;新增 `_resolve_minio_host`(best-effort)。
+  - **部署**：热补丁到测试机(`.imgbak` 备份在容器内),重启 health 200。持久化在本地分支。
+  - **落档**：design.md §5 #14 已加。
+
+- **偏差 WF-5（2026-06-03）：docx/pdf 图片预处理函数是死代码，图片从未内嵌**。
+  - **现象**：WF-4 修了图片抓取后 docx 仍无图。
+  - **根因**：`_preprocess_images` 定义了但**全代码库无调用方**（dead code）——`_render_docx`(pandoc)和 `_render_pdf`(chromium)直接拿原始 markdown 渲染，相对路径图片渲不出。
+  - **改动**：将 `_preprocess_images` 改写为 `_embed_images_as_data_uri`（下载图片→`data:` base64 内嵌，pandoc/chromium 均支持，免临时文件/`file://`/resource-path）；在导出 endpoint(`conversation_export.py`)渲染前对 **docx+pdf** 调用（md/txt 跳过）。
+  - **验证**：容器内端到端跑 embed→`_render_docx`，docx 内出现 `word/media/rId20.jpg`（图片成功嵌入）。
+  - **部署**：热补丁到测试机（`conversation_export_service.py` span 替换 + endpoint），重启 health 200。持久化在本地分支。WF-4 + WF-5 合起来才真正修好 docx 图片。
+  - **落档**：design.md §5 #14（WF-4）+ 本条。
+
+- **偏差 WF-6（2026-06-03）：导入到知识空间未校验单文件大小限制**。
+  - **现象**：系统配置 `uploaded_files_maximum_size`（MB）只前端校验；F028 导入服务端生成文件绕过前端，后端 `add_file` 只查存储配额、不查单文件大小，导致超限文件也能导入。
+  - **改动**：`import_messages_to_knowledge` 构建 markdown_bytes 后，读 `settings.aget_all_config()['env']['uploaded_files_maximum_size']`（MB→bytes）与文件大小比对，超限抛 `ConversationImportQuotaExceededError`(12068)，文案"导出文件大小超过上传限制（XMB）"。
+  - **注意**：配置键路径是 `env.uploaded_files_maximum_size`（initdb_config.yaml，默认 50）；DB 配置有 ~100s Redis 缓存。
+  - **部署**：热补丁到测试机，重启 health 200。持久化在本地分支。
+
+- **偏差 PDF-1（2026-06-02）：PDF 渲染引擎 libreoffice → chromium/playwright**。
+  - **现象**：实测真实数据下，libreoffice 解析 pandoc 生成的 docx 时表格 / 列表布局崩塌，排版不可用。
+  - **改动**：pdf 路径从 `docx → libreoffice → pdf` 改为 `md → html → chromium(playwright) → pdf`，绕开 docx 中间产物；docx 路径不变（仍 pandoc + 模板）。
+  - **依赖变化**：移除 pdf 路径对 libreoffice 的依赖；新增 `playwright` + chromium binary（镜像 `/root/.cache/ms-playwright/chromium-*`）+ `python-markdown`。
+  - **连带新坑（已同步 design.md §5）**：① pandoc 默认要求 list 前空行，需加 `+lists_without_preceding_blankline`；② 部分来源把 PUA marker 字面化成 `` 6 字符串，strip 需兼容；③ 兜底 strip 的 `\s*` 不能吃换行，否则吃掉 ul 项分隔；④ WenQuanYi/Liberation 无 emoji 字形，docx 路径需预替换为 `●`。
+  - **测试**：API + renderer 测试因 mock playwright 重写，单元/集成总数 94 → 80。
+  - **落档**：design.md 决策 6 + §4.1/§4.3/§5/§6.2/§7/§8 已覆盖更新。
+
+- **偏差 ID-1（2026-06-02）：导出请求携带前端临时 id，后端报 12060「消息不存在」**。
+  - **现象**：测试环境（116）日志 `POST /chat/messages/export … 消息不存在或已删除: [9394]`、另一例 `[1, 71]`；DB 实测 id 段为 4022–430645，`9394` 不存在、`1/71` 远低于最小 id。用户复现：会话进行中导出 `message_ids:[430660]`（只发答案、漏提问 430659），刷新后再导出 `[430659, 430660]` 正确。
+  - **根因**：实时会话中前端消息 id 是临时值，不是真实 DB 主键。导出按 `parseInt(messageId)` 取整 id：① daily 路径提问消息被 `useAiChat.onCreated` 用 `messageId: userMessageId` 钉死成临时 UUID（覆盖了 `created` 事件带回的真实 id）→ UUID 解析成 NaN 被丢 → 提问整轮丢失；② workflow 路径答案消息流 `end` 缺 `message_id` 时保留合成数字 id（`unique_id+output_key`）→ 发出去后端查无此 id → 12060。刷新后走历史接口才映射成真实 id，故"刷新后正确"。
+  - **改动（仅 daily 路径）**：`src/frontend/client/src/hooks/useAiChat.ts` — `onCreated` 改为用 `created` 事件的真实 `messageId` 回填提问消息（不再覆盖回 UUID）；新增闭包变量 `realUserMessageId` 追踪提问真实 id，`onFinal` 按真实 id 匹配回提问消息。答案消息原本就在 `agent_answer/end` 回填真实 id，无需改。
+  - **未修**：workflow/技能入口（appChat，`useChatHelpers`/`skillMethod`/`useWebsocket`）的合成数字 id 问题；流式关联逻辑更复杂，回归风险高，待单独处理。见 design.md §8 短板。
+  - **落档**：design.md §5 #11 + §8 短板已更新。
+
+- **补做 SELECT-BELOW-1（2026-06-02）：实现 spec AC-05「全选以下消息」悬浮按钮**（此前只建了组件外壳，从未接线）。
+  - **交互（与产品确认）**：导出态下，一个 pill **常驻 sticky 在消息滚动区左上角**（左对齐底部全选卡片），pill 右侧一条虚线作选择范围校准线；点击时按**当前滚动位置**定位锚点（pill 正下方第一条消息），选中它及下方全部（上方滚走的不选 = 覆盖式）；锚点是答案时连带其上方关联问题。两个入口（daily + appChat）都生效。无图标。
+  - **改动**：
+    - `hooks/useMessageSelection.ts`：`selectAllBelow` 改覆盖式（清空旧 `selectedIds`）；`computeSelectedIds` 在锚点为答案时用 `buildPairGroup` 补回关联问题。
+    - `components/Chat/MessageSelection/SelectAllBelowBanner.tsx`：重写为自包含 sticky pill + 校准线，接收 `scrollRef`，点击时查 `[data-message-id]` 找首个 `rect.top >= barBottom` 的消息为锚点。
+    - `components/Chat/MessageSelection/MessageCheckbox.tsx`：checkbox 加 `data-message-id`（锚点定位锚）。
+    - 接线：daily `components/Chat/AiChatMessages.tsx`（`isActiveForChat(conversationId)` 时渲染）；appChat `pages/appChat/ChatView.tsx` 传 `selectionActive` → `pages/appChat/ChatMessages.tsx` 渲染。
+  - **锚点定位机制**：复用每条消息的选择 checkbox 上的 `data-message-id`，避免给两个入口的多分支消息行逐个加包裹。
+  - **i18n**：复用既有 key `workstation.messageExport.selectAllBelow`（全选以下消息）。
+
 ---
 
 ## 关键复用清单（实现时回看）
 
 | 复用对象 | 路径 | 用途 |
 |---|---|---|
-| `libreoffice_converter._convert_file_extension` | `src/backend/bisheng/knowledge/rag/pipeline/loader/utils/libreoffice_converter.py` | docx → pdf |
+| ~~`libreoffice_converter._convert_file_extension`~~ | ~~docx → pdf~~ | **已废弃**：pdf 改走 chromium(playwright) md→html→pdf（见偏差 PDF-1） |
 | `KnowledgeSpaceService.add_file` | `src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py:2659` | 导入到知识空间 |
 | `KnowledgeSpaceFileDao.async_list_children` | `knowledge_space` 模块 DAO | 同名扫描 |
 | `MinioManager` | `src/backend/bisheng/core/storage/minio/` | 拉内部图片 bytes |
