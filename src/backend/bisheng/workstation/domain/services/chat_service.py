@@ -387,19 +387,20 @@ def _build_user_content(
         question: str,
         file_context: str = '',
         knowledge_bases_info: list[dict] | None = None,
+        retrieved_knowledge_context: str = '',
 ) -> str:
-    """Compose the user message content for the LLM.
+    """组装发送给模型的用户消息内容。
 
-    3 scenarios:
-      (1) plain text question
-      (2) question + uploaded file content
-      (3) question + file content + selected knowledge bases (told to the model
-          via <selected_knowledge_bases>, which hints it to call search_knowledge_bases).
+    三类场景：
+      (1) 纯文本问题
+      (2) 问题 + 上传文件内容
+      (3) 问题 + 文件内容 + 已预检索的知识库内容
     """
     has_kb = bool(knowledge_bases_info)
     has_file = bool(file_context)
+    has_retrieved_kb = bool(retrieved_knowledge_context)
 
-    if not has_kb and not has_file:
+    if not has_kb and not has_file and not has_retrieved_kb:
         logger.info(
             f'[build_user_content] scenario=plain question_len={len(question)}'
             f' preview={question[:120]!r}'
@@ -422,17 +423,31 @@ def _build_user_content(
             f'{json.dumps(kb_brief, ensure_ascii=False)}\n'
             '</selected_knowledge_bases>'
         )
+    if has_retrieved_kb:
+        parts.append(
+            '<retrieved_knowledge_context>\n'
+            f'{retrieved_knowledge_context}\n'
+            '</retrieved_knowledge_context>'
+        )
     if has_file:
         parts.append(f'<uploaded_file_content>\n{file_context}\n</uploaded_file_content>')
     parts.append(f'<user_question>\n{question}\n</user_question>')
     final_content = '\n\n'.join(parts)
 
-    # Debug trace for QA: mirrors the exact prompt fed to the LLM.
-    scenario = 'kb+file' if (has_kb and has_file) else ('kb' if has_kb else 'file')
+    # 调试日志用于复现实际发送给模型的提示词。
+    scenario_parts = []
+    if has_kb:
+        scenario_parts.append('kb')
+    if has_retrieved_kb:
+        scenario_parts.append('retrieved')
+    if has_file:
+        scenario_parts.append('file')
+    scenario = '+'.join(scenario_parts) or 'plain'
     logger.info(
         f'[build_user_content] scenario={scenario}'
         f' kb_count={len(knowledge_bases_info or [])}'
         f' file_context_len={len(file_context or "")}'
+        f' retrieved_knowledge_context_len={len(retrieved_knowledge_context or "")}'
         f' question_len={len(question)}'
         f' final_len={len(final_content)}'
     )
@@ -666,10 +681,6 @@ async def _build_knowledge_search_tool(
             if not tag_names:
                 continue
 
-            tag_rows = await TagDao.get_tags_by_business(
-                business_type=None,  # type: ignore[arg-type]
-                business_id=str(kb_id),
-            ) if False else []
             # Above helper is business-keyed; for file-level tags we query by
             # name against all tags and intersect with the KB's file set.
             try:
@@ -832,14 +843,104 @@ async def _build_knowledge_search_tool(
     )
 
 
+def _split_selected_knowledge_ids(knowledge_bases_info: list[dict]) -> tuple[list[int], list[int]]:
+    space_ids: list[int] = []
+    organization_ids: list[int] = []
+    for kb in knowledge_bases_info or []:
+        try:
+            kb_id = int(kb.get('id'))
+        except (TypeError, ValueError):
+            continue
+        if kb.get('source') == 'space':
+            space_ids.append(kb_id)
+        else:
+            organization_ids.append(kb_id)
+    return space_ids, organization_ids
+
+
+def _format_retrieved_knowledge_context(docs: list) -> list[str]:
+    formatted_results: list[str] = []
+    for doc in docs:
+        meta = getattr(doc, 'metadata', {}) or {}
+        file_name = meta.get('source') or meta.get('document_name') or meta.get('file_name') or ''
+        content = (getattr(doc, 'page_content', '') or '').strip()
+        if not content:
+            continue
+        formatted_results.append(
+            f'[file name]:{file_name}\n[file content begin]\n{content}\n[file content end]\n'
+        )
+    return formatted_results
+
+
+async def _retrieve_selected_knowledge_context(
+        question: str,
+        knowledge_bases_info: list[dict],
+        login_user: UserPayload,
+        max_token: int,
+        citation_collector: CitationRegistryCollector,
+) -> str:
+    """调用模型前先检索用户选择的知识库内容。
+
+    日常对话不能依赖模型自行触发知识库工具调用：
+    部分 OpenAI 兼容模型服务会把工具调用 JSON 当作普通文本输出。
+    """
+    if not knowledge_bases_info:
+        return ''
+
+    from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
+
+    space_ids, organization_ids = _split_selected_knowledge_ids(knowledge_bases_info)
+    if not space_ids and not organization_ids:
+        return ''
+
+    formatted_results: list[str] = []
+    failures: list[dict] = []
+    try:
+        formatted_results, finally_docs, failures = await WorkStationService.queryChunksFromDB(
+            question=question,
+            use_knowledge_param=UseKnowledgeBaseParam(
+                knowledge_space_ids=space_ids,
+                organization_knowledge_ids=organization_ids,
+            ),
+            max_token=max_token,
+            login_user=login_user,
+        )
+    except Exception as exc:
+        logger.exception(f'[pre_retrieve_kb] queryChunksFromDB failed: {exc}')
+        return '知识库检索失败，请稍后重试。'
+
+    docs = list(finally_docs or [])
+    if docs:
+        docs = annotate_rag_documents_with_citations(docs)
+        citation_items = collect_rag_citation_registry_items(docs)
+        await cache_citation_registry_items(citation_items)
+        citation_collector.extend(citation_items)
+        formatted_results = _format_retrieved_knowledge_context(docs)
+
+    for failure in failures or []:
+        kb_name = failure.get('name') or failure.get('id') or ''
+        error_text = str(failure.get('error') or '').replace('</retrieval_error>', '')
+        formatted_results.append(
+            f'[knowledge base]:{kb_name}\n[retrieval error]:{error_text}\n'
+        )
+
+    if not formatted_results:
+        return '没有找到相关内容。'
+
+    context = '\n'.join(formatted_results)
+    logger.info(
+        f'[pre_retrieve_kb] retrieved context chars={len(context)}'
+        f' docs={len(docs)} failures={len(failures or [])}'
+        f' kb_ids={space_ids + organization_ids}'
+    )
+    return context
+
+
 async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
     """Translate APIChatCompletion.use_knowledge_base into KB metadata dicts.
 
-    Returns [] if the user hasn't picked any KB. Used both for building the
-    `search_knowledge_bases` tool and for composing the user prompt's
-    <selected_knowledge_bases> section. Each KB dict carries the set of tag
-    names attached to files inside it (aggregated), so the model can pick
-    meaningful tag filters when calling search_knowledge_bases.
+    Returns [] if the user hasn't picked any KB. Each KB dict carries the set
+    of tag names attached to files inside it for prompt context.
     """
     ukb = data.use_knowledge_base
     if not ukb:
@@ -931,13 +1032,12 @@ async def _prepare_tools(
         citation_collector: CitationRegistryCollector,
         knowledge_bases_info: list[dict] | None = None,
 ) -> tuple[list[BaseTool], list[dict]]:
-    """Assemble the BaseTool list passed to LangGraph create_react_agent.
+    """组装传给 LangGraph create_react_agent 的 BaseTool 列表。
 
-    `tool_payloads` items come from the frontend request; each payload has
-    at least {id: int, tool_key: str, type: 'tool'|'knowledge'}.  Only
-    entries with type=='tool' are materialised here; knowledge base is
-    handled exclusively through the `search_knowledge_bases` tool built
-    from `knowledge_bases_info`.
+    `tool_payloads` 来自前端请求，至少包含
+    {id: int, tool_key: str, type: 'tool'|'knowledge'}。
+    这里只实例化 type=='tool' 的工具；用户选择的知识库会在模型调用前预检索，
+    不再暴露成模型可自行调用的工具。
     """
     tools: list[BaseTool] = []
     # Failures surfaced to caller so the agent can emit synthetic tool_call
@@ -974,21 +1074,10 @@ async def _prepare_tools(
             failures.append({
                 'tool_key': tool_key or str(tool_id or ''),
                 'tool_type': 'web' if tool_key == 'web_search' else 'tool',
-                # display_name is resolved on the frontend via i18n — just
-                # advertise the raw tool_key so the client can map it.
+                # display_name 由前端 i18n 解析，这里只透传 tool_key 供前端映射。
                 'display_name': tool_key or '',
                 'error': err,
             })
-
-    if knowledge_bases_info:
-        kb_tool = await _build_knowledge_search_tool(
-            knowledge_bases_info=knowledge_bases_info,
-            login_user=login_user,
-            max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
-            citation_collector=citation_collector,
-        )
-        if kb_tool is not None:
-            tools.append(kb_tool)
 
     return tools, failures
 
@@ -1286,11 +1375,19 @@ async def _agent_stream_chat_completion(
                 data, model_info, login_user, ws_config,
             )
 
-            # ---- Step 4: compose user content + history ----
+            # ---- Step 4: 预检索用户选择的知识库，并组装用户消息 ----
+            retrieved_knowledge_context = await _retrieve_selected_knowledge_context(
+                question=data.text or '',
+                knowledge_bases_info=knowledge_bases_info,
+                login_user=login_user,
+                max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
+                citation_collector=citation_collector,
+            )
             user_text = _build_user_content(
                 question=data.text or '',
                 file_context=file_context,
                 knowledge_bases_info=knowledge_bases_info,
+                retrieved_knowledge_context=retrieved_knowledge_context,
             )
 
             # Row-count ceiling just limits DB work; the real trimming
@@ -1405,7 +1502,6 @@ async def _agent_stream_chat_completion(
                 )
 
                 tool_meta_map = {t.name: _build_tool_meta(t) for t in langchain_tools}
-                inflight: dict[str, dict] = {}
                 max_iter = await _get_agent_max_iterations()
 
                 async for ev in agent.astream_events(
