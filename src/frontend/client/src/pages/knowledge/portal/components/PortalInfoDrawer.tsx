@@ -1,6 +1,16 @@
-import { Copy, PencilLine, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Copy, X } from "lucide-react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
-import type { PanelKey } from "../types";
+import type { PanelKey, PortalFileCategoryOption } from "../types";
+import {
+    BUSINESS_DOMAIN_OPTIONS,
+    type EncodingDraft,
+    composeFileEncoding,
+    fileEncodingBusinessDomainLabel,
+    fileEncodingCategoryLabel,
+    normalizeEncodingCode,
+    parseFileEncoding,
+} from "../uploadMetadata";
 import { formatFileSize } from "../utils";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
@@ -55,9 +65,11 @@ interface PortalInfoDrawerProps {
     documentPath: string;
     showPermissionPanel?: boolean;
     canEditEncoding?: boolean;
+    fileCategoryOptions: PortalFileCategoryOption[];
+    encodingPrefix: string;
     onClose: () => void;
     onCopyShareLink: () => void;
-    onEditEncoding?: () => void;
+    onUpdateEncoding?: (newEncoding: string) => void | Promise<void>;
     onPanelChange: (panel: Exclude<PanelKey, "share">) => void;
 }
 
@@ -67,11 +79,20 @@ export function PortalInfoDrawer({
     selectedFile,
     showPermissionPanel = true,
     canEditEncoding = false,
+    fileCategoryOptions,
+    encodingPrefix,
     onClose,
     onCopyShareLink,
-    onEditEncoding,
+    onUpdateEncoding,
     onPanelChange,
 }: PortalInfoDrawerProps) {
+    const [encodingDraft, setEncodingDraft] = useState<EncodingDraft>({});
+    const [savingEncoding, setSavingEncoding] = useState(false);
+
+    useEffect(() => {
+        setEncodingDraft({});
+    }, [selectedFile?.id, selectedFile?.fileEncoding]);
+
     if (!activePanel) return null;
     if (!showPermissionPanel && activePanel === "permission") return null;
 
@@ -85,7 +106,6 @@ export function PortalInfoDrawer({
     };
     const visiblePanel = activePanel === "share" ? "share" : activePanel;
     const fileFormat = getStorageFormat(selectedFile);
-    const fileTypeText = selectedFile ? "文档" : "-";
     const tags = selectedFile?.tags ?? [];
     const versionText = formatVersionText(selectedFile?.version_no);
     const operatorName = selectedFile?.user_name || "-";
@@ -100,23 +120,115 @@ export function PortalInfoDrawer({
         </div>
     );
 
+    const parsedEncoding = parseFileEncoding(selectedFile?.fileEncoding, encodingPrefix);
+    const selectedFileCategoryCode = normalizeEncodingCode(
+        encodingDraft.fileCategoryCode ?? parsedEncoding.fileCategoryCode,
+    );
+    const selectedBusinessDomainCode = normalizeEncodingCode(
+        encodingDraft.businessDomainCode ?? parsedEncoding.businessDomainCode,
+    );
+    const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
+    const hasCurrentBusinessDomainOption = BUSINESS_DOMAIN_OPTIONS.some((option) => option.code === selectedBusinessDomainCode);
+    const displayFileEncoding = selectedFileCategoryCode && selectedBusinessDomainCode
+        ? composeFileEncoding(selectedFile?.fileEncoding, selectedFileCategoryCode, selectedBusinessDomainCode, encodingPrefix)
+        : selectedFile?.fileEncoding;
+
+    const handleEncodingPartChange = async (nextDraft: EncodingDraft) => {
+        if (!selectedFile || !canEditEncoding) return;
+        const fileCategoryCode = normalizeEncodingCode(
+            nextDraft.fileCategoryCode ?? encodingDraft.fileCategoryCode ?? parsedEncoding.fileCategoryCode,
+        );
+        const businessDomainCode = normalizeEncodingCode(
+            nextDraft.businessDomainCode ?? encodingDraft.businessDomainCode ?? parsedEncoding.businessDomainCode,
+        );
+        setEncodingDraft({
+            fileCategoryCode,
+            businessDomainCode,
+        });
+        if (!fileCategoryCode || !businessDomainCode) return;
+
+        const newEncoding = composeFileEncoding(
+            selectedFile.fileEncoding,
+            fileCategoryCode,
+            businessDomainCode,
+            encodingPrefix,
+        );
+        if (newEncoding === selectedFile.fileEncoding?.trim()) return;
+
+        setSavingEncoding(true);
+        try {
+            await onUpdateEncoding?.(newEncoding);
+        } finally {
+            setSavingEncoding(false);
+        }
+    };
+
+    const renderFileCategoryItem = () => (
+        <div className={s.detailItem}>
+            <span className={s.detailLabel}>文件类型</span>
+            {selectedFile && canEditEncoding ? (
+                <select
+                    className={s.detailSelect}
+                    aria-label={`修改${selectedFile.name}文件类型 当前类型：${selectedFileCategoryCode || "未识别"}`}
+                    value={selectedFileCategoryCode}
+                    disabled={savingEncoding}
+                    onChange={(event) => void handleEncodingPartChange({ fileCategoryCode: event.currentTarget.value })}
+                >
+                    <option value="">未识别</option>
+                    {selectedFileCategoryCode && !hasCurrentCategoryOption ? (
+                        <option value={selectedFileCategoryCode}>
+                            {fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions)}
+                        </option>
+                    ) : null}
+                    {fileCategoryOptions.map((option) => (
+                        <option key={option.code} value={option.code}>
+                            {option.code} / {option.label}
+                        </option>
+                    ))}
+                </select>
+            ) : (
+                <span className={s.detailValue}>
+                    {selectedFile ? fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions) : "-"}
+                </span>
+            )}
+        </div>
+    );
+
+    const renderBusinessDomainItem = () => (
+        <div className={s.detailItem}>
+            <span className={s.detailLabel}>业务域类型</span>
+            {selectedFile && canEditEncoding ? (
+                <select
+                    className={s.detailSelect}
+                    aria-label={`修改${selectedFile.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
+                    value={selectedBusinessDomainCode}
+                    disabled={savingEncoding}
+                    onChange={(event) => void handleEncodingPartChange({ businessDomainCode: event.currentTarget.value })}
+                >
+                    <option value="">未识别</option>
+                    {selectedBusinessDomainCode && !hasCurrentBusinessDomainOption ? (
+                        <option value={selectedBusinessDomainCode}>
+                            {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode)}
+                        </option>
+                    ) : null}
+                    {BUSINESS_DOMAIN_OPTIONS.map((option) => (
+                        <option key={option.code} value={option.code}>
+                            {option.code} / {option.name}
+                        </option>
+                    ))}
+                </select>
+            ) : (
+                <span className={s.detailValue}>
+                    {selectedFile ? fileEncodingBusinessDomainLabel(selectedBusinessDomainCode) : "-"}
+                </span>
+            )}
+        </div>
+    );
+
     const renderFileEncodingItem = () => (
         <div className={s.detailItem}>
             <span className={s.detailLabel}>文件编码</span>
-            <span className={s.detailValueRow}>
-                <span className={s.detailValue}>{selectedFile?.fileEncoding || "-"}</span>
-                {selectedFile && canEditEncoding ? (
-                    <button
-                        type="button"
-                        className={s.detailEditButton}
-                        title="编辑文件编码"
-                        aria-label="编辑文件编码"
-                        onClick={onEditEncoding}
-                    >
-                        <PencilLine size={14} />
-                    </button>
-                ) : null}
-            </span>
+            <span className={s.detailValue}>{displayFileEncoding || "-"}</span>
         </div>
     );
 
@@ -161,9 +273,10 @@ export function PortalInfoDrawer({
                         className={s.detailList}
                     >
                         {renderDetailItem("文件名", getDisplayFileName(selectedFile))}
+                        {renderFileCategoryItem()}
+                        {renderBusinessDomainItem()}
                         {renderFileEncodingItem()}
                         {renderDetailItem("编码说明", selectedFile?.fileEncoding ? "此处为中文说明占位" : "-")}
-                        {renderDetailItem("文件类型", fileTypeText)}
                         {renderDetailItem("大小", selectedFile ? formatFileSize(selectedFile.size) : "-")}
                         {renderDetailItem("存储格式", fileFormat)}
                         <div className={s.detailItem}>

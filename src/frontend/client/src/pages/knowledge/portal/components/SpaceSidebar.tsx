@@ -28,6 +28,7 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import type { KnowledgeSpace, SpaceLevel } from "~/api/knowledge";
 import {
+    CREATE_KNOWLEDGE_SPACE_ICON_SRC,
     KNOWLEDGE_SPACE_ICON_SRC,
     PORTAL_SIDEBAR_TITLE_ICON_SRC,
     SIDEBAR_TOGGLE_ICON_SRC,
@@ -338,7 +339,7 @@ export function SpaceSidebar({
                                                 >
                                                     <img
                                                         className={s.spaceIcon}
-                                                        src={resolveAssetUrl(KNOWLEDGE_SPACE_ICON_SRC.default)}
+                                                        src={resolveAssetUrl(CREATE_KNOWLEDGE_SPACE_ICON_SRC)}
                                                         alt=""
                                                         aria-hidden="true"
                                                     />

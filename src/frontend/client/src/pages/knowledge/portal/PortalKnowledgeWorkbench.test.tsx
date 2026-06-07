@@ -601,6 +601,7 @@ describe("PortalKnowledgeWorkbench", () => {
             "sidebar-title.png",
             "knowledge-space.png",
             "knowledge-space-active.png",
+            "create-knowledge-space.png",
             "group-public-collapsed.png",
             "group-public-expanded.png",
             "group-department-collapsed.png",
@@ -814,6 +815,10 @@ describe("PortalKnowledgeWorkbench", () => {
         const createRow = await within(personalGroup).findByRole("button", { name: "新建知识库" });
 
         expect(createRow).toBeEnabled();
+        expect(createRow.querySelector("img")).toHaveAttribute(
+            "src",
+            "/assets/knowledge-portal/create-knowledge-space.png",
+        );
 
         fireEvent.click(createRow);
 
@@ -1143,6 +1148,135 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getAllByText("解析中").length).toBeGreaterThan(0);
         expect(within(noStatusRow).queryByText("成功")).not.toBeInTheDocument();
         expect(within(noStatusRow).queryByText("0/0")).not.toBeInTheDocument();
+    });
+
+    test("renders empty file list fields with double dash placeholders", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "空字段文件夹", {
+            type: FileType.FOLDER,
+            successFileNum: 1,
+            fileNum: 1,
+            tags: [],
+            fileEncoding: "",
+            updatedAt: "",
+        });
+        const file = makeFile("201", "README", {
+            size: undefined,
+            tags: [],
+            fileEncoding: "",
+            updatedAt: "",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [folder, file],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        const fileRow = screen.getByTestId("file-tree-row-201");
+
+        expect(within(folderRow).getAllByText("--").length).toBeGreaterThanOrEqual(4);
+        expect(within(fileRow).getAllByText("--").length).toBeGreaterThanOrEqual(5);
+        expect(within(folderRow).queryByText("—")).not.toBeInTheDocument();
+        expect(within(fileRow).queryByText("—")).not.toBeInTheDocument();
+        expect(within(folderRow).queryByText(/NaN/)).not.toBeInTheDocument();
+        expect(within(fileRow).queryByText(/NaN/)).not.toBeInTheDocument();
+    });
+
+    test("edits file classification columns from the portal file list", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "技术文档", {
+            type: FileType.FOLDER,
+            successFileNum: 1,
+            fileNum: 1,
+        });
+        const file = makeFile("201", "编码文档.pdf", {
+            type: FileType.PDF,
+            fileEncoding: "SGGF-STD-EM-20260600000001",
+        });
+        jest.mocked(updateFileEncoding)
+            .mockResolvedValueOnce({ ...file, fileEncoding: "SGGF-RPT-EM-20260600000001" } as any)
+            .mockResolvedValueOnce({ ...file, fileEncoding: "SGGF-RPT-PP-20260600000001" } as any);
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [folder, file],
+            total: 2,
+        } as any);
+
+        renderWorkbench();
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        const fileRow = screen.getByTestId("file-tree-row-201");
+        const table = screen.getByTestId("portal-file-table");
+        const columnHeaders = within(table).getAllByRole("columnheader");
+        const headerTexts = columnHeaders.map((header) => header.textContent?.trim() || "");
+        const headerIndex = (...labels: string[]) => headerTexts.findIndex((text) => labels.includes(text));
+        const fileTypeIndex = headerIndex("文件类型", "Type");
+        const tagIndex = headerIndex("标签", "Tag");
+        const businessDomainIndex = headerIndex("业务域类型");
+        const fileEncodingIndex = headerIndex("文件编码", "File Encoding");
+        const fileTypeHeader = columnHeaders[fileTypeIndex];
+        const fileSizeHeader = columnHeaders[headerIndex("文件大小", "File size")];
+        const fileSizeHeaderContentTags = Array.from(fileSizeHeader?.querySelector("div")?.children ?? [])
+            .map((element) => element.tagName.toLowerCase());
+
+        expect(screen.getByText("业务域类型")).toBeInTheDocument();
+        expect(fileTypeIndex).toBeGreaterThan(tagIndex);
+        expect(businessDomainIndex).toBeGreaterThan(fileTypeIndex);
+        expect(fileEncodingIndex).toBeGreaterThan(businessDomainIndex);
+        expect(fileTypeHeader?.querySelector("img")).toBeNull();
+        expect(fileSizeHeaderContentTags).toEqual(["span", "img"]);
+        expect(within(folderRow).getAllByText("--").length).toBeGreaterThanOrEqual(3);
+        expect(within(folderRow).queryByLabelText(/修改技术文档文件类型/)).not.toBeInTheDocument();
+        const fileTypeSelect = within(fileRow).getByLabelText("修改编码文档.pdf文件类型 当前类型：STD") as HTMLSelectElement;
+        const businessDomainSelect = within(fileRow).getByLabelText("修改编码文档.pdf业务域类型 当前业务域：EM") as HTMLSelectElement;
+        expect(fileTypeSelect).toHaveDisplayValue("STD / 标准规范");
+        expect(businessDomainSelect).toHaveDisplayValue("EM / 能源");
+        expect(Array.from(fileTypeSelect.options).map((option) => option.value)).not.toContain("");
+        expect(Array.from(businessDomainSelect.options).map((option) => option.value)).not.toContain("");
+        expect(within(fileRow).getByText("SGGF-STD-EM-20260600000001")).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "编辑文件编码" })).not.toBeInTheDocument();
+        expect(screen.queryByDisplayValue("SGGF-STD-EM-20260600000001")).not.toBeInTheDocument();
+
+        jest.mocked(getSpaceChildrenApi).mockClear();
+        fireEvent.click(fileTypeHeader!);
+        await act(async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+        });
+        expect(getSpaceChildrenApi).not.toHaveBeenCalled();
+
+        fireEvent.change(fileTypeSelect, {
+            target: { value: "RPT" },
+        });
+
+        await waitFor(() => {
+            expect(updateFileEncoding).toHaveBeenCalledWith("personal-1", "201", "SGGF-RPT-EM-20260600000001");
+        });
+
+        fireEvent.change(within(fileRow).getByLabelText("修改编码文档.pdf业务域类型 当前业务域：EM"), {
+            target: { value: "PP" },
+        });
+
+        await waitFor(() => {
+            expect(updateFileEncoding).toHaveBeenCalledWith("personal-1", "201", "SGGF-RPT-PP-20260600000001");
+        });
     });
 
     test("uses the main work area as a full file list and covers it with preview until back", async () => {
@@ -2032,7 +2166,9 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(drawer).queryByText("后端开发.md")).not.toBeInTheDocument();
         expect(within(drawer).getByText("202512160001")).toBeInTheDocument();
         expect(within(drawer).getByText("此处为中文说明占位")).toBeInTheDocument();
-        expect(within(drawer).getByText("文档")).toBeInTheDocument();
+        expect(within(drawer).getByText("文件类型")).toBeInTheDocument();
+        expect(within(drawer).getByText("业务域类型")).toBeInTheDocument();
+        expect(within(drawer).getAllByText("未识别").length).toBeGreaterThanOrEqual(2);
         expect(within(drawer).getByText("2.3 MB")).toBeInTheDocument();
         expect(within(drawer).getByText("md")).toBeInTheDocument();
         expect(within(drawer).getByText("数据库优化")).toBeInTheDocument();
@@ -2075,21 +2211,19 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByTestId("space-share-dialog")).not.toBeInTheDocument();
     });
 
-    test("edits the selected file encoding from the portal property drawer when file edit permission exists", async () => {
+    test("edits the selected file classification from the portal property drawer when file edit permission exists", async () => {
         const teamSpace = makeSpace("team-1", "我的技术文档", {
             spaceLevel: SpaceLevel.TEAM,
             role: SpaceRole.MEMBER,
         });
         const file = makeFile("201", "后端开发.md", {
             spaceId: "team-1",
-            fileEncoding: "RPT-PP-00000001",
+            fileEncoding: "SGGF-STD-EM-20260600000001",
         });
-        const nextEncoding = "SGGF-STD-PP-20260500000005";
         mockCheckPermission.mockResolvedValue({ allowed: true });
-        jest.mocked(updateFileEncoding).mockResolvedValue({
-            ...file,
-            fileEncoding: nextEncoding,
-        } as any);
+        jest.mocked(updateFileEncoding)
+            .mockResolvedValueOnce({ ...file, fileEncoding: "SGGF-RPT-EM-20260600000001" } as any)
+            .mockResolvedValueOnce({ ...file, fileEncoding: "SGGF-RPT-PP-20260600000001" } as any);
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
@@ -2110,19 +2244,28 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(within(rail).getByRole("button", { name: "侧边栏展开和关闭" }));
         const drawer = await screen.findByTestId("portal-info-drawer");
 
-        const editButton = await within(drawer).findByRole("button", { name: "编辑文件编码" });
-        fireEvent.click(editButton);
+        expect(within(drawer).queryByRole("button", { name: "编辑文件编码" })).not.toBeInTheDocument();
+        expect(screen.queryByDisplayValue("SGGF-STD-EM-20260600000001")).not.toBeInTheDocument();
+        expect(within(drawer).getByLabelText("修改后端开发.md文件类型 当前类型：STD")).toHaveDisplayValue("STD / 标准规范");
+        expect(within(drawer).getByLabelText("修改后端开发.md业务域类型 当前业务域：EM")).toHaveDisplayValue("EM / 能源");
 
-        fireEvent.change(screen.getByDisplayValue("RPT-PP-00000001"), {
-            target: { value: nextEncoding },
+        fireEvent.change(within(drawer).getByLabelText("修改后端开发.md文件类型 当前类型：STD"), {
+            target: { value: "RPT" },
         });
-        fireEvent.click(screen.getByRole("button", { name: /保存|Save|com_knowledge\.save/ }));
 
         await waitFor(() => {
-            expect(updateFileEncoding).toHaveBeenCalledWith("team-1", "201", nextEncoding);
+            expect(updateFileEncoding).toHaveBeenCalledWith("team-1", "201", "SGGF-RPT-EM-20260600000001");
+        });
+
+        fireEvent.change(within(drawer).getByLabelText("修改后端开发.md业务域类型 当前业务域：EM"), {
+            target: { value: "PP" },
+        });
+
+        await waitFor(() => {
+            expect(updateFileEncoding).toHaveBeenCalledWith("team-1", "201", "SGGF-RPT-PP-20260600000001");
         });
         await waitFor(() => {
-            expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent(nextEncoding);
+            expect(screen.getByTestId("portal-info-drawer")).toHaveTextContent("SGGF-RPT-PP-20260600000001");
         });
         expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
             message: "编码更新成功",

@@ -1482,6 +1482,29 @@
   line-height: 22px;
 }
 
+.detailSelect {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid #dee2ec;
+  border-radius: 4px;
+  padding: 0 8px;
+  outline: none;
+  background: #fff;
+  color: #273142;
+  font-size: 14px;
+}
+
+.detailSelect:focus {
+  border-color: #165dff;
+}
+
+.detailSelect:disabled {
+  cursor: not-allowed;
+  background: #f7f8fa;
+  color: #86909c;
+}
+
 .detailValueRow {
   display: inline-flex;
   min-width: 0;

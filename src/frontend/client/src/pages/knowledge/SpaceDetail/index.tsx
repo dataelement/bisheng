@@ -47,6 +47,7 @@ import {
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
+import type { PortalFileCategoryOption } from "../portal/types";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -89,6 +90,9 @@ interface KnowledgeSpaceContentProps {
     hideNativeStatusFilter?: boolean;
     hideShareButton?: boolean;
     hideFilePermissionActions?: boolean;
+    enableEncodingClassification?: boolean;
+    fileCategoryOptions?: PortalFileCategoryOption[];
+    encodingPrefix?: string;
     markPendingDeletion: (ids: Array<string | number>) => void;
     clearPendingDeletion: (ids: Array<string | number>) => void;
     setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
@@ -132,6 +136,9 @@ export function KnowledgeSpaceContent({
     hideNativeStatusFilter,
     hideShareButton = false,
     hideFilePermissionActions = false,
+    enableEncodingClassification = false,
+    fileCategoryOptions = [],
+    encodingPrefix,
     markPendingDeletion,
     clearPendingDeletion,
     setFiles,
@@ -1222,6 +1229,14 @@ export function KnowledgeSpaceContent({
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                     canManageMembers={canManageMembers}
+                                    enableEncodingClassification={enableEncodingClassification}
+                                    fileCategoryOptions={fileCategoryOptions}
+                                    encodingPrefix={encodingPrefix}
+                                    onFileEncodingUpdated={(fileId, newEncoding) => {
+                                        setFiles((prev) => prev.map((file) => (
+                                            file.id === fileId ? { ...file, fileEncoding: newEncoding } : file
+                                        )));
+                                    }}
                                 />
                                 {hasMore && (
                                     <LoadMore

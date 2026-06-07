@@ -13,24 +13,19 @@ import { NotificationSeverity } from "~/common";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
 import type { PortalFileCategoryOption } from "../types";
-import { BUSINESS_DOMAIN_OPTIONS } from "../uploadMetadata";
+import {
+    BUSINESS_DOMAIN_OPTIONS,
+    DEFAULT_ENCODING_PREFIX,
+    type EncodingDraft,
+    composeFileEncoding,
+    fileEncodingBusinessDomainLabel,
+    fileEncodingCategoryLabel,
+    normalizeEncodingCode,
+    parseFileEncoding,
+} from "../uploadMetadata";
 import s from "../PortalKnowledgeWorkbench.module.css";
 
 const PAGE_SIZE = 20;
-const DEFAULT_ENCODING_PREFIX = "SGGF";
-const DEFAULT_ENCODING_SERIAL = "00000000000001";
-
-type EncodingDraft = {
-    fileCategoryCode?: string;
-    businessDomainCode?: string;
-};
-
-type ParsedUploadRecordEncoding = {
-    prefix: string;
-    fileCategoryCode: string;
-    businessDomainCode: string;
-    serial: string;
-};
 
 function uploadStatusLabel(status?: FileStatus): string {
     switch (status) {
@@ -93,55 +88,6 @@ function uploadRecordSpaceName(record: UploadedFileRecord): string {
 
 function uploadRecordTagText(record: UploadedFileRecord): string {
     return record.tags.length ? record.tags.map((tag) => tag.name).join("、") : "-";
-}
-
-function normalizeEncodingCode(value?: string | null): string {
-    return String(value ?? "").trim().toUpperCase();
-}
-
-function parseUploadRecordEncoding(
-    encoding?: string | null,
-    fallbackPrefix = DEFAULT_ENCODING_PREFIX,
-): ParsedUploadRecordEncoding {
-    const cleaned = String(encoding ?? "").trim();
-    const parts = cleaned.split("-").map((part) => part.trim()).filter(Boolean);
-    if (parts.length >= 4) {
-        return {
-            prefix: parts[0] || fallbackPrefix,
-            fileCategoryCode: normalizeEncodingCode(parts[1]),
-            businessDomainCode: normalizeEncodingCode(parts[2]),
-            serial: parts.slice(3).join("-") || DEFAULT_ENCODING_SERIAL,
-        };
-    }
-    const numericSerial = cleaned.replace(/\D/g, "");
-    return {
-        prefix: fallbackPrefix,
-        fileCategoryCode: "",
-        businessDomainCode: "",
-        serial: numericSerial || DEFAULT_ENCODING_SERIAL,
-    };
-}
-
-function composeUploadRecordEncoding(
-    record: UploadedFileRecord,
-    fileCategoryCode: string,
-    businessDomainCode: string,
-    fallbackPrefix: string,
-) {
-    const parsed = parseUploadRecordEncoding(record.fileEncoding, fallbackPrefix);
-    return `${parsed.prefix || fallbackPrefix}-${fileCategoryCode}-${businessDomainCode}-${parsed.serial || DEFAULT_ENCODING_SERIAL}`;
-}
-
-function uploadRecordCategoryLabel(code: string, options: PortalFileCategoryOption[]): string {
-    if (!code) return "未识别";
-    const option = options.find((item) => item.code === code);
-    return option ? `${code} / ${option.label}` : `${code} / 未配置类型`;
-}
-
-function uploadRecordBusinessDomainLabel(code: string): string {
-    if (!code) return "未识别";
-    const option = BUSINESS_DOMAIN_OPTIONS.find((item) => item.code === code);
-    return option ? `${code} / ${option.name}` : `${code} / 未配置业务域`;
 }
 
 type FolderTreeNode = {
@@ -388,7 +334,7 @@ export function PortalUploadedFilesDrawer({
         record: UploadedFileRecord,
         nextDraft: EncodingDraft,
     ) => {
-        const parsed = parseUploadRecordEncoding(record.fileEncoding, encodingPrefix);
+        const parsed = parseFileEncoding(record.fileEncoding, encodingPrefix);
         const currentDraft = encodingDrafts[record.id] ?? {};
         const fileCategoryCode = normalizeEncodingCode(
             nextDraft.fileCategoryCode ?? currentDraft.fileCategoryCode ?? parsed.fileCategoryCode,
@@ -405,8 +351,8 @@ export function PortalUploadedFilesDrawer({
         }));
         if (!fileCategoryCode || !businessDomainCode) return;
 
-        const newEncoding = composeUploadRecordEncoding(
-            record,
+        const newEncoding = composeFileEncoding(
+            record.fileEncoding,
             fileCategoryCode,
             businessDomainCode,
             encodingPrefix,
@@ -493,7 +439,7 @@ export function PortalUploadedFilesDrawer({
                             <div className={s.uploadRecordsEmpty}>正在加载上传记录...</div>
                         ) : records.length ? records.map((record) => {
                             const encodingText = record.fileEncoding?.trim() || "-";
-                            const parsedEncoding = parseUploadRecordEncoding(record.fileEncoding, encodingPrefix);
+                            const parsedEncoding = parseFileEncoding(record.fileEncoding, encodingPrefix);
                             const draft = encodingDrafts[record.id] ?? {};
                             const selectedFileCategoryCode = normalizeEncodingCode(draft.fileCategoryCode ?? parsedEncoding.fileCategoryCode);
                             const selectedBusinessDomainCode = normalizeEncodingCode(draft.businessDomainCode ?? parsedEncoding.businessDomainCode);
@@ -526,7 +472,7 @@ export function PortalUploadedFilesDrawer({
                                             <option value="">未识别</option>
                                             {selectedFileCategoryCode && !hasCurrentCategoryOption ? (
                                                 <option value={selectedFileCategoryCode}>
-                                                    {uploadRecordCategoryLabel(selectedFileCategoryCode, fileCategoryOptions)}
+                                                    {fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions)}
                                                 </option>
                                             ) : null}
                                             {fileCategoryOptions.map((option) => (
@@ -547,7 +493,7 @@ export function PortalUploadedFilesDrawer({
                                             <option value="">未识别</option>
                                             {selectedBusinessDomainCode && !BUSINESS_DOMAIN_OPTIONS.some((option) => option.code === selectedBusinessDomainCode) ? (
                                                 <option value={selectedBusinessDomainCode}>
-                                                    {uploadRecordBusinessDomainLabel(selectedBusinessDomainCode)}
+                                                    {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode)}
                                                 </option>
                                             ) : null}
                                             {BUSINESS_DOMAIN_OPTIONS.map((option) => (

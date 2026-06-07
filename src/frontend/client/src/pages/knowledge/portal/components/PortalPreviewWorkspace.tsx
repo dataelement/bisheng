@@ -1,5 +1,5 @@
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
-import type { PanelKey, PreviewState } from "../types";
+import type { PanelKey, PortalFileCategoryOption, PreviewState } from "../types";
 import { DocumentPreview } from "./DocumentPreview";
 import { PortalAiDrawer } from "./PortalAiDialog";
 import { PortalInfoDrawer } from "./PortalInfoDrawer";
@@ -13,6 +13,8 @@ interface PortalPreviewWorkspaceProps {
     canEditEncoding: boolean;
     canManagePermission: boolean;
     documentPath: string;
+    encodingPrefix: string;
+    fileCategoryOptions: PortalFileCategoryOption[];
     isPersonalSpace: boolean;
     preview: PreviewState;
     selectedFile: KnowledgeFile;
@@ -22,7 +24,7 @@ interface PortalPreviewWorkspaceProps {
     onCopyEncoding: () => void;
     onCopyShareLink: () => void;
     onDownload: () => void;
-    onEditEncoding: () => void;
+    onUpdateEncoding: (newEncoding: string) => void | Promise<void>;
     onOpenPermission: () => void;
     onOpenTags: () => void;
     onPanelChange: (panel: PanelKey | null) => void;
@@ -36,6 +38,8 @@ export function PortalPreviewWorkspace({
     canEditEncoding,
     canManagePermission,
     documentPath,
+    encodingPrefix,
+    fileCategoryOptions,
     isPersonalSpace,
     preview,
     selectedFile,
@@ -45,7 +49,7 @@ export function PortalPreviewWorkspace({
     onCopyEncoding,
     onCopyShareLink,
     onDownload,
-    onEditEncoding,
+    onUpdateEncoding,
     onOpenPermission,
     onOpenTags,
     onPanelChange,
@@ -80,9 +84,11 @@ export function PortalPreviewWorkspace({
                     documentPath={documentPath}
                     showPermissionPanel={!isPersonalSpace}
                     canEditEncoding={canEditEncoding}
+                    fileCategoryOptions={fileCategoryOptions}
+                    encodingPrefix={encodingPrefix}
                     onClose={() => onPanelChange(null)}
                     onCopyShareLink={onCopyShareLink}
-                    onEditEncoding={onEditEncoding}
+                    onUpdateEncoding={onUpdateEncoding}
                     onPanelChange={onPanelChange}
                 />
             ) : null}

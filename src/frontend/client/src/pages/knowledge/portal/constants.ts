@@ -28,6 +28,8 @@ const KNOWLEDGE_PORTAL_ASSET_BASE = "/assets/knowledge-portal";
 
 export const PORTAL_SIDEBAR_TITLE_ICON_SRC = `${KNOWLEDGE_PORTAL_ASSET_BASE}/sidebar-title.png`;
 
+export const CREATE_KNOWLEDGE_SPACE_ICON_SRC = `${KNOWLEDGE_PORTAL_ASSET_BASE}/create-knowledge-space.png`;
+
 export const KNOWLEDGE_SPACE_ICON_SRC = {
     default: `${KNOWLEDGE_PORTAL_ASSET_BASE}/knowledge-space.png`,
     active: `${KNOWLEDGE_PORTAL_ASSET_BASE}/knowledge-space-active.png`,

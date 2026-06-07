@@ -1,4 +1,8 @@
 import type { SpaceTag } from "~/api/knowledge";
+import type { PortalFileCategoryOption } from "./types";
+
+export const DEFAULT_ENCODING_PREFIX = "SGGF";
+export const DEFAULT_ENCODING_SERIAL = "00000000000001";
 
 export const BUSINESS_DOMAIN_OPTIONS = [
     { code: "PP", name: "生产" },
@@ -34,10 +38,71 @@ export interface PortalUploadTagOption {
     value: string;
 }
 
+export type EncodingDraft = {
+    fileCategoryCode?: string;
+    businessDomainCode?: string;
+};
+
+export type ParsedFileEncoding = {
+    prefix: string;
+    fileCategoryCode: string;
+    businessDomainCode: string;
+    serial: string;
+};
+
 export const EMPTY_PORTAL_UPLOAD_METADATA: PortalUploadMetadataState = {
     businessDomainCode: "",
     selectedTagValues: [],
 };
+
+export function normalizeEncodingCode(value?: string | null): string {
+    return String(value ?? "").trim().toUpperCase();
+}
+
+export function parseFileEncoding(
+    encoding?: string | null,
+    fallbackPrefix = DEFAULT_ENCODING_PREFIX,
+): ParsedFileEncoding {
+    const cleaned = String(encoding ?? "").trim();
+    const parts = cleaned.split("-").map((part) => part.trim()).filter(Boolean);
+    if (parts.length >= 4) {
+        return {
+            prefix: parts[0] || fallbackPrefix,
+            fileCategoryCode: normalizeEncodingCode(parts[1]),
+            businessDomainCode: normalizeEncodingCode(parts[2]),
+            serial: parts.slice(3).join("-") || DEFAULT_ENCODING_SERIAL,
+        };
+    }
+    const numericSerial = cleaned.replace(/\D/g, "");
+    return {
+        prefix: fallbackPrefix,
+        fileCategoryCode: "",
+        businessDomainCode: "",
+        serial: numericSerial || DEFAULT_ENCODING_SERIAL,
+    };
+}
+
+export function composeFileEncoding(
+    currentEncoding: string | null | undefined,
+    fileCategoryCode: string,
+    businessDomainCode: string,
+    fallbackPrefix = DEFAULT_ENCODING_PREFIX,
+) {
+    const parsed = parseFileEncoding(currentEncoding, fallbackPrefix);
+    return `${parsed.prefix || fallbackPrefix}-${fileCategoryCode}-${businessDomainCode}-${parsed.serial || DEFAULT_ENCODING_SERIAL}`;
+}
+
+export function fileEncodingCategoryLabel(code: string, options: PortalFileCategoryOption[]): string {
+    if (!code) return "未识别";
+    const option = options.find((item) => item.code === code);
+    return option ? `${code} / ${option.label}` : `${code} / 未配置类型`;
+}
+
+export function fileEncodingBusinessDomainLabel(code: string): string {
+    if (!code) return "未识别";
+    const option = BUSINESS_DOMAIN_OPTIONS.find((item) => item.code === code);
+    return option ? `${code} / ${option.name}` : `${code} / 未配置业务域`;
+}
 
 export function parseUploadTagValues(values: string[]) {
     const manualTagIds: number[] = [];

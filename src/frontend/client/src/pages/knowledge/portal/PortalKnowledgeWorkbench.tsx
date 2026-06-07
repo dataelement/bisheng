@@ -58,7 +58,6 @@ import {
     toStatusNumbers,
     updateTreeNode,
 } from "./utils";
-import { EditEncodingModal } from "../SpaceDetail/EditEncodingModal";
 import { KnowledgeSpaceContent } from "../SpaceDetail";
 import { KnowledgeAiPanel } from "../SpaceDetail/AiChat/KnowledgeAiPanel";
 import type { SearchParams } from "../SpaceDetail/CompoundSearchInput";
@@ -133,7 +132,6 @@ export default function PortalKnowledgeWorkbench() {
     const [canEditSelectedFileEncoding, setCanEditSelectedFileEncoding] = useState(false);
     const [publishEntryIds, setPublishEntryIds] = useState<Set<string>>(new Set());
     const [publishingFile, setPublishingFile] = useState<KnowledgeFile | null>(null);
-    const [editingEncodingFile, setEditingEncodingFile] = useState<KnowledgeFile | null>(null);
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
     const [currentFolderId, setCurrentFolderId] = useState<string | undefined>();
@@ -1350,14 +1348,12 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [selectedFile?.fileEncoding, showToast]);
 
-    const handleSubmitFileEncoding = useCallback(async (newEncoding: string) => {
-        const target = editingEncodingFile;
-        if (!activeSpace || !target) return;
-        if (selectedFile?.id !== target.id || !canEditSelectedFileEncoding) return;
+    const handleUpdateSelectedFileEncoding = useCallback(async (newEncoding: string) => {
+        if (!activeSpace || !selectedFile || !canEditSelectedFileEncoding) return;
 
         try {
-            await updateFileEncoding(String(target.spaceId || activeSpace.id), target.id, newEncoding);
-            patchFileById(target.id, (file) => ({
+            await updateFileEncoding(String(selectedFile.spaceId || activeSpace.id), selectedFile.id, newEncoding);
+            patchFileById(selectedFile.id, (file) => ({
                 ...file,
                 fileEncoding: newEncoding,
             }));
@@ -1369,9 +1365,8 @@ export default function PortalKnowledgeWorkbench() {
     }, [
         activeSpace,
         canEditSelectedFileEncoding,
-        editingEncodingFile,
         patchFileById,
-        selectedFile?.id,
+        selectedFile,
         showToast,
     ]);
 
@@ -1539,6 +1534,9 @@ export default function PortalKnowledgeWorkbench() {
                                                     hideNativeStatusFilter
                                                     hideShareButton
                                                     hideFilePermissionActions={isActiveSpacePersonal}
+                                                    enableEncodingClassification
+                                                    fileCategoryOptions={fileCategoryOptions}
+                                                    encodingPrefix={fileEncodingPrefix}
                                                     markPendingDeletion={markPendingDeletion}
                                                     clearPendingDeletion={clearPendingDeletion}
                                                     setFiles={setCurrentFolderFiles}
@@ -1598,10 +1596,9 @@ export default function PortalKnowledgeWorkbench() {
                     onCopyEncoding={() => void handleCopyFileEncoding()}
                     onCopyShareLink={() => void copyShareLink()}
                     onDownload={() => void handleDownloadSelected()}
-                    onEditEncoding={() => {
-                        if (!canEditSelectedFileEncoding) return;
-                        setEditingEncodingFile(selectedFile);
-                    }}
+                    fileCategoryOptions={fileCategoryOptions}
+                    encodingPrefix={fileEncodingPrefix}
+                    onUpdateEncoding={(newEncoding) => handleUpdateSelectedFileEncoding(newEncoding)}
                     onOpenPermission={() => {
                         if (!canManageSelectedFilePermission) return;
                         setPermissionTarget(selectedFile);
@@ -1710,12 +1707,6 @@ export default function PortalKnowledgeWorkbench() {
                 showToast={showToast}
                 fileCategoryOptions={fileCategoryOptions}
                 encodingPrefix={fileEncodingPrefix}
-            />
-            <EditEncodingModal
-                file={editingEncodingFile}
-                open={Boolean(editingEncodingFile)}
-                onClose={() => setEditingEncodingFile(null)}
-                onSubmit={handleSubmitFileEncoding}
             />
         </div>
     );
