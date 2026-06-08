@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional, List
 
-from langchain.memory import ConversationBufferWindowMemory
+from langchain_classic.memory import ConversationBufferWindowMemory
 from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string, BaseMessage
 from pydantic import BaseModel, Field
 

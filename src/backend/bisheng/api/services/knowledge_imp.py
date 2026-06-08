@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Optional
 
 import aiofiles
 import requests
-from langchain.schema.document import Document
-from langchain.text_splitter import CharacterTextSplitter
+from langchain_classic.schema.document import Document
+from langchain_classic.text_splitter import CharacterTextSplitter
 from langchain_community.document_loaders import (
     BSHTMLLoader,
     PyPDFLoader,
@@ -718,7 +718,7 @@ def delete_vector_data(knowledge: Knowledge, file_ids: List[int]):
 
 def recommend_question(invoke_user_id: int, question: str, answer: str, number: int = 3,
                        tenant_id: Optional[int] = None) -> List[str]:
-    from langchain.chains.llm import LLMChain
+    from langchain_classic.chains.llm import LLMChain
     from langchain_core.prompts.prompt import PromptTemplate
 
     prompt = """- Role: Problem Generation Specialist

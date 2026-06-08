@@ -24,10 +24,10 @@ except ImportError:
 import numpy as np
 import numpy.testing as npt
 import pandas as pd
-from langchain.prompts import ChatPromptTemplate
-from langchain.docstore.document import Document
-# from langchain.schema.document import Document as LangchainDocument
-from langchain.chains.base import Chain
+from langchain_classic.prompts import ChatPromptTemplate
+from langchain_classic.docstore.document import Document
+# from langchain_classic.schema.document import Document as LangchainDocument
+from langchain_classic.chains.base import Chain
 from numpy.random import default_rng
 from tqdm import tqdm
 from .prompt_v2 import (

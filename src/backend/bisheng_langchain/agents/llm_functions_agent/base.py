@@ -7,16 +7,16 @@ from pydantic import model_validator
 
 from bisheng_langchain.chat_models.host_llm import HostQwenChat
 from bisheng_langchain.chat_models.proxy_llm import ProxyChatLLM
-from langchain.agents import BaseSingleActionAgent
-from langchain.callbacks.base import BaseCallbackManager
-from langchain.callbacks.manager import Callbacks
-from langchain.prompts.chat import (BaseMessagePromptTemplate, ChatPromptTemplate,
+from langchain_classic.agents import BaseSingleActionAgent
+from langchain_classic.callbacks.base import BaseCallbackManager
+from langchain_classic.callbacks.manager import Callbacks
+from langchain_classic.prompts.chat import (BaseMessagePromptTemplate, ChatPromptTemplate,
                                     HumanMessagePromptTemplate, MessagesPlaceholder)
-from langchain.schema import AgentAction, AgentFinish, BasePromptTemplate, OutputParserException
-from langchain.schema.language_model import BaseLanguageModel
-from langchain.schema.messages import AIMessage, BaseMessage, FunctionMessage, SystemMessage
-from langchain.tools import BaseTool
-from langchain.tools.convert_to_openai import format_tool_to_openai_function
+from langchain_classic.schema import AgentAction, AgentFinish, BasePromptTemplate, OutputParserException
+from langchain_classic.schema.language_model import BaseLanguageModel
+from langchain_classic.schema.messages import AIMessage, BaseMessage, FunctionMessage, SystemMessage
+from langchain_classic.tools import BaseTool
+from langchain_classic.tools.convert_to_openai import format_tool_to_openai_function
 from langchain_core.agents import AgentActionMessageLog
 from langchain_openai import ChatOpenAI
 

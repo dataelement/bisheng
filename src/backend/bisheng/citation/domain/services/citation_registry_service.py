@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit, urlunsplit
 
-from langchain.docstore.document import Document
+from langchain_classic.docstore.document import Document
 
 from bisheng.citation.domain.models.message_citation import MessageCitation
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository

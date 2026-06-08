@@ -11,17 +11,17 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStore
 from loguru import logger
 
-from langchain.callbacks.manager import CallbackManagerForRetrieverRun
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter, TextSplitter
-from langchain.vectorstores.milvus import Milvus
+from langchain_classic.callbacks.manager import CallbackManagerForRetrieverRun
+from langchain_classic.embeddings import OpenAIEmbeddings
+from langchain_classic.text_splitter import RecursiveCharacterTextSplitter, TextSplitter
+from langchain_classic.vectorstores.milvus import Milvus
 
 sys.path.append('../')
 
 from retrieval.smaller_chunks import SmallerChunksRetriever
 
 openai_proxy = os.environ.get('OPENAI_PROXY')
-httpx_client = httpx.Client(proxies=openai_proxy)
+httpx_client = httpx.Client(proxy=openai_proxy)
 
 EMBEDDING = OpenAIEmbeddings(model='text-embedding-ada-002', http_client=httpx_client)
 

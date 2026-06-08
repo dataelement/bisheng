@@ -1,7 +1,7 @@
 from typing import Any, List, Optional
 
 from bisheng_langchain.vectorstores import ElasticKeywordsSearch
-from langchain.text_splitter import TextSplitter
+from langchain_classic.text_splitter import TextSplitter
 from langchain_core.documents import Document
 from pydantic import Field
 from langchain_core.retrievers import BaseRetriever

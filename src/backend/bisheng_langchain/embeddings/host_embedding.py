@@ -4,8 +4,8 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import requests
-from langchain.embeddings.base import Embeddings
-from langchain.utils import get_from_dict_or_env
+from langchain_classic.embeddings.base import Embeddings
+from langchain_classic.utils import get_from_dict_or_env
 from pydantic import model_validator, BaseModel, Field
 from tenacity import (before_sleep_log, retry, retry_if_exception_type, stop_after_attempt,
                       wait_exponential)

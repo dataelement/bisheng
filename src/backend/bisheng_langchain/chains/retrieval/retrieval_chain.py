@@ -1,12 +1,12 @@
 import inspect
 from typing import Any, Dict, List, Optional
 
-from langchain.callbacks.manager import (
+from langchain_classic.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
 )
-from langchain.chains.base import Chain
-from langchain.schema import BaseRetriever, Document
+from langchain_classic.chains.base import Chain
+from langchain_classic.schema import BaseRetriever, Document
 from pydantic import Field
 
 
