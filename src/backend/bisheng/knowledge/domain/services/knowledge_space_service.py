@@ -3,7 +3,7 @@ import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 from fastapi import Request
 from loguru import logger
@@ -92,8 +92,8 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
     KnowledgeSpaceTagLibraryService,
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
-from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.llm.domain import LLMService
+from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.permission.domain.knowledge_space_permission_template import (
     default_permission_ids_for_relation,
 )
@@ -1455,9 +1455,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # The vector drop above removed the Milvus collection + ES index; recreate
         # empty ones so the cleared space stays queryable (empty result, not 500).
-        await asyncio.to_thread(
-            KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, space
-        )
+        await asyncio.to_thread(KnowledgeService._init_knowledge_indices_sync, self.login_user.user_id, space)
 
         # F008: drop FGA tuples for child resources only; keep the space's tuple.
         await self._cleanup_resource_tuples(child_resources)
@@ -1780,7 +1778,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         start = (page_num - 1) * page_size
-        page_items = items[start:start + page_size + 1]
+        page_items = items[start : start + page_size + 1]
         has_more = len(page_items) > page_size
         page_items = page_items[:page_size]
 
@@ -1881,8 +1879,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
         accessible_ids = await PermissionService.list_accessible_ids(
             user_id=self.login_user.user_id,
-            relation='can_edit',
-            object_type='knowledge_space',
+            relation="can_edit",
+            object_type="knowledge_space",
             login_user=self.login_user,
         )
 
@@ -1899,17 +1897,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 spaces = list((await session.exec(stmt)).all())
         else:
             creator_ids = await KnowledgeDao.aget_knowledge_ids_created_by(
-                self.login_user.user_id, KnowledgeTypeEnum.SPACE,
+                self.login_user.user_id,
+                KnowledgeTypeEnum.SPACE,
             )
-            ids = set(creator_ids) | {
-                int(sid) for sid in accessible_ids if str(sid).isdigit()
-            }
+            ids = set(creator_ids) | {int(sid) for sid in accessible_ids if str(sid).isdigit()}
             if not ids:
                 return []
             spaces = await KnowledgeDao.aget_list_by_ids(list(ids))
             spaces = [s for s in spaces if s.type == KnowledgeTypeEnum.SPACE.value]
             spaces.sort(
-                key=lambda s: s.update_time or datetime.min, reverse=True,
+                key=lambda s: s.update_time or datetime.min,
+                reverse=True,
             )
             spaces = spaces[:limit]
 
@@ -1920,7 +1918,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
-
 
     async def get_knowledge_square(self, keyword: str = None, page: int = 1, page_size: int = 20) -> dict:
         from bisheng.user.domain.services.user import UserService
@@ -2542,7 +2539,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         visible_page_items: list[KnowledgeFile] = []
         permission_context = await self._build_child_permission_context(space_id)
-        batch_cursor: Optional[List] = list(cursor) if cursor else None
+        batch_cursor: list | None = list(cursor) if cursor else None
 
         while True:
             batch_items = await SpaceFileDao.async_list_children(
@@ -2652,7 +2649,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         data = await self._handle_file_folder_extra_info(visible_page_items)
 
-        next_cursor: Optional[str] = None
+        next_cursor: str | None = None
         if has_more and visible_page_items:
             last = visible_page_items[-1]
             next_cursor = encode_cursor(
@@ -3829,9 +3826,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         organization_subject_types = await FineGrainedPermissionService.get_matching_binding_subject_types_async(
             self.login_user,
-            'knowledge_space',
+            "knowledge_space",
             space_id,
-            {'department', 'user_group'},
+            {"department", "user_group"},
         )
         if organization_subject_types:
             raise SpaceOrganizationGrantExitDeniedError(
