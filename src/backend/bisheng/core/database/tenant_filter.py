@@ -66,7 +66,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     'bisheng.database.models.group_resource',
     'bisheng.database.models.tag',
     'bisheng.database.models.template',
-    'bisheng.database.models.evaluation',
+    'bisheng.evaluation.domain.models.evaluation',
     'bisheng.database.models.invite_code',
     'bisheng.database.models.variable_value',
     'bisheng.database.models.report',

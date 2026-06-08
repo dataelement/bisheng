@@ -14,7 +14,6 @@ _ROUTER_EXPORTS = {
     'audit_router': ('bisheng.api.v1.audit', 'router'),
     'chat_router': ('bisheng.api.v1.chat', 'router'),
     'endpoints_router': ('bisheng.api.v1.endpoints', 'router'),
-    'evaluation_router': ('bisheng.api.v1.evaluation', 'router'),
     'flows_router': ('bisheng.api.v1.flows', 'router'),
     'invite_code_router': ('bisheng.api.v1.invite_code', 'router'),
     'mark_router': ('bisheng.api.v1.mark_task', 'router'),
