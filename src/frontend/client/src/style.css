@@ -1477,6 +1477,12 @@ button {
   border-radius: 9999px;
 }
 
+/* Excel preview: horizontal scrollbar same thickness as vertical (override global 0.1em height) */
+.excel-scroll::-webkit-scrollbar {
+  width: 0.5rem;
+  height: 0.5rem;
+}
+
 .scrollbar-transparent::-webkit-scrollbar-thumb {
   background-color: transparent;
 }
