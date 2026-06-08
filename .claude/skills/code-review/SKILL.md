@@ -16,13 +16,13 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行。
 
 1. 执行 `git diff 2.5.0-PM...HEAD --stat` 获取变更文件列表
 2. 执行 `git diff 2.5.0-PM...HEAD` 获取完整 diff
-3. 对照 Feature 的 `spec.md` 和 `tasks.md`
-4. 按 6 维度逐一审查
+3. 对照 Feature 的 `spec.md`、`design.md` 和 `tasks.md`
+4. 按 7 维度逐一审查
 5. 输出审查报告
 
 ---
 
-## 6 维度审查框架
+## 7 维度审查框架
 
 ### 维度 1：边界条件
 
@@ -89,6 +89,25 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行。
 | 未使用代码 | 无 dead code、注释掉的代码块、空函数 |
 | 格式化 | Python 代码通过 ruff check（hook 自动处理） |
 
+### 维度 7：文档同步（design.md 现状快照）
+
+> **目的**：确保 feature 合入后，新 agent 接手时读 design.md 能 5 分钟建立准确认知 —— 没有过期描述、没有缺失的反直觉坑、没有未声明的对外契约。
+
+| 检查项 | 说明 | 严重度 |
+|--------|------|--------|
+| design.md 存在 | feature 目录下有 `design.md`（按 `features/_templates/design.md` 起的稿） | HIGH（缺失直接 NEEDS_FIX） |
+| 决策同步 | diff 中新增/替换的关键技术决策（数据格式、配对/匹配策略、同步 vs 异步、二进制依赖等）在 §3 方案对比有记录，且给出"何时该重新考虑" | HIGH |
+| 数据流/契约同步 | diff 触及 API 路径 / 请求响应字段 / 内部 Service 入参出参 / 数据库新表新字段 / 关键文件职责变化 → §4.1 数据流、§4.2 字段约定、§4.3 模块职责对应章节已更新 | HIGH |
+| 已知坑同步 | 修了一个"代码里看不出的"反直觉 bug（典型：上游字段格式不符合直觉、运行时值与文档不符、必须的兜底逻辑）→ §5 已知坑 表新增一行（带"如果不知道会怎样"+"在哪处理"） | HIGH |
+| 契约/依赖同步 | 新增对外 endpoint / 新依赖 chat/knowledge/permission 等模块的隐式契约 / 新增系统二进制依赖 → §6 Outgoing / Incoming 已补 | HIGH |
+| 修订历史 | §修订历史 末尾追加了本次 feature 完成的条目（日期 + 改动 + 触发原因） | MEDIUM |
+| 与 spec 不冲突 | design.md 对当前实现的描述未与 spec.md AC 矛盾（spec 是不变目标，design 是当前实现，二者口径必须对齐） | HIGH |
+
+**判定要点**：
+- 若 design.md 与代码现状偏离 → 必须修复（视为 HIGH），不能合入
+- 仅本地小修小补（不改变对外行为、不引入新坑、不动决策）→ 本维度全 PASS 即可
+- design.md 不存在但已在 SDD 流程要求之内 → HIGH，要求按模板补全后再审
+
 ---
 
 ## 判定规则
@@ -121,6 +140,7 @@ L2 特性级多维度代码审查。Feature 全部任务完成后执行。
 | Information Leakage | 0 | 0 | 0 | PASS |
 | Test Coverage | 0 | 0 | 0 | PASS |
 | Code Style | 0 | 0 | 0 | PASS |
+| Docs Sync (design.md) | 0 | 0 | 0 | PASS |
 
 ## Findings（如有）
 

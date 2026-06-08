@@ -3,7 +3,7 @@
 > **前置步骤**：本文档编写前已完成 Spec Discovery（架构师提问），
 > PRD 中的不确定性已与用户对齐。
 
-**关联 PRD**: [2.5 技术方案 §6 迁移策略](../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20技术方案.md)、[2.5 PRD §3.4 版本升级数据迁移逻辑](../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md)
+**关联 PRD**: [2.5 技术方案 §6 迁移策略](../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20技术方案.md)、[2.5 PRD §3.4 版本升级数据迁移逻辑](../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md)
 **优先级**: P1
 **所属版本**: v2.5.0
 
@@ -491,5 +491,5 @@ async def _migrate_rbac_to_rebac_if_needed():
 ## 相关文档
 
 - 版本契约: [features/v2.5.0/release-contract.md](../release-contract.md)
-- 技术方案: `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md`
+- 技术方案: `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md`
 - ReBAC 核心: [features/v2.5.0/004-rebac-core/spec.md](../004-rebac-core/spec.md)

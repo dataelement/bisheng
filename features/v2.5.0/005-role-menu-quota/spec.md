@@ -3,7 +3,7 @@
 > **前置步骤**：本文档编写前已完成 Spec Discovery（架构师提问），
 > PRD 中的不确定性已与用户对齐。
 
-**关联 PRD**: [2.5 权限管理体系改造 PRD §3.2-3.4](../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md)、[2.5 多租户需求文档 §5.4 §6](../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20多租户需求文档.md)
+**关联 PRD**: [2.5 权限管理体系改造 PRD §3.2-3.4](../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md)、[2.5 多租户需求文档 §5.4 §6](../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20多租户需求文档.md)
 **优先级**: P1
 **所属版本**: v2.5.0
 
@@ -693,7 +693,7 @@ F005 后端变更对前端的影响（F010 需要处理）：
 ## 相关文档
 
 - 版本契约: [features/v2.5.0/release-contract.md](../release-contract.md)
-- 权限改造 PRD: `docs/PRD/2.5 权限管理体系改造 PRD/2.5 权限管理体系改造 PRD.md`
-- 多租户需求文档: `docs/PRD/2.5 权限管理体系改造 PRD/2.5 多租户需求文档.md`
-- 技术方案: `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md`
+- 权限改造 PRD: `docs/archive/2.5 权限管理体系改造 PRD/2.5 权限管理体系改造 PRD.md`
+- 多租户需求文档: `docs/archive/2.5 权限管理体系改造 PRD/2.5 多租户需求文档.md`
+- 技术方案: `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md`
 - 前序 Feature: F001(multi-tenant-core), F002(department-tree), F004(rebac-core)

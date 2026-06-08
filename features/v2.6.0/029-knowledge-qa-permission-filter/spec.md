@@ -1,6 +1,5 @@
 # Feature: F029-knowledge-qa-permission-filter（知识空间 AI 问答 - 检索权限过滤）
 
-**关联 PRD**: [../../../docs/PRD/知识空间优化/知识空间AI问答-权限过滤.md](../../../docs/PRD/%E7%9F%A5%E8%AF%86%E7%A9%BA%E9%97%B4%E4%BC%98%E5%8C%96/%E7%9F%A5%E8%AF%86%E7%A9%BA%E9%97%B4AI%E9%97%AE%E7%AD%94-%E6%9D%83%E9%99%90%E8%BF%87%E6%BB%A4.md)
 **优先级**: P0（知识空间 AI 问答存在越权读取风险，必须在 v2.6.0 关闭）
 **所属版本**: v2.6.0
 **模块编码**: 沿用 180（`knowledge_space`，现有 `common/errcode/knowledge_space.py`），本 spec 复用 `SpacePermissionDeniedError`（18040）作为权限缺失返回，不新增错误码
@@ -451,7 +450,6 @@ POST /api/v1/citations/resolve
 - 版本契约: [features/v2.6.0/release-contract.md](../release-contract.md)（写 spec 前必须先阅读；本 spec 要求在该文件追加 INV-7）
 - 权限体系 P0 规则（v2.5 之后的现行体系）:
   - `src/backend/AGENTS.md` §3.4 ReBAC + Fine-grained permission_id 统一入口
-  - [docs/PRD/2.5 权限管理体系改造 PRD/](../../../docs/PRD/2.5%20%E6%9D%83%E9%99%90%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E6%94%B9%E9%80%A0%20PRD/)（v2.5 ReBAC + OpenFGA 改造目标 & 模型）
+  - [docs/archive/2.5 权限管理体系改造 PRD/](../../../docs/archive/2.5%20%E6%9D%83%E9%99%90%E7%AE%A1%E7%90%86%E4%BD%93%E7%B3%BB%E6%94%B9%E9%80%A0%20PRD/)（v2.5 ReBAC + OpenFGA 改造目标 & 模型）
   - `docs/architecture/10-permission-rbac.md`（**注意**：该文档描述的是 v2.5 之前的旧 RBAC + AccessType + SpaceChannelMember 模型，与本 spec 实际使用的 `PermissionService.list_accessible_ids` / `FineGrainedPermissionService` 体系不一致，仅供历史背景参考）
-- PRD: [docs/PRD/知识空间优化/知识空间AI问答-权限过滤.md](../../../docs/PRD/%E7%9F%A5%E8%AF%86%E7%A9%BA%E9%97%B4%E4%BC%98%E5%8C%96/%E7%9F%A5%E8%AF%86%E7%A9%BA%E9%97%B4AI%E9%97%AE%E7%AD%94-%E6%9D%83%E9%99%90%E8%BF%87%E6%BB%A4.md)
 - 模块编码登记表: 沿用 180（`knowledge_space`），不新增模块
