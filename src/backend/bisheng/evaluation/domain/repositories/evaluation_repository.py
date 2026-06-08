@@ -1,5 +1,3 @@
-from typing import List
-
 from sqlalchemy import and_, func
 from sqlmodel import select
 
@@ -9,16 +7,15 @@ from bisheng.evaluation.domain.models.evaluation import Evaluation, ExecType
 
 class EvaluationRepository:
     @classmethod
-    def get_my_evaluations(cls, user_id: int, page: int, limit: int) -> tuple[List[Evaluation], int]:
+    def get_my_evaluations(cls, user_id: int, page: int, limit: int) -> tuple[list[Evaluation], int]:
         with get_sync_db_session() as session:
             statement = select(Evaluation).where(
-                Evaluation.is_delete == 0, Evaluation.user_id == user_id,
-                Evaluation.exec_type != ExecType.FLOW.value)
+                Evaluation.is_delete == 0, Evaluation.user_id == user_id, Evaluation.exec_type != ExecType.FLOW.value
+            )
             count_statement = session.query(func.count(Evaluation.id)).where(
-                Evaluation.is_delete == 0, Evaluation.user_id == user_id,
-                Evaluation.exec_type != ExecType.FLOW.value)
-            statement = statement.offset((page - 1) * limit).limit(limit).order_by(
-                Evaluation.update_time.desc())
+                Evaluation.is_delete == 0, Evaluation.user_id == user_id, Evaluation.exec_type != ExecType.FLOW.value
+            )
+            statement = statement.offset((page - 1) * limit).limit(limit).order_by(Evaluation.update_time.desc())
             return session.exec(statement).all(), session.exec(count_statement).scalar()
 
     @classmethod
@@ -32,8 +29,7 @@ class EvaluationRepository:
     @classmethod
     def get_user_one_evaluation(cls, user_id: int, evaluation_id: int) -> Evaluation:
         with get_sync_db_session() as session:
-            statement = select(Evaluation).where(
-                and_(Evaluation.id == evaluation_id, Evaluation.user_id == user_id))
+            statement = select(Evaluation).where(and_(Evaluation.id == evaluation_id, Evaluation.user_id == user_id))
             return session.exec(statement).first()
 
     @classmethod

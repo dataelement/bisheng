@@ -3,6 +3,7 @@
 Output is byte-identical to the previous ragas-based implementation: the same nine
 fields, the same f1/precision/recall formulas, and the same default few-shot prompt.
 """
+
 from __future__ import annotations
 
 import json
@@ -81,7 +82,7 @@ Extracted statements:
 Question:{question}
 Answer: {answer}
 Ground truth: {ground_truth}
-Extracted statements:"""  # noqa: E501
+Extracted statements:"""
 )
 
 _KEY_MAP = {
@@ -107,9 +108,7 @@ def compute_answer_correctness(
     human_prompt: str = "",
 ) -> dict[str, list[Any]]:
     """Return a dict-of-lists with question/answer/ground_truths plus the nine metric fields."""
-    prompt_template = (
-        HumanMessagePromptTemplate.from_template(human_prompt) if human_prompt else CORRECTNESS_PROMPT
-    )
+    prompt_template = HumanMessagePromptTemplate.from_template(human_prompt) if human_prompt else CORRECTNESS_PROMPT
     message_batches = []
     for q, a, g in zip(question, answer, ground_truths):
         msg = prompt_template.format(question=q, ground_truth=g[0], answer=a)
@@ -121,10 +120,15 @@ def compute_answer_correctness(
         "question": list(question),
         "answer": list(answer),
         "ground_truths": list(ground_truths),
-        "statements_gt_only": [], "statements_num_gt_only": [],
-        "statements_answer_only": [], "statements_num_answer_only": [],
-        "statements_overlap": [], "statements_num_overlap": [],
-        "answer_f1": [], "answer_precision": [], "answer_recall": [],
+        "statements_gt_only": [],
+        "statements_num_gt_only": [],
+        "statements_answer_only": [],
+        "statements_num_answer_only": [],
+        "statements_overlap": [],
+        "statements_num_overlap": [],
+        "answer_f1": [],
+        "answer_precision": [],
+        "answer_recall": [],
     }
 
     for generations in llm_result.generations:

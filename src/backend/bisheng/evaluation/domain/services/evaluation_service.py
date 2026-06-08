@@ -4,32 +4,31 @@ import json
 import os
 from collections import defaultdict
 from io import BytesIO
-from typing import List
 
 import numpy as np
 import pandas as pd
-from fastapi import UploadFile, HTTPException
+from fastapi import HTTPException, UploadFile
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 
 from bisheng.api.services.assistant_agent import AssistantAgent
 from bisheng.api.v1.schema.workflow import WorkflowEventType
-from bisheng.api.v1.schemas import (UnifiedResponseModel, resp_200)
+from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.core.cache import InMemoryCache
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.evaluation.domain.models.evaluation import Evaluation, ExecType, EvaluationTaskStatus
+from bisheng.database.models.flow import FlowDao
+from bisheng.database.models.flow_version import FlowVersion, FlowVersionDao
+from bisheng.evaluation.domain.models.evaluation import Evaluation, EvaluationTaskStatus, ExecType
 from bisheng.evaluation.domain.repositories.evaluation_repository import EvaluationRepository
 from bisheng.evaluation.domain.services.answer_correctness import compute_answer_correctness
-from bisheng.database.models.flow import FlowDao
-from bisheng.database.models.flow_version import FlowVersionDao, FlowVersion
 from bisheng.llm.domain.services import LLMService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.worker.workflow.redis_callback import RedisCallback
-from bisheng.worker.workflow.tasks import execute_workflow, continue_workflow, workflow_stateful_worker
+from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, workflow_stateful_worker
 from bisheng.workflow.common.workflow import WorkflowStatus
 
 expire = 600
@@ -39,10 +38,9 @@ class EvaluationService:
     UserCache: InMemoryCache = InMemoryCache()
 
     @classmethod
-    def get_evaluation(cls,
-                       user: UserPayload,
-                       page: int = 1,
-                       limit: int = 20) -> UnifiedResponseModel[List[Evaluation]]:
+    def get_evaluation(
+        cls, user: UserPayload, page: int = 1, limit: int = 20
+    ) -> UnifiedResponseModel[list[Evaluation]]:
         """
         Get a list of assessment tasks
         """
@@ -85,35 +83,36 @@ class EvaluationService:
         for one in res_evaluations:
             evaluation_item = jsonable_encoder(one)
             if one.exec_type in [ExecType.FLOW.value, ExecType.WORKFLOW.value]:
-                evaluation_item['unique_name'] = flow_names.get(one.unique_id)
+                evaluation_item["unique_name"] = flow_names.get(one.unique_id)
             if one.exec_type == ExecType.ASSISTANT.value:
-                evaluation_item['unique_name'] = assistant_names.get(one.unique_id)
+                evaluation_item["unique_name"] = assistant_names.get(one.unique_id)
             if one.version:
-                evaluation_item['version_name'] = flow_versions.get(one.version)
+                evaluation_item["version_name"] = flow_versions.get(one.version)
             if one.result_score:
-                evaluation_item['result_score'] = json.loads(one.result_score) if isinstance(one.result_score,
-                                                                                             str) else one.result_score
+                evaluation_item["result_score"] = (
+                    json.loads(one.result_score) if isinstance(one.result_score, str) else one.result_score
+                )
 
             # Processing Task Progress
             if one.status != EvaluationTaskStatus.running.value:
-                evaluation_item['progress'] = f'100%'
+                evaluation_item["progress"] = "100%"
             elif redis_client.exists(EvaluationService.get_redis_key(one.id)):
-                evaluation_item['progress'] = f'{redis_client.get(EvaluationService.get_redis_key(one.id))}%'
+                evaluation_item["progress"] = f"{redis_client.get(EvaluationService.get_redis_key(one.id))}%"
             else:
-                evaluation_item['progress'] = f'0%'
+                evaluation_item["progress"] = "0%"
 
             # Make sure the error description is returned to the front-end
-            evaluation_item['description'] = one.description or ''
-            evaluation_item['user_name'] = cls.get_user_name(one.user_id)
+            evaluation_item["description"] = one.description or ""
+            evaluation_item["user_name"] = cls.get_user_name(one.user_id)
             data.append(evaluation_item)
 
-        return resp_200(data={'data': data, 'total': total})
+        return resp_200(data={"data": data, "total": total})
 
     @classmethod
     def delete_evaluation(cls, evaluation_id: int, user_payload: UserPayload) -> UnifiedResponseModel:
         evaluation = EvaluationRepository.get_user_one_evaluation(user_payload.user_id, evaluation_id)
         if not evaluation:
-            raise HTTPException(status_code=404, detail='Evaluation not found')
+            raise HTTPException(status_code=404, detail="Evaluation not found")
 
         EvaluationRepository.delete_evaluation(evaluation)
         return resp_200()
@@ -121,13 +120,13 @@ class EvaluationService:
     @classmethod
     def get_user_name(cls, user_id: int):
         if not user_id:
-            return 'system'
+            return "system"
         user = cls.UserCache.get(user_id)
         if user:
             return user.user_name
         user = UserDao.get_user(user_id)
         if not user:
-            return f'{user_id}'
+            return f"{user_id}"
         cls.UserCache.set(user_id, user)
         return user.user_name
 
@@ -137,10 +136,11 @@ class EvaluationService:
         file_id = generate_uuid()
         file_name = file.filename
 
-        file_ext = os.path.basename(file.filename).split('.')[-1]
-        file_path = f'evaluation/dataset/{file_id}.{file_ext}'
-        minio_client.put_object_sync(bucket_name=minio_client.bucket, object_name=file_path, file=file.file,
-                                     content_type=file.content_type)
+        file_ext = os.path.basename(file.filename).split(".")[-1]
+        file_path = f"evaluation/dataset/{file_id}.{file_ext}"
+        minio_client.put_object_sync(
+            bucket_name=minio_client.bucket, object_name=file_path, file=file.file, content_type=file.content_type
+        )
         return file_name, file_path
 
     @classmethod
@@ -152,12 +152,13 @@ class EvaluationService:
         df.to_csv(csv_buffer, index=False)
         csv_buffer.seek(0)
 
-        file_path = f'evaluation/result/{file_id}.csv'
+        file_path = f"evaluation/result/{file_id}.csv"
         minio_client.put_object_sync(
             bucket_name=minio_client.bucket,
             object_name=file_path,
             file=csv_buffer.read(),
-            content_type='application/csv')
+            content_type="application/csv",
+        )
         return file_path
 
     @classmethod
@@ -171,18 +172,19 @@ class EvaluationService:
     @classmethod
     def parse_csv(cls, file_data: io.BytesIO):
         df = pd.read_csv(file_data)
-        df = df.dropna(axis=0, how='all').dropna(axis=1, how='all')
+        df = df.dropna(axis=0, how="all").dropna(axis=1, how="all")
         if df.shape[1] < 2:
             raise ValueError("CSV file must have at least two columns")
-        if df.columns[0] != 'question' or df.columns[1] != 'ground_truth':
+        if df.columns[0] != "question" or df.columns[1] != "ground_truth":
             raise ValueError(
-                "CSV file must have 'question' as the first column and 'ground_truth' as the second column")
+                "CSV file must have 'question' as the first column and 'ground_truth' as the second column"
+            )
         formatted_data = [{"question": row[0], "ground_truth": row[1]} for row in df.values]
         return formatted_data
 
     @classmethod
     def get_redis_key(cls, evaluation_id: int):
-        return f'evaluation_task_progress_{evaluation_id}'
+        return f"evaluation_task_progress_{evaluation_id}"
 
 
 def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluation, question: str) -> str:
@@ -207,13 +209,13 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
     status_info = workflow.get_workflow_status()
     if status_info["status"] == WorkflowStatus.FAILED.value:
         raise Exception(status_info.get("reason", "workflow run failed"))
-    elif status_info['status'] == WorkflowStatus.SUCCESS.value:
+    elif status_info["status"] == WorkflowStatus.SUCCESS.value:
         raise Exception("Only Q&A type workflows are currently supported")
-    elif status_info['status'] == WorkflowStatus.INPUT.value:
-        if not input_event or input_event.message.get('input_schema', {}).get("tab") == "form_input":
+    elif status_info["status"] == WorkflowStatus.INPUT.value:
+        if not input_event or input_event.message.get("input_schema", {}).get("tab") == "form_input":
             raise Exception("Only Q&A type workflows are currently supported")
         # Only workflows entered in dialog boxes are entered by default
-        workflow.set_user_input({input_event.message.get('node_id'): {"user_input": question}})
+        workflow.set_user_input({input_event.message.get("node_id"): {"user_input": question}})
         workflow.set_workflow_status(WorkflowStatus.INPUT_OVER.value)
         worker_node = workflow_stateful_worker.find_task_node_sync(hash_key)
         continue_workflow.apply_async([unique_id, workflow_id, chat_id, user_id], queue=worker_node)
@@ -221,21 +223,24 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
         for event in workflow.sync_get_response_until_break():
             events.append(event)
         status_info = workflow.get_workflow_status()
-        if status_info['status'] == WorkflowStatus.FAILED.value:
+        if status_info["status"] == WorkflowStatus.FAILED.value:
             raise Exception(status_info.get("reason", "workflow run failed"))
-        elif status_info['status'] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.INPUT.value]:
+        elif status_info["status"] in [WorkflowStatus.SUCCESS.value, WorkflowStatus.INPUT.value]:
             workflow.set_workflow_stop()
             # Get the content of the first output event as an answer, if not, report an error
             if not events:
                 raise Exception("Only Q&A type workflows are currently supported")
             answer = None
             for event in events:
-                if event.category in [WorkflowEventType.OutputMsg.value, WorkflowEventType.OutputWithInput.value,
-                                      WorkflowEventType.OutputWithChoose.value]:
-                    answer = event.message.get('msg', "")
+                if event.category in [
+                    WorkflowEventType.OutputMsg.value,
+                    WorkflowEventType.OutputWithInput.value,
+                    WorkflowEventType.OutputWithChoose.value,
+                ]:
+                    answer = event.message.get("msg", "")
                     break
-                elif event.category == WorkflowEventType.StreamMsg.value and event.type != 'stream':
-                    answer = event.message.get('msg', "")
+                elif event.category == WorkflowEventType.StreamMsg.value and event.type != "stream":
+                    answer = event.message.get("msg", "")
                     break
             if answer is None:
                 raise Exception("Only Q&A type workflows are currently supported")
@@ -270,7 +275,7 @@ async def add_evaluation_task(evaluation_id: int):
             gpts_agent = AssistantAgent(assistant_info=assistant, chat_id="", invoke_user_id=evaluation.user_id)
             await gpts_agent.init_assistant()
             for index, one in enumerate(csv_data):
-                messages = await gpts_agent.run(one.get('question'))
+                messages = await gpts_agent.run(one.get("question"))
                 if len(messages):
                     one["answer"] = messages[-1].content
                 current_progress += progress_increment
@@ -280,23 +285,25 @@ async def add_evaluation_task(evaluation_id: int):
             if not workflow_info or workflow_info.flow_id != evaluation.unique_id:
                 raise Exception("workflow version info not found")
             for index, one in enumerate(csv_data):
-                one["answer"] = await asyncio.to_thread(execute_workflow_get_answer, workflow_info, evaluation,
-                                                        one.get('question', ""))
+                one["answer"] = await asyncio.to_thread(
+                    execute_workflow_get_answer, workflow_info, evaluation, one.get("question", "")
+                )
 
         _llm = await LLMService.get_evaluation_llm_object(
-            evaluation.user_id, tenant_id=evaluation.tenant_id,
+            evaluation.user_id,
+            tenant_id=evaluation.tenant_id,
         )
         result = await asyncio.to_thread(
             compute_answer_correctness,
             _llm,
-            [one.get('question') for one in csv_data],
-            [one.get('answer') for one in csv_data],
-            [[one.get('ground_truth')] for one in csv_data],
+            [one.get("question") for one in csv_data],
+            [one.get("answer") for one in csv_data],
+            [[one.get("ground_truth")] for one in csv_data],
             evaluation.prompt,
         )
-        logger.debug(f'evaluation id = {evaluation_id} result: {result}')
+        logger.debug(f"evaluation id = {evaluation_id} result: {result}")
 
-        question = result.get('question', [])
+        question = result.get("question", [])
         columns = [
             # Data field:Title:Type(1:Text 2:Numbers 3:%)
             ("question", "question", 1),
@@ -307,7 +314,7 @@ async def add_evaluation_task(evaluation_id: int):
             ("statements_num_overlap", "statements_num_overlap", 2),
             ("answer_recall", "recall", 3),
             ("answer_precision", "precision", 3),
-            ("answer_f1", "F1", 3)
+            ("answer_f1", "F1", 3),
         ]
         row_list = []
         tmp_dict = defaultdict(int)
@@ -320,7 +327,7 @@ async def add_evaluation_task(evaluation_id: int):
                 if unit_type != 1:
                     tmp_dict[field] += value
                 if unit_type == 3:
-                    value = f'{value * 100:.2f}%' if value not in ["nan", np.nan] else value
+                    value = f"{value * 100:.2f}%" if value not in ["nan", np.nan] else value
                 row_data[title] = value
             row_list.append(row_data)
 
@@ -328,7 +335,7 @@ async def add_evaluation_task(evaluation_id: int):
         for field, title, unit_type in columns:
             value = tmp_dict.get(field)
             if unit_type == 3:
-                value = f'{(value / len(row_list)) * 100:.2f}%'
+                value = f"{(value / len(row_list)) * 100:.2f}%"
                 total_dict[field] = value
             total_row_data[title] = value
         row_list.append(total_row_data)
@@ -341,10 +348,10 @@ async def add_evaluation_task(evaluation_id: int):
         evaluation.result_file_path = result_file_path
         EvaluationRepository.update_evaluation(evaluation=evaluation)
         redis_client.delete(redis_key)
-        logger.info(f'evaluation task success id={evaluation_id}')
+        logger.info(f"evaluation task success id={evaluation_id}")
 
     except Exception as e:
-        logger.exception(f'evaluation task failed id={evaluation_id} {str(e)}')
+        logger.exception(f"evaluation task failed id={evaluation_id} {e!s}")
         evaluation.status = EvaluationTaskStatus.failed.value
         evaluation.description = str(e)[-500:]  # Limit the length of the error description to avoid being too long
         EvaluationRepository.update_evaluation(evaluation=evaluation)
