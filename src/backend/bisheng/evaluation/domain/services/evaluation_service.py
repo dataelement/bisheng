@@ -8,10 +8,6 @@ from typing import List
 
 import numpy as np
 import pandas as pd
-from bisheng_ragas import evaluate
-from bisheng_ragas.llms.langchain import LangchainLLM
-from bisheng_ragas.metrics import AnswerCorrectnessBisheng
-from datasets import Dataset
 from fastapi import UploadFile, HTTPException
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
@@ -24,7 +20,9 @@ from bisheng.core.cache import InMemoryCache
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.assistant import AssistantDao
-from bisheng.database.models.evaluation import (Evaluation, EvaluationDao, ExecType, EvaluationTaskStatus)
+from bisheng.evaluation.domain.models.evaluation import Evaluation, ExecType, EvaluationTaskStatus
+from bisheng.evaluation.domain.repositories.evaluation_repository import EvaluationRepository
+from bisheng.evaluation.domain.services.answer_correctness import compute_answer_correctness
 from bisheng.database.models.flow import FlowDao
 from bisheng.database.models.flow_version import FlowVersionDao, FlowVersion
 from bisheng.llm.domain.services import LLMService
@@ -49,7 +47,7 @@ class EvaluationService:
         Get a list of assessment tasks
         """
         data = []
-        res_evaluations, total = EvaluationDao.get_my_evaluations(user.user_id, page, limit)
+        res_evaluations, total = EvaluationRepository.get_my_evaluations(user.user_id, page, limit)
 
         # SkillIDVertical
         flow_ids = []
@@ -113,11 +111,11 @@ class EvaluationService:
 
     @classmethod
     def delete_evaluation(cls, evaluation_id: int, user_payload: UserPayload) -> UnifiedResponseModel:
-        evaluation = EvaluationDao.get_user_one_evaluation(user_payload.user_id, evaluation_id)
+        evaluation = EvaluationRepository.get_user_one_evaluation(user_payload.user_id, evaluation_id)
         if not evaluation:
             raise HTTPException(status_code=404, detail='Evaluation not found')
 
-        EvaluationDao.delete_evaluation(evaluation)
+        EvaluationRepository.delete_evaluation(evaluation)
         return resp_200()
 
     @classmethod
@@ -250,7 +248,7 @@ def execute_workflow_get_answer(workflow_info: FlowVersion, evaluation: Evaluati
 
 
 async def add_evaluation_task(evaluation_id: int):
-    evaluation = EvaluationDao.get_one_evaluation(evaluation_id=evaluation_id)
+    evaluation = EvaluationRepository.get_one_evaluation(evaluation_id=evaluation_id)
     if not evaluation:
         return
 
@@ -288,18 +286,14 @@ async def add_evaluation_task(evaluation_id: int):
         _llm = await LLMService.get_evaluation_llm_object(
             evaluation.user_id, tenant_id=evaluation.tenant_id,
         )
-        llm = LangchainLLM(_llm)
-        data_samples = {
-            "question": [one.get('question') for one in csv_data],
-            "answer": [one.get('answer') for one in csv_data],
-            "ground_truths": [[one.get('ground_truth')] for one in csv_data]
-        }
-
-        dataset = Dataset.from_dict(data_samples)
-        answer_correctness_bisheng = AnswerCorrectnessBisheng(llm=llm, human_prompt=evaluation.prompt)
-        score = await asyncio.to_thread(evaluate, dataset, [answer_correctness_bisheng])
-        df = score.to_pandas()
-        result = df.to_dict(orient="list")
+        result = await asyncio.to_thread(
+            compute_answer_correctness,
+            _llm,
+            [one.get('question') for one in csv_data],
+            [one.get('answer') for one in csv_data],
+            [[one.get('ground_truth')] for one in csv_data],
+            evaluation.prompt,
+        )
         logger.debug(f'evaluation id = {evaluation_id} result: {result}')
 
         question = result.get('question', [])
@@ -345,7 +339,7 @@ async def add_evaluation_task(evaluation_id: int):
         evaluation.result_score = total_dict
         evaluation.status = EvaluationTaskStatus.success.value
         evaluation.result_file_path = result_file_path
-        EvaluationDao.update_evaluation(evaluation=evaluation)
+        EvaluationRepository.update_evaluation(evaluation=evaluation)
         redis_client.delete(redis_key)
         logger.info(f'evaluation task success id={evaluation_id}')
 
@@ -353,5 +347,5 @@ async def add_evaluation_task(evaluation_id: int):
         logger.exception(f'evaluation task failed id={evaluation_id} {str(e)}')
         evaluation.status = EvaluationTaskStatus.failed.value
         evaluation.description = str(e)[-500:]  # Limit the length of the error description to avoid being too long
-        EvaluationDao.update_evaluation(evaluation=evaluation)
+        EvaluationRepository.update_evaluation(evaluation=evaluation)
         redis_client.delete(redis_key)
