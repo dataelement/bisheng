@@ -126,6 +126,8 @@ export default function Roles() {
   const [quotaFileGb, setQuotaFileGb] = useState("500")
   const [quotaChannelUnlimited, setQuotaChannelUnlimited] = useState(false)
   const [quotaChannelCount, setQuotaChannelCount] = useState("10")
+  const [quotaSpaceSubscribeUnlimited, setQuotaSpaceSubscribeUnlimited] = useState(false)
+  const [quotaSpaceSubscribeCount, setQuotaSpaceSubscribeCount] = useState("100")
   const [menuIds, setMenuIds] = useState<string[]>([])
   const [menuApprovalMode, setMenuApprovalMode] = useState(false)
   const [isMenuLoading, setIsMenuLoading] = useState(false)
@@ -186,6 +188,8 @@ export default function Roles() {
     quotaFileGbVal: string,
     quotaChannelUnlimitedVal: boolean,
     quotaChannelCountVal: string,
+    quotaSpaceSubscribeUnlimitedVal: boolean,
+    quotaSpaceSubscribeCountVal: string,
     menuIdsVal: string[],
     menuApprovalModeVal: boolean,
   ) => JSON.stringify({
@@ -195,6 +199,8 @@ export default function Roles() {
     quotaFileGbVal,
     quotaChannelUnlimitedVal,
     quotaChannelCountVal,
+    quotaSpaceSubscribeUnlimitedVal,
+    quotaSpaceSubscribeCountVal,
     menuIds: [...menuIdsVal].sort(),
     menuApprovalModeVal,
   })
@@ -235,12 +241,14 @@ export default function Roles() {
     setQuotaFileGb("500")
     setQuotaChannelUnlimited(false)
     setQuotaChannelCount("10")
+    setQuotaSpaceSubscribeUnlimited(false)
+    setQuotaSpaceSubscribeCount("100")
     setMenuApprovalMode(false)
     setMenuIds(nextMenuIds)
     setIsMenuLoading(false)
     setMenuLoadFailed(false)
     setInitialEditSnapshot(
-      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", nextMenuIds, false)
+      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", false, "100", nextMenuIds, false)
     )
     setEditOpen(true)
   }
@@ -248,7 +256,8 @@ export default function Roles() {
   const loadRoleMenus = async (
     role: ROLE,
     fileLimit: number,
-    channelLimit: number
+    channelLimit: number,
+    spaceSubscribeLimit: number
   ) => {
     setIsMenuLoading(true)
     setMenuLoadFailed(false)
@@ -276,6 +285,8 @@ export default function Roles() {
         fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500",
         channelLimit === -1,
         channelLimit >= 0 ? String(channelLimit) : "10",
+        spaceSubscribeLimit === -1,
+        spaceSubscribeLimit >= 0 ? String(spaceSubscribeLimit) : "100",
         ids,
         approvalFromRole,
       )
@@ -291,14 +302,17 @@ export default function Roles() {
     const rawFile = qc.knowledge_space_file
     const fileLimit = typeof rawFile === "number" ? rawFile : Number(rawFile ?? -1)
     const channelLimit = Number(qc.channel ?? 10)
+    const spaceSubscribeLimit = Number(qc.knowledge_space_subscribe ?? 100)
     setQuotaFileUnlimited(fileLimit === -1)
     setQuotaFileGb(fileLimit > 0 ? formatKnowledgeSpaceGbInput(fileLimit) : "500")
     setQuotaChannelUnlimited(channelLimit === -1)
     setQuotaChannelCount(channelLimit >= 0 ? String(channelLimit) : "10")
+    setQuotaSpaceSubscribeUnlimited(spaceSubscribeLimit === -1)
+    setQuotaSpaceSubscribeCount(spaceSubscribeLimit >= 0 ? String(spaceSubscribeLimit) : "100")
     setMenuIds([])
     setMenuLoadFailed(false)
     setEditOpen(true)
-    await loadRoleMenus(role, fileLimit, channelLimit)
+    await loadRoleMenus(role, fileLimit, channelLimit, spaceSubscribeLimit)
   }
 
   const buildQuotaConfig = (): Record<string, unknown> => {
@@ -309,6 +323,9 @@ export default function Roles() {
       ? -1
       : (normalizeKnowledgeSpaceFileGb(quotaFileGb) ?? KB_SPACE_FILE_GB_MIN)
     base.channel = quotaChannelUnlimited ? -1 : Math.max(0, Number(quotaChannelCount || 0))
+    base.knowledge_space_subscribe = quotaSpaceSubscribeUnlimited
+      ? -1
+      : Math.max(0, Number(quotaSpaceSubscribeCount || 0))
     base.menu_approval_mode = menuApprovalMode
     return base
   }
@@ -453,6 +470,8 @@ export default function Roles() {
       quotaFileGb,
       quotaChannelUnlimited,
       quotaChannelCount,
+      quotaSpaceSubscribeUnlimited,
+      quotaSpaceSubscribeCount,
       menuIds,
       menuApprovalMode,
     )
@@ -466,6 +485,8 @@ export default function Roles() {
     quotaFileGb,
     quotaChannelUnlimited,
     quotaChannelCount,
+    quotaSpaceSubscribeUnlimited,
+    quotaSpaceSubscribeCount,
     menuIds,
     menuApprovalMode,
   ])
@@ -752,6 +773,27 @@ export default function Roles() {
             </div>
 
             <div className="rounded-md border p-3">
+              <Label>{t("system.spaceSubscribeQuotaLimit")}</Label>
+              <p className="mt-1 text-xs text-muted-foreground">{t("system.spaceSubscribeQuotaLimitDesc")}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Checkbox
+                  checked={quotaSpaceSubscribeUnlimited}
+                  onCheckedChange={(v) => setQuotaSpaceSubscribeUnlimited(Boolean(v))}
+                />
+                <span className="text-sm">{t("system.unlimited")}</span>
+                {!quotaSpaceSubscribeUnlimited && (
+                  <Input
+                    type="number"
+                    min={0}
+                    value={quotaSpaceSubscribeCount}
+                    onChange={(e) => setQuotaSpaceSubscribeCount(e.target.value)}
+                    className="w-[120px]"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-md border p-3">
               <Label>{t("system.menuPermissionSection")}</Label>
               <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
               <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
@@ -782,7 +824,8 @@ export default function Roles() {
                       const rawF = qc.knowledge_space_file
                       const fileLimit = typeof rawF === "number" ? rawF : Number(rawF ?? -1)
                       const channelLimit = Number(qc.channel ?? 10)
-                      void loadRoleMenus(activeRole, fileLimit, channelLimit)
+                      const spaceSubscribeLimit = Number(qc.knowledge_space_subscribe ?? 100)
+                      void loadRoleMenus(activeRole, fileLimit, channelLimit, spaceSubscribeLimit)
                     }}
                   >
                     {t("retry")}

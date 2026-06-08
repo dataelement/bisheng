@@ -1122,7 +1122,11 @@ export async function subscribeSpaceApi(space_id: string): Promise<SubscribeSpac
             (res as any)?.message ||
             (res as any)?.msg ||
             "subscribe space failed";
-        throw new Error(msg);
+        const err: any = new Error(msg);
+        // Surface the backend error code so callers can branch (e.g. 18032
+        // = join-limit reached → localized hint).
+        err.status_code = res.status_code;
+        throw err;
     }
     const payload = res?.data ?? res ?? {};
     const status = String(payload?.status ?? "").toLowerCase();

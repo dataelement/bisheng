@@ -5,7 +5,6 @@ import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
-    getJoinedSpacesApi,
     getSquareSpacesApi,
     subscribeSpaceApi,
     type KnowledgeSpace,
@@ -39,8 +38,6 @@ export default function KnowledgeSquare({
     statusOverride,
     onSquareStatusChange,
 }: KnowledgeSquareProps) {
-    const MAX_JOINED_SPACES = 50;
-
     const { showToast } = useToastContext();
     const localize = useLocalize();
 
@@ -170,21 +167,9 @@ export default function KnowledgeSquare({
             setJoiningId(null);
         };
 
-        // Join/apply upper limit (includes followed + pending applications)
-        try {
-            const joinedSpaces = await getJoinedSpacesApi();
-            if (joinedSpaces.length >= MAX_JOINED_SPACES) {
-                rollback();
-                showToast({
-                    message: localize("com_knowledge.join_space_limit_reached_50"),
-                    severity: NotificationSeverity.WARNING,
-                });
-                return;
-            }
-        } catch {
-            // If the limit check fails, keep the existing behavior instead of blocking.
-        }
-
+        // No client-side cap: the join limit is role-configurable on the backend
+        // (F005 quota knowledge_space_subscribe, default 100) and enforced there;
+        // an over-limit attempt comes back as errcode 18032 and is surfaced below.
         try {
             const result = await subscribeSpaceApi(space.id);
             const nextStatus: SquareSpaceStatus = result.status === "subscribed" ? "joined" : "pending";
@@ -209,14 +194,14 @@ export default function KnowledgeSquare({
             }
         } catch (e) {
             rollback();
+            const code = (e as any)?.status_code;
             const rawMessage =
                 (e as any)?.message ||
                 (e as any)?.status_message ||
                 "";
 
-            // Backend errcode 18032: SpaceSubscribeLimitError
-            // Msg: "You can subscribe to a maximum of 50 knowledge spaces"
-            if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
+            // Backend errcode 18032: SpaceSubscribeLimitError (join limit reached)
+            if (code === 18032) {
                 showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
             } else {
                 const message =

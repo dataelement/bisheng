@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_ROLE_QUOTA: dict[str, int] = {
     "knowledge_space": 30,
     "knowledge_space_file": 500,  # GB
+    "knowledge_space_subscribe": 100,
     "channel": 10,
     "channel_subscribe": 20,
     "workflow": -1,
@@ -71,6 +72,19 @@ _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
         "AND scm.status IN ('ACTIVE','PENDING') "
         "AND {qualified_col}=:{param}"
     ),
+    # Knowledge-space subscriptions a user has joined (non-creator). Mirrors
+    # channel_subscribe but business_type='SPACE'; tenant-level count joins the
+    # knowledge table to scope by the space's tenant. User-level enforcement
+    # lives in KnowledgeSpaceService.subscribe_space (raises 18032); this row
+    # powers the /me/quotas display + multi-role aggregation.
+    "knowledge_space_subscribe": (
+        "SELECT COUNT(*) FROM space_channel_member scm "
+        "INNER JOIN knowledge k ON k.id=scm.business_id "
+        "WHERE scm.business_type='SPACE' "
+        "AND scm.user_role IN ('MEMBER','ADMIN') "
+        "AND scm.status IN ('ACTIVE','PENDING') "
+        "AND {qualified_col}=:{param}"
+    ),
     "workflow": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=10 AND status!=0",
     "assistant": "SELECT COUNT(*) FROM flow WHERE {col}=:{param} AND flow_type=5 AND status!=0",
     # KI-01 fix: actual table is `t_gpts_tools` (t_ prefix); `gpts_tools`
@@ -92,6 +106,7 @@ class QuotaResourceType:
 
     KNOWLEDGE_SPACE = "knowledge_space"
     KNOWLEDGE_SPACE_FILE = "knowledge_space_file"
+    KNOWLEDGE_SPACE_SUBSCRIBE = "knowledge_space_subscribe"
     CHANNEL = "channel"
     CHANNEL_SUBSCRIBE = "channel_subscribe"
     WORKFLOW = "workflow"
@@ -562,13 +577,17 @@ class QuotaService:
             return 0
 
         param = "id_val"
-        qualified_col = (
-            "scm.user_id"
-            if resource_type == "channel_subscribe" and col == "user_id"
-            else "c.tenant_id"
-            if resource_type == "channel_subscribe" and col == "tenant_id"
-            else col
-        )
+        # Subscribe templates join space_channel_member (alias scm) to the
+        # resource table; qualify the filter column to the right alias.
+        if resource_type in ("channel_subscribe", "knowledge_space_subscribe"):
+            if col == "user_id":
+                qualified_col = "scm.user_id"
+            elif col == "tenant_id":
+                qualified_col = "c.tenant_id" if resource_type == "channel_subscribe" else "k.tenant_id"
+            else:
+                qualified_col = col
+        else:
+            qualified_col = col
         sql = template.format(col=col, qualified_col=qualified_col, param=param)
         try:
             async with get_async_db_session() as session:

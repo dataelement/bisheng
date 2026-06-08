@@ -363,6 +363,8 @@
     "menuEnableAll": "全开",
     "menuDisableAll": "全关",
     "channelQuotaLimit": "创建频道数量上限",
+    "spaceSubscribeQuotaLimit": "加入知识空间数量上限",
+    "spaceSubscribeQuotaLimitDesc": "限制该角色用户最多可加入（订阅）的知识空间数量",
     "roleListKnowledgeSpaceUploadLimit": "知识空间上传限额",
     "usePermission": "使用权限",
     "managePermission": "管理权限",

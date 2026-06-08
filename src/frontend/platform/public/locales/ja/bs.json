@@ -361,6 +361,8 @@
     "menuEnableAll": "すべて有効",
     "menuDisableAll": "すべて無効",
     "channelQuotaLimit": "チャンネル作成上限",
+    "spaceSubscribeQuotaLimit": "ナレッジスペース参加上限",
+    "spaceSubscribeQuotaLimitDesc": "このロールのユーザーが参加（購読）できるナレッジスペースの最大数を制限します",
     "roleListKnowledgeSpaceUploadLimit": "ナレッジスペース・アップロード上限",
     "usePermission": "使用権限",
     "managePermission": "管理権限",

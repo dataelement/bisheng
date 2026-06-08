@@ -5,7 +5,7 @@ import { FilterConditionEditor, type FilterGroup, type FilterRelation } from "./
 import { ChannelEditIcon } from "~/components/icons/channels";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 
-const MAX_CHANNEL_NAME = 10;
+const MAX_CHANNEL_NAME = 30;
 export interface SubChannelData {
     id: string;
     name: string;

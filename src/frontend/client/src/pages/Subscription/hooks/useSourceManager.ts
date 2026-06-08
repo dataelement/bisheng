@@ -11,7 +11,6 @@ import { useLocalize } from "~/hooks";
 import { extractApiStatusCode } from "../errorUtils";
 import { normalizeUrlForSearch } from "../urlNormalize";
 
-const MAX_SOURCES = 50;
 const PAGE_SIZE = 20;
 
 function looksLikeUrl(s: string): boolean {
@@ -107,8 +106,11 @@ export function useSourceManager(
     const isSearchMode = searchKeyword.trim().length > 0;
     const workingSources = expanded ? pendingSources : sources;
     const selectedIds = new Set(workingSources.map((s) => s.id));
-    const canSelectMore = workingSources.length < MAX_SOURCES;
-    const isAtLimit = workingSources.length >= MAX_SOURCES;
+    // Source count is no longer hard-capped on the front end. 50 stays as a default
+    // reference shown in the UI, but the real ceiling is the backend / external
+    // API-key quota, which rejects over-quota subscriptions (errcode 19007) on save.
+    const canSelectMore = true;
+    const isAtLimit = false;
 
     // 当外部 sources 在面板展开期间新增时（例如通过爬取新网址信源），
     // 自动将新增的信源合并进 pendingSources，并保持选中态。
@@ -325,7 +327,6 @@ export function useSourceManager(
                         return [...prev, created];
                     });
                     setPendingSources((prev) => {
-                        if (prev.length >= MAX_SOURCES) return prev;
                         if (prev.some((s) => s.id === created.id || s.url === created.url)) return prev;
                         return [...prev, created];
                     });

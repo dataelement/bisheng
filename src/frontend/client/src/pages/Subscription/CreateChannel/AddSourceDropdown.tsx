@@ -1,6 +1,5 @@
 import { Minus, Plus, Search, X, XCircle } from "lucide-react";
 import { useState, useEffect, useRef, type MouseEvent } from "react";
-import { NotificationSeverity } from "~/common";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
 import { Input } from "~/components/ui/Input";
@@ -8,7 +7,7 @@ import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useSourceManager } from "../hooks/useSourceManager";
-import { useConfirm, useToastContext } from "~/Providers";
+import { useConfirm } from "~/Providers";
 import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import {
     AlertDialog,
@@ -74,14 +73,12 @@ export function AddSourceDropdown({
     expanded,
     onExpandChange,
     onEnqueueCrawl,
-    queueInProgressCount,
     resetToken
 }: AddSourceDropdownProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const mgr = useSourceManager(sources, onSourcesChange, expanded, onExpandChange);
     const confirm = useConfirm();
-    const { showToast } = useToastContext();
     const [inputValue, setInputValue] = useState("");
     const [isCollapsedListScrolling, setIsCollapsedListScrolling] = useState(false);
     const collapsedListScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -367,15 +364,8 @@ export function AddSourceDropdown({
                                     </Button>
                                     <Button
                                         onClick={() => {
-                                            // 50 上限：已选 + 队列在跑的 = 阻断
-                                            if (mgr.pendingSources.length + queueInProgressCount >= MAX_SOURCES) {
-                                                showToast({
-                                                    message: localize("com_subscription.maximum_channel_source")
-                                                        || `已达频道 ${MAX_SOURCES} 个信源上限，无法再爬取`,
-                                                    severity: NotificationSeverity.WARNING,
-                                                });
-                                                return;
-                                            }
+                                            // No front-end source-count cap: the backend / external API-key
+                                            // quota is the source of truth and rejects over-quota subscriptions.
                                             onEnqueueCrawl(mgr.searchKeyword.trim());
                                             // 清搜索回 list 视图，并切到「网站」tab
                                             setInputValue("");

@@ -27,7 +27,7 @@ import {
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
 
-const MAX_SPACE_NAME = 20;
+const MAX_SPACE_NAME = 30;
 const MAX_SPACE_DESC = 200;
 const MAX_AUTO_TAG_CUSTOM_TAGS = 200;
 const AUTO_TAG_PREVIEW_LIMIT = 20;

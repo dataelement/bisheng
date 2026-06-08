@@ -72,7 +72,7 @@ class SpaceAlreadySubscribedError(BaseErrorCode):
 
 class SpaceSubscribeLimitError(BaseErrorCode):
     Code: int = 18032
-    Msg: str = "You can subscribe to a maximum of 50 knowledge spaces"
+    Msg: str = "You have reached the maximum number of knowledge spaces you can join"
 
 
 class SpaceOrganizationGrantExitDeniedError(BaseErrorCode):

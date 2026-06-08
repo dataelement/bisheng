@@ -107,7 +107,7 @@ from bisheng.permission.domain.services.fine_grained_permission_service import (
 )
 from bisheng.permission.domain.services.owner_service import OwnerService
 from bisheng.permission.domain.services.permission_service import PermissionService
-from bisheng.role.domain.services.quota_service import QuotaService
+from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
@@ -124,8 +124,6 @@ if TYPE_CHECKING:
 
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 30
-# Maximum number of spaces a user can subscribe to (not as creator)
-_MAX_SUBSCRIBE_PER_USER = 50
 SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
 SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
 SPACE_MEMBER_REMOVED_MESSAGE = "removed_knowledge_space_member"
@@ -3672,9 +3670,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 }
 
         if not existing or existing.status == MembershipStatusEnum.REJECTED:
-            count = await SpaceChannelMemberDao.async_count_user_space_subscriptions(self.login_user.user_id)
-            if count >= _MAX_SUBSCRIBE_PER_USER:
-                raise SpaceSubscribeLimitError()
+            # Limit is role-configurable via F005 quota (knowledge_space_subscribe,
+            # default 100; admins/-1 = unlimited). Tenant cap applies only if the
+            # tenant sets the key; otherwise effective == role quota.
+            effective = await QuotaService.get_effective_quota(
+                self.login_user.user_id,
+                QuotaResourceType.KNOWLEDGE_SPACE_SUBSCRIBE,
+                self.login_user.tenant_id,
+                login_user=self.login_user,
+            )
+            if effective != -1:
+                count = await SpaceChannelMemberDao.async_count_user_space_subscriptions(self.login_user.user_id)
+                if count >= effective:
+                    raise SpaceSubscribeLimitError()
 
         previous_status = existing.status if existing else None
         if existing:
