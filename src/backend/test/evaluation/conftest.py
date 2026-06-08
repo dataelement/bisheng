@@ -49,7 +49,14 @@ def sqlite_session_patch(monkeypatch):
         'bisheng.evaluation.domain.repositories.evaluation_repository.get_sync_db_session',
         _fake_session)
 
+    # The Evaluation table is tenant-aware, so once any test in the process
+    # registers the tenant-filter ORM events they intercept every session —
+    # including this in-memory sqlite one. Bypass keeps the test deterministic
+    # and independent of suite ordering.
+    from bisheng.core.context.tenant import bypass_tenant_filter
+
     seed = Session(bind=engine)
-    yield seed
+    with bypass_tenant_filter():
+        yield seed
     seed.close()
     engine.dispose()

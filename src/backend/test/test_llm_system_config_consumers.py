@@ -100,7 +100,7 @@ def test_linsight_task_exec_threads_session_tenant():
 
 
 def test_evaluation_uses_evaluation_tenant():
-    src = _read('api/services/evaluation.py')
+    src = _read('evaluation/domain/services/evaluation_service.py')
     assert 'tenant_id=evaluation.tenant_id' in src
 
 
