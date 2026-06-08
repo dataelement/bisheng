@@ -3,6 +3,7 @@ from typing import List, Optional, Any, Sequence, Union, Dict, Type, Callable, I
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
+from langchain_core.language_models.chat_models import agenerate_from_stream, generate_from_stream
 from langchain_core.messages import BaseMessage, ToolMessage, BaseMessageChunk
 from langchain_core.outputs import ChatResult, ChatGenerationChunk
 from langchain_core.runnables import Runnable
@@ -336,6 +337,16 @@ class BishengLLM(BishengBase, BaseChatModel):
         messages, kwargs = self.parse_kwargs(messages, kwargs)
         if self.server_info.type == LLMServerType.MOONSHOT.value:
             ret = self.moonshot_generate(messages, stop, run_manager, **kwargs)
+        elif getattr(self.llm, 'streaming', False):
+            # langchain-openai 1.x no longer aggregates a streaming response inside
+            # `_generate` (it returns a raw `Stream` and relies on `_generate_with_cache`
+            # to dispatch streaming models to `_stream`). Because we delegate to the inner
+            # model directly, aggregate the stream here — this also keeps `on_llm_new_token`
+            # callbacks firing so workflow / chat UI streaming keeps working.
+            ret = generate_from_stream(
+                self.llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs))
+            if self.server_info.type == LLMServerType.QWEN.value:
+                ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
         else:
             ret = self.llm._generate(messages, stop, run_manager, **kwargs)
             if self.server_info.type == LLMServerType.QWEN.value:
@@ -380,6 +391,13 @@ class BishengLLM(BishengBase, BaseChatModel):
         messages, kwargs = self.parse_kwargs(messages, kwargs)
         if self.server_info.type == LLMServerType.MOONSHOT.value:
             ret = await self.moonshot_agenerate(messages, stop, run_manager, **kwargs)
+        elif getattr(self.llm, 'streaming', False):
+            # See `_generate`: aggregate the inner stream so `on_llm_new_token` callbacks
+            # keep firing (workflow / chat UI streaming) instead of returning a raw Stream.
+            ret = await agenerate_from_stream(
+                self.llm._astream(messages, stop=stop, run_manager=run_manager, **kwargs))
+            if self.server_info.type == LLMServerType.QWEN.value:
+                ret.generations[0].message = self.convert_qwen_result(ret.generations[0].message)
         else:
             ret = await self.llm._agenerate(messages, stop, run_manager, **kwargs)
             if self.server_info.type == LLMServerType.QWEN.value:
