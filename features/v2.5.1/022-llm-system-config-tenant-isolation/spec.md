@@ -1,6 +1,6 @@
 # Feature: F022-llm-system-config-tenant-isolation (LLM 系统模型默认配置按租户隔离)
 
-**关联 PRD**: [../../../docs/PRD/2.5 权限管理体系改造 PRD/2.5 多租户需求文档.md](../../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20多租户需求文档.md) §7.1（"Root 共享 + Child 扩展"延伸）
+**关联 PRD**: [../../../docs/archive/2.5 权限管理体系改造 PRD/2.5 多租户需求文档.md](../../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20多租户需求文档.md) §7.1（"Root 共享 + Child 扩展"延伸）
 **优先级**: P1
 **所属版本**: v2.5.1
 **模块编码**: 沿用 198（`llm_tenant`），不新增模块编码
@@ -617,12 +617,12 @@ export interface SystemModelConfigEnvelope<T> {
 
 ## 13. 相关文档
 
-- 主 PRD `docs/PRD/2.5 权限管理体系改造 PRD/2.5 多租户需求文档.md`：
+- 主 PRD `docs/archive/2.5 权限管理体系改造 PRD/2.5 多租户需求文档.md`：
   - §7.1（Child 独立模型）— 需补一段"系统模型设置同样按租户隔离"
   - §10.4（废弃 API 说明）— 与本 Feature 无直接关系，仅参考
-- 升级迁移方案 `docs/PRD/2.5 权限管理体系改造 PRD/2.5 版本升级迁移方案.md`：
+- 升级迁移方案 `docs/archive/2.5 权限管理体系改造 PRD/2.5 版本升级迁移方案.md`：
   - §3.7 LLM 模型升级行为 — 需追加 F034 alembic 迁移说明（spec 起初规划为 F031，但 F031 已被 `startup_hotfix_fields` 占用，本期实施时改用 F034）
-- 运维手册 `docs/PRD/2.5 权限管理体系改造 PRD/2.5 多租户切换运维手册.md`：
+- 运维手册 `docs/archive/2.5 权限管理体系改造 PRD/2.5 多租户切换运维手册.md`：
   - §6 故障排查矩阵 — 需追加 19803 实际触发场景
   - §8.3 v2.5 多租户相关 alembic 迁移列表（21 个）→ 22 个（追加 F034 `tenant_system_model_config`）
 - F020 spec.md：

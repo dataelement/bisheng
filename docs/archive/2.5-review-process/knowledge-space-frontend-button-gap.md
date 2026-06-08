@@ -11,7 +11,7 @@
 
 本次结论基于三类信息对比：
 
-- 产品/技术文档：`docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md`
+- 产品/技术文档：`docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md`
 - 后端接口与服务：`src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`、`src/backend/bisheng/permission/api/endpoints/resource_permission.py`
 - 前端页面与组件：`src/frontend/client/src/pages/knowledge/**`
 
@@ -100,8 +100,8 @@
 
 来源：
 
-- `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 249 行
-- `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 256 行
+- `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 249 行
+- `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 256 行
 
 #### 后端依据
 
@@ -151,9 +151,9 @@
 
 来源：
 
-- `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 249 行
-- `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 256 行
-- `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 963 行
+- `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 249 行
+- `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 256 行
+- `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 963 行
 
 #### 后端依据
 
@@ -197,8 +197,8 @@
 
 来源：
 
-- `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 249 行
-- `docs/PRD/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 256 行
+- `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 249 行
+- `docs/archive/2.5 权限管理体系改造 PRD/2.5 技术方案.md` 第 256 行
 
 #### 后端依据
 
