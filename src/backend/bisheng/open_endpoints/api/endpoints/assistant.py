@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketException
 from fastapi import status as http_status
-from fastapi.responses import ORJSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, AIMessageChunk
 from loguru import logger
 
@@ -50,12 +50,12 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
         # Get the default user information configured in the system configuration
         login_user = get_default_operator()
     except Exception as e:
-        return ORJSONResponse(status_code=500, content=str(e), media_type='application/json')
+        return JSONResponse(status_code=500, content=str(e), media_type='application/json')
     # Find Assistant Information
     try:
         assistant_info = await AssistantService.get_assistant_info(assistant_id, login_user)
     except Exception as e:
-        return ORJSONResponse(status_code=500,
+        return JSONResponse(status_code=500,
                               content=str(e),
                               media_type='application/json')
 
@@ -203,7 +203,7 @@ async def assistant_chat_completions(request: Request, req_data: OpenAIChatCompl
                                      media_type='text/event-stream')
         except Exception as exc:
             logger.error(f'StreamingResponse creation error: {exc}')
-            return ORJSONResponse(status_code=500, content=str(exc))
+            return JSONResponse(status_code=500, content=str(exc))
     finally:
         end_time = time.time()
         await telemetry_service.log_event(user_id=login_user.user_id,

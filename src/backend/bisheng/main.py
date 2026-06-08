@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, ORJSONResponse
+from fastapi.responses import JSONResponse
 from loguru import logger
 
 from bisheng.api.router import router, router_rpc
@@ -19,7 +19,7 @@ from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMidd
 from bisheng.utils.threadpool import thread_pool
 
 
-def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
+def handle_http_exception(req: Request, exc: Exception) -> JSONResponse:
     if isinstance(exc, HTTPException):
         msg = {
             'status_code': exc.status_code,
@@ -33,13 +33,13 @@ def handle_http_exception(req: Request, exc: Exception) -> ORJSONResponse:
         logger.exception('Unhandled exception')
         msg = {'status_code': 500, 'status_message': str(exc)}
     logger.error(f'{req.method} {req.url} {str(exc)}')
-    return ORJSONResponse(content=msg)
+    return JSONResponse(content=msg)
 
 
-def handle_request_validation_error(req: Request, exc: RequestValidationError) -> ORJSONResponse:
+def handle_request_validation_error(req: Request, exc: RequestValidationError) -> JSONResponse:
     msg = {'status_code': status.HTTP_422_UNPROCESSABLE_ENTITY, 'status_message': exc.errors()}
     logger.error(f'{req.method} {req.url} {str(exc.errors())[:100]}')
-    return ORJSONResponse(content=msg)
+    return JSONResponse(content=msg)
 
 
 _EXCEPTION_HANDLERS = {
@@ -64,7 +64,6 @@ def create_app():
     """Create the FastAPI app and include the router."""
 
     app = FastAPI(
-        default_response_class=ORJSONResponse,
         exception_handlers=_EXCEPTION_HANDLERS,
         lifespan=lifespan,
     )
