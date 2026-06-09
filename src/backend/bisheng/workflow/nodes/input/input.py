@@ -298,6 +298,9 @@ class InputNode(BaseNode):
 
         file_content_length = 0
         for one_file_url in value:
+            if not one_file_url:
+                logger.warning(f"{self.id}.{key} one_file_url is None")
+                continue
             url_obj = urlparse(one_file_url)
             file_name = unquote(url_obj.path.split('/')[-1])
             # get file original name
