@@ -5795,6 +5795,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder_records = await KnowledgeFileDao.aget_file_by_ids(list(folder_ids)) if folder_ids else []
         folder_map = {int(folder.id): folder for folder in folder_records if getattr(folder, "id", None) is not None}
 
+        file_ids = [int(file.id) for file in files if getattr(file, "id", None) is not None]
+        file_tags: Dict[int, List[Dict]] = {}
+        if file_ids:
+            tag_dict = await asyncio.to_thread(
+                TagDao.get_tags_by_resource_batch,
+                [ResourceTypeEnum.SPACE_FILE],
+                [str(file_id) for file_id in file_ids],
+            )
+            for file_id, tags in tag_dict.items():
+                try:
+                    normalized_file_id = int(file_id)
+                except (TypeError, ValueError):
+                    continue
+                file_tags[normalized_file_id] = [{"id": tag.id, "name": tag.name} for tag in tags]
+
         data = [
             ShougangPortalUploadedFileResp(
                 id=int(file.id),
@@ -5807,7 +5822,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 folder_path_name=self._folder_path_name_from_map(file.file_level_path, folder_map),
                 status=file.status,
                 file_encoding=file.file_encoding,
-                tags=getattr(file, "tags", []) or [],
+                tags=file_tags.get(int(file.id), []),
                 abstract=file.abstract or "",
                 create_time=self._format_datetime(file.create_time),
                 update_time=self._format_datetime(file.update_time),

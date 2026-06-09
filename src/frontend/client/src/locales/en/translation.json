@@ -1455,6 +1455,7 @@
     "edit_space": "Edit knowledge space",
     "edit_tags": "Edit tags",
     "existing_tags": "Existing tags",
+    "recommended_tags": "Recommended tags",
     "exit": "Exit",
     "exit_space": "Exit knowledge space",
     "exit_space_failed": "Failed to exit space",

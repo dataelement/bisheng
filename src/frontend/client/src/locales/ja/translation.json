@@ -1379,6 +1379,7 @@
     "edit_space": "ナレッジスペースを編集",
     "edit_tags": "タグを編集",
     "existing_tags": "既存のタグ",
+    "recommended_tags": "おすすめタグ",
     "exit": "退出",
     "exit_space": "ナレッジスペースを退出",
     "exit_space_failed": "スペースの退出に失敗しました",

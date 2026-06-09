@@ -63,6 +63,7 @@ const mockUseKnowledgeSpaceActionPermissions = jest.fn();
 const mockCheckPermission = jest.fn();
 const mockClipboardWriteText = jest.fn();
 const mockHandleUploadFile = jest.fn();
+const mockUpdateFileTagsApi = jest.fn();
 let mockCreateSpaceConfirmResult: any;
 
 jest.mock("~/Providers", () => ({
@@ -152,7 +153,15 @@ jest.mock("../SpaceDetail/EditTagsModal", () => ({
                 <span data-testid="edit-tags-space-id">{spaceId}</span>
                 <span data-testid="edit-tags-file-id">{fileId}</span>
                 <span data-testid="edit-tags-initial-ids">{(initialTagIds || []).join(",")}</span>
-                <button type="button" onClick={onSaved}>保存标签</button>
+                <button
+                    type="button"
+                    onClick={async () => {
+                        await mockUpdateFileTagsApi(spaceId, fileId, [3]);
+                        await onSaved?.();
+                    }}
+                >
+                    保存标签
+                </button>
             </div>
         ) : null
     ),
@@ -374,6 +383,7 @@ jest.mock("~/api/knowledge", () => ({
     getFileDownloadApi: jest.fn(),
     getFilePreviewApi: jest.fn(),
     updateFileEncoding: jest.fn(),
+    updateFileTagsApi: (...args: any[]) => mockUpdateFileTagsApi(...args),
     fileStatusToNumber: jest.fn((status) => {
         const map: Record<string, number> = {
             processing: 1,
@@ -466,6 +476,7 @@ function openMyUploadsFromPortalShell() {
 describe("PortalKnowledgeWorkbench", () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockUpdateFileTagsApi.mockResolvedValue(undefined);
         localStorage.removeItem("knowledge-view-mode");
         mockCreateSpaceConfirmResult = undefined;
         Object.defineProperty(navigator, "clipboard", {
@@ -658,6 +669,15 @@ describe("PortalKnowledgeWorkbench", () => {
             "src",
             "/assets/knowledge-portal/sidebar-expand.png",
         );
+    });
+
+    test("shows loading state before grouped spaces finish loading", () => {
+        jest.mocked(getGroupedSpacesApi).mockImplementation(() => new Promise(() => undefined) as any);
+
+        renderWorkbench();
+
+        expect(screen.getByText("正在加载知识库...")).toBeInTheDocument();
+        expect(screen.queryByText("暂无可用知识库")).not.toBeInTheDocument();
     });
 
     test("keeps empty state when grouped API returns no spaces", async () => {
@@ -2901,7 +2921,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(drawer).getByText("SGGF-STD-EM-20260600000001")).toBeInTheDocument();
         expect(within(drawer).getByLabelText("修改测试文档.pdf文件类型 当前类型：STD")).toHaveDisplayValue("STD / 标准规范");
         expect(within(drawer).getByLabelText("修改测试文档.pdf业务域类型 当前业务域：EM")).toHaveDisplayValue("EM / 能源");
-        expect(within(drawer).getByText("能源")).toBeInTheDocument();
+        expect(within(drawer).getAllByText("能源").length).toBeGreaterThanOrEqual(1);
         expect(within(drawer).queryByText("个人知识库 / 设备部")).not.toBeInTheDocument();
         expect(within(drawer).queryByText("AI业务域")).not.toBeInTheDocument();
         expect(within(drawer).queryByText("操作")).not.toBeInTheDocument();
@@ -3051,10 +3071,10 @@ describe("PortalKnowledgeWorkbench", () => {
 
         openMyUploadsFromPortalShell();
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
-        expect(within(drawer).getByLabelText("修改历史编码文档.pdf文件类型 当前类型：未识别")).toHaveDisplayValue("未识别");
-        expect(within(drawer).getByLabelText("修改历史编码文档.pdf业务域类型 当前业务域：未识别")).toHaveDisplayValue("未识别");
+        expect(within(drawer).getByLabelText("修改历史编码文档.pdf文件类型 当前类型：--")).toHaveDisplayValue("--");
+        expect(within(drawer).getByLabelText("修改历史编码文档.pdf业务域类型 当前业务域：--")).toHaveDisplayValue("--");
 
-        fireEvent.change(within(drawer).getByLabelText("修改历史编码文档.pdf文件类型 当前类型：未识别"), {
+        fireEvent.change(within(drawer).getByLabelText("修改历史编码文档.pdf文件类型 当前类型：--"), {
             target: { value: "RPT" },
         });
 
@@ -3062,7 +3082,7 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(updateFileEncoding).not.toHaveBeenCalled();
         });
 
-        fireEvent.change(within(drawer).getByLabelText("修改历史编码文档.pdf业务域类型 当前业务域：未识别"), {
+        fireEvent.change(within(drawer).getByLabelText("修改历史编码文档.pdf业务域类型 当前业务域：--"), {
             target: { value: "PP" },
         });
 
@@ -3112,6 +3132,46 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
+    test("shows double dash placeholders for empty uploaded record fields", async () => {
+        const personalSpace = makeSpace("personal-1", "设备部", {
+            role: SpaceRole.ADMIN,
+        });
+        const uploadedRecord = {
+            ...makeFile("501", "空字段文档.pdf", {
+                type: FileType.PDF,
+                status: undefined,
+            }),
+            spaceName: "",
+            spaceLevel: undefined,
+            folderPathName: "根目录",
+            fileEncoding: "",
+            tags: [],
+        };
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(listMyUploadedFilesApi).mockResolvedValue({ data: [uploadedRecord], total: 1 } as any);
+
+        renderWorkbench();
+
+        openMyUploadsFromPortalShell();
+        const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+
+        expect(within(drawer).getAllByText("--").length).toBeGreaterThanOrEqual(5);
+        expect(within(drawer).queryByText("-")).not.toBeInTheDocument();
+        expect(within(drawer).queryByText("知识库:-")).not.toBeInTheDocument();
+        expect(within(drawer).getByLabelText("修改空字段文档.pdf文件类型 当前类型：--")).toHaveDisplayValue("--");
+        expect(within(drawer).getByLabelText("修改空字段文档.pdf业务域类型 当前业务域：--")).toHaveDisplayValue("--");
+        expect(within(drawer).getAllByText("--").length).toBeGreaterThanOrEqual(5);
+        expect(within(drawer).getByRole("button", {
+            name: "修改空字段文档.pdf标签 当前标签：--",
+        })).toBeInTheDocument();
+    });
+
     test("opens an uploaded record tag editor from the current tags", async () => {
         const personalSpace = makeSpace("personal-1", "设备部", {
             role: SpaceRole.ADMIN,
@@ -3140,6 +3200,8 @@ describe("PortalKnowledgeWorkbench", () => {
 
         openMyUploadsFromPortalShell();
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
+        expect(within(drawer).getAllByText("能源").length).toBeGreaterThanOrEqual(1);
+        expect(within(drawer).getByText("+1")).toBeInTheDocument();
         fireEvent.click(within(drawer).getByRole("button", {
             name: "修改标签文档.pdf标签 当前标签：能源、安全",
         }));
@@ -3151,6 +3213,9 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(within(modal).getByRole("button", { name: "保存标签" }));
 
+        await waitFor(() => {
+            expect(mockUpdateFileTagsApi).toHaveBeenCalledWith("personal-1", "501", [3]);
+        });
         await waitFor(() => {
             expect(listMyUploadedFilesApi).toHaveBeenCalledTimes(2);
         });

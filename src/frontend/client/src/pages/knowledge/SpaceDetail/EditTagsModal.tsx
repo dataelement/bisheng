@@ -260,9 +260,9 @@ export function EditTagsModal({
 
                     {/* <div className="w-full h-px bg-[#ebecf0] my-[-1px]" /> */}
 
-                    {/* Existing Space Tags */}
+                    {/* 推荐标签 */}
                     <div className="flex flex-col gap-2 pt-1">
-                        <div className="text-[14px] leading-5 font-medium text-[#212121]">{localize("com_knowledge.existing_tags")}</div>
+                        <div className="text-[14px] leading-5 font-medium text-[#212121]">{localize("com_knowledge.recommended_tags")}</div>
                         <div className="flex flex-wrap gap-1">
                             {spaceTags.length === 0 && (
                                 <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>

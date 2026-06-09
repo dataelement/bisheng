@@ -1568,6 +1568,10 @@ export default function PortalKnowledgeWorkbench() {
                                         </>
                                     )}
                                 </div>
+                            ) : spaceLoading ? (
+                                <div className={s.stateBox}>
+                                    <div className={s.stateTitle}>正在加载知识库...</div>
+                                </div>
                             ) : (
                                 <div className={s.stateBox}>
                                     <div className={s.stateTitle}>暂无可用知识库</div>

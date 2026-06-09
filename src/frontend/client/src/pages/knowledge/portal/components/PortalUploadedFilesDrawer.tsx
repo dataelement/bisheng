@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, Folder } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, PencilLine } from "lucide-react";
 import {
     FileStatus,
     SpaceLevel,
@@ -7,11 +7,13 @@ import {
     listMyUploadedFilesApi,
     moveUploadedFileFolderApi,
     updateFileEncoding,
+    type FileTag,
     type UploadedFileRecord,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
+import TagGroup from "../../SpaceDetail/TagGroup";
 import type { PortalFileCategoryOption } from "../types";
 import {
     BUSINESS_DOMAIN_OPTIONS,
@@ -26,6 +28,12 @@ import {
 import s from "../PortalKnowledgeWorkbench.module.css";
 
 const PAGE_SIZE = 20;
+const EMPTY_FIELD_PLACEHOLDER = "--";
+
+function displayText(value?: string | null): string {
+    const text = String(value ?? "").trim();
+    return text || EMPTY_FIELD_PLACEHOLDER;
+}
 
 function uploadStatusLabel(status?: FileStatus): string {
     switch (status) {
@@ -44,7 +52,7 @@ function uploadStatusLabel(status?: FileStatus): string {
         case FileStatus.VIOLATION:
             return "内容违规";
         default:
-            return "-";
+            return EMPTY_FIELD_PLACEHOLDER;
     }
 }
 
@@ -82,12 +90,19 @@ function spaceLevelLabel(spaceLevel?: SpaceLevel): string {
 }
 
 function uploadRecordSpaceName(record: UploadedFileRecord): string {
-    const spaceName = record.spaceName || "-";
+    const spaceName = displayText(record.spaceName);
+    if (spaceName === EMPTY_FIELD_PLACEHOLDER) return EMPTY_FIELD_PLACEHOLDER;
     return `${spaceLevelLabel(record.spaceLevel)}:${spaceName}`;
 }
 
 function uploadRecordTagText(record: UploadedFileRecord): string {
-    return record.tags.length ? record.tags.map((tag) => tag.name).join("、") : "-";
+    const tagNames = uploadRecordTags(record)
+        .map((tag) => String(tag.name ?? "").trim());
+    return tagNames.length ? tagNames.join("、") : EMPTY_FIELD_PLACEHOLDER;
+}
+
+function uploadRecordTags(record: UploadedFileRecord): FileTag[] {
+    return (record.tags ?? []).filter((tag) => String(tag.name ?? "").trim());
 }
 
 type FolderTreeNode = {
@@ -243,6 +258,7 @@ export function PortalUploadedFilesDrawer({
         () => records.find((record) => record.id === editingFileId) ?? null,
         [editingFileId, records],
     );
+    const uploadRecordsDialogOpen = open && !editingTagsRecord;
 
     const handleStartEdit = useCallback(async (record: UploadedFileRecord) => {
         setEditingTagsRecord(null);
@@ -393,7 +409,8 @@ export function PortalUploadedFilesDrawer({
     }, [loadRecords, onRecordsChanged, page]);
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <>
+        <Dialog open={uploadRecordsDialogOpen} onOpenChange={onOpenChange}>
             <DialogContent className={s.uploadRecordsDialog} onPointerDownOutside={(event) => event.preventDefault()}>
                 <div data-testid="portal-uploaded-files-drawer" className={s.uploadRecordsInner}>
                     <DialogHeader>
@@ -438,38 +455,56 @@ export function PortalUploadedFilesDrawer({
                         {loading ? (
                             <div className={s.uploadRecordsEmpty}>正在加载上传记录...</div>
                         ) : records.length ? records.map((record) => {
-                            const encodingText = record.fileEncoding?.trim() || "-";
+                            const recordName = displayText(record.name);
+                            const spaceName = uploadRecordSpaceName(record);
+                            const statusText = uploadStatusLabel(record.status);
+                            const folderPathName = record.folderPathName?.trim() || "根目录";
+                            const encodingText = displayText(record.fileEncoding);
                             const parsedEncoding = parseFileEncoding(record.fileEncoding, encodingPrefix);
                             const draft = encodingDrafts[record.id] ?? {};
                             const selectedFileCategoryCode = normalizeEncodingCode(draft.fileCategoryCode ?? parsedEncoding.fileCategoryCode);
                             const selectedBusinessDomainCode = normalizeEncodingCode(draft.businessDomainCode ?? parsedEncoding.businessDomainCode);
+                            const selectedFileCategoryText = selectedFileCategoryCode || EMPTY_FIELD_PLACEHOLDER;
+                            const selectedBusinessDomainText = selectedBusinessDomainCode || EMPTY_FIELD_PLACEHOLDER;
                             const hasCurrentCategoryOption = fileCategoryOptions.some((option) => option.code === selectedFileCategoryCode);
                             const tagText = uploadRecordTagText(record);
+                            const recordTags = uploadRecordTags(record);
+                            const editTagsButton = (
+                                <button
+                                    type="button"
+                                    className={s.uploadRecordTagEditButton}
+                                    title="编辑标签"
+                                    aria-label={`修改${recordName}标签 当前标签：${tagText}`}
+                                    onClick={() => handleStartTagsEdit(record)}
+                                >
+                                    <PencilLine size={14} />
+                                </button>
+                            );
                             return (
                                 <div key={record.id} className={s.uploadRecordsRow}>
-                                    <span title={record.name}>{record.name}</span>
-                                    <span title={uploadRecordSpaceName(record)}>{uploadRecordSpaceName(record)}</span>
-                                    <span className={uploadStatusClassName(record.status)}>{uploadStatusLabel(record.status)}</span>
+                                    <span title={recordName}>{recordName}</span>
+                                    <span title={spaceName}>{spaceName}</span>
+                                    <span className={uploadStatusClassName(record.status)}>{statusText}</span>
                                     <span>
                                         <button
                                             type="button"
                                             className={s.uploadRecordFolderButton}
-                                            title={record.folderPathName || "根目录"}
-                                            aria-label={`修改${record.name}上传目录 当前目录：${record.folderPathName || "根目录"}`}
+                                            title={folderPathName}
+                                            aria-label={`修改${recordName}上传目录 当前目录：${folderPathName}`}
                                             onClick={() => void handleStartEdit(record)}
                                         >
-                                            {record.folderPathName || "根目录"}
+                                            {folderPathName}
                                         </button>
                                     </span>
                                     <span>
                                         <select
                                             className={s.uploadRecordSelect}
-                                            aria-label={`修改${record.name}文件类型 当前类型：${selectedFileCategoryCode || "未识别"}`}
+                                            aria-label={`修改${recordName}文件类型 当前类型：${selectedFileCategoryText}`}
                                             value={selectedFileCategoryCode}
                                             disabled={savingEncodingFileId === record.id}
                                             onChange={(event) => void handleEncodingPartChange(record, { fileCategoryCode: event.currentTarget.value })}
                                         >
-                                            <option value="">未识别</option>
+                                            <option value="">{EMPTY_FIELD_PLACEHOLDER}</option>
                                             {selectedFileCategoryCode && !hasCurrentCategoryOption ? (
                                                 <option value={selectedFileCategoryCode}>
                                                     {fileEncodingCategoryLabel(selectedFileCategoryCode, fileCategoryOptions)}
@@ -485,12 +520,12 @@ export function PortalUploadedFilesDrawer({
                                     <span>
                                         <select
                                             className={s.uploadRecordSelect}
-                                            aria-label={`修改${record.name}业务域类型 当前业务域：${selectedBusinessDomainCode || "未识别"}`}
+                                            aria-label={`修改${recordName}业务域类型 当前业务域：${selectedBusinessDomainText}`}
                                             value={selectedBusinessDomainCode}
                                             disabled={savingEncodingFileId === record.id}
                                             onChange={(event) => void handleEncodingPartChange(record, { businessDomainCode: event.currentTarget.value })}
                                         >
-                                            <option value="">未识别</option>
+                                            <option value="">{EMPTY_FIELD_PLACEHOLDER}</option>
                                             {selectedBusinessDomainCode && !BUSINESS_DOMAIN_OPTIONS.some((option) => option.code === selectedBusinessDomainCode) ? (
                                                 <option value={selectedBusinessDomainCode}>
                                                     {fileEncodingBusinessDomainLabel(selectedBusinessDomainCode)}
@@ -506,16 +541,15 @@ export function PortalUploadedFilesDrawer({
                                     <span className={s.uploadRecordReadonlyText} title={encodingText}>
                                         {encodingText}
                                     </span>
-                                    <span>
-                                        <button
-                                            type="button"
-                                            className={s.uploadRecordInlineEditButton}
-                                            title={tagText}
-                                            aria-label={`修改${record.name}标签 当前标签：${tagText}`}
-                                            onClick={() => handleStartTagsEdit(record)}
-                                        >
-                                            {tagText}
-                                        </button>
+                                    <span className={s.uploadRecordTagCell} title={tagText}>
+                                        {recordTags.length ? (
+                                            <TagGroup tags={recordTags} actionButton={editTagsButton} />
+                                        ) : (
+                                            <>
+                                                <span className={s.uploadRecordTagEmpty}>{EMPTY_FIELD_PLACEHOLDER}</span>
+                                                {editTagsButton}
+                                            </>
+                                        )}
                                     </span>
                                 </div>
                             );
@@ -587,18 +621,19 @@ export function PortalUploadedFilesDrawer({
                             关闭
                         </Button>
                     </DialogFooter>
-                    {editingTagsRecord ? (
-                        <EditTagsModal
-                            isOpen={Boolean(editingTagsRecord)}
-                            onClose={() => setEditingTagsRecord(null)}
-                            onSaved={handleTagsSaved}
-                            spaceId={editingTagsRecord.spaceId}
-                            fileId={editingTagsRecord.id}
-                            initialTagIds={editingTagsRecord.tags.map((tag) => tag.id).filter((id) => id >= 0)}
-                        />
-                    ) : null}
                 </div>
             </DialogContent>
         </Dialog>
+        {editingTagsRecord ? (
+            <EditTagsModal
+                isOpen={Boolean(editingTagsRecord)}
+                onClose={() => setEditingTagsRecord(null)}
+                onSaved={handleTagsSaved}
+                spaceId={editingTagsRecord.spaceId}
+                fileId={editingTagsRecord.id}
+                initialTagIds={(editingTagsRecord.tags ?? []).map((tag) => tag.id).filter((id) => id >= 0)}
+            />
+        ) : null}
+        </>
     );
 }

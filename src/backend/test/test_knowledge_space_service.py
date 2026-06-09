@@ -979,6 +979,14 @@ async def test_list_my_uploaded_files_queries_uploader_records_without_read_perm
         'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
         new_callable=AsyncMock,
         return_value=folders,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.get_tags_by_resource_batch',
+        return_value={
+            '501': [
+                SimpleNamespace(id=11, name='能源'),
+                SimpleNamespace(id=12, name='安全'),
+            ],
+        },
     ), patch.object(
         service,
         '_require_permission_id',
@@ -995,6 +1003,7 @@ async def test_list_my_uploaded_files_queries_uploader_records_without_read_perm
     assert result.data[0].space_level == KnowledgeSpaceLevelEnum.TEAM
     assert result.data[0].folder_path_name == '技术文档/能源管理'
     assert result.data[0].parent_id == 38
+    assert result.data[0].tags == [{'id': 11, 'name': '能源'}, {'id': 12, 'name': '安全'}]
 
 
 @pytest.mark.asyncio
@@ -1032,6 +1041,9 @@ async def test_list_my_uploaded_files_defaults_missing_space_level_to_personal(s
         'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids',
         new_callable=AsyncMock,
         return_value=[],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.TagDao.get_tags_by_resource_batch',
+        return_value={},
     ), patch.object(
         service,
         '_get_space_level',
