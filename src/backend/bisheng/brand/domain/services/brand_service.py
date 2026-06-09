@@ -201,83 +201,22 @@ class BrandService:
             file_name=default_asset.file_name,
         )
 
-    async def build_runtime_script(self) -> str:
-        config = await self.get_config()
+    async def get_runtime_config(self) -> dict[str, Any]:
+        raw_value = await self.repository.get_value(BRAND_CONFIG_KEY)
+        if not raw_value:
+            return {}
+
+        try:
+            saved = BrandConfig.model_validate(json.loads(raw_value))
+            config = self._merge_with_defaults(saved)
+        except (json.JSONDecodeError, ValueError) as exc:
+            logger.warning('Invalid brand_config in DB, using static defaults for runtime: %s', exc)
+            return {}
+
+        await self._hydrate_asset_urls(config)
         payload_data = config.model_dump(mode='json')
         payload_data.pop('linsightAgentName', None)
-        payload = json.dumps(payload_data, ensure_ascii=False).replace('</', '<\\/')
-        return f"""(function() {{
-  var incoming = {payload};
-  var previous = window.BRAND_CONFIG || {{}};
-  function mergeObject(base, next) {{
-    var result = {{}};
-    Object.keys(base || {{}}).forEach(function(key) {{ result[key] = base[key]; }});
-    Object.keys(next || {{}}).forEach(function(key) {{ result[key] = next[key]; }});
-    return result;
-  }}
-  function getRuntimeBaseUrl() {{
-    var currentScript = document.currentScript && document.currentScript.src || '';
-    var marker = '/api/v1/brand/runtime.js';
-    var markerIndex = currentScript.indexOf(marker);
-    if (markerIndex === -1) {{
-      return '';
-    }}
-    var path = currentScript.slice(0, markerIndex);
-    try {{
-      path = new URL(path).pathname;
-    }} catch (error) {{}}
-    return path.replace(/\\/$/, '');
-  }}
-  function withRuntimeBaseUrl(url) {{
-    if (!url || /^(?:https?:|data:|blob:|\\/\\/)/i.test(url)) {{
-      return url || '';
-    }}
-    var baseUrl = getRuntimeBaseUrl();
-    if (!baseUrl || url.indexOf(baseUrl + '/') === 0) {{
-      return url;
-    }}
-    return url.charAt(0) === '/' ? baseUrl + url : baseUrl + '/' + url;
-  }}
-  function normalizeAssetUrls(assets) {{
-    Object.keys(assets || {{}}).forEach(function(key) {{
-      if (assets[key] && assets[key].url) {{
-        assets[key].url = withRuntimeBaseUrl(assets[key].url);
-      }}
-    }});
-  }}
-  window.BRAND_CONFIG = mergeObject(previous, incoming);
-  window.BRAND_CONFIG.brandName = mergeObject(previous.brandName, incoming.brandName);
-  if (previous.linsightAgentName || incoming.linsightAgentName) {{
-    window.BRAND_CONFIG.linsightAgentName = mergeObject(previous.linsightAgentName, incoming.linsightAgentName);
-  }}
-  window.BRAND_CONFIG.assets = mergeObject(previous.assets, incoming.assets);
-  normalizeAssetUrls(window.BRAND_CONFIG.assets);
-  var loading = incoming.loading || {{}};
-  var loadingIcon = withRuntimeBaseUrl(incoming.URLLoadingIcon || (loading.icon && loading.icon.url) || previous.loadingIcon || '');
-  window.BRAND_CONFIG.URLLoadingIcon = loadingIcon;
-  window.BRAND_CONFIG.loadingIcon = loadingIcon;
-  window.BRAND_CONFIG.loadingAnimation = loading.animation || previous.loadingAnimation || '';
-  function getBrandLanguage() {{
-    var savedLanguage = '';
-    try {{ savedLanguage = window.localStorage && window.localStorage.getItem('i18nextLng') || ''; }} catch (error) {{ savedLanguage = ''; }}
-    var language = savedLanguage || navigator.language || 'en';
-    return language.toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
-  }}
-  function getBrandTitle(brandName) {{
-    var language = getBrandLanguage();
-    return language === 'zh' ? (brandName.zh || brandName.en || '') : (brandName.en || brandName.zh || '');
-  }}
-  if (window.BRAND_CONFIG.brandName) {{
-    document.title = getBrandTitle(window.BRAND_CONFIG.brandName);
-  }}
-  var favicon = window.BRAND_CONFIG.assets && window.BRAND_CONFIG.assets.favicon && window.BRAND_CONFIG.assets.favicon.url;
-  if (favicon) {{
-    var link = document.querySelector("link[rel*='icon']") || document.createElement('link');
-    link.rel = 'icon';
-    link.href = favicon;
-    document.head.appendChild(link);
-  }}
-}})();"""
+        return payload_data
 
     def _merge_with_defaults(self, incoming: BrandConfig | BrandConfigUpdate) -> BrandConfig:
         merged = _default_config()

@@ -43,6 +43,7 @@ interface Window {
       headerLogoDark?: { url?: string };
     };
   };
+  __BRAND_CONFIG_READY__?: Promise<any>;
   /** Runtime app config injected by public/assets/bisheng/config.js. */
   APP_CONFIG?: {
     /** Hide Japanese from the language switcher and locale auto-detection. */

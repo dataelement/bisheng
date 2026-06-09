@@ -53,7 +53,7 @@ BiSheng 需要在管理后台提供可视化的品牌定制能力，让系统管
 | 普通用户 | 不可进入品牌定制页面，但可看到已生效的品牌展示 |
 | 未登录用户 | 可在登录页加载公开运行时品牌配置 |
 
-后端配置接口需要管理员鉴权；运行时脚本 `/api/v1/brand/runtime.js` 为公开读取接口，用于页面初始化前加载品牌配置。
+后端配置接口需要管理员鉴权；运行时配置接口 `/api/v1/brand/runtime-config` 为公开读取接口，只返回品牌配置 JSON 数据。页面初始化前由前端静态脚本 `/assets/bisheng/brand-runtime.js` 加载该接口并写入 `window.BRAND_CONFIG`。
 
 ## 6. 功能说明
 
@@ -221,23 +221,23 @@ window.BRAND_CONFIG = {
 
 静态 `config.js` 加载后，页面继续加载：
 
-`/api/v1/brand/runtime.js`
+`/assets/bisheng/brand-runtime.js`
 
-运行时脚本负责：
+前端静态运行时脚本负责：
 
-1. 读取后端持久化的品牌定制配置。
+1. 读取后端公开 JSON 接口 `/api/v1/brand/runtime-config` 返回的品牌定制配置。
 2. 与已有 `window.BRAND_CONFIG` 合并。
 3. 更新 `brandName`、Logo assets、Loading 配置。
 4. 不下发 `linsightAgentName`，避免覆盖 `config.js` 手册配置。
 5. 设置 `document.title`。
 6. 设置 favicon。
 7. 对相对资源路径按当前应用 base path 归一化。
-8. 响应头设置 `Cache-Control: no-store`，避免保存后刷新仍读旧配置。
+8. 后端 JSON 接口响应头设置 `Cache-Control: no-store`，避免保存后刷新仍读旧配置。
 
 加载顺序：
 
 1. `config.js`
-2. `runtime.js`
+2. `brand-runtime.js` 读取 `/api/v1/brand/runtime-config`
 3. 前端应用初始化
 
 ### 7.3 本地与部署环境
@@ -256,7 +256,7 @@ window.BRAND_CONFIG = {
 
 要求：
 
-1. 工作台应通过注入的后端/平台 base URL 加载 `config.js` 与 `runtime.js`。
+1. 工作台应通过注入的 base URL 加载 `config.js` 与前端静态 `brand-runtime.js`，并通过 `/workspace/api/v1/brand/runtime-config` 代理读取同一份后端品牌配置。
 2. 管理后台保存品牌配置后，工作台刷新或重新进入时应读取同一份后端品牌配置。
 3. 同域部署和本地分端口部署都应正常工作。
 
@@ -397,38 +397,38 @@ window.BRAND_CONFIG = {
 
 返回：该分类默认素材。
 
-### 9.6 运行时脚本
+### 9.6 运行时配置
 
-`GET /api/v1/brand/runtime.js`
+`GET /api/v1/brand/runtime-config`
 
 权限：公开。
 
-返回：JavaScript 脚本。
+返回：品牌配置 JSON 数据。
 
 作用：
 
-1. 将品牌配置写入 `window.BRAND_CONFIG`。
-2. 更新 `document.title`。
-3. 更新 favicon。
-4. 归一化相对资源路径。
-5. 保留 `config.js` 中的 `linsightAgentName`。
+1. 如果后端存在已保存的 `brand_config`，返回后端持久化的品牌定制配置。
+2. 如果后端不存在 `brand_config`，返回空配置，前端继续使用 `/assets/bisheng/config.js` 和默认素材，保证部署前手册白标方案不被后端内置值覆盖。
+3. 不返回 `linsightAgentName`，避免覆盖 `config.js` 中的手册配置。
+4. 设置 `Cache-Control: no-store`，避免保存后刷新仍读旧配置。
+5. 不返回 JavaScript，不承载前端运行逻辑。
 
 ## 10. 前端集成要求
 
 ### 10.1 管理后台
 
-1. `index.html` 按顺序加载 `/assets/bisheng/config.js` 与 `/api/v1/brand/runtime.js`。
+1. `index.html` 按顺序加载 `/assets/bisheng/config.js` 与 `/assets/bisheng/brand-runtime.js`。
 2. 登录页左侧大图使用 `loginHeroLight/loginHeroDark`。
 3. 登录页顶部 Logo 使用 `headerLogoLight/headerLogoDark`。
 4. 管理后台主框架左上角 Logo 使用 `headerLogoLight/headerLogoDark`。
-5. 浏览器标题与 favicon 由运行时配置控制。
+5. 浏览器标题与 favicon 由前端静态 `brand-runtime.js` 读取运行时配置后控制。
 6. 保存成功后当前页面即时更新标题与 favicon；其他 Logo 位置刷新后生效。
 
 ### 10.2 工作台
 
-1. `index.html` 按顺序加载 `config.js` 与 `runtime.js`。
+1. `index.html` 按顺序加载 `config.js` 与 `brand-runtime.js`。
 2. 系统品牌名称可影响工作台初始化阶段的浏览器标题及 i18n 品牌变量。
-3. runtime 会设置工作台初始 favicon。
+3. `brand-runtime.js` 会设置工作台初始 favicon。
 4. 工作台加载“构建 → 日常”配置后，如果存在 `assistantIcon.image`，工作台 favicon 会被该配置覆盖。
 5. 工作台左侧边栏图标、欢迎页面图标、对话头像继续由“构建 → 日常”配置，不由品牌定制接管。
 
@@ -505,7 +505,7 @@ window.BRAND_CONFIG = {
 
 ### 12.6 运行时与兼容
 
-1. `/api/v1/brand/runtime.js` 返回 JavaScript，且响应不缓存。
+1. `/api/v1/brand/runtime-config` 返回 JSON 数据，且响应不缓存。
 2. 管理后台和工作台均能加载 runtime。
 3. 本地 3001 管理后台保存配置后，4001 工作台刷新可读取同一份配置。
 4. 同域部署时，管理后台和工作台也能读取同一份配置。
@@ -519,7 +519,7 @@ window.BRAND_CONFIG = {
 | 品牌定制与工作台日常配置边界混淆 | PRD 和 UI 文案明确：工作台侧栏图标、欢迎图标、对话头像归“构建 → 日常” |
 | 删除素材导致页面裂图 | 删除当前使用素材时自动回退默认素材 |
 | 对象存储 URL 临时签名过期 | 持久化 `relative_path`，读取配置和 runtime 时重新生成可访问 URL |
-| 本地分端口导致工作台读不到配置 | 工作台通过注入 base URL 加载 `config.js` 和 `runtime.js` |
+| 本地分端口导致工作台读不到配置 | 工作台通过注入 base URL 加载 `config.js` 和 `brand-runtime.js`，运行时 JSON 走 `/workspace/api` 代理 |
 | runtime 覆盖部署前手册配置 | runtime 不下发 `linsightAgentName`，仅覆盖品牌定制负责的字段 |
 | SVG 安全风险 | 上传时拒绝脚本、事件处理器和 `javascript:` 风险内容 |
 
@@ -528,7 +528,7 @@ window.BRAND_CONFIG = {
 发布要求：
 
 1. 后端注册 `/api/v1/brand/*` 路由。
-2. 管理后台和工作台入口 HTML 加载 `config.js` 与 `runtime.js`。
+2. 管理后台和工作台入口 HTML 加载 `config.js` 与前端静态 `brand-runtime.js`。
 3. 管理后台和工作台都包含 `/assets/bisheng/` 默认静态素材。
 4. MinIO/public bucket 与文件访问代理在本地和部署环境均可访问。
 

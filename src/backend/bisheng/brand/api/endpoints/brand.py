@@ -1,6 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from fastapi.responses import PlainTextResponse
-
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile
 from bisheng.brand.domain.schemas.brand_schema import BrandAssetCategory, BrandConfigUpdate
 from bisheng.brand.domain.services.brand_service import BrandService
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -69,13 +67,11 @@ async def delete_brand_asset(
     return resp_200(default_asset.model_dump(mode='json'))
 
 
-@router.get('/runtime.js')
-async def get_brand_runtime_script(
+@router.get('/runtime-config')
+async def get_brand_runtime_config(
+    response: Response,
     service: BrandService = Depends(get_brand_service),
 ):
-    script = await service.build_runtime_script()
-    return PlainTextResponse(
-        script,
-        media_type='application/javascript',
-        headers={'Cache-Control': 'no-store'},
-    )
+    response.headers['Cache-Control'] = 'no-store'
+    config = await service.get_runtime_config()
+    return resp_200(config)
