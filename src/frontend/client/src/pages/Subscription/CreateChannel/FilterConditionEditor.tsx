@@ -1,5 +1,5 @@
 import { useLocalize } from "~/hooks";
-import { RefreshCcw, SquarePlus } from "lucide-react";
+import { RefreshCcw, SquarePlus, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -107,6 +107,10 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
         }
     };
 
+    const removeKeyword = (idx: number) => {
+        onChange(keywords.filter((_, i) => i !== idx));
+    };
+
     return (
         <div
             className="min-h-[32px] w-full rounded-[6px] border border-[#EBECF0] bg-white px-[8px] py-[3px] flex flex-wrap items-center gap-[4px] cursor-text focus-within:border-[#165DFF] focus-within:ring-2 focus-within:ring-[#165DFF]/20"
@@ -115,9 +119,20 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
             {keywords.map((kw, idx) => (
                 <span
                     key={`${kw}-${idx}`}
-                    className="inline-flex items-center rounded-[4px] bg-[#F2F3F5] px-[8px] py-[1px] text-[14px] leading-[22px] text-[#4E5969] max-w-[180px] truncate"
+                    className="inline-flex items-center gap-[2px] rounded-[4px] bg-[#F2F3F5] pl-[8px] pr-[4px] py-[1px] text-[14px] leading-[22px] text-[#4E5969] max-w-[180px]"
                 >
-                    {kw}
+                    <span className="truncate">{kw}</span>
+                    <X
+                        className="size-3 shrink-0 cursor-pointer text-[#86909C] hover:text-[#4E5969]"
+                        onMouseDown={(e) => {
+                            // Keep the input focused so the tag row doesn't lose focus-within styling.
+                            e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            removeKeyword(idx);
+                        }}
+                    />
                 </span>
             ))}
             <input

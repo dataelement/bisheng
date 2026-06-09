@@ -618,6 +618,7 @@ export function KnowledgeSpaceContent({
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
         onUploadFile: canUploadFile ? onUploadFile : () => undefined,
+        onUploadFolder: canUploadFile ? onUploadFolder : undefined,
         maxFileSizeMB,
         enableEtl4lm,
     });

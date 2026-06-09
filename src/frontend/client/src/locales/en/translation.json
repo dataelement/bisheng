@@ -1512,6 +1512,7 @@
     "joined_count_label": "Joined count:",
     "department_spaces": "Department Spaces",
     "department_badge": "Dept",
+    "go_to_parent_folder": "Back to parent",
     "approval_enabled_badge": "Approval on",
     "approval_disabled_badge": "No approval",
     "approval_pending_status": "Pending approval",
