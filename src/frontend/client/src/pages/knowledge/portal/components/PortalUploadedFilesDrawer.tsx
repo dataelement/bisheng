@@ -444,13 +444,13 @@ export function PortalUploadedFilesDrawer({
                     <div className={s.uploadRecordsTable}>
                         <div className={s.uploadRecordsHead}>
                             <span>文件名称</span>
-                            <span>知识空间</span>
+                            <span>知识库</span>
                             <span>状态</span>
                             <span>上传目录</span>
-                            <span>文件类型</span>
+                            <span>文件分类</span>
                             <span>业务域类型</span>
-                            <span>文件编码</span>
                             <span>标签</span>
+                            <span>文件编码</span>
                         </div>
                         {loading ? (
                             <div className={s.uploadRecordsEmpty}>正在加载上传记录...</div>
@@ -499,7 +499,7 @@ export function PortalUploadedFilesDrawer({
                                     <span>
                                         <select
                                             className={s.uploadRecordSelect}
-                                            aria-label={`修改${recordName}文件类型 当前类型：${selectedFileCategoryText}`}
+                                            aria-label={`修改${recordName}文件分类 当前分类：${selectedFileCategoryText}`}
                                             value={selectedFileCategoryCode}
                                             disabled={savingEncodingFileId === record.id}
                                             onChange={(event) => void handleEncodingPartChange(record, { fileCategoryCode: event.currentTarget.value })}
@@ -538,9 +538,6 @@ export function PortalUploadedFilesDrawer({
                                             ))}
                                         </select>
                                     </span>
-                                    <span className={s.uploadRecordReadonlyText} title={encodingText}>
-                                        {encodingText}
-                                    </span>
                                     <span className={s.uploadRecordTagCell} title={tagText}>
                                         {recordTags.length ? (
                                             <TagGroup tags={recordTags} actionButton={editTagsButton} />
@@ -550,6 +547,9 @@ export function PortalUploadedFilesDrawer({
                                                 {editTagsButton}
                                             </>
                                         )}
+                                    </span>
+                                    <span className={s.uploadRecordReadonlyText} title={encodingText}>
+                                        {encodingText}
                                     </span>
                                 </div>
                             );

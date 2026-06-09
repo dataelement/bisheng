@@ -12,15 +12,18 @@ jest.mock("~/Providers", () => ({
 jest.mock("~/hooks", () => ({
     useLocalize: () => (key: string) => {
         const dict: Record<string, string> = {
-            "com_subscription.create_konwledge_space": "创建知识空间",
-            "com_subscription.edit_knowledge_space": "编辑知识空间",
+            "com_subscription.create_konwledge_space": "创建知识库",
+            "com_subscription.edit_knowledge_space": "编辑知识库",
+            "com_knowledge.create_knowledge_space": "创建知识库",
+            "com_knowledge.edit_space": "编辑知识库",
             "com_knowledge.space_level": "空间层级",
             "com_knowledge.public_spaces": "公共知识库",
             "com_knowledge.department_spaces": "部门知识库",
             "com_knowledge.team_spaces": "团队知识库",
             "com_knowledge.personal_spaces": "个人知识库",
-            "com_subscription.create_knowledge_space_success": "创建知识空间成功",
-            "com_subscription.goto_knowledge_space": "前往知识空间",
+            "com_knowledge.space_create_success": "知识库创建成功",
+            "com_subscription.create_knowledge_space_success": "知识库创建成功",
+            "com_subscription.goto_knowledge_space": "前往知识库",
             "com_knowledge.member_management": "成员管理",
             "com_knowledge.cancel": "取消",
             "com_knowledge.confirm_create": "确认创建",
@@ -235,7 +238,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.getByRole("radio", { name: "部门知识库" })).toHaveAttribute("aria-checked", "true");
         expect(screen.getByTestId("department-selector")).toBeInTheDocument();
 
-        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+        fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "业务域资料库" },
         });
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
@@ -305,7 +308,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.queryByText("申请理由")).not.toBeInTheDocument();
         expect(screen.queryByText("申请意见")).not.toBeInTheDocument();
 
-        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+        fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "个人资料库" },
         });
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
@@ -358,12 +361,12 @@ describe("CreateKnowledgeSpaceDrawer", () => {
             onConfirm,
         });
 
-        expect(screen.getByText("编辑知识空间")).toBeInTheDocument();
+        expect(screen.getByText("编辑知识库")).toBeInTheDocument();
         expect(screen.queryByText("权限设置")).not.toBeInTheDocument();
         expect(screen.queryByText("发布到广场")).not.toBeInTheDocument();
         expect(screen.getByText("自动标签生成")).toBeInTheDocument();
 
-        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+        fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "团队资料库更新" },
         });
         fireEvent.click(screen.getByRole("button", { name: "保存" }));
@@ -377,7 +380,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         }));
     });
 
-    test("编辑部门层级知识空间时显示部门知识库", async () => {
+    test("编辑部门层级知识库时显示部门知识库", async () => {
         renderDrawer({
             mode: "edit",
             editingSpace: {
@@ -394,7 +397,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
             } as any,
         });
 
-        expect(screen.getByText("编辑知识空间")).toBeInTheDocument();
+        expect(screen.getByText("编辑知识库")).toBeInTheDocument();
         expect(screen.getByText("部门知识库")).toBeInTheDocument();
     });
 
@@ -472,7 +475,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.queryByRole("checkbox", { name: "生产 PP" })).not.toBeInTheDocument();
         expect(screen.queryByRole("checkbox", { name: "质量 QM" })).not.toBeInTheDocument();
 
-        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+        fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "团队资料库" },
         });
         fireEvent.change(screen.getByPlaceholderText("请输入申请理由"), {
@@ -527,13 +530,13 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         });
 
         await waitFor(() => expect(getCreateSpaceOptionsApi).toHaveBeenCalled());
-        fireEvent.change(screen.getByPlaceholderText("com_subscription.enter_knowledge_space_name"), {
+        fireEvent.change(screen.getByPlaceholderText("请输入知识库名称"), {
             target: { value: "个人资料库" },
         });
         fireEvent.click(screen.getByRole("button", { name: "确认创建" }));
 
-        await waitFor(() => expect(screen.getByText("创建知识空间成功")).toBeInTheDocument());
-        expect(screen.getByRole("button", { name: "前往知识空间" })).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText("知识库创建成功")).toBeInTheDocument());
+        expect(screen.getByRole("button", { name: "前往知识库" })).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "成员管理" })).not.toBeInTheDocument();
     });
 });

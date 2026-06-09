@@ -344,7 +344,7 @@ export function FilePublishDialog({
                         </div>
                     )}
                     <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-[#1d2129]">申请意见</label>
+                        <label className="text-sm font-medium text-[#1d2129]">申请理由</label>
                         <textarea
                             className="min-h-[96px] w-full rounded-md border border-[#dcdfe6] px-3 py-2 text-sm outline-none focus:border-[#165dff]"
                             value={reason}

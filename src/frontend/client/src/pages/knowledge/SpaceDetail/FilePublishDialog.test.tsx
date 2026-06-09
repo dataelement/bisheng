@@ -78,6 +78,8 @@ describe("FilePublishDialog", () => {
         await waitFor(() => expect(mockGetTargetSpaces).toHaveBeenCalledWith(10));
         await waitFor(() => expect(mockGetSimilarCandidates).toHaveBeenCalledWith(100, "20"));
 
+        expect(screen.getByText("申请理由")).toBeInTheDocument();
+        expect(screen.queryByText("申请意见")).not.toBeInTheDocument();
         expect(screen.getByRole("option", { name: "推荐加载中..." })).toBeInTheDocument();
 
         similar.resolve({ data: [] });

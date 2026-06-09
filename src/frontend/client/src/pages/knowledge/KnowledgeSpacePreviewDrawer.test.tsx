@@ -15,20 +15,21 @@ jest.mock("~/hooks", () => ({
       "com_knowledge.loading": "加载中",
       "com_knowledge.join": "加入",
       "com_knowledge.joined": "已加入",
-      "com_knowledge.space_invalid_or_deleted": "该知识空间已失效或被删除",
+      "com_knowledge.space_invalid_or_deleted": "该知识库已失效或被删除",
       "com_knowledge.collapse_drawer": "收起",
       "com_knowledge.close": "关闭",
       "com_knowledge.articles_count": "篇内容",
       "com_knowledge.users_count": "用户",
       "com_knowledge.space_view_requires_join": "加入后可查看详情",
-      "com_knowledge.exit_space_short": "退出空间",
+      "com_knowledge.exit_space_short": "退出知识库",
       "com_knowledge.withdraw_application": "撤回申请",
       "com_knowledge.reapply": "重新申请",
     };
     return dict[key] || key;
-  },
-  usePrefersMobileLayout: () => false,
-}));
+	  },
+	  usePrefersMobileLayout: () => false,
+	  useScrollRevealRef: () => ({ current: null }),
+	}));
 
 jest.mock("./SpaceDetail/FileCard", () => ({
   FileCard: () => <div data-testid="file-card" />,

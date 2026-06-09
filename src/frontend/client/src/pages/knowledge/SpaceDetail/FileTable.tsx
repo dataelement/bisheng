@@ -487,16 +487,6 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
 
-                {/* 标签 — 不排序 */}
-                <TableHead
-                    className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
-                    style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
-                >
-                    <div className="flex items-center gap-1.5 border-l pl-3">
-                        {localize("com_knowledge.tag")}</div>
-                    <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
-                </TableHead>
-
                 {shougangEnabled && enableEncodingClassification && (
                     <>
                         <TableHead
@@ -508,7 +498,7 @@ function FileTableHeader({
                             }}
                         >
                             <div className="flex items-center gap-1.5 border-l pl-3">
-                                {localize("com_knowledge.type")}
+                                文件分类
                             </div>
                             <ResizeHandle columnKey="fileType" onResizeStart={onResizeStart} />
                         </TableHead>
@@ -527,6 +517,16 @@ function FileTableHeader({
                         </TableHead>
                     </>
                 )}
+
+                {/* 标签 — 不排序 */}
+                <TableHead
+                    className="relative bg-[rgb(251,251,251)] p-0 font-normal text-[#4e5969]"
+                    style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        {localize("com_knowledge.tag")}</div>
+                    <ResizeHandle columnKey="tags" onResizeStart={onResizeStart} />
+                </TableHead>
 
                 {/* 文件编码 — 仅 shougang 模式显示 */}
                 {shougangEnabled && (
@@ -1258,26 +1258,6 @@ function FileRow({
                 </span>
             </TableCell>
 
-            {/* 标签 — 行悬停时显示编辑（管理员、非文件夹） */}
-            <TableCell
-                className={cn("py-3", rowBg)}
-                style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
-            >
-                <div className="flex h-full w-full items-center gap-1.5 overflow-hidden">
-                    {!isFolder && fileTags.length > 0 ? (
-                        <TagGroup
-                            tags={fileTags}
-                            actionButton={editTagsButton}
-                        />
-                    ) : (
-                        <>
-                            <span className="truncate text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
-                            {editTagsButton}
-                        </>
-                    )}
-                </div>
-            </TableCell>
-
             {enableEncodingClassification && (
                 <>
                     <TableCell
@@ -1289,7 +1269,7 @@ function FileRow({
                         ) : canEditEncoding ? (
                             <select
                                 className={encodingSelectClassName}
-                                aria-label={`修改${file.name}文件类型 当前类型：${selectedFileCategoryCode || "未识别"}`}
+                                aria-label={`修改${file.name}文件分类 当前分类：${selectedFileCategoryCode || "未识别"}`}
                                 value={selectedFileCategoryCode}
                                 disabled={savingEncoding}
                                 onClick={(event) => event.stopPropagation()}
@@ -1352,6 +1332,26 @@ function FileRow({
                     </TableCell>
                 </>
             )}
+
+            {/* 标签 — 行悬停时显示编辑（管理员、非文件夹） */}
+            <TableCell
+                className={cn("py-3", rowBg)}
+                style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
+            >
+                <div className="flex h-full w-full items-center gap-1.5 overflow-hidden">
+                    {!isFolder && fileTags.length > 0 ? (
+                        <TagGroup
+                            tags={fileTags}
+                            actionButton={editTagsButton}
+                        />
+                    ) : (
+                        <>
+                            <span className="truncate text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
+                            {editTagsButton}
+                        </>
+                    )}
+                </div>
+            </TableCell>
 
             {/* 文件编码 — 仅 shougang 模式显示 */}
             {shougangEnabled && (

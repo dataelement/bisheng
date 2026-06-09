@@ -26,21 +26,14 @@ const SHARE_TAB = "share";
 const MEMBERS_TAB = "members";
 const PERMISSION_TAB = "permission";
 const SUBJECT_TABS: Array<{
-    value: "user" | "department" | "user_group";
+    value: "user" | "department";
     labelKey: string;
 }> = [
     { value: "user", labelKey: "com_permission.subject_user" },
     { value: "department", labelKey: "com_permission.subject_department" },
-    { value: "user_group", labelKey: "com_permission.subject_user_group" },
 ];
 
-function getAllowedSubjectTabs(spaceLevel?: SpaceLevel) {
-    if (spaceLevel === SpaceLevel.DEPARTMENT) {
-        return SUBJECT_TABS.filter((tab) => tab.value !== "user_group");
-    }
-    if (spaceLevel === SpaceLevel.TEAM) {
-        return SUBJECT_TABS.filter((tab) => tab.value !== "user_group");
-    }
+function getAllowedSubjectTabs(_spaceLevel?: SpaceLevel) {
     return SUBJECT_TABS;
 }
 
@@ -79,9 +72,9 @@ export function KnowledgeSpaceShareDialog({
     const [activeTab, setActiveTab] = useState(defaultTab);
     const [refreshKey, setRefreshKey] = useState(0);
     const [copied, setCopied] = useState(false);
-    const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department" | "user_group">("user");
+    const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department">("user");
     const [grantDialogOpen, setGrantDialogOpen] = useState(false);
-    const [grantSubjectType, setGrantSubjectType] = useState<"user" | "department" | "user_group">("user");
+    const [grantSubjectType, setGrantSubjectType] = useState<"user" | "department">("user");
     const [grantIncludeChildren, setGrantIncludeChildren] = useState(true);
     const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
     const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
@@ -199,7 +192,7 @@ export function KnowledgeSpaceShareDialog({
     const permissionPanel = (
         <Tabs
             value={currentSubjectType}
-            onValueChange={(value) => setCurrentSubjectType(value as "user" | "department" | "user_group")}
+            onValueChange={(value) => setCurrentSubjectType(value as "user" | "department")}
             className="flex min-h-0 flex-1 flex-col"
         >
             <div className="flex items-center justify-between gap-3">

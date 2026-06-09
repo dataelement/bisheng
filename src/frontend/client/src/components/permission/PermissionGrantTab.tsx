@@ -5,9 +5,7 @@ import {
   authorizeResource,
   getGrantableRelationModels,
   getKnowledgeSpaceGrantDepartments,
-  getKnowledgeSpaceGrantUserGroups,
   getResourceGrantDepartments,
-  getResourceGrantUserGroups,
   getResourceGrantUsers,
   getResourcePermissions,
 } from "~/api/permission";
@@ -27,9 +25,8 @@ import { cn } from "~/utils";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
-import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
 
-const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
+const SUBJECT_TYPES: SubjectType[] = ["user", "department"];
 const DEFAULT_MODELS: RelationModelOption[] = [
   { id: "owner", name: "所有者", relation: "owner" },
   { id: "viewer", name: "可查看", relation: "viewer" },
@@ -42,13 +39,16 @@ const EMPTY_GRANTED_SUBJECT_IDS: Record<SubjectType, number[]> = {
   user_group: [],
 };
 
+function normalizeSubjectType(type?: SubjectType): SubjectType {
+  return type && SUBJECT_TYPES.includes(type) ? type : "user";
+}
+
 export interface PermissionGrantApiAdapter {
   getPermissions: typeof getResourcePermissions;
   authorize: typeof authorizeResource;
   getGrantableRelationModels: typeof getGrantableRelationModels;
   getGrantUsers?: typeof getResourceGrantUsers;
   getGrantDepartments?: typeof getResourceGrantDepartments;
-  getGrantUserGroups?: typeof getResourceGrantUserGroups;
 }
 
 // Render selected subjects as chips. Horizontally scrollable with a right-edge fade when overflow occurs.
@@ -144,7 +144,6 @@ const DEFAULT_PERMISSION_API: PermissionGrantApiAdapter = {
   getGrantableRelationModels,
   getGrantUsers: getResourceGrantUsers,
   getGrantDepartments: getResourceGrantDepartments,
-  getGrantUserGroups: getResourceGrantUserGroups,
 };
 
 export function PermissionGrantTab({
@@ -166,7 +165,7 @@ export function PermissionGrantTab({
   const localize = useLocalize();
   const { showToast } = useToastContext();
   const activePermissionApi = permissionApi ?? DEFAULT_PERMISSION_API;
-  const [subjectType, setSubjectType] = useState<SubjectType>(fixedSubjectType ?? "user");
+  const [subjectType, setSubjectType] = useState<SubjectType>(normalizeSubjectType(fixedSubjectType));
   const [selected, setSelected] = useState<SelectedSubject[]>([]);
   const [models, setModels] = useState<RelationModelOption[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>("viewer");
@@ -178,7 +177,7 @@ export function PermissionGrantTab({
   const [submitting, setSubmitting] = useState(false);
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
-  const effectiveSubjectType = fixedSubjectType ?? subjectType;
+  const effectiveSubjectType = normalizeSubjectType(fixedSubjectType ?? subjectType);
   const grantSubjectScopeResourceId =
     grantSubjectScopeSpaceId || (resourceType === "knowledge_space" ? resourceId : undefined);
 
@@ -242,18 +241,23 @@ export function PermissionGrantTab({
 
   useEffect(() => {
     if (fixedSubjectType) {
-      setSubjectType(fixedSubjectType);
+      setSubjectType(normalizeSubjectType(fixedSubjectType));
       setSelected([]);
       setSelectedDepartmentSummary([]);
     }
   }, [fixedSubjectType]);
 
+  const permittedSubjectTypes = useMemo(
+    () => SUBJECT_TYPES.filter((type) => !allowedSubjectTypes?.length || allowedSubjectTypes.includes(type)),
+    [allowedSubjectTypes],
+  );
+
   useEffect(() => {
-    if (!allowedSubjectTypes?.length || allowedSubjectTypes.includes(subjectType)) return;
-    setSubjectType(allowedSubjectTypes[0]);
+    if (permittedSubjectTypes.includes(subjectType)) return;
+    setSubjectType(permittedSubjectTypes[0] ?? "user");
     setSelected([]);
     setSelectedDepartmentSummary([]);
-  }, [allowedSubjectTypes, subjectType]);
+  }, [permittedSubjectTypes, subjectType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -310,7 +314,7 @@ export function PermissionGrantTab({
   }, [availableModels, selectedModelId]);
 
   const handleSubjectTypeChange = (type: SubjectType) => {
-    if (allowedSubjectTypes && !allowedSubjectTypes.includes(type)) return;
+    if (!permittedSubjectTypes.includes(type)) return;
     setSubjectType(type);
     setSelected([]);
     setSelectedDepartmentSummary([]);
@@ -321,16 +325,6 @@ export function PermissionGrantTab({
       getKnowledgeSpaceGrantDepartments(grantSubjectScopeResourceId || resourceId, config),
     [grantSubjectScopeResourceId, resourceId]
   );
-  const loadKnowledgeSpaceUserGroups = useCallback(
-    (config?: { signal?: AbortSignal; keyword?: string }) =>
-      getKnowledgeSpaceGrantUserGroups(
-        grantSubjectScopeResourceId || resourceId,
-        { keyword: config?.keyword },
-        { signal: config?.signal },
-      ),
-    [grantSubjectScopeResourceId, resourceId]
-  );
-
   const handleSubmit = async () => {
     if (selected.length === 0) return;
     const grants: GrantItem[] = selected.map((s) => ({
@@ -385,7 +379,7 @@ export function PermissionGrantTab({
       {!fixedSubjectType && (
         <div className="flex items-center gap-3">
           <div className="flex w-fit gap-1 rounded-md bg-gray-100 p-1">
-            {SUBJECT_TYPES.filter((type) => !allowedSubjectTypes || allowedSubjectTypes.includes(type)).map((type) => (
+            {permittedSubjectTypes.map((type) => (
               <button
                 key={type}
                 className={`rounded px-3 py-1.5 text-sm transition-colors ${effectiveSubjectType === type
@@ -439,17 +433,6 @@ export function PermissionGrantTab({
             disabledIds={grantedSubjectIds.department}
             loadDepartments={grantSubjectScopeResourceId ? loadKnowledgeSpaceDepartments : undefined}
             grantDepartmentsApi={activePermissionApi.getGrantDepartments}
-          />
-        )}
-        {effectiveSubjectType === "user_group" && (
-          <SubjectSearchUserGroup
-            value={selected}
-            onChange={setSelected}
-            resourceType={resourceType}
-            resourceId={resourceId}
-            disabledIds={grantedSubjectIds.user_group}
-            loadUserGroups={grantSubjectScopeResourceId ? loadKnowledgeSpaceUserGroups : undefined}
-            grantUserGroupsApi={activePermissionApi.getGrantUserGroups}
           />
         )}
       </div>

@@ -38,7 +38,7 @@ import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
-import { submitKnowledgeSpaceCreateWithApproval } from "./createKnowledgeSpaceApproval";
+import { submitKnowledgeSpaceCreate } from "./createKnowledgeSpaceApproval";
 
 function reloadKnowledgePage() {
     if (typeof window === "undefined") return;
@@ -504,6 +504,27 @@ export default function Knowledge() {
                         ? VisibilityType.APPROVAL
                         : VisibilityType.PRIVATE;
             const is_released = form.publishToSquare === "yes";
+            const applyCreatedSpace = (newSpace: KnowledgeSpace) => {
+                setActiveSpace(newSpace);
+
+                // Optimistically update cached "mine created" lists so subsequent "create limit check"
+                // doesn't rely on backend propagation timing.
+                const createdKeys: Array<[string, string, SpaceSortType]> = [
+                    ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
+                    ["knowledgeSpaces", "mine", SpaceSortType.NAME],
+                ];
+                for (const key of createdKeys) {
+                    queryClient.setQueryData<KnowledgeSpace[]>(key, (prev) => {
+                        if (!prev) return [newSpace];
+                        if (prev.some((s) => s.id === newSpace.id)) return prev;
+                        return [newSpace, ...prev];
+                    });
+                }
+
+                queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+                showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
+                return { showSuccess: true };
+            };
 
             if (editingSpace) {
                 // ── Edit mode ──
@@ -521,28 +542,9 @@ export default function Knowledge() {
                 showToast({ message: localize("com_knowledge.space_updated"), severity: NotificationSeverity.SUCCESS });
             } else {
                 // ── Create mode ──
-                const result = await submitKnowledgeSpaceCreateWithApproval(form);
+                const result = await submitKnowledgeSpaceCreate(form);
                 if (result.created && result.space) {
-                    const newSpace = result.space;
-                    setActiveSpace(newSpace);
-
-                    // Optimistically update cached "mine created" lists so subsequent "create limit check"
-                    // doesn't rely on backend propagation timing.
-                    const createdKeys: Array<[string, string, SpaceSortType]> = [
-                        ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
-                        ["knowledgeSpaces", "mine", SpaceSortType.NAME],
-                    ];
-                    for (const key of createdKeys) {
-                        queryClient.setQueryData<KnowledgeSpace[]>(key, (prev) => {
-                            if (!prev) return [newSpace];
-                            if (prev.some((s) => s.id === newSpace.id)) return prev;
-                            return [newSpace, ...prev];
-                        });
-                    }
-
-                    queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-                    showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
-                    return { showSuccess: true };
+                    return applyCreatedSpace(result.space);
                 }
                 queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
                 showToast({ message: "已提交申请", severity: NotificationSeverity.SUCCESS });

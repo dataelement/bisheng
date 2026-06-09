@@ -349,4 +349,35 @@ describe("Client PermissionListTab", () => {
     expect(mockedGetResourcePermissions).not.toHaveBeenCalled();
     expect(mockedGetGrantableRelationModels).not.toHaveBeenCalled();
   });
+
+  it("hides historical user group permission entries", async () => {
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user_group",
+        subject_id: 9,
+        subject_name: "测试用户组",
+        subject_member_names: ["Alice", "Bob"],
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_space"
+        resourceId="space-1"
+        refreshKey={0}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockedGetResourcePermissions).toHaveBeenCalledWith("knowledge_space", "space-1");
+    });
+
+    expect(screen.queryByRole("button", { name: "com_permission.subject_user_group" })).not.toBeInTheDocument();
+    expect(screen.queryByText("测试用户组")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alice、Bob")).not.toBeInTheDocument();
+    expect(screen.getByText("com_permission.empty_permissions")).toBeInTheDocument();
+  });
 });

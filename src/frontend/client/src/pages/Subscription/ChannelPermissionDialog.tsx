@@ -5,11 +5,10 @@ import {
     Channel,
     getChannelGrantableRelationModelsApi,
     getChannelGrantSubjectsDepartmentsApi,
-    getChannelGrantSubjectsUserGroupsApi,
     getChannelGrantSubjectsUsersApi,
     getChannelPermissionsApi,
 } from "~/api/channels";
-import type { RelationModel, SubjectType } from "~/api/permission";
+import type { RelationModel } from "~/api/permission";
 import { PermissionGrantTab } from "~/components/permission/PermissionGrantTab";
 import type { PermissionGrantApiAdapter } from "~/components/permission/PermissionGrantTab";
 import { PermissionListTab } from "~/components/permission/PermissionListTab";
@@ -39,12 +38,11 @@ interface ChannelPermissionDialogProps {
 type ChannelPermissionApiAdapter = PermissionApiAdapter & PermissionGrantApiAdapter;
 
 const SUBJECT_TABS: Array<{
-    value: SubjectType;
+    value: "user" | "department";
     labelKey: string;
 }> = [
     { value: "user", labelKey: "com_permission.subject_user" },
     { value: "department", labelKey: "com_permission.subject_department" },
-    { value: "user_group", labelKey: "com_permission.subject_user_group" },
 ];
 
 export function ChannelPermissionDialog({
@@ -55,9 +53,9 @@ export function ChannelPermissionDialog({
     const localize = useLocalize();
     const queryClient = useQueryClient();
     const [refreshKey, setRefreshKey] = useState(0);
-    const [currentSubjectType, setCurrentSubjectType] = useState<SubjectType>("user");
+    const [currentSubjectType, setCurrentSubjectType] = useState<"user" | "department">("user");
     const [grantDialogOpen, setGrantDialogOpen] = useState(false);
-    const [grantSubjectType, setGrantSubjectType] = useState<SubjectType>("user");
+    const [grantSubjectType, setGrantSubjectType] = useState<"user" | "department">("user");
     const [grantIncludeChildren, setGrantIncludeChildren] = useState(true);
     const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
     const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
@@ -73,8 +71,6 @@ export function ChannelPermissionDialog({
             getChannelGrantSubjectsUsersApi(resourceId, params, config),
         getGrantDepartments: (_resourceType, resourceId, config) =>
             getChannelGrantSubjectsDepartmentsApi(resourceId, config),
-        getGrantUserGroups: (_resourceType, resourceId, params, config) =>
-            getChannelGrantSubjectsUserGroupsApi(resourceId, params, config),
     }), []);
 
     useEffect(() => {
@@ -104,7 +100,7 @@ export function ChannelPermissionDialog({
             });
     }, [channel?.id, open]);
 
-    const handlePermissionChanged = useCallback((subjectType?: SubjectType) => {
+    const handlePermissionChanged = useCallback((subjectType?: "user" | "department") => {
         setRefreshKey((key) => key + 1);
         if (subjectType) setCurrentSubjectType(subjectType);
         queryClient.invalidateQueries({ queryKey: ["channels"] });
@@ -134,7 +130,7 @@ export function ChannelPermissionDialog({
                     <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
                         <Tabs
                             value={currentSubjectType}
-                            onValueChange={(value) => setCurrentSubjectType(value as SubjectType)}
+                            onValueChange={(value) => setCurrentSubjectType(value as "user" | "department")}
                             className="flex min-h-0 flex-1 flex-col"
                         >
                             <div className="flex items-center justify-between gap-3">

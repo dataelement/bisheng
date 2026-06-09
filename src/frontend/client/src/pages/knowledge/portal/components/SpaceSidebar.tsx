@@ -270,8 +270,8 @@ export function SpaceSidebar({
                                         <button
                                             type="button"
                                             className={s.groupCreateButton}
-                                            aria-label={`新增${group.title}知识空间`}
-                                            title={canCreate ? `新增${group.title}知识空间` : "无创建权限"}
+                                            aria-label={`新增${group.title}`}
+                                            title={canCreate ? `新增${group.title}` : "无创建权限"}
                                             disabled={!canCreate}
                                             onClick={(event) => {
                                                 event.stopPropagation();

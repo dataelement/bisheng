@@ -343,7 +343,7 @@ export function PortalInfoDrawer({
                         {renderDetailItem("当前用户角色", activeSpace?.role)}
                         {renderDetailItem("知识库可见性", activeSpace?.visibility)}
                         {renderDetailItem("权限范围", "继承当前知识库权限")}
-                        {renderDetailItem("说明", "细粒度权限管理请在知识空间成员与权限设置中维护。")}
+                        {renderDetailItem("说明", "细粒度权限管理请在知识库成员与权限设置中维护。")}
                     </div>
                 ) : null}
 

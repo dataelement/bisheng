@@ -373,7 +373,7 @@ export function CreateKnowledgeSpaceDrawer({
         if (submitting) return;
         if (!name.trim()) {
             showToast({
-                message: localize("com_subscription.knowledge_space_name_empty") || localize("com_knowledge.space_name_empty"),
+                message: localize("com_knowledge.space_name_empty"),
                 severity: NotificationSeverity.WARNING
             });
             return;
@@ -473,7 +473,7 @@ export function CreateKnowledgeSpaceDrawer({
                 <SheetHeader className="sticky top-0 z-10 mx-6 bg-white pb-4 pt-6 touch-mobile:mx-0">
                     <div className="flex items-center justify-between gap-3">
                         <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
-                            {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || localize("com_knowledge.edit_space") : localize("com_subscription.create_konwledge_space")}
+                            {mode === "edit" ? localize("com_knowledge.edit_space") : localize("com_knowledge.create_knowledge_space")}
                         </SheetTitle>
                         <button
                             type="button"
@@ -491,7 +491,7 @@ export function CreateKnowledgeSpaceDrawer({
                         <div className="flex flex-col items-center">
                             <ChannelSuccessIcon className="h-[120px] w-[120px] mb-5" />
                             <div className="mb-8 text-center text-[20px] font-normal text-[#1D2129]">
-                                {localize("com_subscription.create_knowledge_space_success")}
+                                {localize("com_knowledge.space_create_success")}
                             </div>
                             <div className="flex gap-3">
                                 <Button
@@ -502,7 +502,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         onOpenChange(false);
                                     }}
                                 >
-                                    {localize("com_subscription.goto_knowledge_space")}
+                                    前往知识库
                                 </Button>
                                 {shouldShowSuccessManageMembers ? (
                                     <Button
@@ -576,7 +576,7 @@ export function CreateKnowledgeSpaceDrawer({
                             <div className="space-y-2">
                                 <Label className="text-sm text-[#1D2129] font-medium">
                                     <span className="text-[#F53F3F] mr-1">*</span>
-                                    {localize("com_subscription.knowledge_space_name")}
+                                    知识库名称
                                 </Label>
                                 <div className="relative flex items-center gap-2">
                                     <Input
@@ -611,7 +611,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setName(v);
                                             }
                                         }}
-                                        placeholder={localize("com_subscription.enter_knowledge_space_name")}
+                                        placeholder="请输入知识库名称"
                                         className="h-8 border-[#E5E6EB] text-[14px] pr-16 bg-[#fff]"
                                     />
                                     <span className="absolute right-4 text-[12px] text-[#86909C]">
@@ -658,7 +658,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 setDescription(v);
                                             }
                                         }}
-                                        placeholder={localize("com_subscription.enter_knowledge_space_description")}
+                                        placeholder="请输入知识库简介"
                                         className="min-h-[104px] rounded-[6px] border-[#E5E6EB] bg-[#fff] text-[14px]"
                                     />
                                 </div>

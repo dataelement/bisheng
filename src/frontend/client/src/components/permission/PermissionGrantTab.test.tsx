@@ -56,6 +56,16 @@ describe("PermissionGrantTab", () => {
       configurable: true,
       value: IntersectionObserverMock,
     });
+    class ResizeObserverMock implements ResizeObserver {
+      disconnect = jest.fn();
+      observe = jest.fn();
+      unobserve = jest.fn();
+    }
+    Object.defineProperty(globalThis, "ResizeObserver", {
+      writable: true,
+      configurable: true,
+      value: ResizeObserverMock,
+    });
   });
 
   beforeEach(() => {
@@ -121,7 +131,7 @@ describe("PermissionGrantTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_department" }));
     expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_user_group" }));
+    expect(screen.queryByRole("button", { name: "com_permission.subject_user_group" })).not.toBeInTheDocument();
     expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
   });
 
@@ -194,7 +204,8 @@ describe("PermissionGrantTab", () => {
     fireEvent.click(await screen.findByText("测试部门"));
 
     await waitFor(() => {
-      expect(screen.getByText("测试部门、测试部门/子部门")).toBeInTheDocument();
+      expect(screen.getAllByText("测试部门").length).toBeGreaterThan(1);
+      expect(screen.getByText("测试部门/子部门")).toBeInTheDocument();
     });
   });
 
@@ -270,7 +281,7 @@ describe("PermissionGrantTab", () => {
     expect(mockedAuthorizeResource).not.toHaveBeenCalled();
   });
 
-  it("marks already granted user groups as disabled without selecting them again", async () => {
+  it("hides user group grant targets even when historical user group grants exist", async () => {
     mockedGetResourcePermissions.mockResolvedValue([
       {
         subject_type: "user_group",
@@ -291,20 +302,14 @@ describe("PermissionGrantTab", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "com_permission.subject_user_group" }));
-
-    const userGroupLabel = await screen.findByText("测试用户组");
-    const checkbox = userGroupLabel.parentElement?.querySelector('[role="checkbox"]');
-
     await waitFor(() => {
-      expect(checkbox).toHaveAttribute("data-state", "unchecked");
-      expect(checkbox).toBeDisabled();
+      expect(mockedGetResourcePermissions).toHaveBeenCalledWith("knowledge_space", "space-1");
     });
-    expect(screen.getByText("com_permission.already_granted")).toBeInTheDocument();
 
-    fireEvent.click(userGroupLabel);
-    fireEvent.click(screen.getByRole("button", { name: "com_permission.action_submit" }));
-
+    expect(screen.queryByRole("button", { name: "com_permission.subject_user_group" })).not.toBeInTheDocument();
+    expect(screen.queryByText("测试用户组")).not.toBeInTheDocument();
+    expect(mockedGetKnowledgeSpaceGrantUserGroups).not.toHaveBeenCalled();
+    expect(mockedGetResourceGrantUserGroups).not.toHaveBeenCalled();
     expect(mockedAuthorizeResource).not.toHaveBeenCalled();
   });
 });

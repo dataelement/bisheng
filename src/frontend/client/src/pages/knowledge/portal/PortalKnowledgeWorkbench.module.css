@@ -1755,7 +1755,7 @@
 .uploadRecordsRow {
   min-width: 1240px;
   display: grid;
-  grid-template-columns: minmax(160px, 1.2fr) minmax(170px, 1fr) 92px minmax(130px, .9fr) minmax(130px, .9fr) minmax(120px, .8fr) minmax(180px, 1.1fr) minmax(110px, .8fr);
+  grid-template-columns: minmax(160px, 1.2fr) minmax(170px, 1fr) 92px minmax(130px, .9fr) minmax(130px, .9fr) minmax(120px, .8fr) minmax(110px, .8fr) minmax(180px, 1.1fr);
   align-items: center;
   gap: 10px;
   padding: 9px 12px;

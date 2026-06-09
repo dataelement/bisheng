@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react";
+import { Building2, ChevronDown, Loader2, RotateCcw, Search, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
@@ -69,10 +69,9 @@ function TruncatedTooltip({
 const SUBJECT_ICONS = {
   user: User,
   department: Building2,
-  user_group: Users,
 };
 
-const LIST_SUBJECT_TYPES = ["user", "department", "user_group"] as const;
+const LIST_SUBJECT_TYPES = ["user", "department"] as const;
 type ListSubjectType = (typeof LIST_SUBJECT_TYPES)[number];
 
 export interface PermissionApiAdapter {
@@ -230,7 +229,7 @@ export function PermissionListTab({
   const displayModels = useMemo<RelationModelOption[]>(() => {
     const opts = [...grantableModelOptions];
     const ids = new Set(opts.map((o) => o.id));
-    for (const entry of entries) {
+    for (const entry of entries.filter((item) => item.subject_type !== "user_group")) {
       if (!entry.model_id || ids.has(entry.model_id)) continue;
       ids.add(entry.model_id);
       opts.push({
@@ -242,22 +241,27 @@ export function PermissionListTab({
     return opts.length ? opts : DEFAULT_MODELS;
   }, [entries, grantableModelOptions]);
 
-  const subjectEntries = useMemo(
-    () => entries.filter((entry) => entry.subject_type === listTab),
-    [entries, listTab],
-  );
-  const ownerEntryCount = useMemo(
-    () => entries.filter((entry) => entry.subject_type === "user" && entry.relation === "owner").length,
+  const visiblePermissionEntries = useMemo(
+    () => entries.filter((entry) => entry.subject_type !== "user_group"),
     [entries],
+  );
+  const subjectEntries = useMemo(
+    () => visiblePermissionEntries.filter((entry) => entry.subject_type === listTab),
+    [listTab, visiblePermissionEntries],
+  );
+  const hasVisibleEntries = visiblePermissionEntries.length > 0;
+  const ownerEntryCount = useMemo(
+    () => visiblePermissionEntries.filter((entry) => entry.subject_type === "user" && entry.relation === "owner").length,
+    [visiblePermissionEntries],
   );
 
   useEffect(() => {
-    if (fixedSubjectType || userSelectedTab || entries.length === 0 || subjectEntries.length > 0) return;
+    if (fixedSubjectType || userSelectedTab || !hasVisibleEntries || subjectEntries.length > 0) return;
     const firstNonEmptyTab = LIST_SUBJECT_TYPES.find((subjectType) =>
-      entries.some((entry) => entry.subject_type === subjectType),
+      visiblePermissionEntries.some((entry) => entry.subject_type === subjectType),
     );
     if (firstNonEmptyTab) setListTab(firstNonEmptyTab);
-  }, [entries, fixedSubjectType, subjectEntries.length, userSelectedTab]);
+  }, [fixedSubjectType, hasVisibleEntries, subjectEntries.length, userSelectedTab, visiblePermissionEntries]);
 
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
 
@@ -443,7 +447,6 @@ export function PermissionListTab({
     const map: Record<ListSubjectType, string> = {
       user: localize("com_permission.subject_user"),
       department: localize("com_permission.subject_department"),
-      user_group: localize("com_permission.subject_user_group"),
     };
     return map[type];
   };
@@ -463,7 +466,6 @@ export function PermissionListTab({
         localize("com_subscription.search_user_placeholder") ||
         localize("com_permission.search_user"),
       department: localize("com_permission.search_department"),
-      user_group: localize("com_permission.search_user_group"),
     };
     return map[type];
   };
@@ -510,7 +512,7 @@ export function PermissionListTab({
     );
   }
 
-  if (entries.length === 0) {
+  if (!hasVisibleEntries) {
     return (
       <div className="py-12 text-center text-sm text-gray-500">
         {localize("com_permission.empty_permissions")}

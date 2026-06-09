@@ -24,7 +24,6 @@ import {
     updateFileEncoding,
     updateSpaceApi,
 } from "~/api/knowledge";
-import { submitShougangKnowledgeSpaceCreateApprovalApi } from "~/api/approval";
 import { checkPermission, canOpenPermissionDialog } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -34,6 +33,7 @@ import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { triggerUrlDownload } from "../knowledgeUtils";
+import { submitKnowledgeSpaceCreate } from "../createKnowledgeSpaceApproval";
 import { TREE_PAGE_SIZE } from "./constants";
 import type {
     PanelKey,
@@ -236,7 +236,7 @@ export default function PortalKnowledgeWorkbench() {
 
     const handlePinSpace = useCallback(async (space: KnowledgeSpace, pinned: boolean, group: SpaceGroup) => {
         if (pinned && group.spaces.filter((item) => item.isPinned).length >= 5) {
-            showToast({ message: "最多置顶 5 个知识空间", severity: NotificationSeverity.INFO });
+            showToast({ message: "最多置顶 5 个知识库", severity: NotificationSeverity.INFO });
             return;
         }
         try {
@@ -264,16 +264,16 @@ export default function PortalKnowledgeWorkbench() {
                 setActiveSpace(getNextActiveSpace(space.id));
             }
             await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: "知识空间已删除", severity: NotificationSeverity.SUCCESS });
+            showToast({ message: "知识库已删除", severity: NotificationSeverity.SUCCESS });
         } catch {
-            showToast({ message: "删除知识空间失败", severity: NotificationSeverity.ERROR });
+            showToast({ message: "删除知识库失败", severity: NotificationSeverity.ERROR });
         }
     }, [activeSpace?.id, confirm, getNextActiveSpace, queryClient, showToast]);
 
     const handleLeaveSpace = useCallback(async (space: KnowledgeSpace) => {
         const ok = await confirm({
             title: "提示",
-            description: "确认退出该知识空间？",
+            description: "确认退出该知识库？",
             confirmText: "退出",
             cancelText: "取消",
         });
@@ -285,9 +285,9 @@ export default function PortalKnowledgeWorkbench() {
                 setActiveSpace(getNextActiveSpace(space.id));
             }
             await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-            showToast({ message: "已退出知识空间", severity: NotificationSeverity.SUCCESS });
+            showToast({ message: "已退出知识库", severity: NotificationSeverity.SUCCESS });
         } catch {
-            showToast({ message: "退出知识空间失败", severity: NotificationSeverity.ERROR });
+            showToast({ message: "退出知识库失败", severity: NotificationSeverity.ERROR });
         }
     }, [activeSpace?.id, confirm, getNextActiveSpace, queryClient, showToast]);
 
@@ -1398,26 +1398,16 @@ export default function PortalKnowledgeWorkbench() {
                 });
                 setActiveSpace((prev) => prev?.id === updated.id ? { ...updated, role: prev.role } : prev);
                 await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-                showToast({ message: "知识空间已更新", severity: NotificationSeverity.SUCCESS });
+                showToast({ message: "知识库已更新", severity: NotificationSeverity.SUCCESS });
                 return true;
             }
 
-            const result = await submitShougangKnowledgeSpaceCreateApprovalApi({
-                name: form.name,
-                description: form.description,
-                auth_type: authType,
-                is_released: form.publishToSquare === "yes",
-                space_level: form.spaceLevel,
-                department_id: form.departmentId,
-                auto_tag_enabled: form.autoTagEnabled,
-                auto_tag_library_id: form.autoTagLibraryId,
-                reason: form.reason,
-            });
+            const result = await submitKnowledgeSpaceCreate(form);
 
             if (result.created && result.space) {
                 setActiveSpace(result.space);
                 await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-                showToast({ message: "创建知识空间成功", severity: NotificationSeverity.SUCCESS });
+                showToast({ message: "创建知识库成功", severity: NotificationSeverity.SUCCESS });
                 return true;
             }
 
@@ -1425,7 +1415,7 @@ export default function PortalKnowledgeWorkbench() {
             showToast({ message: "已提交申请", severity: NotificationSeverity.SUCCESS });
             return { showSuccess: false };
         } catch (error) {
-            const message = error instanceof Error && error.message ? error.message : "创建知识空间失败";
+            const message = error instanceof Error && error.message ? error.message : "创建知识库失败";
             showToast({ message, severity: NotificationSeverity.ERROR });
             return false;
         }
@@ -1440,7 +1430,7 @@ export default function PortalKnowledgeWorkbench() {
         ].filter(Boolean);
         return names.join("/");
     }, [activeGroup?.title, activeSpace?.name, selectedFile?.name, selectedFile?.path]);
-    const aiContextLabel = currentFolderId ? "文件夹" : "知识空间";
+    const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
 
     return (
         <div className={s.workbench}>
@@ -1575,7 +1565,7 @@ export default function PortalKnowledgeWorkbench() {
                             ) : (
                                 <div className={s.stateBox}>
                                     <div className={s.stateTitle}>暂无可用知识库</div>
-                                    <div>请先创建或加入知识空间。</div>
+                                    <div>请先创建或加入知识库。</div>
                                 </div>
                             )}
                         </main>

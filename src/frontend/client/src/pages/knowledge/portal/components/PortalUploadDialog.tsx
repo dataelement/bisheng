@@ -392,7 +392,7 @@ export function PortalUploadDialog({
                                     </div>
                                 </div>
                                 <div className={s.uploadHint}>
-                                    未选择目录时，系统会根据当前知识空间已有目录推荐上传目录，并直接上传到推荐目录。
+                                    未选择目录时，系统会根据当前知识库已有目录推荐上传目录，并直接上传到推荐目录。
                                 </div>
                             </div>
                         </div>

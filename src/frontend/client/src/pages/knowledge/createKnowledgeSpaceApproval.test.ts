@@ -1,10 +1,18 @@
 import { submitShougangKnowledgeSpaceCreateApprovalApi } from "~/api/approval";
-import { SpaceLevel, VisibilityType } from "~/api/knowledge";
-import { submitKnowledgeSpaceCreateWithApproval } from "./createKnowledgeSpaceApproval";
+import { createSpaceApi, SpaceLevel, VisibilityType } from "~/api/knowledge";
+import { submitKnowledgeSpaceCreate, submitKnowledgeSpaceCreateWithApproval } from "./createKnowledgeSpaceApproval";
 
 jest.mock("~/api/approval", () => ({
     submitShougangKnowledgeSpaceCreateApprovalApi: jest.fn(),
 }));
+
+jest.mock("~/api/knowledge", () => {
+    const actual = jest.requireActual("~/api/knowledge");
+    return {
+        ...actual,
+        createSpaceApi: jest.fn(),
+    };
+});
 
 describe("submitKnowledgeSpaceCreateWithApproval", () => {
     beforeEach(() => {
@@ -15,6 +23,11 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
             instance_id: 101,
             task_ids: [201],
         });
+        jest.mocked(createSpaceApi).mockResolvedValue({
+            id: "personal-1",
+            name: "个人资料库",
+            spaceLevel: SpaceLevel.PERSONAL,
+        } as any);
     });
 
     it("submits normal knowledge create form through Shougang approval API", async () => {
@@ -46,5 +59,35 @@ describe("submitKnowledgeSpaceCreateWithApproval", () => {
         });
         expect(payload).not.toHaveProperty("user_group_id");
         expect(payload).not.toHaveProperty("business_domain_codes");
+    });
+
+    it("creates personal knowledge space directly without approval", async () => {
+        const result = await submitKnowledgeSpaceCreate({
+            name: "个人资料库",
+            description: "个人说明",
+            joinPolicy: "review",
+            publishToSquare: "no",
+            spaceLevel: SpaceLevel.PERSONAL,
+            departmentId: undefined,
+            autoTagEnabled: true,
+            autoTagLibraryId: 3,
+            autoTagCustomTags: ["技术"],
+        } as any);
+
+        expect(createSpaceApi).toHaveBeenCalledWith({
+            name: "个人资料库",
+            description: "个人说明",
+            auth_type: VisibilityType.PRIVATE,
+            is_released: false,
+            space_level: SpaceLevel.PERSONAL,
+            auto_tag_enabled: true,
+            auto_tag_library_id: 3,
+            auto_tag_custom_tags: ["技术"],
+        });
+        expect(submitShougangKnowledgeSpaceCreateApprovalApi).not.toHaveBeenCalled();
+        expect(result).toEqual(expect.objectContaining({
+            created: true,
+            space: expect.objectContaining({ id: "personal-1" }),
+        }));
     });
 });

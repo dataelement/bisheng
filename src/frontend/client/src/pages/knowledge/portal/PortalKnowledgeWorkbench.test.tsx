@@ -512,6 +512,10 @@ describe("PortalKnowledgeWorkbench", () => {
         jest.mocked(updateFileEncoding).mockResolvedValue(makeFile("201", "后端开发.md", {
             fileEncoding: "RPT-PP-00000001",
         }) as any);
+        jest.mocked(createSpaceApi).mockResolvedValue(makeSpace("personal-created", "新空间", {
+            role: SpaceRole.CREATOR,
+            spaceLevel: SpaceLevel.PERSONAL,
+        }) as any);
         jest.mocked(getFileDownloadApi).mockResolvedValue({
             preview_url: "/preview.md",
             original_url: "/origin.md",
@@ -766,13 +770,13 @@ describe("PortalKnowledgeWorkbench", () => {
         renderWorkbench();
 
         await waitFor(() => {
-            expect(screen.getByRole("button", { name: "新增公共知识库知识空间" })).toBeEnabled();
+            expect(screen.getByRole("button", { name: "新增公共知识库" })).toBeEnabled();
         });
 
         const publicGroup = screen.getByTestId("space-group-public");
         expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: "新增公共知识库知识空间" }));
+        fireEvent.click(screen.getByRole("button", { name: "新增公共知识库" }));
 
         expect(screen.getByTestId("create-space-drawer")).toHaveTextContent(`initial:${SpaceLevel.PUBLIC}`);
         expect(within(publicGroup).getByText("公共空间01")).toBeInTheDocument();
@@ -788,7 +792,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        const teamCreateButton = await screen.findByRole("button", { name: "新增团队知识库知识空间" });
+        const teamCreateButton = await screen.findByRole("button", { name: "新增团队知识库" });
         expect(teamCreateButton).toBeEnabled();
 
         fireEvent.click(teamCreateButton);
@@ -806,7 +810,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        fireEvent.click(await screen.findByRole("button", { name: "新增团队知识库知识空间" }));
+        fireEvent.click(await screen.findByRole("button", { name: "新增团队知识库" }));
         expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("approvalReason:true");
         fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
 
@@ -875,6 +879,36 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("successManageMembers:false");
     });
 
+    test("creates personal knowledge space directly without submitting approval", async () => {
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+
+        renderWorkbench();
+
+        const personalGroup = screen.getByTestId("space-group-personal");
+        fireEvent.click(await within(personalGroup).findByRole("button", { name: "新建知识库" }));
+        fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
+
+        await waitFor(() => {
+            expect(createSpaceApi).toHaveBeenCalledTimes(1);
+        });
+        expect(createSpaceApi).toHaveBeenCalledWith(expect.objectContaining({
+            name: "新空间",
+            auth_type: VisibilityType.PRIVATE,
+            is_released: false,
+            space_level: SpaceLevel.PERSONAL,
+        }));
+        expect(submitShougangKnowledgeSpaceCreateApprovalApi).not.toHaveBeenCalled();
+        expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: "创建知识库成功" }));
+        await waitFor(() => {
+            expect(mockCreateSpaceConfirmResult).toBe(true);
+        });
+    });
+
     test("hides create row under a group without create permission", async () => {
         jest.mocked(getCreateSpaceOptionsApi).mockResolvedValue({
             canCreatePublic: true,
@@ -899,7 +933,7 @@ describe("PortalKnowledgeWorkbench", () => {
         await waitFor(() => {
             expect(within(teamGroup).queryByRole("button", { name: "新建知识库" })).not.toBeInTheDocument();
         });
-        expect(screen.getByRole("button", { name: "新增团队知识库知识空间" })).toBeDisabled();
+        expect(screen.getByRole("button", { name: "新增团队知识库" })).toBeDisabled();
     });
 
     test("disables create action for groups without create permission", async () => {
@@ -921,7 +955,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         renderWorkbench();
 
-        const teamCreateButton = await screen.findByRole("button", { name: "新增团队知识库知识空间" });
+        const teamCreateButton = await screen.findByRole("button", { name: "新增团队知识库" });
         expect(teamCreateButton).toBeDisabled();
 
         fireEvent.click(teamCreateButton);
@@ -954,7 +988,7 @@ describe("PortalKnowledgeWorkbench", () => {
             expect(within(departmentGroup).queryByRole("button", { name: "新建知识库" })).not.toBeInTheDocument();
         });
 
-        const departmentCreateButton = screen.getByRole("button", { name: "新增部门知识库知识空间" });
+        const departmentCreateButton = screen.getByRole("button", { name: "新增部门知识库" });
         expect(departmentCreateButton).toBeDisabled();
 
         fireEvent.click(departmentCreateButton);
@@ -1260,7 +1294,7 @@ describe("PortalKnowledgeWorkbench", () => {
         const columnHeaders = within(table).getAllByRole("columnheader");
         const headerTexts = columnHeaders.map((header) => header.textContent?.trim() || "");
         const headerIndex = (...labels: string[]) => headerTexts.findIndex((text) => labels.includes(text));
-        const fileTypeIndex = headerIndex("文件类型", "Type");
+        const fileTypeIndex = headerIndex("文件分类");
         const tagIndex = headerIndex("标签", "Tag");
         const businessDomainIndex = headerIndex("业务域类型");
         const fileEncodingIndex = headerIndex("文件编码", "File Encoding");
@@ -1270,14 +1304,15 @@ describe("PortalKnowledgeWorkbench", () => {
             .map((element) => element.tagName.toLowerCase());
 
         expect(screen.getByText("业务域类型")).toBeInTheDocument();
-        expect(fileTypeIndex).toBeGreaterThan(tagIndex);
+        expect(fileTypeIndex).toBeLessThan(tagIndex);
         expect(businessDomainIndex).toBeGreaterThan(fileTypeIndex);
+        expect(businessDomainIndex).toBeLessThan(tagIndex);
         expect(fileEncodingIndex).toBeGreaterThan(businessDomainIndex);
         expect(fileTypeHeader?.querySelector("img")).toBeNull();
         expect(fileSizeHeaderContentTags).toEqual(["span", "img"]);
         expect(within(folderRow).getAllByText("--").length).toBeGreaterThanOrEqual(3);
-        expect(within(folderRow).queryByLabelText(/修改技术文档文件类型/)).not.toBeInTheDocument();
-        const fileTypeSelect = within(fileRow).getByLabelText("修改编码文档.pdf文件类型 当前类型：STD") as HTMLSelectElement;
+        expect(within(folderRow).queryByLabelText(/修改技术文档文件分类/)).not.toBeInTheDocument();
+        const fileTypeSelect = within(fileRow).getByLabelText("修改编码文档.pdf文件分类 当前分类：STD") as HTMLSelectElement;
         const businessDomainSelect = within(fileRow).getByLabelText("修改编码文档.pdf业务域类型 当前业务域：EM") as HTMLSelectElement;
         expect(fileTypeSelect).toHaveDisplayValue("STD / 标准规范");
         expect(businessDomainSelect).toHaveDisplayValue("EM / 能源");
@@ -2908,10 +2943,14 @@ describe("PortalKnowledgeWorkbench", () => {
 
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
         expect(listMyUploadedFilesApi).toHaveBeenCalledWith(expect.objectContaining({ page: 1, pageSize: 20 }));
-        expect(within(drawer).getByText("文件类型")).toBeInTheDocument();
+        expect(within(drawer).getByText("文件分类")).toBeInTheDocument();
         expect(within(drawer).getByText("业务域类型")).toBeInTheDocument();
         expect(within(drawer).getByText("文件编码")).toBeInTheDocument();
         expect(within(drawer).getByText("标签")).toBeInTheDocument();
+        const uploadRecordHeaders = Array.from(drawer.querySelectorAll(".uploadRecordsHead span"))
+            .map((header) => header.textContent?.trim() || "");
+        expect(uploadRecordHeaders.indexOf("文件分类")).toBeLessThan(uploadRecordHeaders.indexOf("标签"));
+        expect(uploadRecordHeaders.indexOf("业务域类型")).toBeLessThan(uploadRecordHeaders.indexOf("标签"));
         expect(within(drawer).queryByText("AI推荐文件类型")).not.toBeInTheDocument();
         expect(within(drawer).queryByText("AI标签")).not.toBeInTheDocument();
         expect(within(drawer).getByText("测试文档.pdf")).toBeInTheDocument();
@@ -2919,7 +2958,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(drawer).getByText("解析中")).toHaveClass("uploadRecordStatusInfo");
         expect(within(drawer).getByText("根目录")).toBeInTheDocument();
         expect(within(drawer).getByText("SGGF-STD-EM-20260600000001")).toBeInTheDocument();
-        expect(within(drawer).getByLabelText("修改测试文档.pdf文件类型 当前类型：STD")).toHaveDisplayValue("STD / 标准规范");
+        expect(within(drawer).getByLabelText("修改测试文档.pdf文件分类 当前分类：STD")).toHaveDisplayValue("STD / 标准规范");
         expect(within(drawer).getByLabelText("修改测试文档.pdf业务域类型 当前业务域：EM")).toHaveDisplayValue("EM / 能源");
         expect(within(drawer).getAllByText("能源").length).toBeGreaterThanOrEqual(1);
         expect(within(drawer).queryByText("个人知识库 / 设备部")).not.toBeInTheDocument();
@@ -3018,7 +3057,7 @@ describe("PortalKnowledgeWorkbench", () => {
         })).not.toBeInTheDocument();
         expect(screen.queryByDisplayValue("SGGF-STD-EM-20260600000001")).not.toBeInTheDocument();
 
-        fireEvent.change(within(drawer).getByLabelText("修改编码文档.pdf文件类型 当前类型：STD"), {
+        fireEvent.change(within(drawer).getByLabelText("修改编码文档.pdf文件分类 当前分类：STD"), {
             target: { value: "RPT" },
         });
 
@@ -3071,10 +3110,10 @@ describe("PortalKnowledgeWorkbench", () => {
 
         openMyUploadsFromPortalShell();
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
-        expect(within(drawer).getByLabelText("修改历史编码文档.pdf文件类型 当前类型：--")).toHaveDisplayValue("--");
+        expect(within(drawer).getByLabelText("修改历史编码文档.pdf文件分类 当前分类：--")).toHaveDisplayValue("--");
         expect(within(drawer).getByLabelText("修改历史编码文档.pdf业务域类型 当前业务域：--")).toHaveDisplayValue("--");
 
-        fireEvent.change(within(drawer).getByLabelText("修改历史编码文档.pdf文件类型 当前类型：--"), {
+        fireEvent.change(within(drawer).getByLabelText("修改历史编码文档.pdf文件分类 当前分类：--"), {
             target: { value: "RPT" },
         });
 
@@ -3120,7 +3159,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         openMyUploadsFromPortalShell();
         const drawer = await screen.findByTestId("portal-uploaded-files-drawer");
-        fireEvent.change(within(drawer).getByLabelText("修改重复编码文档.pdf文件类型 当前类型：STD"), {
+        fireEvent.change(within(drawer).getByLabelText("修改重复编码文档.pdf文件分类 当前分类：STD"), {
             target: { value: "RPT" },
         });
 
@@ -3164,7 +3203,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(within(drawer).getAllByText("--").length).toBeGreaterThanOrEqual(5);
         expect(within(drawer).queryByText("-")).not.toBeInTheDocument();
         expect(within(drawer).queryByText("知识库:-")).not.toBeInTheDocument();
-        expect(within(drawer).getByLabelText("修改空字段文档.pdf文件类型 当前类型：--")).toHaveDisplayValue("--");
+        expect(within(drawer).getByLabelText("修改空字段文档.pdf文件分类 当前分类：--")).toHaveDisplayValue("--");
         expect(within(drawer).getByLabelText("修改空字段文档.pdf业务域类型 当前业务域：--")).toHaveDisplayValue("--");
         expect(within(drawer).getAllByText("--").length).toBeGreaterThanOrEqual(5);
         expect(within(drawer).getByRole("button", {
@@ -3579,7 +3618,7 @@ describe("PortalKnowledgeWorkbench", () => {
         fireEvent.click(await screen.findByRole("button", { name: "筛选" }));
         fireEvent.click(screen.getByRole("button", { name: "失败" }));
 
-        const input = screen.getByPlaceholderText("在当前知识空间进行搜索");
+        const input = screen.getByRole("textbox");
         fireEvent.change(input, { target: { value: "后端" } });
         fireEvent.keyDown(input, { key: "Enter" });
 
@@ -3621,7 +3660,7 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(await screen.findByText("后端开发.md")).toBeInTheDocument();
 
-        const input = screen.getByPlaceholderText("在当前知识空间进行搜索");
+        const input = screen.getByRole("textbox");
         fireEvent.change(input, { target: { value: "搜索" } });
         fireEvent.keyDown(input, { key: "Enter" });
 
