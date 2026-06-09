@@ -39,6 +39,7 @@
 | langgraph 1.x | `langgraph.graph.graph.CompiledGraph` → `langgraph.graph.state.CompiledStateGraph` | gpts/sql_agent |
 | pydantic v2 严格化 | 非注解类属性 `pattern = re.compile(...)` → `pattern: ClassVar[...]` | chatglm output_parser |
 | **LLM 流式（重点）** | `BishengLLM._generate/_agenerate`：inner 流式时改用 `generate_from_stream(inner._stream)` 聚合，保留 `on_llm_new_token` 回调 | `bisheng/llm/domain/llm/llm.py` |
+| **Milvus ORM 连接（重点）** | langchain-milvus 0.3.x 用 MilvusClient 连接，但 `col` 属性仍走 ORM `Collection(using=alias)`；pymilvus 2.6 的 `MilvusClient._using='cm-<id>'` 不注册 ORM 连接 → `ConnectionNotExistException`。新增 `Milvus` 子类，首次访问 `col` 时按 (uri,db) 注册稳定可复用的 ORM 连接并重定向 `self.alias` | `bisheng/core/vectorstore/milvus.py` |
 
 ### 3.1 BishengLLM 流式聚合修复（务必理解）
 
