@@ -348,8 +348,10 @@ const AiChatInput = memo(
                         "+" menu; keep the picker trigger hidden here. */}
                     {showUpload && (() => {
                         const InputFilesAny = InputFiles as any;
-                        const accept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
-                        // console.log('upload accept :>> ', accept);
+                        const baseAccept = bsConfig?.enable_etl4lm ? File_Accept.Linsight_Etl4lm : File_Accept.Linsight;
+                        // Workstation (daily) chat also accepts OFD. Linsight shares this
+                        // enum but is out of scope, so only extend the non-Lingsi path.
+                        const accept = isLingsi ? baseAccept : `${baseAccept},.ofd`;
                         return <InputFilesAny
                             ref={inputFilesRef}
                             v={""}
