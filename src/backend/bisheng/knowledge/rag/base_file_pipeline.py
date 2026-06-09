@@ -13,6 +13,7 @@ from bisheng.knowledge.rag.pipeline.loader.excel import ExcelLoader
 from bisheng.knowledge.rag.pipeline.loader.hierarchical import HierarchicalMarkdownLoader, HierarchicalWordLoader
 from bisheng.knowledge.rag.pipeline.loader.html import BishengHtmlLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import MineruLoader
+from bisheng.knowledge.rag.pipeline.loader.ofd import OfdLoader
 from bisheng.knowledge.rag.pipeline.loader.paddle_ocr import PaddleOcrLoader
 from bisheng.knowledge.rag.pipeline.loader.pdf import LocalPdfLoader
 from bisheng.knowledge.rag.pipeline.loader.ppt import BishengPptLoader
@@ -37,6 +38,7 @@ FileExtensionMap = {
     "pptx": {"loader": "_init_ppt_loader", "transformers": "_init_common_transformers"},
     "dps": {"loader": "_init_xcreate_loader", "transformers": "_init_common_transformers"},
     "pdf": {"loader": "_init_pdf_loader", "transformers": "_init_common_transformers"},
+    "ofd": {"loader": "_init_ofd_loader", "transformers": "_init_common_transformers"},
     "png": {"loader": "_init_image_loader", "transformers": "_init_common_transformers"},
     "jpg": {"loader": "_init_image_loader", "transformers": "_init_common_transformers"},
     "jpeg": {"loader": "_init_image_loader", "transformers": "_init_common_transformers"},
@@ -54,8 +56,8 @@ class BaseFilePipeline(BasePipeline):
         self.file_name = file_name
         self.file_split_rule = file_rule
 
-        self.local_file_path: str | None = getattr(self, 'local_file_path', None)
-        self.tmp_dir: str | None = getattr(self, 'tmp_dir', None)
+        self.local_file_path: str | None = getattr(self, "local_file_path", None)
+        self.tmp_dir: str | None = getattr(self, "tmp_dir", None)
         self.loader = None
         self.transformers = None
 
@@ -119,11 +121,11 @@ class BaseFilePipeline(BasePipeline):
             pipeline = NormalPipeline(loader=loader, transformers=transformers, vector_store=self.vector_store)
             return pipeline.run(config)
 
-    def _get_loader_common_params(self) -> dict:
+    def _get_loader_common_params(self, file_path: str | None = None, file_extension: str | None = None) -> dict:
         return {
-            "file_path": self.local_file_path,
+            "file_path": file_path or self.local_file_path,
             "file_metadata": self.file_metadata,
-            "file_extension": self.file_extension,
+            "file_extension": file_extension or self.file_extension,
             "tmp_dir": self.tmp_dir,
             "image_object_dir": self._get_image_object_dir(),
         }
@@ -140,10 +142,12 @@ class BaseFilePipeline(BasePipeline):
     def _init_excel_loader(self) -> BaseBishengLoader:
         return ExcelLoader(
             **self._get_loader_common_params(),
-            header_rows=[self.file_split_rule.excel_rule.header_start_row,
-                         self.file_split_rule.excel_rule.header_end_row],
+            header_rows=[
+                self.file_split_rule.excel_rule.header_start_row,
+                self.file_split_rule.excel_rule.header_end_row,
+            ],
             data_rows=self.file_split_rule.excel_rule.slice_length,
-            append_header=self.file_split_rule.excel_rule.append_header
+            append_header=self.file_split_rule.excel_rule.append_header,
         )
 
     def _init_txt_loader(self) -> BaseBishengLoader:
@@ -163,12 +167,10 @@ class BaseFilePipeline(BasePipeline):
     def _init_word_loader(self) -> BaseBishengLoader:
         if self.should_use_hierarchical_split():
             return HierarchicalWordLoader(
-                **self._get_loader_common_params(),
-                retain_images=self.file_split_rule.retain_images == 1
+                **self._get_loader_common_params(), retain_images=self.file_split_rule.retain_images == 1
             )
         return BishengWordLoader(
-            **self._get_loader_common_params(),
-            retain_images=self.file_split_rule.retain_images == 1
+            **self._get_loader_common_params(), retain_images=self.file_split_rule.retain_images == 1
         )
 
     def _init_ppt_loader(self) -> BaseBishengLoader:
@@ -190,35 +192,54 @@ class BaseFilePipeline(BasePipeline):
             append_header=self.file_split_rule.excel_rule.append_header,
         )
 
-    def _init_pdf_loader(self) -> BaseBishengLoader:
+    def _build_pdf_loader(self, file_path: str, file_extension: str) -> BaseBishengLoader:
+        """Select and build the PDF loader for ``file_path`` (single source of truth).
+
+        Used both for genuine PDF input (``_init_pdf_loader``) and for the PDF that
+        OfdLoader produces from an OFD. ``file_extension`` is passed through so the
+        image-loader path (``_init_image_loader`` → png/jpg/...) keeps its real
+        extension, while OFD delegation passes ``"pdf"``.
+        """
         knowledge_conf = settings.get_knowledge()
+        common_params = self._get_loader_common_params(file_path=file_path, file_extension=file_extension)
         if knowledge_conf.loader_provider == ParseType.ETL4LM.value and knowledge_conf.etl4lm.url:
-            if hasattr(self, 'db_file') and self.db_file:
+            if hasattr(self, "db_file") and self.db_file:
                 self.db_file.parse_type = ParseType.ETL4LM.value
             return Etl4lmLoader(
-                **self._get_loader_common_params(),
+                **common_params,
                 filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
-                **knowledge_conf.etl4lm.model_dump()
+                **knowledge_conf.etl4lm.model_dump(),
             )
         elif knowledge_conf.loader_provider == ParseType.MINERU.value and knowledge_conf.mineru.url:
-            if hasattr(self, 'db_file') and self.db_file:
+            if hasattr(self, "db_file") and self.db_file:
                 self.db_file.parse_type = ParseType.MINERU.value
             return MineruLoader(
-                **self._get_loader_common_params(),
+                **common_params,
                 filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
-                **knowledge_conf.mineru.model_dump()
+                **knowledge_conf.mineru.model_dump(),
             )
         elif knowledge_conf.loader_provider == ParseType.PADDLE_OCR.value and knowledge_conf.paddle_ocr.url:
-            if hasattr(self, 'db_file') and self.db_file:
+            if hasattr(self, "db_file") and self.db_file:
                 self.db_file.parse_type = ParseType.PADDLE_OCR.value
             return PaddleOcrLoader(
-                **self._get_loader_common_params(),
+                **common_params,
                 filter_page_header_footer=self.file_split_rule.filter_page_header_footer == 1,
-                **knowledge_conf.paddle_ocr.model_dump()
+                **knowledge_conf.paddle_ocr.model_dump(),
             )
         return LocalPdfLoader(
-            **self._get_loader_common_params(),
+            **common_params,
             retain_images=self.file_split_rule.retain_images == 1,
+        )
+
+    def _init_pdf_loader(self) -> BaseBishengLoader:
+        return self._build_pdf_loader(self.local_file_path, self.file_extension)
+
+    def _init_ofd_loader(self) -> BaseBishengLoader:
+        # Convert OFD -> PDF in OfdLoader.load(), then delegate to the PDF loader
+        # the pipeline would build for a real PDF (selection stays single-sourced).
+        return OfdLoader(
+            **self._get_loader_common_params(),
+            pdf_loader_factory=lambda pdf_path: self._build_pdf_loader(pdf_path, "pdf"),
         )
 
     def _init_image_loader(self) -> BaseBishengLoader:

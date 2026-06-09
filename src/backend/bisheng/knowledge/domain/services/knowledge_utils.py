@@ -1,7 +1,6 @@
 import json
 import os
 import time
-from typing import Optional, Tuple
 
 from langchain_core.language_models import BaseChatModel
 from loguru import logger
@@ -56,18 +55,14 @@ class KnowledgeUtils(BaseService):
         return chunk
 
     @classmethod
-    async def async_save_preview_cache(
-            cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None
-    ):
+    async def async_save_preview_cache(cls, cache_key, mapping: dict = None, chunk_index: int = 0, value: dict = None):
         redis_client = await get_redis_client()
         if mapping:
             for key, val in mapping.items():
                 mapping[key] = json.dumps(val, ensure_ascii=False)
             await redis_client.ahset(cache_key, mapping=mapping)
         else:
-            await redis_client.ahset(
-                cache_key, key=str(chunk_index), value=json.dumps(value, ensure_ascii=False)
-            )
+            await redis_client.ahset(cache_key, key=str(chunk_index), value=json.dumps(value, ensure_ascii=False))
 
     @classmethod
     def delete_preview_cache(cls, cache_key, chunk_index: int = None):
@@ -124,8 +119,8 @@ class KnowledgeUtils(BaseService):
 
     @classmethod
     def resolve_source_object_name(
-            cls, file_id: int | str, file_name: str, object_name: Optional[str] = None
-    ) -> Optional[str]:
+        cls, file_id: int | str, file_name: str, object_name: str | None = None
+    ) -> str | None:
         """Prefer the persisted object path and fall back to the canonical storage path."""
         if object_name:
             return object_name
@@ -140,8 +135,8 @@ class KnowledgeUtils(BaseService):
 
     @classmethod
     def get_knowledge_preview_file_object_name(
-            cls, file_id: int | str, file_name: str = None, file_ext: str = None
-    ) -> Optional[str]:
+        cls, file_id: int | str, file_name: str = None, file_ext: str = None
+    ) -> str | None:
         """Get the preview file corresponding to the knowledge base file atminioStorage Path for This path is stored in the officialbucketand within"""
         if file_name:
             file_ext = file_name.split(".")[-1]
@@ -149,15 +144,15 @@ class KnowledgeUtils(BaseService):
             return f"preview/{file_id}.docx"
         elif file_ext in ["xls", "xlsx", "et"]:
             return f"preview/{file_id}.xlsx"
-        elif file_ext in ["ppt", "pptx", "dps"]:
+        elif file_ext in ["ppt", "pptx", "dps", "ofd"]:
             return f"preview/{file_id}.pdf"
         # No preview required for other file types
         return None
 
     @classmethod
     def resolve_preview_object_name(
-            cls, file_id: int | str, file_name: str = None, preview_file_object_name: Optional[str] = None
-    ) -> Optional[str]:
+        cls, file_id: int | str, file_name: str = None, preview_file_object_name: str | None = None
+    ) -> str | None:
         """Prefer the persisted preview path and fall back to the canonical preview path."""
         if preview_file_object_name:
             return preview_file_object_name
@@ -166,7 +161,7 @@ class KnowledgeUtils(BaseService):
         return cls.get_knowledge_preview_file_object_name(file_id=file_id, file_name=file_name)
 
     @classmethod
-    def get_tmp_preview_file_object_name(cls, file_path: str) -> Optional[str]:
+    def get_tmp_preview_file_object_name(cls, file_path: str) -> str | None:
         """Get a temporary preview file atminioStorage Path for This path is stored in a temporarybucket"""
         file_name = os.path.basename(file_path)
         file_name_no_ext, file_ext = file_name.rsplit(".", 1)
@@ -174,15 +169,17 @@ class KnowledgeUtils(BaseService):
             return f"preview/{file_name_no_ext}.docx"
         elif file_ext in ["xls", "xlsx", "et"]:
             return f"preview/{file_name_no_ext}.xlsx"
-        elif file_ext in ["ppt", "pptx", "dps"]:
+        elif file_ext in ["ppt", "pptx", "dps", "ofd"]:
             return f"preview/{file_name_no_ext}.pdf"
         # No preview required for other file types
         return None
 
     @classmethod
     def get_knowledge_abstract_llm(
-        cls, invoke_user_id: int, tenant_id: Optional[int] = None,
-    ) -> Tuple[Optional[BaseChatModel], Optional[KnowledgeLLMConfig]]:
+        cls,
+        invoke_user_id: int,
+        tenant_id: int | None = None,
+    ) -> tuple[BaseChatModel | None, KnowledgeLLMConfig | None]:
         """Get a summary of the knowledge basechunkright of privacy llmObjects"""
         knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id)
         if not knowledge_llm.abstract_enabled or not knowledge_llm.extract_title_model_id:
@@ -191,11 +188,11 @@ class KnowledgeUtils(BaseService):
 
         return LLMService.get_bisheng_llm_sync(
             model_id=knowledge_llm.extract_title_model_id,
-
             app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
             app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
             app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
-            user_id=invoke_user_id), knowledge_llm
+            user_id=invoke_user_id,
+        ), knowledge_llm
 
     @classmethod
     def _get_milvus_schema_ready_signature(cls) -> str:
@@ -363,8 +360,8 @@ class KnowledgeUtils(BaseService):
     async def process_rebuild_file(cls, db_file, req_data, login_user_id: int, login_user_name: str):
         """Shared logic to rebuild a knowledge file with new rules."""
         from bisheng.api.v1.schemas import FileProcessBase
-        from bisheng.worker.knowledge import file_worker
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.worker.knowledge import file_worker
 
         split_rule_dict = req_data.model_dump(include=set(list(FileProcessBase.model_fields.keys())))
         if req_data.excel_rule is not None:
@@ -381,7 +378,7 @@ class KnowledgeUtils(BaseService):
         return db_file
 
     @classmethod
-    async def process_retry_files(cls, db_files, id2input: dict, login_user) -> Tuple[list, set]:
+    async def process_retry_files(cls, db_files, id2input: dict, login_user) -> tuple[list, set]:
         """Shared logic for retrying multiple files with updated configuration"""
         from bisheng.core.storage.minio.minio_manager import get_minio_storage
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
@@ -399,21 +396,22 @@ class KnowledgeUtils(BaseService):
                 content = json.loads(content)
                 if content.get("new_name"):
                     new_file_name = content.get("new_name")
-            except Exception as e:
+            except Exception:
                 pass
 
             # file exist
             file.object_name = input_file.get("object_name", file.object_name)
-            file_preview_cache_key = cls.get_preview_cache_key(
-                file.knowledge_id, input_file.get("file_path", "")
-            )
+            file_preview_cache_key = cls.get_preview_cache_key(file.knowledge_id, input_file.get("file_path", ""))
 
-            if file.object_name.startswith('tmp'):
+            if file.object_name.startswith("tmp"):
                 # Moving Temporary Files to the Official Directory
                 new_object_name = cls.get_knowledge_file_object_name(file.id, file.object_name)
-                await minio_client.copy_object(source_object=file.object_name, dest_object=new_object_name,
-                                               source_bucket=minio_client.tmp_bucket,
-                                               dest_bucket=minio_client.bucket)
+                await minio_client.copy_object(
+                    source_object=file.object_name,
+                    dest_object=new_object_name,
+                    source_bucket=minio_client.tmp_bucket,
+                    dest_bucket=minio_client.bucket,
+                )
                 file.object_name = new_object_name
             file.file_name = new_file_name
             file.remark = ""
