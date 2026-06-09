@@ -323,7 +323,10 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
             payload = sched.get_payload(file_id=file_id)
             if not payload:
                 sched.rollback_dispatch(user_id=user_id, file_id=file_id)
-                logger.error(
+                # Expected, self-healing case: the file's payload expired (TTL) or
+                # was removed out-of-band while its id lingered in the FIFO. We roll
+                # the dispatch back and skip — not an error, so log at WARNING.
+                logger.warning(
                     "file_scheduler: missing payload for file_id={}; rolled back",
                     file_id,
                 )

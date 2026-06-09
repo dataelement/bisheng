@@ -42,7 +42,10 @@ const supportedFileTypes = new Set<FileType>([
 ]);
 
 function normalizeFileType(type?: string): FileType {
-  const normalizedType = String(type || "").toLowerCase().replace(/^\./, "") as FileType;
+  const rawType = String(type || "").toLowerCase().replace(/^\./, "");
+  // OFD is converted to PDF; show the PDF icon for it.
+  if (rawType === "ofd") return "pdf";
+  const normalizedType = rawType as FileType;
   return supportedFileTypes.has(normalizedType) ? normalizedType : "txt";
 }
 

@@ -4,7 +4,7 @@ from time import perf_counter
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from fastapi.encoders import jsonable_encoder
-from langchain.memory import ConversationBufferWindowMemory
+from langchain_classic.memory import ConversationBufferWindowMemory
 from loguru import logger
 
 from bisheng.api.v1.schema.workflow import WorkflowEvent, WorkflowEventType, WorkflowInputSchema, WorkflowInputItem, \

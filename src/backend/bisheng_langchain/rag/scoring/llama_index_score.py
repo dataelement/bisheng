@@ -19,11 +19,11 @@ openai_proxy = os.environ.get('OPENAI_PROXY', '')
 
 
 def llama_index_answer_correctness(querys, responses, references):
-    embed = OpenAIEmbedding(api_key=openai_api_key, http_client=httpx.AsyncClient(proxies=openai_proxy))
+    embed = OpenAIEmbedding(api_key=openai_api_key, http_client=httpx.AsyncClient(proxy=openai_proxy))
 
     model_name = "gpt-3.5-turbo-16k"
     service_context = ServiceContext.from_defaults(
-        llm=OpenAI(model=model_name, api_key=openai_api_key, http_client=httpx.AsyncClient(proxies=openai_proxy)),
+        llm=OpenAI(model=model_name, api_key=openai_api_key, http_client=httpx.AsyncClient(proxy=openai_proxy)),
         embed_model=embed,
     )
     evaluator = CorrectnessEvaluator(service_context=service_context)

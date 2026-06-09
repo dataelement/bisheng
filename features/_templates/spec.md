@@ -1,257 +1,110 @@
 # Feature: <名称>
 
-> **前置步骤**：本文档编写前必须已完成 Spec Discovery（架构师提问），
-> 确保 PRD 中的不确定性已与用户对齐。
+> **本文档定位 — 纯 What（需求口径，不随代码漂移）**
+>
+> spec 只回答 **做什么 / 验收标准 / 不做什么**。
+> **所有 How（决策、数据流、字段、API、Service、前端、文件清单、性能指标）一律不写在这里。**
+> How 的唯一真相在 [design.md](./design.md)（接手必读）与 [tasks.md](./tasks.md)（执行流水）。
+>
+> 为什么这么切：How 写进 spec，实现一变 spec 就过时，而 spec 通常没人回头改 → 接手人被旧方案误导。
+> spec 只承载需求口径，才能长期稳定、可被反复引用。
+>
+> **前置步骤**：本文档编写前必须已完成 Spec Discovery（架构师提问），PRD 中的不确定性已与用户对齐。
 
-**关联 PRD**: [<PRD 文件路径> §章节名]
+**关联 PRD**: [<PRD 文件路径 / wiki 链接> §章节名]
 **优先级**: P0 / P1 / P2
-**所属版本**: v2.5.0
+**所属版本**: v<X.Y.Z>
+**依赖**: <前置 Feature，如 F004 / F008；无则写「无」>
+
+> **范围边界**（文章经验：写清「明确不做什么」比写「做什么」更能防 scope 膨胀）
+> - **本次纳入**：
+>   - <能力 1>
+>   - <能力 2>
+> - **本次明确排除**：
+>   - <明确不做的功能>（延后到 vX.X.X / 另起 feature）
+>   - <容易被误以为要做、但本期不做的事，逐条写清并附一句原因>
 
 ---
 
-## 1. 概述与用户故事
+## 1. 用户故事
+
+> 只保留**业务价值视角**的故事。
+> 「为什么这么实现」（如：统一某状态管理、共用某 Service）属于**设计意图**，写进 design.md §3 / §4.3，不在 spec 重复。
 
 作为 **<角色>**，
 我希望 **<目标>**，
 以便 **<价值>**。
 
+（多角色场景按 A / B / C 分列，每条都是「角色 + 目标 + 价值」三段式。）
+
 ---
 
 ## 2. 验收标准
 
-> AC-ID 在本特性内唯一，格式 `AC-NN`。
+> **spec 的核心资产。** AC-ID 在本特性内唯一，格式 `AC-NN`。
 > tasks.md 中的测试任务必须通过 `覆盖 AC: AC-NN` 追溯到此表。
+> 错误码号在此表中**仅作为「可观测的对外行为」引用**（如「返错误码 12061」）；
+> 错误码的定义、归属、编码规则是实现细节，写在 design.md §6 / 代码 `common/errcode/`，不在 spec 维护错误码详表。
+
+**写法分级**：
+- **P0 / 复杂 feature** → 用 **EARS 句型**（无歧义、可直接转测试；杜绝"友好提示""响应快"这类没法验收的话）
+- **小功能 / hotfix** → 下面的表格式即可
+
+**EARS 句型**（每条 AC 选一种填空）：
+
+| 句型 | 用于 |
+|---|---|
+| `THE SYSTEM SHALL <要求>` | 始终成立的普遍要求 |
+| `WHEN <事件>, THE SYSTEM SHALL <响应>` | 某事件发生时 |
+| `WHILE <状态>, THE SYSTEM SHALL <响应>` | 处于某状态时（如"流式生成中"） |
+| `IF <异常/不期望>, THEN THE SYSTEM SHALL <响应>` | 异常 / 错误路径 |
+| `WHERE <特性开启>, THE SYSTEM SHALL <响应>` | 某可选特性开启时 |
+
+EARS 示例：
+- **AC-01** — WHEN 用户提交正确凭证, THE SYSTEM SHALL 返回 token 并初始化其权限上下文。
+- **AC-02** — IF 密码连续错误 5 次, THEN THE SYSTEM SHALL 锁定账号 15 分钟并返回错误码 10605。
+- **AC-03** — WHERE 多租户开启, THE SYSTEM SHALL 把查询限定到当前 tenant_id。
+
+表格式（小功能 / hotfix 用）：
 
 | ID | 角色 | 操作 | 预期结果 |
 |----|------|------|---------|
-| AC-01 | <角色> | <执行什么操作> | <系统返回/显示什么> |
-| AC-02 | <角色> | <边界/错误场景操作> | <错误码/HTTP 状态码> |
+| AC-01 | <角色> | <执行什么操作> | <系统返回 / 显示什么> |
+| AC-02 | <角色> | <边界 / 错误场景操作> | <错误码 / HTTP 状态码 / 提示文案> |
+
+（AC 多时按能力分小节 2.1 / 2.2 / …。）
 
 ---
 
 ## 3. 边界情况
 
 - 当 <异常场景> 时，系统应 <预期行为>
-- **不支持**：<明确排除的功能>（延后到 vX.X.X）
+- <数据形态多样 / 并发 race / 缺字段兜底 等> —— 只写**期望的对外行为**；
+  具体兜底策略、运行时坑的处理细节指向 design.md §5（不在 spec 展开实现）。
 
 ---
 
-## 4. 架构决策
+## 4. 设计与实现（指针，不复制）
 
-| ID | 决策 | 选项 | 结论 | 理由 |
-|----|------|------|------|------|
-| AD-01 | <决策主题> | A: ... / B: ... | 选 A | <理由> |
+> **本节刻意不写内容。** spec 不承载 How，避免与代码一起漂移。
+> 需要了解实现时，按下表跳转 —— 这些文档才是各自 How 的唯一真相：
 
----
-
-## 5. 数据库 & Domain 模型
-
-### 数据库表定义
-
-> 使用 SQLModel ORM 定义。所有新表必须继承 `SQLModelSerializable`，
-> 包含 `tenant_id`（多租户）、`create_time`/`update_time` 字段。
-
-```python
-from datetime import datetime
-from typing import Optional
-
-from sqlalchemy import Column, DateTime, String, text
-from sqlmodel import Field
-from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
-from bisheng.common.models.base import SQLModelSerializable
-
-
-class NewEntity(SQLModelSerializable, table=True):
-    __tablename__ = "new_entity"
-
-    id: Optional[int] = Field(default=None, primary_key=True)
-    tenant_id: Optional[str] = Field(default=None, index=True)
-    name: str = Field(sa_column=Column(String(255), nullable=False))
-    # ... 业务字段
-
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
-```
-
-### Domain 模型 / DTO
-
-> Pydantic Schema 用于请求/响应序列化。
-
-```python
-from pydantic import BaseModel
-
-
-class NewEntityCreate(BaseModel):
-    name: str
-    # ...
-
-
-class NewEntityRead(BaseModel):
-    id: int
-    name: str
-    create_time: datetime
-    # ...
-```
-
----
-
-## 6. API 契约
-
-### 端点列表
-
-> 认证：`UserPayload = Depends(UserPayload.get_login_user)`
-> 响应包装：`UnifiedResponseModel[T]`
-
-| Method | Path | 描述 | 认证 |
-|--------|------|------|------|
-| GET | `/api/v1/<resource>` | 列表查询（分页） | 是 |
-| POST | `/api/v1/<resource>` | 创建 | 是 |
-| GET | `/api/v1/<resource>/{id}` | 详情 | 是 |
-| PUT | `/api/v1/<resource>/{id}` | 更新 | 是 |
-| DELETE | `/api/v1/<resource>/{id}` | 删除 | 是 |
-
-### 请求/响应示例
-
-**创建请求**:
-```json
-POST /api/v1/<resource>
-{
-  "name": "示例"
-}
-```
-
-**成功响应**:
-```json
-{
-  "status_code": 200,
-  "status_message": "SUCCESS",
-  "data": {
-    "id": 1,
-    "name": "示例",
-    "create_time": "2025-01-01T00:00:00"
-  }
-}
-```
-
-**分页响应**（使用 `PageData[T]`）:
-```json
-{
-  "status_code": 200,
-  "status_message": "SUCCESS",
-  "data": {
-    "data": [...],
-    "total": 100
-  }
-}
-```
-
-### 错误码表
-
-> 错误码遵循 5 位 MMMEE 编码。MMM=模块编码，EE=模块内错误类型。
-> 新模块编码需在 release-contract.md「已分配模块编码」中注册。
-
-| HTTP Status | MMMEE Code | Error Class | 场景 | 关联 AC |
-|-------------|------------|-------------|------|---------|
-| 200 (body) | MMMEE | XxxError | 参数不合法 | AC-0X |
-| 200 (body) | MMMEE | XxxError | 唯一性冲突 | AC-0X |
-| 200 (body) | MMMEE | XxxError | 权限不足 | AC-0X |
-
----
-
-## 7. Service 层逻辑
-
-> 描述核心业务逻辑的流程和职责划分，不写具体实现代码。
-> Service 文件位置：`{module}/domain/services/{service_name}.py`
-
-### 核心方法
-
-| 方法 | 输入 | 输出 | 职责 |
-|------|------|------|------|
-| `create_xxx` | CreateDTO + UserPayload | Entity | 创建 + OpenFGA 授权 |
-
-### 权限检查
-
-> 资源操作必须通过 `PermissionService.check()` 检查权限。
-> 资源创建必须通过 `PermissionService.authorize()` 写入 OpenFGA owner 元组。
-> 禁止直接查询 `role_access` 或 `group_resource`（WEB_MENU 类型除外）。
-
-### DAO 调用约定
-
-> DAO 方法为 `@classmethod`：
-> - 同步：`XxxDao.get_xxx()` / `create_xxx()` / `update_xxx()` / `delete_xxx()`
-> - 异步：`XxxDao.aget_xxx()` / `acreate_xxx()` / `aupdate_xxx()` / `adelete_xxx()`
-
----
-
-## 8. 前端设计
-
-### 8.1 Platform 前端（如适用）
-
-> 路径：`src/frontend/platform/src/`
-
-**页面路由**: `/xxx` → `pages/XxxPage/`
-
-**组件树**:
-```
-XxxPage/
-├── index.tsx          # 页面入口
-├── components/        # 页面级组件
-└── ...
-```
-
-**状态管理**: Zustand store（`src/store/xxxStore.tsx`）
-
-**API 调用**: `src/controllers/API/xxx.ts` → 封装函数 → 组件调用
-
-**i18n**: 键前缀 `<module>.xxx`
-
-### 8.2 Client 前端（如适用）
-
-> 路径：`src/frontend/client/src/`
-> 路由基础路径：`/workspace`
-
-**页面路由**: `/workspace/xxx`
-
-**状态管理**: Zustand atoms（`src/store/xxx.ts`）
-
-**API 调用**: `src/api/xxx.ts`
-
----
-
-## 9. 文件清单
-
-列出本特性将新建或修改的所有文件。
-
-### 新建
-
-| 文件 | 说明 |
-|------|------|
-| `src/backend/bisheng/{module}/domain/models/{entity}.py` | ORM + DAO |
-| `src/backend/bisheng/{module}/domain/services/{service}.py` | 业务逻辑 |
-| `src/backend/bisheng/{module}/api/endpoints/{endpoint}.py` | API 端点 |
-| `src/backend/bisheng/common/errcode/{module}.py` | 错误码 |
-
-### 修改
-
-| 文件 | 变更内容 |
-|------|---------|
-| `src/backend/bisheng/{module}/api/router.py` | 注册新路由 |
-| `src/backend/bisheng/api/router.py` | 注册模块路由（如新模块） |
-
----
-
-## 10. 非功能要求
-
-- **性能**: <响应时间、吞吐量要求>
-- **安全**: 权限控制（PermissionService 五级检查链路）、数据隔离（tenant_id）
-- **兼容性**: <与现有功能的兼容要求>
+| 你想知道 | 去哪看 |
+|---|---|
+| 为什么这么实现（决策 + 备选 + 何时该推翻） | design.md §3 方案对比 |
+| 关键约束（双 DB / 多租户 / 权限 / 运行时依赖 / 错误码段） | design.md §2 |
+| 今天的数据流、模块职责、字段 / API / 文件名约定 | design.md §4 系统现状 |
+| 代码里看不出的坑、反直觉事实 | design.md §5 |
+| 对外契约、改了会破坏谁、依赖谁 | design.md §6 |
+| 性能 / 安全 / 可观测非功能指标 | design.md §2 + §7 |
+| 任务拆解、文件清单、执行顺序、踩坑落档 | tasks.md |
 
 ---
 
 ## 相关文档
 
-- 版本契约: [features/v2.5.0/release-contract.md](../release-contract.md)（写 spec 前必须先阅读）
+- 设计真相: [design.md](./design.md)（接手第一入口）
+- 执行与落档: [tasks.md](./tasks.md)
+- 版本契约: [features/v<X.Y.Z>/release-contract.md](../release-contract.md)（写 spec 前必须先阅读）
 - 架构文档: `docs/architecture/`
-- PRD: `docs/PRD/`
+- PRD: <PRD 路径 / wiki 链接>

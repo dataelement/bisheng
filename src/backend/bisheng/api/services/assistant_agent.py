@@ -2,22 +2,22 @@ import json
 import os
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any
 
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.tools.render import format_tool_to_openai_tool
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool, ArgsSchema
-from langchain_core.utils.function_calling import format_tool_to_openai_tool
+from langchain_core.tools import ArgsSchema, BaseTool
 from langgraph.prebuilt import create_react_agent
 from loguru import logger
 from pydantic import Field, SkipValidation
-from typing_extensions import Annotated
 
 from bisheng.api.services.assistant_base import AssistantUtils
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_PROMPT_RULES,
     CitationRegistryCollector,
@@ -28,17 +28,21 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_rag_citation_registry_items,
     collect_web_citation_registry_items,
 )
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-from bisheng.common.errcode.assistant import AssistantModelEmptyError, AssistantModelNotConfigError, \
-    AssistantAutoLLMError
+from bisheng.common.errcode.assistant import (
+    AssistantAutoLLMError,
+    AssistantModelEmptyError,
+    AssistantModelNotConfigError,
+)
 from bisheng.database.models.assistant import Assistant, AssistantLink, AssistantLinkDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.services.executor import ToolExecutor
 from bisheng_langchain.gpts.assistant import ConfigurableAssistant
-from bisheng_langchain.gpts.auto_optimization import (generate_breif_description,
-                                                      generate_opening_dialog,
-                                                      optimize_assistant_prompt)
+from bisheng_langchain.gpts.auto_optimization import (
+    generate_breif_description,
+    generate_opening_dialog,
+    optimize_assistant_prompt,
+)
 from bisheng_langchain.gpts.auto_tool_selected import ToolInfo, ToolSelector
 from bisheng_langchain.gpts.prompts import ASSISTANT_PROMPT_OPT
 
@@ -54,10 +58,10 @@ class AssistantCitationToolWrapper(BaseTool):
 
     name: str
     description: str
-    args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = Field(default=None)
+    args_schema: Annotated[ArgsSchema | None, SkipValidation()] = Field(default=None)
     tool: BaseTool
-    citation_registry_items: List[CitationRegistryItemSchema] = Field(default_factory=list, exclude=True)
-    citation_collector: Optional[CitationRegistryCollector] = Field(default=None, exclude=True)
+    citation_registry_items: list[CitationRegistryItemSchema] = Field(default_factory=list, exclude=True)
+    citation_collector: CitationRegistryCollector | None = Field(default=None, exclude=True)
 
     @classmethod
     def wrap(cls, tool: BaseTool, citation_collector: CitationRegistryCollector) -> BaseTool:
@@ -126,13 +130,13 @@ class AssistantCitationToolWrapper(BaseTool):
             inputs['question'] = query
         return inputs
 
-    def _extend_citation_registry_items(self, items: List[CitationRegistryItemSchema]) -> None:
+    def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
         cache_citation_registry_items_sync(items)
         self.citation_registry_items.extend(items)
         if self.citation_collector:
             self.citation_collector.extend(items)
 
-    async def _aextend_citation_registry_items(self, items: List[CitationRegistryItemSchema]) -> None:
+    async def _aextend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
         await cache_citation_registry_items(items)
         self.citation_registry_items.extend(items)
         if self.citation_collector:
@@ -178,7 +182,7 @@ class AssistantAgent(AssistantUtils):
     Additional instructions to note:
     - If the user's question is in Chinese, please answer it in Chinese.
     - When there is time information involved in a question, such as recently6Months, yesterday, last year, etc., you need to use the time tool to query the time information.
-    """  # noqa
+    """
 
     def __init__(self, assistant_info: Assistant, chat_id: str, invoke_user_id: int):
         self.assistant = assistant_info
@@ -187,7 +191,7 @@ class AssistantAgent(AssistantUtils):
         self.invoke_user_id = invoke_user_id
 
         self.chat_id = chat_id
-        self.tools: List[BaseTool] = []
+        self.tools: list[BaseTool] = []
         self.offline_flows = []
         self.agent: ConfigurableAssistant | None = None
         self.agent_executor_dict = {
@@ -254,10 +258,10 @@ class AssistantAgent(AssistantUtils):
         """Get by nametool Vertical
            tools_name_param:: {name: params}
         """
-        links: List[AssistantLink] = await AssistantLinkDao.get_assistant_link(
+        links: list[AssistantLink] = await AssistantLinkDao.get_assistant_link(
             assistant_id=self.assistant.id)
         # tool
-        tools: List[BaseTool] = []
+        tools: list[BaseTool] = []
         tool_ids = []
         flow_links = []
         for link in links:
@@ -299,9 +303,9 @@ class AssistantAgent(AssistantUtils):
             if isinstance(tool, AssistantCitationToolWrapper):
                 tool.citation_registry_items = []
 
-    def collect_citation_registry_items(self) -> List[CitationRegistryItemSchema]:
+    def collect_citation_registry_items(self) -> list[CitationRegistryItemSchema]:
         """Collect citation items emitted by wrapped tools."""
-        items: List[CitationRegistryItemSchema] = []
+        items: list[CitationRegistryItemSchema] = []
         seen_keys: set[tuple[str, str | None]] = set()
         candidate_items = self.citation_registry_collector.list_items()
         for tool in self.tools:
@@ -347,7 +351,7 @@ class AssistantAgent(AssistantUtils):
 
             # areagentAdd Recursive Limit Configuration
             self.agent = self.agent.with_config({'recursion_limit': 100})
-            logger.info(f'Agent config applied: recursion_limit=100')
+            logger.info('Agent config applied: recursion_limit=100')
 
     async def optimize_assistant_prompt(self):
         """ Automatically optimize generationprompt """
@@ -374,7 +378,7 @@ class AssistantAgent(AssistantUtils):
         """ Generate description dialog """
         return generate_breif_description(self.llm, prompt)
 
-    def choose_tools(self, tool_list: List[Dict[str, str]], prompt: str) -> List[str]:
+    def choose_tools(self, tool_list: list[dict[str, str]], prompt: str) -> list[str]:
         """
          Choose A Tool
          tool_list: [{name: xxx, description: xxx}]
@@ -399,7 +403,7 @@ class AssistantAgent(AssistantUtils):
                 run_id=run_id)
             await callback[0].on_tool_end(output='flow is offline', name=one, run_id=run_id)
 
-    async def record_chat_history(self, message: List[Any]):
+    async def record_chat_history(self, message: list[Any]):
         # Record Assistant Chat History
         if not os.getenv('BISHENG_RECORD_HISTORY'):
             return
@@ -417,13 +421,13 @@ class AssistantAgent(AssistantUtils):
                     f,
                     ensure_ascii=False)
         except Exception as e:
-            logger.error(f'record assistant history error: {str(e)}')
+            logger.error(f'record assistant history error: {e!s}')
 
-    async def trim_messages(self, messages: List[Any]) -> List[Any]:
+    async def trim_messages(self, messages: list[Any]) -> list[Any]:
         # Dapatkanencoding
         enc = self.cl100k_base()
 
-        def get_finally_message(new_messages: List[Any]) -> List[Any]:
+        def get_finally_message(new_messages: list[Any]) -> list[Any]:
             # No more processing until only one record has been trimmed
             if len(new_messages) == 1:
                 return new_messages
@@ -445,7 +449,7 @@ class AssistantAgent(AssistantUtils):
 
         return get_finally_message(messages)
 
-    async def run(self, query: str, chat_history: List = None, callback: Callbacks = None) -> List[BaseMessage]:
+    async def run(self, query: str, chat_history: list = None, callback: Callbacks = None) -> list[BaseMessage]:
         """
         Run Agent Conversation
         """
@@ -471,7 +475,7 @@ class AssistantAgent(AssistantUtils):
 
         return result
 
-    async def astream(self, query: str, chat_history: List = None, callback: Callbacks = None):
+    async def astream(self, query: str, chat_history: list = None, callback: Callbacks = None):
         """
         Run Agent Conversation - Streaming version
         """
@@ -497,7 +501,7 @@ class AssistantAgent(AssistantUtils):
             config = RunnableConfig(callbacks=callback)
             final_messages = []
 
-            logger.info(f'Using function-calling mode, starting astream...')
+            logger.info('Using function-calling mode, starting astream...')
 
             chunk_count = 0
 
@@ -520,19 +524,19 @@ class AssistantAgent(AssistantUtils):
                         yield [message]
 
             except Exception as astream_error:
-                logger.exception(f'Error in astream async for loop: {str(astream_error)}')
+                logger.exception(f'Error in astream async for loop: {astream_error!s}')
                 raise astream_error
 
             logger.info(f'Function calling astream completed, total chunks: {chunk_count}')
 
             if chunk_count == 0:
-                logger.warning(f'No chunks received from agent.astream()! This indicates a streaming issue.')
+                logger.warning('No chunks received from agent.astream()! This indicates a streaming issue.')
 
             # Record Chat History
             if final_messages:
                 await self.record_chat_history([one.to_json() for one in final_messages])
 
-    async def react_run(self, inputs: List, callback: Callbacks = None):
+    async def react_run(self, inputs: list, callback: Callbacks = None):
         """ react Mode input and execution """
         result = await self.agent.ainvoke({
             'input': inputs[-1].content,

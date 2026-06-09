@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Request, Body, Path, WebSocket, WebSocketException
 from fastapi import status as http_status
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.responses import StreamingResponse
 
@@ -126,7 +126,7 @@ async def invoke_workflow(request: Request,
         return StreamingResponse(handle_workflow_event(res), media_type='text/event-stream')
     except Exception as exc:
         logger.exception(f'invoke_workflow error: {str(exc)}')
-        return ORJSONResponse(status_code=500, content=str(exc))
+        return JSONResponse(status_code=500, content=str(exc))
     finally:
         end_time = time.time()
         await telemetry_service.log_event(user_id=login_user.user_id,

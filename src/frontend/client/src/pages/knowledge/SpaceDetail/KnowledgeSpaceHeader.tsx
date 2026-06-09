@@ -516,6 +516,16 @@ export function KnowledgeSpaceHeader({
                             </div>
                             {/* PC 端：完整文件路径（空间名 / 文件夹…） */}
                             <div className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm text-[#1d2129] md:flex">
+                                {/* 返回上一级：非根级时展示，点击回到父级文件夹（顶层则回到空间根） */}
+                                <button
+                                    type="button"
+                                    onClick={() => onNavigateFolder(currentPath[currentPath.length - 2]?.id)}
+                                    aria-label={localize("com_knowledge.go_to_parent_folder")}
+                                    title={localize("com_knowledge.go_to_parent_folder")}
+                                    className="mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                >
+                                    <ChevronLeft className="size-4" />
+                                </button>
                                 <button
                                     type="button"
                                     onClick={() => onNavigateFolder(undefined)}

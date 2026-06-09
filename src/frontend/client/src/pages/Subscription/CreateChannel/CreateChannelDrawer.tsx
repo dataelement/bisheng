@@ -47,9 +47,9 @@ import { useLocalize } from "~/hooks";
 import useMediaQuery from "~/hooks/useMediaQuery";
 import { useCreateChannelForm } from "../hooks/useCreateChannelForm";
 
-const MAX_CHANNEL_NAME = 10;
+const MAX_CHANNEL_NAME = 30;
 const MAX_CHANNEL_DESC = 100;
-const MAX_SUB_CHANNELS = 6;
+const MAX_SUB_CHANNELS = 10;
 
 /** 可见方式 / 权限：主标题（私有、需审核、公开）— 与创建知识空间一致 */
 const PERMISSION_OPTION_TEXT_CLASS =

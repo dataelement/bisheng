@@ -1,6 +1,5 @@
 # Feature: F025-approval-center-unification（统一审批中心与旧审批链路收敛）
 
-**关联 PRD**: [../../../docs/PRD/审批流程PRD/审批流程PRD.md](../../../docs/PRD/%E5%AE%A1%E6%89%B9%E6%B5%81%E7%A8%8BPRD/%E5%AE%A1%E6%89%B9%E6%B5%81%E7%A8%8BPRD.md) §1-§11
 **优先级**: P0（主版本新增通用审批能力，覆盖菜单权限申请、频道订阅审批、知识空间加入/订阅审批）
 **所属版本**: v2.6.0
 **模块编码**: 沿用 181（`approval`，现有 `common/errcode/approval.py`），本 spec 会扩展错误码而不新开模块
@@ -643,7 +642,7 @@ platform approval admin
 - **可观测性**：所有关键操作写 `approval_action_log` + `auditlog`，并带 `trace_id`、`instance_id`、`scenario_code`、`handler`。
 - **兼容性**：历史 `approval_request` 和旧站内信审批记录如需保留，可只读查看；新业务不再创建旧消息审批事实。
 - **能力收敛**：部门知识空间文件上传审批在本版本移除；新增/现行上传链路不再写 `approval_request`，只走 ReBAC 权限校验。
-- **数据库兼容性**：审批中心新增模型、索引、迁移、默认值与时间戳行为必须同时兼容 MySQL 与达梦；实现时默认遵循 [达梦数据库支持设计](../../../docs/superpowers/specs/2026-04-28-dameng-database-support-design.md) 的单代码库、方言分支方案。
+- **数据库兼容性**：审批中心新增模型、索引、迁移、默认值与时间戳行为必须同时兼容 MySQL 与达梦；实现时默认遵循 [达梦数据库支持设计](../../../docs/archive/legacy-sdd/specs/2026-04-28-dameng-database-support-design.md) 的单代码库、方言分支方案。
 
 ---
 
@@ -651,4 +650,3 @@ platform approval admin
 
 - 版本契约: [../release-contract.md](../release-contract.md)
 - 版本索引: [../README.md](../README.md)
-- 关联 PRD: [../../../docs/PRD/审批流程PRD/审批流程PRD.md](../../../docs/PRD/%E5%AE%A1%E6%89%B9%E6%B5%81%E7%A8%8BPRD/%E5%AE%A1%E6%89%B9%E6%B5%81%E7%A8%8BPRD.md)

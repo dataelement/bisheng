@@ -1,0 +1,33 @@
+# MySQL -> DaMeng (DM8) data-migration config for migrate_mysql_to_dm.py
+#
+# This script copies DATA ONLY. Create the target DM schema FIRST:
+#   bisheng          : start the backend once against the DM URL, or run
+#                      `alembic upgrade head` against it.
+#   bisheng_gateway  : execute docker/db/init_dm.sql on the BISHENG_GATEWAY schema.
+#   openfga          : openfga migrate --datastore-engine dm --datastore-uri 'dm://...'
+#
+# URLs support ${VAR} / ${VAR:-default} placeholders, expanded from the environment.
+#
+# DSN formats:
+#   MySQL source : mysql+pymysql://user:pass@host:3306/dbname?charset=utf8mb4
+#   DM target    : dm+dmPython://user:pass@host:5236/SCHEMA
+#                  (the /SCHEMA path is the DM user/schema; the script strips it
+#                   internally for the sync dmPython driver)
+
+databases:
+  bisheng:
+    source_url: "mysql+pymysql://root:${MYSQL_PASSWORD}@${MYSQL_HOST:-127.0.0.1}:3306/bisheng?charset=utf8mb4"
+    target_url: "dm+dmPython://BISHENG:${DM_BISHENG_PASSWORD}@${DM_HOST:-192.168.107.9}:5236/BISHENG"
+    # include: []   # empty = every table reflected on the DM target
+    exclude:
+      - alembic_version   # already excluded by default, listed here for clarity
+
+  bisheng_gateway:
+    source_url: "mysql+pymysql://root:${MYSQL_PASSWORD}@${MYSQL_HOST:-127.0.0.1}:3306/bisheng_gateway?charset=utf8mb4"
+    target_url: "dm+dmPython://BISHENG_GATEWAY:${DM_GATEWAY_PASSWORD}@${DM_HOST:-192.168.107.9}:5236/BISHENG_GATEWAY"
+
+  openfga:
+    source_url: "mysql+pymysql://root:${MYSQL_PASSWORD}@${MYSQL_HOST:-127.0.0.1}:3306/openfga?charset=utf8mb4"
+    target_url: "dm+dmPython://OPENFGA:${DM_OPENFGA_PASSWORD}@${DM_HOST:-192.168.107.9}:5236/OPENFGA"
+    # goose_db_version (openfga's goose migration-version table) is skipped
+    # by default — it is owned by `openfga migrate` on the DM side.

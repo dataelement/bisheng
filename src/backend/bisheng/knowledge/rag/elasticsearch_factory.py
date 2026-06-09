@@ -1,13 +1,11 @@
-from typing import Optional, List, Dict
-
-from elasticsearch import Elasticsearch, AsyncElasticsearch
+from elasticsearch import AsyncElasticsearch, Elasticsearch
 
 from bisheng.common.schemas.rag_schema import RagMetadataFieldSchema
 from bisheng.common.services.config_service import settings
-from bisheng.core.vectorstore import ElasticsearchStore, AsyncElasticsearchStore, BM25Strategy, AsyncBM25Strategy
+from bisheng.core.vectorstore import AsyncBM25Strategy, AsyncElasticsearchStore, BM25Strategy, ElasticsearchStore
 
 
-def generate_metadata_mappings(metadata_schemas: Optional[List[RagMetadataFieldSchema]]):
+def generate_metadata_mappings(metadata_schemas: list[RagMetadataFieldSchema] | None):
     """
     Generate Elasticsearch metadata mappings from RagMetadataFieldSchema list.
     Args:
@@ -16,27 +14,29 @@ def generate_metadata_mappings(metadata_schemas: Optional[List[RagMetadataFieldS
     Returns:
 
     """
-    metadata_mappings: Optional[Dict[str, any]] = None
+    metadata_mappings: dict[str, any] | None = None
     for schema in metadata_schemas or []:
         if metadata_mappings is None:
             metadata_mappings = {}
-        if schema.field_type == 'text':
-            metadata_mappings[schema.field_name] = {'type': 'text',
-                                                    'fields': {'keyword': {'type': 'keyword', 'ignore_above': 256}}}
-        elif schema.field_type == 'boolean':
-            metadata_mappings[schema.field_name] = {'type': 'boolean'}
-        elif schema.field_type == 'int8' or schema.field_type == 'int16':
-            metadata_mappings[schema.field_name] = {'type': 'short'}
-        elif schema.field_type == 'int32':
-            metadata_mappings[schema.field_name] = {'type': 'integer'}
-        elif schema.field_type == 'int64':
-            metadata_mappings[schema.field_name] = {'type': 'long'}
-        elif schema.field_type == 'float':
-            metadata_mappings[schema.field_name] = {'type': 'float'}
-        elif schema.field_type == 'double':
-            metadata_mappings[schema.field_name] = {'type': 'double'}
-        elif schema.field_type == 'json':
-            metadata_mappings[schema.field_name] = {'type': 'flattened'}
+        if schema.field_type == "text":
+            metadata_mappings[schema.field_name] = {
+                "type": "text",
+                "fields": {"keyword": {"type": "keyword", "ignore_above": 256}},
+            }
+        elif schema.field_type == "boolean":
+            metadata_mappings[schema.field_name] = {"type": "boolean"}
+        elif schema.field_type == "int8" or schema.field_type == "int16":
+            metadata_mappings[schema.field_name] = {"type": "short"}
+        elif schema.field_type == "int32":
+            metadata_mappings[schema.field_name] = {"type": "integer"}
+        elif schema.field_type == "int64":
+            metadata_mappings[schema.field_name] = {"type": "long"}
+        elif schema.field_type == "float":
+            metadata_mappings[schema.field_name] = {"type": "float"}
+        elif schema.field_type == "double":
+            metadata_mappings[schema.field_name] = {"type": "double"}
+        elif schema.field_type == "json":
+            metadata_mappings[schema.field_name] = {"type": "flattened"}
 
     return metadata_mappings
 
@@ -47,16 +47,17 @@ class ElasticsearchFactory:
         """Initialize an ElasticsearchStore vectorstore for keywords."""
         es_conf = settings.get_vectors_conf().elasticsearch
 
-        metadata_schemas: Optional[List[RagMetadataFieldSchema]] = kwargs.pop('metadata_schemas', None)
+        metadata_schemas: list[RagMetadataFieldSchema] | None = kwargs.pop("metadata_schemas", None)
 
         metadata_mappings = generate_metadata_mappings(metadata_schemas)
 
         es_client = ElasticsearchStore(
             index_name=index_name,
             strategy=BM25Strategy(),
-            es_connection=Elasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify),
+            # langchain-elasticsearch 1.0 renamed `es_connection` -> `client`.
+            client=Elasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify),
             metadata_mappings=metadata_mappings,
-            **kwargs
+            **kwargs,
         )
         return es_client
 
@@ -65,15 +66,16 @@ class ElasticsearchFactory:
         """Asynchronously initialize an ElasticsearchStore vectorstore for keywords."""
         es_conf = settings.get_vectors_conf().elasticsearch
 
-        metadata_schemas: Optional[List[RagMetadataFieldSchema]] = kwargs.pop('metadata_schemas', None)
+        metadata_schemas: list[RagMetadataFieldSchema] | None = kwargs.pop("metadata_schemas", None)
 
         metadata_mappings = generate_metadata_mappings(metadata_schemas)
 
         es_client = AsyncElasticsearchStore(
             index_name=index_name,
             strategy=AsyncBM25Strategy(),
-            es_connection=AsyncElasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify),
+            # langchain-elasticsearch 1.0 renamed `es_connection` -> `client`.
+            client=AsyncElasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify),
             metadata_mappings=metadata_mappings,
-            **kwargs
+            **kwargs,
         )
         return es_client

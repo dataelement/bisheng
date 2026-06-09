@@ -5,12 +5,13 @@ type BrandAssetKey =
     | "headerLogoLight"
     | "headerLogoDark";
 
-const ABSOLUTE_URL_PATTERN = /^(https?:|data:|blob:)/i;
+const ABSOLUTE_URL_PATTERN = /^(https?:|data:|blob:|\/\/)/i;
 
 export function withBrandBaseUrl(url = "") {
     if (!url) return "";
     if (ABSOLUTE_URL_PATTERN.test(url)) return url;
     const baseUrl = (__APP_ENV__.BASE_URL || "").replace(/\/$/, "");
+    if (baseUrl && (url === baseUrl || url.startsWith(`${baseUrl}/`))) return url;
     const normalizedUrl = url.startsWith("/") ? url : `/${url}`;
     return `${baseUrl}${normalizedUrl}`;
 }

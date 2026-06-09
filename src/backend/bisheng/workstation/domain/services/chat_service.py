@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import Request
 from fastapi.responses import StreamingResponse
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
 from loguru import logger

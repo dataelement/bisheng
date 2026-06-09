@@ -9,8 +9,8 @@ import re
 from collections import Counter
 from typing import (Any, Iterable, List, Optional)
 
-from langchain.docstore.document import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_classic.docstore.document import Document
+from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
 

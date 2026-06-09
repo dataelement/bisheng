@@ -21,6 +21,7 @@
 | —（无新增） | F029-knowledge-qa-permission-filter | 仅读取/调用现有 KnowledgeSpace / Folder / KnowledgeFile / MessageCitation；不引入新领域对象 |
 | —（无新增） | F030-knowledge-resource-unified-api | v2 filelib 统一对外 API；仅经由现有 `KnowledgeService` / `KnowledgeSpaceService` 读写 Knowledge / KnowledgeFile / KnowledgeSpace，不引入新领域对象、不新增 DAO 入口 |
 | ChannelInfoSourceSubscription（`channel_info_source` 行生命周期 + 情报服务订阅副作用） | F031-channel-source-subscription-reconcile | 订阅意图唯一真相 = 租户内 `channel.source_list` 并集；`channel_info_source` 行存在 ⟺ 已订阅，行与外部订阅态同生共死；拥有订阅/退订情报服务的调用时机与每日对账写行为。仅读取 `Channel.source_list`，不拥有 `Channel` 本身，不拥有 F026 的频道授权/`space_channel_member` channel 字段 |
+| —（无新增） | F032-ofd-upload-support | 仅在现有 RAG 解析链路（`FileExtensionMap` / loader / 预览对象）上新增 `ofd` 扩展名分支：OFD 转 PDF 后复用既有 PDF 解析/预览/检索；不引入新领域对象、不新增 DAO，不改动既有扩展名的处理路径 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -60,6 +61,7 @@
 | F029-knowledge-qa-permission-filter | — | 仅复用现有 ReBAC `list_accessible_ids` + Fine-grained `view_file` 解析；不依赖其他 v2.6.0 Feature |
 | F030-knowledge-resource-unified-api | F027, F029 | 列表/文件列表沿用 F027 cursor 协议（INV-6）；代用户检索 `user_id` 闭合 F029 遗留的 RPC 越权口子（对齐 INV-7） |
 | F031-channel-source-subscription-reconcile | F026 | 与 F026 同改 `channel_service.py` 但领域解耦（F026 拥有频道授权/`space_channel_member` channel 字段，F031 拥有 `channel_info_source` 订阅生命周期）；缺陷收敛型，不新增表、不新增对外 API、不新增错误码（沿用 190 段 19007） |
+| F032-ofd-upload-support | — | 仅在现有 RAG 解析链路新增 `ofd` 扩展名分支（OFD→PDF 后复用 PDF 解析/预览）；不依赖其他 v2.6.0 Feature，不新增领域对象/表/对外 API；新增 109 段错误码 `OfdConvertError`(10917) |
 
 ---
 
@@ -73,6 +75,7 @@
 | 190 | channel / bisheng_information | F026 沿用现有 `common/errcode/channel.py`，扩展频道授权错误码时不得与既有 190xx 冲突 |
 | 120 | workstation | F028 沿用现有 `common/errcode/workstation.py`，会话导出 / 导入知识空间错误码段位 12060-12079，不得与既有 1204X / 1205X 冲突 |
 | 109 | knowledge | F030 沿用现有 `common/errcode/knowledge.py`，新增 `KnowledgeTypeNotSupportedError`(10962)；复用 10900/10901/10991。180 (knowledge_space) 复用 18001/18010/18040 |
+| 109 | knowledge | F032 沿用现有 `common/errcode/knowledge.py`，新增 `OfdConvertError`(10917)；不得与既有 10915/10916/10962 冲突 |
 
 ---
 
@@ -87,3 +90,4 @@
 | 2026-05-30 | 登记 F028 工作台会话导出 / 导入知识空间：不新增领域对象，不新增不变量；扩展 120 (workstation) 错误码段位 12060-12079；复用 `KnowledgeSpaceService.add_file` 与 `AddToKnowledgeModal` | F028 |
 | 2026-06-02 | 登记 F030 知识资源统一对外 API（v2 filelib 改造）：表 1 标注"无新增领域对象"、表 3 追加依赖 F027/F029；新增模块 109 错误码 `KnowledgeTypeNotSupportedError`(10962)；列表/文件列表遵循 INV-6 cursor 协议（PRD 同步改造）；代用户检索 `user_id` 对齐 INV-7；个人库 type=2 对外不暴露但枚举保留（workstation/linsight 内部继续使用）；未新增不变量 | F030 |
 | 2026-06-04 | 登记 F031 频道信息源订阅状态对账：表 1 新增 `ChannelInfoSourceSubscription` 领域归属（订阅意图真相 = `channel.source_list` 并集，`channel_info_source` 为物化视图）、表 3 追加依赖 F026；订阅同步即时、退订改每日对账驱动；不新增表/对外 API/错误码（沿用 190 段 19007）；未新增不变量 | F031 |
+| 2026-06-08 | 登记 F032 全平台 OFD 上传支持：表 1 标注"无新增领域对象"（仅在 RAG 解析链路加 `ofd` 分支，OFD→PDF 后复用 PDF 解析/预览）、表 3 追加（无依赖）；新增 109 段错误码 `OfdConvertError`(10917)；未新增不变量、未新增表/对外 API | F032 |

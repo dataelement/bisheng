@@ -115,10 +115,13 @@ def sync_bisheng_model_limit_check(self: 'BishengBase'):
             raise Exception(f'{self.server_info.name}/{self.model_info.model_name} Quota used up')
 
 
-def get_token_from_usage(token_usage: Dict[str, Any]) -> tuple[int, int, int, int]:
+def get_token_from_usage(token_usage: Optional[Dict[str, Any]]) -> tuple[int, int, int, int]:
     """
     FROMtoken_usageGet in DictionarytokenUsage
     """
+    # token_usage may be None for a partial/cancelled stream result.
+    if not token_usage:
+        return 0, 0, 0, 0
     input_token = token_usage.get('input_tokens', 0) or token_usage.get('prompt_tokens', 0)
     output_token = token_usage.get('output_tokens', 0) or token_usage.get('completion_tokens', 0)
     cache_token = token_usage.get('cached_token', 0) or token_usage.get("prompt_tokens_details", {}).get(
@@ -134,7 +137,9 @@ def parse_token_usage(result: Any) -> tuple[int, int, int, int]:
     input_token, output_token, cache_token, total_token = 0, 0, 0, 0
     if isinstance(result, ChatResult):
         for generation in result.generations:
-            token_usage = generation.generation_info.get('token_usage', {}) or generation.message.response_metadata.get(
+            generation_info = generation.generation_info or {}
+            response_metadata = generation.message.response_metadata or {}
+            token_usage = generation_info.get('token_usage', {}) or response_metadata.get(
                 'token_usage', {}) or generation.message.usage_metadata
             tmp1, tmp2, tmp3, tmp4 = get_token_from_usage(token_usage)
             input_token += tmp1
@@ -142,7 +147,9 @@ def parse_token_usage(result: Any) -> tuple[int, int, int, int]:
             cache_token += tmp3
             total_token += tmp4
     elif isinstance(result, ChatGenerationChunk):
-        token_usage = result.message.response_metadata.get('token_usage', {}) or result.generation_info.get(
+        generation_info = result.generation_info or {}
+        response_metadata = result.message.response_metadata or {}
+        token_usage = response_metadata.get('token_usage', {}) or generation_info.get(
             'token_usage', {}) or result.message.usage_metadata
         input_token, output_token, cache_token, total_token = get_token_from_usage(token_usage)
     else:

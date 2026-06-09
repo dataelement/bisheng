@@ -1,6 +1,6 @@
 # Feature: 企业微信组织同步 Provider
 
-**关联 PRD**: [2.5 多租户需求文档.md §9.2 企业微信 Provider 对接详述](../../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20多租户需求文档.md#92-企业微信-provider-对接详述本期核心)
+**关联 PRD**: [2.5 多租户需求文档.md §9.2 企业微信 Provider 对接详述](../../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20多租户需求文档.md#92-企业微信-provider-对接详述本期核心)
 **关联基线**: [v2.5.0/F009-org-sync spec.md](../../v2.5.0/009-org-sync/spec.md)
 **优先级**: P0
 **所属版本**: v2.5.1（编号延续上一版 F020；模块职责属于 v2.5.0 org-sync 体系的 Provider 扩展）
@@ -360,5 +360,5 @@ pages/SystemPage/components/OrgSync/
 
 - 版本契约: [features/v2.5.1/release-contract.md](../release-contract.md)（写 spec 前必须先阅读）
 - 基线 Feature: [features/v2.5.0/009-org-sync/spec.md](../../v2.5.0/009-org-sync/spec.md)
-- PRD: [2.5 多租户需求文档.md §9.2](../../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20多租户需求文档.md#92-企业微信-provider-对接详述本期核心)
+- PRD: [2.5 多租户需求文档.md §9.2](../../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20多租户需求文档.md#92-企业微信-provider-对接详述本期核心)
 - 企微开放文档: https://developer.work.weixin.qq.com/document/path/90208

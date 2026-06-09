@@ -54,14 +54,14 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
  * Prefer `getAllowedExtensions(enableEtl4lm)` for runtime-correct lists.
  */
 export const ALLOWED_EXTENSIONS = [
-    "pdf", "txt", "docx", "ppt", "pptx", "md", "html",
+    "pdf", "ofd", "txt", "docx", "ppt", "pptx", "md", "html",
     "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
     "wps", "dps", "et",
 ] as const;
 
 /** Subset used when ETL4LM is NOT deployed — drops images. */
 const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
-    "pdf", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
+    "pdf", "ofd", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
 ];
 
 /**
@@ -126,6 +126,9 @@ export function getFileTypeFromName(name: string): FileType {
     const ext = name.split(".").pop()?.toLowerCase();
     switch (ext) {
         case "pdf": return FileType.PDF;
+        // OFD is converted to PDF; its preview is a PDF, so treat it as PDF for
+        // icon + viewer routing.
+        case "ofd": return FileType.PDF;
         case "doc": return FileType.DOC;
         case "docx": return FileType.DOCX;
         case "xls": return FileType.XLS;

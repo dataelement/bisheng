@@ -1,8 +1,8 @@
 import asyncio
 from typing import Any, Callable, Dict, List, Union
 
-from langchain.callbacks.manager import Callbacks
-from langchain.chains.router.base import Route, RouterChain
+from langchain_classic.callbacks.manager import Callbacks
+from langchain_classic.chains.router.base import Route, RouterChain
 
 
 class RuleBasedRouter(RouterChain):

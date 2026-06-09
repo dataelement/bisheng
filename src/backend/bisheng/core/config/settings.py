@@ -599,7 +599,6 @@ class Settings(BaseModel):
     utilities: dict = {}
     input_output: dict = {}
     output_parsers: dict = {}
-    autogen_roles: dict = {}
     dev: bool = False
     environment: Union[dict, str] = "dev"
     # ↑↑↑ before config for langchain flow, will be deprecated

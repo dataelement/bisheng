@@ -3,7 +3,7 @@
 > **前置步骤**：本文档编写前必须已完成 Spec Discovery（架构师提问），
 > 确保 PRD 中的不确定性已与用户对齐。
 
-**关联 PRD**: [2.5 权限管理体系改造 PRD §3.3](../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md)、[2.5 技术方案 §4](../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20技术方案.md)
+**关联 PRD**: [2.5 权限管理体系改造 PRD §3.3](../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md)、[2.5 技术方案 §4](../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20技术方案.md)
 **优先级**: P1
 **所属版本**: v2.5.0
 
@@ -557,6 +557,6 @@ namespace: `permission`
 ## 相关文档
 
 - 版本契约: [features/v2.5.0/release-contract.md](../release-contract.md)
-- 权限改造 PRD: [docs/PRD/2.5 权限管理体系改造 PRD](../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md)
-- ReBAC 技术方案: [docs/PRD/2.5 技术方案](../../docs/PRD/2.5%20权限管理体系改造%20PRD/2.5%20技术方案.md)
+- 权限改造 PRD: [docs/archive/2.5 权限管理体系改造 PRD](../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20权限管理体系改造%20PRD.md)
+- ReBAC 技术方案: [docs/archive/2.5 技术方案](../../docs/archive/2.5%20权限管理体系改造%20PRD/2.5%20技术方案.md)
 - F004 ReBAC 核心 spec: [features/v2.5.0/004-rebac-core/spec.md](../004-rebac-core/spec.md)

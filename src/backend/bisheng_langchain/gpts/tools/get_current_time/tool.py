@@ -2,7 +2,7 @@ from datetime import datetime
 
 import pytz
 from pydantic import BaseModel, Field
-from langchain.tools import tool
+from langchain_classic.tools import tool
 
 
 class GetCurTimeInput(BaseModel):

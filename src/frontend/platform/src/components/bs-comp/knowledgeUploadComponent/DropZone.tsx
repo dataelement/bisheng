@@ -12,8 +12,8 @@ export default function DropZone({ onDrop }) {
 
     // Define supported file formats (for display purposes only, not for filtering)
     const supportedFormats = appConfig.enableEtl4lm
-        ? ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP', ...xinChuangFormats]
-        : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', ...xinChuangFormats];
+        ? ['.PDF', '.OFD', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP', ...xinChuangFormats]
+        : ['.PDF', '.OFD', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', ...xinChuangFormats];
     const allowedExts = new Set(
         supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
     );

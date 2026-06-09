@@ -3,12 +3,12 @@
 import importlib
 from typing import Any, Type
 
-from langchain.agents import Agent
-from langchain.base_language import BaseLanguageModel
-from langchain.chains.base import Chain
-from langchain.chat_models.base import BaseChatModel
-from langchain.prompts import PromptTemplate
-from langchain.tools import BaseTool
+from langchain_classic.agents import Agent
+from langchain_classic.base_language import BaseLanguageModel
+from langchain_classic.chains.base import Chain
+from langchain_classic.chat_models.base import BaseChatModel
+from langchain_classic.prompts import PromptTemplate
+from langchain_classic.tools import BaseTool
 
 
 def import_module(module_path: str) -> Any:
@@ -57,7 +57,6 @@ def import_by_type(_type: str, name: str) -> Any:
         'utilities': import_utility,
         'output_parsers': import_output_parser,
         'retrievers': import_retriever,
-        'autogenRoles': import_autogenRoles,
         'inputOutput': import_inputoutput,
     }
     if _type == 'llms':
@@ -80,7 +79,7 @@ def import_inputoutput(input_output: str) -> Any:
 
 def import_output_parser(output_parser: str) -> Any:
     """Import output parser from output parser name"""
-    return import_module(f'from langchain.output_parsers import {output_parser}')
+    return import_module(f'from langchain_classic.output_parsers import {output_parser}')
 
 
 def import_chat_llm(llm: str) -> BaseChatModel:
@@ -95,16 +94,12 @@ def import_chain_contribute_llm(llm: str) -> BaseChatModel:
 
 def import_retriever(retriever: str) -> Any:
     """Import retriever from retriever name"""
-    return import_module(f'from langchain.retrievers import {retriever}')
-
-
-def import_autogenRoles(autogen: str) -> Any:
-    return import_module(f'from bisheng_langchain.autogen_role import {autogen}')
+    return import_module(f'from langchain_classic.retrievers import {retriever}')
 
 
 def import_memory(memory: str) -> Any:
     """Import memory from memory name"""
-    return import_module(f'from langchain.memory import {memory}')
+    return import_module(f'from langchain_classic.memory import {memory}')
 
 
 def import_prompt(prompt: str) -> Type[PromptTemplate]:

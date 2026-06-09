@@ -6,8 +6,8 @@ import type { FilterGroup, FilterRelation } from "../CreateChannel/FilterConditi
 import type { SubChannelData } from "../CreateChannel/SubChannelBlock";
 import { generateUUID } from "~/utils";
 
-const MAX_CHANNEL_NAME = 10;
-const MAX_SUB_CHANNELS = 6;
+const MAX_CHANNEL_NAME = 30;
+const MAX_SUB_CHANNELS = 10;
 
 type VisibilityType = "private" | "review" | "public";
 type PublishToSquare = "yes" | "no";

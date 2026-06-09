@@ -3,11 +3,12 @@ from bisheng.telemetry_search.api.router import router as telemetry_search_route
 from fastapi import APIRouter
 
 from bisheng.api.v1 import (assistant_router, audit_router, chat_router,
-                            endpoints_router, evaluation_router,
+                            endpoints_router,
                             group_router, mark_router,
                             report_router, tag_router,
                             user_router, variable_router, workflow_router,
                             workstation_router, tool_router, invite_code_router, skillcenter_router, flows_router)
+from bisheng.evaluation.api.router import router as evaluation_router
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router

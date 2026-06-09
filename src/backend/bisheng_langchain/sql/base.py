@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from langchain.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
-from langchain.chains.llm import LLMChain
-from langchain.prompts.prompt import PromptTemplate
+from langchain_classic.callbacks.manager import AsyncCallbackManagerForChainRun, CallbackManagerForChainRun
+from langchain_classic.chains.llm import LLMChain
+from langchain_classic.prompts.prompt import PromptTemplate
 from langchain_community.tools.sql_database.prompt import QUERY_CHECKER
 from langchain_experimental.sql import SQLDatabaseChain as SQLDatabaseChainExperimental
 
@@ -19,7 +19,7 @@ class SQLDatabaseChain(SQLDatabaseChainExperimental):
         .. code-block:: python
 
             from langchain_experimental.sql import SQLDatabaseChain
-            from langchain.llms import OpenAI, SQLDatabase
+            from langchain_classic.llms import OpenAI, SQLDatabase
             db = SQLDatabase(...)
             db_chain = SQLDatabaseChain.from_llm(OpenAI(), db)
 

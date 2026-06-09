@@ -1,6 +1,6 @@
 from importlib import metadata
 
-# from bisheng.processing.process import load_flow_from_json  # noqa: E402
+# from bisheng.processing.process import load_flow_from_json
 
 try:
     # SetujuciGo to automatic modification

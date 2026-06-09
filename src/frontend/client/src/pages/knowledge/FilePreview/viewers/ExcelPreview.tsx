@@ -495,7 +495,7 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
             <div className="flex flex-col relative flex-1 min-h-0">
                 <div
                     ref={tableContainerRef}
-                    className="flex-1 min-h-0 border border-gray-200 bg-white relative overflow-auto"
+                    className="excel-scroll flex-1 min-h-0 border border-gray-200 bg-white relative overflow-auto"
                     style={{
                         width: "100%",
                         overflowX: "auto",

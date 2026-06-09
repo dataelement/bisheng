@@ -1,6 +1,6 @@
 from typing import Any, Type, List, Optional
 
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.documents import Document, BaseDocumentCompressor
 from langchain_core.language_models import BaseChatModel
 from langchain_core.prompts import SystemMessagePromptTemplate, HumanMessagePromptTemplate, ChatPromptTemplate

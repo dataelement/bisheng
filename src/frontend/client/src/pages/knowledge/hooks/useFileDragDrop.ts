@@ -10,10 +10,72 @@ import { useLocalize } from "~/hooks";
 interface UseFileDragDropOptions {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     onUploadFile: (files?: FileList | File[]) => void;
+    /**
+     * Folder drop handler. When provided, a dropped directory is read one level
+     * deep (matching the folder-picker button) and handed off here. When omitted,
+     * dropped folders are ignored.
+     */
+    onUploadFolder?: (
+        files: File[],
+        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+    ) => void;
     /** Maximum single file size in MB (from env config). Falls back to DEFAULT_MAX_FILE_SIZE_MB. */
     maxFileSizeMB?: number;
     /** Whether ETL4LM service is deployed; controls which extensions/MIME types are accepted. */
     enableEtl4lm?: boolean;
+}
+
+/**
+ * Read the *direct child files* of a dropped directory (single-level, matching
+ * the folder-picker button). Each returned File gets a synthetic
+ * `webkitRelativePath` of `"<dir>/<file>"` so it flows through the existing
+ * folder-upload pipeline (getRootFolderName / filterFolderUploadFiles) unchanged.
+ * Sub-directories are ignored. `readEntries` returns in batches, so it must be
+ * called repeatedly until it yields an empty list.
+ */
+function readTopLevelFolderFiles(dirEntry: FileSystemDirectoryEntry): Promise<File[]> {
+    return new Promise((resolve) => {
+        const reader = dirEntry.createReader();
+        const filePromises: Promise<File | null>[] = [];
+        const finish = () =>
+            Promise.all(filePromises).then((files) =>
+                resolve(files.filter((f): f is File => f != null)),
+            );
+        const readBatch = () => {
+            reader.readEntries((batch) => {
+                if (batch.length === 0) {
+                    finish();
+                    return;
+                }
+                for (const ent of batch) {
+                    if (ent.isFile) {
+                        const fileEntry = ent as FileSystemFileEntry;
+                        filePromises.push(
+                            new Promise<File | null>((res) => {
+                                fileEntry.file(
+                                    (f) => {
+                                        try {
+                                            Object.defineProperty(f, "webkitRelativePath", {
+                                                value: `${dirEntry.name}/${f.name}`,
+                                                configurable: true,
+                                            });
+                                        } catch {
+                                            // Property locked on this engine; the folder filter
+                                            // then falls back to file.name and drops it — safe.
+                                        }
+                                        res(f);
+                                    },
+                                    () => res(null),
+                                );
+                            }),
+                        );
+                    }
+                }
+                readBatch();
+            }, finish);
+        };
+        readBatch();
+    });
 }
 
 /**
@@ -23,6 +85,7 @@ interface UseFileDragDropOptions {
 export function useFileDragDrop({
     onDragStateChange,
     onUploadFile,
+    onUploadFolder,
     maxFileSizeMB,
     enableEtl4lm = false,
 }: UseFileDragDropOptions) {
@@ -91,6 +154,34 @@ export function useFileDragDrop({
             e.stopPropagation();
             dragCounter.current = 0;
 
+            // Folder drop: detect a dropped directory via the Entries API. The
+            // entries must be read out synchronously here — the DataTransferItemList
+            // is invalidated once this handler returns, though the FileSystemEntry
+            // objects it yields stay valid for the async directory read.
+            const items = e.dataTransfer.items;
+            if (onUploadFolder && items && items.length > 0) {
+                let dirEntry: FileSystemDirectoryEntry | null = null;
+                for (let i = 0; i < items.length; i++) {
+                    const entry = items[i].webkitGetAsEntry?.();
+                    if (entry?.isDirectory) {
+                        dirEntry = entry as FileSystemDirectoryEntry;
+                        break;
+                    }
+                }
+                if (dirEntry) {
+                    // handleUploadFolder owns count cap / hidden / dup-name / silent
+                    // filtering, so just read one level deep and hand the files over.
+                    // Any loose files in the same drop are ignored (button parity: one folder).
+                    onDragStateChange?.(false);
+                    void readTopLevelFolderFiles(dirEntry).then((files) => {
+                        if (files.length > 0) {
+                            onUploadFolder(files, { allowedExtensions: allowedExt, maxSizeMB: limitMB });
+                        }
+                    });
+                    return;
+                }
+            }
+
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
                 const filesList = Array.from(e.dataTransfer.files);
                 if (filesList.length > MAX_UPLOAD_COUNT) {
@@ -119,7 +210,7 @@ export function useFileDragDrop({
                 onDragStateChange?.(false);
             }
         },
-        [onDragStateChange, onUploadFile, limitBytes, limitMB, allowedExt, localize]
+        [onDragStateChange, onUploadFile, onUploadFolder, limitBytes, limitMB, allowedExt, localize]
     );
 
     return {
