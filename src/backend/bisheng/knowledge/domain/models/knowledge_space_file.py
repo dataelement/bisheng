@@ -1,27 +1,42 @@
-from typing import List, Optional, Sequence
+from collections.abc import Sequence
 
 from sqlalchemy import case, func, or_, text, update
-from sqlmodel import select, col
+from sqlmodel import col, select
 
 from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFile, KnowledgeFileStatus, \
-    FileType, FileSource
-
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileSource,
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+)
 
 # F027 AD-14: file extension priority for "file_type" sort order.
 # Same 15-WHEN ranking used by `SpaceFileDao.order_field_text`'s SQL CASE.
 # Files not matching any of these (folders, unknown extensions) get rank 999.
-_EXT_PRIORITIES: List[tuple] = [
-    ('pdf', 1), ('docx', 2), ('doc', 3),
-    ('xlsx', 4), ('xls', 5), ('csv', 6),
-    ('pptx', 7), ('ppt', 8),
-    ('jpg', 9), ('jpeg', 10), ('png', 11), ('bmp', 12),
-    ('md', 13), ('txt', 14), ('html', 15),
+_EXT_PRIORITIES: list[tuple] = [
+    ("pdf", 1),
+    ("docx", 2),
+    ("doc", 3),
+    ("xlsx", 4),
+    ("xls", 5),
+    ("csv", 6),
+    ("pptx", 7),
+    ("ppt", 8),
+    ("jpg", 9),
+    ("jpeg", 10),
+    ("png", 11),
+    ("bmp", 12),
+    ("md", 13),
+    ("txt", 14),
+    ("html", 15),
+    ("ofd", 16),
 ]
 _EXT_RANK_FALLBACK = 999
 
 
-def _compute_ext_rank_python(file_name: Optional[str]) -> int:
+def _compute_ext_rank_python(file_name: str | None) -> int:
     """Python mirror of the SQL CASE WHEN ext_rank ladder (F027 AD-14).
 
     Must agree exactly with ``_compute_ext_rank_case_when()`` so cursor
@@ -32,7 +47,7 @@ def _compute_ext_rank_python(file_name: Optional[str]) -> int:
         return _EXT_RANK_FALLBACK
     lowered = file_name.lower()
     for ext, rank in _EXT_PRIORITIES:
-        if lowered.endswith('.' + ext):
+        if lowered.endswith("." + ext):
             return rank
     return _EXT_RANK_FALLBACK
 
@@ -43,34 +58,32 @@ def _compute_ext_rank_case_when():
     Returns a Case expression that resolves to the same integer as
     ``_compute_ext_rank_python()`` for any given ``KnowledgeFile.file_name``.
     """
-    whens = [
-        (func.lower(KnowledgeFile.file_name).like(f'%.{ext}'), rank)
-        for ext, rank in _EXT_PRIORITIES
-    ]
+    whens = [(func.lower(KnowledgeFile.file_name).like(f"%.{ext}"), rank) for ext, rank in _EXT_PRIORITIES]
     return case(*whens, else_=_EXT_RANK_FALLBACK)
 
 
 class SpaceFileDao(KnowledgeFileDao):
-    """ DAO for space folder and file operations in the knowledge_file table """
+    """DAO for space folder and file operations in the knowledge_file table"""
 
     @staticmethod
     def _root_path_filter():
         # Treat both empty string and NULL as root-level items. Some historical
         # rows and upload paths persist NULL, while newer writes use "".
         return or_(
-            KnowledgeFile.file_level_path == '',
+            KnowledgeFile.file_level_path == "",
             KnowledgeFile.file_level_path.is_(None),
         )
 
     @classmethod
-    async def count_folder_by_name(cls, knowledge_id: int, folder_name: str, file_level_path: str,
-                                   exclude_id: Optional[int] = None) -> int:
-        """ Count folders with the same name in the same directory level """
+    async def count_folder_by_name(
+        cls, knowledge_id: int, folder_name: str, file_level_path: str, exclude_id: int | None = None
+    ) -> int:
+        """Count folders with the same name in the same directory level"""
         statement = select(func.count(KnowledgeFile.id)).where(
             KnowledgeFile.knowledge_id == knowledge_id,
             KnowledgeFile.file_type == 0,
             KnowledgeFile.file_name == folder_name,
-            KnowledgeFile.file_level_path == file_level_path
+            KnowledgeFile.file_level_path == file_level_path,
         )
         if exclude_id is not None:
             statement = statement.where(KnowledgeFile.id != exclude_id)
@@ -78,13 +91,12 @@ class SpaceFileDao(KnowledgeFileDao):
             return await session.scalar(statement)
 
     @classmethod
-    async def count_file_by_name(cls, knowledge_id: int, file_name: str,
-                                 exclude_id: Optional[int] = None) -> int:
-        """ Count files with the same name in the space (duplicate check on rename) """
+    async def count_file_by_name(cls, knowledge_id: int, file_name: str, exclude_id: int | None = None) -> int:
+        """Count files with the same name in the space (duplicate check on rename)"""
         statement = select(func.count(KnowledgeFile.id)).where(
             KnowledgeFile.knowledge_id == knowledge_id,
             KnowledgeFile.file_type == 1,
-            KnowledgeFile.file_name == file_name
+            KnowledgeFile.file_name == file_name,
         )
         if exclude_id is not None:
             statement = statement.where(KnowledgeFile.id != exclude_id)
@@ -92,15 +104,13 @@ class SpaceFileDao(KnowledgeFileDao):
             return await session.scalar(statement)
 
     @classmethod
-    async def get_children_by_prefix(cls, knowledge_id: int, prefix: str, file_status: KnowledgeFileStatus = None) \
-            -> List[KnowledgeFile]:
-        """ Get all files/folders whose file_level_path starts with the given prefix """
+    async def get_children_by_prefix(
+        cls, knowledge_id: int, prefix: str, file_status: KnowledgeFileStatus = None
+    ) -> list[KnowledgeFile]:
+        """Get all files/folders whose file_level_path starts with the given prefix"""
         statement = select(KnowledgeFile).where(
             KnowledgeFile.knowledge_id == knowledge_id,
-            or_(
-                col(KnowledgeFile.file_level_path) == prefix,
-                col(KnowledgeFile.file_level_path).like(f"{prefix}/%")
-            )
+            or_(col(KnowledgeFile.file_level_path) == prefix, col(KnowledgeFile.file_level_path).like(f"{prefix}/%")),
         )
         if file_status is not None:
             statement = statement.where(KnowledgeFile.status == file_status.value)
@@ -109,19 +119,19 @@ class SpaceFileDao(KnowledgeFileDao):
 
     @classmethod
     async def async_list_children(
-            cls,
-            knowledge_id: int,
-            parent_id: Optional[int],
-            file_ids: Optional[List[int]] = None,
-            order_field: str = "file_type",
-            order_sort: str = "desc",
-            file_status: List[int] = None,
-            page: int = 1,
-            page_size: int = 20,
-            file_type: Optional[int] = None,
-            exclude_file_ids: Optional[List[int]] = None,
-            cursor: Optional[Sequence] = None,
-    ) -> List[KnowledgeFile]:
+        cls,
+        knowledge_id: int,
+        parent_id: int | None,
+        file_ids: list[int] | None = None,
+        order_field: str = "file_type",
+        order_sort: str = "desc",
+        file_status: list[int] = None,
+        page: int = 1,
+        page_size: int = 20,
+        file_type: int | None = None,
+        exclude_file_ids: list[int] | None = None,
+        cursor: Sequence | None = None,
+    ) -> list[KnowledgeFile]:
         """
         Async: List direct children (folders first, then files) under a given parent.
         When parent_id is None, returns root-level items (file_level_path == '').
@@ -132,7 +142,7 @@ class SpaceFileDao(KnowledgeFileDao):
         (other order_fields keep using OFFSET).
         """
         if parent_id is None:
-            exact_path = ''
+            exact_path = ""
             path_filter = cls._root_path_filter()
         else:
             parent = await KnowledgeFileDao.query_by_id(parent_id)
@@ -150,32 +160,30 @@ class SpaceFileDao(KnowledgeFileDao):
             filters.append(col(KnowledgeFile.id).notin_(exclude_file_ids))
 
         if file_status:
+            from sqlalchemy import and_, exists
             from sqlalchemy.orm import aliased
-            from sqlalchemy import exists, and_
+
             Descendant = aliased(KnowledgeFile)
-            folder_prefix = func.concat(exact_path, '/', KnowledgeFile.id)
+            folder_prefix = func.concat(exact_path, "/", KnowledgeFile.id)
             descendant_exists = exists().where(
                 Descendant.knowledge_id == knowledge_id,
                 Descendant.file_type == 1,
                 Descendant.status.in_(file_status),
                 or_(
                     Descendant.file_level_path == folder_prefix,
-                    Descendant.file_level_path.like(func.concat(folder_prefix, '/%'))
-                )
+                    Descendant.file_level_path.like(func.concat(folder_prefix, "/%")),
+                ),
             )
             status_filter = or_(
                 and_(KnowledgeFile.file_type == 1, KnowledgeFile.status.in_(file_status)),
                 and_(
                     KnowledgeFile.file_type == 0,
                     or_(KnowledgeFile.status.in_(file_status), descendant_exists),
-                )
+                ),
             )
             filters.append(status_filter)
 
-        statement = (
-            select(KnowledgeFile)
-            .where(*filters)
-        )
+        statement = select(KnowledgeFile).where(*filters)
 
         # F027: cursor-based keyset takes precedence over OFFSET.
         if cursor is not None and order_field == "file_type":
@@ -196,14 +204,10 @@ class SpaceFileDao(KnowledgeFileDao):
                 True,
                 True,
             )
-            statement = statement.where(
-                build_keyset_where(sort_cols, tuple(cursor), descending=descending)
-            )
+            statement = statement.where(build_keyset_where(sort_cols, tuple(cursor), descending=descending))
             if page_size:
                 statement = statement.limit(page_size)
-            statement = statement.order_by(
-                text(cls.order_field_text(order_field, order_sort))
-            )
+            statement = statement.order_by(text(cls.order_field_text(order_field, order_sort)))
         else:
             if page and page_size:
                 statement = statement.offset((page - 1) * page_size).limit(page_size)
@@ -224,15 +228,25 @@ class SpaceFileDao(KnowledgeFileDao):
             # Use LOWER(file_name) LIKE '%.<ext>' instead of SUBSTRING_INDEX —
             # the latter is MySQL-specific and not supported on DM8.
             ext_priorities = [
-                ('pdf', 1), ('docx', 2), ('doc', 3),
-                ('xlsx', 4), ('xls', 5), ('csv', 6),
-                ('pptx', 7), ('ppt', 8),
-                ('jpg', 9), ('jpeg', 10), ('png', 11), ('bmp', 12),
-                ('md', 13), ('txt', 14), ('html', 15),
+                ("pdf", 1),
+                ("docx", 2),
+                ("doc", 3),
+                ("xlsx", 4),
+                ("xls", 5),
+                ("csv", 6),
+                ("pptx", 7),
+                ("ppt", 8),
+                ("jpg", 9),
+                ("jpeg", 10),
+                ("png", 11),
+                ("bmp", 12),
+                ("md", 13),
+                ("txt", 14),
+                ("html", 15),
+                ("ofd", 16),
             ]
-            when_clauses = '\n                '.join(
-                f"WHEN LOWER(file_name) LIKE '%.{ext}' THEN {rank}"
-                for ext, rank in ext_priorities
+            when_clauses = "\n                ".join(
+                f"WHEN LOWER(file_name) LIKE '%.{ext}' THEN {rank}" for ext, rank in ext_priorities
             )
             order_text += f"""
             file_type {order_sort},
@@ -249,18 +263,18 @@ class SpaceFileDao(KnowledgeFileDao):
 
     @classmethod
     async def async_count_children(
-            cls,
-            knowledge_id: int,
-            parent_id: Optional[int],
-            file_ids: Optional[List[int]] = None,
-            file_status: List[int] = None,
+        cls,
+        knowledge_id: int,
+        parent_id: int | None,
+        file_ids: list[int] | None = None,
+        file_status: list[int] = None,
     ) -> int:
         """
         Async: Count direct children under a given parent.
         When parent_id is None, counts root-level items.
         """
         if parent_id is None:
-            exact_path = ''
+            exact_path = ""
             path_filter = cls._root_path_filter()
         else:
             parent = await KnowledgeFileDao.query_by_id(parent_id)
@@ -274,25 +288,26 @@ class SpaceFileDao(KnowledgeFileDao):
             filters.append(KnowledgeFile.id.in_(file_ids))
 
         if file_status:
+            from sqlalchemy import and_, exists
             from sqlalchemy.orm import aliased
-            from sqlalchemy import exists, and_
+
             Descendant = aliased(KnowledgeFile)
-            folder_prefix = func.concat(exact_path, '/', KnowledgeFile.id)
+            folder_prefix = func.concat(exact_path, "/", KnowledgeFile.id)
             descendant_exists = exists().where(
                 Descendant.knowledge_id == knowledge_id,
                 Descendant.file_type == FileType.FILE.value,
                 Descendant.status.in_(file_status),
                 or_(
                     Descendant.file_level_path == folder_prefix,
-                    Descendant.file_level_path.like(func.concat(folder_prefix, '/%'))
-                )
+                    Descendant.file_level_path.like(func.concat(folder_prefix, "/%")),
+                ),
             )
             status_filter = or_(
                 and_(KnowledgeFile.file_type == FileType.FILE.value, KnowledgeFile.status.in_(file_status)),
                 and_(
                     KnowledgeFile.file_type == FileType.DIR.value,
                     or_(KnowledgeFile.status.in_(file_status), descendant_exists),
-                )
+                ),
             )
             filters.append(status_filter)
 
@@ -302,34 +317,41 @@ class SpaceFileDao(KnowledgeFileDao):
 
     @classmethod
     async def get_user_total_file_size(cls, user_id: int) -> int:
-        """ Get total file size for all files in the knowledge space (excluding folders) """
+        """Get total file size for all files in the knowledge space (excluding folders)"""
         statement = select(func.sum(KnowledgeFile.file_size)).where(
             KnowledgeFile.user_id == user_id,
             KnowledgeFile.file_type == 1,
-            col(KnowledgeFile.file_source).in_([FileSource.SPACE_UPLOAD.value,
-                                                FileSource.CHANNEL.value]),
+            col(KnowledgeFile.file_source).in_([FileSource.SPACE_UPLOAD.value, FileSource.CHANNEL.value]),
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement) or 0
 
     @classmethod
-    async def update_records_update_time(cls, ids: List[int]):
+    async def update_records_update_time(cls, ids: list[int]):
         if not ids:
             return
-        statement = update(KnowledgeFile).where(
-            col(KnowledgeFile.id).in_(ids),
-        ).values(update_time=text("NOW()"))
+        statement = (
+            update(KnowledgeFile)
+            .where(
+                col(KnowledgeFile.id).in_(ids),
+            )
+            .values(update_time=text("NOW()"))
+        )
         async with get_async_db_session() as session:
             await session.execute(statement)
             await session.commit()
 
     @classmethod
-    def update_records_update_time_sync(cls, ids: List[int]):
+    def update_records_update_time_sync(cls, ids: list[int]):
         if not ids:
             return
-        statement = update(KnowledgeFile).where(
-            col(KnowledgeFile.id).in_(ids),
-        ).values(update_time=text("NOW()"))
+        statement = (
+            update(KnowledgeFile)
+            .where(
+                col(KnowledgeFile.id).in_(ids),
+            )
+            .values(update_time=text("NOW()"))
+        )
         with get_sync_db_session() as session:
             session.execute(statement)
             session.commit()
