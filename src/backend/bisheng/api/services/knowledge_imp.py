@@ -67,17 +67,8 @@ from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViola
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
 from bisheng.utils.exceptions import EtlException, FileParseException
-from bisheng_langchain.rag.extract_info import extract_title, async_extract_title
 from bisheng_langchain.text_splitter import ElemCharacterTextSplitter
 
-filetype_load_map = {
-    "txt": TextLoader,
-    "pdf": PyPDFLoader,
-    "html": BSHTMLLoader,
-    "md": TextLoader,
-    "docx": UnstructuredWordDocumentLoader,
-    "pptx": UnstructuredPowerPointLoader,
-}
 
 
 def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
