@@ -467,6 +467,36 @@ def _parse_tool_results(raw_output, tool_name: str):
 _WEB_SEARCH_TOOL_NAMES = {'web_search', 'search_web', 'bing_search', 'tavily_search'}
 
 
+def _extract_tool_error(raw_output) -> str | None:
+    """Return the error message when a tool produced an error observation.
+
+    When ``_handle_agent_tool_error`` swallows a failure, LangGraph emits a
+    ToolMessage with ``status='error'``. Surface that to the frontend so the
+    tool-call block can be rendered as failed, while the model still receives
+    the message as a normal observation.
+    """
+    if getattr(raw_output, 'status', None) == 'error':
+        content = getattr(raw_output, 'content', None)
+        return str(content) if content is not None else 'tool execution failed'
+    return None
+
+
+def _handle_agent_tool_error(e: Exception) -> str:
+    """Turn a tool execution error into ToolMessage content so the ReAct loop
+    keeps running instead of crashing the whole agent stream.
+
+    LangGraph's default ``handle_tool_errors`` (``_default_handle_tool_errors``)
+    only swallows ``ToolInvocationError`` (bad-args validation) and re-raises
+    everything else, so a genuine runtime failure (e.g. an upstream API
+    returning 403) propagates out of ``astream_events`` and aborts the chat.
+    Feeding the error back to the model as the tool's output lets the agent
+    react to it (retry, pick another tool, or tell the user) like a normal
+    observation.
+    """
+    logger.warning(f'[agent_chat] tool execution error fed back to model: {e!r}')
+    return f'工具执行失败: {e}'
+
+
 def _build_tool_meta(tool: BaseTool) -> dict:
     """Extract display_name + tool_type from a BaseTool for SSE frontend display.
 
@@ -1393,12 +1423,21 @@ async def _agent_stream_chat_completion(
 
             # ---- Step 5: execute ----
             if langchain_tools:
-                from langgraph.prebuilt import create_react_agent
+                from langgraph.prebuilt import ToolNode, create_react_agent
                 from langchain_core.runnables import RunnableConfig
+
+                # Wrap tools in a ToolNode whose error handler feeds tool
+                # failures back to the model as observations, so a single tool
+                # error never aborts the whole agent stream
+                # (see _handle_agent_tool_error).
+                tool_node = ToolNode(
+                    langchain_tools,
+                    handle_tool_errors=_handle_agent_tool_error,
+                )
 
                 agent = create_react_agent(
                     bisheng_llm,
-                    langchain_tools,
+                    tool_node,
                     prompt=sys_prompt,  # may be None
                 )
 
@@ -1498,7 +1537,7 @@ async def _agent_stream_chat_completion(
                             tool_event = events[idx]
                             results = _parse_tool_results(raw_output, tool_event.get('tool_name'))
                             tool_event['results'] = results
-                            tool_event['error'] = None
+                            tool_event['error'] = _extract_tool_error(raw_output)
                             tool_event['ended_at'] = ended_ms
                             if tool_event.get('started_at') is not None:
                                 tool_event['duration_ms'] = max(0, ended_ms - tool_event['started_at'])
@@ -1514,7 +1553,7 @@ async def _agent_stream_chat_completion(
                                 'tool_type': 'tool',
                                 'args': {},
                                 'results': results,
-                                'error': None,
+                                'error': _extract_tool_error(raw_output),
                                 'started_at': ended_ms,
                                 'ended_at': ended_ms,
                                 'duration_ms': 0,
