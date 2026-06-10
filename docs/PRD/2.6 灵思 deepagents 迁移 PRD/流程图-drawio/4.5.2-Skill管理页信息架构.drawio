@@ -1,0 +1,58 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="d1" name="4.5.2 Skill管理页信息架构">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="OP" value="顶部 操作区" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="260" height="400" as="geometry"/>
+        </mxCell>
+        <mxCell id="A1" value="上传 Skill" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="OP">
+          <mxGeometry x="30" y="40" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="A2" value="新建 Skill" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="OP">
+          <mxGeometry x="30" y="110" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="A3" value="编辑" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="OP">
+          <mxGeometry x="30" y="180" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="A4" value="删除" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="OP">
+          <mxGeometry x="30" y="250" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="A5" value="启用/停用 开关" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="OP">
+          <mxGeometry x="30" y="320" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="LS" value="左侧 列表区" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="540" y="60" width="280" height="340" as="geometry"/>
+        </mxCell>
+        <mxCell id="L0" value="搜索框" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="LS">
+          <mxGeometry x="40" y="40" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="L1" value="本租户自定义技能列表&lt;br&gt;名称·描述·启停状态&lt;br&gt;无分组" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="LS">
+          <mxGeometry x="40" y="180" width="200" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="DS" value="右侧 详情区" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="60" width="280" height="280" as="geometry"/>
+        </mxCell>
+        <mxCell id="D1" value="Preview 渲染视图" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="DS">
+          <mxGeometry x="40" y="50" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="D2" value="Source 原文视图" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="DS">
+          <mxGeometry x="40" y="170" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="eL0L1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L0" target="L1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eD1D2" value="切换" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="D1" target="D2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eLSDS" value="选中某 Skill" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="LS" target="DS">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eOPLS" value="作用于选中项" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="OP" target="LS">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
