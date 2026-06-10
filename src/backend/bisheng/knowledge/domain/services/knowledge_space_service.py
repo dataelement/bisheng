@@ -3147,6 +3147,298 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
         return updated_file
 
+    # ── Move (F034) ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _parent_ref_from_level_path(file_level_path: str, space_id: int) -> tuple[str, int]:
+        """Resolve the OpenFGA parent ref a file/folder currently hangs off of.
+
+        Empty path → the space root (knowledge_space); otherwise the last segment
+        of the level path is the immediate parent folder id.
+        """
+        segments = [p for p in (file_level_path or "").split("/") if p]
+        if segments:
+            return "folder", int(segments[-1])
+        return "knowledge_space", space_id
+
+    async def _replace_resource_parent_tuple(
+        self,
+        object_type: str,
+        object_id: int,
+        old_parent: tuple[str, int],
+        new_parent: tuple[str, int],
+    ) -> None:
+        """Atomically swap a resource's `parent` tuple (delete old, write new).
+
+        Inherited permissions (AC-09) recompute automatically from the new parent
+        via OpenFGA tupleToUserset — no manual re-grant. Directly-granted tuples
+        on the resource are untouched.
+        """
+        ops = []
+        if old_parent:
+            ops.append(
+                TupleOperation(
+                    action="delete",
+                    user=f"{old_parent[0]}:{old_parent[1]}",
+                    relation="parent",
+                    object=f"{object_type}:{object_id}",
+                )
+            )
+        ops.append(
+            TupleOperation(
+                action="write",
+                user=f"{new_parent[0]}:{new_parent[1]}",
+                relation="parent",
+                object=f"{object_type}:{object_id}",
+            )
+        )
+        try:
+            await PermissionService.batch_write_tuples(
+                ops,
+                crash_safe=True,
+                raise_on_failure=True,
+                stop_on_failure=True,
+            )
+        except Exception as e:
+            _logger.exception(
+                "Failed to replace parent tuple for %s:%s (%s -> %s): %s",
+                object_type,
+                object_id,
+                old_parent,
+                new_parent,
+                e,
+            )
+            raise
+
+    async def _dispatch_cross_space_migration(self, file_id: int) -> None:
+        """Hand a file's retrieval-data migration to the async worker (T007)."""
+        from bisheng.worker.knowledge.move_worker import migrate_file_vectors
+
+        migrate_file_vectors.delay(file_id=file_id)
+
+    async def _collect_version_chain_file_ids(self, session, file_ids: list[int]) -> tuple[set[int], set[int]]:
+        """Expand the given primary/leaf file ids to their full version chains.
+
+        Returns ``(all_knowledge_file_ids, all_document_ids)`` so cross-space move
+        can relocate the primary **and** every historical version together with the
+        document anchor (design 决策 4). Files without a version row map to
+        themselves only. Direct session queries keep it inside the move txn.
+        """
+        from sqlmodel import select
+
+        from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+
+        all_files: set[int] = set(file_ids)
+        all_docs: set[int] = set()
+        doc_ids: set[int] = set()
+        for fid in file_ids:
+            v = (
+                await session.exec(
+                    select(KnowledgeDocumentVersion).where(KnowledgeDocumentVersion.knowledge_file_id == fid)
+                )
+            ).first()
+            if v is not None:
+                doc_ids.add(v.document_id)
+        for did in doc_ids:
+            all_docs.add(did)
+            versions = (
+                await session.exec(select(KnowledgeDocumentVersion).where(KnowledgeDocumentVersion.document_id == did))
+            ).all()
+            for v in versions:
+                all_files.add(v.knowledge_file_id)
+        return all_files, all_docs
+
+    async def move_items(
+        self,
+        space_id: int,
+        items: list[dict],
+        target_space_id: int,
+        target_folder_id: int | None = None,
+        skip_invalid: bool = False,
+    ) -> dict:
+        """Move files/folders within a space or across spaces (F034).
+
+        Returns ``{"moved": [...], "invalid": [...]}``; see design §4.2. Same-space
+        is a synchronous metadata move; cross-space additionally relocates the whole
+        version chain, clears tags (AC-23), marks SUCCESS files REBUILDING, and
+        dispatches async retrieval-data migration per file.
+        """
+        from sqlmodel import col, func, or_, select
+
+        from bisheng.knowledge.domain.models.knowledge import Knowledge
+        from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+
+        await self._require_read_permission(space_id)
+        cross_space = target_space_id != space_id
+        max_depth = 10
+
+        async with get_async_db_session() as session:
+            source_space = await session.get(Knowledge, space_id)
+            target_space = await session.get(Knowledge, target_space_id)
+            if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
+                raise SpaceNotFoundError()
+            if source_space and target_space.tenant_id != source_space.tenant_id:
+                raise SpaceTenantMismatchError()
+
+            if target_folder_id:
+                target_folder = await session.get(KnowledgeFile, target_folder_id)
+                if (
+                    not target_folder
+                    or target_folder.file_type != FileType.DIR.value
+                    or target_folder.knowledge_id != target_space_id
+                ):
+                    raise SpaceFolderNotFoundError()
+                target_level_path = f"{target_folder.file_level_path}/{target_folder.id}"
+                target_level = target_folder.level + 1
+                new_parent: tuple[str, int] = ("folder", target_folder.id)
+            else:
+                target_level_path = ""
+                target_level = 0
+                new_parent = ("knowledge_space", target_space_id)
+
+            # ── validate each item ──
+            valid: list[KnowledgeFile] = []
+            invalid: list[dict] = []
+            for it in items:
+                rec = await session.get(KnowledgeFile, int(it["id"]))
+                if not rec or rec.knowledge_id != space_id:
+                    raise SpaceFileNotFoundError()
+                is_folder = rec.file_type == FileType.DIR.value
+                word = "folder" if is_folder else "file"
+                otype = "folder" if is_folder else "knowledge_file"
+                perm_id = "move_folder" if is_folder else "move_file"
+                self_prefix = f"{rec.file_level_path}/{rec.id}"
+
+                reason: str | None = None
+                eff = await self._get_effective_permission_ids(otype, rec.id, space_id=space_id)
+                if perm_id not in eff:
+                    reason = "no_permission"
+                elif is_folder and not cross_space and target_folder_id == rec.id:
+                    reason = "into_self"
+                elif is_folder and not cross_space and target_level_path.startswith(f"{self_prefix}/"):
+                    reason = "into_subtree"
+                elif not cross_space and target_level_path == (rec.file_level_path or ""):
+                    reason = "into_current_parent"
+                else:
+                    if is_folder:
+                        max_sub = await session.scalar(
+                            select(func.max(KnowledgeFile.level)).where(
+                                KnowledgeFile.knowledge_id == space_id,
+                                or_(
+                                    KnowledgeFile.id == rec.id,
+                                    col(KnowledgeFile.file_level_path) == self_prefix,
+                                    col(KnowledgeFile.file_level_path).like(f"{self_prefix}/%"),
+                                ),
+                            )
+                        )
+                        depth_after = target_level + ((max_sub or rec.level) - rec.level)
+                    else:
+                        depth_after = target_level
+                    if depth_after > max_depth:
+                        reason = "depth_exceeded"
+                    elif is_folder and not cross_space:
+                        dup = await session.scalar(
+                            select(func.count(KnowledgeFile.id)).where(
+                                KnowledgeFile.knowledge_id == target_space_id,
+                                KnowledgeFile.file_type == FileType.DIR.value,
+                                KnowledgeFile.file_name == rec.file_name,
+                                KnowledgeFile.file_level_path == target_level_path,
+                                KnowledgeFile.id != rec.id,
+                            )
+                        )
+                        if dup and dup > 0:
+                            reason = "name_conflict"
+
+                if reason:
+                    invalid.append({"id": rec.id, "type": word, "name": rec.file_name, "reason": reason})
+                else:
+                    valid.append(rec)
+
+            if invalid and not skip_invalid:
+                return {"moved": [], "invalid": invalid}
+
+            # ── execute valid items ──
+            moved: list[dict] = []
+            files_to_migrate: set[int] = set()
+            for rec in valid:
+                is_folder = rec.file_type == FileType.DIR.value
+                word = "folder" if is_folder else "file"
+                old_parent = self._parent_ref_from_level_path(rec.file_level_path, space_id)
+                level_delta = target_level - rec.level
+
+                rows: list[KnowledgeFile] = [rec]
+                if is_folder:
+                    old_self_prefix = f"{rec.file_level_path}/{rec.id}"
+                    new_self_prefix = f"{target_level_path}/{rec.id}"
+                    descendants = (
+                        await session.exec(
+                            select(KnowledgeFile).where(
+                                KnowledgeFile.knowledge_id == space_id,
+                                or_(
+                                    col(KnowledgeFile.file_level_path) == old_self_prefix,
+                                    col(KnowledgeFile.file_level_path).like(f"{old_self_prefix}/%"),
+                                ),
+                            )
+                        )
+                    ).all()
+                    for d in descendants:
+                        d.file_level_path = new_self_prefix + (d.file_level_path or "")[len(old_self_prefix) :]
+                        d.level = d.level + level_delta
+                        rows.append(d)
+                rec.file_level_path = target_level_path
+                rec.level = target_level
+
+                if cross_space:
+                    leaf_file_ids = [r.id for r in rows if r.file_type == FileType.FILE.value]
+                    chain_files, chain_docs = await self._collect_version_chain_file_ids(session, leaf_file_ids)
+                    for cfid in chain_files:
+                        cf = await session.get(KnowledgeFile, cfid)
+                        if cf is None:
+                            continue
+                        cf.knowledge_id = target_space_id
+                        if cf.status == KnowledgeFileStatus.SUCCESS.value:
+                            cf.status = KnowledgeFileStatus.REBUILDING.value
+                        session.add(cf)
+                        files_to_migrate.add(cfid)
+                    for r in rows:
+                        r.knowledge_id = target_space_id
+                    for did in chain_docs:
+                        doc = await session.get(KnowledgeDocument, did)
+                        if doc is not None:
+                            doc.knowledge_id = target_space_id
+                            session.add(doc)
+
+                for r in rows:
+                    session.add(r)
+
+                moved.append(
+                    {
+                        "id": rec.id,
+                        "type": word,
+                        "old_parent_id": old_parent[1] if old_parent[0] == "folder" else None,
+                        "cross_space": cross_space,
+                    }
+                )
+
+            await session.commit()
+
+        # ── post-commit side effects (FGA tuples / tags / async dispatch) ──
+        for m in moved:
+            otype = "folder" if m["type"] == "folder" else "knowledge_file"
+            old_parent = ("folder", m["old_parent_id"]) if m["old_parent_id"] else ("knowledge_space", space_id)
+            await self._replace_resource_parent_tuple(otype, m["id"], old_parent, new_parent)
+
+        if cross_space and files_to_migrate:
+            for fid in files_to_migrate:
+                # AC-23: clear knowledge-space tags on the moved file (not migrated).
+                await TagDao.aupdate_resource_tags([], str(fid), ResourceTypeEnum.SPACE_FILE, self.login_user.user_id)
+                await self._dispatch_cross_space_migration(fid)
+
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        if cross_space:
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(target_space_id)
+        return {"moved": moved, "invalid": invalid}
+
     async def update_file_encoding(
         self,
         file_id: int,

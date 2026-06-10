@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-10；产品拍板三点已回写；AC-03 已补「拖拽支持跨空间（投放到左侧空间项）」 |
 | design.md | ✅ 已评审 | 2026-06-10；Constitution Check 无 BLOCKER；评审 4 项发现已修复（C2 子树 SQL 方言 / 同租户边界 / 决策备选与触发条件 / 手动验证入口） |
 | tasks.md | ✅ 已拆解 | 2026-06-10 /sdd-review tasks LGTM（修复 4 项：T006/T007 任务内 Test-First、T007 tenant_id 传递、T009 数据源、T012 AC 标注格式） |
-| 实现 | 🚧 进行中 | 3 / 12 完成（Wave 1 ✅） |
+| 实现 | 🚧 进行中 | 6 / 12 完成（Wave 1-2 ✅） |
 
 ---
 
@@ -48,7 +48,7 @@
 
 ### Wave 2 — 移动服务（Test-First）
 
-- [ ] **T004**: move_items 单元测试（先红）
+- [x] **T004**: move_items 单元测试（先红）
   **文件**: `src/backend/test/knowledge/test_knowledge_space_move.py`
   **逻辑**: mock DAO / PermissionService / celery 派发，覆盖：
   - 同空间校验矩阵：无 move 权限(no_permission) / into_self / into_subtree / into_current_parent / depth_exceeded（按子树最深）/ name_conflict / `skip_invalid` 两步语义（false 有冲突→不提交只回清单；true→提交其余）
@@ -58,14 +58,14 @@
   **覆盖 AC**: AC-01, AC-02, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13, AC-20, AC-23
   **依赖**: T001, T002, T003
 
-- [ ] **T005**: KnowledgeSpaceService.move_items 实现
+- [x] **T005**: KnowledgeSpaceService.move_items 实现
   **文件**: `src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`
   **逻辑**: 编排=逐项校验 → 同/跨空间分流（design 决策 1/3）→ 事务内改 `file_level_path`/`level`（+跨空间改 `knowledge_id` 整版本链、清标签、置 REBUILDING）→ parent tuple 替换 → 跨空间逐文件派发 `migrate_file_vectors`。版本链展开参照 `_cascade_version_links_on_delete`（design 决策 4）
   **测试**: T004 全绿
   **覆盖 AC**: 同 T004
   **依赖**: T004
 
-- [ ] **T006**: API 端点 + 集成测试
+- [x] **T006**: API 端点 + 集成测试
   **文件**: `src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`、`src/backend/test/knowledge/test_knowledge_space_move_api.py`
   **逻辑**: `POST /{space_id}/files/move`（请求/响应契约=design §4.2，含 `target_space_id`/`skip_invalid`/`moved[].old_parent_id`/`invalid[].reason`）；收参调 service 不写业务。**任务内先写集成测试（红）再实现端点（绿）**。若现有空间列表接口无法按 `upload_file` 权限过滤（供 T009 弹窗左侧用），本任务一并补查询参数（复用 ReBAC `list_accessible_ids`）
   **测试**: happy path（同/跨空间）+ invalid 清单不提交 + skip_invalid 提交其余

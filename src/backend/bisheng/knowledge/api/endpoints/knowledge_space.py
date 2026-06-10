@@ -1,43 +1,44 @@
-from typing import Any, Optional, List
+from typing import Any
 
-from fastapi import APIRouter, Depends, Body, Query, Request
+from fastapi import APIRouter, Body, Depends, Query, Request
 from loguru import logger
 from starlette.responses import StreamingResponse
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.common.schemas.api import resp_200, SSEResponse
+from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.knowledge.api.dependencies import (
-    get_knowledge_space_service,
     get_knowledge_space_chat_service,
+    get_knowledge_space_service,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
-    DepartmentKnowledgeSpaceBatchCreateReq,
-    KnowledgeSpaceCreateReq,
-    KnowledgeSpaceUpdateReq,
-    FolderCreateReq,
-    FolderRenameReq,
-    FileCreateReq,
-    FileRenameReq,
-    FileEncodingUpdateReq,
     BatchDeleteReq,
     BatchDownloadReq,
-    UpdateSpaceMemberRoleRequest,
-    RemoveSpaceMemberRequest,
-    ChatReq,
     ChatFolderReq,
-)
-from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
-    KnowledgeSpaceChatService,
+    ChatReq,
+    DepartmentKnowledgeSpaceBatchCreateReq,
+    FileCreateReq,
+    FileEncodingUpdateReq,
+    FileMoveReq,
+    FileRenameReq,
+    FolderCreateReq,
+    FolderRenameReq,
+    KnowledgeSpaceCreateReq,
+    KnowledgeSpaceUpdateReq,
+    RemoveSpaceMemberRequest,
+    UpdateSpaceMemberRoleRequest,
 )
 from bisheng.knowledge.domain.services.department_knowledge_space_service import (
     DepartmentKnowledgeSpaceService,
 )
+from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
+    KnowledgeSpaceChatService,
+)
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
+from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
@@ -139,7 +140,7 @@ async def delete_space(
 
 @router.get("/uploadable")
 async def list_uploadable_spaces(
-    keyword: Optional[str] = Query(default=None, description='substring filter on space name'),
+    keyword: str | None = Query(default=None, description="substring filter on space name"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     """F028: list knowledge spaces where the user has ``upload_file`` permission.
@@ -150,17 +151,19 @@ async def list_uploadable_spaces(
     in the dozens. Body returns ``{"data": [{"id", "name", "icon", "description"}]}``.
     """
     spaces = await svc.list_uploadable_spaces(keyword=keyword)
-    return resp_200({
-        'data': [
-            {
-                'id': s.id,
-                'name': s.name or '',
-                'icon': None,
-                'description': s.description,
-            }
-            for s in spaces
-        ]
-    })
+    return resp_200(
+        {
+            "data": [
+                {
+                    "id": s.id,
+                    "name": s.name or "",
+                    "icon": None,
+                    "description": s.description,
+                }
+                for s in spaces
+            ]
+        }
+    )
 
 
 @router.get("/mine")
@@ -257,7 +260,7 @@ async def get_space_members(
     space_id: int,
     page: int = Query(1, description="Page number"),
     page_size: int = Query(20, description="Page size"),
-    keyword: Optional[str] = Query(None, description="Search keyword"),
+    keyword: str | None = Query(None, description="Search keyword"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_space_members(space_id, page, page_size, keyword)
@@ -289,20 +292,18 @@ async def remove_member(
 @router.get("/{space_id}/children")
 async def list_space_children(
     space_id: int,
-    parent_id: Optional[int] = None,
-    file_ids: List[int] = Query(default=None, description="精确文件ID列表"),
+    parent_id: int | None = None,
+    file_ids: list[int] = Query(default=None, description="精确文件ID列表"),
     order_field: str = "file_type",
     order_sort: str = "asc",
-    file_status: List[int] = Query(default=None, description="文件状态列表"),
+    file_status: list[int] = Query(default=None, description="文件状态列表"),
     page_size: int = 20,
-    cursor: Optional[str] = Query(
+    cursor: str | None = Query(
         default=None,
         description="F027 cursor-based pagination token from the previous response's "
-                    "`next_cursor`. Omit (or pass empty) to fetch the first page.",
+        "`next_cursor`. Omit (or pass empty) to fetch the first page.",
     ),
-    file_type: Optional[int] = Query(
-        default=None, description="0=DIR only, 1=FILE only, empty=both"
-    ),
+    file_type: int | None = Query(default=None, description="0=DIR only, 1=FILE only, empty=both"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     """List space children (F027 cursor-based pagination).
@@ -327,14 +328,14 @@ async def list_space_children(
 @router.get("/{space_id}/search")
 async def search_space_children(
     space_id: int,
-    parent_id: Optional[int] = None,
+    parent_id: int | None = None,
     page: int = 1,
     page_size: int = 20,
     order_field: str = "file_type",
     order_sort: str = "asc",
-    tag_ids: List[int] = Query(default=None, description="标签ID列表"),
-    file_status: List[int] = Query(default=None, description="文件状态列表"),
-    keyword: Optional[str] = None,
+    tag_ids: list[int] = Query(default=None, description="标签ID列表"),
+    file_status: list[int] = Query(default=None, description="文件状态列表"),
+    keyword: str | None = None,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_space_children(
@@ -477,6 +478,24 @@ async def delete_file(
     return resp_200()
 
 
+@router.post("/{space_id}/files/move")
+async def move_file_folder(
+    space_id: int,
+    req: FileMoveReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """F034: move files/folders within or across spaces (same-space when
+    target_space_id == space_id). Returns {moved, invalid}; see design §4.2."""
+    result = await svc.move_items(
+        space_id,
+        [item.model_dump() for item in req.items],
+        target_space_id=req.target_space_id,
+        target_folder_id=req.target_folder_id,
+        skip_invalid=req.skip_invalid,
+    )
+    return resp_200(result)
+
+
 @router.get("/{space_id}/files/{file_id}/preview")
 async def get_file_preview(
     space_id: int,
@@ -501,7 +520,7 @@ async def get_file_download(
 async def update_file_tags(
     space_id: int,
     file_id: int,
-    tag_ids: List[int] = Body(..., embed=True, description="标签ID列表"),
+    tag_ids: list[int] = Body(..., embed=True, description="标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
     result = await svc.update_file_tags(space_id, file_id, tag_ids)
@@ -534,8 +553,8 @@ async def batch_delete(
 @router.post("/{space_id}/files/batch-tag")
 async def batch_update_tags(
     space_id: int,
-    file_ids: List[int] = Body(..., embed=True, description="文件ID列表"),
-    tag_ids: List[int] = Body(..., embed=True, description="标签ID列表"),
+    file_ids: list[int] = Body(..., embed=True, description="文件ID列表"),
+    tag_ids: list[int] = Body(..., embed=True, description="标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.batch_add_file_tags(space_id, file_ids, tag_ids)
@@ -545,7 +564,7 @@ async def batch_update_tags(
 @router.post("/{space_id}/files/batch-retry")
 async def batch_retry_failed_files(
     space_id: int,
-    file_ids: List[int] = Body(..., embed=True, description="file or folder ids"),
+    file_ids: list[int] = Body(..., embed=True, description="file or folder ids"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
     result = await svc.batch_retry_failed_files(space_id, file_ids)
@@ -596,9 +615,7 @@ async def chat_single_file(
 ) -> Any:
     async def event_stream():
         try:
-            async for one in svc.chat_single_file(
-                space_id, file_id, req.query, req.model_id
-            ):
+            async for one in svc.chat_single_file(space_id, file_id, req.query, req.model_id):
                 yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
@@ -692,9 +709,7 @@ async def chat_folder(
 ) -> Any:
     async def event_stream():
         try:
-            async for one in svc.chat_folder(
-                space_id, req.folder_id, req.chat_id, req.query, req.model_id, req.tags
-            ):
+            async for one in svc.chat_folder(space_id, req.folder_id, req.chat_id, req.query, req.model_id, req.tags):
                 yield SSEResponse(data=one).to_string()
         except BaseErrorCode as e:
             yield e.to_sse_event_instance_str()
