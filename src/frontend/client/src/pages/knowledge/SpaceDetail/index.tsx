@@ -1082,6 +1082,7 @@ export function KnowledgeSpaceContent({
                                             onSelect={(selected) => handleSelectFile(file.id, selected)}
                                             onDownload={() => handleSingleDownload(file.id)}
                                             onRename={(newName) => onRenameFile(file.id, newName)}
+                                            onMove={canUploadFile ? () => openMove([file]) : undefined}
                                             onDelete={() => handleDelete(file.id)}
                                             onEditTags={() => handleOpenEditTags(file.id)}
                                             onRetry={() => handleSingleRetry(file.id)}
@@ -1121,6 +1122,7 @@ export function KnowledgeSpaceContent({
                                     onDownload={(id) => handleSingleDownload(id)}
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
+                                    onMove={canUploadFile ? (file) => openMove([file]) : undefined}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}

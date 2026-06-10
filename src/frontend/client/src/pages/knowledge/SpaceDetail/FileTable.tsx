@@ -10,6 +10,7 @@ import {
     Edit,
     FileImageIcon,
     FileUserIcon,
+    FolderInput,
     GitBranch,
     History,
     MoreVertical,
@@ -515,6 +516,7 @@ interface FileTableProps {
     onDownload: (id: string) => void;
     onEditTags: (id: string) => void;
     onRename: (id: string, newName: string) => void;
+    onMove?: (file: KnowledgeFile) => void;
     onDelete: (id: string) => void;
     onRetry: (id: string) => void;
     onNavigateFolder: (id: string) => void;
@@ -536,7 +538,7 @@ interface FileTableProps {
     canManageMembers?: boolean;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onMove, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -634,6 +636,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onDownload={() => onDownload(file.id)}
                                 onEditTags={() => onEditTags(file.id)}
                                 onRename={(newName) => onRename(file.id, newName)}
+                                onMove={onMove ? () => onMove(file) : undefined}
                                 onDelete={() => onDelete(file.id)}
                                 onRetry={() => onRetry?.(file.id)}
                                 onNavigateFolder={() => onNavigateFolder?.(file.id)}
@@ -698,6 +701,7 @@ function FileRow({
     onDownload,
     onEditTags,
     onRename,
+    onMove,
     onDelete,
     onRetry,
     onNavigateFolder,
@@ -728,6 +732,7 @@ function FileRow({
     onDownload: () => void;
     onEditTags: () => void;
     onRename: (newName: string) => void;
+    onMove?: () => void;
     onDelete: () => void;
     onRetry: () => void;
     onNavigateFolder?: () => void;
@@ -833,6 +838,17 @@ function FileRow({
                             >
                                 <Edit className="mr-2 size-4" />
                                 {localize("com_knowledge.rename")}
+                            </DropdownMenuItem>
+                        )}
+                        {onMove && !isCreating && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onMove();
+                                }}
+                            >
+                                <FolderInput className="mr-2 size-4" />
+                                {localize("com_knowledge.move")}
                             </DropdownMenuItem>
                         )}
                         {isAdmin && hasRetryOption && (

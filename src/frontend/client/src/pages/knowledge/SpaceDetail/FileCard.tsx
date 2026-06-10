@@ -1,4 +1,4 @@
-import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
+import { Download, Edit, FolderInput, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -26,6 +26,7 @@ interface FileCardProps {
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
     onRename: (newName: string) => void;
+    onMove?: () => void;
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
@@ -57,6 +58,7 @@ export function FileCard({
     onSelect,
     onDownload,
     onRename,
+    onMove,
     onDelete,
     onEditTags,
     onRetry,
@@ -419,6 +421,15 @@ export function FileCard({
                                             >
                                                 <Edit className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.rename")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        {onMove && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onMove(); }}
+                                                className="flex items-center"
+                                            >
+                                                <FolderInput className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.move")}
                                             </DropdownMenuItem>
                                         )}
                                         {isAdmin && hasRetryOption && (
