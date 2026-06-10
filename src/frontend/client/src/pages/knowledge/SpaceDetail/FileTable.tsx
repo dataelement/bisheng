@@ -517,6 +517,8 @@ interface FileTableProps {
     onEditTags: (id: string) => void;
     onRename: (id: string, newName: string) => void;
     onMove?: (file: KnowledgeFile) => void;
+    /** F034 drag-move: drop dragged items into a same-space folder. */
+    onMoveToFolder?: (folderId: string, items: KnowledgeFile[]) => void;
     onDelete: (id: string) => void;
     onRetry: (id: string) => void;
     onNavigateFolder: (id: string) => void;
@@ -538,7 +540,7 @@ interface FileTableProps {
     canManageMembers?: boolean;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onMove, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onMove, onMoveToFolder, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -562,6 +564,44 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     const handleOpenEditEncoding = (file: KnowledgeFile) => {
         if (!canEditEncoding) return;
         setEditingEncodingFile(file);
+    };
+
+    // F034 same-space drag-move: rows are drag sources, folder rows are drop targets.
+    const dragMoveEnabled = !!onMoveToFolder;
+    const dragItemsRef = useRef<KnowledgeFile[]>([]);
+    const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+
+    const handleRowDragStart = (file: KnowledgeFile) => (e: React.DragEvent) => {
+        // Drag the whole selection when the grabbed row is part of it; else just it.
+        const payload =
+            selectedFiles.has(file.id) && selectedFiles.size > 0
+                ? files.filter((f) => selectedFiles.has(f.id))
+                : [file];
+        dragItemsRef.current = payload;
+        e.dataTransfer.effectAllowed = "move";
+        try {
+            e.dataTransfer.setData("text/plain", payload.map((f) => f.id).join(","));
+        } catch {
+            // setData can throw in some browsers during synthetic events; payload is in the ref.
+        }
+    };
+
+    const isDroppableFolder = (folder: KnowledgeFile) =>
+        dragItemsRef.current.length > 0 && !dragItemsRef.current.some((f) => f.id === folder.id);
+
+    const handleFolderDragOver = (folder: KnowledgeFile) => (e: React.DragEvent) => {
+        if (!isDroppableFolder(folder)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (dragOverFolderId !== folder.id) setDragOverFolderId(folder.id);
+    };
+
+    const handleFolderDrop = (folder: KnowledgeFile) => (e: React.DragEvent) => {
+        e.preventDefault();
+        const items = dragItemsRef.current;
+        dragItemsRef.current = [];
+        setDragOverFolderId(null);
+        if (items.length && onMoveToFolder) onMoveToFolder(folder.id, items);
     };
 
     const handleSubmitEncoding = async (newEncoding: string) => {
@@ -662,6 +702,12 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onOpenVersionManagement={onOpenVersionManagement}
                                 onOpenVersionHistory={onOpenVersionHistory}
                                 canManageMembers={canManageMembers}
+                                rowDraggable={dragMoveEnabled}
+                                onRowDragStart={handleRowDragStart(file)}
+                                isFolderDragOver={dragOverFolderId === file.id}
+                                onFolderDragOver={handleFolderDragOver(file)}
+                                onFolderDragLeave={() => setDragOverFolderId((prev) => (prev === file.id ? null : prev))}
+                                onFolderDrop={handleFolderDrop(file)}
                             />
                         ))}
                     </TableBody>
@@ -723,6 +769,12 @@ function FileRow({
     onOpenVersionManagement,
     onOpenVersionHistory,
     canManageMembers = false,
+    rowDraggable = false,
+    onRowDragStart,
+    isFolderDragOver = false,
+    onFolderDragOver,
+    onFolderDragLeave,
+    onFolderDrop,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -753,6 +805,13 @@ function FileRow({
     versionManagementEnabled?: boolean;
     onOpenVersionManagement?: (file: KnowledgeFile) => void;
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    // F034 drag-move: row is a drag source; folder rows are drop targets.
+    rowDraggable?: boolean;
+    onRowDragStart?: (e: React.DragEvent) => void;
+    isFolderDragOver?: boolean;
+    onFolderDragOver?: (e: React.DragEvent) => void;
+    onFolderDragLeave?: () => void;
+    onFolderDrop?: (e: React.DragEvent) => void;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -916,10 +975,16 @@ function FileRow({
     return (
         <TableRow
             data-knowledge-file-item
+            draggable={rowDraggable && !isCreating && !isRenaming}
+            onDragStart={rowDraggable ? onRowDragStart : undefined}
+            onDragOver={isFolder ? onFolderDragOver : undefined}
+            onDragLeave={isFolder ? onFolderDragLeave : undefined}
+            onDrop={isFolder ? onFolderDrop : undefined}
             className={cn(
                 "group border-b border-b-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
-                "bg-transparent hover:bg-transparent"
+                "bg-transparent hover:bg-transparent",
+                isFolderDragOver && "outline outline-2 -outline-offset-2 outline-primary"
             )}
             onMouseEnter={() => setRowHovered(true)}
             onMouseLeave={() => setRowHovered(false)}

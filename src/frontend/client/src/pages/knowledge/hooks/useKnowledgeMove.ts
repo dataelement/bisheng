@@ -48,12 +48,13 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
 
     const runMove = useCallback(
         (
+            items: KnowledgeFile[],
             targetSpaceId: string,
             targetFolderId: string | null,
             skipInvalid: boolean,
         ): Promise<MoveResult> =>
             moveFilesApi(spaceId, {
-                items: pendingItems.map((f) => ({
+                items: items.map((f) => ({
                     id: f.id,
                     type: f.type === FileType.FOLDER ? "folder" : "file",
                 })),
@@ -61,15 +62,22 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 target_folder_id: targetFolderId,
                 skip_invalid: skipInvalid,
             }),
-        [spaceId, pendingItems],
+        [spaceId],
     );
 
     /**
-     * Dialog `onConfirm`. Throws to keep the dialog open (cancelled confirm /
-     * hard error); resolves to let the dialog close on success.
+     * Core move orchestration shared by the dialog and drag-drop entry points:
+     * cross-space二次确认, partial-conflict two-step, success/error toast, refresh.
+     * Throws on cancel/error so the dialog can stay open; drag callers swallow.
      */
-    const handleMoveConfirm = useCallback(
-        async (targetSpaceId: string, targetFolderId: string | null, crossSpace: boolean) => {
+    const executeMove = useCallback(
+        async (
+            items: KnowledgeFile[],
+            targetSpaceId: string,
+            targetFolderId: string | null,
+            crossSpace: boolean,
+        ) => {
+            if (!items.length) return;
             if (crossSpace) {
                 const ok = await confirm({
                     title: localize("com_knowledge.move_cross_space_confirm_title"),
@@ -82,7 +90,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
 
             let result: MoveResult;
             try {
-                result = await runMove(targetSpaceId, targetFolderId, false);
+                result = await runMove(items, targetSpaceId, targetFolderId, false);
             } catch (err) {
                 showToast({ message: resolveErrorMessage(err), status: "error" });
                 throw err;
@@ -99,7 +107,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 });
                 if (!ok) throw new Error("move:cancelled");
                 try {
-                    result = await runMove(targetSpaceId, targetFolderId, true);
+                    result = await runMove(items, targetSpaceId, targetFolderId, true);
                 } catch (err) {
                     showToast({ message: resolveErrorMessage(err), status: "error" });
                     throw err;
@@ -118,5 +126,30 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
         [confirm, localize, runMove, showToast, resolveErrorMessage, onMoved],
     );
 
-    return { moveDialogOpen, setMoveDialogOpen, openMove, handleMoveConfirm };
+    /** Dialog `onConfirm` — moves the items the picker was opened for. */
+    const handleMoveConfirm = useCallback(
+        (targetSpaceId: string, targetFolderId: string | null, crossSpace: boolean) =>
+            executeMove(pendingItems, targetSpaceId, targetFolderId, crossSpace),
+        [executeMove, pendingItems],
+    );
+
+    /**
+     * Drag-drop entry: move the dragged items into a folder in the SAME space.
+     * Swallows the cancel/error rejection (no dialog to keep open).
+     */
+    const dropMoveToFolder = useCallback(
+        async (items: KnowledgeFile[], targetFolderId: string) => {
+            // Dropping onto a folder that is itself being dragged is a no-op.
+            const filtered = items.filter((f) => f.id !== targetFolderId);
+            if (!filtered.length) return;
+            try {
+                await executeMove(filtered, spaceId, targetFolderId, false);
+            } catch {
+                // Reason already surfaced via toast / confirm cancel.
+            }
+        },
+        [executeMove, spaceId],
+    );
+
+    return { moveDialogOpen, setMoveDialogOpen, openMove, handleMoveConfirm, dropMoveToFolder };
 }

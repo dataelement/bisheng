@@ -789,7 +789,7 @@ export function KnowledgeSpaceContent({
     };
 
     // F034: move selected files/folders (same-space or cross-space) via MoveToDialog.
-    const { moveDialogOpen, setMoveDialogOpen, openMove, handleMoveConfirm } = useKnowledgeMove({
+    const { moveDialogOpen, setMoveDialogOpen, openMove, handleMoveConfirm, dropMoveToFolder } = useKnowledgeMove({
         spaceId: space.id,
         onMoved: () => {
             setSelectedFiles(new Set());
@@ -1123,6 +1123,7 @@ export function KnowledgeSpaceContent({
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
                                     onMove={canUploadFile ? (file) => openMove([file]) : undefined}
+                                    onMoveToFolder={canUploadFile ? (folderId, items) => dropMoveToFolder(items, folderId) : undefined}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}
