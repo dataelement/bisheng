@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-10；产品拍板三点已回写；AC-03 已补「拖拽支持跨空间（投放到左侧空间项）」 |
 | design.md | ✅ 已评审 | 2026-06-10；Constitution Check 无 BLOCKER；评审 4 项发现已修复（C2 子树 SQL 方言 / 同租户边界 / 决策备选与触发条件 / 手动验证入口） |
 | tasks.md | ✅ 已拆解 | 2026-06-10 /sdd-review tasks LGTM（修复 4 项：T006/T007 任务内 Test-First、T007 tenant_id 传递、T009 数据源、T012 AC 标注格式） |
-| 实现 | 🚧 进行中 | 7 / 12 完成（Wave 1-3 ✅，后端全通） |
+| 实现 | 🚧 进行中 | 9 / 12 完成（后端全通 + 前端 API/弹窗/批量移动） |
 
 ---
 
@@ -84,12 +84,12 @@
 
 ### Wave 4 — 前端 Client（手动验证）
 
-- [ ] **T008**: client API 封装
+- [x] **T008**: client API 封装
   **文件**: `src/frontend/client/src/api/knowledge.ts`
   **逻辑**: `moveFilesApi(spaceId, {items, target_space_id, target_folder_id, skip_invalid})`，错误带 status_code 供分支
   **依赖**: T006
 
-- [ ] **T009**: MoveToDialog 移动到弹窗
+- [x] **T009**: MoveToDialog 移动到弹窗
   **文件**: `src/frontend/client/src/pages/knowledge/SpaceDetail/MoveToDialog.tsx`
   **逻辑**: 左侧=有 upload_file 权限的空间列表（首项当前空间；数据源=T006 确认/补充的过滤接口）；右侧=选中空间的文件夹树（cursor 懒加载）+ 文件（置灰）；无上传权限文件夹置灰；「移动到此」
   **覆盖 AC**: AC-04, AC-07

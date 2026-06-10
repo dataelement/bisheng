@@ -1645,7 +1645,25 @@
       "section_dismiss": "関連付けをスキップ",
       "section_dismiss_subtitle": "現在のファイルを独立ドキュメントとして保持し、バージョンチェーンに追加しません。",
       "btn_close": "閉じる"
-    }
+    },
+    "move_to": "移動先",
+    "current_space_tag": "（現在）",
+    "root_dir": "ルート",
+    "move_empty_folder": "このフォルダは空です",
+    "move_here": "ここに移動",
+    "move": "移動",
+    "move_success": "{0} 件を移動しました",
+    "move_cross_success": "{0} 件を移動しました。検索データをバックグラウンドで処理中です",
+    "move_partial_title": "一部の項目は移動できません",
+    "move_partial_desc": "次の項目は移動できません：{0}",
+    "move_rest": "残りを移動",
+    "move_cancel_all": "キャンセル",
+    "move_cross_space_confirm_title": "スペース間で移動しますか？",
+    "move_cross_space_confirm_desc": "スペース間の移動では検索データが再処理され、元に戻せません。",
+    "move_error_permission": "移動する権限がありません",
+    "move_error_tenant": "移動先スペースは別テナントに属しているため、この操作はサポートされていません",
+    "move_error_target": "無効な移動先です",
+    "move_failed": "移動に失敗しました"
   },
   "com_subscription": {
     "add": "追加",
@@ -2029,7 +2047,6 @@
   "com_approval_task_badge_rejected": "却下",
   "com_approval_section_business_content": "業務内容",
   "com_approval_search_placeholder": "申請者・シナリオ・ファイルを検索",
-  "com_ui_close": "閉じる",
   "knowledge_qa_noVisibleContent": "アクセス権限のあるリソースに該当する内容が見つかりませんでした。",
   "workstation": {
     "messageExport": {

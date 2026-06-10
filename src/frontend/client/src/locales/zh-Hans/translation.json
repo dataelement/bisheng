@@ -1649,7 +1649,25 @@
       "section_dismiss": "不关联推荐文档",
       "section_dismiss_subtitle": "当前文件保持现有状态,不写入推荐的版本链。",
       "btn_close": "关闭"
-    }
+    },
+    "move_to": "移动到",
+    "current_space_tag": "（当前）",
+    "root_dir": "根目录",
+    "move_empty_folder": "此文件夹为空",
+    "move_here": "移动到此",
+    "move": "移动",
+    "move_success": "已移动 {0} 项",
+    "move_cross_success": "已移动 {0} 项，正在后台处理检索数据",
+    "move_partial_title": "部分项无法移动",
+    "move_partial_desc": "以下项无法移动：{0}",
+    "move_rest": "移动其余",
+    "move_cancel_all": "取消移动",
+    "move_cross_space_confirm_title": "确认跨空间移动？",
+    "move_cross_space_confirm_desc": "跨空间移动后将重新处理检索数据，且无法撤回。",
+    "move_error_permission": "无移动权限",
+    "move_error_tenant": "目标空间与源空间归属不同租户，暂不支持该操作",
+    "move_error_target": "无效的移动目标",
+    "move_failed": "移动失败"
   },
   "com_subscription": {
     "add": "加入",
@@ -2035,7 +2053,6 @@
   "com_approval_task_badge_rejected": "已拒绝",
   "com_approval_section_business_content": "业务内容",
   "com_approval_search_placeholder": "搜索申请人、场景或文件",
-  "com_ui_close": "关闭",
   "knowledge_qa_noVisibleContent": "未在你有权访问的内容中找到相关信息",
   "workstation": {
     "messageExport": {
