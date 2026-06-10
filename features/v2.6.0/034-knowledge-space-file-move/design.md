@@ -144,7 +144,15 @@
 | `worker/knowledge/` 新增 `migrate_file_vectors` | 跨空间检索数据迁移（ES读→目标写→删源→置状态） | 不改文件元数据归属（service 已改完） |
 | `knowledge_space_permission_template.py` | 加 `move_file`/`move_folder` → `can_edit` 两行映射 | — |
 | `common/errcode/knowledge_space.py` | 加 `SpaceMoveInvalidTargetError`(18033) | — |
-| client `SpaceDetail/` 新增 `MoveToDialog` + 行级 DnD hook | 左空间右文件夹弹窗 / 多选拖拽（投放目标=可视文件夹行 **+ 左侧空间列表的空间项**，后者=跨空间移到根、松手后二次确认）/ 同空间撤回 toast / 批量异常弹窗 | 不直接调 axios |
+| **前端（client）实现索引** ↓ | （以实际落地为准，覆盖 design 设想） | |
+| `api/knowledge.ts` → `moveFilesApi` + 类型 `MoveResult/MovedEntry/InvalidEntry` | 封装 `POST /{space}/files/move`；业务错误带 `status_code` 供分支 | 不写交互 |
+| `pages/knowledge/hooks/useKnowledgeMove.ts` | **移动编排大脑**：`executeMove`（跨空间二次确认 → 调接口 → 部分冲突两步 → 成功提示 → `onMoved` 刷新）；`handleMoveConfirm`（弹窗入口）；`dropMoveToFolder`（拖拽入口，同空间直接移动，吞掉取消/错误）；`undoMove`（同空间撤回：按 `old_parent_id` 分组反向移动） | 不持有拖拽状态 |
+| `pages/knowledge/hooks/useKnowledgeMoveDrag.ts` | **拖拽状态机**（表格+卡片共用）：拖源 `handleDragStart`（拖选中集合或单项，写 `dataTransfer text/plain`）；文件夹 drop 目标 `handleFolderDragOver/Leave/Drop`；`dragOverFolderId` 高亮态 | 不调接口（drop 回调交给 `onMoveToFolder`） |
+| `pages/knowledge/SpaceDetail/MoveToDialog.tsx` | 「移动到」弹窗：左=有上传权限的空间列表（`listUploadableSpacesApi`，当前空间置顶）/ 右=该空间文件夹导航（面包屑+进入）/「移动到此」=移到当前所在目录 | 不做移动本身（`onConfirm` 回调给 hook） |
+| `SpaceDetail/index.tsx` | 装配：实例化两个 hook；批量「移动」按钮 handler；渲染 `MoveToDialog`；给 `FileTable`/`FileCard` 透传 `onMove`(单项→弹窗) / `onMoveToFolder`(拖拽) / 卡片拖拽 props；`onMoved` = `setSelectedFiles(new Set())` + 失效 `file-versions` + `onDeleteFile("")` 重载 | — |
+| `SpaceDetail/{FileTable,FileCard}.tsx` | 行/卡片接拖源 + 文件夹接 drop 目标；行菜单加「移动」项。**列表行高亮=整行背景变色（`#bcd4ff`）；卡片高亮=`border-primary` 边框** | — |
+| `SpaceDetail/KnowledgeSpaceHeader.tsx` | 批量操作下拉加「移动」项（`onBatchMove`/`canBatchMove`=有上传权限） | — |
+| `pages/knowledge/hooks/useFileDragDrop.ts`（既有，本 feature 改） | **坑**：上传遮罩的四个 drag handler 加 `isExternalFileDrag` 守卫（仅 `dataTransfer.types` 含 `"Files"` 时触发），否则内部移动拖拽会误弹上传遮罩 | — |
 
 **复用的现成零件**：
 - 权限：`_require_permission_id(type, id, perm_id, space_id=)`；空间列表 ReBAC `list_accessible_ids`
@@ -222,3 +230,4 @@
 | 2026-06-09 | 初版（仅同空间） | feature 设计 |
 | 2026-06-10 | v2：纳入跨空间（复用复制管线/版本链整链/REBUILDING 状态/二次确认无撤回）;编号 032→034（032=OFD、033=linsight 已占用） | PRD 范围升级,产品确认三决策 |
 | 2026-06-10 | 实现完成（Wave 1-4 全通,21 后端测试绿,本地验证移动+toast）。3 项降级：①跨空间拖到左侧空间列表未做（跨组件树成本高,弹窗已覆盖）②同空间撤回未做（toast 无动作按钮,后端已留 old_parent_id）③图片目录物理迁移记债（坑 6）。i18n 占位符须用 `{{0}}` 双花括号 | 实现落地 + 务实降级 |
+| 2026-06-10 | 本地测试后修订：①同空间撤回**改用 confirm 弹窗实现**（不再降级）②修复内部拖拽误触发上传遮罩（`useFileDragDrop` 加 `isExternalFileDrag` 守卫）③卡片视图补拖拽（抽 `useKnowledgeMoveDrag` 共用）④拖拽高亮：列表=整行背景变色、卡片=边框变色。§4.3 前端实现索引按实际重写 | 联调修 bug + UX 调整 |

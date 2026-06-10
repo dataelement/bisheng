@@ -303,8 +303,8 @@ export function FileCard({
                     ? "border-primary shadow-sm"
                     : "border-[#ECECEC] hover:border-[#c9cdd4]",
                 hovered && "shadow-md",
-                // F034: highlight a folder card as the drop target during drag
-                isFolderDragOver && "border-primary bg-[#bcd4ff]"
+                // F034: highlight a folder card as the drop target — card border only
+                isFolderDragOver && "border-primary"
             )}
             style={{
                 transitionProperty: 'background-color',
