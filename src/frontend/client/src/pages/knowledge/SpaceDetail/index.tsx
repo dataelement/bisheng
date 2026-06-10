@@ -19,6 +19,7 @@ import {
 } from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
+import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
@@ -923,6 +924,12 @@ export function KnowledgeSpaceContent({
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+    // F034: drag-move wiring for the card grid (table view wires its own internally).
+    const cardDrag = useKnowledgeMoveDrag({
+        files: displayFiles,
+        selectedFiles,
+        onMoveToFolder: canUploadFile ? (folderId, items) => dropMoveToFolder(items, folderId) : undefined,
+    });
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         deleteEntryIds.has(file.id)
     );
@@ -1099,6 +1106,12 @@ export function KnowledgeSpaceContent({
                                             onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                             onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                             canManageMembers={canManageMembers}
+                                            cardDraggable={cardDrag.enabled}
+                                            onCardDragStart={cardDrag.handleDragStart(file)}
+                                            isFolderDragOver={cardDrag.dragOverFolderId === file.id}
+                                            onFolderDragOver={cardDrag.handleFolderDragOver(file)}
+                                            onFolderDragLeave={cardDrag.handleFolderDragLeave(file)}
+                                            onFolderDrop={cardDrag.handleFolderDrop(file)}
                                         />
                                     </div>
                                 ))}

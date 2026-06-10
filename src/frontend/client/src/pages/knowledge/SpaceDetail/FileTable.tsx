@@ -29,6 +29,7 @@ import {
     DropdownMenuTrigger
 } from "~/components";
 import { cn } from "~/utils";
+import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
 import TagGroup from "./TagGroup";
 import { EditEncodingModal } from "./EditEncodingModal";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
@@ -567,42 +568,14 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     };
 
     // F034 same-space drag-move: rows are drag sources, folder rows are drop targets.
-    const dragMoveEnabled = !!onMoveToFolder;
-    const dragItemsRef = useRef<KnowledgeFile[]>([]);
-    const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
-
-    const handleRowDragStart = (file: KnowledgeFile) => (e: React.DragEvent) => {
-        // Drag the whole selection when the grabbed row is part of it; else just it.
-        const payload =
-            selectedFiles.has(file.id) && selectedFiles.size > 0
-                ? files.filter((f) => selectedFiles.has(f.id))
-                : [file];
-        dragItemsRef.current = payload;
-        e.dataTransfer.effectAllowed = "move";
-        try {
-            e.dataTransfer.setData("text/plain", payload.map((f) => f.id).join(","));
-        } catch {
-            // setData can throw in some browsers during synthetic events; payload is in the ref.
-        }
-    };
-
-    const isDroppableFolder = (folder: KnowledgeFile) =>
-        dragItemsRef.current.length > 0 && !dragItemsRef.current.some((f) => f.id === folder.id);
-
-    const handleFolderDragOver = (folder: KnowledgeFile) => (e: React.DragEvent) => {
-        if (!isDroppableFolder(folder)) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        if (dragOverFolderId !== folder.id) setDragOverFolderId(folder.id);
-    };
-
-    const handleFolderDrop = (folder: KnowledgeFile) => (e: React.DragEvent) => {
-        e.preventDefault();
-        const items = dragItemsRef.current;
-        dragItemsRef.current = [];
-        setDragOverFolderId(null);
-        if (items.length && onMoveToFolder) onMoveToFolder(folder.id, items);
-    };
+    const {
+        enabled: dragMoveEnabled,
+        dragOverFolderId,
+        handleDragStart: handleRowDragStart,
+        handleFolderDragOver,
+        handleFolderDragLeave,
+        handleFolderDrop,
+    } = useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder });
 
     const handleSubmitEncoding = async (newEncoding: string) => {
         if (!editingEncodingFile) return;
@@ -706,7 +679,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onRowDragStart={handleRowDragStart(file)}
                                 isFolderDragOver={dragOverFolderId === file.id}
                                 onFolderDragOver={handleFolderDragOver(file)}
-                                onFolderDragLeave={() => setDragOverFolderId((prev) => (prev === file.id ? null : prev))}
+                                onFolderDragLeave={handleFolderDragLeave(file)}
                                 onFolderDrop={handleFolderDrop(file)}
                             />
                         ))}
@@ -818,9 +791,12 @@ function FileRow({
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
-    const rowBg = isSelected
-        ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
-        : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
+    // F034: 拖拽悬停的目标文件夹整行高亮（比选中态更深的蓝，明确"放到这里"）
+    const rowBg = isFolderDragOver
+        ? "bg-[#bcd4ff] transition-colors duration-150"
+        : isSelected
+            ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
+            : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
     const {
         isRenaming,
         renameValue,
@@ -983,8 +959,7 @@ function FileRow({
             className={cn(
                 "group border-b border-b-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制
-                "bg-transparent hover:bg-transparent",
-                isFolderDragOver && "outline outline-2 -outline-offset-2 outline-primary"
+                "bg-transparent hover:bg-transparent"
             )}
             onMouseEnter={() => setRowHovered(true)}
             onMouseLeave={() => setRowHovered(false)}

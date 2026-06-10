@@ -1,6 +1,12 @@
 import { useCallback, useState } from "react";
 
-import { FileType, type KnowledgeFile, moveFilesApi, type MoveResult } from "~/api/knowledge";
+import {
+    FileType,
+    type KnowledgeFile,
+    moveFilesApi,
+    type MovedEntry,
+    type MoveResult,
+} from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 
@@ -66,6 +72,37 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
     );
 
     /**
+     * Same-space undo (AC-16/17): move each item back to its original parent.
+     * Items are grouped by `old_parent_id` since a batch may have come from
+     * several folders; each group is restored to its own parent (root = null).
+     */
+    const undoMove = useCallback(
+        async (moved: MovedEntry[]) => {
+            const groups = new Map<number | null, MovedEntry[]>();
+            for (const m of moved) {
+                const list = groups.get(m.old_parent_id) ?? [];
+                list.push(m);
+                groups.set(m.old_parent_id, list);
+            }
+            try {
+                for (const [parentId, items] of groups) {
+                    await moveFilesApi(spaceId, {
+                        items: items.map((m) => ({ id: String(m.id), type: m.type })),
+                        target_space_id: spaceId,
+                        target_folder_id: parentId != null ? String(parentId) : null,
+                        skip_invalid: true,
+                    });
+                }
+                showToast({ message: localize("com_knowledge.move_undone"), status: "success" });
+            } catch (err) {
+                showToast({ message: resolveErrorMessage(err), status: "error" });
+            }
+            onMoved();
+        },
+        [spaceId, showToast, localize, resolveErrorMessage, onMoved],
+    );
+
+    /**
      * Core move orchestration shared by the dialog and drag-drop entry points:
      * cross-space二次确认, partial-conflict two-step, success/error toast, refresh.
      * Throws on cancel/error so the dialog can stay open; drag callers swallow.
@@ -114,16 +151,27 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 }
             }
 
-            const moved = result.moved.length;
-            showToast({
-                message: crossSpace
-                    ? localize("com_knowledge.move_cross_success", { 0: moved })
-                    : localize("com_knowledge.move_success", { 0: moved }),
-                status: "success",
-            });
+            const movedCount = result.moved.length;
+            const movedEntries = result.moved;
             onMoved();
+
+            if (crossSpace) {
+                showToast({
+                    message: localize("com_knowledge.move_cross_success", { 0: movedCount }),
+                    status: "success",
+                });
+            } else if (movedCount > 0) {
+                // Same-space: offer an undo via a confirm dialog (toast has no action).
+                const undo = await confirm({
+                    title: localize("com_knowledge.move_success", { 0: movedCount }),
+                    description: localize("com_knowledge.move_undo_hint"),
+                    confirmText: localize("com_knowledge.move_undo"),
+                    cancelText: localize("com_knowledge.move_close"),
+                });
+                if (undo) await undoMove(movedEntries);
+            }
         },
-        [confirm, localize, runMove, showToast, resolveErrorMessage, onMoved],
+        [confirm, localize, runMove, showToast, resolveErrorMessage, onMoved, undoMove],
     );
 
     /** Dialog `onConfirm` — moves the items the picker was opened for. */
