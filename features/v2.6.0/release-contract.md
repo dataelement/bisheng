@@ -22,6 +22,7 @@
 | —（无新增） | F030-knowledge-resource-unified-api | v2 filelib 统一对外 API；仅经由现有 `KnowledgeService` / `KnowledgeSpaceService` 读写 Knowledge / KnowledgeFile / KnowledgeSpace，不引入新领域对象、不新增 DAO 入口 |
 | ChannelInfoSourceSubscription（`channel_info_source` 行生命周期 + 情报服务订阅副作用） | F031-channel-source-subscription-reconcile | 订阅意图唯一真相 = 租户内 `channel.source_list` 并集；`channel_info_source` 行存在 ⟺ 已订阅，行与外部订阅态同生共死；拥有订阅/退订情报服务的调用时机与每日对账写行为。仅读取 `Channel.source_list`，不拥有 `Channel` 本身，不拥有 F026 的频道授权/`space_channel_member` channel 字段 |
 | —（无新增） | F032-ofd-upload-support | 仅在现有 RAG 解析链路（`FileExtensionMap` / loader / 预览对象）上新增 `ofd` 扩展名分支：OFD 转 PDF 后复用既有 PDF 解析/预览/检索；不引入新领域对象、不新增 DAO，不改动既有扩展名的处理路径 |
+| —（无新增） | F033-department-space-member-scope | 仅在现有 ReBAC 授权链路（`resource_permission.py` 的 `grant-subjects/*` 列表 + `authorize`）上，对 `knowledge_space` 资源按 `DepartmentKnowledgeSpace` 绑定收敛授权范围（绑定部门子树 / 子树成员，禁用 user_group）；只读 `DepartmentKnowledgeSpace` / `Department` / `UserDepartment`，不拥有这些对象、不新增领域对象/表/DAO；普通知识空间授权路径零变化 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -62,6 +63,7 @@
 | F030-knowledge-resource-unified-api | F027, F029 | 列表/文件列表沿用 F027 cursor 协议（INV-6）；代用户检索 `user_id` 闭合 F029 遗留的 RPC 越权口子（对齐 INV-7） |
 | F031-channel-source-subscription-reconcile | F026 | 与 F026 同改 `channel_service.py` 但领域解耦（F026 拥有频道授权/`space_channel_member` channel 字段，F031 拥有 `channel_info_source` 订阅生命周期）；缺陷收敛型，不新增表、不新增对外 API、不新增错误码（沿用 190 段 19007） |
 | F032-ofd-upload-support | — | 仅在现有 RAG 解析链路新增 `ofd` 扩展名分支（OFD→PDF 后复用 PDF 解析/预览）；不依赖其他 v2.6.0 Feature，不新增领域对象/表/对外 API；新增 109 段错误码 `OfdConvertError`(10917) |
+| F033-department-space-member-scope | F006/F007（ReBAC 资源授权）、部门知识空间能力（`DepartmentKnowledgeSpace` 绑定） | 范围收敛型；在既有 ReBAC 授权/列表接口对部门知识空间加部门子树准入，禁用 user_group；不依赖其他 v2.6.0 Feature，不新增领域对象/表/对外 API/错误码（**复用 `PermissionDeniedError`**）；不改动普通知识空间授权路径 |
 
 ---
 
@@ -91,3 +93,4 @@
 | 2026-06-02 | 登记 F030 知识资源统一对外 API（v2 filelib 改造）：表 1 标注"无新增领域对象"、表 3 追加依赖 F027/F029；新增模块 109 错误码 `KnowledgeTypeNotSupportedError`(10962)；列表/文件列表遵循 INV-6 cursor 协议（PRD 同步改造）；代用户检索 `user_id` 对齐 INV-7；个人库 type=2 对外不暴露但枚举保留（workstation/linsight 内部继续使用）；未新增不变量 | F030 |
 | 2026-06-04 | 登记 F031 频道信息源订阅状态对账：表 1 新增 `ChannelInfoSourceSubscription` 领域归属（订阅意图真相 = `channel.source_list` 并集，`channel_info_source` 为物化视图）、表 3 追加依赖 F026；订阅同步即时、退订改每日对账驱动；不新增表/对外 API/错误码（沿用 190 段 19007）；未新增不变量 | F031 |
 | 2026-06-08 | 登记 F032 全平台 OFD 上传支持：表 1 标注"无新增领域对象"（仅在 RAG 解析链路加 `ofd` 分支，OFD→PDF 后复用 PDF 解析/预览）、表 3 追加（无依赖）；新增 109 段错误码 `OfdConvertError`(10917)；未新增不变量、未新增表/对外 API | F032 |
+| 2026-06-10 | 登记 F033 部门知识空间成员授权范围收敛：表 1 标注"无新增领域对象"（仅在 ReBAC 授权/列表接口对 `knowledge_space` 按 `DepartmentKnowledgeSpace` 绑定收敛至部门子树/子树成员、禁用 user_group）、表 3 追加依赖 F006/F007 + 部门空间能力；复用 `PermissionDeniedError`，未新增错误码/表/对外 API/不变量；普通知识空间授权路径零变化 | F033 |

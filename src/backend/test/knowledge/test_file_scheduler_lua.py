@@ -60,7 +60,7 @@ def test_enqueue_pushes_file_and_marks_user_active(scheduler, redis_conn):
     assert payload["callback_url"] == "http://cb"
     assert redis_conn.sismember("{bisheng_fs}:active_users", "42")
     assert redis_conn.sismember("{bisheng_fs}:inflight_users", "42")
-    assert 0 < redis_conn.ttl("{bisheng_fs}:payload:100") <= 14400
+    assert 0 < redis_conn.ttl("{bisheng_fs}:payload:100") <= 604800
 
 
 def test_dispatch_one_pops_fifo_without_per_user_limit(scheduler, redis_conn):
@@ -173,6 +173,66 @@ def test_release_dispatch_lock_only_releases_own_token(scheduler, redis_conn):
     token_b = scheduler.acquire_dispatch_lock(ttl_seconds=10)
     assert token_b is not None
     assert token_b != token_a
+
+
+def test_drop_inflight_discards_without_requeue_or_counter_change(scheduler, redis_conn):
+    """A ghost in-flight entry (payload lost, never confirmed) must be removed
+    from inflight WITHOUT being pushed back to the queue and WITHOUT touching the
+    queue counter — otherwise it becomes a poison pill that blocks the queue."""
+    scheduler.enqueue_file(user_id="9", file_id="1", preview_cache_key="", callback_url="", file_ext="txt")
+    scheduler.enqueue_file(user_id="9", file_id="2", preview_cache_key="", callback_url="", file_ext="txt")
+    dispatched = scheduler.dispatch_one(user_id="9")  # RPOP tail → "1"
+    assert dispatched == "1"
+
+    scheduler.drop_inflight(user_id="9", file_id="1")
+
+    # not re-queued, payload gone, inflight cleared, counter untouched
+    assert redis_conn.lrange("{bisheng_fs}:queue:9", 0, -1) == ["2"]
+    assert redis_conn.hgetall("{bisheng_fs}:payload:1") == {}
+    assert "1" not in redis_conn.smembers("{bisheng_fs}:inflight:9")
+    assert scheduler.inflight_total(queue="knowledge_celery") == 0
+
+
+def test_drop_inflight_clears_inflight_users_when_empty(scheduler, redis_conn):
+    scheduler.enqueue_file(user_id="9", file_id="1", preview_cache_key="", callback_url="", file_ext="txt")
+    scheduler.dispatch_one(user_id="9")
+    scheduler.drop_inflight(user_id="9", file_id="1")
+    assert not redis_conn.sismember("{bisheng_fs}:inflight_users", "9")
+
+
+def test_put_payload_writes_hash_with_ttl(scheduler, redis_conn):
+    scheduler.put_payload(
+        file_id="5",
+        preview_cache_key="",
+        callback_url="",
+        user_id="9",
+        file_ext="pdf",
+        tenant_id="3",
+        ttl_seconds=120,
+    )
+    payload = redis_conn.hgetall("{bisheng_fs}:payload:5")
+    assert payload == {
+        "preview_cache_key": "",
+        "callback_url": "",
+        "user_id": "9",
+        "file_ext": "pdf",
+        "tenant_id": "3",
+    }
+    assert 0 < redis_conn.ttl("{bisheng_fs}:payload:5") <= 120
+
+
+def test_queued_files_returns_queue_contents(scheduler, redis_conn):
+    for fid in ("1", "2", "3"):
+        scheduler.enqueue_file(user_id="9", file_id=fid, preview_cache_key="", callback_url="", file_ext="txt")
+    # LPUSH order → newest first; queued_files mirrors LRANGE 0 -1
+    assert scheduler.queued_files(user_id="9") == ["3", "2", "1"]
+
+
+def test_remove_from_queue_removes_all_occurrences(scheduler, redis_conn):
+    scheduler.enqueue_file(user_id="9", file_id="1", preview_cache_key="", callback_url="", file_ext="txt")
+    redis_conn.rpush("{bisheng_fs}:queue:9", "1")  # simulate an accidental duplicate
+    scheduler.remove_from_queue(user_id="9", file_id="1")
+    assert redis_conn.lrange("{bisheng_fs}:queue:9", 0, -1) == []
 
 
 def test_dispatch_re_adds_user_to_inflight_users(scheduler, redis_conn):

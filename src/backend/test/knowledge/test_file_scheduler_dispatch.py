@@ -266,20 +266,98 @@ def test_no_lock_returns_early(monkeypatch):
     sched.release_dispatch_lock.assert_not_called()
 
 
-def test_missing_payload_rolls_back(monkeypatch):
+def _db_row(status, *, file_name="a.txt", tenant_id=1):
+
+    m = MagicMock()
+    m.status = status.value if hasattr(status, "value") else status
+    m.file_name = file_name
+    m.tenant_id = tenant_id
+    return m
+
+
+def _patch_dao(monkeypatch, by_id):
+    """Patch KnowledgeFileDao.get_file_by_ids to return rows keyed by file id."""
+
+    def _get(ids):
+        rows = [by_id.get(int(i)) for i in ids]
+        return [r for r in rows if r is not None]
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.get_file_by_ids",
+        _get,
+    )
+
+
+def test_missing_payload_waiting_file_rebuilds_and_dispatches(monkeypatch):
+    """A still-WAITING file whose payload expired must be self-healed: rebuild the
+    payload from the DB row and dispatch it — NOT rolled back, NOT dropped."""
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+
     sched = _sched()
     sched.active_users.return_value = ["a"]
-    sched.dispatch_one.side_effect = ["10", None]
-    sched.get_payload.return_value = {}  # evicted
+    sched.dispatch_one.side_effect = ["50", None]
+    sched.get_payload.return_value = {}  # payload expired
+    _patch_dao(monkeypatch, {50: _db_row(KnowledgeFileStatus.WAITING, file_name="x.pdf", tenant_id=7)})
+    apply_async = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._parse_apply_async", apply_async)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.decide_queue", lambda ext: "knowledge_celery")
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_conf", lambda: _conf())
+
+    run_dispatch_round(scheduler=sched)
+
+    sched.put_payload.assert_called_once()
+    assert apply_async.call_count == 1
+    assert apply_async.call_args.kwargs["args"][0] == 50
+    sched.rollback_dispatch.assert_not_called()
+    sched.drop_inflight.assert_not_called()
+    sched.confirm_dispatch.assert_called_once_with(file_id="50", queue="knowledge_celery")
+
+
+def test_missing_payload_ghost_file_is_discarded_not_requeued(monkeypatch):
+    """A popped file with no payload AND a terminal/deleted DB row is a ghost: it
+    must be discarded (drop_inflight), never re-queued (no poison pill)."""
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+
+    sched = _sched()
+    sched.active_users.return_value = ["a"]
+    sched.dispatch_one.side_effect = ["94238", None]
+    sched.get_payload.return_value = {}
+    _patch_dao(monkeypatch, {94238: _db_row(KnowledgeFileStatus.SUCCESS)})
     apply_async = MagicMock()
     monkeypatch.setattr("bisheng.worker.knowledge.scheduler._parse_apply_async", apply_async)
     monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_conf", lambda: _conf())
 
     run_dispatch_round(scheduler=sched)
 
+    sched.drop_inflight.assert_called_once_with(user_id="a", file_id="94238")
+    sched.rollback_dispatch.assert_not_called()
     apply_async.assert_not_called()
-    sched.rollback_dispatch.assert_called_once_with(user_id="a", file_id="10")
-    sched.release_dispatch_lock.assert_called_once_with("tok")
+
+
+def test_ghost_at_queue_tail_does_not_block_files_behind_it(monkeypatch):
+    """Regression for the poison-pill / head-of-line-blocking bug: a ghost popped
+    first must NOT cause the user to be skipped — the live file behind it must
+    still be dispatched in the same round."""
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+
+    sched = _sched()
+    sched.active_users.return_value = ["a"]
+    # tail = ghost 94238 (popped first), then a live WAITING file 100, then empty
+    sched.dispatch_one.side_effect = ["94238", "100", None]
+    sched.get_payload.side_effect = lambda *, file_id: {} if file_id == "94238" else {"file_ext": "txt"}
+    _patch_dao(monkeypatch, {94238: _db_row(KnowledgeFileStatus.SUCCESS)})
+    apply_async = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._parse_apply_async", apply_async)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.decide_queue", lambda ext: "knowledge_celery")
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_conf", lambda: _conf())
+
+    run_dispatch_round(scheduler=sched)
+
+    # ghost discarded, live file behind it dispatched
+    sched.drop_inflight.assert_called_once_with(user_id="a", file_id="94238")
+    assert apply_async.call_count == 1
+    assert apply_async.call_args.kwargs["args"][0] == 100
+    sched.confirm_dispatch.assert_called_once_with(file_id="100", queue="knowledge_celery")
 
 
 def test_stamps_owning_tenant(monkeypatch):

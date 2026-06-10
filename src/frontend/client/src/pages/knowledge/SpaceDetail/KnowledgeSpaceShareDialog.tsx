@@ -36,6 +36,13 @@ interface KnowledgeSpaceShareDialogProps {
     showShareTab: boolean;
     showMembersTab?: boolean;
     showPermissionTab: boolean;
+    /**
+     * F033: department knowledge spaces authorize only within the bound
+     * department subtree and forbid the user-group dimension. When true, the
+     * user-group tab is hidden in both the permission list and the grant dialog.
+     * Backend enforces the same restriction regardless of this flag.
+     */
+    isDepartmentSpace?: boolean;
 }
 
 export function KnowledgeSpaceShareDialog({
@@ -48,6 +55,7 @@ export function KnowledgeSpaceShareDialog({
     showShareTab,
     showMembersTab = false,
     showPermissionTab,
+    isDepartmentSpace = false,
 }: KnowledgeSpaceShareDialogProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -158,14 +166,19 @@ export function KnowledgeSpaceShareDialog({
         </div>
     );
 
-    const SUBJECT_TABS: Array<{
+    // F033: department spaces drop the user-group dimension. The list view and
+    // the grant dialog share this array, so both lose the tab at once.
+    const SUBJECT_TABS = useMemo<Array<{
         value: "user" | "department" | "user_group";
         labelKey: string;
-    }> = [
-        { value: "user", labelKey: "com_permission.subject_user" },
-        { value: "department", labelKey: "com_permission.subject_department" },
-        { value: "user_group", labelKey: "com_permission.subject_user_group" },
-    ];
+    }>>(() => {
+        const tabs = [
+            { value: "user" as const, labelKey: "com_permission.subject_user" },
+            { value: "department" as const, labelKey: "com_permission.subject_department" },
+            { value: "user_group" as const, labelKey: "com_permission.subject_user_group" },
+        ];
+        return isDepartmentSpace ? tabs.filter((tab) => tab.value !== "user_group") : tabs;
+    }, [isDepartmentSpace]);
 
     const permissionPanel = (
         <Tabs

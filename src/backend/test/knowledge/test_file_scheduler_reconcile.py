@@ -138,6 +138,76 @@ def test_case1_timeout_status_is_treated_as_terminal(monkeypatch):
     sched.enqueue_file.assert_not_called()
 
 
+def test_case5_queue_ghost_removed(monkeypatch):
+    """A queued file with no payload AND a terminal DB row is a ghost: reconcile
+    must LREM it from the queue so it stops blocking dispatch."""
+    _patch_fair_enabled(monkeypatch)
+    fake_conn = MagicMock()
+    fake_conn.llen.return_value = 1
+    fake_conn.scard.return_value = 0
+    sched = MagicMock()
+    sched.inflight_users.return_value = []
+    sched.active_users.return_value = ["3"]
+    sched.queued_files.return_value = ["94238"]
+    sched.get_payload.return_value = {}  # payload expired
+    sched._conn = fake_conn
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.get_file_by_ids",
+        lambda ids: [_row(KnowledgeFileStatus.SUCCESS)],
+    )
+
+    reconcile_file_scheduler_task.run()
+
+    sched.remove_from_queue.assert_called_once_with(user_id="3", file_id="94238")
+    sched.put_payload.assert_not_called()
+
+
+def test_case5_queue_orphan_waiting_rebuilds_payload(monkeypatch):
+    """A queued file still WAITING but with an expired payload must have its
+    payload rebuilt (not removed) so the next dispatch can parse it."""
+    _patch_fair_enabled(monkeypatch)
+    fake_conn = MagicMock()
+    fake_conn.llen.return_value = 1
+    fake_conn.scard.return_value = 0
+    sched = MagicMock()
+    sched.inflight_users.return_value = []
+    sched.active_users.return_value = ["3"]
+    sched.queued_files.return_value = ["555"]
+    sched.get_payload.return_value = {}
+    sched._conn = fake_conn
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.get_file_by_ids",
+        lambda ids: [_row(KnowledgeFileStatus.WAITING, file_name="x.pdf", user_id=3)],
+    )
+
+    reconcile_file_scheduler_task.run()
+
+    sched.put_payload.assert_called_once()
+    sched.remove_from_queue.assert_not_called()
+
+
+def test_case5_healthy_queued_file_untouched(monkeypatch):
+    """A queued file that still has its payload must be left alone."""
+    _patch_fair_enabled(monkeypatch)
+    fake_conn = MagicMock()
+    fake_conn.llen.return_value = 1
+    fake_conn.scard.return_value = 0
+    sched = MagicMock()
+    sched.inflight_users.return_value = []
+    sched.active_users.return_value = ["3"]
+    sched.queued_files.return_value = ["555"]
+    sched.get_payload.return_value = {"file_ext": "txt", "user_id": "3"}
+    sched._conn = fake_conn
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+
+    reconcile_file_scheduler_task.run()
+
+    sched.remove_from_queue.assert_not_called()
+    sched.put_payload.assert_not_called()
+
+
 def test_case4_drained_active_user_removed(monkeypatch):
     """If queue and inflight are both empty, user must be removed from active_users."""
     _patch_fair_enabled(monkeypatch)
@@ -147,6 +217,7 @@ def test_case4_drained_active_user_removed(monkeypatch):
     sched = MagicMock()
     sched.inflight_users.return_value = []  # no inflight to reconcile
     sched.active_users.return_value = ["9"]
+    sched.queued_files.return_value = []
     sched._conn = fake_conn
     monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
 
@@ -167,6 +238,7 @@ def test_case4_user_with_queued_files_not_removed(monkeypatch):
     sched = MagicMock()
     sched.inflight_users.return_value = []
     sched.active_users.return_value = ["9"]
+    sched.queued_files.return_value = []
     sched._conn = fake_conn
     monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
 
