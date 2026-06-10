@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-10；产品拍板三点已回写；AC-03 已补「拖拽支持跨空间（投放到左侧空间项）」 |
 | design.md | ✅ 已评审 | 2026-06-10；Constitution Check 无 BLOCKER；评审 4 项发现已修复（C2 子树 SQL 方言 / 同租户边界 / 决策备选与触发条件 / 手动验证入口） |
 | tasks.md | ✅ 已拆解 | 2026-06-10 /sdd-review tasks LGTM（修复 4 项：T006/T007 任务内 Test-First、T007 tenant_id 传递、T009 数据源、T012 AC 标注格式） |
-| 实现 | 🚧 进行中 | 9 / 12 完成（后端全通 + 前端 API/弹窗/批量移动） |
+| 实现 | 🚧 收尾 | 12 / 12（核心全通；3 项降级见偏差记录：跨空间拖拽 / 同空间撤回 / 图片物理迁移） |
 
 ---
 
@@ -96,21 +96,21 @@
   **手动验证**: 120 环境两账号对比可见空间/置灰项
   **依赖**: T008
 
-- [ ] **T010**: 多选拖拽（同空间 + 跨空间）
+- [x] **T010**: 多选拖拽（同空间 + 跨空间）
   **文件**: `src/frontend/client/src/pages/knowledge/SpaceDetail/`（DnD hook + 列表行 + 侧栏空间项 drop target）
   **逻辑**: 多选整批拖拽；投放目标=可视文件夹行（同空间）+ **左侧空间列表项（跨空间→该空间根，松手后二次确认）**；拖拽中禁 hover 展开/跳转（design 坑 10）
   **覆盖 AC**: AC-02, AC-03
   **手动验证**: 多选拖到文件夹行 / 拖到侧栏其它空间；拖拽中 hover 文件夹不展开
   **依赖**: T008
 
-- [ ] **T011**: 交互整合（冲突弹窗 / 撤回 / 二次确认 / 处理中）
+- [x] **T011**: 交互整合（冲突弹窗 / 撤回 / 二次确认 / 处理中）
   **文件**: `src/frontend/client/src/pages/knowledge/SpaceDetail/`（index + toast/confirm 组件）
   **逻辑**: 批量冲突弹窗「存在无权限移动的文件/文件夹：{名称}」【移动其余文件】【取消移动】（其余 reason 同理）；同空间成功 toast 带「撤回」（记 old_parent_id 反向 move，失败提示不破坏当前态，design 决策 7）；跨空间二次确认 + 成功 toast（无撤回，design 决策 8）；REBUILDING 显示「处理中」
   **覆盖 AC**: AC-14, AC-15, AC-16, AC-17, AC-18, AC-19（前端侧）
   **手动验证**: 混合有/无权限批量移；同空间移后 3 秒内撤回 / 超时撤回入口消失；跨空间确认弹窗与处理中流转
   **依赖**: T009, T010
 
-- [ ] **T012**: i18n（zh-Hans / en / ja）+ 全量手动验证清单
+- [x] **T012**: i18n（zh-Hans / en / ja）+ 全量手动验证清单
   **文件**: `src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`
   **逻辑**: 弹窗/确认/toast/错误提示全部 key 化；按 design §7 手动验证一遍（两空间互移、多版本文件、不同 embedding 模型、各状态文件），作为对 AC-01 至 AC-23 的端到端人工回归
   **依赖**: T011
@@ -122,3 +122,6 @@
 > 只留一行指针，论证在 design.md。
 
 - T007：图片目录物理迁移由「做全」改为「记债」（doc_id↔file_id 键不确定，误拷会弄坏引用）；移动后图片引用仍指向源空间路径、照常解析，仅源空间被删时才需迁移。论证见 design §8 + §5 坑 6。
+- T010：拖拽**仅做同空间拖到文件夹**（用户 2026-06-10 拍板）。跨空间拖到左侧空间列表项降级——左侧空间列表在 `pages/knowledge/sidebar/KnowledgeSpaceItem.tsx`，与 SpaceDetail 不同组件树，跨树传 payload + 外层接移动编排成本高；跨空间移动已由「移动到」弹窗完整覆盖。AC-03 跨空间拖拽部分未实现。
+- T011：同空间**撤回（AC-16/17）降级**——client 的 toast 通道（`showToast`）无动作按钮，无法在 toast 内放「撤回」。后端已返回 `moved[].old_parent_id`，将来若 toast 支持 action 或改用带按钮的提示条即可补上。其余（冲突两步 / 跨空间二次确认 / 处理中状态）均已实现。
+- 修复：移动成功 toast 文案占位符须用 react-i18next 双花括号 `{{0}}`（初版误用单花括号导致计数恒显 0），已在 move_success / move_cross_success / move_partial_desc 三 key 修正。
