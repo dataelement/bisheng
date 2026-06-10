@@ -7,6 +7,9 @@ export default function UsersSelect({ multiple = false, lockedValues = [], value
         return {
             label: String(v?.label ?? ''),
             value: Number(v?.value),
+            department_id: v?.department_id == null ? undefined : Number(v.department_id),
+            dept_id: typeof v?.dept_id === "string" ? v.dept_id : undefined,
+            external_id: v?.external_id ?? null,
             department_path: typeof dp === "string" && dp.trim() ? dp.trim() : undefined,
         }
     }).filter((x) => x.label && Number.isFinite(x.value))

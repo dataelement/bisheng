@@ -38,9 +38,11 @@ def test_shougang_conf_accepts_unused_fields():
         prefix="GF",
         deployment_label="首钢",
         portal_admin_url="/portal-admin/",
+        portal_base_url="https://portal.example.com",
     )
     assert conf.deployment_label == "首钢"
     assert conf.portal_admin_url == "/portal-admin/"
+    assert conf.portal_base_url == "https://portal.example.com"
 
 
 def test_shougang_conf_ignores_invalid_file_encoding_block():

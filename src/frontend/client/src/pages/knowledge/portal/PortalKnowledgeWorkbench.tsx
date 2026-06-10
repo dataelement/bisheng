@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
     FileStatus,
     FileType,
@@ -67,6 +68,7 @@ import { PortalPreviewWorkspace } from "./components/PortalPreviewWorkspace";
 import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawer";
 import { SpaceSidebar } from "./components/SpaceSidebar";
 import { usePortalApprovalBridge } from "./hooks/usePortalApprovalBridge";
+import { usePortalDeepLink } from "./hooks/usePortalDeepLink";
 import { usePortalSpaces } from "./hooks/usePortalSpaces";
 import { usePortalUploadDialog } from "./hooks/usePortalUploadDialog";
 import s from "./PortalKnowledgeWorkbench.module.css";
@@ -79,6 +81,7 @@ export default function PortalKnowledgeWorkbench() {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
     const queryClient = useQueryClient();
+    const [searchParams] = useSearchParams();
     const { data: bsConfig } = useGetBsConfig();
     const isH5 = usePrefersMobileLayout();
     const aiPane = useAiSplitPane();
@@ -663,6 +666,24 @@ export default function PortalKnowledgeWorkbench() {
             void loadRootTree(1, false, activeSpace.id);
         }
     }, [activeSpace?.id, loadRootTree]);
+
+    usePortalDeepLink({
+        searchParams,
+        activeSpace,
+        activeSpaceIdRef,
+        selectableSpaces,
+        displayedFiles,
+        statusFilterNumbers,
+        setActiveSpace,
+        setCurrentFolderId,
+        setSelectedFileIds,
+        setSelectedFolderIds,
+        setSearchText,
+        setSearchMode,
+        setSearchResults,
+        setSearchLoading,
+        setSelectedFile,
+    });
 
     useEffect(() => {
         if (!selectedFile) return;

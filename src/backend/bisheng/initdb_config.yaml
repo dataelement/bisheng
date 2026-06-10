@@ -98,6 +98,8 @@ daily_chat:
 shougang:
   # 文件编码公司前缀；为空时使用代码默认值 SGGF。
   prefix: "SGGF"
+  # 门户网站访问基址；/api/v2/filelib/retrieve 会拼接为 /knowledge-spaces?spaceId=...&fileId=... 原文预览 URL。
+  portal_base_url: ""
   # 文件编码配置为可选项；缺失或单项非法时会回退到代码默认值，不阻断文件入库。
   file_encoding:
    classify_prompt: |

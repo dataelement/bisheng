@@ -56,6 +56,8 @@ class RetrieveChunk(BaseModel):
     document_id: int
     document_name: str
     chunk_index: int
+    source_url: str = ""
+    source_full_url: str = ""
 
 
 class RetrieveResp(BaseModel):

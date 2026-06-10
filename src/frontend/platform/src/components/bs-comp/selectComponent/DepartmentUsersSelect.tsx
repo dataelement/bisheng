@@ -13,6 +13,8 @@ import { useTranslation } from "react-i18next"
 export type DepartmentUserOption = {
   label: string
   value: number
+  department_id?: number
+  dept_id?: string
   /** Login credential (external_id). Falls back to value (user_id) when absent. */
   external_id?: string | null
   /** 选人时由组织树节点解析，供编辑页即时展示部门路径 */
@@ -153,6 +155,8 @@ export default function DepartmentUsersSelect({
       const users = (res?.data || []).map((u) => ({
         value: Number(u.user_id),
         label: u.user_name,
+        department_id: did,
+        dept_id: node.dept_id,
         external_id: u.person_id ?? null,
       }))
       setDeptUsersMap((prev) => ({ ...prev, [did]: users }))
@@ -267,6 +271,18 @@ export default function DepartmentUsersSelect({
     return m
   }, [tree])
 
+  const deptNodeByTreeId = useMemo(() => {
+    const m = new Map<number, DepartmentTreeNode>()
+    const walk = (nodes: DepartmentTreeNode[]) => {
+      for (const n of nodes) {
+        m.set(Number(n.id), n)
+        if (n.children?.length) walk(n.children)
+      }
+    }
+    walk(tree)
+    return m
+  }, [tree])
+
   const searchedByDept = useMemo(() => {
     const map = new Map<number, DepartmentUserOption[]>()
     if (!keywordTrim) return map
@@ -276,6 +292,8 @@ export default function DepartmentUsersSelect({
       const row: DepartmentUserOption = {
         value: Number(u.user_id),
         label: u.user_name,
+        department_id: did,
+        dept_id: deptNodeByTreeId.get(did)?.dept_id,
         external_id: u.external_id ?? null,
       }
       const arr = map.get(did) || []
@@ -283,7 +301,7 @@ export default function DepartmentUsersSelect({
       map.set(did, arr)
     }
     return map
-  }, [deptBusinessKeyToId, keywordTrim, searchedUsers])
+  }, [deptBusinessKeyToId, deptNodeByTreeId, keywordTrim, searchedUsers])
 
   /** 有搜索词时：只按「用户名」命中（getUsersApi 的 name + 返回行的 department_id / dept_id 挂树），不按部门名过滤 */
   const nodeMatches = useCallback((n: DepartmentTreeNode): boolean => {

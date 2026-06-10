@@ -343,6 +343,7 @@ class ShougangConf(BaseModel):
     # consumed by the file-encoding pipeline. Kept here so the model accepts them.
     deployment_label: Optional[str] = Field(default=None)
     portal_admin_url: Optional[str] = Field(default=None)
+    portal_base_url: Optional[str] = Field(default=None)
     file_encoding: ShougangFileEncodingConf = Field(default_factory=ShougangFileEncodingConf)
 
     @property

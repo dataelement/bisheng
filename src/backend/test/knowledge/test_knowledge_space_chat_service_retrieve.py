@@ -6,14 +6,18 @@ These tests cover the multi-KB retrieval orchestration introduced for the
 filter validation, tag-name resolution, KB-not-found, multi-KB merge and
 top_k truncation, and the per-chunk knowledge_id annotation.
 """
+from inspect import signature
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
 from langchain_core.documents import Document
 
+from bisheng.developer_token.api.dependencies import get_developer_token_user
 from bisheng.knowledge.domain.services import knowledge_space_chat_service as svc_mod
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
+from bisheng.open_endpoints.api.dependencies import get_knowledge_space_chat_service_for_openapi
+from bisheng.open_endpoints.api.endpoints.filelib import _build_portal_source_urls
 
 
 class _StubNotFoundError(Exception):
@@ -49,6 +53,36 @@ def _doc(content: str, *, document_id: int, document_name: str, chunk_index: int
             "chunk_index": chunk_index,
         },
     )
+
+
+def test_build_portal_source_urls_encodes_portal_deep_link():
+    source_url, source_full_url = _build_portal_source_urls(
+        portal_base_url="https://portal.example.com/knowledge-spaces",
+        knowledge_id=7,
+        document_id=9,
+    )
+
+    assert source_url == "/knowledge-spaces?spaceId=7&fileId=9"
+    assert source_full_url == "https://portal.example.com/knowledge-spaces?spaceId=7&fileId=9"
+
+
+async def test_openapi_chat_service_depends_on_developer_token_user():
+    params = signature(get_knowledge_space_chat_service_for_openapi).parameters
+    assert params["developer_user"].default.dependency is get_developer_token_user
+
+    request = MagicMock()
+    developer_user = MagicMock()
+    version_repo = MagicMock()
+
+    service = await get_knowledge_space_chat_service_for_openapi(
+        request=request,
+        developer_user=developer_user,
+        version_repo=version_repo,
+    )
+
+    assert service.request is request
+    assert service.login_user is developer_user
+    assert service.version_repo is version_repo
 
 
 # ---------------------------------------------------------------------------

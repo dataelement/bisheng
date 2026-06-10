@@ -96,6 +96,17 @@ Module numbers: 100=server, 104=assistant, 105=flow, 106=user, 108=llm, 109=know
 
 Pagination: `PageData[T]` (new code) with fields `data` + `total`; `PageList[T]` is legacy-compat only.
 
+### 3.6 Backend Coding Standards
+
+- Python code must follow PEP 8, use type hints for function/method parameters and return values, and keep naming conventional: modules/functions/variables `snake_case`, classes `PascalCase`, constants `UPPER_SNAKE_CASE`.
+- Keep formatting compatible with project tooling: `ruff format`, `ruff check --fix`, and import ordering.
+- Repository interfaces live under `domain/repositories/interfaces/` and extend `BaseRepository[ModelClass, IDType]` + `ABC`; implementations live under `domain/repositories/implementations/` and extend `BaseRepositoryImpl[ModelClass, IDType]` + the module repository interface.
+- Schema changes must go through Alembic migrations in `bisheng/core/database/alembic/versions`; never edit database tables directly.
+- CRUD must use SQLModel / SQLAlchemy ORM models through Repository methods. Avoid raw SQL; if a complex query is required, encapsulate it behind a clear Repository API.
+- Database sessions must be managed by dependency injection or existing session helpers such as `@db_session`; never create ad-hoc unmanaged sessions in business code.
+- Business errors belong in `bisheng/common/errcode/` as `BaseErrorCode` subclasses with explicit `Code` and `Msg`; do not return raw error strings from business logic.
+- Log critical business flow, exception boundaries, and important operations with useful context such as user ID or request ID. Log messages, comments, and docstrings should be concise English; comments explain why non-obvious logic exists.
+
 ---
 
 ## 4. Frontend Rules (P0)

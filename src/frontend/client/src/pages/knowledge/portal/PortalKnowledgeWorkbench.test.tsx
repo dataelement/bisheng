@@ -64,7 +64,13 @@ const mockCheckPermission = jest.fn();
 const mockClipboardWriteText = jest.fn();
 const mockHandleUploadFile = jest.fn();
 const mockUpdateFileTagsApi = jest.fn();
+let mockSearchParams = "";
 let mockCreateSpaceConfirmResult: any;
+
+jest.mock("react-router-dom", () => ({
+    ...jest.requireActual("react-router-dom"),
+    useSearchParams: () => [new URLSearchParams(mockSearchParams), jest.fn()],
+}));
 
 jest.mock("~/Providers", () => ({
     useToastContext: () => ({
@@ -447,7 +453,8 @@ function toLocalDateTimeInput(date: Date) {
     return `${formatLocalDateTime(date).replace(" ", "T")}:00`;
 }
 
-function renderWorkbench() {
+function renderWorkbench(initialEntry = "/knowledge-portal") {
+    mockSearchParams = new URL(initialEntry, "http://localhost").search.slice(1);
     const queryClient = new QueryClient({
         defaultOptions: {
             queries: {
@@ -1405,6 +1412,66 @@ describe("PortalKnowledgeWorkbench", () => {
         const restoredWorkspace = await screen.findByTestId("portal-file-workspace");
         expect(within(restoredWorkspace).getByTestId("portal-file-table")).toBeInTheDocument();
         expect(screen.queryByTestId("portal-preview-page")).not.toBeInTheDocument();
+    });
+
+    test("opens a deep-linked portal file preview from query params", async () => {
+        const personalSpace = makeSpace("personal-1", "信息", {
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("201", "后端开发.md", {
+            type: FileType.MD,
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench("/knowledge-portal?spaceId=personal-1&fileId=201");
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("后端开发.md");
+        await waitFor(() => {
+            expect(getFilePreviewApi).toHaveBeenCalledWith("personal-1", "201");
+        });
+    });
+
+    test("opens a deep-linked portal file after the file list finishes loading", async () => {
+        const personalSpace = makeSpace("118", "GR00011", {
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("345", "扁桃与桃光合作用特征的比较研究.pdf", {
+            type: FileType.PDF,
+            spaceId: "118",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+        jest.mocked(searchSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
+
+        renderWorkbench("/knowledge-portal?spaceId=118&fileId=345");
+
+        const preview = await screen.findByTestId("portal-preview-page");
+        expect(preview).toHaveTextContent("扁桃与桃光合作用特征的比较研究.pdf");
+        await waitFor(() => {
+            expect(getFilePreviewApi).toHaveBeenCalledWith("118", "345");
+        });
     });
 
     test("formats table update times as full date time without relative labels", async () => {
