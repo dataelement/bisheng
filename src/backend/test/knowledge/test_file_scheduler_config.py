@@ -15,10 +15,20 @@ def test_knowledge_file_worker_conf_defaults():
     assert conf.fair_scheduler.per_user_pick_size == 1
     assert conf.fair_scheduler.user_overrides == {}
     assert conf.fair_scheduler.inflight_ttl_seconds == 7200
+    # Payload TTL is only a leak backstop (payload is deleted on confirm/purge);
+    # it must be far longer than any realistic queue residency so a still-queued
+    # file never loses its dispatch context. Default 7 days.
+    assert conf.fair_scheduler.payload_ttl_seconds == 604800
     assert conf.fair_scheduler.queue_concurrency == {
         "knowledge_celery": 20,
         "ocr_celery": 5,
     }
+
+
+def test_fair_scheduler_payload_ttl_minimum_one_hour():
+    """payload_ttl_seconds must be at least 3600 (ge=3600)."""
+    with pytest.raises(ValueError):
+        FairSchedulerConf(payload_ttl_seconds=3599)
 
 
 def test_fair_scheduler_lock_ttl_upper_bound():

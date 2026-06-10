@@ -81,6 +81,24 @@ redis.call('SADD',  prefix .. 'active_users', user_id)
 return 1
 """
 
+DROP_DISPATCH = r"""
+local prefix = '{bisheng_fs}:'
+local user_id = KEYS[1]
+local file_id = ARGV[1]
+
+-- Discard a ghost in-flight entry (payload lost / DB terminal-or-deleted) that
+-- was RPOP'd by DISPATCH_ONE but must NOT be parsed. Unlike ROLLBACK_DISPATCH
+-- this does NOT RPUSH the file back — re-queuing a payload-less file is exactly
+-- what turns it into a poison pill. The file was never confirmed, so the queue
+-- counter was never bumped and must not be touched here.
+redis.call('SREM', prefix .. 'inflight:' .. user_id, file_id)
+redis.call('DEL',  prefix .. 'payload:' .. file_id)
+if redis.call('SCARD', prefix .. 'inflight:' .. user_id) == 0 then
+    redis.call('SREM', prefix .. 'inflight_users', user_id)
+end
+return 1
+"""
+
 COMPLETE_FILE = r"""
 local prefix = '{bisheng_fs}:'
 local user_id = KEYS[1]

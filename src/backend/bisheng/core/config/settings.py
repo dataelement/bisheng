@@ -285,6 +285,12 @@ class FairSchedulerConf(BaseModel):
     per_user_pick_size: int = Field(default=1, ge=1)
     user_overrides: dict[str, int] = Field(default_factory=dict)
     inflight_ttl_seconds: int = Field(default=7200, ge=60)
+    # Payload TTL is only a leak backstop: payload is deleted on confirm/purge in
+    # the normal lifecycle, so this just bounds how long an enqueued-but-never-
+    # dispatched-or-purged payload lingers. It MUST exceed any realistic queue
+    # residency — otherwise a file still waiting in the FIFO loses its dispatch
+    # context (the historical poison-pill / head-of-line-blocking bug). Default 7d.
+    payload_ttl_seconds: int = Field(default=604800, ge=3600)
 
     @model_validator(mode="after")
     def validate(self):
