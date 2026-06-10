@@ -124,6 +124,33 @@ Options:
 - `--channel-id <id>`: restrict to a single channel; default is all channels
 - `--apply`: perform writes; default is dry-run
 
+### `clean_department_space_user_group_grants.py`
+
+One-off F033 cleanup. Department knowledge spaces no longer allow the **user-group**
+authorization dimension (the API rejects new user_group grants; the client hides
+the tab). This removes any historical user_group grant on a department space —
+revokes the OpenFGA tuple and drops the relation-model binding. Runtime code keeps
+no compatibility path for these grants.
+
+Behavior:
+
+- scans every department knowledge space (`DepartmentKnowledgeSpaceDao.aget_all`)
+- reports each `user_group` grant as `(space_id, group_id, relation, affected_users)`
+- with `--apply`, revokes the grant via `PermissionService.authorize` + removes the binding
+- only touches department spaces' `user_group` grants — never normal spaces, never user/department grants
+
+Usage:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/clean_department_space_user_group_grants.py            # dry-run
+PYTHONPATH=./ .venv/bin/python scripts/clean_department_space_user_group_grants.py --apply    # execute
+```
+
+Options:
+
+- `--apply`: perform the revokes; default is dry-run. Irreversible (revokes group members' access) — review dry-run output first.
+
 ### `permission_migration.sh`
 
 Manual runner for the F006 historical permission migration from RBAC to ReBAC.

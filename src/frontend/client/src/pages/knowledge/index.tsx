@@ -844,6 +844,7 @@ export default function Knowledge() {
                 showShareTab={false}
                 showMembersTab={false}
                 showPermissionTab
+                isDepartmentSpace={spacePermissionDialogSpace?.spaceKind === "department"}
             />
 
             <KnowledgeSpacePreviewDrawer

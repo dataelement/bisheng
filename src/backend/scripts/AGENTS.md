@@ -106,7 +106,53 @@ Naming: `snake_case` for both `.py` and `.sh` (e.g. `set_admin.sh`, not `set-adm
 
 ---
 
-## 6. Database & Tenant Context
+## 6. Runtime Environment Initialization
+
+A script must run against the **same environment the live service runs against** — same config file, same `settings`, same initialized infra clients. Mismatches here are silent and dangerous: the script reads a different DB/Milvus/Redis than the service, or an infra client is simply absent and a call fails deep in the stack.
+
+### 6.1 Config file (`config` env var)
+
+The service and every script resolve config through `os.getenv('config', 'config.yaml')` (see `bisheng/common/services/config_service.py`). **Export the same `config` the running service uses** before invoking the script, or you will load the wrong YAML (wrong DB / Milvus / Redis endpoints):
+
+```bash
+export config=config.yaml      # must match the value the API/Celery process runs with
+export PYTHONPATH="./"
+python scripts/<your_script>.py
+```
+
+Always import the shared settings singleton — never re-parse the YAML yourself:
+
+```python
+from bisheng.common.services.config_service import settings  # YAML → env → DB → Redis, identical to the service
+```
+
+### 6.2 App context (infra clients)
+
+The API service builds its runtime context in the FastAPI lifespan via `initialize_app_context(config=settings)` (`bisheng/main.py`). A bare script does **not** — only the lazily-registered **database** context exists. So raw DB reads/writes work without any setup, but anything that needs another engine — **OpenFGA/ReBAC** (`PermissionService.authorize`), **Redis** caches, **Milvus**, **Elasticsearch** — will fail (e.g. `FGAClient not available`) until you initialize the full context yourself.
+
+If your script touches anything beyond the database, mirror the lifespan: initialize at startup, **always** close on teardown.
+
+```python
+from bisheng.common.services.config_service import settings
+from bisheng.core.context.manager import close_app_context, initialize_app_context
+
+async def _main() -> int:
+    await initialize_app_context(config=settings)   # DB + OpenFGA + Redis + Milvus + ES, same as the service
+    try:
+        return await run(...)
+    finally:
+        await close_app_context()                   # release pools/clients; do this even on error
+
+asyncio.run(_main())
+```
+
+Reference scripts that do this correctly: `backfill_channel_member_rebac_grants.py`, `clean_department_space_user_group_grants.py`.
+
+**Rule of thumb:** DB-only script → `get_async_db_session()` is enough (§7). Touches FGA / Redis / Milvus / ES → you **must** call `initialize_app_context` first.
+
+---
+
+## 7. Database & Tenant Context
 
 Scripts run **outside** the FastAPI request lifecycle, so the automatic tenant filter has no active tenant context. If your script touches tenant-scoped tables:
 
@@ -124,7 +170,7 @@ For async DB work use `get_async_db_session()` + `asyncio.run(main())`; for sync
 
 ---
 
-## 7. Documentation Requirement
+## 8. Documentation Requirement
 
 Every new script MUST:
 
@@ -135,7 +181,7 @@ Operators should be able to discover the script from `README.md` alone.
 
 ---
 
-## 8. Reference Script Layout (minimal)
+## 9. Reference Script Layout (minimal)
 
 `scripts/set_admin.sh`:
 

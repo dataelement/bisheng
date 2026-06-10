@@ -92,6 +92,11 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only; review DM8 compat manually
 ```
 
+**Migration vs. script — keep them separate:**
+
+- **Schema changes** (DDL: create/alter/drop table, columns, indexes, constraints) → Alembic revision under `migrations/versions/`. These are versioned and replayed on every environment via `alembic upgrade head`.
+- **One-off data migration or cleanup** (backfill/transform rows, purge stale data, fix-up jobs run once) → a standalone script under `scripts/`, **not** Alembic. Don't bury data-only operations in schema revisions.
+
 ---
 
 ## Quick Map (indexes — architecture detail in `docs/architecture/`)
