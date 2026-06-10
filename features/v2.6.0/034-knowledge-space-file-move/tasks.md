@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-10；产品拍板三点已回写；AC-03 已补「拖拽支持跨空间（投放到左侧空间项）」 |
 | design.md | ✅ 已评审 | 2026-06-10；Constitution Check 无 BLOCKER；评审 4 项发现已修复（C2 子树 SQL 方言 / 同租户边界 / 决策备选与触发条件 / 手动验证入口） |
 | tasks.md | ✅ 已拆解 | 2026-06-10 /sdd-review tasks LGTM（修复 4 项：T006/T007 任务内 Test-First、T007 tenant_id 传递、T009 数据源、T012 AC 标注格式） |
-| 实现 | 🔲 未开始 | 0 / 12 完成 |
+| 实现 | 🚧 进行中 | 3 / 12 完成（Wave 1 ✅） |
 
 ---
 
@@ -27,20 +27,20 @@
 
 ### Wave 1 — 基础零件（无互相依赖，可并行）
 
-- [ ] **T001**: 权限模板新增 move_file / move_folder
+- [x] **T001**: 权限模板新增 move_file / move_folder
   **文件**: `src/backend/bisheng/permission/domain/knowledge_space_permission_template.py`
   **逻辑**: 文件级权限项加 `{'id': 'move_file', 'label': '移动文件', 'relation': 'can_edit'}`，文件夹级同理加 `move_folder`（与 rename_file/upload_file 同档；见 design 决策 5——不动 OpenFGA 模型、不迁 tuple）
   **测试**: 断言 `default_permission_ids_for_relation`：editor/manager/owner 档含 move_file/move_folder，viewer 档不含
   **覆盖 AC**: AC-05, AC-06
   **依赖**: 无
 
-- [ ] **T002**: 错误码 SpaceMoveInvalidTargetError(18033)
+- [x] **T002**: 错误码 SpaceMoveInvalidTargetError(18033)
   **文件**: `src/backend/bisheng/common/errcode/knowledge_space.py`
   **逻辑**: 18033，语义=无效移动目标（移入自身/子目录/当前父目录）；release-contract 已登记
   **覆盖 AC**: AC-10（对外可观测错误）
   **依赖**: 无
 
-- [ ] **T003**: DAO 子树辅助
+- [x] **T003**: DAO 子树辅助
   **文件**: `src/backend/bisheng/knowledge/domain/models/knowledge_space_file.py`（SpaceFileDao）
   **逻辑**: 新增「子树最深 level」查询（供 10 层校验按子树最深算，见 design 坑 2）；确认 `get_children_by_prefix` / `count_folder_by_name` / `count_file_by_name` 可复用。**C2 注意**：避免 MySQL-only SQL（design §2）
   **覆盖 AC**: AC-11（支撑）

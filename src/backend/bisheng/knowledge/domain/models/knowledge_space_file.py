@@ -118,6 +118,27 @@ class SpaceFileDao(KnowledgeFileDao):
             return (await session.exec(statement)).all()
 
     @classmethod
+    async def get_max_level_in_subtree(cls, knowledge_id: int, folder_id: int, folder_level_path: str) -> int:
+        """Deepest ``level`` within a folder's own subtree (the folder itself + all
+        descendants). F034 depth check (AC-11): a folder move is allowed only if
+        ``target_level + (max_subtree_level - folder_level) <= 10``; this returns the
+        ``max_subtree_level`` term. Subtree prefix = ``{folder_level_path}/{folder_id}``;
+        the folder itself (``file_level_path == folder_level_path``) is included so a
+        leaf folder still reports its own level.
+        """
+        subtree_prefix = f"{folder_level_path}/{folder_id}"
+        statement = select(func.max(KnowledgeFile.level)).where(
+            KnowledgeFile.knowledge_id == knowledge_id,
+            or_(
+                KnowledgeFile.id == folder_id,
+                col(KnowledgeFile.file_level_path) == subtree_prefix,
+                col(KnowledgeFile.file_level_path).like(f"{subtree_prefix}/%"),
+            ),
+        )
+        async with get_async_db_session() as session:
+            return await session.scalar(statement) or 0
+
+    @classmethod
     async def async_list_children(
         cls,
         knowledge_id: int,
