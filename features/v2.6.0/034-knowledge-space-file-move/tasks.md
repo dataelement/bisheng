@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-10；产品拍板三点已回写；AC-03 已补「拖拽支持跨空间（投放到左侧空间项）」 |
 | design.md | ✅ 已评审 | 2026-06-10；Constitution Check 无 BLOCKER；评审 4 项发现已修复（C2 子树 SQL 方言 / 同租户边界 / 决策备选与触发条件 / 手动验证入口） |
 | tasks.md | ✅ 已拆解 | 2026-06-10 /sdd-review tasks LGTM（修复 4 项：T006/T007 任务内 Test-First、T007 tenant_id 传递、T009 数据源、T012 AC 标注格式） |
-| 实现 | 🚧 进行中 | 6 / 12 完成（Wave 1-2 ✅） |
+| 实现 | 🚧 进行中 | 7 / 12 完成（Wave 1-3 ✅，后端全通） |
 
 ---
 
@@ -74,7 +74,7 @@
 
 ### Wave 3 — 跨空间迁移任务
 
-- [ ] **T007**: migrate_file_vectors celery 任务 + 幂等单测
+- [x] **T007**: migrate_file_vectors celery 任务 + 幂等单测
   **文件**: `src/backend/bisheng/worker/knowledge/move_worker.py`、`src/backend/test/knowledge/test_move_worker.py`
   **逻辑**: 按 file 当前 knowledge_id 解析目标（design 坑 7）：源空间 ES 读全部 chunk → metadata 更新（knowledge_id 等）→ 目标空间 `add_texts` 双写 Milvus+ES（目标模型自动重嵌入，design 决策 2）→ 删源空间数据（按 file_id，幂等）→ 状态 REBUILDING→SUCCESS / 失败→FAILED（可重试）。**图片目录**：拷贝 `knowledge/images/{old_kid}/{doc_id}` 至新空间路径并更新 chunk 引用（design 坑 6，做全）。**解析中兜底**：验证 design 坑 8 的窗口，必要时在解析任务完成段回查归属
   **约束**: 任务参数携带 `tenant_id`（Celery headers → 执行前恢复 `current_tenant_id` ContextVar，与既有 knowledge_celery 任务一致）。**任务内先写幂等单测（红）再实现（绿）**
@@ -121,4 +121,4 @@
 
 > 只留一行指针，论证在 design.md。
 
-（暂无）
+- T007：图片目录物理迁移由「做全」改为「记债」（doc_id↔file_id 键不确定，误拷会弄坏引用）；移动后图片引用仍指向源空间路径、照常解析，仅源空间被删时才需迁移。论证见 design §8 + §5 坑 6。

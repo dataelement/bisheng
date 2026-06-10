@@ -3210,11 +3210,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             raise
 
-    async def _dispatch_cross_space_migration(self, file_id: int) -> None:
-        """Hand a file's retrieval-data migration to the async worker (T007)."""
+    async def _dispatch_cross_space_migration(self, file_id: int, source_space_id: int) -> None:
+        """Hand a file's retrieval-data migration to the async worker (T007).
+
+        ``source_space_id`` is where the chunks currently live (the file's
+        knowledge_id was already flipped to the target); the worker reads source
+        and re-embeds into the file's current (target) space.
+        """
         from bisheng.worker.knowledge.move_worker import migrate_file_vectors
 
-        migrate_file_vectors.delay(file_id=file_id)
+        migrate_file_vectors.delay(file_id=file_id, source_space_id=source_space_id)
 
     async def _collect_version_chain_file_ids(self, session, file_ids: list[int]) -> tuple[set[int], set[int]]:
         """Expand the given primary/leaf file ids to their full version chains.
@@ -3359,7 +3364,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             # ── execute valid items ──
             moved: list[dict] = []
-            files_to_migrate: set[int] = set()
+            moved_file_ids: set[int] = set()  # all relocated files (tag clearing, AC-23)
+            files_to_migrate: set[int] = set()  # only files with data to move (was SUCCESS → REBUILDING)
             for rec in valid:
                 is_folder = rec.file_type == FileType.DIR.value
                 word = "folder" if is_folder else "file"
@@ -3396,10 +3402,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         if cf is None:
                             continue
                         cf.knowledge_id = target_space_id
+                        moved_file_ids.add(cfid)
                         if cf.status == KnowledgeFileStatus.SUCCESS.value:
+                            # Only completed files have chunks to migrate. Files still
+                            # parsing/failed continue in the target space via their own
+                            # parse/retry flow (AC-21); no migration dispatch for them.
                             cf.status = KnowledgeFileStatus.REBUILDING.value
+                            files_to_migrate.add(cfid)
                         session.add(cf)
-                        files_to_migrate.add(cfid)
                     for r in rows:
                         r.knowledge_id = target_space_id
                     for did in chain_docs:
@@ -3428,11 +3438,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             old_parent = ("folder", m["old_parent_id"]) if m["old_parent_id"] else ("knowledge_space", space_id)
             await self._replace_resource_parent_tuple(otype, m["id"], old_parent, new_parent)
 
-        if cross_space and files_to_migrate:
-            for fid in files_to_migrate:
-                # AC-23: clear knowledge-space tags on the moved file (not migrated).
+        if cross_space:
+            # AC-23: clear space tags on every relocated file (tags don't migrate).
+            for fid in moved_file_ids:
                 await TagDao.aupdate_resource_tags([], str(fid), ResourceTypeEnum.SPACE_FILE, self.login_user.user_id)
-                await self._dispatch_cross_space_migration(fid)
+            # Dispatch retrieval-data migration only for files that had data (source = old space).
+            for fid in files_to_migrate:
+                await self._dispatch_cross_space_migration(fid, source_space_id=space_id)
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
         if cross_space:

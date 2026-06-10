@@ -256,7 +256,9 @@ async def test_cross_space_moves_version_chain_clears_tags_sets_rebuilding(async
 
     svc = _svc()
     # move_items reads the version chain directly via the (patched) session.
-    svc._dispatch_cross_space_migration = AsyncMock(side_effect=lambda fid: dispatched.append(fid))
+    svc._dispatch_cross_space_migration = AsyncMock(
+        side_effect=lambda fid, source_space_id=None: dispatched.append((fid, source_space_id))
+    )
 
     res = await svc.move_items(1, [{"id": 100, "type": "file"}], target_space_id=2, target_folder_id=None)
 
@@ -269,9 +271,10 @@ async def test_cross_space_moves_version_chain_clears_tags_sets_rebuilding(async
     # document anchor moved too
     fresh_doc = await async_db_session.get(KnowledgeDocument, doc.id)
     assert fresh_doc.knowledge_id == 2
-    # tags cleared + migration dispatched for both files
+    # tags cleared + migration dispatched for both files (source = old space 1)
     assert {a[1] for a in cleared_tags} == {"100", "101"}
-    assert set(dispatched) == {100, 101}
+    assert {fid for fid, _ in dispatched} == {100, 101}
+    assert all(src == 1 for _, src in dispatched)
 
 
 @pytest.mark.asyncio
