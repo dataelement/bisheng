@@ -32,6 +32,7 @@ def _conf(cap, **overrides):
     conf.queue_concurrency = {"knowledge_celery": cap}
     conf.concurrency_for = lambda q: cap
     conf.weight_for = lambda u: overrides.get("weights", {}).get(str(u), 1)
+    conf.payload_ttl_seconds = 604800
     return conf
 
 

@@ -18,8 +18,7 @@ autogen_coding/
 # Personal notes (lilu's local reference docs, not for sharing)
 .claude/docs/
 
-# Local feature planning artifacts
-features/
+
 
 # VSCode
 .vscode

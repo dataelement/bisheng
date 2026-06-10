@@ -1,0 +1,157 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="d1" name="4.3.4 执行过程用户交互流程图">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1700" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="A" value="用户提交任务" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="560" y="40" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="B" value="进入执行视图&lt;br&gt;全局状态：规划中" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="150" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="C" value="思考过程流式滚动&lt;br&gt;生成任务清单" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="260" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="D" value="全局状态：执行中&lt;br&gt;清单逐项点亮" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="370" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="E" value="当前步骤类型" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="570" y="480" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="F" value="步骤卡：输入/输出/状态" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="620" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="G" value="步骤卡：正在翻阅文件第N页" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="620" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="H" value="步骤卡：命中资料条目" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="620" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="I" value="子任务块：内含子步骤流" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="620" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="J" value="灵思需要补充?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="470" y="730" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="K" value="全局状态：等待你的补充&lt;br&gt;输入区高亮 见4.4" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="120" y="735" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="L" value="执行结果" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="470" y="870" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="M" value="全局状态：已完成&lt;br&gt;产物区聚合交付物" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="120" y="1010" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="N" value="全局状态：执行失败&lt;br&gt;原因摘要+重试" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="470" y="1010" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="O" value="全局状态：已终止&lt;br&gt;保留已产出结果" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="820" y="1010" width="200" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="P" value="预览/单个下载/打包下载" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1150" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="Q" value="基于产物继续追问" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="1150" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="R" value="重试 或 查看中间结果" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="540" y="1150" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="eAB" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="A" target="B">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eBC" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="B" target="C">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eCD" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="C" target="D">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eDE" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="D" target="E">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eEF" value="工具调用" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="E" target="F">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eEG" value="翻阅附件" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="E" target="G">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eEH" value="检索知识库" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="E" target="H">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eEI" value="委派子任务" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="E" target="I">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eFJ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="F" target="J">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eGJ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="G" target="J">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eHJ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="H" target="J">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eIJ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="I" target="J">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eJK" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="J" target="K">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eKD" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="K" target="D">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eJD" value="否，继续" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="J" target="D">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="900" y="765"/>
+              <mxPoint x="900" y="395"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eDL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="D" target="L">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="430" y="395"/>
+              <mxPoint x="430" y="905"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eLM" value="成功" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L" target="M">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eLN" value="失败" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L" target="N">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eLO" value="用户终止" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="L" target="O">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eMP" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="M" target="P">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eMQ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="M" target="Q">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eNR" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="N" target="R">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eQD" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="Q" target="D">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="380" y="1230"/>
+              <mxPoint x="380" y="445"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="eRB" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="R" target="B">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="640" y="1250"/>
+              <mxPoint x="800" y="1250"/>
+              <mxPoint x="800" y="175"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

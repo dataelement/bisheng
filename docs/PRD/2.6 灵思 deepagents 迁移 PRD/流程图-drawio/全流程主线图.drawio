@@ -1,0 +1,100 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="d1" name="用户使用全流程主线图">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="1500" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="Start" value="用户进入灵思" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="180" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="Chip" value="挂上「任务模式」chip&lt;br&gt;进入灵思模式" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="360" y="150" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="F2" value="§4.2 附件上传与按需处理&lt;br&gt;offload-first·解析四态·引用溯源" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="660" y="285" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="F1" value="§4.1 发起任务·统一输入区&lt;br&gt;「+」技能 / 知识空间 / 组织知识库 / 附件 + 输入框工具栏选用工具&lt;br&gt;提交前一览·可见可改" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="290" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="Submit" value="提交任务" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="360" y="410" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="Queue" value="§4.3 排队中&lt;br&gt;并发超限时排队·可感知" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="330" y="540" width="240" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="F3" value="§4.3 执行过程可视化&lt;br&gt;规划→子任务委派→执行&lt;br&gt;含产物交付·长任务后台运行" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="650" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="Need" value="灵思需要澄清?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="360" y="780" width="180" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="F4" value="§4.4 人机协同 HITL&lt;br&gt;执行中追问·用户回答/干预/叫停" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="775" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="Deliver" value="产物交付&lt;br&gt;下载 / 复制 / 溯源" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="330" y="910" width="240" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="Done" value="拿到产物·回看历史任务" style="rounded=1;whiteSpace=wrap;html=1;arcSize=50;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="350" y="1010" width="200" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="Support" value="横切支撑层" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="120" y="1120" width="860" height="180" as="geometry"/>
+        </mxCell>
+        <mxCell id="S5" value="§4.5 Skill 管理页&lt;br&gt;built-in 官方 / 本租户私有" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="Support">
+          <mxGeometry x="30" y="50" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="S6" value="§4.6 存量 SOP 迁移体验&lt;br&gt;动态 SOP → 静态 Skill" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="Support">
+          <mxGeometry x="310" y="50" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="S7" value="§4.7 权限与可见性&lt;br&gt;三角色 × 三资源 可见/可改" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="Support">
+          <mxGeometry x="590" y="50" width="240" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="Start" target="Chip">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="Chip" target="F1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="挂入输入区" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="F2" target="F1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="F1" target="Submit">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="Submit" target="Queue">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="Queue" target="F3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="F3" target="Need">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e8" value="是" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="Need" target="F4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;exitX=1;exitY=0.25;entryX=1;entryY=0.25;" edge="1" parent="1" source="F4" target="F3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e10" value="否" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="Need" target="Deliver">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;" edge="1" parent="1" source="Deliver" target="Done">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e12" value="提供可选技能" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="S5" target="F1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e13" value="迁移产出的 Skill" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="S6" target="S5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e14" value="约束可见范围" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="S7" target="F1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e15" value="约束操作权限" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;dashed=1;" edge="1" parent="1" source="S7" target="S5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

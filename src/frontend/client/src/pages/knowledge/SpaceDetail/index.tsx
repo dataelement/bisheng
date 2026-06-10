@@ -1215,6 +1215,7 @@ export function KnowledgeSpaceContent({
                     showShareTab={false}
                     showMembersTab={false}
                     showPermissionTab
+                    isDepartmentSpace={permTarget.type === "knowledge_space" && space?.spaceKind === "department"}
                 />
             )}
 
