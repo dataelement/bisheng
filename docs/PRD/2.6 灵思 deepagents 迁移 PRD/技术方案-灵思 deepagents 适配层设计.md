@@ -2,6 +2,8 @@
 
 > 版本：v2.6.0 · 状态：Draft · Owner：lilu · 日期：2026-06-03
 > 配套文档：《灵思 Linsight 迁移 deepagents 框架 PRD》。本文承接 PRD 第四章的产品需求，给出工程实现细节、组件契约与代码锚点。
+>
+> 🔄 **v2.6 终稿修订（按《差异-现方案-vs-技术方案》对齐）**：HITL 改 **park-and-release**（§4，取代原 hold-slot 轮询）；知识库**定方案 B**（§5.2）；**补 §2.7 模型选择**（PRD §4.1.10）；Skill 磁盘**加多节点部署约束**（§7.1）；**工作区/文件模型重构**为 **MinIO 真相 + `file_dir` 写穿缓存 + 自定义 `WorkspaceBackend` 收口**（§5.3/§9，取代原"路径 A 本地 file_dir + 自研文件工具 + `state.files`"）。任务模式文件读写一律走 **deepagents 原生工具**，自研 `add_text_to_file/replace_file_lines/read_text_file` 下线。
 
 ---
 
@@ -13,7 +15,8 @@
 |------|------|
 | **替换** | 自研 ReAct 内核 `bisheng_langchain/linsight/{agent,task,react_task,manage,prompt,react_prompt}.py` → deepagents `create_deep_agent` |
 | **保留** | `worker.py`、Redis queue、WebSocket、`state_message_manager.py`、多租户、OpenFGA、`LLMService`、工具体系、MinIO、`linsight_session_version`/`linsight_execute_task` 数据模型、DM8 双库 |
-| **新增** | `_normalize_chunk` 事件归一层、Skill 加载/白名单中间件、Skill CRUD API、Skill 多租户存储、SOP→Skill 迁移脚本、前端 Skills 管理页、**Redis checkpointer（HITL 中断现场持久化、可随时续跑，见 §2.3/§4）**、**历史消息压缩中间件（对齐 2.0 `tool_buffer`，见 §3.8）** |
+| **新增** | `_normalize_chunk` 事件归一层、Skill 加载/白名单中间件、Skill CRUD API、Skill 多租户存储、SOP→Skill 迁移脚本、前端 Skills 管理页、**Redis checkpointer（HITL 中断现场持久化、可随时续跑，见 §2.3/§4）**、**历史消息压缩中间件（对齐 2.0 `tool_buffer`，见 §3.8）**、**工作区 `WorkspaceBackend`（MinIO 真相 + `file_dir` 写穿缓存，见 §9）** |
+| **下线** | 自研文件工具 `add_text_to_file/replace_file_lines/read_text_file`（→ deepagents 原生 `write_file/read_file/edit_file/ls`，见 §9） |
 | **下线** | SOP 动态生成 / `sop_manage.py` 沉淀链路 / `col_linsight_sop` 写入 / SOP 相关端点 |
 
 ---
@@ -22,7 +25,7 @@
 
 ### 2.1 装配点改造：`_create_agent` → `create_deep_agent`
 
-唯一的内核替换发生在 `task_exec.py::_create_agent`（line287）。当前实现返回自研 `LinsightAgent`（line294）；改造后改为调用 deepagents 的工厂函数，返回 LangGraph 编译产物 `CompiledStateGraph`。**装配点之外的执行编排骨架（`_execute_workflow` line151、`generate_task`、`_execute_agent_tasks` line342、`_handle_event` line405、`continue_task` line525、`_wait_for_input_completion` line530）一律不动**——它们面向的是 `BaseEvent` 抽象，与内核解耦，这正是适配层策略的价值所在。
+唯一的内核替换发生在 `task_exec.py::_create_agent`（line287）。当前实现返回自研 `LinsightAgent`（line294）；改造后改为调用 deepagents 的工厂函数，返回 LangGraph 编译产物 `CompiledStateGraph`。**装配点之外的事件归一与编排骨架（`_execute_workflow`、`_execute_agent_tasks`、`_handle_event`、`_normalize_chunk`）大体不动**——它们面向 `BaseEvent` 抽象、与内核解耦，这正是适配层策略的价值所在。**例外（park-and-release，§4）**：HITL 的等待/续跑链路改造——`_wait_for_input_completion` 原地轮询**下线**，`continue_task` 改为「释放并发 + 重新入队 + `Command(resume)`」。
 
 改造后的装配契约（伪代码，锚 line287-301）
 
@@ -37,7 +40,7 @@ async def _create_agent(self, session_model: LinsightSessionVersion, tools: List
         system_prompt=LINSIGHT_SYSTEM_PROMPT_ZH,       # 中文化 system prompt（见 2.4）
         subagents=[...],                               # 子智能体（含 SkillsMiddleware/SkillWhitelistMiddleware 装配）
         interrupt_on={...},                            # HITL 中断点（见 §3 HITL）
-        backend=FilesystemBackend(virtual_mode=True),  # 虚拟 FS，仅 agent 内部态（见沙箱边界章）
+        backend=WorkspaceBackend(svid, minio, file_dir),  # 工作区: MinIO 真相 + file_dir 写穿缓存（见 §9）；Skill 仍走磁盘 SKILLS_ROOT（§7）
         checkpointer=redis_checkpointer,               # ✅ Redis 持久化，跨进程续跑，见 2.3
         store=None,                                    # store 留空（无跨 thread 共享需求）
         # max_steps 经 recursion_limit 落到 config（见 2.5）
@@ -153,6 +156,15 @@ sequenceDiagram
     end
 ```
 
+### 2.7 模型选择与运行时切换（PRD §4.1.10）
+
+**为什么改**：迁移前灵思执行模型由「灵思任务执行模型」区单独配置（一个模型 + 执行模式 Function Call/ReAct），用户无从选择、且与日常对话模型两套割裂。deepagents 迁移后执行模式由框架接管、模型可热替换，故把灵思执行模型收敛到「工作台对话模型」同一池。
+
+- **管理端（租户管理员）**：「模型 → 系统模型配置 → 工作台模型 → 工作台对话模型」列表每行新增「灵思默认模型」单选，**整列只能选一个**，选中者即灵思任务默认执行模型。原「灵思任务执行模型」配置区（模型 + 执行模式）**整体移除**。
+- **终端用户**：发起任务的统一输入区提供模型选择器，候选 = 工作台对话模型列表，**默认选中**管理员标记的「灵思默认模型」，可发起前切换为列表任一模型、按本轮生效。
+- **落地**：用户选择经 `config.configurable.model_id` 注入；`_get_llm`（line215）改为按 per-task `model_id`（缺省取「灵思默认模型」）调用 `LLMService.get_bisheng_linsight_llm`，多租户解析 + share fallback 不变（§2.2）。移除 `workbench_conf.linsight_executor_mode` 分支——`task_mode` 不再由配置驱动，§2.1 装配的 `create_deep_agent` 自带执行模式。
+- **数据**：「灵思默认模型」标记存于既有工作台 llm 配置的一个按租户单选字段，无需新表。
+
 ---
 
 ## 3. 执行事件流映射
@@ -244,7 +256,7 @@ flowchart TD
     G --> I
     I --> J[push_message RPUSH<br/>linsight_tasks:id:messages TTL=3600s]
     H --> J
-    I -.HITL.-> K[_wait_for_input_completion line530<br/>1s 轮询 → Command resume]
+    I -.HITL.-> K[interrupt → 释放并发+驻留<br/>回答后重新入队 → Command resume]
     K --> A
     J --> L{终态?}
     L -->|是| M[task_terminated 末帧 + close 1000]
@@ -292,7 +304,7 @@ flowchart TD
 
 目标（deepagents）：deepagents 内核用 LangGraph 原生 `interrupt()` 实现 HITL——agent 在子图节点内调用 `interrupt(payload)`，LangGraph 抛出 `GraphInterrupt`，`astream` 自然停止并在最后一个 chunk 暴露 `__interrupt__`。续跑必须用 `graph.astream(Command(resume=user_input), config)` 投喂同一 `thread_id`。
 
-适配层目标：**不改 `_wait_for_input_completion`/`continue_task` 的外层时序契约，把 deepagents 的 interrupt/resume 机制桥接到既有 `ExecuteTaskStatusEnum` 状态机与 `MessageEventType.user_input` 事件流上。**
+适配层目标（**park-and-release**，沿用 worker.py 但等待期不占并发）：把 deepagents 的 interrupt/resume 桥接到既有 `ExecuteTaskStatusEnum` 状态机与 `MessageEventType.user_input` 事件流；**`interrupt()` 即释放 Worker semaphore + 退出任务循环（任务「驻留」），不再 `_wait_for_input_completion` 原地轮询**；用户回答后**重新入队**，任一 Worker 同 `thread_id` 从 checkpointer 复活 + `Command(resume)` 续跑。
 
 ### 4.2 interrupt() ↔ waiting_for_user_input 状态机映射
 
@@ -300,9 +312,9 @@ flowchart TD
 stateDiagram-v2
     [*] --> IN_PROGRESS: agent.astream 启动
     IN_PROGRESS --> WAITING_FOR_USER_INPUT: chunk 含 __interrupt__<br/>归一为 NeedUserInput<br/>push user_input 事件
-    WAITING_FOR_USER_INPUT --> WAITING_FOR_USER_INPUT: _wait_for_input_completion<br/>1s 轮询 MySQL（无超时·可隔任意时长）
-    WAITING_FOR_USER_INPUT --> USER_INPUT_COMPLETED: POST /workbench/user-input<br/>set_user_input 双写<br/>push user_input_completed
-    USER_INPUT_COMPLETED --> IN_PROGRESS: continue_task<br/>Command(resume=user_input)<br/>从 Redis checkpoint 续跑
+    note right of WAITING_FOR_USER_INPUT: park：释放 semaphore + 退出循环<br/>state 已在 checkpointer（无超时·任意时长）
+    WAITING_FOR_USER_INPUT --> USER_INPUT_COMPLETED: POST /workbench/user-input<br/>set_user_input 双写 + 重新入队<br/>push user_input_completed
+    USER_INPUT_COMPLETED --> IN_PROGRESS: Worker 重新拾取<br/>同 thread_id 复活 + Command(resume)
     IN_PROGRESS --> SUCCESS: __interrupt__ 不再出现<br/>TaskEnd
     IN_PROGRESS --> FAILED: 异常/超 retry_num
     IN_PROGRESS --> TERMINATED: 用户终止
@@ -326,7 +338,7 @@ stateDiagram-v2
 
 ### 4.4 续跑：Command(resume) 替换 continue_task 内核
 
-`continue_task(line525)` 当前签名 `agent.continue_task(event.task_id, user_input_event.user_input)` 保留，但内部实现从"喂回自研 agent"改为：
+park-and-release 下不再有同进程的 `continue_task` 等待续跑；「续跑」由空闲 Worker **重新拾取**该 `session_version_id` 后执行——重建 graph（同 `thread_id`）+ `Command(resume)`：
 
 ```
 config = {"configurable": {"thread_id": session_version_id}}  # 同一 thread
@@ -342,19 +354,25 @@ async for chunk in agent.astream(Command(resume=user_input), config,
 
 ### 4.5 /workbench/user-input 端点（不变）
 
-`POST /workbench/user-input`（`endpoints/linsight.py:400`），鉴权 `get_login_user`（执行端，非管理端）。落点 `state_message_manager.set_user_input(task_id, user_input, files)`（line432）：写 MySQL `history` 追加 `UserInputEventSchema(step_type="call_user_input")` + 置状态 `USER_INPUT_COMPLETED` + push `user_input_completed`。此端点与 deepagents 无耦合，**零改动**。
+`POST /workbench/user-input`（`endpoints/linsight.py:400`），鉴权 `get_login_user`（执行端，非管理端）。落点 `state_message_manager.set_user_input(task_id, user_input, files)`（line432）：写 MySQL `history` 追加 `UserInputEventSchema(step_type="call_user_input")` + 置状态 `USER_INPUT_COMPLETED` + push `user_input_completed`。
 
-`_wait_for_input_completion(line530)` 1s 轮询 MySQL 任务状态，检测到 `USER_INPUT_COMPLETED` 后取 `history[-1]`（line493-497 的 `step_type=="call_user_input"` 校验保留），返回任务模型给 `continue_task`。轮询契约不变。
+**park-and-release 改动**：`set_user_input` 成功后**追加一步「重新入队」**（`rpush` linsight queue），由空闲 Worker 拾取续跑；原 `_wait_for_input_completion(line530)` 1s 原地轮询**下线**（不再有进程在等待期占用并发）。端点其余逻辑零改动。
 
-### 4.6 跨 Worker 重启 / 隔任意时长续跑（Redis checkpointer 原生支持）
+### 4.6 park-and-release：等待不占并发 + 跨 Worker/重启续跑
 
-目标：用户在 `WAITING_FOR_USER_INPUT` 期间离开、隔很久回来，或 Worker 子进程崩溃/重启，都能精确回到 interrupt 点续跑。
+目标：用户在 `WAITING_FOR_USER_INPUT` 期间离开、隔很久回来，或 Worker 子进程崩溃/重启，都能精确回到 interrupt 点续跑，且**等待期间不占用任何 Worker 并发名额**。
 
-处置策略（本期，依赖 §2.3 的 Redis checkpointer）：
-- **LangGraph 原生续跑**：中断点的 thread state 已由 Redis checkpointer 持久化（`thread_id=session_version_id`）。Worker 重启后由调度中心从 Redis queue 重新拾取 `session_version_id`，**用同一 `thread_id` 重建 graph 并 `astream(Command(resume=user_input), config)`**，LangGraph 自动从 Redis checkpoint 恢复到挂起点，无需以 MySQL history 手工重放整段执行。
-- `LinsightStateMessageManager`（MySQL+Redis 双写）仍是**前端展示流的权威源**：重连后前端从 MySQL task 实体回拉已完成步骤、从 Redis messages（TTL 内）拉增量；checkpointer 则是**图续跑的权威源**。两源职责分离、互不替代。
-- `_normalize_chunk` 以 `call_id` 幂等合并（见 §3.4 顺序/幂等），万一恢复路径产生重复 `ExecStep` 帧按 `call_id` 去重，前端不重复渲染。
-- ⚠️ 保真边界（R3）：langgraph 1.2.1 实测 interrupt halt 期间 pending writes 不落 thread state，POC 须实测"隔任意时长 + 跨重启"下 resume 是否丢失中断瞬间的局部写；若个别场景不可复现，降级该任务 `FAILED` 走 `retry_num=3`（应为低概率边界，非常态路径）。
+机制（沿用 worker.py，依赖 §2.3 Redis checkpointer）：
+1. `astream` 命中 `__interrupt__` → 归一 `NeedUserInput` + push `user_input` + 状态 `WAITING_FOR_USER_INPUT`。
+2. **释放并发**：Worker 释放该任务 semaphore + `release_task_ownership`，**退出当前任务协程**（不再起 `_wait_for_user_input`/`_wait_for_input_completion` 轮询）。thread state 已在 checkpointer（`thread_id=session_version_id`），任务进入「驻留」。
+3. 用户经 `POST /workbench/user-input` 回答 → `set_user_input` 双写 → **`rpush` 重新入队**。
+4. 任一空闲 Worker 从 queue 拾取 → 同 `thread_id` 从 checkpointer 重建 graph → `astream(Command(resume=user_input), config)` 续跑；后续 chunk 经既有 `_normalize_chunk → _handle_event`。
+
+要点：
+- **正常等待与崩溃恢复路径统一**：都靠「重新入队 → 异地从 checkpointer 复活」，不要求同一存活进程；数小时等待**零并发占用**（避免默认 `max_concurrency=5` 被等待任务吃满）。
+- `LinsightStateMessageManager`（MySQL+Redis 双写）是**前端展示流权威源**，checkpointer 是**图续跑权威源**，两源职责分离。
+- **幂等**：`set_user_input` 幂等覆盖 `history[-1]` + checkpointer 写串行 + Worker 拾取时校验任务非终态再续跑；重复回答/重复入队仅首次生效。`_normalize_chunk` 按 `call_id` 去重，恢复路径不重复渲染。
+- ⚠️ 保真边界（R3）：langgraph 1.2.1 实测 interrupt halt 期 pending writes 不落 thread state，POC 须实测 park-and-release「重新入队 + 异地续跑」保真；个别不可复现场景降级 `FAILED` 走 `retry_num`。
 
 ### 4.7 HITL 边界异常表
 
@@ -362,7 +380,7 @@ async for chunk in agent.astream(Command(resume=user_input), config,
 |---|---|
 | interrupt payload 缺 `task_id` | `_normalize_chunk` 无法路由 → 记 error，任务 `FAILED` 走 retry |
 | 续跑 `thread_id` 与挂起时不一致 | LangGraph 抛 "no interrupt to resume" → 捕获后按 Worker 重启重放路径恢复 |
-| 用户长时间不输入（数小时/隔天） | `_wait_for_input_completion` 仅轮询无超时；中断现场由 Redis checkpointer 持久保存，**不自动超时终止**，用户回来仍可续跑（对齐 PRD §4.4）。前端 messages key TTL=3600s 仅影响 UI 增量流，过期后从 MySQL+checkpointer 重建，不影响续跑能力 |
+| 用户长时间不输入（数小时/隔天） | 任务已 park（释放并发、驻留 checkpointer），**不占资源、不自动超时终止**，用户回来回答即重新入队续跑（对齐 PRD §4.4）。前端 messages key TTL=3600s 仅影响 UI 增量流，过期后从 MySQL+checkpointer 重建，不影响续跑能力 |
 | 同一 task 重复 POST user-input | `set_user_input` 幂等覆盖 `history[-1]`；状态已是 `USER_INPUT_COMPLETED` 时二次提交无副作用 |
 | Worker 崩在 WAITING 态 | 从 Redis checkpoint 原生恢复到中断点续跑（§4.6）；个别不可复现场景降级 FAILED+retry |
 | resume 后 agent 立即再 interrupt | 正常多轮 HITL，状态机回到 WAITING_FOR_USER_INPUT，循环直至无 `__interrupt__` |
@@ -383,11 +401,13 @@ agent = create_deep_agent(
     system_prompt=...,
     subagents=...,
     interrupt_on=...,
-    backend=FilesystemBackend(virtual_mode=True),  # 见 5.3/§7
+    backend=WorkspaceBackend(svid, minio, file_dir),  # 工作区: MinIO 真相 + file_dir 写穿缓存（见 §9）
 )
 ```
 
 工具调用产生的事件经 `messages`/`updates` chunk → `_normalize_chunk` → `ExecStep(step_type="tool_call")`，以 `call_id` 合并 start/end 两帧（§1）。
+
+> **例外（§9）**：自研**文件**工具（`list_files`/`read_text_file`/`add_text_to_file`/`replace_file_lines`）**不再注入**——任务模式文件读写改走 deepagents 原生 `write_file/read_file/edit_file/ls`（后端 = §9 的 `WorkspaceBackend`）。其余工具（代码解释器、`SearchKnowledgeBase`、工作台预设工具）仍按本节 `BaseTool` 直传。
 
 ### 5.2 知识库 RAG：方案 A vs 方案 B
 
@@ -400,47 +420,34 @@ agent = create_deep_agent(
 | 召回精度 | 受首轮 query 限制，子任务漂移后失准 | 子任务级 query 精准 |
 | 与 deepagents 适配 | 自然（deepagents 用 system_prompt） | 自然（deepagents 鼓励工具自治） |
 
-**决策方式（需验证后定）**：在迁移分支跑召回对比基准——同一组 query/SOP，分别用 A/B 跑，比对召回命中率、最终交付物质量、token 消耗。倾向 B（契合 deepagents 工具自治范式 + token 更省）。验证前两路代码都保留，配置开关切换。
+**决策（已定方案 B）**：取方案 B（`SearchKnowledgeBase` 作 `BaseTool`）。FR-3.5「知识库检索可见步骤卡」是硬前提（方案 A 注入 system_prompt 则检索全程无 `tool_call` 信号、对前端不可见），叠加 token 更省、子任务级 query 更准、契合 deepagents 工具自治范式。**不再保留 A 路与配置开关**，只实现 B；原"A/B 对比基准"降级为 B 的召回质量调优，不作选型门槛。
 
 > ⚠️ **A 与 B 在可视化能力上非等价，A 不是 B 的「静默降级」**：方案 A 把检索结果预拼进 `system_prompt`，执行期 `astream` **无任何 `tool_call`/`ToolMessage` 信号**——知识库检索对前端完全不可见，PRD **FR-3.5「检索作为可见步骤」P0 在方案 A 下不成立**（offload-first 信任感的核心兑现点缺失）。仅方案 B（`SearchKnowledgeBase` 作为 `BaseTool`）下检索才产生可见的 `task_execute_step(step_type=knowledge)` 步骤卡（命中条数 + 首条摘要由适配层解析 `ToolMessage.content`）。**故若因性能/成本切换到方案 A，须在产品侧主动告知 FR-3.5 P0 失效，不可作为静默降级路径。** 默认选 B。
 
 ### 5.3 沙箱职责边界：E2B 真实沙箱 vs deepagents 虚拟 FS
 
-这是最易混淆点，必须严格分离两套"文件系统"：
+任务模式有**三个互不混用**的文件空间，必须严格分离：
 
-| 维度 | E2B 真实沙箱（`bisheng_code_interpreter`） | deepagents 虚拟 FS（`FilesystemBackend(virtual_mode=True)`，`state.files`） |
-|---|---|---|
-| 性质 | 真实容器内执行代码，真实 IO | agent 状态内的内存键值，非真实文件 |
-| 产物 | 真实文件 → 上传 MinIO → 返回 URL | 仅 agent 内部草稿/中间态 |
-| 持久化 | MinIO 对象存储 | 随 graph state，任务结束即弃 |
-| 是否交付物 | **是**，最终交付走 MinIO URL | **否**，绝不作交付物 |
-| 多租户隔离 | MinIO bucket / 路径按 tenant 隔离 | 进程内态，无跨租户暴露 |
-| 路径安全 | E2B 沙箱天然隔离 | `virtual_mode=True` 防宿主机路径穿越 |
+| 文件空间 | 载体 | 职责 | 是否交付物 |
+|---|---|---|---|
+| **工作区**（§9） | **MinIO `workspace/{svid}/`（真相）+ `file_dir` 写穿缓存**，经自定义 `WorkspaceBackend` 收口 | 上传附件 markdown/图片、agent 中间文件、产物；deepagents 原生 `read/write/edit/ls` 与 E2B 都经它读写 | `output/` 区 = 交付物（产物区）；`scratch/` = 中间态（同样持久，不进产物区） |
+| **E2B 真实沙箱** | `bisheng_code_interpreter` 远程容器 | 真实执行代码；瞬态计算镜像 | 产出经 copy-out 摄入工作区（§9），不单独成交付物 |
+| **Skill 磁盘**（§7） | `FilesystemBackend(SKILLS_ROOT)`，磁盘 | 只读静态 SKILL.md，progressive disclosure | 否 |
 
-```mermaid
-flowchart LR
-    A[agent 推理] --> B{需要真实产物?}
-    B -->|是| C[E2B 沙箱执行代码]
-    C --> D[生成真实文件]
-    D --> E[上传 MinIO]
-    E --> F[返回 URL → ExecStep.extra_info]
-    F --> G[最终交付物 TaskEnd.data]
-    B -->|否, 仅中间态| H[写 state.files 虚拟 FS]
-    H --> A
-```
+> **与原方案的差异**：旧稿用 deepagents 虚拟 FS（`state.files`）承载 agent 内部态、附件走独立本地 `file_dir`（路径 A）。现方案**取消 `state.files` 作为文件载体**（大 markdown/二进制不挂 graph state）——附件/中间/产物统一收敛到**一个工作区**（MinIO 真相 + `file_dir` 写穿缓存），E2B 经工作区 copy-in/out，Skill 独立走磁盘。详见 §9。
 
 边界规则：
-- **交付物唯一来源是 E2B→MinIO→URL。** 任何最终产物（报告、表格、文件）的下载链接只能来自 MinIO，禁止把 `state.files` 内容当交付物返回前端。
-- deepagents 内置文件工具（read/write/edit file）操作的是虚拟 FS，仅服务于 agent 自身的 plan/草稿/skill 读取（§7），不落真实盘。
-- `virtual_mode=True` 同时是 §7 Skill 防路径穿越的依托。
+- **交付物 = 工作区 `output/` 区**，下载链接来自 MinIO `workspace/{svid}/output/`；大/二进制产物在工作区只留指针清单、直传 MinIO（§9）。
+- **E2B 是瞬态计算镜像**：跑代码前从工作区 copy-in、跑完 copy-out 摄入工作区；沙箱自身不持久。
+- **Skill 磁盘与工作区两套后端互不混用**：Skill 只读、随内核加载（§7）；工作区可读写、按 session 隔离（§9）。
 
 ### 5.4 工具/沙箱边界异常表
 
 | 场景 | 处置 |
 |---|---|
 | E2B 沙箱执行失败 | 工具返回错误 → `ExecStep(status=end, output=err)`；agent 可重试或换路 |
-| MinIO 上传失败 | 交付物缺失 → 任务 FAILED 走 retry_num；不得用 state.files 顶替 |
-| agent 误把 state.files 当交付 | 适配层在 `_normalize_chunk` 收口：仅 MinIO URL 进 `TaskEnd.data`/`extra_info` |
+| MinIO 上传失败 | 交付物缺失 → 任务 FAILED 走 retry_num；不得用 `file_dir` 本地副本顶替真相 |
+| agent 误把中间文件当交付 | 仅工作区 `output/` 区（MinIO URL）进 `TaskEnd.data`/`extra_info`；`scratch/` 中间态不进产物区 |
 | 知识库工具(方案B)召回超时 | 工具内部超时返回空 + 提示，agent 降级继续 |
 | BaseTool 与 deepagents 签名不兼容 | 极少见；统一经 `init_linsight_*` 产出标准 `BaseTool`，CI 加类型断言 |
 
@@ -547,6 +554,8 @@ SKILLS_ROOT/
 ```
 
 `FilesystemBackend(root_dir=SKILLS_ROOT, virtual_mode=True)`：`virtual_mode=True` 把所有路径约束在 `root_dir` 内，**防路径穿越**（`../` 逃逸被拦截）。租户自定义目录按 `tenant_id` 分片，配合 §6 自动注入实现隔离。
+
+> ⚠️ **多节点部署约束**：`worker.py` 的 `NodeManager` 为多节点设计（hostname 级 node_id + 心跳 + ownership），磁盘 Skill 要求 `SKILLS_ROOT` 为**所有 Worker 节点可见的同一卷** —— 须满足「灵思 Worker 单机部署」或「多机挂共享存储（NFS 等）」之一，否则 A 机新建/编辑的 Skill 在 B 机 worker 上读不到、CRUD 与执行不一致。元数据若入 DB 则跨节点一致；**正文一致性依赖共享卷**。运维须将此约束写入部署文档；启动期可加 `SKILLS_ROOT` 可写 + 共享性自检告警。若未来多机且不便共享盘，演进为 MinIO 正文 + 本地物化（`FilesystemBackend` 退化为物化后的本地只读层）。
 
 > **两类技能的本质区别（对齐 PRD §4.5/§4.7）**：`built-in/` 是任务模式**内核能力**，所有租户共用同一份磁盘文件、随内核常驻加载，**不出现在技能选择器与管理页，也不经 `/skill` API**；`data/skills/{tenant_id}/` 才是前端可见、可管理的**租户自定义技能**（租户管理员从 0 新建 / 导入）。系统管理员不直接管 built-in，如需维护某租户的自定义技能须经 admin-scope 切入该租户。
 
@@ -741,6 +750,8 @@ prompt 注入的极简性是现状最关键的设计点 —— `prepare_file_lis
 
 执行期可用文件工具由 `ToolServices.init_linsight_tools`（`tool.py:565`）注入：`list_files / get_file_details / search_files / read_text_file / add_text_to_file / replace_file_lines`，外加 `SearchKnowledgeBase`（`linsight_knowledge.py`，跨文件向量召回）。
 
+> **本节为现状（feat/2.6.0-beta2）背景**。任务模式下这些**自研文件工具下线**，文件读写改走 deepagents 原生 `write_file/read_file/edit_file/ls`（后端 `WorkspaceBackend`，§9.3.2）；`SearchKnowledgeBase` 保留（§5.2 方案 B）。
+
 ### 9.2 Context Engineering 取舍论证
 
 迁移时必须显式锁定上下文策略。三种范式对比：
@@ -759,13 +770,13 @@ prompt 注入的极简性是现状最关键的设计点 —— `prepare_file_lis
 结论：**offload-first 是唯一在"完整性 + 可扩展 + 多轮稳定"三者同时成立的方案**，且与灵思现状链路同构，改动收敛。摘要注入的有损性对企业场景（合同条款、财报数字、表格）不可接受；整份注入在 50MB 上限下根本不可行。
 
 落地三原则（与 deepagents 0.7.0 `file-upload.md` 对齐）：
-1. **解析后 markdown 落入 agent 可读文件空间**（沿用本地 `file_dir` + 文件工具，或 deepagents `FilesystemBackend(virtual_mode=True)` 的 `state.files`），正文绝不进 prompt/messages。
+1. **解析后 markdown 落入 agent 可读工作区**（§9.3.2 `WorkspaceBackend`：MinIO 真相 + `file_dir` 写穿缓存，**不挂 graph state**），正文绝不进 prompt/messages。
 2. **首条消息只带轻量指针块**：路径 + 原文件名 + 行数 + 图片数，**零正文零预览**。预览即破坏 offload-first，且随多轮线性放大。
 3. **模型分页 `read_file(offset, limit)` 先看结构再取目标段**；deepagents `FilesystemMiddleware` 的 `tool_token_limit_before_evict` 作为超大单次读取的兜底驱逐。
 
 ### 9.3 offload-first 接入设计
 
-> **结论先行**：本期取**路径 A**——附件继续走本地 `file_dir`，**不**改走 deepagents 虚拟 FS（虚拟 FS 本期仅承担 §7 Skill 存储）；灵思"解析→落 markdown→指针块→按需分页读→向量召回"五段链路**整体保留**，改动收敛在 **3 处**：① 指针块模板对齐 deepagents `<uploaded_files>`（§9.3.3）；② 文件对象新增 `line_count`/`image_count` 字段（§9.3.1）；③ 含图文档复用 BiSheng 解析产图文一体 markdown（§9.3.5）。外加文件生命周期从"单任务"上提到"会话级"（§9.3.7）。完整锚点见 §9.4。下文按子节展开。
+> **结论先行（v2.6 修订）**：任务模式文件读写走 **deepagents 原生工具**（`write_file/read_file/edit_file/ls`），后端是自定义 **`WorkspaceBackend`**——**唯一工作区 = MinIO `workspace/{svid}/`（真相）+ 本地 `file_dir`（写穿缓存）**。**不挂 graph state**（大 markdown/二进制都不进 `state.files`/checkpointer）。附件、agent 中间文件、E2B 代码产出统一收敛到这一个工作区；产物 = `output/` 区。解析→落 markdown→指针块→按需分页读→向量召回的范式保留，但落点从"裸 `file_dir` + 自研文件工具"改为 `WorkspaceBackend`。子节：§9.3.2 工作区后端、§9.3.3 指针块、§9.3.4 分页读、§9.3.5 含图、§9.3.6 子智能体、§9.3.7 生命周期、§9.3.8 会话级记忆、§9.3.9 代码产出文件。
 
 #### 9.3.1 解析 → 落 markdown（保留）
 
@@ -778,25 +789,33 @@ prompt 注入的极简性是现状最关键的设计点 —— `prepare_file_lis
 | `line_count` | markdown 文本 `\n` 计数 | 指针块行数、分页 read 边界 |
 | `image_count` | 抽图阶段计数（§9.3.5） | 指针块图片数、降级判定 |
 
-#### 9.3.2 落入 agent 文件空间
+#### 9.3.2 工作区后端：`WorkspaceBackend`（MinIO 真相 + file_dir 写穿缓存）
 
-执行前 `_init_file_directory`（`task_exec.py:231`）并发下载 markdown 到本地 `CACHE_DIR/linsight/{sid8}/`，结束 `finally` `rmtree` 清理（`task_exec.py:99`）。迁移后两条可选路径：
+deepagents 文件工具与 E2B 都**只对 `WorkspaceBackend` 操作**，hook 在后端方法（工具无关），不在工具名、不在 graph state：
 
-| 路径 | 文件空间载体 | 文件工具 | 路径安全 |
-|---|---|---|---|
-| **A（推荐，最小改动）** | 沿用本地 `file_dir` | 沿用 `init_linsight_tools` 的 list/read/search 等 | 由 `root_path` 约束 |
-| B（deepagents 原生） | `FilesystemBackend(virtual_mode=True)` 的 `state.files` | deepagents `FilesystemMiddleware` 内置文件工具 | `virtual_mode=True` 防穿越 |
+```python
+# 工作区(按 session 唯一): truth=MinIO workspace/{svid}/...   cache=本地 file_dir(写穿)
+class WorkspaceBackend(FilesystemBackend):     # 注入 create_deep_agent(backend=...)
+    def write(path, content):                  # write_file/edit_file/E2B 摄入都走这里
+        cache.write(path, content)             # 本地写(大文件/部分编辑快)
+        minio.put(f"workspace/{svid}/{path}", content)    # ★写穿 → 即时持久, 不进 state
+    def read(path, offset=0, limit=None):
+        if not cache.has(path): cache.fetch(minio, path)  # 懒加载
+        return cache.read(path, offset, limit)            # 分页读, 大 md 不全量入上下文
+    def ls(prefix=""):
+        return minio.list(f"workspace/{svid}/{prefix}")   # 真相以 MinIO 为准
+```
 
-本期取**路径 A**：灵思文件工具体系成熟（§5.1 BaseTool 直传），与 E2B 沙箱 `local_sync_path` 已打通（`_init_bisheng_code_tool` 把 `file_dir` 同步进 E2B），推倒成 `state.files` 会割裂沙箱链路。deepagents 虚拟 FS 在本期**仅承担 §7 Skill 存储职责**，附件文件空间继续走本地 `file_dir`。二者职责边界见 §9.5。
+**工作区布局**：`/uploads/<name>/index.md`(+`images/`) 解析后附件；`/output/` 交付物；`/scratch/` 中间态。`<name>` 为规整后原文件名（小写化、非法字符归一、防穿越、同会话重名加后缀，与 §7 Skill 命名同规）。原件不进工作区（仍落 MinIO 临时桶，§9.3.1），工作区只放解析后产物。
 
-**工作区目录布局（对齐 deepagents 文件空间语义）**：无论后端载体是路径 A 的本地 `file_dir` 根，还是路径 B 的 `state.files`，对模型与前端暴露的都是同一套 deepagents 工作区路径——每个上传附件按 `/uploads/<name>/` 独立成目录：
+**关键性质**：
+- **不挂 state**：正文只在 MinIO+cache；graph state/checkpointer 只存"图怎么走"，**大 markdown/二进制都不进 state**。
+- **大文件**：MinIO 真相是对象存储（任意大）；`read(offset,limit)` 分页；指针块零正文 → 大文件不撑上下文、不撑 checkpoint。超阈值/二进制由 `WorkspaceBackend` 直传 MinIO + 工作区只留指针清单、不过 cache（§9.3.9）。
+- **park durable**：`write` 写穿使 MinIO 恒为最新 → park 时清 `file_dir` 缓存无损，resume 从 MinIO 重建。**取消了旧稿"per-task file_dir 易失 + 仅成功时上传"的丢数据风险**（park/失败也不丢）。
+- **多节点正确**：cache 只是本地加速；异地 Worker resume 从 MinIO 物化同一工作区。
+- **物化（start/resume）**：只建索引/指针不预载正文（`ls` MinIO → 注入 `<uploaded_files>`），正文按 `read` 懒加载（offload-first）。
 
-| 工作区路径 | 内容 | 说明 |
-|---|---|---|
-| `/uploads/<name>/index.md` | 该附件的**解析结果**（图文一体 markdown，§9.3.5） | 模型 `read_file` 的目标即此文件；指针块（§9.3.3）path 指向它 |
-| `/uploads/<name>/images/` | 含图文档抽出的图片（仅"含图"时存在） | `encoding=base64` 写入（§9.3.5）；`index.md` 以 `![](images/…)` **相对引用**，保留图文位置 |
-
-`<name>` 为对原文件名规整后的目录名（小写化、非法字符归一、防路径穿越；同会话重名加消歧后缀，与 §7 Skill 命名同规）。**原件不进工作区**——上传原文件仍按现状落 MinIO 临时桶（§9.3.1），工作区只放"解析后的 agent 可读产物"，贯彻 offload-first（正文零进 prompt）。该布局即 deepagents 0.7.0 `file-upload.md` 的 `<uploaded_files>` 约定；本期挂在 `file_dir`，未来切路径 B 时同名路径平移到 `state.files`，模型/前端契约不变。
+> **POC 必验**：deepagents 0.6.x 允许注入实现 `read/write/ls/edit` 的自定义 `FilesystemBackend`（替代 `virtual_mode`/`StateBackend`），且 E2B 产出能经该 backend 写入。
 
 #### 9.3.3 指针块（替换 prepare_file_list 模板）
 
@@ -827,7 +846,7 @@ flowchart LR
     D --> F
 ```
 
-`read_text_file` 现状支持区间读（行级），迁移后语义对齐 deepagents `read_file(offset, limit)`。**向量检索 `SearchKnowledgeBase` 是分页读的互补而非替代**：分页读适合"已知在某文件某段"的精确取用，向量召回适合"不知在哪份文件"的跨大/多文件语义召回。二者并存，覆盖完整取数谱系。`FilesystemMiddleware` 的 `tool_token_limit_before_evict` 作为模型误发超大 `read_file` 的兜底（避免单次读爆窗口）。
+分页读由 deepagents `read_file(offset, limit)` 实现（`WorkspaceBackend.read` 分页，行/字节级）。**向量检索 `SearchKnowledgeBase` 是分页读的互补而非替代**：分页读适合"已知在某文件某段"的精确取用，向量召回适合"不知在哪份文件"的跨大/多文件语义召回。二者并存，覆盖完整取数谱系。`FilesystemMiddleware` 的 `tool_token_limit_before_evict` 作为模型误发超大 `read_file` 的兜底（避免单次读爆窗口）。
 
 #### 9.3.5 含图文档
 
@@ -839,7 +858,7 @@ flowchart LR
 
 #### 9.3.6 子智能体共享文件空间
 
-§2 装配的 `subagents` **必须能读上传文件**。路径 A 下子智能体共享同一本地 `file_dir`（子图继承父 `root_path`）；若部分子智能体走 deepagents 原生 `state.files`，则 `state.files` 在父子图间共享（deepagents state 传递语义）。装配时确保子智能体的文件工具 `root_path` 指向同一 `file_dir`，避免子智能体读不到附件。指针块同样需注入子智能体上下文（或子智能体通过 `list_files` 自发现）。
+§2 装配的 `subagents` **必须能读上传文件**。子智能体共享**同一 `WorkspaceBackend`**（同 `svid` 工作区）——父子图用同一 MinIO 前缀 + `file_dir` 缓存，天然共享附件/中间文件，无需 `root_path` 对齐。指针块需注入子智能体上下文（或子智能体经 `ls`/`list_files` 自发现）。
 
 #### 9.3.7 文件空间生命周期（任务执行期 per-task）
 
@@ -849,10 +868,10 @@ flowchart LR
 
 | 层 | 真相源 / 生命周期 | 处置 |
 |----|------------------|------|
-| 解析产物（markdown + 图片） | MinIO 正式桶 + `linsight_session_version.files`（JSON），**per-version** | 提交时由 `_process_submitted_files` 写入；作为该 version 文件的持久真相源 |
-| 本地 `file_dir`（路径 A） | per-task 缓存（`CACHE_DIR/linsight/{sid8}/`） | **保持 per-task**：执行前 `_init_file_directory`（`task_exec.py:231`）从 MinIO 拉起，任务 `finally` `shutil.rmtree`（`task_exec.py:99`）。**无需改为「会话级按需重建」**——因为退出后日常对话不读文件（§9.3.8 决策），不存在「续聊仍要本地副本」的诉求 |
-| deepagents `state.files`（路径 B） | 绑定 graph 实例 | graph 实例随任务结束销毁；本期走路径 A，`state.files` 仅承担 §7 Skill 存储 |
-| 文件访问能力（read 工具 + 指针块） | **仅任务模式内装配** | 工具 + 指针块只在任务执行链路注入；退出到日常对话**不装配**文件能力（决策见 §9.3.8） |
+| 工作区真相 | **MinIO `workspace/{svid}/`** + `linsight_session_version.files`（附件元数据 JSON） | 唯一真相源；附件提交时写入，agent 中间/产物经 `WorkspaceBackend` 写穿入 MinIO |
+| 本地 `file_dir`（写穿缓存） | per-task 缓存（`CACHE_DIR/linsight/{sid8}/`） | 执行前从 MinIO 物化，任务 `finally` `rmtree`；**清缓存无损**（写穿保证 MinIO 已最新），resume 从 MinIO 重建 |
+| graph state | **不承载文件** | `state.files` 不再用于工作区；checkpointer 只存图执行态（§9.3.2） |
+| 文件访问能力（deepagents 文件工具 + 指针块） | **仅任务模式内装配** | 退出到日常对话**不装配**文件能力（决策见 §9.3.8） |
 
 **关键点**：
 
@@ -892,6 +911,40 @@ flowchart LR
 
 **与知识库 / 工具的对称性**：知识库（`org_knowledge_enabled` / `personal_knowledge_enabled` 两 flag）与工具（`tools` JSON）在提交时本就是前端打包进 submit 请求、后端按 version 落库（见调研）。因此它们的「会话级记忆」**纯前端即可**：前端保留选择态、再次进入回填、下次 submit 照常带上，后端无需新增任何「会话记忆」字段。**仅文件因涉及临时桶生命周期，需要上面的后端幂等改造。**
 
+#### 9.3.9 代码产出文件（E2B/本地沙箱）
+
+沙箱是独立 FS（E2B 远程容器 / 本地 cwd），脚本写文件**不调 `write_file` 工具、目录不确定**，故经「全树扫描 + 经 `WorkspaceBackend` 摄入」捕获，不 hook 工具名：
+
+```python
+SIZE_INLINE = 5MB   # 阈值: 决定走 cache 还是直传 MinIO
+
+# 跑代码前: 工作区 → 沙箱 (copy-in, 按需, 避免推大文件)
+on before_code_run():
+    cache.materialize(workspace.working_set from MinIO)
+    for f in cache.list():
+        if f.size <= SIZE_INLINE: sandbox.put(f.path, f.bytes)
+        else:                     sandbox.inject_presigned_url(f)   # 大文件给 URL 让脚本按需 GET
+
+# 跑代码后: 扫沙箱产出 → 按大小/类型分流摄入 (不靠 write 工具)
+on after_code_run():
+    for path, meta in sandbox.scan_tree(diff_by=hash):
+        dst = ("output/" if under_output(path) else "scratch/") + rel(path)
+        if meta.size <= SIZE_INLINE and is_text(path):
+            backend.write(dst, sandbox.read(path))                 # cache + MinIO 写穿
+        else:
+            stream(sandbox.read_stream(path) → minio.put(f"workspace/{svid}/{dst}"))  # 直传, 不过 cache
+            workspace.manifest.add(dst, size, md5, url)            # 工作区只留指针
+    enumerate_new_files_to_model(new_paths + size)                 # ★模型据此 read_file/引用产物
+```
+
+要点：
+- **入沙箱**：小文件 push、大文件给 presigned URL 让脚本自取 → 不把大输入塞进 copy-in（system_prompt 须教模型「大文件用给定 URL 读」，POC 验遵从率）。
+- **出沙箱**：全树扫描捕获（脚本不调 write 也能抓）；小文本走 cache+写穿，大/二进制**沙箱直传 MinIO + 指针**，绝不过 cache/state/上下文。
+- **告知模型**：`run` 结果**枚举本次新增/改动文件**（path+size），否则 agent 不知脚本产出了啥（现状 E2B 仅回图片 URL，须补全）。
+- **分类**：路径前缀 `output/` vs `scratch/`，不依赖 `file_name∈answer`。
+- **一致性**：沙箱是拷贝非视图 → 必有 copy-in/out；靠「同工作区同时只一个 code run + pull-after 为权威」串行化（deepagents 工具本就串行）。
+- **衔接现状**：现状 `sync_files_to_local` 已做「扫描回灌 file_dir + 图片直传 MinIO」（`e2b_executor.py`）；本方案只改两点——回灌目标从裸 `file_dir` 改为 `WorkspaceBackend`（cache+写穿）；「大文件直传 MinIO」从仅图片一般化到所有超阈值/二进制产出。
+
 ### 9.4 关键改动锚点表
 
 | # | 改动点 | 文件锚点 | 改动性质 | 说明 |
@@ -900,28 +953,29 @@ flowchart LR
 | 2 | 文件对象加字段 | `workbench_impl.py:_parse_file` 返回体 | 新增 | `line_count` / `image_count` |
 | 3 | 指针块模板 | `workbench_impl.py:477 prepare_file_list` | **替换** | 灵思模板 → `<uploaded_files>` |
 | 4 | 截断逻辑 | `agent.py:35 parse_file_list_str`（`max_file_num=5`） | 保留 | 多文件只列头部 |
-| 5 | 文件空间 | `task_exec.py:231 _init_file_directory` | **保留（per-task）** | 本地 file_dir 维持 per-task 拉起 + `finally` rmtree；日常对话不接管文件，无需会话级重建（§9.3.7 / §9.3.8 决策） |
-| 6 | 文件工具注入 | `tool.py:565 init_linsight_tools` | 保留 | list/read/search 等直传 |
-| 7 | 分页读语义对齐 | `read_text_file` 工具 | 语义对齐 | 对齐 `read_file(offset,limit)` |
+| 5 | 工作区后端 | `task_exec.py:231 _init_file_directory` + 新增 `WorkspaceBackend` | **改造** | 物化改为 MinIO→`file_dir` 写穿缓存；`file_dir` 仅缓存可清，真相在 MinIO（§9.3.2） |
+| 6 | 文件工具 | deepagents 原生 `write_file/read_file/edit_file/ls`（后端 `WorkspaceBackend`） | **替换** | 自研 `init_linsight_tools` 的 list/read/write 文件工具下线（§9.3.2） |
+| 7 | 分页读 | deepagents `read_file(offset,limit)` | **替换** | 由 `WorkspaceBackend.read` 实现分页（§9.3.2） |
 | 8 | 图片抽取 | `_parse_file` 解析阶段 | 新增 | base64 独立文件 + `encoding=base64` + `![]()` 引用 |
 | 9 | 子智能体共享 | §2 `subagents` 装配 | 新增校验 | 子图 `root_path` 指向同一 file_dir |
 | 10 | 上传端点 | `endpoints/linsight.py:55` | 保留 | 同步存盘 + background_tasks 异步解析不动 |
 | 11 | 文件跨 version 复用 | `workbench_impl.py:_process_submitted_files`（line 148 附近） | **新增（幂等）** | 同会话再次进入任务模式用同一 `file_id` 提交时，复用正式桶产物、跳过「临时桶→正式桶」复制；临时元数据过期且无正式产物则判失效、提示重传（§9.3.8 关键边界） |
+| 12 | 代码产出捕获 | `e2b_executor.py sync_files_to_local` | **改造** | 回灌目标改 `WorkspaceBackend`（cache+写穿）；大/二进制直传 MinIO + 指针，告知模型新文件（§9.3.9） |
 
 ### 9.5 与 deepagents 虚拟 FS / 沙箱的关系
 
-本章必须与 §5.3 沙箱边界、§7 Skill 存储划清三层文件空间职责，避免混用：
+本章与 §5.3 沙箱边界、§7 Skill 存储划清三层文件空间职责，避免混用：
 
-| 文件空间 | 载体 | 职责 | 本章关系 |
-|---|---|---|---|
-| **附件文件空间** | 本地 `file_dir`（路径 A） | 上传附件 markdown + 图片，agent 按需读 | **本章主体** |
-| **E2B 真实沙箱** | `bisheng_code_interpreter`，`local_sync_path` 同步 file_dir | 代码执行 + **交付物唯一来源**（E2B→MinIO→URL） | 附件经 local_sync_path 进沙箱供代码处理；产物不回附件空间 |
-| **deepagents 虚拟 FS** | `FilesystemBackend(virtual_mode=True)`，`state.files` | 本期仅承担 §7 Skill 存储 + agent 内部中间态 | 附件**不走**虚拟 FS（路径 A 决策）；`virtual_mode` 防穿越供 Skill 用 |
+| 文件空间 | 载体 | 职责 |
+|---|---|---|
+| **工作区**（本章主体） | MinIO `workspace/{svid}/`（真相）+ `file_dir`（写穿缓存），`WorkspaceBackend` 收口 | 附件 markdown/图片、agent 中间文件、产物；deepagents 工具 + E2B 都经它 |
+| **E2B 真实沙箱** | `bisheng_code_interpreter` 远程容器 | 真实代码执行；瞬态计算镜像，经工作区 copy-in/out（§9.3.9） |
+| **Skill 磁盘**（§7） | `FilesystemBackend(SKILLS_ROOT)` | 只读静态 SKILL.md，progressive disclosure |
 
-三条铁律（与 §5.3 一致）：
-1. **交付物唯一来源是 E2B→MinIO→URL**，附件 markdown 与 `state.files` 都不得当交付物返回前端。
-2. 附件正文经文件工具读取进入 agent 上下文，但**绝不经指针块/messages 注入**。
-3. 若后续切路径 B（`state.files`），需同步迁移 E2B `local_sync_path` 链路，本期不做。
+三条铁律：
+1. **交付物 = 工作区 `output/` 区**（MinIO `workspace/{svid}/output/`）；大/二进制走指针清单 + 直传 MinIO。
+2. 附件/中间/产物**不挂 graph state**（大 markdown 也不进）；正文按 `read(offset,limit)` 入上下文，绝不经指针块/messages 注入。
+3. **E2B 是瞬态计算镜像**：每次 run copy-in/out，沙箱自身不持久；Skill 磁盘与工作区两套后端互不混用。
 
 ### 9.6 边界异常表
 
@@ -929,7 +983,7 @@ flowchart LR
 |---|---|---|---|
 | 单文件超限 | 上传 > 50MB（默认上限） | 上传端点拒绝，返回明确错误码（模块 110），不进解析 | `endpoints/linsight.py` 上传校验 |
 | 解析空/异常 | 扫描件/加密/损坏文档，`TempFilePipeline` 产出空 texts 或抛错 | **明确失败不静默落空文件**：`parsing_status=failed` + `error_message`；不写 `/uploads/<name>/`、指针块不列该文件；前端据 `error_message` **自动移除该附件 chip + toast 原因**（见 PRD §4.2.2） | `_parse_file` except 分支 |
-| 图片过多超 state 上限 | 含图文档抽图后超文件空间容量 | **降级丢图只留 markdown**：`image_count` 标记降级，markdown 正文保留，`![]()` 引用降级为占位 | 抽图阶段 |
+| 图片过多超工作区容量 | 含图文档抽图后超工作区容量上限 | **降级丢图只留 markdown**：`image_count` 标记降级，markdown 正文保留，`![]()` 引用降级为占位 | 抽图阶段 |
 | 模型误发超大 read | `read_file` limit 过大撑窗口 | `tool_token_limit_before_evict` 兜底驱逐，提示模型分页重试 | FilesystemMiddleware |
 | 多文件 > max_file_num | 指针块文件数 > 5 | 只列头部 5 份 + "共 N 份存于 /uploads/" 提示，模型用 `list_files` 自发现其余 | `parse_file_list_str` |
 | 子智能体读不到附件 | 子图 `root_path` 与父不一致 | 装配时强制子图 `root_path` = 父 `file_dir`；缺失则装配失败 | §2 subagents 装配 |
