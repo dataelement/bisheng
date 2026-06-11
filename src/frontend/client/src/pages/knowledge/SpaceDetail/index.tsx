@@ -18,6 +18,7 @@ import {
     DialogTitle,
 } from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
 import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
 import {
@@ -797,6 +798,9 @@ export function KnowledgeSpaceContent({
             setSelectedFiles(new Set());
             queryClient.invalidateQueries({ queryKey: ["file-versions"] });
             onDeleteFile(""); // generic "file list changed, reload" signal (same as batch delete)
+            // Refresh the left sidebar folder tree(s). No spaceId → global refresh,
+            // so a cross-space move updates both the source and target trees.
+            dispatchKnowledgeSpaceFilesRefresh();
         },
     });
     // Uploading placeholders have no backend identity yet — a selection that
