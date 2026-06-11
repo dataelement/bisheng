@@ -54,6 +54,16 @@ _EXCEPTION_HANDLERS = {
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
     await init_default_data()
+    # F034: align frozen system permission tiers with newly-added
+    # move_file/move_folder on every boot. Idempotent + non-critical — a failure
+    # only leaves the admin permission UI stale, so it must never block startup.
+    try:
+        from bisheng.permission.domain.relation_model_backfill import (
+            backfill_relation_model_move_permissions,
+        )
+        await backfill_relation_model_move_permissions()
+    except Exception:
+        logger.exception('relation-model move-permission backfill failed; continuing startup')
     # LangfuseInstance.update()
     yield
     thread_pool.tear_down()

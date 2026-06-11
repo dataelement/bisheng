@@ -90,6 +90,39 @@ Options:
 
 - `--apply`: perform writes; default is dry-run
 
+### `backfill_relation_model_move_permissions.py`
+
+Backfills the F034 permissions `move_file` / `move_folder` into **frozen system**
+relation tiers (所有者 / 可管理 / 可编辑) whose checkbox snapshot was frozen
+before those permissions existed.
+
+> **Usually you don't need to run this.** The same idempotent backfill runs
+> automatically on every backend startup (wired into `main.py` lifespan), so a
+> normal upgrade + restart self-heals. This standalone script exists only for
+> fixing an environment without a restart, or for inspecting the change first.
+
+Behavior:
+
+- reads the global `config.key = "permission_relation_models_v1"` JSON list
+- for each **system** (`is_system = true`) model with `permissions_explicit = true`,
+  unions in `{move_file, move_folder} ∩ default_permission_ids_for_relation(relation)`
+  — owner/manager/editor get both, viewer gets none
+- skips dynamic (`permissions_explicit = false`) models — they already compute
+  the new permissions from the template at runtime
+- skips custom (`is_system = false`) models; preserves all other permissions
+- idempotent: once aligned, re-runs are no-ops
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_relation_model_move_permissions.py
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_relation_model_move_permissions.py --apply
+```
+
+Options:
+
+- `--apply`: perform writes; default is dry-run
+
 ### `backfill_channel_member_rebac_grants.py`
 
 Repairs **already-active** channel subscribers that were activated before commit
