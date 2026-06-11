@@ -24,6 +24,7 @@ import {
     DEFAULT_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
     MAX_UPLOAD_COUNT,
+    isKnowledgeItemUploading,
     getAllowedExtensions,
     getFileInputAccept,
     triggerUrlDownload,
@@ -798,7 +799,15 @@ export function KnowledgeSpaceContent({
             onDeleteFile(""); // generic "file list changed, reload" signal (same as batch delete)
         },
     });
-    const handleBatchMove = () => openMove(selectedList);
+    // Uploading placeholders have no backend identity yet — a selection that
+    // contains one cannot be moved (the menu entry is also disabled below).
+    const selectionHasUploading = displayFiles.some(
+        (f) => selectedFiles.has(f.id) && isKnowledgeItemUploading(f),
+    );
+    const handleBatchMove = () => {
+        if (selectionHasUploading) return;
+        openMove(selectedList);
+    };
 
     const handleBatchDelete = async () => {
         const confirmed = await confirm({
@@ -1005,7 +1014,7 @@ export function KnowledgeSpaceContent({
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchMove={handleBatchMove}
-                canBatchMove={canUploadFile}
+                canBatchMove={canUploadFile && !selectionHasUploading}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}

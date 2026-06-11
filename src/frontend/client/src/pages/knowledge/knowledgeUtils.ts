@@ -27,6 +27,16 @@ export function isKnowledgeApprovalRejected(file: KnowledgeFile): boolean {
     return file.approvalStatus === "rejected" || file.approvalStatus === "sensitive_rejected";
 }
 
+/**
+ * True while a file body is still being uploaded (frontend placeholder row)
+ * or a folder row is a not-yet-committed inline-create placeholder. These
+ * rows have no stable backend identity yet, so move (drag / menu / batch)
+ * must be disabled for them.
+ */
+export function isKnowledgeItemUploading(file: KnowledgeFile): boolean {
+    return file.status === FileStatus.UPLOADING || !!file.isCreating;
+}
+
 export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
     if (file.approvalStatus) {
         return file.approvalStatus === "pending_review";
