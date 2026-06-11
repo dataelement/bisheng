@@ -68,6 +68,7 @@ def _install_chat_service_stubs() -> None:
     schemas_module.KnowledgeFileOne = getattr(schemas_module, 'KnowledgeFileOne', _DummySchema)
     schemas_module.FileProcessBase = getattr(schemas_module, 'FileProcessBase', _DummySchema)
     schemas_module.ExcelRule = getattr(schemas_module, 'ExcelRule', _DummySchema)
+    schemas_module.WSModel = getattr(schemas_module, 'WSModel', _DummySchema)
 
     if 'bisheng.chat_session.domain.chat' not in sys.modules:
         chat_module = ModuleType('bisheng.chat_session.domain.chat')
@@ -111,6 +112,20 @@ def _install_chat_service_stubs() -> None:
 
         tool_module.KnowledgeRetrieverTool = _DummyKnowledgeRetrieverTool
         sys.modules['bisheng.tool.domain.langchain.knowledge'] = tool_module
+
+    if 'bisheng.llm' not in sys.modules:
+        llm_pkg = ModuleType('bisheng.llm')
+        llm_pkg.__path__ = []
+        sys.modules['bisheng.llm'] = llm_pkg
+    if 'bisheng.llm.domain' not in sys.modules:
+        llm_domain_module = ModuleType('bisheng.llm.domain')
+        llm_domain_module.__path__ = []
+        llm_domain_module.LLMService = MagicMock()
+        sys.modules['bisheng.llm.domain'] = llm_domain_module
+    if 'bisheng.llm.domain.utils' not in sys.modules:
+        llm_utils_module = ModuleType('bisheng.llm.domain.utils')
+        llm_utils_module.extract_reasoning_content = lambda *_args, **_kwargs: ""
+        sys.modules['bisheng.llm.domain.utils'] = llm_utils_module
 
 
 def _load_chat_service_class():
@@ -205,10 +220,73 @@ class TestKnowledgeSpaceChatPermissions:
         ), patch.object(
             chat_service, 'space_rag', _empty_space_rag,
         ):
-            result = [item async for item in chat_service.chat_single_file(1, 11, 'hi')]
+            result = [item async for item in chat_service.chat_single_file(1, 11, 'hi', 1001)]
 
         assert result == []
         mock_require_view.assert_awaited_once_with(1, 11)
+
+    @pytest.mark.asyncio
+    async def test_chat_single_file_records_my_knowledge_document_qa_on_first_chunk(self, chat_service):
+        file_record = _make_file(file_id=11, knowledge_id=1)
+        space = _make_space(space_id=1)
+
+        async def _one_chunk_space_rag(*args, **kwargs):
+            yield {"ok": True}
+
+        with (
+            patch.object(
+                chat_service,
+                "_require_file_view_permission",
+                new_callable=AsyncMock,
+                return_value=file_record,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.MessageSessionDao.afilter_session",
+                new_callable=AsyncMock,
+                return_value=[SimpleNamespace(chat_id="chat-1", flow_id="flow-1")],
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_milvus_vectorstore",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(as_retriever=lambda **kwargs: object()),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.KnowledgeRag.init_knowledge_es_vectorstore",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(as_retriever=lambda **kwargs: object()),
+            ),
+            patch.object(chat_service, "space_rag", _one_chunk_space_rag),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync"
+            ) as mock_log_event,
+        ):
+            result = [item async for item in chat_service.chat_single_file(1, 11, "hi", 1001)]
+
+        assert result == [{"ok": True}]
+        _, kwargs = mock_log_event.call_args
+        assert kwargs["user_id"] == chat_service.login_user.user_id
+        assert kwargs["event_type"].value == "portal_qa"
+        event_data = kwargs["event_data"]
+        assert event_data.source_app == "bisheng_my_knowledge"
+        assert event_data.scene == "my_knowledge_document_qa"
+        assert event_data.entry_point == "my_knowledge_document_qa"
+        assert event_data.space_id == 1
+        assert event_data.file_id == 11
+
+    def test_log_portal_document_qa_skips_portal_bff_proxy(self, chat_service):
+        chat_service.request.headers.get.return_value = "shougang_portal_bff"
+
+        with patch(
+            "bisheng.knowledge.domain.services.knowledge_space_chat_service.PortalTelemetryEventService.log_event_sync"
+        ) as mock_log_event:
+            chat_service._log_portal_document_qa_success(knowledge_id=1, file_id=11)
+
+        mock_log_event.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_get_chat_folder_session_requires_view_folder_when_folder_selected(self, chat_service):

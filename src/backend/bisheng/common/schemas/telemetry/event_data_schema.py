@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum, StatusEnum
 
 
 class BaseEventData(BaseModel):
@@ -83,7 +83,7 @@ class FileParseEventData(BaseEventData):
     _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.FILE_PARSE
 
     parse_type: str
-    status: Literal['success', 'failed', 'parse_failed']
+    status: Literal["success", "failed", "parse_failed"]
     app_type: ApplicationTypeEnum
 
 
@@ -93,7 +93,7 @@ class MessageFeedbackEventData(BaseEventData):
     _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.MESSAGE_FEEDBACK
 
     message_id: int
-    operation_type: Literal['like', 'dislike', 'copy']
+    operation_type: Literal["like", "dislike", "copy"]
 
     app_id: str
     app_name: str
@@ -156,3 +156,35 @@ class ApplicationProcessEventData(BaseEventData):
     start_time: int
     end_time: int
     process_time: int
+
+
+class PortalEventData(BaseEventData):
+    source_app: str
+    scene: str
+    entry_point: str
+    resource_type: str
+    status: Literal["success"] = "success"
+    space_id: int | str | None = None
+    file_id: int | str | None = None
+    target_space_id: int | str | None = None
+    source_space_id: int | str | None = None
+    source_file_id: int | str | None = None
+    conversation_id: str | None = None
+
+
+class PortalFavoriteEventData(PortalEventData):
+    """Data model for Shougang portal favorite success events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_FAVORITE
+
+
+class PortalQaEventData(PortalEventData):
+    """Data model for Shougang portal QA success events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_QA
+
+
+class PortalDocumentReadEventData(PortalEventData):
+    """Data model for Shougang portal document preview/read success events."""
+
+    _event_name: BaseTelemetryTypeEnum = BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ

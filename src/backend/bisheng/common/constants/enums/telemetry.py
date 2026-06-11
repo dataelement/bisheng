@@ -2,8 +2,8 @@ from enum import Enum
 
 
 class StatusEnum(str, Enum):
-    SUCCESS = 'success'
-    FAILED = 'failed'
+    SUCCESS = "success"
+    FAILED = "failed"
 
 
 # Generalized application type enumeration
@@ -85,3 +85,12 @@ class BaseTelemetryTypeEnum(str, Enum):
 
     # Session Run Time
     APPLICATION_PROCESS = "application_process"
+
+    # Shougang portal favorite success event
+    PORTAL_FAVORITE = "portal_favorite"
+
+    # Shougang portal QA success event
+    PORTAL_QA = "portal_qa"
+
+    # Shougang portal document preview/read success event
+    PORTAL_DOCUMENT_READ = "portal_document_read"

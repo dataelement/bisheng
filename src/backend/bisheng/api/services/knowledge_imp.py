@@ -81,6 +81,17 @@ filetype_load_map = {
 }
 
 
+def _shougang_encoding_first_three_segments(file_encoding: str | None) -> tuple[str, str, str] | None:
+    parts = [part.strip() for part in (file_encoding or "").split("-")]
+    if len(parts) < 3 or not all(parts[:3]):
+        return None
+    return parts[0], parts[1], parts[2]
+
+
+def _has_valid_simhash(simhash: str | None) -> bool:
+    return bool(simhash) and simhash != "0" * 16
+
+
 def put_images_to_minio(local_image_dir, knowledge_id, doc_id):
     if not os.path.exists(local_image_dir):
         return
@@ -276,7 +287,8 @@ def addEmbedding(
                 vmc = getattr(knowledge_conf, "version_management", None)
                 threshold = vmc.simhash_similarity_threshold if vmc else 0.85
 
-                if db_file.simhash:
+                source_encoding_key = _shougang_encoding_first_three_segments(db_file.file_encoding)
+                if _has_valid_simhash(db_file.simhash) and source_encoding_key is not None:
                     with get_sync_db_session() as session:
                         primary_kf_ids = session.exec(
                             select(KnowledgeDocumentVersion.knowledge_file_id)
@@ -298,9 +310,12 @@ def addEmbedding(
                                 )
                             ).all()
                             for cand in candidates:
-                                if cand.simhash and _simhash_similarity(
-                                    db_file.simhash, cand.simhash
-                                ) >= threshold:
+                                if (
+                                    _has_valid_simhash(cand.simhash)
+                                    and _shougang_encoding_first_three_segments(cand.file_encoding)
+                                    == source_encoding_key
+                                    and _simhash_similarity(db_file.simhash, cand.simhash) >= threshold
+                                ):
                                     above_count += 1
                     logger.info(
                         f"similar_scan_sync file_id={db_file.id} "
@@ -312,7 +327,7 @@ def addEmbedding(
                         db_file.similar_status = 1
                 else:
                     logger.warning(
-                        f"similar_scan_sync file_id={db_file.id} skipped: no simhash in memory"
+                        f"similar_scan_sync file_id={db_file.id} skipped: no simhash or file_encoding in memory"
                     )
             except Exception:
                 logger.warning("similar scan (sync) failed", exc_info=True)

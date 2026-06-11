@@ -343,6 +343,27 @@ class ShougangPortalHomeResp(BaseModel):
     tags: List[str] = Field(default_factory=list)
 
 
+class ShougangPortalTelemetryEventReq(BaseModel):
+    event_type: Literal["portal_favorite", "portal_qa", "portal_document_read"]
+    source_app: str = Field(..., min_length=1, max_length=64)
+    scene: str = Field(..., min_length=1, max_length=128)
+    entry_point: str = Field(..., min_length=1, max_length=128)
+    resource_type: str = Field(default="document", max_length=64)
+    status: Literal["success"] = "success"
+    space_id: Optional[int | str] = None
+    file_id: Optional[int | str] = None
+    target_space_id: Optional[int | str] = None
+    source_space_id: Optional[int | str] = None
+    source_file_id: Optional[int | str] = None
+    conversation_id: Optional[str] = Field(default=None, max_length=128)
+
+
+class ShougangPortalHomeStatsResp(BaseModel):
+    read_count: int = 0
+    favorite_count: int = 0
+    qa_count: int = 0
+
+
 class KnowledgeSpaceUpdateReq(BaseModel):
     name: Optional[str] = Field(
         None, max_length=200, description="Knowledge Space Name"

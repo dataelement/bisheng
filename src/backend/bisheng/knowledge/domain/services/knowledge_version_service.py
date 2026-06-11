@@ -167,7 +167,6 @@ class KnowledgeVersionService:
             VersionLinkFileNotReadyError,
             VersionLinkSourceFileMissingError,
             VersionLinkSourceMultiVersionError,
-            VersionLinkTargetUnavailableError,
         )
 
         # ── Source guard ────────────────────────────────────────────────────
@@ -389,7 +388,9 @@ class KnowledgeVersionService:
         from bisheng.common.utils.simhash_utils import similarity as _similarity
 
         kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not kf.simhash:
+        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
+            return 0
+        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
             return 0
 
         if threshold is None:
@@ -404,7 +405,9 @@ class KnowledgeVersionService:
 
         above_count = 0
         for c in candidates:
-            if not c.simhash:
+            if not self._has_valid_simhash(getattr(c, "simhash", None)):
+                continue
+            if not self._shougang_encoding_matches(kf, c):
                 continue
             if _similarity(kf.simhash, c.simhash) >= threshold:
                 above_count += 1
@@ -440,6 +443,10 @@ class KnowledgeVersionService:
             # Cap candidate_count at the same limit the right-panel uses (default 3)
             # so the left-side count never exceeds what the user can actually act on.
             candidates = await self.get_similar_candidates_for_file(kf.id)
+            if not candidates:
+                kf.similar_status = 0
+                await self.knowledge_file_repo.update(kf)
+                continue
             out.append(PendingSimilarFileEntry(
                 knowledge_file_id=kf.id, file_name=kf.file_name,
                 file_code=getattr(kf, "file_encoding", None),
@@ -487,7 +494,9 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
 
         kf = await self.knowledge_file_repo.find_by_id(current_file_id)
-        if kf is None or not kf.simhash:
+        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
+            return []
+        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
             return []
 
         conf = await bisheng_settings.async_get_knowledge()
@@ -503,7 +512,9 @@ class KnowledgeVersionService:
 
         scored: list[tuple[float, KnowledgeFile]] = []
         for c in candidates:
-            if not c.simhash:
+            if not self._has_valid_simhash(getattr(c, "simhash", None)):
+                continue
+            if not self._shougang_encoding_matches(kf, c):
                 continue
             sim = _similarity(kf.simhash, c.simhash)
             if sim < threshold:
@@ -585,11 +596,49 @@ class KnowledgeVersionService:
         return out
 
     @staticmethod
+    def _has_valid_simhash(simhash: str | None) -> bool:
+        return bool(simhash) and simhash != "0" * 16
+
+    @staticmethod
     def _shougang_encoding_first_three_segments(file_encoding: str | None) -> tuple[str, str, str] | None:
         parts = [part.strip() for part in (file_encoding or "").split("-")]
         if len(parts) < 3 or not all(parts[:3]):
             return None
         return parts[0], parts[1], parts[2]
+
+    @classmethod
+    def _shougang_encoding_matches(cls, source_file: KnowledgeFile, candidate_file: KnowledgeFile) -> bool:
+        source_encoding_key = cls._shougang_encoding_first_three_segments(
+            getattr(source_file, "file_encoding", None)
+        )
+        if source_encoding_key is None:
+            return False
+        return (
+            cls._shougang_encoding_first_three_segments(
+                getattr(candidate_file, "file_encoding", None)
+            )
+            == source_encoding_key
+        )
+
+    async def _similarity_matches_threshold(
+        self,
+        source_file: KnowledgeFile,
+        candidate_file: KnowledgeFile,
+        threshold: float | None = None,
+    ) -> bool:
+        from bisheng.common.utils.simhash_utils import similarity as _similarity
+
+        if not self._has_valid_simhash(getattr(source_file, "simhash", None)):
+            return False
+        if not self._has_valid_simhash(getattr(candidate_file, "simhash", None)):
+            return False
+        if not self._shougang_encoding_matches(source_file, candidate_file):
+            return False
+        if threshold is None:
+            conf = await bisheng_settings.async_get_knowledge()
+            vmc = getattr(conf, "version_management", None)
+            threshold = vmc.simhash_similarity_threshold if vmc else 0.85
+        return _similarity(source_file.simhash, candidate_file.simhash) >= threshold
 
     async def search_shougang_publish_version_sources(
         self,
@@ -740,7 +789,6 @@ class KnowledgeVersionService:
             VersionLinkFileNotReadyError,
             VersionLinkSourceFileMissingError,
             VersionLinkSourceMultiVersionError,
-            VersionLinkTargetUnavailableError,
         )
 
         # ── Current (the file the user is managing) guard ───────────────────
@@ -788,6 +836,8 @@ class KnowledgeVersionService:
         if source_kf.status != KnowledgeFileStatus.SUCCESS.value:
             # File still around but not finished parsing.
             raise VersionLinkFileNotReadyError()
+        if not await self._similarity_matches_threshold(current_kf, source_kf):
+            raise HTTPException(status_code=409, detail="source document is not similar to current file")
 
         existing = await self.version_repo.find_by_document_id(target_doc_id)
         existing_kf_ids = [v.knowledge_file_id for v in existing]
@@ -844,7 +894,9 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
 
         kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not kf.simhash:
+        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
+            return []
+        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
             return []
 
         conf = await bisheng_settings.async_get_knowledge()
@@ -861,7 +913,9 @@ class KnowledgeVersionService:
 
         scored: list[tuple[float, KnowledgeFile]] = []
         for c in candidates:
-            if not c.simhash:
+            if not self._has_valid_simhash(getattr(c, "simhash", None)):
+                continue
+            if not self._shougang_encoding_matches(kf, c):
                 continue
             sim = _similarity(kf.simhash, c.simhash)
             if sim < threshold:
@@ -902,7 +956,9 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
 
         kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not kf.simhash:
+        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
+            return []
+        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
             return []
 
         conf = await bisheng_settings.async_get_knowledge()
@@ -918,7 +974,9 @@ class KnowledgeVersionService:
 
         scored: list[tuple[float, KnowledgeFile]] = []
         for candidate in candidates:
-            if not candidate.simhash:
+            if not self._has_valid_simhash(getattr(candidate, "simhash", None)):
+                continue
+            if not self._shougang_encoding_matches(kf, candidate):
                 continue
             sim = _similarity(kf.simhash, candidate.simhash)
             if sim >= threshold:
@@ -964,12 +1022,9 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
 
         kf = await self.knowledge_file_repo.find_by_id(knowledge_file_id)
-        if kf is None or not kf.simhash:
+        if kf is None or not self._has_valid_simhash(getattr(kf, "simhash", None)):
             return []
-        source_encoding_key = self._shougang_encoding_first_three_segments(
-            getattr(kf, "file_encoding", None)
-        )
-        if source_encoding_key is None:
+        if self._shougang_encoding_first_three_segments(getattr(kf, "file_encoding", None)) is None:
             return []
 
         conf = await bisheng_settings.async_get_knowledge()
@@ -985,11 +1040,9 @@ class KnowledgeVersionService:
 
         scored: list[tuple[float, KnowledgeFile]] = []
         for candidate in candidates:
-            if not candidate.simhash:
+            if not self._has_valid_simhash(getattr(candidate, "simhash", None)):
                 continue
-            if self._shougang_encoding_first_three_segments(
-                getattr(candidate, "file_encoding", None)
-            ) != source_encoding_key:
+            if not self._shougang_encoding_matches(kf, candidate):
                 continue
             if can_view_file is not None and not await can_view_file(int(candidate.id)):
                 continue

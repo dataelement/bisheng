@@ -2,8 +2,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
+from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
 from bisheng.knowledge.api.dependencies import get_knowledge_space_service
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalDomainFileCountReq,
@@ -14,6 +17,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileSearchResp,
     ShougangPortalHomeReq,
     ShougangPortalHomeResp,
+    ShougangPortalHomeStatsResp,
     ShougangPortalPersonalSpacesResp,
     ShougangPortalShareLinkAccessResp,
     ShougangPortalShareLinkCreateReq,
@@ -25,6 +29,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalSpaceLevelsResp,
     ShougangPortalTagSearchReq,
     ShougangPortalTagSearchResp,
+    ShougangPortalTelemetryEventReq,
 )
 
 router = APIRouter(prefix='/knowledge/shougang-portal', tags=['shougang_portal'])
@@ -133,6 +138,33 @@ async def get_shougang_portal_home(
 ) -> Any:
     result = await svc.get_shougang_portal_home(req)
     return resp_200(ShougangPortalHomeResp(**result).model_dump(mode='json'))
+
+
+@router.post('/telemetry/events')
+async def record_shougang_portal_telemetry_event(
+        req: ShougangPortalTelemetryEventReq,
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    event_type = BaseTelemetryTypeEnum(req.event_type)
+    event_data = PortalTelemetryEventService.build_event_data(
+        event_type,
+        req.model_dump(exclude={'event_type'}, exclude_none=True),
+    )
+    PortalTelemetryEventService.log_event_sync(
+        user_id=login_user.user_id,
+        event_type=event_type,
+        event_data=event_data,
+    )
+    return resp_200({'accepted': True})
+
+
+@router.get('/home/stats')
+async def get_shougang_portal_home_stats(
+        login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    _ = login_user
+    result = await PortalTelemetryEventService.count_home_events()
+    return resp_200(ShougangPortalHomeStatsResp(**result).model_dump(mode='json'))
 
 
 @router.post('/files/search')

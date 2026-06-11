@@ -13,9 +13,15 @@ from bisheng.api.services.workstation import WorkStationService
 from bisheng.api.v1.schema.chat_schema import ChatMessageHistoryResponse
 from bisheng.api.v1.schemas import ChatResponse, KnowledgeSpaceConfig
 from bisheng.chat_session.domain.chat import ChatSessionService
-from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.schemas.telemetry.event_data_schema import PortalQaEventData
+from bisheng.common.telemetry.portal_event_service import (
+    PORTAL_BFF_TELEMETRY_SOURCE_HEADER,
+    PortalTelemetryEventService,
+    is_portal_bff_proxy_source,
+)
 from bisheng.common.utils.title_generator import generate_conversation_title_async
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.database.constants import MessageCategory
@@ -114,8 +120,35 @@ class KnowledgeSpaceChatService:
         es_retriever = es_vector.as_retriever(search_kwargs={
             "filter": [{"term": {"metadata.document_id": file_id}}]
         })
+        telemetry_logged = False
         async for one in self.space_rag(session, vector_retriever, es_retriever, query, model_id, None):
+            if not telemetry_logged:
+                self._log_portal_document_qa_success(knowledge_id=knowledge_id, file_id=file_id)
+                telemetry_logged = True
             yield one
+
+    def _is_portal_bff_proxy_request(self) -> bool:
+        return is_portal_bff_proxy_source(self.request.headers.get(PORTAL_BFF_TELEMETRY_SOURCE_HEADER))
+
+    def _log_portal_document_qa_success(self, *, knowledge_id: int, file_id: int) -> None:
+        if self._is_portal_bff_proxy_request():
+            return
+        try:
+            PortalTelemetryEventService.log_event_sync(
+                user_id=self.login_user.user_id,
+                event_type=BaseTelemetryTypeEnum.PORTAL_QA,
+                event_data=PortalQaEventData(
+                    source_app="bisheng_my_knowledge",
+                    scene="my_knowledge_document_qa",
+                    entry_point="my_knowledge_document_qa",
+                    resource_type="document",
+                    space_id=knowledge_id,
+                    file_id=file_id,
+                    status="success",
+                ),
+            )
+        except (RuntimeError, ValueError, TypeError):
+            logger.exception("Failed to log portal document QA telemetry.")
 
     async def space_rag(self, session, vector_retriever, es_retriever, query: str, model_id: int, tags: Any = None) \
             -> AsyncIterator[ChatResponse]:

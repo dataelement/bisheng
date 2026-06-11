@@ -46,6 +46,13 @@ from bisheng.common.errcode.knowledge_space import (
 )
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
+from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.schemas.telemetry.event_data_schema import PortalDocumentReadEventData
+from bisheng.common.telemetry.portal_event_service import (
+    PORTAL_BFF_TELEMETRY_SOURCE_HEADER,
+    PortalTelemetryEventService,
+    is_portal_bff_proxy_source,
+)
 from bisheng.common.utils import util as common_util
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
@@ -6266,12 +6273,35 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_permission_id("knowledge_file", file_id, "view_file", space_id=file_record.knowledge_id)
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
-        asyncio.create_task(self._log_file_preview_success(file_record))
+        asyncio.create_task(self._log_file_preview_success(file_record))  # noqa: RUF006
+        if not self._is_portal_bff_proxy_request():
+            asyncio.create_task(self._log_portal_document_read_success(file_record))  # noqa: RUF006
 
         return {
             "original_url": original_url,
             "preview_url": preview_url,
         }
+
+    def _is_portal_bff_proxy_request(self) -> bool:
+        return is_portal_bff_proxy_source(self.request.headers.get(PORTAL_BFF_TELEMETRY_SOURCE_HEADER))
+
+    async def _log_portal_document_read_success(self, file_record: KnowledgeFile) -> None:
+        try:
+            PortalTelemetryEventService.log_event_sync(
+                user_id=self.login_user.user_id,
+                event_type=BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ,
+                event_data=PortalDocumentReadEventData(
+                    source_app="bisheng_my_knowledge",
+                    scene="document_preview",
+                    entry_point="my_knowledge_preview",
+                    resource_type="document",
+                    space_id=file_record.knowledge_id,
+                    file_id=file_record.id,
+                    status="success",
+                ),
+            )
+        except (RuntimeError, ValueError, TypeError):
+            logger.exception("Failed to log portal document read telemetry.")
 
     async def _log_file_preview_success(self, file_record: KnowledgeFile) -> None:
         try:

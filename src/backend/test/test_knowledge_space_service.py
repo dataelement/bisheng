@@ -1,11 +1,10 @@
 import asyncio
-import inspect
 import importlib
+import inspect
 import json
 import sys
 from datetime import datetime, timedelta
-from types import ModuleType
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,8 +14,8 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
     SpaceCreateDepartmentDeniedError,
     SpaceFileDuplicateError,
-    SpaceFileSizeLimitError,
     SpaceFileNotFoundError,
+    SpaceFileSizeLimitError,
     SpaceFolderNotFoundError,
     SpaceInvalidScopeOwnerError,
     SpaceNotFoundError,
@@ -29,31 +28,28 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMember,
     UserRoleEnum,
 )
+from bisheng.database.models.user_group import UserGroupDao
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     Knowledge,
     KnowledgeState,
     KnowledgeTypeEnum,
 )
-from bisheng.knowledge.domain.models.knowledge_space_scope import (
-    KnowledgeSpaceLevelEnum,
-    KnowledgeSpaceOwnerTypeEnum,
-)
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
     ShougangPortalSpaceInfoItemResp,
-    UploadFolderRecommendFileReq,
     SpaceSubscriptionStatusEnum,
+    UploadFolderRecommendFileReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     PORTAL_SEARCH_ES_RECALL_LIMIT,
     PORTAL_SEARCH_OVERSAMPLE_FACTOR,
     PORTAL_SEARCH_VECTOR_RECALL_LIMIT,
 )
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
-from bisheng.database.models.user_group import UserGroupDao
 
 
 def _install_schema_stubs() -> None:
@@ -6046,10 +6042,75 @@ class TestTupleLifecycle:
 
         assert result == {"original_url": "original", "preview_url": "preview"}
         mock_log.assert_called_once_with(file_record)
-        mock_create_task.assert_called_once()
-        scheduled = mock_create_task.call_args.args[0]
-        assert inspect.iscoroutine(scheduled)
-        scheduled.close()
+        assert mock_create_task.call_count == 2
+        scheduled_tasks = [call.args[0] for call in mock_create_task.call_args_list]
+        assert all(inspect.iscoroutine(task) for task in scheduled_tasks)
+        for task in scheduled_tasks:
+            task.close()
+
+    @pytest.mark.asyncio
+    async def test_log_portal_document_read_success_records_my_knowledge_preview(self, service):
+        file_record = _make_file(file_id=196, knowledge_id=1)
+
+        with patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.PortalTelemetryEventService.log_event_sync"
+        ) as mock_log_event:
+            await service._log_portal_document_read_success(file_record)
+
+        _, kwargs = mock_log_event.call_args
+        assert kwargs["user_id"] == service.login_user.user_id
+        assert kwargs["event_type"].value == "portal_document_read"
+        event_data = kwargs["event_data"]
+        assert event_data.source_app == "bisheng_my_knowledge"
+        assert event_data.scene == "document_preview"
+        assert event_data.entry_point == "my_knowledge_preview"
+        assert event_data.space_id == 1
+        assert event_data.file_id == 196
+
+    @pytest.mark.asyncio
+    async def test_get_file_preview_skips_my_knowledge_read_for_portal_bff_proxy(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=196, knowledge_id=1)
+        service.request.headers.get.return_value = "shougang_portal_bff"
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=file_record,
+            ),
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+                return_value={"view_space", "view_file"},
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url",
+                return_value=("original", "preview"),
+            ),
+            patch.object(
+                service,
+                "_log_file_preview_success",
+                new_callable=AsyncMock,
+                create=True,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.asyncio.create_task",
+            ) as mock_create_task,
+        ):
+            result = await service.get_file_preview(196)
+
+        assert result == {"original_url": "original", "preview_url": "preview"}
+        assert mock_create_task.call_count == 1
+        scheduled_task = mock_create_task.call_args.args[0]
+        assert inspect.iscoroutine(scheduled_task)
+        scheduled_task.close()
 
     @pytest.mark.asyncio
     async def test_get_file_preview_denied_without_view_file_permission(self, service):
