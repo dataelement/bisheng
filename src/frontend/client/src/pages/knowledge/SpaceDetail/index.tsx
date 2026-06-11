@@ -18,6 +18,8 @@ import {
     DialogTitle,
 } from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
+import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
@@ -32,6 +34,7 @@ import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
+import { MoveToDialog } from "./MoveToDialog";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { LoadMore } from "./LoadMore";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
@@ -786,6 +789,17 @@ export function KnowledgeSpaceContent({
         onEditTags(editingTagsFileId || "");
     };
 
+    // F034: move selected files/folders (same-space or cross-space) via MoveToDialog.
+    const { moveDialogOpen, setMoveDialogOpen, openMove, handleMoveConfirm, dropMoveToFolder } = useKnowledgeMove({
+        spaceId: space.id,
+        onMoved: () => {
+            setSelectedFiles(new Set());
+            queryClient.invalidateQueries({ queryKey: ["file-versions"] });
+            onDeleteFile(""); // generic "file list changed, reload" signal (same as batch delete)
+        },
+    });
+    const handleBatchMove = () => openMove(selectedList);
+
     const handleBatchDelete = async () => {
         const confirmed = await confirm({
             title: localize("com_knowledge.confirm_delete_selected_items", { 0: selectedFiles.size }),
@@ -910,6 +924,12 @@ export function KnowledgeSpaceContent({
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+    // F034: drag-move wiring for the card grid (table view wires its own internally).
+    const cardDrag = useKnowledgeMoveDrag({
+        files: displayFiles,
+        selectedFiles,
+        onMoveToFolder: canUploadFile ? (folderId, items) => dropMoveToFolder(items, folderId) : undefined,
+    });
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         deleteEntryIds.has(file.id)
     );
@@ -984,6 +1004,8 @@ export function KnowledgeSpaceContent({
                 canBatchDownload={canBatchDownload}
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
+                onBatchMove={handleBatchMove}
+                canBatchMove={canUploadFile}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
@@ -1067,6 +1089,7 @@ export function KnowledgeSpaceContent({
                                             onSelect={(selected) => handleSelectFile(file.id, selected)}
                                             onDownload={() => handleSingleDownload(file.id)}
                                             onRename={(newName) => onRenameFile(file.id, newName)}
+                                            onMove={canUploadFile ? () => openMove([file]) : undefined}
                                             onDelete={() => handleDelete(file.id)}
                                             onEditTags={() => handleOpenEditTags(file.id)}
                                             onRetry={() => handleSingleRetry(file.id)}
@@ -1083,6 +1106,12 @@ export function KnowledgeSpaceContent({
                                             onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                             onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                             canManageMembers={canManageMembers}
+                                            cardDraggable={cardDrag.enabled}
+                                            onCardDragStart={cardDrag.handleDragStart(file)}
+                                            isFolderDragOver={cardDrag.dragOverFolderId === file.id}
+                                            onFolderDragOver={cardDrag.handleFolderDragOver(file)}
+                                            onFolderDragLeave={cardDrag.handleFolderDragLeave(file)}
+                                            onFolderDrop={cardDrag.handleFolderDrop(file)}
                                         />
                                     </div>
                                 ))}
@@ -1106,6 +1135,8 @@ export function KnowledgeSpaceContent({
                                     onDownload={(id) => handleSingleDownload(id)}
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
+                                    onMove={canUploadFile ? (file) => openMove([file]) : undefined}
+                                    onMoveToFolder={canUploadFile ? (folderId, items) => dropMoveToFolder(items, folderId) : undefined}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}
@@ -1181,6 +1212,15 @@ export function KnowledgeSpaceContent({
                         ? (displayFiles.find(f => f.id === editingTagsFileId)?.tags?.map(t => t.id) || [])
                         : []
                 }
+            />
+
+            {/* F034: Move files/folders (same-space + cross-space) */}
+            <MoveToDialog
+                open={moveDialogOpen}
+                onOpenChange={setMoveDialogOpen}
+                currentSpaceId={space.id}
+                currentSpaceName={space.name}
+                onConfirm={handleMoveConfirm}
             />
 
             <Dialog open={!!violationFile} onOpenChange={(open) => {

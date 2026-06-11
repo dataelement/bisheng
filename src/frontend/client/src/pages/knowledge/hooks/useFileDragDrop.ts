@@ -7,6 +7,11 @@ import {
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
+// Only react to OS file-upload drags. Internal drags (e.g. F034 move, which
+// carries "text/plain") must NOT trigger the upload overlay.
+const isExternalFileDrag = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer?.types || []).includes("Files");
+
 interface UseFileDragDropOptions {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     onUploadFile: (files?: FileList | File[]) => void;
@@ -26,20 +31,24 @@ interface UseFileDragDropOptions {
 }
 
 /**
- * Read the *direct child files* of a dropped directory (single-level, matching
- * the folder-picker button). Each returned File gets a synthetic
- * `webkitRelativePath` of `"<dir>/<file>"` so it flows through the existing
- * folder-upload pipeline (getRootFolderName / filterFolderUploadFiles) unchanged.
- * Sub-directories are ignored. `readEntries` returns in batches, so it must be
- * called repeatedly until it yields an empty list.
+ * Recursively read every file under a dropped directory (F034 §5.5: nested
+ * upload — the backend rebuilds the whole tree). Each returned File gets a
+ * synthetic `webkitRelativePath` of `"<dir>/<sub>/<file>"` so it flows through
+ * the folder-upload pipeline exactly like the `webkitdirectory` picker.
+ * `readEntries` returns in batches, so it must be called repeatedly until it
+ * yields an empty list.
  */
-function readTopLevelFolderFiles(dirEntry: FileSystemDirectoryEntry): Promise<File[]> {
+function readFolderFilesRecursive(
+    dirEntry: FileSystemDirectoryEntry,
+    pathPrefix: string,
+): Promise<File[]> {
+    const prefix = pathPrefix ? `${pathPrefix}/${dirEntry.name}` : dirEntry.name;
     return new Promise((resolve) => {
         const reader = dirEntry.createReader();
-        const filePromises: Promise<File | null>[] = [];
+        const collected: Promise<File[] | File | null>[] = [];
         const finish = () =>
-            Promise.all(filePromises).then((files) =>
-                resolve(files.filter((f): f is File => f != null)),
+            Promise.all(collected).then((parts) =>
+                resolve(parts.flat().filter((f): f is File => f != null)),
             );
         const readBatch = () => {
             reader.readEntries((batch) => {
@@ -50,13 +59,13 @@ function readTopLevelFolderFiles(dirEntry: FileSystemDirectoryEntry): Promise<Fi
                 for (const ent of batch) {
                     if (ent.isFile) {
                         const fileEntry = ent as FileSystemFileEntry;
-                        filePromises.push(
+                        collected.push(
                             new Promise<File | null>((res) => {
                                 fileEntry.file(
                                     (f) => {
                                         try {
                                             Object.defineProperty(f, "webkitRelativePath", {
-                                                value: `${dirEntry.name}/${f.name}`,
+                                                value: `${prefix}/${f.name}`,
                                                 configurable: true,
                                             });
                                         } catch {
@@ -68,6 +77,10 @@ function readTopLevelFolderFiles(dirEntry: FileSystemDirectoryEntry): Promise<Fi
                                     () => res(null),
                                 );
                             }),
+                        );
+                    } else if (ent.isDirectory) {
+                        collected.push(
+                            readFolderFilesRecursive(ent as FileSystemDirectoryEntry, prefix),
                         );
                     }
                 }
@@ -113,6 +126,7 @@ export function useFileDragDrop({
 
     const handleDragEnter = useCallback(
         (e: React.DragEvent) => {
+            if (!isExternalFileDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             dragCounter.current += 1;
@@ -126,6 +140,7 @@ export function useFileDragDrop({
 
     const handleDragLeave = useCallback(
         (e: React.DragEvent) => {
+            if (!isExternalFileDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             dragCounter.current -= 1;
@@ -138,6 +153,7 @@ export function useFileDragDrop({
 
     const handleDragOver = useCallback(
         (e: React.DragEvent) => {
+            if (!isExternalFileDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
@@ -150,6 +166,7 @@ export function useFileDragDrop({
 
     const handleDrop = useCallback(
         (e: React.DragEvent) => {
+            if (!isExternalFileDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             dragCounter.current = 0;
@@ -170,10 +187,11 @@ export function useFileDragDrop({
                 }
                 if (dirEntry) {
                     // handleUploadFolder owns count cap / hidden / dup-name / silent
-                    // filtering, so just read one level deep and hand the files over.
-                    // Any loose files in the same drop are ignored (button parity: one folder).
+                    // filtering, so read the whole tree (nested, F034 §5.5) and hand
+                    // the files over. Any loose files in the same drop are ignored
+                    // (button parity: one folder).
                     onDragStateChange?.(false);
-                    void readTopLevelFolderFiles(dirEntry).then((files) => {
+                    void readFolderFilesRecursive(dirEntry, "").then((files) => {
                         if (files.length > 0) {
                             onUploadFolder(files, { allowedExtensions: allowedExt, maxSizeMB: limitMB });
                         }

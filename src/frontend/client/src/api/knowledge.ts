@@ -1458,6 +1458,45 @@ export async function addFilesApi(
     });
 }
 
+/** One file of a folder upload: uploaded body path + its path inside the picked folder. */
+export interface FolderUploadItemPayload {
+    file_path: string;
+    relative_path: string;
+    size: number;
+}
+
+/**
+ * F034 §5.5: register a whole folder (nested) in one batch — the backend
+ * rebuilds the directory tree from each item's relative_path.
+ * POST /api/v1/knowledge/space/{space_id}/folders/upload
+ *
+ * `skip403Redirect` routes batch rejections (18011 depth / 18012 dup folder /
+ * 18024 user quota / 18025 count / 19403 tenant quota) through the unified
+ * interceptor: api_errors.<code> is translated, toasted (AC-32), and the
+ * promise rejects so the caller's catch fires.
+ */
+export async function uploadFolderApi(
+    space_id: string,
+    data: { parent_id?: number | null; items: FolderUploadItemPayload[] }
+): Promise<KnowledgeFile[]> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/folders/upload`,
+        data,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
+    ) as ApiResponse<RawSpaceChild[]>;
+    const payload: any = res?.data ?? {};
+    const list = extractList<RawSpaceChild>(payload);
+    return list.map(raw => {
+        const file = mapChild(raw, space_id);
+        // Preserve raw object for status 3 (duplicate) so retry API can use it
+        if (raw?.status === 3) {
+            (file as any)._raw = raw;
+        }
+        return file;
+    });
+}
+
 /**
  * Add article(s) to a knowledge space folder
  * POST /api/v1/channel/manager/articles/add_to_knowledge_space
@@ -1496,6 +1535,75 @@ export async function renameFileApi(
  */
 export async function deleteFileApi(space_id: string, file_id: string): Promise<void> {
     return request.delete(`/api/v1/knowledge/space/${space_id}/files/${file_id}`);
+}
+
+// ─────────────────────────────────────────────
+// API functions — Move (F034)
+// ─────────────────────────────────────────────
+
+export interface MoveItemInput {
+    id: string;
+    type: "file" | "folder";
+}
+
+export interface MovedEntry {
+    id: number;
+    type: "file" | "folder";
+    /** Source parent folder id (null = space root); used for same-space undo. */
+    old_parent_id: number | null;
+    cross_space: boolean;
+}
+
+/** Reason a single item could not be moved (per-item, batch-safe). */
+export type MoveInvalidReason =
+    | "no_permission"
+    | "into_self"
+    | "into_subtree"
+    | "into_current_parent"
+    | "depth_exceeded"
+    | "name_conflict";
+
+export interface InvalidEntry {
+    id: number;
+    type: "file" | "folder";
+    name: string;
+    reason: MoveInvalidReason;
+}
+
+export interface MoveResult {
+    moved: MovedEntry[];
+    invalid: InvalidEntry[];
+}
+
+/**
+ * Move files/folders within a space or across spaces.
+ * target_space_id === space_id ⇒ same-space move; otherwise cross-space.
+ * Business errors (18033/18040/18041) reject with `.status_code` for branching.
+ */
+export async function moveFilesApi(
+    space_id: string,
+    params: {
+        items: MoveItemInput[];
+        target_space_id: string;
+        target_folder_id?: string | null;
+        skip_invalid?: boolean;
+    }
+): Promise<MoveResult> {
+    const res = (await request.post(`/api/v1/knowledge/space/${space_id}/files/move`, {
+        items: params.items.map((i) => ({ id: Number(i.id), type: i.type })),
+        target_space_id: Number(params.target_space_id),
+        target_folder_id:
+            params.target_folder_id != null ? Number(params.target_folder_id) : null,
+        skip_invalid: params.skip_invalid ?? false,
+    })) as ApiResponse<MoveResult> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        const err = new Error(
+            res.status_message || res.message || res.msg || "move failed"
+        ) as Error & { status_code?: number };
+        err.status_code = res.status_code;
+        throw err;
+    }
+    return res.data;
 }
 
 // ─────────────────────────────────────────────

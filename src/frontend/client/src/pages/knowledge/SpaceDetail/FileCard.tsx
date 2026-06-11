@@ -1,4 +1,4 @@
-import { Download, Edit, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
+import { Download, Edit, FolderInput, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
@@ -26,6 +26,7 @@ interface FileCardProps {
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
     onRename: (newName: string) => void;
+    onMove?: () => void;
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
@@ -48,6 +49,13 @@ interface FileCardProps {
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
     /** Mirrors member-management gating: creators + manage_space_relation holders. */
     canManageMembers?: boolean;
+    // F034 drag-move: card is a drag source; folder cards are drop targets.
+    cardDraggable?: boolean;
+    onCardDragStart?: (e: React.DragEvent) => void;
+    isFolderDragOver?: boolean;
+    onFolderDragOver?: (e: React.DragEvent) => void;
+    onFolderDragLeave?: () => void;
+    onFolderDrop?: (e: React.DragEvent) => void;
 }
 
 export function FileCard({
@@ -57,6 +65,7 @@ export function FileCard({
     onSelect,
     onDownload,
     onRename,
+    onMove,
     onDelete,
     onEditTags,
     onRetry,
@@ -76,6 +85,12 @@ export function FileCard({
     onOpenVersionManagement,
     onOpenVersionHistory,
     canManageMembers = false,
+    cardDraggable = false,
+    onCardDragStart,
+    isFolderDragOver = false,
+    onFolderDragOver,
+    onFolderDragLeave,
+    onFolderDrop,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -276,13 +291,20 @@ export function FileCard({
 
     return (
         <Card
+            draggable={cardDraggable && !isCreating}
+            onDragStart={cardDraggable ? onCardDragStart : undefined}
+            onDragOver={isFolder ? onFolderDragOver : undefined}
+            onDragLeave={isFolder ? onFolderDragLeave : undefined}
+            onDrop={isFolder ? onFolderDrop : undefined}
             className={cn(
                 "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
                     ? "border-primary shadow-sm"
                     : "border-[#ECECEC] hover:border-[#c9cdd4]",
-                hovered && "shadow-md"
+                hovered && "shadow-md",
+                // F034: highlight a folder card as the drop target — card border only
+                isFolderDragOver && "border-primary"
             )}
             style={{
                 transitionProperty: 'background-color',
@@ -419,6 +441,15 @@ export function FileCard({
                                             >
                                                 <Edit className="mr-2 size-4 shrink-0" />
                                                 {localize("com_knowledge.rename")}
+                                            </DropdownMenuItem>
+                                        )}
+                                        {onMove && (
+                                            <DropdownMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onMove(); }}
+                                                className="flex items-center"
+                                            >
+                                                <FolderInput className="mr-2 size-4 shrink-0" />
+                                                {localize("com_knowledge.move")}
                                             </DropdownMenuItem>
                                         )}
                                         {isAdmin && hasRetryOption && (

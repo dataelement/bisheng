@@ -57,6 +57,11 @@ class SpaceFileSizeLimitError(BaseErrorCode):
     Msg: str = "File size limit exceeded"
 
 
+class SpaceFolderUploadCountExceededError(BaseErrorCode):
+    Code: int = 18025
+    Msg: str = "A single batch upload supports at most 1000 files"
+
+
 # ── Subscribe ────────────────────────────────────────────────────────────────
 
 
@@ -78,6 +83,14 @@ class SpaceSubscribeLimitError(BaseErrorCode):
 class SpaceOrganizationGrantExitDeniedError(BaseErrorCode):
     Code: int = 18071
     Msg: str = "本空间通过部门/用户组授权给你，暂无法退出"
+
+
+# ── Move (F034) ───────────────────────────────────────────────────────────────
+
+
+class SpaceMoveInvalidTargetError(BaseErrorCode):
+    Code: int = 18033
+    Msg: str = "Invalid move target: cannot move a folder into itself, its subtree, or its current parent"
 
 
 # ── Permission ────────────────────────────────────────────────────────────────
