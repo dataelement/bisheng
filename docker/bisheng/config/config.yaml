@@ -2,6 +2,15 @@
 # 密码加密参考 https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc#Gxitd1xEeof1TzxdhINcGS6JnXd
 database_url:
   "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@mysql:3306/bisheng?charset=utf8mb4"
+# 数据库连接池配置（可选，省略则用下方默认值）。
+# 注意：连接池是“每进程每引擎”一套，总连接数 ≈ 进程数 ×（pool_size + max_overflow）。
+# 调优时务必让该总数小于数据库服务端的最大会话数（如达梦 MAX_SESSIONS）。
+# database_pool:
+#   pool_size: 100      # 每进程常驻连接数
+#   max_overflow: 20    # 高峰允许超出 pool_size 的临时连接数
+#   pool_timeout: 30    # 等待空闲连接的超时秒数
+#   pool_recycle: 3600  # 连接最大存活秒数，超过则回收重建
+#   pool_pre_ping: true # 取连接前先 ping 检测有效性
 
 # 缓存配置  redis://[[username]:[password]]@localhost:6379/0
 # 如果设置了密码，需要参考MySQL密码的加密逻辑对密码进行加密。eg: redis://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@redis:6379/0

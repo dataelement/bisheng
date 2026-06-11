@@ -23,6 +23,8 @@
 | ChannelInfoSourceSubscription（`channel_info_source` 行生命周期 + 情报服务订阅副作用） | F031-channel-source-subscription-reconcile | 订阅意图唯一真相 = 租户内 `channel.source_list` 并集；`channel_info_source` 行存在 ⟺ 已订阅，行与外部订阅态同生共死；拥有订阅/退订情报服务的调用时机与每日对账写行为。仅读取 `Channel.source_list`，不拥有 `Channel` 本身，不拥有 F026 的频道授权/`space_channel_member` channel 字段 |
 | —（无新增） | F032-ofd-upload-support | 仅在现有 RAG 解析链路（`FileExtensionMap` / loader / 预览对象）上新增 `ofd` 扩展名分支：OFD 转 PDF 后复用既有 PDF 解析/预览/检索；不引入新领域对象、不新增 DAO，不改动既有扩展名的处理路径 |
 | —（无新增） | F033-department-space-member-scope | 仅在现有 ReBAC 授权链路（`resource_permission.py` 的 `grant-subjects/*` 列表 + `authorize`）上，对 `knowledge_space` 资源按 `DepartmentKnowledgeSpace` 绑定收敛授权范围（绑定部门子树 / 子树成员，禁用 user_group）；只读 `DepartmentKnowledgeSpace` / `Department` / `UserDepartment`，不拥有这些对象、不新增领域对象/表/DAO；普通知识空间授权路径零变化 |
+| LinsightSkill（`linsight_skill` 表 + SKILLS_ROOT 磁盘 SKILL.md 生命周期） | F035-linsight-task-mode | 租户自定义技能元数据（name/description/enabled/source，唯一约束 `(tenant_id,name)`）与磁盘正文的创建/编辑/删除/启停；内核 built-in skill 不入表、不经 API。同时拥有：自研 ReAct 内核与 SOP 动态生成链路的**下线**、`linsight_sop`→Skill 一次性迁移写行为；只读 `linsight_session_version`/`linsight_execute_task`（沿用既有模型，不改其归属） |
+| —（无新增） | F034-knowledge-space-file-move | 不引入新领域对象；经由 `KnowledgeSpaceService` 新增对 KnowledgeFile / KnowledgeDocument 的「移动」写行为（改 `knowledge_id` / `file_level_path` / `level`，版本链整链迁移）+ 跨空间检索数据迁移 celery 任务；§5.5 新增「文件夹上传」批量编排（按相对路径重建目录树，复用 `add_folder`/`add_file` 管线与配额校验）；不改变 F039 版本模型与 F030 对外 API 语义 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -64,6 +66,8 @@
 | F031-channel-source-subscription-reconcile | F026 | 与 F026 同改 `channel_service.py` 但领域解耦（F026 拥有频道授权/`space_channel_member` channel 字段，F031 拥有 `channel_info_source` 订阅生命周期）；缺陷收敛型，不新增表、不新增对外 API、不新增错误码（沿用 190 段 19007） |
 | F032-ofd-upload-support | — | 仅在现有 RAG 解析链路新增 `ofd` 扩展名分支（OFD→PDF 后复用 PDF 解析/预览）；不依赖其他 v2.6.0 Feature，不新增领域对象/表/对外 API；新增 109 段错误码 `OfdConvertError`(10917) |
 | F033-department-space-member-scope | F006/F007（ReBAC 资源授权）、部门知识空间能力（`DepartmentKnowledgeSpace` 绑定） | 范围收敛型；在既有 ReBAC 授权/列表接口对部门知识空间加部门子树准入，禁用 user_group；不依赖其他 v2.6.0 Feature，不新增领域对象/表/对外 API/错误码（**复用 `PermissionDeniedError`**）；不改动普通知识空间授权路径 |
+| F035-linsight-task-mode | F011/F012/F013（多租户基线）、既有角色菜单体系、F029/F030（知识库检索权限过滤，INV-7） | 内核替换型（自研 ReAct → deepagents 适配层，一次性切换不并存）；新增 `linsight_skill` 表 + Alembic、新增 110 段错误码 11050–11069、新增 `/api/v1/linsight/skill` API 与「任务模式」菜单子项；保留 worker.py/Redis queue/WS 协议（`MessageEventType` 不新增枚举）；新增 Redis checkpointer（HITL park-and-release）与 MinIO `workspace/{svid}/` 工作区前缀；设计真相 = `features/v2.6.0/035-linsight-task-mode/design.md`（原《技术方案》） |
+| F034-knowledge-space-file-move | F004/F008, F027, F039 | 文件/文件夹移动（同空间 + 跨空间）+ §5.5 文件夹上传；权限走 ReBAC 细粒度 `move_file`/`move_folder`（映射 can_edit，不改 OpenFGA 模型）；列表刷新沿用 F027 cursor 协议（INV-6）；跨空间移动依赖 F039 版本链「同空间」不变式做整链迁移；新增 180 段错误码 18033（无效移动目标）/ 18025（单次批量超 1000）；新增对外 API `POST /knowledge/space/{id}/files/move` 与 `.../folders/upload`；未新增不变量 |
 
 ---
 
@@ -78,6 +82,8 @@
 | 120 | workstation | F028 沿用现有 `common/errcode/workstation.py`，会话导出 / 导入知识空间错误码段位 12060-12079，不得与既有 1204X / 1205X 冲突 |
 | 109 | knowledge | F030 沿用现有 `common/errcode/knowledge.py`，新增 `KnowledgeTypeNotSupportedError`(10962)；复用 10900/10901/10991。180 (knowledge_space) 复用 18001/18010/18040 |
 | 109 | knowledge | F032 沿用现有 `common/errcode/knowledge.py`，新增 `OfdConvertError`(10917)；不得与既有 10915/10916/10962 冲突 |
+| 110 | linsight | F035 沿用现有 `common/errcode/linsight.py`，Skill 管理占用段位 **11050–11069**（11050 重名 / 11051 校验失败 / 11052 超 10MB / 11053 不存在 / 11054 无权限），不得与既有 110xx（≤11040+）冲突 |
+| 180 | knowledge_space | F034 沿用现有 `common/errcode/knowledge_space.py`，新增 `SpaceMoveInvalidTargetError`(18033) / `SpaceFolderUploadCountExceededError`(18025)；复用 18011（层级）/ 18012（文件夹重名）/ 18021 / 18024（容量）/ 18040 / 18041（跨租户）；§5.5 文件夹上传租户容量超限复用 190 段 19403 |
 
 ---
 
@@ -94,3 +100,5 @@
 | 2026-06-04 | 登记 F031 频道信息源订阅状态对账：表 1 新增 `ChannelInfoSourceSubscription` 领域归属（订阅意图真相 = `channel.source_list` 并集，`channel_info_source` 为物化视图）、表 3 追加依赖 F026；订阅同步即时、退订改每日对账驱动；不新增表/对外 API/错误码（沿用 190 段 19007）；未新增不变量 | F031 |
 | 2026-06-08 | 登记 F032 全平台 OFD 上传支持：表 1 标注"无新增领域对象"（仅在 RAG 解析链路加 `ofd` 分支，OFD→PDF 后复用 PDF 解析/预览）、表 3 追加（无依赖）；新增 109 段错误码 `OfdConvertError`(10917)；未新增不变量、未新增表/对外 API | F032 |
 | 2026-06-10 | 登记 F033 部门知识空间成员授权范围收敛：表 1 标注"无新增领域对象"（仅在 ReBAC 授权/列表接口对 `knowledge_space` 按 `DepartmentKnowledgeSpace` 绑定收敛至部门子树/子树成员、禁用 user_group）、表 3 追加依赖 F006/F007 + 部门空间能力；复用 `PermissionDeniedError`，未新增错误码/表/对外 API/不变量；普通知识空间授权路径零变化 | F033 |
+| 2026-06-11 | 登记 F035 灵思任务模式（deepagents 适配层）：表 1 新增 `LinsightSkill` 领域归属（元数据 `linsight_skill` 表 + SKILLS_ROOT 磁盘正文；含旧内核下线与 SOP→Skill 迁移写行为）、表 3 追加依赖多租户基线/角色菜单/F029/F030；新增 110 段错误码 11050–11069、`linsight_skill` 表 + Alembic、`/skill` API、「任务模式」菜单子项；WS 协议 `MessageEventType` 不新增枚举；未新增不变量；设计真相在 feature 目录 design.md | F035 |
+| 2026-06-11 | 登记 F034 知识空间文件/文件夹移动（同空间 + 跨空间）+ §5.5 文件夹上传：表 1 标注"无新增领域对象"（经 `KnowledgeSpaceService` 新增移动写行为 + 跨空间检索数据迁移 celery 任务 + 文件夹上传批量编排按相对路径重建目录树）、表 3 追加依赖 F004/F008、F027、F039；新增 180 段错误码 `SpaceMoveInvalidTargetError`(18033)、`SpaceFolderUploadCountExceededError`(18025)；新增细粒度权限 id `move_file`/`move_folder`（can_edit 档，不改 OpenFGA 模型）；新增对外 API 移动接口与 `folders/upload`；未新增不变量 | F034 |

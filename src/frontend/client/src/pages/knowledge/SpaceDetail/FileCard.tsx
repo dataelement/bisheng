@@ -14,7 +14,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Badge } from "~/components/ui/Badge";
@@ -98,6 +98,8 @@ export function FileCard({
         "(hover: hover) and (pointer: fine)",
     );
     const isCreating = !!file.isCreating;
+    // Uploading placeholder cards have no backend identity yet — not movable.
+    const isUploading = isKnowledgeItemUploading(file);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const failureMessage = (
@@ -291,7 +293,7 @@ export function FileCard({
 
     return (
         <Card
-            draggable={cardDraggable && !isCreating}
+            draggable={cardDraggable && !isCreating && !isUploading}
             onDragStart={cardDraggable ? onCardDragStart : undefined}
             onDragOver={isFolder ? onFolderDragOver : undefined}
             onDragLeave={isFolder ? onFolderDragLeave : undefined}
@@ -443,7 +445,7 @@ export function FileCard({
                                                 {localize("com_knowledge.rename")}
                                             </DropdownMenuItem>
                                         )}
-                                        {onMove && (
+                                        {onMove && !isUploading && (
                                             <DropdownMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onMove(); }}
                                                 className="flex items-center"

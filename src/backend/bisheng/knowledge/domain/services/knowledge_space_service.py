@@ -3171,9 +3171,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for depth in range(1, len(dir_parts) + 1):
                 dir_set.add(dir_parts[:depth])
 
-        # Depth: deepest created folder must stay within the 10-level limit.
+        # Depth: deepest created FOLDER must stay within the 10-layer limit
+        # (UI 第1层 = level 0 ⇒ deepest folder level 9). Files inside the
+        # deepest folder don't count as a layer.
         max_chain = max((len(d) for d in dir_set), default=0)
-        if max_chain and base_child_level + max_chain - 1 > 10:
+        if max_chain and base_child_level + max_chain - 1 > 9:
             raise SpaceFolderDepthError()
 
         # Duplicate check only for the top-level folder names (design 坑 U3):
@@ -3412,7 +3414,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await self._require_read_permission(space_id)
         cross_space = target_space_id != space_id
-        max_depth = 10
+        # Depth limit counts FOLDER layers only (UI 第1层 = level 0, "10 层" ⇒
+        # deepest folder level 9). Files may sit inside a deepest-level folder,
+        # so file moves carry no depth check at all.
+        max_folder_level = 9
 
         async with get_async_db_session() as session:
             source_space = await session.get(Knowledge, space_id)
@@ -3463,9 +3468,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     reason = "into_current_parent"
                 else:
                     if is_folder:
+                        # Deepest FOLDER in the moved subtree (the folder itself
+                        # included); files are excluded — they don't count as a
+                        # layer, so an empty folder and a folder whose deepest
+                        # node is a file are both limited by their folders only.
                         max_sub = await session.scalar(
                             select(func.max(KnowledgeFile.level)).where(
                                 KnowledgeFile.knowledge_id == space_id,
+                                KnowledgeFile.file_type == FileType.DIR.value,
                                 or_(
                                     KnowledgeFile.id == rec.id,
                                     col(KnowledgeFile.file_level_path) == self_prefix,
@@ -3474,11 +3484,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                             )
                         )
                         depth_after = target_level + ((max_sub or rec.level) - rec.level)
-                    else:
-                        depth_after = target_level
-                    if depth_after > max_depth:
-                        reason = "depth_exceeded"
-                    elif is_folder and not cross_space:
+                        if depth_after > max_folder_level:
+                            reason = "depth_exceeded"
+                    if reason is None and is_folder and not cross_space:
                         dup = await session.scalar(
                             select(func.count(KnowledgeFile.id)).where(
                                 KnowledgeFile.knowledge_id == target_space_id,

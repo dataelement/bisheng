@@ -144,16 +144,19 @@ async def test_invalid_reasons_into_self_subtree_current_parent(async_db_session
 
 
 @pytest.mark.asyncio
-async def test_invalid_depth_exceeded(async_db_session):
+async def test_invalid_depth_exceeded_empty_folder(async_db_session):
+    """Depth counts FOLDER layers (UI 第1层 = level 0 ⇒ deepest folder level 9):
+    even an EMPTY folder moved into a deepest-level folder must be rejected.
+    """
     await _seed_spaces(async_db_session)
-    # target folder at level 10 (deepest allowed); moving any folder under it → level 11
+    # target folder at level 9 = 第10层 (deepest allowed); a folder moved under it → level 10
     await _add(
         async_db_session,
         id=40,
         knowledge_id=1,
         file_name="deep",
         file_type=DIR,
-        level=10,
+        level=9,
         file_level_path="/1/2/3/4/5/6/7/8/9",
     )
     await _add(async_db_session, id=41, knowledge_id=1, file_name="mv", file_type=DIR, level=0, file_level_path="")
@@ -161,6 +164,57 @@ async def test_invalid_depth_exceeded(async_db_session):
     svc = _svc()
     res = await svc.move_items(1, [{"id": 41, "type": "folder"}], target_space_id=1, target_folder_id=40)
     assert res["invalid"][0]["reason"] == "depth_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_file_into_deepest_folder_allowed(async_db_session):
+    """Files don't count as a layer: moving a FILE into a 第10层 (level 9)
+    folder is allowed even though the file lands at level 10.
+    """
+    await _seed_spaces(async_db_session)
+    await _add(
+        async_db_session,
+        id=40,
+        knowledge_id=1,
+        file_name="deep",
+        file_type=DIR,
+        level=9,
+        file_level_path="/1/2/3/4/5/6/7/8/9",
+    )
+    await _add(async_db_session, id=42, knowledge_id=1, file_name="f.pdf", file_type=FILE, level=0, file_level_path="")
+
+    svc = _svc()
+    res = await svc.move_items(1, [{"id": 42, "type": "file"}], target_space_id=1, target_folder_id=40)
+    assert res["invalid"] == []
+    assert res["moved"][0]["id"] == 42
+
+
+@pytest.mark.asyncio
+async def test_depth_ignores_files_in_subtree(async_db_session):
+    """A folder whose deepest node is a FILE is limited by its folders only:
+    moving it so its deepest folder lands exactly at level 9 is allowed,
+    even though the file inside lands at level 10.
+    """
+    await _seed_spaces(async_db_session)
+    # target at level 8 = 第9层
+    await _add(
+        async_db_session,
+        id=40,
+        knowledge_id=1,
+        file_name="deep",
+        file_type=DIR,
+        level=8,
+        file_level_path="/1/2/3/4/5/6/7/8",
+    )
+    await _add(async_db_session, id=41, knowledge_id=1, file_name="mv", file_type=DIR, level=0, file_level_path="")
+    await _add(
+        async_db_session, id=43, knowledge_id=1, file_name="in.pdf", file_type=FILE, level=1, file_level_path="/41"
+    )
+
+    svc = _svc()
+    res = await svc.move_items(1, [{"id": 41, "type": "folder"}], target_space_id=1, target_folder_id=40)
+    assert res["invalid"] == []
+    assert {m["id"] for m in res["moved"]} == {41}
 
 
 @pytest.mark.asyncio

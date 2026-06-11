@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 
 import {
     FileType,
+    type InvalidEntry,
     type KnowledgeFile,
     moveFilesApi,
     type MovedEntry,
@@ -9,6 +10,38 @@ import {
 } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
+
+import { showMoveUndoToast } from "../components/moveUndoToast";
+
+type Localize = ReturnType<typeof useLocalize>;
+
+/** i18n key for a per-item rejection reason (name_conflict differs by item type). */
+function reasonLabelKey(entry: InvalidEntry): string {
+    if (entry.reason === "name_conflict") {
+        return entry.type === "folder"
+            ? "com_knowledge.move_reason_name_conflict_folder"
+            : "com_knowledge.move_reason_name_conflict_file";
+    }
+    return `com_knowledge.move_reason_${entry.reason}`;
+}
+
+/**
+ * Build a human description of why items were rejected, grouped by reason so a
+ * single name-clash reads "目标位置已存在同名文件夹：a" instead of the generic
+ * "部分项无法移动：a". Order follows first appearance.
+ */
+function describeInvalid(invalid: InvalidEntry[], localize: Localize): string {
+    const groups = new Map<string, string[]>();
+    for (const entry of invalid) {
+        const label = localize(reasonLabelKey(entry));
+        const names = groups.get(label) ?? [];
+        names.push(entry.name);
+        groups.set(label, names);
+    }
+    return Array.from(groups.entries())
+        .map(([label, names]) => localize("com_knowledge.move_reason_group", { 0: label, 1: names.join("、") }))
+        .join("\n");
+}
 
 interface UseKnowledgeMoveArgs {
     /** Source space the selected items currently live in. */
@@ -113,6 +146,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
             targetSpaceId: string,
             targetFolderId: string | null,
             crossSpace: boolean,
+            targetFolderName?: string,
         ) => {
             if (!items.length) return;
             if (crossSpace) {
@@ -133,12 +167,21 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 throw err;
             }
 
-            // Partial conflict: nothing was moved; offer to move only the valid ones.
+            // Some items were rejected; nothing was moved yet (reject-all).
             if (result.invalid.length > 0) {
-                const names = result.invalid.map((i) => i.name).join("、");
+                const description = describeInvalid(result.invalid, localize);
+                const allBlocked = result.invalid.length >= items.length;
+
+                if (allBlocked) {
+                    // Nothing can be moved — pure info, no decision: a toast reads
+                    // cleaner than a two-button dialog (e.g. "目标位置已存在同名文件夹：a").
+                    showToast({ message: description, status: "error" });
+                    throw new Error("move:cancelled");
+                }
+
                 const ok = await confirm({
                     title: localize("com_knowledge.move_partial_title"),
-                    description: localize("com_knowledge.move_partial_desc", { 0: names }),
+                    description,
                     cancelText: localize("com_knowledge.move_cancel_all"),
                     confirmText: localize("com_knowledge.move_rest"),
                 });
@@ -161,14 +204,17 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                     status: "success",
                 });
             } else if (movedCount > 0) {
-                // Same-space: offer an undo via a confirm dialog (toast has no action).
-                const undo = await confirm({
-                    title: localize("com_knowledge.move_success", { 0: movedCount }),
-                    description: localize("com_knowledge.move_undo_hint"),
-                    confirmText: localize("com_knowledge.move_undo"),
-                    cancelText: localize("com_knowledge.move_close"),
+                // Same-space: success toast with an inline 「撤回」 action.
+                const message = targetFolderName
+                    ? localize("com_knowledge.move_undo_toast", { 0: targetFolderName })
+                    : localize("com_knowledge.move_success", { 0: movedCount });
+                showMoveUndoToast({
+                    message,
+                    actionLabel: localize("com_knowledge.move_undo"),
+                    onAction: () => {
+                        void undoMove(movedEntries);
+                    },
                 });
-                if (undo) await undoMove(movedEntries);
             }
         },
         [confirm, localize, runMove, showToast, resolveErrorMessage, onMoved, undoMove],
@@ -176,8 +222,8 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
 
     /** Dialog `onConfirm` — moves the items the picker was opened for. */
     const handleMoveConfirm = useCallback(
-        (targetSpaceId: string, targetFolderId: string | null, crossSpace: boolean) =>
-            executeMove(pendingItems, targetSpaceId, targetFolderId, crossSpace),
+        (targetSpaceId: string, targetFolderId: string | null, crossSpace: boolean, targetFolderName?: string) =>
+            executeMove(pendingItems, targetSpaceId, targetFolderId, crossSpace, targetFolderName),
         [executeMove, pendingItems],
     );
 
@@ -186,12 +232,12 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
      * Swallows the cancel/error rejection (no dialog to keep open).
      */
     const dropMoveToFolder = useCallback(
-        async (items: KnowledgeFile[], targetFolderId: string) => {
+        async (items: KnowledgeFile[], targetFolderId: string, targetFolderName?: string) => {
             // Dropping onto a folder that is itself being dragged is a no-op.
             const filtered = items.filter((f) => f.id !== targetFolderId);
             if (!filtered.length) return;
             try {
-                await executeMove(filtered, spaceId, targetFolderId, false);
+                await executeMove(filtered, spaceId, targetFolderId, false, targetFolderName);
             } catch {
                 // Reason already surfaced via toast / confirm cancel.
             }

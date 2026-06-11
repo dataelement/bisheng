@@ -36,7 +36,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -519,7 +519,7 @@ interface FileTableProps {
     onRename: (id: string, newName: string) => void;
     onMove?: (file: KnowledgeFile) => void;
     /** F034 drag-move: drop dragged items into a same-space folder. */
-    onMoveToFolder?: (folderId: string, items: KnowledgeFile[]) => void;
+    onMoveToFolder?: (folderId: string, items: KnowledgeFile[], folderName: string) => void;
     onDelete: (id: string) => void;
     onRetry: (id: string) => void;
     onNavigateFolder: (id: string) => void;
@@ -790,6 +790,8 @@ function FileRow({
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
+    // Uploading placeholder rows have no backend identity yet — not movable.
+    const isUploading = isKnowledgeItemUploading(file);
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
     // F034: 拖拽悬停的目标文件夹整行高亮（比选中态更深的蓝，明确"放到这里"）
     const rowBg = isFolderDragOver
@@ -875,7 +877,7 @@ function FileRow({
                                 {localize("com_knowledge.rename")}
                             </DropdownMenuItem>
                         )}
-                        {onMove && !isCreating && (
+                        {onMove && !isCreating && !isUploading && (
                             <DropdownMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -951,7 +953,7 @@ function FileRow({
     return (
         <TableRow
             data-knowledge-file-item
-            draggable={rowDraggable && !isCreating && !isRenaming}
+            draggable={rowDraggable && !isCreating && !isRenaming && !isUploading}
             onDragStart={rowDraggable ? onRowDragStart : undefined}
             onDragOver={isFolder ? onFolderDragOver : undefined}
             onDragLeave={isFolder ? onFolderDragLeave : undefined}

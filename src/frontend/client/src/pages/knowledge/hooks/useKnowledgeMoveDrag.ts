@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 
 import { type KnowledgeFile } from "~/api/knowledge";
+import { isKnowledgeItemUploading } from "../knowledgeUtils";
 
 interface UseKnowledgeMoveDragArgs {
     /** Files currently rendered (used to expand the selection on drag). */
@@ -8,7 +9,7 @@ interface UseKnowledgeMoveDragArgs {
     /** Currently multi-selected file ids. */
     selectedFiles: Set<string>;
     /** Drop handler — undefined disables drag entirely (no move permission). */
-    onMoveToFolder?: (folderId: string, items: KnowledgeFile[]) => void;
+    onMoveToFolder?: (folderId: string, items: KnowledgeFile[], folderName: string) => void;
 }
 
 /**
@@ -29,6 +30,12 @@ export function useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder }: U
             selectedFiles.has(file.id) && selectedFiles.size > 0
                 ? files.filter((f) => selectedFiles.has(f.id))
                 : [file];
+        // Uploading placeholders have no stable backend identity yet — if any
+        // is in the payload (single or expanded selection), cancel the drag.
+        if (payload.some(isKnowledgeItemUploading)) {
+            e.preventDefault();
+            return;
+        }
         dragItemsRef.current = payload;
         e.dataTransfer.effectAllowed = "move";
         try {
@@ -56,7 +63,7 @@ export function useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder }: U
         const items = dragItemsRef.current;
         dragItemsRef.current = [];
         setDragOverFolderId(null);
-        if (items.length && onMoveToFolder) onMoveToFolder(folder.id, items);
+        if (items.length && onMoveToFolder) onMoveToFolder(folder.id, items, folder.name);
     };
 
     return {

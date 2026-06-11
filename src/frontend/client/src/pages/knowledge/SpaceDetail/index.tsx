@@ -18,12 +18,14 @@ import {
     DialogTitle,
 } from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
 import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
     MAX_UPLOAD_COUNT,
+    isKnowledgeItemUploading,
     getAllowedExtensions,
     getFileInputAccept,
     triggerUrlDownload,
@@ -796,9 +798,20 @@ export function KnowledgeSpaceContent({
             setSelectedFiles(new Set());
             queryClient.invalidateQueries({ queryKey: ["file-versions"] });
             onDeleteFile(""); // generic "file list changed, reload" signal (same as batch delete)
+            // Refresh the left sidebar folder tree(s). No spaceId → global refresh,
+            // so a cross-space move updates both the source and target trees.
+            dispatchKnowledgeSpaceFilesRefresh();
         },
     });
-    const handleBatchMove = () => openMove(selectedList);
+    // Uploading placeholders have no backend identity yet — a selection that
+    // contains one cannot be moved (the menu entry is also disabled below).
+    const selectionHasUploading = displayFiles.some(
+        (f) => selectedFiles.has(f.id) && isKnowledgeItemUploading(f),
+    );
+    const handleBatchMove = () => {
+        if (selectionHasUploading) return;
+        openMove(selectedList);
+    };
 
     const handleBatchDelete = async () => {
         const confirmed = await confirm({
@@ -928,7 +941,7 @@ export function KnowledgeSpaceContent({
     const cardDrag = useKnowledgeMoveDrag({
         files: displayFiles,
         selectedFiles,
-        onMoveToFolder: canUploadFile ? (folderId, items) => dropMoveToFolder(items, folderId) : undefined,
+        onMoveToFolder: canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined,
     });
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         deleteEntryIds.has(file.id)
@@ -1005,7 +1018,7 @@ export function KnowledgeSpaceContent({
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchMove={handleBatchMove}
-                canBatchMove={canUploadFile}
+                canBatchMove={canUploadFile && !selectionHasUploading}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
@@ -1136,7 +1149,7 @@ export function KnowledgeSpaceContent({
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
                                     onMove={canUploadFile ? (file) => openMove([file]) : undefined}
-                                    onMoveToFolder={canUploadFile ? (folderId, items) => dropMoveToFolder(items, folderId) : undefined}
+                                    onMoveToFolder={canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}
