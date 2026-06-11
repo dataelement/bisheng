@@ -12,6 +12,7 @@ from bisheng.common.errcode.developer_token import (
     DeveloperTokenMissingError,
     DeveloperTokenRateLimitedError,
 )
+from bisheng.developer_token.api.dependencies import _get_developer_token_endpoint_key
 from bisheng.developer_token.domain.models import DeveloperToken
 from bisheng.developer_token.domain.services.developer_token_service import DeveloperTokenService
 
@@ -47,6 +48,17 @@ class _Redis:
             raise self.error
         self.calls.append((key, expiration))
         return self.count
+
+
+class _CountingRedis:
+    def __init__(self):
+        self.counts = {}
+        self.calls = []
+
+    async def aincr(self, key, expiration=3600):
+        self.counts[key] = self.counts.get(key, 0) + 1
+        self.calls.append((key, expiration))
+        return self.counts[key]
 
 
 @pytest.mark.asyncio
@@ -101,10 +113,77 @@ async def test_rate_limit_exceeded_is_rejected(monkeypatch):
     )
 
     with pytest.raises(DeveloperTokenRateLimitedError):
-        await DeveloperTokenService._check_rate_limit(2, 2)
+        await DeveloperTokenService._check_rate_limit(
+            2,
+            2,
+            endpoint_key="POST /api/v2/filelib/retrieve",
+        )
 
-    assert redis.calls[0][0].startswith("developer_token:rate:2:")
+    endpoint_hash = DeveloperTokenService._hash_rate_endpoint("POST /api/v2/filelib/retrieve")
+    assert redis.calls[0][0].startswith(f"developer_token:rate:2:{endpoint_hash}:")
     assert redis.calls[0][1] == 70
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_is_isolated_by_endpoint_for_same_token(monkeypatch):
+    redis = _CountingRedis()
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.get_redis_client",
+        AsyncMock(return_value=redis),
+    )
+
+    await DeveloperTokenService._check_rate_limit(2, 1, endpoint_key="POST /api/v2/filelib/retrieve")
+    await DeveloperTokenService._check_rate_limit(2, 1, endpoint_key="GET /api/v2/filelib/file/list")
+
+    keys = [call[0] for call in redis.calls]
+    assert len(keys) == 2
+    assert len(set(keys)) == 2
+    assert all(redis.counts[key] == 1 for key in keys)
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_is_isolated_by_token_for_same_endpoint(monkeypatch):
+    redis = _CountingRedis()
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.get_redis_client",
+        AsyncMock(return_value=redis),
+    )
+
+    await DeveloperTokenService._check_rate_limit(2, 1, endpoint_key="POST /api/v2/filelib/retrieve")
+    await DeveloperTokenService._check_rate_limit(3, 1, endpoint_key="POST /api/v2/filelib/retrieve")
+
+    keys = [call[0] for call in redis.calls]
+    assert len(keys) == 2
+    assert len(set(keys)) == 2
+    assert keys[0].split(":")[2] == "2"
+    assert keys[1].split(":")[2] == "3"
+
+
+@pytest.mark.asyncio
+async def test_unlimited_rate_limit_skips_redis(monkeypatch):
+    get_redis = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.developer_token.domain.services.developer_token_service.get_redis_client",
+        get_redis,
+    )
+
+    await DeveloperTokenService._check_rate_limit(2, None, endpoint_key="POST /api/v2/filelib/retrieve")
+    await DeveloperTokenService._check_rate_limit(2, 0, endpoint_key="POST /api/v2/filelib/retrieve")
+
+    get_redis.assert_not_awaited()
+
+
+def test_endpoint_key_uses_route_template_instead_of_concrete_path():
+    request = SimpleNamespace(
+        method="get",
+        scope={
+            "route": SimpleNamespace(path="/api/v2/filelib/file/{file_id}"),
+            "path": "/api/v2/filelib/file/345",
+        },
+        url=SimpleNamespace(path="/api/v2/filelib/file/345"),
+    )
+
+    assert _get_developer_token_endpoint_key(request) == "GET /api/v2/filelib/file/{file_id}"
 
 
 @pytest.mark.asyncio
@@ -115,7 +194,11 @@ async def test_redis_error_fails_closed(monkeypatch):
     )
 
     with pytest.raises(DeveloperTokenLimiterUnavailableError):
-        await DeveloperTokenService._check_rate_limit(2, 2)
+        await DeveloperTokenService._check_rate_limit(
+            2,
+            2,
+            endpoint_key="POST /api/v2/filelib/retrieve",
+        )
 
 
 @pytest.mark.asyncio

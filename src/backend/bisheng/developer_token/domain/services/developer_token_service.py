@@ -60,7 +60,9 @@ logger = logging.getLogger(__name__)
 
 class DeveloperTokenService:
     CONFIG_KEY = "developer_token_global_config"
-    RATE_KEY_TEMPLATE = "developer_token:rate:{token_id}:{minute}"
+    RATE_KEY_TEMPLATE = "developer_token:rate:{token_id}:{endpoint_hash}:{minute}"
+    RATE_ENDPOINT_HASH_LENGTH = 16
+    RATE_ENDPOINT_FALLBACK = "UNKNOWN"
     TOKEN_PREFIX = "bst_"
     TOKEN_PREFIX_DISPLAY_LENGTH = 12
 
@@ -290,6 +292,7 @@ class DeveloperTokenService:
         *,
         request_ip: str | None = None,
         user_agent: str | None = None,
+        endpoint_key: str | None = None,
     ) -> UserPayload:
         if not raw_token:
             raise DeveloperTokenMissingError()
@@ -314,7 +317,7 @@ class DeveloperTokenService:
         effective_ip_whitelist, effective_rate_limit = await cls._effective_controls(token)
         if not cls._ip_allowed(request_ip, effective_ip_whitelist):
             raise DeveloperTokenIpForbiddenError()
-        await cls._check_rate_limit(token.id, effective_rate_limit)
+        await cls._check_rate_limit(token.id, effective_rate_limit, endpoint_key=endpoint_key)
 
         tenant_context_token = set_current_tenant_id(token.tenant_id)
         visible_context_token = set_visible_tenant_ids(frozenset({token.tenant_id}))
@@ -473,12 +476,19 @@ class DeveloperTokenService:
         return ip_whitelist or "", cls._normalize_rate_limit(rate_limit)
 
     @classmethod
-    async def _check_rate_limit(cls, token_id: int, rate_limit: int | None) -> None:
+    async def _check_rate_limit(
+        cls,
+        token_id: int,
+        rate_limit: int | None,
+        *,
+        endpoint_key: str | None = None,
+    ) -> None:
         limit = cls._normalize_rate_limit(rate_limit)
         if limit is None:
             return
         key = cls.RATE_KEY_TEMPLATE.format(
             token_id=token_id,
+            endpoint_hash=cls._hash_rate_endpoint(endpoint_key),
             minute=datetime.now(timezone.utc).strftime("%Y%m%d%H%M"),
         )
         try:
@@ -489,6 +499,12 @@ class DeveloperTokenService:
             raise DeveloperTokenLimiterUnavailableError() from exc
         if count > limit:
             raise DeveloperTokenRateLimitedError()
+
+    @classmethod
+    def _hash_rate_endpoint(cls, endpoint_key: str | None) -> str:
+        value = endpoint_key.strip() if isinstance(endpoint_key, str) else ""
+        value = value or cls.RATE_ENDPOINT_FALLBACK
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()[: cls.RATE_ENDPOINT_HASH_LENGTH]
 
     @classmethod
     def _validate_rate_limit(cls, value: int | None) -> None:

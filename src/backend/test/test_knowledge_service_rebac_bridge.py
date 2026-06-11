@@ -894,12 +894,12 @@ async def test_aget_knowledge_files_uses_permission_service_read_async_bridge():
         'aget_file_by_filters',
         new_callable=AsyncMock,
         return_value=[],
-    ), patch.object(
+    ) as mock_list_files, patch.object(
         service_module.KnowledgeFileDao,
         'acount_file_by_filters',
         new_callable=AsyncMock,
         return_value=0,
-    ), patch.object(
+    ) as mock_count_files, patch.object(
         service_module.TagDao,
         'get_tags_by_resource',
         return_value={},
@@ -923,6 +923,7 @@ async def test_aget_knowledge_files_uses_permission_service_read_async_bridge():
             page=1,
             page_size=100,
             file_ids=None,
+            file_type=1,
         )
 
     mock_ensure_read.assert_awaited_once_with(
@@ -939,3 +940,5 @@ async def test_aget_knowledge_files_uses_permission_service_read_async_bridge():
     assert data == []
     assert total == 0
     assert writeable is False
+    assert mock_list_files.await_args.kwargs['file_type'] == 1
+    assert mock_count_files.await_args.kwargs['file_type'] == 1

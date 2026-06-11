@@ -1,33 +1,53 @@
 import json
 import os
-from typing import List, Literal, Optional
+from datetime import datetime
+from typing import Any, List, Literal, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query,
-                     Request, UploadFile)
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from loguru import logger
+from sqlmodel import col, select
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse
 
 from bisheng.api.services import knowledge_imp
-from bisheng.api.services.knowledge_imp import (text_knowledge)
-from bisheng.api.v1.schemas import (ChunkInput, KnowledgeFileOne, KnowledgeFileProcess,
-                                    resp_200, resp_500, ExcelRule)
+from bisheng.api.services.knowledge_imp import text_knowledge
+from bisheng.api.v1.schemas import ChunkInput, ExcelRule, KnowledgeFileOne, KnowledgeFileProcess, resp_200, resp_500
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import ServerError
+from bisheng.common.errcode.http_error import ServerError, UnAuthorizedError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
-from bisheng.core.cache.utils import save_download_file, async_file_download
+from bisheng.core.cache.utils import async_file_download, save_download_file
+from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
-from bisheng.knowledge.domain.models.knowledge import (KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum,
-                                                       KnowledgeUpdate)
-from bisheng.knowledge.domain.models.knowledge_file import (QAKnoweldgeDao, QAKnowledgeUpsert)
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.developer_token.api.dependencies import get_developer_token_user
+from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate
+from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileDao,
+    KnowledgeFileStatus,
+    QAKnoweldgeDao,
+    QAKnowledgeUpsert,
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.open_endpoints.api.dependencies import get_knowledge_space_chat_service_for_openapi
-from bisheng.open_endpoints.domain.schemas.filelib import (APIAddQAParam, APIAppendQAParam, QueryQAParam,
-                                                            RetrieveChunk, RetrieveReq, RetrieveResp)
+from bisheng.open_endpoints.domain.schemas.filelib import (
+    APIAddQAParam,
+    APIAppendQAParam,
+    FileDetailFile,
+    FileDetailResp,
+    QueryQAParam,
+    RetrieveChunk,
+    RetrieveReq,
+    RetrieveResp,
+)
 from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
 from bisheng.role.domain.services.quota_service import QuotaService
 from bisheng.utils.util import sync_func_to_async
@@ -35,6 +55,203 @@ from bisheng.utils.util import sync_func_to_async
 # build router
 router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
 PORTAL_KNOWLEDGE_SPACES_PATH = '/knowledge-spaces'
+OPENAPI_FILE_CATEGORY_ID = '入库分类测试'
+OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE = '分类编码测试'
+OPENAPI_FILE_DOC_TYPE_CODE = '分类赋码测试'
+OPENAPI_TEXT_OBJECT_SUFFIXES = ('.md', '.markdown', '.txt')
+OPENAPI_FILE_CONTENT_PAGE_SIZE = 1000
+
+
+def _get_file_item_id(file_item: Any) -> int | None:
+    raw_file_id = file_item.get('id') if isinstance(file_item, dict) else getattr(file_item, 'id', None)
+    if raw_file_id is None:
+        return None
+    try:
+        return int(raw_file_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_document_type_code(file_encoding: str | None) -> str:
+    if not isinstance(file_encoding, str):
+        return ''
+    parts = [part.strip().upper() for part in file_encoding.split('-') if part.strip()]
+    if len(parts) >= 3:
+        return parts[1]
+    if len(parts) >= 2:
+        return parts[0]
+    return ''
+
+
+def _serialize_openapi_file_item(file_item: Any, *, is_primary: bool) -> dict:
+    if hasattr(file_item, 'model_dump'):
+        item = file_item.model_dump()
+    elif isinstance(file_item, dict):
+        item = dict(file_item)
+    else:
+        item = dict(vars(file_item))
+
+    file_encoding = item.get('file_encoding') or ''
+    item.update({
+        'file_encoding': file_encoding,
+        'is_primary': is_primary,
+        'document_type': _parse_document_type_code(file_encoding),
+        'categoryID': OPENAPI_FILE_CATEGORY_ID,
+        'categoryGroupClassCode': OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE,
+        'docTypeCode': OPENAPI_FILE_DOC_TYPE_CODE,
+    })
+    return item
+
+
+def _format_openapi_datetime(value: Any) -> str:
+    if value is None:
+        return ''
+    if isinstance(value, datetime):
+        return value.isoformat(sep=' ')
+    return str(value)
+
+
+def _serialize_openapi_file_detail(file_item: KnowledgeFile, *, is_primary: bool) -> FileDetailFile:
+    file_encoding = file_item.file_encoding or ''
+    return FileDetailFile(
+        id=int(file_item.id),
+        knowledge_id=int(file_item.knowledge_id),
+        file_encoding=file_encoding,
+        file_name=file_item.file_name,
+        file_size=file_item.file_size,
+        status=file_item.status,
+        update_time=_format_openapi_datetime(file_item.update_time),
+        is_primary=is_primary,
+        document_type=_parse_document_type_code(file_encoding),
+        categoryID=OPENAPI_FILE_CATEGORY_ID,
+        categoryGroupClassCode=OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE,
+        docTypeCode=OPENAPI_FILE_DOC_TYPE_CODE,
+    )
+
+
+def _unique_text_object_candidates(
+        file_item: KnowledgeFile,
+        content_format: Literal['text', 'markdown'],
+) -> list[str]:
+    if content_format == 'markdown':
+        generated_candidates = [
+            f'preview/{file_item.id}.md',
+            f'markdown/{file_item.id}.md',
+            f'preview/{file_item.id}.txt',
+            f'text/{file_item.id}.txt',
+        ]
+    else:
+        generated_candidates = [
+            f'preview/{file_item.id}.txt',
+            f'text/{file_item.id}.txt',
+            f'preview/{file_item.id}.md',
+            f'markdown/{file_item.id}.md',
+        ]
+    candidates = [
+        getattr(file_item, 'preview_file_object_name', None),
+        KnowledgeService.resolve_preview_object_name(
+            file_item.id,
+            file_item.file_name,
+            getattr(file_item, 'preview_file_object_name', None),
+        ),
+        *generated_candidates,
+    ]
+    seen = set()
+    result = []
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        if str(candidate).lower().endswith(OPENAPI_TEXT_OBJECT_SUFFIXES):
+            result.append(candidate)
+    return result
+
+
+async def _load_file_content_from_text_object(
+        file_item: KnowledgeFile,
+        content_format: Literal['text', 'markdown'],
+) -> str | None:
+    candidates = _unique_text_object_candidates(file_item, content_format)
+    if not candidates:
+        return None
+
+    minio_client = await get_minio_storage()
+    for object_name in candidates:
+        try:
+            if not await minio_client.object_exists(minio_client.bucket, object_name):
+                continue
+            content = await minio_client.get_object(minio_client.bucket, object_name)
+            if content is None:
+                continue
+            return content.decode('utf-8')
+        except UnicodeDecodeError:
+            logger.warning('openapi file detail text object is not utf-8 object_name={}', object_name)
+        except Exception as exc:
+            logger.warning('openapi file detail read text object failed object_name={} error={}', object_name, exc)
+    return None
+
+
+async def _load_file_content_from_es(db_knowledge: Any, file_id: int) -> tuple[str, int]:
+    es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge=db_knowledge)
+    chunks = []
+    search_after = None
+    while True:
+        search_data = {
+            'size': OPENAPI_FILE_CONTENT_PAGE_SIZE,
+            'sort': [
+                {
+                    'metadata.chunk_index': {
+                        'order': 'asc',
+                        'missing': 0,
+                        'unmapped_type': 'long',
+                    },
+                },
+            ],
+            'query': {
+                'bool': {
+                    'filter': [
+                        {'term': {'metadata.document_id': file_id}},
+                    ],
+                },
+            },
+        }
+        if search_after:
+            search_data['search_after'] = search_after
+        try:
+            es_res = await es_client.client.search(index=db_knowledge.index_name, body=search_data)
+        except Exception as exc:
+            logger.warning('openapi file detail read es chunks failed file_id={} error={}', file_id, exc)
+            raise
+        hits = es_res.get('hits', {}).get('hits', [])
+        if not hits:
+            break
+        for hit in hits:
+            source = hit.get('_source', {})
+            chunks.append(KnowledgeService.split_chunk_metadata(source.get('text') or ''))
+        if len(hits) < OPENAPI_FILE_CONTENT_PAGE_SIZE:
+            break
+        search_after = hits[-1].get('sort')
+        if not search_after:
+            break
+    return '\n'.join(chunks), len(chunks)
+
+
+async def _load_file_primary_flags(file_ids: list[int | None]) -> dict[int, bool]:
+    unique_file_ids = list(dict.fromkeys(file_id for file_id in file_ids if file_id is not None))
+    if not unique_file_ids:
+        return {}
+
+    statement = select(
+        KnowledgeDocumentVersion.knowledge_file_id,
+        KnowledgeDocumentVersion.is_primary,
+    ).where(col(KnowledgeDocumentVersion.knowledge_file_id).in_(unique_file_ids))
+    async with get_async_db_session() as session:
+        result = await session.execute(statement)
+        return {
+            int(knowledge_file_id): bool(is_primary)
+            for knowledge_file_id, is_primary in result.all()
+            if knowledge_file_id is not None
+        }
 
 
 def _build_portal_knowledge_spaces_path(base_path: str) -> str:
@@ -203,17 +420,84 @@ def delete_file_batch_api(request: Request, file_ids: List[int]):
 @router.get('/file/list', status_code=200)
 async def get_filelist(request: Request,
                        knowledge_id: int,
+                       login_user: UserPayload = Depends(get_developer_token_user),
                        keyword: str = None,
                        status: List[int] = Query(default=None),
                        page_size: int = 10,
                        page_num: int = 1):
     """ Get knowledge base file information. """
-    login_user = await get_default_operator_async()
     data, total, flag = await KnowledgeService.aget_knowledge_files(
         request, login_user, knowledge_id,
         keyword, status, page_num, page_size,
+        file_type=FileType.FILE.value,
     )
+    file_ids = [_get_file_item_id(item) for item in data]
+    primary_flags = await _load_file_primary_flags(file_ids)
+    data = [
+        _serialize_openapi_file_item(
+            item,
+            is_primary=primary_flags.get(file_id, True),
+        )
+        for item, file_id in zip(data, file_ids, strict=True)
+    ]
     return resp_200(data={'data': data, 'total': total, 'writeable': flag})
+
+
+@router.get('/file/detail', status_code=200)
+async def get_file_detail(
+        request: Request,
+        file_encoding: str = Query(..., description='File encoding'),
+        knowledge_id: Optional[int] = Query(default=None, description='Knowledge resource id'),
+        content_format: Literal['text', 'markdown'] = Query(default='text', description='Content format'),
+        login_user: UserPayload = Depends(get_developer_token_user),
+):
+    """Query one file by file encoding and return metadata plus full parsed content."""
+    cleaned_file_encoding = file_encoding.strip()
+    if not cleaned_file_encoding:
+        raise HTTPException(status_code=400, detail='file_encoding must not be empty')
+
+    files = await KnowledgeFileDao.aget_files_by_file_encoding(
+        cleaned_file_encoding,
+        knowledge_id=knowledge_id,
+    )
+    if not files:
+        raise HTTPException(status_code=404, detail='file not found')
+    if len(files) > 1:
+        raise HTTPException(status_code=409, detail='duplicate file_encoding found')
+
+    file_record = files[0]
+    db_knowledge = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+    if not db_knowledge:
+        raise HTTPException(status_code=404, detail='knowledge not found')
+
+    try:
+        await KnowledgeService.permission_service.ensure_knowledge_read_async(
+            login_user=login_user,
+            owner_user_id=db_knowledge.user_id,
+            knowledge_id=db_knowledge.id,
+        )
+    except UnAuthorizedError:
+        raise UnAuthorizedError.http_exception()
+
+    if file_record.status != KnowledgeFileStatus.SUCCESS.value:
+        return resp_200(data=FileDetailResp())
+
+    primary_flags = await _load_file_primary_flags([file_record.id])
+    content = await _load_file_content_from_text_object(file_record, content_format)
+    if content is None:
+        content, chunk_count = await _load_file_content_from_es(db_knowledge, int(file_record.id))
+    else:
+        chunk_count = 1 if content else 0
+
+    data = FileDetailResp(
+        file=_serialize_openapi_file_detail(
+            file_record,
+            is_primary=primary_flags.get(int(file_record.id), True),
+        ),
+        content=content,
+        chunk_count=chunk_count,
+    )
+    return resp_200(data=data)
 
 
 @router.post('/chunks')

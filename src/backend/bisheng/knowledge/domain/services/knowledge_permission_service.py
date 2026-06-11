@@ -4,14 +4,20 @@ from time import perf_counter
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
+from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.department import UserDepartmentDao as _UserDepartmentDao
 from bisheng.database.models.role_access import AccessType
-from bisheng.database.models.department import DepartmentDao, UserDepartmentDao as _UserDepartmentDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.permission.api.endpoints.resource_permission import (
     _get_bindings,
     _get_relation_models,
     _normalize_model_dict,
 )
 from bisheng.permission.domain.knowledge_library_permission_template import default_permission_ids_for_relation
+from bisheng.permission.domain.knowledge_space_permission_template import (
+    default_permission_ids_for_relation as default_space_permission_ids_for_relation,
+)
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 from bisheng.permission.domain.services.owner_service import _run_async_safe
 from bisheng.permission.domain.services.permission_service import PermissionService
@@ -34,6 +40,18 @@ _KNOWLEDGE_ACCESS_PERMISSION_ID = {
     AccessType.KNOWLEDGE_WRITE: 'edit_kb',
 }
 
+_KNOWLEDGE_SPACE_PERMISSION_ID_ALIAS = {
+    'view_kb': 'view_space',
+    'edit_kb': 'edit_space',
+    'delete_kb': 'delete_space',
+}
+
+_SPACE_MEMBER_ROLE_TO_RELATION = {
+    UserRoleEnum.CREATOR: 'owner',
+    UserRoleEnum.ADMIN: 'manager',
+    UserRoleEnum.MEMBER: 'viewer',
+}
+
 _PERMISSION_LEVEL_TO_RELATION = {
     'owner': 'owner',
     'can_manage': 'manager',
@@ -52,17 +70,21 @@ class KnowledgePermissionService:
         knowledge_id: int,
         permission_id: str,
     ) -> bool:
+        effective_permission_id = await cls._resolve_permission_id_for_knowledge(
+            knowledge_id,
+            permission_id,
+        )
         effective_permission_ids = await cls.get_effective_permission_ids_async(
             login_user=login_user,
             knowledge_id=knowledge_id,
         )
-        allowed = permission_id in effective_permission_ids
+        allowed = effective_permission_id in effective_permission_ids
         if not allowed:
             logger.warning(
                 'knowledge permission denied user=%s knowledge_id=%s permission_id=%s effective_permissions=%s',
                 getattr(login_user, 'user_id', None),
                 knowledge_id,
-                permission_id,
+                effective_permission_id,
                 sorted(effective_permission_ids),
             )
         return allowed
@@ -93,6 +115,27 @@ class KnowledgePermissionService:
                 return default_permission_ids_for_relation(model.get('relation'))
             return set()
         return default_permission_ids_for_relation(relation)
+
+    @staticmethod
+    async def _is_knowledge_space(knowledge_id: int) -> bool:
+        try:
+            knowledge = await KnowledgeDao.aquery_by_id(int(knowledge_id))
+        except Exception as exc:
+            logger.debug('Could not resolve knowledge type for %s: %s', knowledge_id, exc)
+            return False
+        return bool(knowledge and knowledge.type == KnowledgeTypeEnum.SPACE.value)
+
+    @classmethod
+    async def _resolve_permission_id_for_knowledge(
+        cls,
+        knowledge_id: int,
+        permission_id: str,
+    ) -> str:
+        if permission_id not in _KNOWLEDGE_SPACE_PERMISSION_ID_ALIAS:
+            return permission_id
+        if await cls._is_knowledge_space(knowledge_id):
+            return _KNOWLEDGE_SPACE_PERMISSION_ID_ALIAS[permission_id]
+        return permission_id
 
     @staticmethod
     async def _get_relation_models_map() -> dict[str, dict]:
@@ -178,6 +221,49 @@ class KnowledgePermissionService:
                     return binding
         return None
 
+    @staticmethod
+    async def _space_membership_permission_ids(
+        login_user: UserPayload,
+        knowledge_id: int,
+    ) -> set[str]:
+        member = await SpaceChannelMemberDao.async_find_member(
+            int(knowledge_id),
+            login_user.user_id,
+        )
+        if not member or not member.is_active:
+            return set()
+        relation = _SPACE_MEMBER_ROLE_TO_RELATION.get(member.user_role)
+        return default_space_permission_ids_for_relation(relation or '')
+
+    @classmethod
+    async def _get_effective_space_permission_ids_async(
+        cls,
+        login_user: UserPayload,
+        knowledge_id: int,
+        *,
+        models: dict[str, dict],
+        bindings: list[dict],
+        binding_department_paths: dict[int, str],
+        user_subject_strings: set[str],
+        tuple_cache: dict[str, list[dict]] | None = None,
+        tuple_department_paths: dict[int, str] | None = None,
+    ) -> set[str]:
+        effective_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+            login_user,
+            'knowledge_space',
+            knowledge_id,
+            models=models,
+            bindings=bindings,
+            binding_department_paths=binding_department_paths,
+            user_subject_strings=user_subject_strings,
+            tuple_cache=tuple_cache,
+            tuple_department_paths=tuple_department_paths,
+        )
+        effective_permission_ids.update(
+            await cls._space_membership_permission_ids(login_user, knowledge_id),
+        )
+        return effective_permission_ids
+
     @classmethod
     async def get_effective_permission_ids_async(
         cls,
@@ -199,6 +285,18 @@ class KnowledgePermissionService:
             user_subject_strings = await cls._get_current_user_subject_strings(login_user)
         if binding_department_paths is None:
             binding_department_paths = await cls._get_binding_department_paths(bindings)
+
+        if await cls._is_knowledge_space(knowledge_id):
+            return await cls._get_effective_space_permission_ids_async(
+                login_user,
+                knowledge_id,
+                models=models,
+                bindings=bindings,
+                binding_department_paths=binding_department_paths,
+                user_subject_strings=user_subject_strings,
+                tuple_cache=tuple_cache,
+                tuple_department_paths=tuple_department_paths,
+            )
 
         return await FineGrainedPermissionService.get_effective_permission_ids_async(
             login_user,

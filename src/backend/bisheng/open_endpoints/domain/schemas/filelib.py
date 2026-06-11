@@ -63,3 +63,24 @@ class RetrieveChunk(BaseModel):
 class RetrieveResp(BaseModel):
     chunks: List[RetrieveChunk]
     total: int
+
+
+class FileDetailFile(BaseModel):
+    id: int
+    knowledge_id: int
+    file_encoding: str
+    file_name: str
+    file_size: Optional[int] = None
+    status: Optional[int] = None
+    update_time: str = ""
+    is_primary: bool
+    document_type: str
+    categoryID: str
+    categoryGroupClassCode: str
+    docTypeCode: str
+
+
+class FileDetailResp(BaseModel):
+    file: Optional[FileDetailFile] = None
+    content: str = ""
+    chunk_count: int = 0

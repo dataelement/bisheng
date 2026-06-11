@@ -1589,6 +1589,7 @@ class KnowledgeService(KnowledgeUtils):
         page: int = 1,
         page_size: int = 10,
         file_ids: List[int] = None,
+        file_type: int = None,
     ) -> (List[KnowledgeFileResp], int, bool):
         db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not db_knowledge:
@@ -1621,6 +1622,7 @@ class KnowledgeService(KnowledgeUtils):
             page_size=page_size,
             file_ids=file_ids,
             extra_file_ids=extra_file_ids,
+            file_type=file_type,
         )
         total = await KnowledgeFileDao.acount_file_by_filters(
             knowledge_id,
@@ -1628,6 +1630,7 @@ class KnowledgeService(KnowledgeUtils):
             status,
             file_ids=file_ids,
             extra_file_ids=extra_file_ids,
+            file_type=file_type,
         )
 
         file_title_map = await asyncio.to_thread(

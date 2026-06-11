@@ -6,7 +6,9 @@ These tests cover the multi-KB retrieval orchestration introduced for the
 filter validation, tag-name resolution, KB-not-found, multi-KB merge and
 top_k truncation, and the per-chunk knowledge_id annotation.
 """
+from datetime import datetime
 from inspect import signature
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -17,7 +19,11 @@ from bisheng.developer_token.api.dependencies import get_developer_token_user
 from bisheng.knowledge.domain.services import knowledge_space_chat_service as svc_mod
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.open_endpoints.api.dependencies import get_knowledge_space_chat_service_for_openapi
-from bisheng.open_endpoints.api.endpoints.filelib import _build_portal_source_urls
+from bisheng.open_endpoints.api.endpoints import filelib as filelib_mod
+from bisheng.open_endpoints.api.endpoints.filelib import (
+    _build_portal_source_urls,
+    _parse_document_type_code,
+)
 
 
 class _StubNotFoundError(Exception):
@@ -83,6 +89,226 @@ async def test_openapi_chat_service_depends_on_developer_token_user():
     assert service.request is request
     assert service.login_user is developer_user
     assert service.version_repo is version_repo
+
+
+def test_openapi_file_list_depends_on_developer_token_user():
+    params = signature(filelib_mod.get_filelist).parameters
+    assert params["login_user"].default.dependency is get_developer_token_user
+
+
+def test_openapi_file_detail_depends_on_developer_token_user():
+    params = signature(filelib_mod.get_file_detail).parameters
+    assert params["login_user"].default.dependency is get_developer_token_user
+
+
+def test_parse_document_type_code_from_file_encoding():
+    assert _parse_document_type_code("SGGF-RPT-QM-20260400000007") == "RPT"
+    assert _parse_document_type_code("rpt-qm") == "RPT"
+    assert _parse_document_type_code(None) == ""
+
+
+async def test_openapi_file_list_enriches_shougang_fields(monkeypatch):
+    request = MagicMock()
+    developer_user = MagicMock()
+    file_items = [
+        SimpleNamespace(id=101, file_name="report.pdf", file_encoding="SGGF-RPT-QM-20260400000007"),
+        SimpleNamespace(id=102, file_name="legacy.pdf", file_encoding=None),
+    ]
+    list_files = AsyncMock(return_value=(file_items, 2, False))
+    load_primary_flags = AsyncMock(return_value={101: False})
+    monkeypatch.setattr(filelib_mod.KnowledgeService, "aget_knowledge_files", list_files)
+    monkeypatch.setattr(filelib_mod, "_load_file_primary_flags", load_primary_flags)
+
+    response = await filelib_mod.get_filelist(
+        request=request,
+        knowledge_id=7,
+        login_user=developer_user,
+        status=None,
+    )
+
+    list_files.assert_awaited_once_with(
+        request,
+        developer_user,
+        7,
+        None,
+        None,
+        1,
+        10,
+        file_type=filelib_mod.FileType.FILE.value,
+    )
+    load_primary_flags.assert_awaited_once_with([101, 102])
+    assert response.data["total"] == 2
+    assert response.data["writeable"] is False
+
+    first, second = response.data["data"]
+    assert first["file_encoding"] == "SGGF-RPT-QM-20260400000007"
+    assert first["document_type"] == "RPT"
+    assert first["is_primary"] is False
+    assert first["categoryID"] == "入库分类测试"
+    assert first["categoryGroupClassCode"] == "分类编码测试"
+    assert first["docTypeCode"] == "分类赋码测试"
+
+    assert second["file_encoding"] == ""
+    assert second["document_type"] == ""
+    assert second["is_primary"] is True
+
+
+def test_openapi_file_detail_text_object_candidates_follow_content_format():
+    file_record = SimpleNamespace(
+        id=101,
+        file_name="report.pdf",
+        preview_file_object_name=None,
+    )
+
+    text_candidates = filelib_mod._unique_text_object_candidates(file_record, "text")
+    markdown_candidates = filelib_mod._unique_text_object_candidates(file_record, "markdown")
+
+    assert text_candidates[:2] == ["preview/101.txt", "text/101.txt"]
+    assert markdown_candidates[:2] == ["preview/101.md", "markdown/101.md"]
+
+
+async def test_openapi_file_detail_returns_file_and_preview_content(monkeypatch):
+    request = MagicMock()
+    developer_user = MagicMock()
+    file_record = SimpleNamespace(
+        id=101,
+        knowledge_id=7,
+        file_encoding="SGGF-RPT-QM-20260400000007",
+        file_name="report.pdf",
+        file_size=256,
+        status=filelib_mod.KnowledgeFileStatus.SUCCESS.value,
+        update_time=datetime(2026, 6, 10, 8, 30, 0),
+        preview_file_object_name="preview/101.md",
+    )
+    db_knowledge = SimpleNamespace(id=7, user_id=9, index_name="idx")
+    get_files = AsyncMock(return_value=[file_record])
+    query_knowledge = AsyncMock(return_value=db_knowledge)
+    ensure_read = AsyncMock()
+    load_primary_flags = AsyncMock(return_value={101: False})
+    load_text_object = AsyncMock(return_value="# title\nbody")
+    load_es = AsyncMock(side_effect=AssertionError("text object should be preferred"))
+    monkeypatch.setattr(filelib_mod.KnowledgeFileDao, "aget_files_by_file_encoding", get_files)
+    monkeypatch.setattr(filelib_mod.KnowledgeDao, "aquery_by_id", query_knowledge)
+    monkeypatch.setattr(filelib_mod.KnowledgeService.permission_service, "ensure_knowledge_read_async", ensure_read)
+    monkeypatch.setattr(filelib_mod, "_load_file_primary_flags", load_primary_flags)
+    monkeypatch.setattr(filelib_mod, "_load_file_content_from_text_object", load_text_object)
+    monkeypatch.setattr(filelib_mod, "_load_file_content_from_es", load_es)
+
+    response = await filelib_mod.get_file_detail(
+        request=request,
+        file_encoding=" SGGF-RPT-QM-20260400000007 ",
+        knowledge_id=None,
+        content_format="markdown",
+        login_user=developer_user,
+    )
+
+    get_files.assert_awaited_once_with("SGGF-RPT-QM-20260400000007", knowledge_id=None)
+    query_knowledge.assert_awaited_once_with(7)
+    ensure_read.assert_awaited_once_with(login_user=developer_user, owner_user_id=9, knowledge_id=7)
+    load_primary_flags.assert_awaited_once_with([101])
+    load_text_object.assert_awaited_once_with(file_record, "markdown")
+    assert response.data.file.id == 101
+    assert response.data.file.knowledge_id == 7
+    assert response.data.file.file_encoding == "SGGF-RPT-QM-20260400000007"
+    assert response.data.file.file_name == "report.pdf"
+    assert response.data.file.file_size == 256
+    assert response.data.file.status == filelib_mod.KnowledgeFileStatus.SUCCESS.value
+    assert response.data.file.update_time == "2026-06-10 08:30:00"
+    assert response.data.file.is_primary is False
+    assert response.data.file.document_type == "RPT"
+    assert response.data.file.categoryID == "入库分类测试"
+    assert response.data.file.categoryGroupClassCode == "分类编码测试"
+    assert response.data.file.docTypeCode == "分类赋码测试"
+    assert response.data.content == "# title\nbody"
+    assert response.data.chunk_count == 1
+
+
+async def test_openapi_file_detail_non_success_returns_empty_data(monkeypatch):
+    file_record = SimpleNamespace(
+        id=101,
+        knowledge_id=7,
+        file_encoding="SGGF-RPT-QM-20260400000007",
+        file_name="report.pdf",
+        status=filelib_mod.KnowledgeFileStatus.FAILED.value,
+    )
+    db_knowledge = SimpleNamespace(id=7, user_id=9)
+    load_text_object = AsyncMock(side_effect=AssertionError("non-success files should not load content"))
+    monkeypatch.setattr(filelib_mod.KnowledgeFileDao, "aget_files_by_file_encoding", AsyncMock(return_value=[file_record]))
+    monkeypatch.setattr(filelib_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=db_knowledge))
+    monkeypatch.setattr(
+        filelib_mod.KnowledgeService.permission_service,
+        "ensure_knowledge_read_async",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(filelib_mod, "_load_file_content_from_text_object", load_text_object)
+
+    response = await filelib_mod.get_file_detail(
+        request=MagicMock(),
+        file_encoding="SGGF-RPT-QM-20260400000007",
+        knowledge_id=7,
+        content_format="text",
+        login_user=MagicMock(),
+    )
+
+    assert response.data.file is None
+    assert response.data.content == ""
+    assert response.data.chunk_count == 0
+
+
+async def test_openapi_file_detail_duplicate_encoding_raises_409(monkeypatch):
+    monkeypatch.setattr(
+        filelib_mod.KnowledgeFileDao,
+        "aget_files_by_file_encoding",
+        AsyncMock(return_value=[SimpleNamespace(id=1), SimpleNamespace(id=2)]),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await filelib_mod.get_file_detail(
+            request=MagicMock(),
+            file_encoding="SGGF-RPT-QM-20260400000007",
+            knowledge_id=None,
+            content_format="text",
+            login_user=MagicMock(),
+        )
+
+    assert exc.value.status_code == 409
+
+
+async def test_openapi_file_detail_falls_back_to_es_chunks(monkeypatch):
+    file_record = SimpleNamespace(
+        id=101,
+        knowledge_id=7,
+        file_encoding="SGGF-RPT-QM-20260400000007",
+        file_name="report.pdf",
+        file_size=None,
+        status=filelib_mod.KnowledgeFileStatus.SUCCESS.value,
+        update_time=None,
+        preview_file_object_name=None,
+    )
+    db_knowledge = SimpleNamespace(id=7, user_id=9, index_name="idx")
+    monkeypatch.setattr(filelib_mod.KnowledgeFileDao, "aget_files_by_file_encoding", AsyncMock(return_value=[file_record]))
+    monkeypatch.setattr(filelib_mod.KnowledgeDao, "aquery_by_id", AsyncMock(return_value=db_knowledge))
+    monkeypatch.setattr(
+        filelib_mod.KnowledgeService.permission_service,
+        "ensure_knowledge_read_async",
+        AsyncMock(),
+    )
+    monkeypatch.setattr(filelib_mod, "_load_file_primary_flags", AsyncMock(return_value={101: True}))
+    monkeypatch.setattr(filelib_mod, "_load_file_content_from_text_object", AsyncMock(return_value=None))
+    load_es = AsyncMock(return_value=("chunk 1\nchunk 2", 2))
+    monkeypatch.setattr(filelib_mod, "_load_file_content_from_es", load_es)
+
+    response = await filelib_mod.get_file_detail(
+        request=MagicMock(),
+        file_encoding="SGGF-RPT-QM-20260400000007",
+        knowledge_id=7,
+        content_format="text",
+        login_user=MagicMock(),
+    )
+
+    load_es.assert_awaited_once_with(db_knowledge, 101)
+    assert response.data.content == "chunk 1\nchunk 2"
+    assert response.data.chunk_count == 2
 
 
 # ---------------------------------------------------------------------------

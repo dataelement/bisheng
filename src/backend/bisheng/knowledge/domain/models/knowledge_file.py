@@ -474,6 +474,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def _build_file_filters_statement(cls, statement, file_name: str = None, status: List[int] = None,
                                       file_ids: List[int] = None, file_level_path: str = None,
                                       extra_file_ids: List[int] = None,
+                                      file_type: int = None,
                                       *, order_by: str = None, order_field: str = None, order_sort: str = "desc"):
         and_statement = []
         if status:
@@ -482,6 +483,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
             and_statement.append(KnowledgeFile.id.in_(file_ids))
         if file_level_path:
             and_statement.append(KnowledgeFile.file_level_path.like(f"{file_level_path}%"))
+        if file_type is not None:
+            and_statement.append(KnowledgeFile.file_type == file_type)
 
         keyword_statement = None
         if file_name and extra_file_ids:
@@ -528,11 +531,13 @@ class KnowledgeFileDao(KnowledgeFileBase):
                                    file_ids: List[int] = None, extra_file_ids: List[int] = None,
                                    file_level_path: str = None, order_by: str = None,
                                    order_field: str = None, order_sort: str = "desc",
+                                   file_type: int = None,
                                    *, page: int = 0, page_size: int = 0,
                                    exclude_file_ids: Optional[List[int]] = None) -> List[KnowledgeFile]:
         statement = select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
-                                                      extra_file_ids=extra_file_ids, order_by=order_by,
+                                                      extra_file_ids=extra_file_ids, file_type=file_type,
+                                                      order_by=order_by,
                                                       order_field=order_field, order_sort=order_sort)
         if exclude_file_ids:
             statement = statement.where(col(KnowledgeFile.id).notin_(exclude_file_ids))
@@ -626,12 +631,34 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return int(await session.scalar(statement) or 0)
 
     @classmethod
+    async def aget_files_by_file_encoding(
+            cls,
+            file_encoding: str,
+            knowledge_id: Optional[int] = None,
+    ) -> List[KnowledgeFile]:
+        cleaned = (file_encoding or '').strip()
+        if not cleaned:
+            return []
+        statement = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.file_encoding == cleaned,
+            )
+            .order_by(col(KnowledgeFile.id).asc())
+        )
+        if knowledge_id is not None:
+            statement = statement.where(KnowledgeFile.knowledge_id == knowledge_id)
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     async def acount_file_by_filters(cls, knowledge_id: int, file_name: str = None, status: List[int] = None,
                                      file_ids: List[int] = None, extra_file_ids: List[int] = None,
-                                     file_level_path: str = None) -> int:
+                                     file_level_path: str = None, file_type: int = None) -> int:
         statement = select(func.count()).where(KnowledgeFile.knowledge_id == knowledge_id)
         statement = cls._build_file_filters_statement(statement, file_name, status, file_ids, file_level_path,
-                                                      extra_file_ids=extra_file_ids)
+                                                      extra_file_ids=extra_file_ids, file_type=file_type)
         async with get_async_db_session() as session:
             return await session.scalar(statement)
 
@@ -914,7 +941,8 @@ class QAKnoweldgeDao(QAKnowledgeBase):
 
     @classmethod
     def get_qa_knowledge_by_name(cls, question: List[str], knowledge_id: int, exclude_id: int = None) -> QAKnowledge:
-        from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, json_array_contains
+        from bisheng.core.database.dialect_helpers import json_array_contains
+
         with get_sync_db_session() as session:
             dialect = session.bind.dialect.name if session.bind else 'mysql'
             group_filters = []

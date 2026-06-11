@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.common.errcode.http_error import UnAuthorizedError
+from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.database.models.role_access import AccessType
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     _PERMISSION_SYNC_TIMEOUT_SECONDS,
     KnowledgePermissionService,
@@ -143,6 +146,10 @@ async def test_check_permission_id_async_reads_effective_permission_ids():
     login_user = SimpleNamespace(user_id=7)
 
     with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService._resolve_permission_id_for_knowledge',
+        new_callable=AsyncMock,
+        return_value='view_kb',
+    ), patch(
         'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService.get_effective_permission_ids_async',
         new_callable=AsyncMock,
         return_value={'view_kb'},
@@ -158,6 +165,126 @@ async def test_check_permission_id_async_reads_effective_permission_ids():
         login_user=login_user,
         knowledge_id=31,
     )
+
+
+@pytest.mark.asyncio
+async def test_check_permission_id_async_maps_library_read_to_space_view():
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService._is_knowledge_space',
+        new_callable=AsyncMock,
+        return_value=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService.get_effective_permission_ids_async',
+        new_callable=AsyncMock,
+        return_value={'view_space'},
+    ):
+        allowed = await KnowledgePermissionService.check_permission_id_async(
+            login_user=login_user,
+            knowledge_id=118,
+            permission_id='view_kb',
+        )
+
+    assert allowed is True
+
+
+@pytest.mark.asyncio
+async def test_get_effective_permission_ids_async_uses_space_permission_family():
+    login_user = SimpleNamespace(user_id=7)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService._is_knowledge_space',
+        new_callable=AsyncMock,
+        return_value=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+        new_callable=AsyncMock,
+        return_value={'view_space'},
+    ) as get_effective, patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.SpaceChannelMemberDao.async_find_member',
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        permissions = await KnowledgePermissionService.get_effective_permission_ids_async(
+            login_user=login_user,
+            knowledge_id=118,
+            models={},
+            bindings=[],
+            binding_department_paths={},
+            user_subject_strings={'user:7'},
+        )
+
+    assert permissions == {'view_space'}
+    assert get_effective.await_args.args[1] == 'knowledge_space'
+
+
+@pytest.mark.asyncio
+async def test_get_effective_permission_ids_async_allows_public_space_viewer():
+    login_user = SimpleNamespace(user_id=7)
+    public_space = SimpleNamespace(
+        type=KnowledgeTypeEnum.SPACE.value,
+        space_level=KnowledgeSpaceLevelEnum.PUBLIC,
+    )
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgeDao.aquery_by_id',
+        new_callable=AsyncMock,
+        return_value=public_space,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService.get_implicit_permission_level',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.PermissionService._get_fga',
+        return_value=None,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.SpaceChannelMemberDao.async_find_member',
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        permissions = await KnowledgePermissionService.get_effective_permission_ids_async(
+            login_user=login_user,
+            knowledge_id=118,
+            models={},
+            bindings=[],
+            binding_department_paths={},
+            user_subject_strings={'user:7'},
+        )
+
+    assert 'view_space' in permissions
+    assert 'view_file' in permissions
+
+
+@pytest.mark.asyncio
+async def test_get_effective_permission_ids_async_merges_space_membership_permissions():
+    login_user = SimpleNamespace(user_id=7)
+    member = SimpleNamespace(is_active=True, user_role=UserRoleEnum.ADMIN)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.KnowledgePermissionService._is_knowledge_space',
+        new_callable=AsyncMock,
+        return_value=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+        new_callable=AsyncMock,
+        return_value=set(),
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_permission_service.SpaceChannelMemberDao.async_find_member',
+        new_callable=AsyncMock,
+        return_value=member,
+    ):
+        permissions = await KnowledgePermissionService.get_effective_permission_ids_async(
+            login_user=login_user,
+            knowledge_id=118,
+            models={},
+            bindings=[],
+            binding_department_paths={},
+            user_subject_strings={'user:7'},
+        )
+
+    assert 'edit_space' in permissions
+    assert 'manage_space_relation' in permissions
 
 
 def test_ensure_access_sync_raises_when_rebac_denies():

@@ -10,7 +10,6 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.dialects import sqlite
 
-
 # ---------------------------------------------------------------------------
 # Fake session for SQL-inspection tests (no real DB)
 # ---------------------------------------------------------------------------
@@ -123,6 +122,80 @@ async def test_aget_file_by_filters_empty_exclude_no_notin_clause():
 
     sql = _compile_sql(session.statement)
     assert "NOT IN" not in sql.upper(), f"Unexpected NOT IN clause for empty list: {sql}"
+
+
+@pytest.mark.asyncio
+async def test_aget_file_by_filters_file_type_adds_file_type_clause():
+    """file_type must filter before pagination so directories are excluded correctly."""
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileDao
+
+    session = _FakeAsyncSession()
+
+    @asynccontextmanager
+    async def _session_ctx():
+        yield session
+
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_file.get_async_db_session",
+        new=_session_ctx,
+    ):
+        await KnowledgeFileDao.aget_file_by_filters(
+            knowledge_id=1,
+            file_type=FileType.FILE.value,
+        )
+
+    sql = _compile_sql(session.statement)
+    assert "file_type = 1" in sql, f"file_type filter missing: {sql}"
+
+
+@pytest.mark.asyncio
+async def test_acount_file_by_filters_file_type_adds_file_type_clause():
+    """The count query must use the same file_type filter as the list query."""
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileDao
+
+    session = _FakeAsyncSession()
+
+    @asynccontextmanager
+    async def _session_ctx():
+        yield session
+
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_file.get_async_db_session",
+        new=_session_ctx,
+    ):
+        await KnowledgeFileDao.acount_file_by_filters(
+            knowledge_id=1,
+            file_type=FileType.FILE.value,
+        )
+
+    sql = _compile_sql(session.statement)
+    assert "file_type = 1" in sql, f"file_type count filter missing: {sql}"
+
+
+@pytest.mark.asyncio
+async def test_aget_files_by_file_encoding_filters_code_space_and_file_type():
+    """OpenAPI file detail lookup must locate files by code while excluding folders."""
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+
+    session = _FakeAsyncSession()
+
+    @asynccontextmanager
+    async def _session_ctx():
+        yield session
+
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_file.get_async_db_session",
+        new=_session_ctx,
+    ):
+        await KnowledgeFileDao.aget_files_by_file_encoding(
+            file_encoding="SGGF-RPT-QM-20260400000007",
+            knowledge_id=7,
+        )
+
+    sql = _compile_sql(session.statement)
+    assert "file_encoding = 'SGGF-RPT-QM-20260400000007'" in sql, f"file_encoding filter missing: {sql}"
+    assert "knowledge_id = 7" in sql, f"knowledge_id filter missing: {sql}"
+    assert "file_type = 1" in sql, f"file_type filter missing: {sql}"
 
 
 # ---------------------------------------------------------------------------
