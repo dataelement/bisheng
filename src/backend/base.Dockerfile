@@ -32,12 +32,16 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 # 安装 Poetry
 #RUN curl -sSL https://install.python-poetry.org | python3 - --version 1.8.2
 
-# 安装 playwright 及 chromium：playwright 是 Python 包，版本锁定在 pyproject.toml，
-# 此处单独安装一次并下载 chromium，后续 Dockerfile 构建时只要该版本不变就命中缓存。
-# 注意：如果 playwright 升级，需重新 build base。
-ARG PLAYWRIGHT_VERSION=1.57.0
-RUN uv pip install playwright==${PLAYWRIGHT_VERSION} --system && \
-    playwright install chromium && \
-    playwright install-deps && \
-    uv pip uninstall playwright --system
+# 拷贝依赖文件并安装全量 Python 包，形成 venv 快照
+# Dockerfile 构建时再跑一次 uv sync，只安装 delta，速度极快
+COPY ./pyproject.toml ./uv.lock ./
+RUN uv sync --frozen --no-dev && uv cache clean
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+# 安装 NLTK 数据
+RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('averaged_perceptron_tagger_eng')"
+
+# 安装 playwright chromium（包已在 venv 里，此处下载 chromium 二进制及系统依赖）
+RUN playwright install chromium && playwright install-deps
 
