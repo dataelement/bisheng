@@ -1,4 +1,4 @@
-# Design: 知识空间文件 / 文件夹移动（同空间 + 跨空间）
+# Design: 知识空间文件 / 文件夹移动（同空间 + 跨空间）+ 文件夹上传
 
 > 现状快照（Why this How）。spec=做什么，本文=为什么这么实现 + 今天代码长什么样，tasks=流水账。
 
@@ -174,7 +174,7 @@
 | 3 | AC-09 继承权限重算**不用写代码**——OpenFGA parent tuple 一换,tupleToUserset 自动重算；直绑 tuple 不碰 | 手动重算继承,白做且易错 | parent tuple 双操作 |
 | 4 | 「只校验被操作对象、不校验子项」（AC-08）：跨空间移动文件夹时**子文件即使无 move 权限也跟着走**——这是 PRD 明确语义,不是漏洞 | 误加递归权限校验,行为与 PRD 不符 | move_items 权限只查入参项 |
 | 5 | **版本链整链迁移**：漏掉历史版本会违反「链内同空间」不变式（version_service 写路径会炸）;历史版本文件**各有自己的向量和 minio 对象**,迁移任务也要覆盖它们 | 历史版本残留旧空间,版本管理页报错 | move_items 按 document 展开整链 |
-| 6 | **MinIO 不用搬**：对象路径按 file_id（`original/{id}.ext`）。**例外是文档图片目录** `knowledge/images/{knowledge_id}/{doc_id}`——chunk 里的图片引用指向旧空间目录;不搬也能用,但**旧空间被删除时图会丢** | 删旧空间后,已移走文件的图片裂开 | 迁移任务顺带把 images 目录拷到新空间路径并更新 chunk 引用;或至少在 tasks 里列为已知债 |
+| 6 | **MinIO 不用搬**：对象路径按 file_id（`original/{id}.ext`）。文档图片目录 `knowledge/images/{knowledge_id}/{doc_id}` 的 chunk 引用指向旧空间路径,**但已核实（2026-06-11）删旧空间不会丢图**——空间删除的 MinIO 清理（`delete_knowledge_file_in_minio`）只按文件记录逐个删 4 个对象字段,全代码库无按 `knowledge/images/{kid}/` 前缀的删除逻辑,且该目录配匿名读策略,不依赖空间存在 | 误以为要赶在删空间前迁移图片,做多余的搬运工程 | 无需处理;真实债务是 images 目录**从来没人清理**(连本空间文件的图都留着)=存储泄漏,见 §8 |
 | 7 | 跨空间迁移任务**执行中途**源/目标空间可能再变（连环移动）：任务按 file 当前 `knowledge_id` 解析目标,以「最后归属」为准;删源时按 file_id 删,幂等 | 重复迁移/删错空间 | migrate 任务读 DB 最新归属 + 幂等删 |
 | 8 | 排队中/解析中文件跨空间移动：解析 celery 任务**执行时**才解析 knowledge_id → 自然写入新空间;但若任务已初始化旧空间客户端（极小窗口）,产物会落旧空间 | 偶发:移动后文件在新空间永远搜不到 | 迁移任务对此类文件不派发;解析完成后若发现归属已变,由解析任务终段按当前归属写入（实现时验证该窗口,必要时解析完成回查一次归属） |
 | 9 | 同空间撤回是反向 move + 重新校验：原位置被占/原目录被删 → 撤回失败,保留当前态 | 不处理失败分支 | 撤回失败 toast |
@@ -192,6 +192,8 @@
 | 权限 id `move_file` / `move_folder`（can_edit 档） | 细粒度权限 | 权限配置 UI 自动出现 |
 | `SpaceMoveInvalidTargetError`(18033) | 错误码 | 前端循环/无效目标提示 |
 | `migrate_file_vectors` celery 任务 | 内部任务 | 跨空间迁移;失败重试入口 |
+| `POST .../space/{id}/folders/upload`（文件夹上传，§9） | HTTP API | client SpaceDetail 文件夹上传（picker + 拖拽） |
+| `SpaceFolderUploadCountExceededError`(18025，§9，可选兜底) | 错误码 | 前端 1000 超限兜底提示 |
 
 ### 6.2 我依赖（Incoming）
 
@@ -219,7 +221,125 @@
 
 - **模型相同时的纯向量拷贝加速**：当前统一走重嵌入,模型相同场景可省 embedding 算力,待量级需要时再做。
 - **跨空间撤回**：PRD 砍掉;若将来要做 = 反向迁移 + 后端撤回记录,另立项。
-- **图片目录迁移**（坑 6）：**实现阶段定为记债,不在 T007 做物理拷贝**。原因——文档图片目录键为 `knowledge/images/{kid}/{doc_id}`,而 `doc_id` 与 file_id 的对应在解析侧不确定;按错误的键拷贝反而会弄坏图片引用。当前实现:移动后 chunk 内的图片引用仍指向**源空间路径**,图片照常解析(源 MinIO 对象不被移动删除,移动只删源向量/ES)。仅当**源空间整体被删除**时这些图才会裂开——届时由空间删除流程或一次性清理脚本统一迁移。T007 已在任务体注释中标注该行为。
+- **图片目录迁移**（坑 6）：**不做,且已核实无需做**（2026-06-11）。移动后 chunk 内的图片引用仍指向**源空间路径**,图片照常解析;原先担心「删旧空间会丢图」经核实**不成立**——空间删除只按文件记录删对象,从不按 `knowledge/images/{kid}/` 前缀清理,图不会裂。真实遗留问题是反方向的:**images 目录从来没人清理**(空间删除后本空间文件的图片也全留在 MinIO),属存储泄漏,与移动无关,如需治理另立清理脚本项。move_worker.py 头注释中"objects only need migrating before the source space is deleted"的说法同样基于旧假设,下次动该文件时顺手修正。
+
+---
+
+## 9. 文件夹上传（§5.5）设计
+
+> 与「移动」正交：移动 = 空间内内容换位置；上传 = 把本地文件夹整树搬进空间。本节自包含，AC-24~31。
+
+### 9.1 现状（接手必读）：前端已有「文件夹上传」半成品，但只做一层平铺
+
+- 前端早已具备：`webkitdirectory` 选择器（`client/.../SpaceDetail/index.tsx:961`）、拖拽目录读取（`useFileDragDrop.ts:41` `readTopLevelFolderFiles`）、文件夹上传编排（`useFileUpload.ts:288` `handleUploadFolder`）、过滤工具（`knowledgeUtils.ts:224` `filterFolderUploadFiles`）。
+- **但现有行为 = 被作废的旧规则 3.2.4**：`filterFolderUploadFiles` 用 `rel.split("/").length !== 2` **只留文件夹根目录直属文件、过滤掉所有子文件夹文件**；拖拽 `readTopLevelFolderFiles` 也只读一层。即现有「上传文件夹」实际是「把根层文件平铺传上来，不重建子目录树」。
+- 后端无「按相对路径重建目录树」能力：`add_folder`（单建一个文件夹，`knowledge_space_service.py:2772`，含深度 18011 / 同目录重名 18012 校验）与 `add_file`（往一个 `parent_id` 放平铺文件，`:2940`，含权限/容量/MinIO/celery 派发）各自独立。
+- **结论**：§5.5 是把这套半成品从「一层平铺」升级为「全量嵌套 + 服务端重建目录树」——前端递归化 + 后端新增批量编排，不是从零起。
+
+### 9.2 复用的现成零件（几乎全有）
+
+| 能力 | 现成件 | 锚点 |
+|---|---|---|
+| 目录读取 | webkitdirectory 选择器 / `webkitGetAsEntry` 递归 | `index.tsx:961` / `useFileDragDrop.ts:174` |
+| 相对路径 | `file.webkitRelativePath`（`getRootFolderName`） | `knowledgeUtils.ts:208` |
+| 格式白名单 | `ALLOWED_EXTENSIONS` / `getAllowedExtensions(etl4lm)`（后端 `FileExtensionMap`，`base_file_pipeline.py:25`） | `knowledgeUtils.ts:56` |
+| 单文件大小 | `DEFAULT_MAX_FILE_SIZE_MB=200` ← `bishengConfig.uploaded_files_maximum_size` | `knowledgeUtils.ts:111` / `index.tsx:540` |
+| 文件本体上传 | `uploadFileToServerApi` → `file_path` | `api/knowledge.ts:1405` |
+| 建文件夹 | `add_folder`（深度/重名已校验） | `service:2772` |
+| 注册文件 + 派发解析 | `add_file`（权限/容量/MinIO/celery） | `service:2940` |
+| 容量校验 | 用户档 `QuotaService.get_knowledge_space_upload_limit_bytes`(18024) / 租户 `get_tenant_storage_remaining_bytes`(19403) | `quota_service.py:514` / `:482` |
+| 文件重名 | md5/name 冲突 → 临时对象 + FAILED + 前端覆盖（**不报错**） | `knowledge_service.py:1259` |
+
+### 9.3 关键决策
+
+#### 决策 U1：目录树重建放**后端新增批量接口**，不靠前端多次调现有接口编排
+
+- **备选 A**（前端编排）：前端解析 `relativePath` → 需建文件夹集合，按层序逐个 `createFolderApi` 建树拿 id，再逐文件 `addFile` 到对应 parent。后端零改。
+- **备选 B**（后端批量接口）：新增 `POST .../space/{id}/folders/upload`，收 `{parent_id, items:[{file_path, relative_path}]}`，服务端一次性：顶层文件夹重名校验 → 解析相对路径建目录树（事务）→ 层级校验 → **容量整批预校验** → 逐文件注册 + 派发解析 → 返回每文件结果（含重名 FAILED）。
+- **选定 B**。
+- **原因**：① spec 把「层级 / 文件夹重名 / 容量」定为**服务端为准 + 整批拒**，B 让这三项在一个事务里集中判、整批 reject 干净；A 的逐请求建树把校验摊到几十上百次往返，部分失败后半建的目录树难回滚。② 容量校验现有是 `add_file` 内「上传后查 `current_total > limit`」的逐文件式（`service:2974-2993`），逐文件编排会传一半才超限——违反 AC-30「上传后超出 → 拒整批」；B 可在建树前按「本批总大小 + 已用 vs 上限」预判。③ 目录父子顺序、`path→id` 映射在服务端一次算清，比前端管理更稳。
+- **代价**：后端新写批量编排 service（约等于 `add_folder×N + add_file×N` 的合并体）。
+- **何时重新考虑**：若产品要求边传边显示每个子文件夹的创建进度（强前端编排感），再回到 A。
+
+> 注：文件**本体**仍走现有 `uploadFileToServerApi` 逐个传 MinIO 拿 `file_path`——本设计不改这条；1000 文件即 1000 次本体上传 + 1000 个解析任务入队，属现有上传模式（坑 U6）。批量接口只做「注册 + 建树 + 集中校验」。
+
+#### 决策 U2：全量嵌套——前端递归读取 + 废弃「只留根层」过滤
+
+- 去掉 `filterFolderUploadFiles` 的 `split("/").length !== 2` 单层过滤，改为保留所有层级文件、只按「格式 / 隐藏 / 超大」过滤；拖拽侧 `readTopLevelFolderFiles` 改为递归读全部子目录（`FileSystemDirectoryEntry` 递归）。
+- **原因**：对齐产品拍板「3.2.4 作废、全量嵌套」。
+
+#### 决策 U3：1000 上限按「过滤前原始总数」前端主挡、后端兜底
+
+- 前端读到的原始文件总数（含所有嵌套层、**过滤之前**）> 1000 → 直接报错整批不传（产品拍板计数口径）。后端批量接口对收到的文件数兜底校验（防绕 UI 直调）。
+
+#### 决策 U4：静默过滤（格式 / 隐藏 / 超大）在前端，后端格式兜底
+
+- 前端按 `ALLOWED_EXTENSIONS` + 200MB + 隐藏文件静默剔除，不报错、不占名额，合规文件才进上传；后端 `add_file` 链路本就有格式校验（`base_file_pipeline` → `KnowledgeFileNotSupportedError`/18022）兜底。
+
+> **AC-32（产品 2026-06-11 补充）**：所有拒批场景（数量 / 层级 / 顶层夹重名 / 容量）前端一律以 **toast** 提示具体原因——前端挡下的直接 toast；服务端拒的按错误码映射 toast 文案。
+
+### 9.4 数据流 + 接口契约
+
+数据流：
+`选文件夹(picker/拖拽) → 前端递归取全部文件+relativePath → 校验：总数>1000 整批拒 / 静默过滤格式·隐藏·超大 → 逐个 uploadFileToServerApi 传本体拿 file_path → POST .../folders/upload(parent_id + [{file_path, relative_path}]) → 服务端：顶层夹重名 → 建目录树 → 层级≤10 → 容量整批预校验 → 逐文件注册+派发解析 → 返回每文件结果 → 列表刷新`
+
+**接口** `POST /api/v1/knowledge/space/{space_id}/folders/upload`
+
+请求：
+```
+{
+  "parent_id": 456 | null,          // 上传落点(当前目录)，null=空间根
+  "items": [
+    {"file_path": "tmp/uuid.pdf", "relative_path": "我的资料/子目录/a.pdf", "size": 1048576}
+  ]
+}
+```
+- `relative_path` 第一段 = 待建顶层文件夹名；中间段 = 子目录树；末段 = 文件名。
+- 同一顶层文件夹名只校验一次重名（U3 坑）。
+- `size`（实现时新增）= 前端报告的文件字节数，仅用于**容量整批预校验**（整批拒的 UX）；权威配额校验仍由注册环节（add_file 复用）逐文件执行,客户端谎报 size 只会让预校验放行、随后被逐文件校验挡住。
+
+响应：复用 `add_file` 的每文件结果结构（成功项 + 重名 FAILED 项，前端走现有覆盖弹窗）。整批校验失败（数量 / 层级 / 顶层夹重名 / 容量）→ 4xx + 错误码，**整批不落库**。
+
+**权限口径（C4）**：
+- 入口权限与现有单文件上传同口径——对落点（`parent_id` 文件夹，或空间根）`_require_permission_id('upload_file')`，复用 `add_file` 开头的写法（`service:2952`）。不引入新权限 id。
+- 批量新建的**每个文件夹节点**必须初始化权限 tuple（FGA parent 继承），复用 `add_folder` 内的 `_initialize_child_resource_permissions`（`service:2814`）——constitution C4「资源创建必须 authorize」硬规定，批量编排合并时**最容易漏的就是这步**，漏掉会建出无主文件夹（继承链断裂，后续移动/授权都异常）。
+
+校验落点：
+
+| 校验 | 落点 | 错误码 |
+|---|---|---|
+| 入口权限 `upload_file`（落点文件夹/空间） | 服务端（C4 统一入口） | 18040 已有 |
+| 总数 ≤ 1000 | 前端主挡 + 后端兜底 | 新增 18025（或复用参数错误） |
+| 格式 / 隐藏 / 超大 | 前端静默过滤 + 后端格式兜底 | 18022（格式）已有 |
+| 层级 ≤ 10 | 服务端（建树后最深层） | 18011 已有 |
+| 顶层文件夹重名 | 服务端（parent 下 `count_folder_by_name`） | 18012 已有 |
+| 容量（用户档 / 租户） | 服务端**整批预校验** | 18024 / 19403 已有 |
+| 文件重名 | 服务端复用现有 md5/name → FAILED | 无（走覆盖流程） |
+
+### 9.5 已知坑
+
+| # | 反直觉事实 | 不知道会怎样 | 处理 |
+|---|---|---|---|
+| U1 | 现有「文件夹上传」= 旧 3.2.4（只传根层、过滤子文件夹），不是没做——是做了旧规则 | 以为从零做，漏改 `filterFolderUploadFiles`/`readTopLevelFolderFiles` | 决策 U2 改造点 |
+| U2 | 容量校验现有是 `add_file` 内「逐文件上传后查超限」，批量逐文件会传一半才超 | 部分文件已落库才报容量错，违反「整批拒」 | 批量接口建树前按本批总大小预校验 |
+| U3 | 文件夹重名只校验**顶层**那个文件夹（parent 下）；子目录树是新建的不会撞 | 误对每层子目录做重名校验 | 仅顶层 `count_folder_by_name` |
+| U4 | 文件重名**不报错**（现有 = 临时对象 + FAILED + 前端覆盖），与「文件夹重名报错拒」是两套语义 | 误把文件重名也做成整批拒 | AC-31 复用现有，前端覆盖弹窗 |
+| U5 | 隐藏判定要看 `relativePath` **每一段**（子目录可能是隐藏夹如 `.git/`） | 只判文件名，漏掉隐藏目录下文件 | 前端过滤按 path 段 |
+| U6 | 解析与单文件上传同管线，1000 文件 = 1000 次 MinIO 本体上传 + 1000 个解析任务入队 | 误以为批量接口「一次传完」 | 本体仍逐个传，批量接口只做注册 + 建树 |
+| U7 | 批量建树的每个文件夹节点都要走权限 tuple 初始化（C4 authorize），不是只插 DB 行 | 建出"无主"文件夹：继承链断裂，后续授权/移动异常 | 复用 `_initialize_child_resource_permissions`（`service:2814`），逐节点 |
+
+### 9.6 对外契约（增量）
+
+- **新增**：`POST .../space/{id}/folders/upload`（client SpaceDetail 用）；可能新增错误码 `SpaceFolderUploadCountExceededError`(18025) 作后端兜底。
+- **复用**：18011 / 18012 / 18022 / 18024 / 19403；`uploadFileToServerApi` / `add_folder` / `add_file` / `QuotaService` / 解析管线。
+- **依赖**：`webkitRelativePath`（浏览器能力）、`file_level_path`/`level` 层级模型、QuotaService 配额口径。
+- **release-contract 待登记**：F034 行追加「§5.5 文件夹上传：新增 `folders/upload` 批量接口 + 18025；无新增领域对象（复用 SpaceFile/解析/配额）」。
+
+### 9.7 测试
+
+- **后端**：目录树重建（多层嵌套 path → 正确父子）、层级 > 10 整批拒、顶层夹重名拒、容量整批预校验（本批总和触顶 → 整批拒、不留半成品）、文件重名走 FAILED 不拒批、数量兜底。
+- **前端**：递归取全部嵌套文件、1000（过滤前）挡、静默过滤格式/隐藏/超大、两入口（picker + 拖拽）、覆盖弹窗复用。
+- **手动**：传一个 3 层嵌套文件夹（混入不支持格式 + 隐藏文件 + 超大文件）→ 只合规文件按树重建；传顶层重名文件夹 → 拒；构造超容量 → 整批拒。
 
 ---
 
@@ -231,3 +351,6 @@
 | 2026-06-10 | v2：纳入跨空间（复用复制管线/版本链整链/REBUILDING 状态/二次确认无撤回）;编号 032→034（032=OFD、033=linsight 已占用） | PRD 范围升级,产品确认三决策 |
 | 2026-06-10 | 实现完成（Wave 1-4 全通,21 后端测试绿,本地验证移动+toast）。3 项降级：①跨空间拖到左侧空间列表未做（跨组件树成本高,弹窗已覆盖）②同空间撤回未做（toast 无动作按钮,后端已留 old_parent_id）③图片目录物理迁移记债（坑 6）。i18n 占位符须用 `{{0}}` 双花括号 | 实现落地 + 务实降级 |
 | 2026-06-10 | 本地测试后修订：①同空间撤回**改用 confirm 弹窗实现**（不再降级）②修复内部拖拽误触发上传遮罩（`useFileDragDrop` 加 `isExternalFileDrag` 守卫）③卡片视图补拖拽（抽 `useKnowledgeMoveDrag` 共用）④拖拽高亮：列表=整行背景变色、卡片=边框变色。§4.3 前端实现索引按实际重写 | 联调修 bug + UX 调整 |
+| 2026-06-10 | 纳入 §5.5 文件夹上传设计（§9，AC-24~31）：后端新增 `folders/upload` 批量接口重建目录树 + 容量整批预校验，复用配额/解析/重名/层级管线；前端从「一层平铺」升级全量嵌套（废 `filterFolderUploadFiles` 单层过滤、拖拽递归读全树）；关键现状=前端已有半成品但行为=旧 3.2.4。可选新增错误码 18025 | spec 扩 §5.5，探明前端已有半成品 |
+| 2026-06-11 | 修正坑 6 / §8：核实「删旧空间丢图」不成立——空间删除（`delete_knowledge_file_in_minio`）只按文件记录删对象，从不按 `knowledge/images/` 前缀清理，移走文件的图不会裂；真实问题是 images 目录无人清理（存储泄漏，另立项） | 用户要求核实删除链路 |
+| 2026-06-11 | Wave 5 文件夹上传实现完成（T013~T016）：后端 `upload_folder_items` + `POST /{space_id}/folders/upload` + 18025（13 个新测试绿，知识模块零回归）；前端递归读全树、全层级静默过滤（隐藏按 path 段）、`uploadFolderApi` 走 `skip403Redirect` 统一 toast（AC-32）。契约偏差：items 增加 `size` 字段（§9.4 已更新）。AC-32 产品补充已落 spec | Wave 5 实现落地 |
