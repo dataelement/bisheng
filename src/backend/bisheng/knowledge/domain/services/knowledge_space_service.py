@@ -26,6 +26,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceFolderDepthError,
     SpaceFolderDuplicateError,
     SpaceFolderNotFoundError,
+    SpaceFolderUploadCountExceededError,
     SpaceLimitError,
     SpaceNotFoundError,
     SpaceOrganizationGrantExitDeniedError,
@@ -76,6 +77,7 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    FolderUploadItem,
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
     RemoveSpaceMemberRequest,
@@ -3117,6 +3119,141 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
         return failed_files + process_files
+
+    MAX_FOLDER_UPLOAD_FILES = 1000
+
+    async def upload_folder_items(
+        self,
+        knowledge_id: int,
+        items: list[FolderUploadItem],
+        parent_id: int | None = None,
+    ) -> list[KnowledgeSpaceFileResponse]:
+        """F034 §5.5 folder upload: rebuild the client-side directory tree, then
+        register every file through the regular add_file pipeline.
+
+        Batch pre-checks (count / depth / top-level folder duplicate / capacity)
+        are all-or-nothing: any failure rejects the whole batch before a single
+        row is created. Per-file duplicates keep the existing FAILED+overwrite
+        semantics from add_file and never reject the batch.
+        """
+        if len(items) > self.MAX_FOLDER_UPLOAD_FILES:
+            raise SpaceFolderUploadCountExceededError()
+
+        # Entry permission: same gate as single-file upload (design §9.4 / C4).
+        if parent_id:
+            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+        else:
+            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+
+        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not db_knowledge:
+            raise SpaceNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
+
+        base_path = ""
+        base_child_level = 0
+        if parent_id:
+            parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
+            base_path = f"{parent_folder.file_level_path}/{parent_id}"
+            base_child_level = parent_folder.level + 1
+
+        # Parse relative paths into (dir chain, file path); collect every
+        # directory that needs creating. "." / ".." / empty segments are
+        # dropped so a crafted path cannot escape the drop point.
+        parsed: list[tuple[tuple[str, ...], str]] = []
+        dir_set: set[tuple[str, ...]] = set()
+        for item in items:
+            parts = [p for p in item.relative_path.replace("\\", "/").split("/") if p and p not in (".", "..")]
+            if not parts:
+                raise SpaceFolderNotFoundError()
+            dir_parts = tuple(parts[:-1])
+            parsed.append((dir_parts, item.file_path))
+            for depth in range(1, len(dir_parts) + 1):
+                dir_set.add(dir_parts[:depth])
+
+        # Depth: deepest created folder must stay within the 10-level limit.
+        max_chain = max((len(d) for d in dir_set), default=0)
+        if max_chain and base_child_level + max_chain - 1 > 10:
+            raise SpaceFolderDepthError()
+
+        # Duplicate check only for the top-level folder names (design 坑 U3):
+        # everything below them is freshly created and cannot clash.
+        for top_name in {d[0] for d in dir_set}:
+            if await SpaceFileDao.count_folder_by_name(knowledge_id, top_name, base_path) > 0:
+                raise SpaceFolderDuplicateError()
+
+        # Capacity pre-check on the whole batch (design 坑 U2): client-reported
+        # sizes give the all-or-nothing UX; add_file keeps the authoritative
+        # per-file check during registration.
+        total_size = sum(item.size or 0 for item in items)
+        role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
+        if role_user_limit_bytes is not None:
+            current_user_total = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
+            if current_user_total + total_size > role_user_limit_bytes:
+                raise SpaceFileSizeLimitError()
+        target_tid = db_knowledge.tenant_id
+        tenant_remaining_bytes = await QuotaService.get_tenant_storage_remaining_bytes(target_tid)
+        if tenant_remaining_bytes is not None and total_size > tenant_remaining_bytes:
+            tenant_used_bytes = await QuotaService.get_tenant_storage_used_bytes(target_tid)
+            blocker = (
+                target_tid,
+                "tenant_limit",
+                round((tenant_used_bytes + total_size) / (1024**3), 2),
+                round((tenant_used_bytes + tenant_remaining_bytes) / (1024**3), 2),
+                "",
+            )
+            raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
+
+        # Build the directory tree parents-first. node_info maps a dir chain to
+        # (folder_id, file_level_path for its children, level for its children);
+        # the empty chain is the drop point itself.
+        node_info: dict[tuple[str, ...], tuple[int | None, str, int]] = {(): (parent_id, base_path, base_child_level)}
+        created_folders: list[KnowledgeFile] = []
+        try:
+            for dir_parts in sorted(dir_set, key=len):
+                parent_node_id, child_path, child_level = node_info[dir_parts[:-1]]
+                folder_row = await KnowledgeFileDao.aadd_file(
+                    KnowledgeFile(
+                        knowledge_id=knowledge_id,
+                        user_id=self.login_user.user_id,
+                        user_name=self.login_user.user_name,
+                        updater_id=self.login_user.user_id,
+                        updater_name=self.login_user.user_name,
+                        file_name=dir_parts[-1],
+                        file_type=0,
+                        level=child_level,
+                        file_level_path=child_path,
+                        status=KnowledgeFileStatus.SUCCESS.value,
+                    )
+                )
+                created_folders.append(folder_row)
+                # Every created node must get its permission tuple (design 坑 U7);
+                # skipping this leaves an ownerless folder with a broken
+                # inheritance chain.
+                await self._initialize_child_resource_permissions(
+                    "folder",
+                    folder_row.id,
+                    "folder" if parent_node_id else "knowledge_space",
+                    parent_node_id or knowledge_id,
+                )
+                node_info[dir_parts] = (folder_row.id, f"{child_path}/{folder_row.id}", child_level + 1)
+        except Exception:
+            try:
+                await self._cleanup_resource_tuples([("folder", row.id) for row in created_folders])
+            finally:
+                await KnowledgeFileDao.adelete_batch([row.id for row in created_folders])
+            raise
+
+        # Register files per directory through the regular pipeline (quota,
+        # dedup/FAILED semantics, doc+V1 rows, parse dispatch all reused).
+        groups: dict[tuple[str, ...], list[str]] = {}
+        for dir_parts, file_path in parsed:
+            groups.setdefault(dir_parts, []).append(file_path)
+        results: list[KnowledgeSpaceFileResponse] = []
+        for dir_parts, file_paths in groups.items():
+            results.extend(await self.add_file(knowledge_id, file_paths, parent_id=node_info[dir_parts][0]))
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        return results
 
     async def rename_file(self, file_id: int, new_name: str) -> KnowledgeFile:
         from bisheng.worker.knowledge.rebuild_knowledge_worker import (

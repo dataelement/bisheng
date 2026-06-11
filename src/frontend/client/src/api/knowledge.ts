@@ -1458,6 +1458,45 @@ export async function addFilesApi(
     });
 }
 
+/** One file of a folder upload: uploaded body path + its path inside the picked folder. */
+export interface FolderUploadItemPayload {
+    file_path: string;
+    relative_path: string;
+    size: number;
+}
+
+/**
+ * F034 §5.5: register a whole folder (nested) in one batch — the backend
+ * rebuilds the directory tree from each item's relative_path.
+ * POST /api/v1/knowledge/space/{space_id}/folders/upload
+ *
+ * `skip403Redirect` routes batch rejections (18011 depth / 18012 dup folder /
+ * 18024 user quota / 18025 count / 19403 tenant quota) through the unified
+ * interceptor: api_errors.<code> is translated, toasted (AC-32), and the
+ * promise rejects so the caller's catch fires.
+ */
+export async function uploadFolderApi(
+    space_id: string,
+    data: { parent_id?: number | null; items: FolderUploadItemPayload[] }
+): Promise<KnowledgeFile[]> {
+    const res = await request.post(
+        `/api/v1/knowledge/space/${space_id}/folders/upload`,
+        data,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        { skip403Redirect: true } as any,
+    ) as ApiResponse<RawSpaceChild[]>;
+    const payload: any = res?.data ?? {};
+    const list = extractList<RawSpaceChild>(payload);
+    return list.map(raw => {
+        const file = mapChild(raw, space_id);
+        // Preserve raw object for status 3 (duplicate) so retry API can use it
+        if (raw?.status === 3) {
+            (file as any)._raw = raw;
+        }
+        return file;
+    });
+}
+
 /**
  * Add article(s) to a knowledge space folder
  * POST /api/v1/channel/manager/articles/add_to_knowledge_space

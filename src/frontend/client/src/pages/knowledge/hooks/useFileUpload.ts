@@ -9,7 +9,9 @@ import {
     renameFolderApi,
     deleteFolderApi,
     uploadFileToServerApi,
+    uploadFolderApi,
     addFilesApi,
+    type FolderUploadItemPayload,
     renameFileApi,
     deleteFileApi,
     retryDuplicateFilesApi,
@@ -273,17 +275,20 @@ export function useFileUpload({
         setDuplicateFiles([]);
     }, []);
 
-    // ─── Folder upload (pick a local folder; one-level only) ─────────────
+    // ─── Folder upload (pick a local folder; nested, F034 §5.5) ──────────
     /**
-     * Upload a single picked folder. The browser populates
-     * `File.webkitRelativePath` like "Docs/a.pdf" (root file) or
-     * "Docs/Sub/b.pdf" (nested). We:
-     *   1. Reject the whole batch if the picked folder is hidden,
-     *      has a name already used at the current location, or the raw
-     *      file count exceeds MAX_FOLDER_UPLOAD_COUNT.
-     *   2. Silently filter to root-level + supported + size-ok files.
-     *   3. Create one folder on the backend and register the kept files
-     *      under it, reusing the existing upload + register pipeline.
+     * Upload a single picked folder, keeping its whole nested structure. The
+     * browser populates `File.webkitRelativePath` like "Docs/a.pdf" (root
+     * file) or "Docs/Sub/b.pdf" (nested). We:
+     *   1. Reject the whole batch if the picked folder is hidden, has a name
+     *      already used at the current location, or the raw (pre-filter) file
+     *      count exceeds MAX_FOLDER_UPLOAD_COUNT — each with a toast (AC-32).
+     *   2. Silently filter out hidden / unsupported / oversize files at every
+     *      nesting level (AC-27).
+     *   3. Upload each file body, then register the batch via
+     *      uploadFolderApi — the backend rebuilds the directory tree and runs
+     *      the regular parse pipeline; batch rejections toast via
+     *      api_errors.<code>.
      */
     const handleUploadFolder = useCallback(
         async (
@@ -336,36 +341,31 @@ export function useFileUpload({
             }
 
             const validFiles = filterFolderUploadFiles(allFiles, options);
-            if (validFiles.length === 0) return;
-
-            // Create the destination folder first so we have a parent_id to
-            // register the uploaded files against.
-            let folder: KnowledgeFile;
-            try {
-                folder = await createFolderApi(activeSpace.id, {
-                    name: rootName,
-                    parent_id: currentFolderId || null,
+            if (validFiles.length === 0) {
+                // Every file was silently filtered (format / hidden / oversize):
+                // nothing to upload, and no empty tree is created (AC-27 edge).
+                showToast({
+                    message: localize("com_knowledge.folder_upload_no_valid_files"),
+                    severity: NotificationSeverity.WARNING,
                 });
-            } catch {
-                showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
                 return;
             }
 
-            // Show the new folder in the current listing immediately.
-            setFiles((prev) => [folder, ...prev]);
-            setTotal((prev) => prev + 1);
-            dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-
-            // Upload each file to object storage (sequential, mirrors existing
-            // single-file upload — keeps load predictable for 1k batches).
-            const uploadedPaths: string[] = [];
+            // Upload each file body to object storage (sequential, mirrors the
+            // existing single-file upload — keeps load predictable for 1k
+            // batches), keeping its relative path + size for the tree rebuild.
+            const uploadedItems: FolderUploadItemPayload[] = [];
             const failures: { name: string; reason: string }[] = [];
             for (const file of validFiles) {
                 try {
                     // Pass `file.name` explicitly to strip the folder prefix
                     // Chromium would otherwise put in the multipart filename.
                     const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file, file.name);
-                    uploadedPaths.push(res.file_path);
+                    uploadedItems.push({
+                        file_path: res.file_path,
+                        relative_path: file.webkitRelativePath || file.name,
+                        size: file.size,
+                    });
                 } catch (err) {
                     failures.push({
                         name: file.name,
@@ -386,36 +386,34 @@ export function useFileUpload({
                 showToast({ message, severity: NotificationSeverity.ERROR });
             }
 
-            if (uploadedPaths.length === 0) {
-                // Folder created but every file upload failed — list refresh
-                // ensures the empty folder shows up with the correct counts.
-                await loadFiles(currentPage);
-                return;
-            }
+            if (uploadedItems.length === 0) return;
 
-            // Register files under the new folder. Duplicates inside this new
-            // folder shouldn't be possible (a fresh folder is empty), but the
-            // backend may still flag global duplicates by md5; reuse the
-            // existing duplicate-overwrite flow.
+            // Register the whole batch: the backend rebuilds the directory tree
+            // from each item's relative_path, then runs the regular pipeline.
+            // Batch rejections (depth / dup folder / quota / count) are toasted
+            // by the interceptor via api_errors.<code> (AC-32).
             try {
-                const registeredFiles = await addFilesApi(activeSpace.id, {
-                    file_path: uploadedPaths,
-                    parent_id: Number(folder.id),
+                const registeredFiles = await uploadFolderApi(activeSpace.id, {
+                    parent_id: currentFolderId ? Number(currentFolderId) : null,
+                    items: uploadedItems,
                 });
                 const dupes = extractDuplicateFileEntries(registeredFiles);
                 if (dupes.length > 0) {
                     setDuplicateFiles(dupes);
                 }
             } catch {
-                // Swallow — the refresh below will reflect whatever made it in.
+                // Whole batch rejected before any row was created; the toast
+                // already fired in the interceptor. Nothing to refresh.
+                return;
             }
 
+            dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             await loadFiles(currentPage);
             } finally {
                 folderUploadInFlightRef.current = false;
             }
         },
-        [activeSpace, currentFolderId, currentPage, loadFiles, localize, setFiles, setTotal, showToast],
+        [activeSpace, currentFolderId, currentPage, loadFiles, localize, showToast],
     );
 
     // ─── Folder creation ─────────────────────────────────────────────────
