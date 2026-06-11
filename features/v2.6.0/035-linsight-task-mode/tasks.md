@@ -1,6 +1,6 @@
-# Tasks: 灵思任务模式 · deepagents 适配层（F034）— 多人并行开发拆分
+# Tasks: 灵思任务模式 · deepagents 适配层（F035）— 多人并行开发拆分
 
-**关联**: [design.md](./design.md) · [技术方案](../../技术方案-灵思%20deepagents%20适配层设计.md)（§1–§10） · [差异文档](./差异-现方案-vs-技术方案.md) · [PRD](../../任务模式!灵思%202.0/任务模式!灵思%202.0.md)
+**关联**: [spec.md](./spec.md)（AC 收口） · [design.md](./design.md)（设计真相，§1–§9 终稿修订已内联） · [契约约定](./依赖与契约约定.md) · [PRD](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/2.6%20灵思%20Linsight%20迁移%20deepagents%20框架%20PRD.md)（需求真相）
 **版本**: v2.6.0
 
 ---
@@ -9,7 +9,8 @@
 
 | 步骤 | 状态 | 备注 |
 |------|------|------|
-| design.md | ✅ 已评审 | 接手第一入口 |
+| spec.md | ✅ 已评审 | 薄 spec：AC-1..8 收口，需求真相在 docs/PRD 的 PRD |
+| design.md | ✅ 已评审 | 接手第一入口（原《技术方案》改名）；2026-06-11 评审问题已修复（task_id 约定/park 终止/resume 优先级/残留清理） |
 | 契约冻结（Wave 0） | 🔲 未开始 | **阻塞所有并行 Track，必须最先完成** |
 | 实现 | 🔲 未开始 | 0 / 9 Track |
 
@@ -63,7 +64,7 @@
 
 ### C5 · checkpointer / 续跑契约（B 产出 → A/端点 消费）
 - **约定**：`thread_id = session_version_id`；Redis checkpointer（`langgraph-checkpoint-redis`）连接复用 `RedisManager`。
-- **续跑入队**：`/workbench/user-input` 成功后 `rpush` queue 的 **payload 格式** + worker 拾取时「续跑 vs 新任务」判定字段 + `Command(resume=...)` 取值来源（最近一次 user_input 事件）。
+- **续跑入队**：`/workbench/user-input` 成功后 **`lpush` 队头**（resume 优先于新任务）的 **payload 格式** + worker 拾取时「续跑 vs 新任务」判定字段 + 非终态校验 + `Command(resume=...)` 取值来源（最近一次 user_input 事件）。
 - **交付**：B 给出 checkpointer 装配函数签名 + queue payload 格式；A 用 `InMemorySaver` 先行，集成换 Redis。
 
 ### C6 · 菜单权限 + 路由守卫（F 产出 → H/I 消费）
@@ -72,7 +73,7 @@
 
 ### C7 · 数据与错误码（D/Lead 产出 → 全体读）
 - `linsight_skill` 表 DDL + Alembic revision；错误码段 `110` 段 11050–11069（`common/errcode/linsight.py`）。
-- **release-contract 登记 F034**：领域对象 `LinsightSkill`、错误码段、新表（**Wave 0 必须先登记**，表1规则）。
+- **release-contract 登记 F035**：领域对象 `LinsightSkill`、错误码段、新表（**Wave 0 必须先登记**，表1规则）。
 
 ---
 
@@ -153,7 +154,7 @@ flowchart TD
 
 ## 5. 分支与协作约定
 
-- **基线分支**：`feat/2.6.0/034-linsight-task-mode`（docs + 契约先落此分支）。
+- **基线分支**：`feat/2.6.0/035-linsight-task-mode`（docs + 契约先落此分支）。
 - **Track 分支**：`feat/2.6.0/034-<track>`（如 `034-trackA-kernel`），PR 合入基线；基线每日/每 Wave 滚动集成。
 - **代码 ownership（防冲突，按目录切）**：
 
@@ -176,13 +177,13 @@ flowchart TD
 
 ## 6. 各 Track 任务清单
 
-> 格式：`[ ] T<Track><NN>` · **文件** · **逻辑** · **依赖** · **DoD**。设计论证见 design §X / 技术方案 §Y，不复制。
+> 格式：`[ ] T<Track><NN>` · **文件** · **逻辑** · **依赖** · **DoD**。设计论证见 design.md §X，不复制。
 
 ### Track 0 · 地基（Lead）
 - [ ] **T0-1** 引入依赖锁版：`deepagents>=0.6.3`、`langgraph>=1.0`、`langgraph-checkpoint-redis`。**DoD**：`uv sync --frozen` 通过。
 - [ ] **T0-2** POC spike（§7 五项），产出结论 + astream/MessageEventType **共享 fixtures**。**DoD**：5 项有红/绿结论，fixtures 入库。
 - [ ] **T0-3** `linsight_skill` 表 + Alembic revision（带 `tenant_id`，DM8 复核）。**DoD**：`alembic upgrade head` 通过。
-- [ ] **T0-4** release-contract 登记 F034（领域对象/错误码段/表）。**DoD**：表1/表3/已分配编码更新。
+- [ ] **T0-4** release-contract 登记 F035（领域对象/错误码段/表）。**DoD**：表1/表3/已分配编码更新。
 - [ ] **T0-5** 冻结 C1–C7 契约文档（本 tasks §1 充实为可编程签名）。**DoD**：各 owner 签字。
 
 ### Track A · 内核与事件流
@@ -201,7 +202,7 @@ flowchart TD
 - [ ] **TC-1**(测试) `WorkspaceBackend` 单测：write 写穿、read 分页/懒加载、ls 以 MinIO 为准、多租户隔离。**覆盖** AC-6。
 - [ ] **TC-2** `workspace_backend.py` 实现（MinIO 真相 + file_dir 写穿缓存）+ `FakeWorkspaceBackend`（**Wave 0 即交付给 A/B**）。**依赖** C2。
 - [ ] **TC-3** 附件摄入：解析 markdown→MinIO，物化指针块 `<uploaded_files>`，含图文档（base64 图片）。**依赖** TC-2。
-- [ ] **TC-4** 代码产出捕获：E2B copy-in（小 push / 大 presigned）+ copy-out（全树扫描→按 `SIZE_INLINE` 分流→backend）+ `run` 结果枚举新文件 + `output/`vs`scratch/` 分类。**依赖** TC-2。**DoD**：脚本产出可被 `ls`/`read` 看见、产物 promote MinIO。
+- [ ] **TC-4** 代码产出捕获：E2B copy-in（≤阈值自动 delta push + 大文件经 code 工具入参 `required_files` 声明、worker 中转流式写入；**沙箱不可达 MinIO，禁用 presigned 自取**）+ copy-out（全树扫描→按 `SIZE_INLINE` 分流→backend）+ `run` 结果枚举新文件 + FileNotFoundError 兜底提示 + `output/`vs`scratch/` 分类。**依赖** TC-2。**DoD**：脚本产出可被 `ls`/`read` 看见、产物 promote MinIO；声明大文件可在沙箱内读到。
 
 ### Track D · Skill 体系
 - [ ] **TD-1** `models/linsight_skill.py` + DAO（依赖 T0-3）。
@@ -247,7 +248,7 @@ flowchart TD
 | P2 | `subgraphs=True` 子图事件冒泡父 astream + 并行 namespace 不串流 | A | 子任务步骤流降级 |
 | P3 | Redis checkpointer park-and-release 隔任意时长 + 跨重启续跑保真（R3） | B | HITL 续跑降级 FAILED+retry |
 | P4 | 中文模型 `call_reason` 填写遵从率 + Skill progressive disclosure 命中率≥95%（R1，基线模型） | A/D | 步骤可读性/技能命中降级 |
-| P5 | presigned URL 大文件 seed 的脚本遵从率 | C | 大输入改全量 push |
+| P5 | 中文模型对 code 工具 `required_files` 入参的声明遵从率 + FileNotFoundError 提示后补声明的修复成功率 | C/A | 大文件改无条件全量 push（牺牲 copy-in 耗时） |
 
 ---
 

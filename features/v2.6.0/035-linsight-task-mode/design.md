@@ -1,9 +1,10 @@
-# 技术方案：灵思 Linsight 迁移 deepagents 适配层设计
+# Design: 灵思任务模式 · Linsight 迁移 deepagents 适配层（F035）
 
-> 版本：v2.6.0 · 状态：Draft · Owner：lilu · 日期：2026-06-03
-> 配套文档：《灵思 Linsight 迁移 deepagents 框架 PRD》。本文承接 PRD 第四章的产品需求，给出工程实现细节、组件契约与代码锚点。
+> 版本：v2.6.0 · 状态：✅ 已评审（2026-06-11） · Owner：lilu / GuoQing Zhang
+> 关联：[PRD](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/2.6%20灵思%20Linsight%20迁移%20deepagents%20框架%20PRD.md)（需求真相；文中「PRD §x」即指它） · [spec.md](./spec.md)（AC 收口） · [tasks.md](./tasks.md) · [依赖与契约约定](./依赖与契约约定.md) · [release-contract](../release-contract.md)
+> 本文承接 PRD 第四章的产品需求，给出工程实现细节、组件契约与代码锚点。原名《技术方案：灵思 Linsight 迁移 deepagents 适配层设计》，其他文档中「技术方案 §x」的引用即指本文 §x。
 >
-> 🔄 **v2.6 终稿修订（按《差异-现方案-vs-技术方案》对齐）**：HITL 改 **park-and-release**（§4，取代原 hold-slot 轮询）；知识库**定方案 B**（§5.2）；**补 §2.7 模型选择**（PRD §4.1.10）；Skill 磁盘**加多节点部署约束**（§7.1）；**工作区/文件模型重构**为 **MinIO 真相 + `file_dir` 写穿缓存 + 自定义 `WorkspaceBackend` 收口**（§5.3/§9，取代原"路径 A 本地 file_dir + 自研文件工具 + `state.files`"）。任务模式文件读写一律走 **deepagents 原生工具**，自研 `add_text_to_file/replace_file_lines/read_text_file` 下线。
+> 🔄 **v2.6 终稿修订（已内联）**：HITL 改 **park-and-release**（§4，取代原 hold-slot 轮询）；知识库**定方案 B**（§5.2）；**补 §2.7 模型选择**（PRD §4.1.10）；Skill 磁盘**加多节点部署约束**（§7.1）；**工作区/文件模型重构**为 **MinIO 真相 + `file_dir` 写穿缓存 + 自定义 `WorkspaceBackend` 收口**（§5.3/§9，取代原"路径 A 本地 file_dir + 自研文件工具 + `state.files`"）。任务模式文件读写一律走 **deepagents 原生工具**，自研 `add_text_to_file/replace_file_lines/read_text_file` 下线。
 
 ---
 
@@ -205,7 +206,7 @@ async for mode, chunk in agent.astream(input, config, stream_mode=["updates","me
 | 2 | 规划节点产出任务清单（generate_task 阶段 / planner 节点 update） | updates | `{tasks:[task.model_dump()]}` | `GenerateSubTask(subtask=[...])` →（`_handle_generate_subtask` line422 → `_save_task_info` line305） | `task_generate` |
 | 3 | task 节点状态切换（IN_PROGRESS 等中间态） | updates/values | `update_execution_task_status` 回填 task_data | （ExecStep/TaskStart 副带）`update_execution_task_status` | `task_status_update` |
 | 4 | `__interrupt__` 出现 + interrupt payload `step_type=call_user_input` | updates | `{task_id, call_reason, params, step_type:"call_user_input"}` | `NeedUserInput` | `user_input` |
-| 5 | `Command(resume=...)` 续跑、`USER_INPUT_COMPLETED` 状态达成 | （续跑侧）| `task_model.model_dump()` | （`_wait_for_user_input` line520 推送） | `user_input_completed` |
+| 5 | `Command(resume=...)` 续跑、`USER_INPUT_COMPLETED` 状态达成 | （续跑侧）| `task_model.model_dump()` | （`/workbench/user-input` 端点 `set_user_input` 后推送，park-and-release §4.6） | `user_input_completed` |
 | 6 | tool_call 起 / ToolMessage 止（同一 `call_id` 两帧） | updates+messages | `{call_id, call_reason, name, params, output, step_type, status:start/end, extra_info}` | `ExecStep`（start/end 各一帧，归一层按 call_id 合并） | `task_execute_step` |
 | 7 | task 节点完成（update 含该 task 终值） | updates+values | `{task_id, status, answer, data}` | `TaskEnd(status,answer,data)` | `task_end` |
 | 8 | `astream` 抛异常 / `GraphRecursionError` / 工具致命错 | （捕获）| `{error: msg}` | （无对应 BaseEvent，归一层直发） | `error_message` |
@@ -221,9 +222,21 @@ async for mode, chunk in agent.astream(input, config, stream_mode=["updates","me
 > - `ui_card`：从 `values` chunk 的 `state.ui` 数组 diff 提取新增 `UIMessage`（或追加 `stream_mode="custom"` 实时取 `push_ui_message` 推送），`data={name, props, metadata}`；前端按 `name` 查自建卡片注册表渲染，未注册走文本降级（对齐 PRD §4.3.2 genUI 行 / FR-3.14）。⚠️ HITL `interrupt()` halt 期 `push_ui_message` 的 pending writes 不持久化（langgraph 1.2.1 缺陷），该场景卡片改从 `AIMessage.tool_calls.args` 渲染。
 > - `web_search` / `knowledge`：复用 `tool` 帧，`extra_info` 可承载解析后的结构化结果（搜索条目 / 命中摘要），供 PRD §4.3.2 文案映射的「可点击溯源」（P2）。`knowledge` 仅 §5.2 方案 B 下产生。
 
+#### 3.3.1 todo → ExecuteTask 的 `task_id` 稳定性约定（映射表行 1/2/3/7 的前提）
+
+deepagents 的 todos 只是 state 里的 `[{content, status}]` 列表——**没有稳定 id，也没有「每个 todo 一个图节点」**（执行是同一个 agent loop）。而 `task_generate/task_start/task_end` 协议与步骤归属都需要稳定 `task_id`。约定：
+
+1. **id 生成**：首次 `write_todos` 时，归一层按序为每项生成 `task_id = md5(svid + ":" + content)[:8]`，写入 `LinsightExecuteTask` 投影并在 `ctx` 维护 `content → task_id` 映射。
+2. **更新对齐（三级 diff）**：后续 `write_todos` 把新列表对齐旧投影——① content 精确匹配（沿用 task_id，只更新 status）→ ② 序号对齐兜底（文案被改写时按位置继承 id，更新 content）→ ③ 均不中者视为新增（生成新 id，增量 `task_generate`）；旧列表中消失的项置 `TERMINATED` 不删行。
+3. **prompt 配合**：system_prompt 约束模型「更新 todo 只翻 status、不改写文案」，使 ① 覆盖绝大多数更新，②③ 仅兜底。
+4. **步骤归属**：`ExecStep.task_id` 取**当前 `in_progress` 的 todo** 的 task_id（deepagents TodoList 语义同一时刻仅一项 in_progress）；无 in_progress（规划期/收尾期）时归属 session 级伪任务（`task_id = svid`），前端渲染到全局流。
+5. **状态映射**：todo `pending/in_progress/completed` → `task_status_update`/`task_start`/`task_end`；失败态为适配层推断（该 todo 关联工具步骤持续 error，P2）。
+
+> 该约定是契约 C1 fixtures 的生成规则之一（A 产出、H 消费），变更须走契约变更评审。
+
 ### 3.4 顺序 / 幂等 / 双写 / TTL
 
-- **顺序（串行）**：单一 `async for` 串行驱动 `_handle_event`→`push_message`（RPUSH，key `linsight_tasks:{session_version_id}:messages`），前端 LPOP 取得严格 FIFO。**禁止**在归一层或 handler 内 `asyncio.create_task` 并发 push（HITL 的 `_wait_for_user_input` line460 是受控例外：它 fire-and-forget 等待，但其 push 仍走同一 manager 的串行 RPUSH，靠 Redis 原子性保序）。
+- **顺序（串行）**：单一 `async for` 串行驱动 `_handle_event`→`push_message`（RPUSH，key `linsight_tasks:{session_version_id}:messages`），前端 LPOP 取得严格 FIFO。**禁止**在归一层或 handler 内 `asyncio.create_task` 并发 push。park-and-release 下 HITL **无原地等待协程**（§4.6）：`user_input` 由归一层在 interrupt 时推送、`user_input_completed` 由 `/workbench/user-input` 端点推送，两者同走 manager 的串行 RPUSH，靠 Redis 原子性保序。
 - **幂等（call_id 主键合并）**：tool_call 产生「开始」「结束」两帧 `ExecStep`，以 `call_id`（`event.py:15`）为幂等键。归一层 `ctx` 维护 `call_id→开始帧` 表：收到 end 帧时合并 params/output/status，避免前端渲染两张卡片。既有 `_handle_exec_step`（line462）按 `call_id` `add_execution_task_step` 时亦做覆盖更新，二次保险。
 - **双写**：实体经 `set/update` 双写 MySQL+Redis，`@retry_async(3,1s)`（`state_message_manager.py:56-58` 常量）。message 流仅 Redis（RPUSH），不双写 MySQL——它是瞬态 UI 流，状态真值在 task 实体。
 - **TTL**：`DEFAULT_EXPIRATION=3600`（line56），message key 1 小时过期。超时即视为会话失活（见边界异常表）。
@@ -273,7 +286,7 @@ flowchart TD
 | `astream` 抛错 | 工具致命错 / `GraphRecursionError`（max_steps=200 超限）/ 模型异常 | try 捕获 → `error_message`(msg) + `task_terminated` 成对 → `close(1000)`；`_execute_agent_tasks` line399 既有 except 链复用 | line396-401 |
 | 断连重连 | 前端 WS 断开重连 | message 流在 Redis 未被消费部分仍可 LPOP（TTL 内）；状态真值在 MySQL，重连后拉 task 实体重建 UI | Redis+MySQL |
 | TTL 过期 | session 静默 >3600s | message key 失效，视为会话失活；重连只能从 MySQL task 实体恢复终态快照，不恢复中间步骤流 | DEFAULT_EXPIRATION line56 |
-| interrupt 交织 | HITL 等待期间又来其他 chunk | `_wait_for_user_input`（line460）fire-and-forget 等待，主 `astream` 在 interrupt 处挂起；resume 前不应有该 task 新 ExecStep，归一层丢弃越界帧 | line473-528 |
+| interrupt 交织 | interrupt 后仍有尾部 chunk 到达 | park-and-release 下 `__interrupt__` 即结束本段 `astream`、任务驻留（§4.6）；resume 前该任务不会有新 chunk，归一层丢弃 interrupt 帧之后到达的尾部越界帧 | `_normalize_chunk` ctx |
 | 超长截断 | tool output / answer 超长 | ExecStep.output 截断并标记 `extra_info.truncated`；final_result 大产物走 E2B→MinIO→URL，不进 message 体 | 归一层 + 沙箱 |
 | 子智能体子步骤流归并 | `subgraphs=True` 后 subagent 子图事件携 `namespace`/`checkpoint_ns` 前缀冒泡父 `astream` | 归一层按 `namespace` 前缀识别子图来源，将子图 ExecStep 归并到父任务下、带父级 `call_id` 层级标记（`step_type=subagent` 的嵌套子步骤），**前端按层级渲染嵌套步骤卡**（对齐 PRD §4.3.2 子任务「内含子步骤流」），call_id 全局唯一。无法归并的子事件降级为独立 `unknown` 步骤并告警。**POC 必验**：子图事件是否真冒泡父流、并行子 agent 的 `namespace` 交错不串流 | `_normalize_chunk` ctx |
 | 重复终态 | 异常路径 + 正常收尾双触 task_terminated | `ctx.terminated` 标志位：首个终态置位，后续终态 push 被丢弃，保证 task_terminated 仅一帧且为末帧 | `_normalize_chunk` / line189 |
@@ -356,7 +369,7 @@ async for chunk in agent.astream(Command(resume=user_input), config,
 
 `POST /workbench/user-input`（`endpoints/linsight.py:400`），鉴权 `get_login_user`（执行端，非管理端）。落点 `state_message_manager.set_user_input(task_id, user_input, files)`（line432）：写 MySQL `history` 追加 `UserInputEventSchema(step_type="call_user_input")` + 置状态 `USER_INPUT_COMPLETED` + push `user_input_completed`。
 
-**park-and-release 改动**：`set_user_input` 成功后**追加一步「重新入队」**（`rpush` linsight queue），由空闲 Worker 拾取续跑；原 `_wait_for_input_completion(line530)` 1s 原地轮询**下线**（不再有进程在等待期占用并发）。端点其余逻辑零改动。
+**park-and-release 改动**：`set_user_input` 成功后**追加一步「重新入队」**——**`lpush` 队头**（resume 任务优先于排队中的新任务，保证「回答后任务续跑」的体感，PRD §4.4.4；同 svid 重复入队幂等），由空闲 Worker 拾取续跑；原 `_wait_for_input_completion(line530)` 1s 原地轮询**下线**（不再有进程在等待期占用并发）。端点其余逻辑零改动。
 
 ### 4.6 park-and-release：等待不占并发 + 跨 Worker/重启续跑
 
@@ -365,13 +378,14 @@ async for chunk in agent.astream(Command(resume=user_input), config,
 机制（沿用 worker.py，依赖 §2.3 Redis checkpointer）：
 1. `astream` 命中 `__interrupt__` → 归一 `NeedUserInput` + push `user_input` + 状态 `WAITING_FOR_USER_INPUT`。
 2. **释放并发**：Worker 释放该任务 semaphore + `release_task_ownership`，**退出当前任务协程**（不再起 `_wait_for_user_input`/`_wait_for_input_completion` 轮询）。thread state 已在 checkpointer（`thread_id=session_version_id`），任务进入「驻留」。
-3. 用户经 `POST /workbench/user-input` 回答 → `set_user_input` 双写 → **`rpush` 重新入队**。
+3. 用户经 `POST /workbench/user-input` 回答 → `set_user_input` 双写 → **`lpush` 队头重新入队**（resume 优先于新任务，不让用户答完追问再排长队）。
 4. 任一空闲 Worker 从 queue 拾取 → 同 `thread_id` 从 checkpointer 重建 graph → `astream(Command(resume=user_input), config)` 续跑；后续 chunk 经既有 `_normalize_chunk → _handle_event`。
 
 要点：
 - **正常等待与崩溃恢复路径统一**：都靠「重新入队 → 异地从 checkpointer 复活」，不要求同一存活进程；数小时等待**零并发占用**（避免默认 `max_concurrency=5` 被等待任务吃满）。
 - `LinsightStateMessageManager`（MySQL+Redis 双写）是**前端展示流权威源**，checkpointer 是**图续跑权威源**，两源职责分离。
 - **幂等**：`set_user_input` 幂等覆盖 `history[-1]` + checkpointer 写串行 + Worker 拾取时校验任务非终态再续跑；重复回答/重复入队仅首次生效。`_normalize_chunk` 按 `call_id` 去重，恢复路径不重复渲染。
+- **park 期间的用户终止**：驻留期没有任何进程在跑该任务，「终止」由**终止端点直接收口**——置 session/task 终态 + push `task_terminated`（末帧）+ 删除该 thread 的 checkpoint（§2.3 容量治理的终态清理分支）；**不经 worker**。若用户已回答、任务正排队等续跑时终止 → worker 拾取时按「非终态校验」直接丢弃该队列项（既有幂等条款），不复活已终止任务。
 - ⚠️ 保真边界（R3）：langgraph 1.2.1 实测 interrupt halt 期 pending writes 不落 thread state，POC 须实测 park-and-release「重新入队 + 异地续跑」保真；个别不可复现场景降级 `FAILED` 走 `retry_num`。
 
 ### 4.7 HITL 边界异常表
@@ -384,6 +398,8 @@ async for chunk in agent.astream(Command(resume=user_input), config,
 | 同一 task 重复 POST user-input | `set_user_input` 幂等覆盖 `history[-1]`；状态已是 `USER_INPUT_COMPLETED` 时二次提交无副作用 |
 | Worker 崩在 WAITING 态 | 从 Redis checkpoint 原生恢复到中断点续跑（§4.6）；个别不可复现场景降级 FAILED+retry |
 | resume 后 agent 立即再 interrupt | 正常多轮 HITL，状态机回到 WAITING_FOR_USER_INPUT，循环直至无 `__interrupt__` |
+| park（驻留）期间用户点「终止」 | 无进程在跑 → 终止端点直接置终态 + push `task_terminated` + 删 thread checkpoint；不经 worker（§4.6） |
+| 已终止任务残留在续跑队列 | worker 拾取时校验任务非终态，终态项直接丢弃、释放名额，不复活 |
 
 ---
 
@@ -877,7 +893,7 @@ flowchart LR
 
 - **风险消解**：原方案曾把「退出后日常对话续聊仍要持有指针块 + 文件读取能力」列为实现期重点验证项——该诉求已被产品决策（§9.3.8：仅会话级记忆、日常对话不接管文件）**取消**，对应改造与风险一并消解。`file_dir` 生命周期回归 per-task，§9.4 锚点 #5 保持「不改」。
 - **token 恒定**：offload-first 下，任务内附件不增量进入 prompt，仅在 `read_file` 时入上下文，多步骤重发成本恒定。
-- **容量管理**：单次任务附件累积过多时按 `session_version.files` 总字节阈值做上限管理（超限提示用户清理或转知识库），避免 state / MinIO 无界增长。
+- **容量管理**：单次任务附件累积过多时按 `session_version.files` 总字节阈值做上限管理（超限提示用户清理或转知识库），避免 cache / MinIO 无界增长。
 - **跨会话**：新建会话不继承上一会话文件；跨会话复用走知识库（持久向量库），与附件（会话级）形成分工。
 
 #### 9.3.8 退出任务模式后的会话级上下文记忆（决策：仅记忆 + 显式开关）
@@ -913,17 +929,29 @@ flowchart LR
 
 #### 9.3.9 代码产出文件（E2B/本地沙箱）
 
-沙箱是独立 FS（E2B 远程容器 / 本地 cwd），脚本写文件**不调 `write_file` 工具、目录不确定**，故经「全树扫描 + 经 `WorkspaceBackend` 摄入」捕获，不 hook 工具名：
+沙箱是独立 FS（E2B 远程容器 / 本地 cwd），脚本写文件**不调 `write_file` 工具、目录不确定**，故经「全树扫描 + 经 `WorkspaceBackend` 摄入」捕获，不 hook 工具名。
+
+**网络前提（约束 copy-in 设计）**：
+
+```
+worker → MinIO    ✅ 内网可达          worker → E2B 沙箱  ✅ 经 E2B 云 API（现状 files.write/read 即此路）
+沙箱   → MinIO    ❌ 不可达（E2B 在云上, 内网 MinIO 沙箱内访问不到）
+```
+
+⇒ 一切文件进出沙箱**必须 worker 中转**（MinIO→worker→E2B API→沙箱，及反向）；「沙箱自取 presigned URL」不成立。
 
 ```python
-SIZE_INLINE = 5MB   # 阈值: 决定走 cache 还是直传 MinIO
+SIZE_INLINE   = 5MB   # 阈值: 决定走 cache 还是直传 MinIO
+SIZE_AUTOPUSH = 5MB   # 阈值: ≤ 它自动推沙箱(模型零负担), > 它须模型显式声明
 
-# 跑代码前: 工作区 → 沙箱 (copy-in, 按需, 避免推大文件)
-on before_code_run():
+# 跑代码前: 工作区 → 沙箱 (copy-in, worker 中转)
+on before_code_run(required_files: list[str]):       # required_files = code 工具新增入参
     cache.materialize(workspace.working_set from MinIO)
     for f in cache.list():
-        if f.size <= SIZE_INLINE: sandbox.put(f.path, f.bytes)
-        else:                     sandbox.inject_presigned_url(f)   # 大文件给 URL 让脚本按需 GET
+        if f.size <= SIZE_AUTOPUSH and hash_changed(f):
+            sandbox.files.write(f.path, f.bytes)      # 小文件自动 delta push
+    for p in required_files:                          # 大文件: 模型在 code 工具入参中声明
+        if hash_changed(p): stream(backend.read(p) → sandbox.files.write(p))   # hash 命中 no-op
 
 # 跑代码后: 扫沙箱产出 → 按大小/类型分流摄入 (不靠 write 工具)
 on after_code_run():
@@ -938,7 +966,7 @@ on after_code_run():
 ```
 
 要点：
-- **入沙箱**：小文件 push、大文件给 presigned URL 让脚本自取 → 不把大输入塞进 copy-in（system_prompt 须教模型「大文件用给定 URL 读」，POC 验遵从率）。
+- **入沙箱（required_files 机制）**：≤`SIZE_AUTOPUSH` 自动 delta push（模型零负担）；大文件由模型在 **`bisheng_code_interpreter` 工具入参 `required_files: list[str]`** 中声明，工具实现 worker 中转流式写入沙箱（hash 命中 no-op，`keep_sandbox` 多次 run 重复声明零成本）。**不加独立 load 工具**——「带着这些文件跑这段代码」一步原子，避免两步时序错；schema 是 BiSheng 自有 `CodeInterpreterToolArguments`（`tool.py:47`），非 deepagents 内置工具（PRD N4 不用 `CodeInterpreterMiddleware`），加参数无框架约束。**兜底**：脚本因未声明报 FileNotFoundError → run 结果附「该文件需在 required_files 中声明」提示，模型补声明重试。system_prompt + 工具 description 写明「超阈值文件须声明」。本地 executor（cwd=file_dir 天然可见）不受影响，按 executor 类型分支。
 - **出沙箱**：全树扫描捕获（脚本不调 write 也能抓）；小文本走 cache+写穿，大/二进制**沙箱直传 MinIO + 指针**，绝不过 cache/state/上下文。
 - **告知模型**：`run` 结果**枚举本次新增/改动文件**（path+size），否则 agent 不知脚本产出了啥（现状 E2B 仅回图片 URL，须补全）。
 - **分类**：路径前缀 `output/` vs `scratch/`，不依赖 `file_name∈answer`。
