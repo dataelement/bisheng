@@ -583,6 +583,27 @@ class InAppMessageForwardingConf(BaseModel):
     # Future: shougang / longhua etc. as parallel fields
 
 
+class DatabasePoolConf(BaseModel):
+    """SQLAlchemy connection-pool configuration for the database engine.
+
+    Defaults mirror the values previously hardcoded in
+    ``DatabaseConnectionManager._get_default_engine_config`` so omitting the
+    ``database_pool`` section in config.yaml changes nothing. Tune these per
+    deployment so that ``num_db_processes * (pool_size + max_overflow)`` stays
+    under the DB server's max-session cap.
+    """
+
+    pool_size: int = Field(default=100, description="Persistent connections kept per engine/process")
+    max_overflow: int = Field(default=20, description="Extra connections allowed beyond pool_size under load")
+    pool_timeout: int = Field(default=30, description="Seconds to wait for a free connection before timing out")
+    pool_recycle: int = Field(default=3600, description="Recycle a connection after this many seconds")
+    pool_pre_ping: bool = Field(default=True, description="Test connections with a ping before use")
+
+    def as_engine_kwargs(self) -> dict:
+        """Return the kwargs consumed by SQLAlchemy ``create_engine``."""
+        return self.model_dump()
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -646,6 +667,7 @@ class Settings(BaseModel):
     reconcile: ReconcileConf = ReconcileConf()
     llm: LLMConf = LLMConf()
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
+    database_pool: DatabasePoolConf = DatabasePoolConf()
 
     @field_validator("database_url")
     @classmethod

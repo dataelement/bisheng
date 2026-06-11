@@ -6,7 +6,7 @@ from sqlalchemy import Integer
 from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database import get_sync_db_session, get_async_db_session, async_execute_autocommit
 from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.models.user_group import UserGroupDao
 
@@ -313,9 +313,10 @@ class MessageSessionDao(MessageSessionBase):
         statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
             update_time=datetime.now()
         )
-        async with get_async_db_session() as session:
-            await session.exec(statement)
-            await session.commit()
+        # Run in AUTOCOMMIT: the row lock on this hot conversation row is
+        # released the instant the UPDATE executes, so a cancelled request
+        # cannot leak it (idle-in-transaction) in a UPDATE -> COMMIT window.
+        await async_execute_autocommit(statement)
 
     @classmethod
     def update_session_name_sync(cls, chat_id: str, name: str):

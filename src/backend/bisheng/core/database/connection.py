@@ -99,6 +99,11 @@ class DatabaseConnectionManager:
         if self._engine is None:
             config = self._get_default_engine_config()
             config.update(self.engine_kwargs)
+            # StaticPool (SQLite) rejects QueuePool sizing kwargs; drop them so
+            # an externally-supplied pool config doesn't break SQLite engines.
+            if config.get('poolclass') is StaticPool:
+                for key in ('pool_size', 'max_overflow', 'pool_timeout'):
+                    config.pop(key, None)
 
             sync_url = self.database_url
             if "dm+dmPython" in sync_url:
@@ -144,9 +149,14 @@ class DatabaseConnectionManager:
         with session_maker() as session:
             try:
                 yield session
-            except Exception as e:
+            except BaseException as e:
+                # Catch BaseException (not just Exception) so non-Exception
+                # interruptions (KeyboardInterrupt, and CancelledError if ever
+                # driven from async) still roll back rather than leaving an open
+                # transaction holding row locks.
                 session.rollback()
-                logger.error(f"Database session rolled back due to error: {e}")
+                if isinstance(e, Exception):
+                    logger.error(f"Database session rolled back due to error: {e}")
                 raise
             finally:
                 session.close()
@@ -166,12 +176,31 @@ class DatabaseConnectionManager:
         async with session_maker() as session:
             try:
                 yield session
-            except Exception as e:
+            except BaseException as e:
+                # CancelledError is a BaseException (Py3.8+). Catching only
+                # Exception let a cancelled request skip rollback, leaving an
+                # open transaction that held a row lock (idle-in-transaction)
+                # and stalled the whole connection pool. Roll back on ANY
+                # exceptional exit, including cancellation.
                 await session.rollback()
-                logger.error(f"Database session rolled back due to error: {e}")
+                if isinstance(e, Exception):
+                    logger.error(f"Database session rolled back due to error: {e}")
                 raise
             finally:
                 await session.close()
+
+    async def async_execute_autocommit(self, statement) -> None:
+        """Execute a single write statement in AUTOCOMMIT mode.
+
+        The statement is committed server-side in the same round-trip, so any
+        row lock it takes is released the instant it executes -- there is no
+        open-transaction window between the write and a separate COMMIT that a
+        cancelled request could leak (idle-in-transaction). Use for hot
+        single-row updates such as ``message_session.update_time``.
+        """
+        engine = self.async_engine.execution_options(isolation_level="AUTOCOMMIT")
+        async with engine.connect() as conn:
+            await conn.execute(statement)
 
     async def create_db_and_tables(self) -> None:
         """Creation of databases and tables"""

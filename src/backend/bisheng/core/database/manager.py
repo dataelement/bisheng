@@ -124,7 +124,10 @@ async def get_database_connection() -> DatabaseConnectionManager:
         logger.warning(f"Database context not found, registering default instance")
         try:
             from bisheng.common.services.config_service import settings
-            app_context.register_context(DatabaseManager(settings.database_url))
+            app_context.register_context(DatabaseManager(
+                settings.database_url,
+                engine_config=settings.database_pool.as_engine_kwargs(),
+            ))
             return await app_context.async_get_instance(DatabaseManager.name)
         except Exception as e:
             logger.error(f"Failed to register and initialize database context: {e}")
@@ -147,7 +150,10 @@ def sync_get_database_connection() -> DatabaseConnectionManager:
         logger.warning(f"Database context not found, registering default instance")
         try:
             from bisheng.common.services.config_service import settings
-            app_context.register_context(DatabaseManager(settings.database_url))
+            app_context.register_context(DatabaseManager(
+                settings.database_url,
+                engine_config=settings.database_pool.as_engine_kwargs(),
+            ))
             return app_context.sync_get_instance(DatabaseManager.name)
         except Exception as e:
             logger.error(f"Failed to register and initialize database context: {e}")
@@ -184,3 +190,15 @@ def get_sync_db_session():
     db_manager = sync_get_database_connection()
     with db_manager.create_session() as session:
         yield session
+
+
+async def async_execute_autocommit(statement) -> None:
+    """Execute a single write statement in AUTOCOMMIT mode on the global engine.
+
+    Thin wrapper over ``DatabaseConnectionManager.async_execute_autocommit``.
+    Use for hot single-row updates (e.g. ``message_session.update_time``) so a
+    cancelled request cannot leak a row lock in the window between the UPDATE
+    and a separate COMMIT.
+    """
+    db_manager = await get_database_connection()
+    await db_manager.async_execute_autocommit(statement)
