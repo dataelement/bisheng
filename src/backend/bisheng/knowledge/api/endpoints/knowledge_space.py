@@ -24,6 +24,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FileRenameReq,
     FolderCreateReq,
     FolderRenameReq,
+    FolderUploadReq,
     KnowledgeSpaceCreateReq,
     KnowledgeSpaceUpdateReq,
     RemoveSpaceMemberRequest,
@@ -396,6 +397,21 @@ async def add_folder(
         parent_id=req.parent_id,
     )
     return resp_200(folder)
+
+
+@router.post("/{space_id}/folders/upload")
+async def upload_folder(
+    space_id: int,
+    req: FolderUploadReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """F034 §5.5: register a whole client-side folder (nested) in one batch."""
+    files = await svc.upload_folder_items(
+        knowledge_id=space_id,
+        items=req.items,
+        parent_id=req.parent_id,
+    )
+    return resp_200(files)
 
 
 @router.put("/{space_id}/folders/{folder_id}")

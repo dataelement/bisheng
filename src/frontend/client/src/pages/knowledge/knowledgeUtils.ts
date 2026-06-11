@@ -27,6 +27,16 @@ export function isKnowledgeApprovalRejected(file: KnowledgeFile): boolean {
     return file.approvalStatus === "rejected" || file.approvalStatus === "sensitive_rejected";
 }
 
+/**
+ * True while a file body is still being uploaded (frontend placeholder row)
+ * or a folder row is a not-yet-committed inline-create placeholder. These
+ * rows have no stable backend identity yet, so move (drag / menu / batch)
+ * must be disabled for them.
+ */
+export function isKnowledgeItemUploading(file: KnowledgeFile): boolean {
+    return file.status === FileStatus.UPLOADING || !!file.isCreating;
+}
+
 export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
     if (file.approvalStatus) {
         return file.approvalStatus === "pending_review";
@@ -211,10 +221,17 @@ export function getRootFolderName(relativePath: string): string {
 }
 
 /**
- * Folder upload silently keeps only files at the *root* of the picked folder
- * (one path segment after the folder name) and drops:
- *   - files nested inside any sub-folder
- *   - hidden files (leading dot)
+ * A relative path is hidden when ANY of its segments is hidden — a visible
+ * file inside a hidden directory (e.g. `.git/config`) must also be dropped.
+ */
+export function isHiddenPath(relativePath: string): boolean {
+    return relativePath.split("/").some((segment) => isHiddenName(segment));
+}
+
+/**
+ * Folder upload keeps files at *every* nesting level (F034 §5.5: the backend
+ * rebuilds the directory tree from `webkitRelativePath`) and silently drops:
+ *   - hidden files, and files inside hidden directories (checked per path segment)
  *   - unsupported extensions
  *   - files exceeding the size limit
  *
@@ -228,8 +245,7 @@ export function filterFolderUploadFiles(
     const maxBytes = options.maxSizeMB * 1024 * 1024;
     return files.filter((file) => {
         const rel = file.webkitRelativePath || file.name;
-        if (rel.split("/").length !== 2) return false;
-        if (isHiddenName(file.name)) return false;
+        if (isHiddenPath(rel)) return false;
         if (file.size > maxBytes) return false;
         const ext = file.name.split(".").pop()?.toLowerCase();
         if (!ext || !options.allowedExtensions.includes(ext)) return false;

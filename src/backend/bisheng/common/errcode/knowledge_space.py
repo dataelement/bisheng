@@ -57,6 +57,11 @@ class SpaceFileSizeLimitError(BaseErrorCode):
     Msg: str = "File size limit exceeded"
 
 
+class SpaceFolderUploadCountExceededError(BaseErrorCode):
+    Code: int = 18025
+    Msg: str = "A single batch upload supports at most 1000 files"
+
+
 # ── Subscribe ────────────────────────────────────────────────────────────────
 
 

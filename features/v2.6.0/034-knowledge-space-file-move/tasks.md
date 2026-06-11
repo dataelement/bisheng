@@ -9,10 +9,10 @@
 
 | 步骤 | 状态 | 备注 |
 |------|------|------|
-| spec.md | ✅ 已评审 | 2026-06-10；产品拍板三点已回写；AC-03 已补「拖拽支持跨空间（投放到左侧空间项）」 |
-| design.md | ✅ 已评审 | 2026-06-10；Constitution Check 无 BLOCKER；评审 4 项发现已修复（C2 子树 SQL 方言 / 同租户边界 / 决策备选与触发条件 / 手动验证入口） |
-| tasks.md | ✅ 已拆解 | 2026-06-10 /sdd-review tasks LGTM（修复 4 项：T006/T007 任务内 Test-First、T007 tenant_id 传递、T009 数据源、T012 AC 标注格式） |
-| 实现 | ✅ 完成 | 12 / 12；本地验证通过。仅 2 项降级（见偏差记录）：跨空间拖拽未做（弹窗已覆盖）/ 图片物理迁移记债。同空间撤回已改用 confirm 弹窗实现 |
+| spec.md | ✅ 已评审 | 2026-06-10；产品拍板三点已回写；AC-03 已补「拖拽支持跨空间（投放到左侧空间项）」。2026-06-10 扩充 §5.5 文件夹上传（2.7 节 AC-24~31），/sdd-review spec 实质 LGTM（仅 2 条 low：AC-25/校验分工略带 How、3.2.4 作废系产品决策） |
+| design.md | ✅ 已评审 | 2026-06-10；Constitution Check 无 BLOCKER；评审 4 项发现已修复（C2 子树 SQL 方言 / 同租户边界 / 决策备选与触发条件 / 手动验证入口）。同日 §9 文件夹上传（AC-24~31）评审：无 BLOCKER，1 项 medium 已修（补 C4 权限口径——入口 `upload_file` + 建夹逐节点 authorize，坑 U7）；2 low 记录跳过（U2 无重考触发条件、上传 Wave 待拆解） |
+| tasks.md | ✅ 已拆解 | 2026-06-10 /sdd-review tasks LGTM（修复 4 项：T006/T007 任务内 Test-First、T007 tenant_id 传递、T009 数据源、T012 AC 标注格式）。2026-06-11 新增 Wave 5 文件夹上传 T013~T016，/sdd-review tasks LGTM（1 low 记录跳过：18025 并入 T013） |
+| 实现 | 🔨 Wave 5 进行中 | Wave 1-4（移动）12/12 完成、本地验证通过（2 项降级见偏差记录；同空间撤回已改用 confirm 弹窗）。Wave 5（文件夹上传）4/4 代码完成；T016 手动回归待跑（design §9.7 清单） |
 
 ---
 
@@ -115,11 +115,45 @@
   **逻辑**: 弹窗/确认/toast/错误提示全部 key 化；按 design §7 手动验证一遍（两空间互移、多版本文件、不同 embedding 模型、各状态文件），作为对 AC-01 至 AC-23 的端到端人工回归
   **依赖**: T011
 
+### Wave 5 — 文件夹上传（§5.5 / AC-24~32，design §9）
+
+- [x] **T013**: 后端 upload_folder_items 服务（任务内 Test-First）+ 错误码 18025
+  **文件**: `src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`、`src/backend/bisheng/common/errcode/knowledge_space.py`、`src/backend/test/knowledge/test_knowledge_space_folder_upload.py`
+  **逻辑**: 新增 `upload_folder_items(parent_id, items[{file_path, relative_path}])` 编排（design 决策 U1）：入口 `_require_permission_id('upload_file')`（同 `add_file:2952` 口径）→ 数量兜底 ≤1000（18025）→ 顶层夹重名 `count_folder_by_name`（18012）→ 解析 relative_path 建目录树（每节点初始化权限 tuple，**坑 U7**，复用 `_initialize_child_resource_permissions`）→ 建树后最深层级 ≤10（18011）→ **容量整批预校验**（本批总大小+已用 vs 用户档/租户上限，**坑 U2**，18024/19403）→ 逐文件复用现有注册+解析派发逻辑（文件重名走现有 FAILED+覆盖语义，**坑 U4**，不拒批）。整批校验失败不留半成品（事务）
+  **测试**: 先红后绿——多层 path 建树父子正确 / 层级>10 整批拒 / 顶层重名拒 / 容量触顶整批拒不留半成品 / >1000 拒 / 文件重名不拒批 / 每个新建夹有权限初始化调用
+  **覆盖 AC**: AC-25, AC-26, AC-28, AC-29, AC-30, AC-31
+  **依赖**: 无（复用 Wave 1-2 现成件）
+
+- [x] **T014**: API 端点 POST /{space_id}/folders/upload + 集成测试
+  **文件**: `src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`、`src/backend/test/knowledge/test_knowledge_space_folder_upload_api.py`
+  **逻辑**: 请求/响应契约=design §9.4（items[{file_path, relative_path}]；响应复用 add_file 每文件结果结构）；收参调 service 不写业务。**任务内先写集成测试（红）再实现端点（绿）**
+  **测试**: happy path（嵌套树）+ 各拒批场景返回对应错误码（前端据此 toast，AC-32）
+  **覆盖 AC**: AC-25, AC-32（错误码可观测侧）
+  **依赖**: T013
+
+- [x] **T015**: 前端目录读取升级（全量嵌套）+ 过滤 + 1000 挡 + toast
+  **文件**: `src/frontend/client/src/pages/knowledge/hooks/useFileDragDrop.ts`、`src/frontend/client/src/pages/knowledge/knowledgeUtils.ts`、`SpaceDetail/index.tsx`
+  **逻辑**: 拖拽 `readTopLevelFolderFiles` 改递归读全部子目录（保真 relativePath）；废 `filterFolderUploadFiles` 单层过滤（design 决策 U2），改为全层级保留 + 静默过滤（格式/隐藏/超大；隐藏判定按 path **每一段**，**坑 U5**）；原始总数（过滤前）>1000 → toast「单次批量文件总数最多 1000 个」整批不传（决策 U3）；全被过滤 → toast 无可上传文件，不发请求
+  **覆盖 AC**: AC-24, AC-26, AC-27, AC-32（前端侧）
+  **手动验证**: 拖 3 层嵌套文件夹（混入不支持格式/隐藏/超大）；picker 入口同验
+  **依赖**: 无（与后端并行）
+
+- [x] **T016**: 前端接通批量接口 + 拒批 toast + i18n + 手动回归
+  **文件**: `src/frontend/client/src/api/knowledge.ts`、`src/frontend/client/src/pages/knowledge/hooks/useFileUpload.ts`、`src/frontend/client/src/locales/{zh-Hans,en,ja}/translation.json`
+  **逻辑**: 新增 `uploadFolderApi(spaceId, {parent_id, items})`；`handleUploadFolder` 改为：逐文件 `uploadFileToServerApi` 传本体 → 调批量接口注册建树 → 刷新列表；**服务端拒批错误码（18011/18012/18025/18024/19403）逐一映射 toast 文案（AC-32）**；文件重名 FAILED 项复用现有覆盖弹窗；文案 key 化三语；按 design §9.7 手动回归（含顶层重名、构造超容量）
+  **覆盖 AC**: AC-24, AC-25, AC-29, AC-30, AC-31, AC-32
+  **手动验证**: design §9.7 清单全跑
+  **依赖**: T014, T015
+
 ---
 
 ## 实际偏差记录
 
 > 只留一行指针，论证在 design.md。
+
+- Wave 5 / T013：接口契约 items 增加 `size` 字段（前端报告字节数）——容量整批预校验的数据源；权威配额校验仍在注册环节逐文件执行。design §9.4 已更新。
+- Wave 5 / T016：服务端拒批 toast 未逐码手写映射——`uploadFolderApi` 走 `skip403Redirect` 统一拦截管线，自动按 `api_errors.<code>` 翻译并 toast（18011/18012/18024/19403 文案已存在，新增 18025 三语）；前端挡下的（>1000、全被过滤、顶层重名预查）显式 showToast。AC-32 全覆盖。
+- Wave 5：隐藏的顶层文件夹整体拖入 → 静默不上传（沿用既有行为,属 AC-27 静默过滤语义延伸）。
 
 - T007：图片目录物理迁移由「做全」改为「记债」（doc_id↔file_id 键不确定，误拷会弄坏引用）；移动后图片引用仍指向源空间路径、照常解析，仅源空间被删时才需迁移。论证见 design §8 + §5 坑 6。
 - T010：拖拽**仅做同空间拖到文件夹**（用户 2026-06-10 拍板）。跨空间拖到左侧空间列表项降级——左侧空间列表在 `pages/knowledge/sidebar/KnowledgeSpaceItem.tsx`，与 SpaceDetail 不同组件树，跨树传 payload + 外层接移动编排成本高；跨空间移动已由「移动到」弹窗完整覆盖。AC-03 跨空间拖拽部分未实现。

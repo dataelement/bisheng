@@ -53,9 +53,7 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
     space_kind: Literal["normal", "department"] = Field(default="normal", description="Knowledge space kind")
     department_id: int | None = Field(default=None, description="Bound department id for department spaces")
     department_name: str | None = Field(default=None, description="Bound department name for department spaces")
-    approval_enabled: bool | None = Field(
-        default=None, description="Whether department-space uploads require approval"
-    )
+    approval_enabled: bool | None = Field(default=None, description="Whether department-space uploads require approval")
     sensitive_check_enabled: bool | None = Field(
         default=None,
         description="Whether department-space uploads require content safety check",
@@ -122,6 +120,22 @@ class FileCreateReq(BaseModel):
 
 class FileRenameReq(BaseModel):
     name: str = Field(..., description="New File Name")
+
+
+class FolderUploadItem(BaseModel):
+    """F034 §5.5 folder upload: one already-uploaded file body + its relative path."""
+
+    file_path: str = Field(..., description="MinIO path returned by the upload endpoint")
+    relative_path: str = Field(..., description="Path relative to the drop point, e.g. 'Top/Sub/a.pdf'")
+    # Client-reported size, used only for the batch-level capacity pre-check
+    # (all-or-nothing UX). The authoritative per-file quota check still runs
+    # during registration (add_file).
+    size: int = Field(0, ge=0, description="File size in bytes")
+
+
+class FolderUploadReq(BaseModel):
+    parent_id: int | None = Field(None, description="Target folder id; None = space root")
+    items: list[FolderUploadItem] = Field(..., min_length=1, description="Files with relative paths")
 
 
 class MoveItem(BaseModel):
