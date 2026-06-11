@@ -10,6 +10,7 @@ import {
     Edit,
     FileImageIcon,
     FileUserIcon,
+    FolderInput,
     GitBranch,
     History,
     MoreVertical,
@@ -28,6 +29,7 @@ import {
     DropdownMenuTrigger
 } from "~/components";
 import { cn } from "~/utils";
+import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
 import TagGroup from "./TagGroup";
 import { EditEncodingModal } from "./EditEncodingModal";
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
@@ -515,6 +517,9 @@ interface FileTableProps {
     onDownload: (id: string) => void;
     onEditTags: (id: string) => void;
     onRename: (id: string, newName: string) => void;
+    onMove?: (file: KnowledgeFile) => void;
+    /** F034 drag-move: drop dragged items into a same-space folder. */
+    onMoveToFolder?: (folderId: string, items: KnowledgeFile[]) => void;
     onDelete: (id: string) => void;
     onRetry: (id: string) => void;
     onNavigateFolder: (id: string) => void;
@@ -536,7 +541,7 @@ interface FileTableProps {
     canManageMembers?: boolean;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onMove, onMoveToFolder, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -561,6 +566,16 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
         if (!canEditEncoding) return;
         setEditingEncodingFile(file);
     };
+
+    // F034 same-space drag-move: rows are drag sources, folder rows are drop targets.
+    const {
+        enabled: dragMoveEnabled,
+        dragOverFolderId,
+        handleDragStart: handleRowDragStart,
+        handleFolderDragOver,
+        handleFolderDragLeave,
+        handleFolderDrop,
+    } = useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder });
 
     const handleSubmitEncoding = async (newEncoding: string) => {
         if (!editingEncodingFile) return;
@@ -634,6 +649,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onDownload={() => onDownload(file.id)}
                                 onEditTags={() => onEditTags(file.id)}
                                 onRename={(newName) => onRename(file.id, newName)}
+                                onMove={onMove ? () => onMove(file) : undefined}
                                 onDelete={() => onDelete(file.id)}
                                 onRetry={() => onRetry?.(file.id)}
                                 onNavigateFolder={() => onNavigateFolder?.(file.id)}
@@ -659,6 +675,12 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onOpenVersionManagement={onOpenVersionManagement}
                                 onOpenVersionHistory={onOpenVersionHistory}
                                 canManageMembers={canManageMembers}
+                                rowDraggable={dragMoveEnabled}
+                                onRowDragStart={handleRowDragStart(file)}
+                                isFolderDragOver={dragOverFolderId === file.id}
+                                onFolderDragOver={handleFolderDragOver(file)}
+                                onFolderDragLeave={handleFolderDragLeave(file)}
+                                onFolderDrop={handleFolderDrop(file)}
                             />
                         ))}
                     </TableBody>
@@ -698,6 +720,7 @@ function FileRow({
     onDownload,
     onEditTags,
     onRename,
+    onMove,
     onDelete,
     onRetry,
     onNavigateFolder,
@@ -719,6 +742,12 @@ function FileRow({
     onOpenVersionManagement,
     onOpenVersionHistory,
     canManageMembers = false,
+    rowDraggable = false,
+    onRowDragStart,
+    isFolderDragOver = false,
+    onFolderDragOver,
+    onFolderDragLeave,
+    onFolderDrop,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -728,6 +757,7 @@ function FileRow({
     onDownload: () => void;
     onEditTags: () => void;
     onRename: (newName: string) => void;
+    onMove?: () => void;
     onDelete: () => void;
     onRetry: () => void;
     onNavigateFolder?: () => void;
@@ -748,15 +778,25 @@ function FileRow({
     versionManagementEnabled?: boolean;
     onOpenVersionManagement?: (file: KnowledgeFile) => void;
     onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    // F034 drag-move: row is a drag source; folder rows are drop targets.
+    rowDraggable?: boolean;
+    onRowDragStart?: (e: React.DragEvent) => void;
+    isFolderDragOver?: boolean;
+    onFolderDragOver?: (e: React.DragEvent) => void;
+    onFolderDragLeave?: () => void;
+    onFolderDrop?: (e: React.DragEvent) => void;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
-    const rowBg = isSelected
-        ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
-        : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
+    // F034: 拖拽悬停的目标文件夹整行高亮（比选中态更深的蓝，明确"放到这里"）
+    const rowBg = isFolderDragOver
+        ? "bg-[#bcd4ff] transition-colors duration-150"
+        : isSelected
+            ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
+            : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
     const {
         isRenaming,
         renameValue,
@@ -835,6 +875,17 @@ function FileRow({
                                 {localize("com_knowledge.rename")}
                             </DropdownMenuItem>
                         )}
+                        {onMove && !isCreating && (
+                            <DropdownMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onMove();
+                                }}
+                            >
+                                <FolderInput className="mr-2 size-4" />
+                                {localize("com_knowledge.move")}
+                            </DropdownMenuItem>
+                        )}
                         {isAdmin && hasRetryOption && (
                             <DropdownMenuItem
                                 onClick={(e) => {
@@ -900,6 +951,11 @@ function FileRow({
     return (
         <TableRow
             data-knowledge-file-item
+            draggable={rowDraggable && !isCreating && !isRenaming}
+            onDragStart={rowDraggable ? onRowDragStart : undefined}
+            onDragOver={isFolder ? onFolderDragOver : undefined}
+            onDragLeave={isFolder ? onFolderDragLeave : undefined}
+            onDrop={isFolder ? onFolderDrop : undefined}
             className={cn(
                 "group border-b border-b-[#e5e6eb]",
                 // 取消 Table 默认 tr:hover 底色，整行颜色只由单元格 rowBg + group-hover 控制

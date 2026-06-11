@@ -1499,6 +1499,75 @@ export async function deleteFileApi(space_id: string, file_id: string): Promise<
 }
 
 // ─────────────────────────────────────────────
+// API functions — Move (F034)
+// ─────────────────────────────────────────────
+
+export interface MoveItemInput {
+    id: string;
+    type: "file" | "folder";
+}
+
+export interface MovedEntry {
+    id: number;
+    type: "file" | "folder";
+    /** Source parent folder id (null = space root); used for same-space undo. */
+    old_parent_id: number | null;
+    cross_space: boolean;
+}
+
+/** Reason a single item could not be moved (per-item, batch-safe). */
+export type MoveInvalidReason =
+    | "no_permission"
+    | "into_self"
+    | "into_subtree"
+    | "into_current_parent"
+    | "depth_exceeded"
+    | "name_conflict";
+
+export interface InvalidEntry {
+    id: number;
+    type: "file" | "folder";
+    name: string;
+    reason: MoveInvalidReason;
+}
+
+export interface MoveResult {
+    moved: MovedEntry[];
+    invalid: InvalidEntry[];
+}
+
+/**
+ * Move files/folders within a space or across spaces.
+ * target_space_id === space_id ⇒ same-space move; otherwise cross-space.
+ * Business errors (18033/18040/18041) reject with `.status_code` for branching.
+ */
+export async function moveFilesApi(
+    space_id: string,
+    params: {
+        items: MoveItemInput[];
+        target_space_id: string;
+        target_folder_id?: string | null;
+        skip_invalid?: boolean;
+    }
+): Promise<MoveResult> {
+    const res = (await request.post(`/api/v1/knowledge/space/${space_id}/files/move`, {
+        items: params.items.map((i) => ({ id: Number(i.id), type: i.type })),
+        target_space_id: Number(params.target_space_id),
+        target_folder_id:
+            params.target_folder_id != null ? Number(params.target_folder_id) : null,
+        skip_invalid: params.skip_invalid ?? false,
+    })) as ApiResponse<MoveResult> & { message?: string; msg?: string };
+    if (res?.status_code !== undefined && res.status_code !== 200) {
+        const err = new Error(
+            res.status_message || res.message || res.msg || "move failed"
+        ) as Error & { status_code?: number };
+        err.status_code = res.status_code;
+        throw err;
+    }
+    return res.data;
+}
+
+// ─────────────────────────────────────────────
 // API functions — Batch operations
 // ─────────────────────────────────────────────
 

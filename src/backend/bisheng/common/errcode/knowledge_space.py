@@ -80,6 +80,14 @@ class SpaceOrganizationGrantExitDeniedError(BaseErrorCode):
     Msg: str = "本空间通过部门/用户组授权给你，暂无法退出"
 
 
+# ── Move (F034) ───────────────────────────────────────────────────────────────
+
+
+class SpaceMoveInvalidTargetError(BaseErrorCode):
+    Code: int = 18033
+    Msg: str = "Invalid move target: cannot move a folder into itself, its subtree, or its current parent"
+
+
 # ── Permission ────────────────────────────────────────────────────────────────
 
 

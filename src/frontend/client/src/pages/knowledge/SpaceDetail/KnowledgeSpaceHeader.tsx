@@ -13,6 +13,7 @@ import {
     Tag,
     RotateCcw,
     Trash2,
+    FolderInput,
     FileSearch
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
@@ -71,6 +72,8 @@ interface KnowledgeSpaceHeaderProps {
     canBatchDownload?: boolean;
     onBatchTag: () => void;
     onBatchRetry: () => void;
+    onBatchMove?: () => void;
+    canBatchMove?: boolean;
     onBatchDelete: () => void;
     canBatchDelete?: boolean;
     onGoKnowledgeSquare?: () => void;
@@ -114,6 +117,8 @@ export function KnowledgeSpaceHeader({
     canBatchDownload = false,
     onBatchTag,
     onBatchRetry,
+    onBatchMove,
+    canBatchMove = false,
     onBatchDelete,
     canBatchDelete = false,
     onGoKnowledgeSquare,
@@ -339,6 +344,12 @@ export function KnowledgeSpaceHeader({
                             <DropdownMenuItem onClick={onBatchRetry} className="cursor-pointer">
                                 <RotateCcw className="mr-2 size-4" />
                                 {localize("com_knowledge.batch_retry")}
+                            </DropdownMenuItem>
+                        )}
+                        {canBatchMove && onBatchMove && (
+                            <DropdownMenuItem onClick={onBatchMove} className="cursor-pointer">
+                                <FolderInput className="mr-2 size-4" />
+                                {localize("com_knowledge.move")}
                             </DropdownMenuItem>
                         )}
                         {canBatchDelete && (

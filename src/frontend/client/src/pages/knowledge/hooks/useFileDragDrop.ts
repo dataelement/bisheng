@@ -7,6 +7,11 @@ import {
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
+// Only react to OS file-upload drags. Internal drags (e.g. F034 move, which
+// carries "text/plain") must NOT trigger the upload overlay.
+const isExternalFileDrag = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer?.types || []).includes("Files");
+
 interface UseFileDragDropOptions {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     onUploadFile: (files?: FileList | File[]) => void;
@@ -113,6 +118,7 @@ export function useFileDragDrop({
 
     const handleDragEnter = useCallback(
         (e: React.DragEvent) => {
+            if (!isExternalFileDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             dragCounter.current += 1;
@@ -126,6 +132,7 @@ export function useFileDragDrop({
 
     const handleDragLeave = useCallback(
         (e: React.DragEvent) => {
+            if (!isExternalFileDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             dragCounter.current -= 1;
@@ -138,6 +145,7 @@ export function useFileDragDrop({
 
     const handleDragOver = useCallback(
         (e: React.DragEvent) => {
+            if (!isExternalFileDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
@@ -150,6 +158,7 @@ export function useFileDragDrop({
 
     const handleDrop = useCallback(
         (e: React.DragEvent) => {
+            if (!isExternalFileDrag(e)) return;
             e.preventDefault();
             e.stopPropagation();
             dragCounter.current = 0;

@@ -1722,7 +1722,29 @@
       "section_dismiss": "Skip linking",
       "section_dismiss_subtitle": "Keep the current file as a standalone document; do not add it to a version chain.",
       "btn_close": "Close"
-    }
+    },
+    "move_to": "Move to",
+    "current_space_tag": "(current)",
+    "root_dir": "Root",
+    "move_empty_folder": "This folder is empty",
+    "move_here": "Move here",
+    "move": "Move",
+    "move_success": "Moved {{0}} item(s)",
+    "move_cross_success": "Moved {{0}} item(s); updating retrieval data in the background",
+    "move_partial_title": "Some items can't be moved",
+    "move_partial_desc": "These items can't be moved: {{0}}",
+    "move_rest": "Move the rest",
+    "move_cancel_all": "Cancel",
+    "move_cross_space_confirm_title": "Move across spaces?",
+    "move_cross_space_confirm_desc": "A cross-space move re-processes retrieval data and can't be undone.",
+    "move_error_permission": "No permission to move",
+    "move_error_tenant": "The target space belongs to a different tenant; not supported",
+    "move_error_target": "Invalid move target",
+    "move_failed": "Move failed",
+    "move_undo_hint": "Click Undo to restore items to their original location.",
+    "move_undo": "Undo",
+    "move_close": "Close",
+    "move_undone": "Move undone"
   },
   "com_subscription": {
     "add": "Add",
@@ -2106,7 +2128,6 @@
   "com_approval_task_badge_rejected": "Rejected",
   "com_approval_section_business_content": "Business Content",
   "com_approval_search_placeholder": "Search applicant, scenario or file",
-  "com_ui_close": "Close",
   "knowledge_qa_noVisibleContent": "No relevant content found in resources accessible to you.",
   "workstation": {
     "messageExport": {
