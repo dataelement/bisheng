@@ -347,11 +347,7 @@ export function KnowledgeSpaceHeader({
                             </DropdownMenuItem>
                         )}
                         {onBatchMove && (
-                            <DropdownMenuItem
-                                onClick={onBatchMove}
-                                disabled={!canBatchMove}
-                                className="cursor-pointer"
-                            >
+                            <DropdownMenuItem onClick={onBatchMove} className="cursor-pointer">
                                 <FolderInput className="mr-2 size-4" />
                                 {localize("com_knowledge.move")}
                             </DropdownMenuItem>

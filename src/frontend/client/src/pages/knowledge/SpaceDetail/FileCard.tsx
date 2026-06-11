@@ -27,6 +27,8 @@ interface FileCardProps {
     onDownload: () => void;
     onRename: (newName: string) => void;
     onMove?: () => void;
+    /** Space-level move permission; when false the card's move item shows greyed. */
+    canMove?: boolean;
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
@@ -66,6 +68,7 @@ export function FileCard({
     onDownload,
     onRename,
     onMove,
+    canMove = false,
     onDelete,
     onEditTags,
     onRetry,
@@ -445,8 +448,9 @@ export function FileCard({
                                                 {localize("com_knowledge.rename")}
                                             </DropdownMenuItem>
                                         )}
-                                        {onMove && !isUploading && (
+                                        {onMove && (
                                             <DropdownMenuItem
+                                                disabled={!canMove || isUploading}
                                                 onClick={(e) => { e.stopPropagation(); onMove(); }}
                                                 className="flex items-center"
                                             >

@@ -74,6 +74,37 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
         setMoveDialogOpen(true);
     }, []);
 
+    /**
+     * Batch-move entry from the toolbar. `denied` = selected items the user lacks
+     * move permission for (decided up-front on the frontend, space-level). If any
+     * are denied, show the block dialog listing them with 【移动其余文件】【取消移动】;
+     * "move the rest" then opens the picker with only the permitted items. The
+     * backend re-validates every item on the actual move (safety net).
+     */
+    const requestBatchMove = useCallback(
+        async (permitted: KnowledgeFile[], denied: KnowledgeFile[]) => {
+            if (denied.length === 0) {
+                openMove(permitted);
+                return;
+            }
+            const blocked: InvalidEntry[] = denied.map((f) => ({
+                id: Number(f.id),
+                type: f.type === FileType.FOLDER ? "folder" : "file",
+                name: f.name,
+                reason: "no_permission",
+            }));
+            const ok = await confirm({
+                title: localize("com_knowledge.move_partial_title"),
+                description: describeInvalid(blocked, localize),
+                cancelText: localize("com_knowledge.move_cancel_all"),
+                confirmText: localize("com_knowledge.move_rest"),
+            });
+            if (!ok || !permitted.length) return;
+            openMove(permitted);
+        },
+        [confirm, localize, openMove],
+    );
+
     const resolveErrorMessage = useCallback(
         (err: unknown): string => {
             const code = (err as { status_code?: number })?.status_code;
@@ -167,21 +198,13 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                 throw err;
             }
 
-            // Some items were rejected; nothing was moved yet (reject-all).
+            // Some items were rejected; nothing was moved yet (reject-all). Always
+            // a dialog listing the blocked items by reason + 【移动其余文件】【取消移动】
+            // (even when ALL are blocked — "移动其余" then simply moves nothing).
             if (result.invalid.length > 0) {
-                const description = describeInvalid(result.invalid, localize);
-                const allBlocked = result.invalid.length >= items.length;
-
-                if (allBlocked) {
-                    // Nothing can be moved — pure info, no decision: a toast reads
-                    // cleaner than a two-button dialog (e.g. "目标位置已存在同名文件夹：a").
-                    showToast({ message: description, status: "error" });
-                    throw new Error("move:cancelled");
-                }
-
                 const ok = await confirm({
                     title: localize("com_knowledge.move_partial_title"),
-                    description,
+                    description: describeInvalid(result.invalid, localize),
                     cancelText: localize("com_knowledge.move_cancel_all"),
                     confirmText: localize("com_knowledge.move_rest"),
                 });
@@ -245,5 +268,5 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
         [executeMove, spaceId],
     );
 
-    return { moveDialogOpen, setMoveDialogOpen, openMove, handleMoveConfirm, dropMoveToFolder };
+    return { moveDialogOpen, setMoveDialogOpen, openMove, requestBatchMove, handleMoveConfirm, dropMoveToFolder };
 }

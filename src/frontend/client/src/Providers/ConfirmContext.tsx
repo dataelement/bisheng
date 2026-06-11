@@ -78,13 +78,13 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     <AlertDialogFooter className="flex flex-row justify-center gap-4 sm:justify-center">
                         <AlertDialogCancel
                             onClick={handleCancel}
-                            className="w-28 mt-0 border-slate-200 text-slate-600"
+                            className="min-w-28 mt-0 whitespace-nowrap px-4 border-slate-200 text-slate-600"
                         >
                             {options.cancelText || "取消"}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             onClick={handleConfirm}
-                            className={`w-28 bg-red-600 hover:bg-red-700`}
+                            className={`min-w-28 whitespace-nowrap px-4 bg-red-600 hover:bg-red-700`}
                         >
                             {options.confirmText || "确认"}
                         </AlertDialogAction>
