@@ -1518,7 +1518,7 @@
     "qa_current_folder": "基于当前文件夹问答",
     "qa_current_space": "基于当前知识空间问答",
     "queueing_status": "排队中",
-    "rebuilding_status": "重建中",
+    "rebuilding_status": "处理中",
     "recently_updated": "最近更新",
     "rename": "重命名",
     "rename_failed": "重命名失败",

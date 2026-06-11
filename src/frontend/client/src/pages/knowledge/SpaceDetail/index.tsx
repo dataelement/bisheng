@@ -853,6 +853,10 @@ export function KnowledgeSpaceContent({
             return;
         }
         clearPendingDeletion(allIds);
+        // Refresh the left sidebar folder tree (deleted folders) and the
+        // "相似文档" pending count (deleted files may have been pending).
+        dispatchKnowledgeSpaceFilesRefresh();
+        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
     };
 
     const handleDelete = async (fileId: string) => {

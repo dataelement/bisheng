@@ -1515,7 +1515,7 @@
     "qa_current_folder": "現在のフォルダに基づいて質問と回答",
     "qa_current_space": "現在のナレッジスペースに基づいて質問と回答",
     "queueing_status": "待機中",
-    "rebuilding_status": "再構築中",
+    "rebuilding_status": "処理中",
     "recently_updated": "最近の更新",
     "rename": "名前を変更",
     "rename_failed": "名前の変更に失敗しました",

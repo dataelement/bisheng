@@ -1591,7 +1591,7 @@
     "qa_current_folder": "Q&A based on the current folder",
     "qa_current_space": "Q&A based on the current knowledge space",
     "queueing_status": "Queueing",
-    "rebuilding_status": "Rebuilding",
+    "rebuilding_status": "Processing",
     "recently_updated": "Recently updated",
     "rename": "Rename",
     "rename_failed": "Rename failed",
