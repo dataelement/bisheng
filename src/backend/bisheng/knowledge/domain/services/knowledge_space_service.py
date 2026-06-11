@@ -3486,7 +3486,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         depth_after = target_level + ((max_sub or rec.level) - rec.level)
                         if depth_after > max_folder_level:
                             reason = "depth_exceeded"
-                    if reason is None and is_folder and not cross_space:
+                    # AC-12: same-level FOLDER name conflict is rejected for BOTH
+                    # same-space and cross-space moves (the dup query already scopes
+                    # to target_space_id). Files are never name-checked on move.
+                    if reason is None and is_folder:
                         dup = await session.scalar(
                             select(func.count(KnowledgeFile.id)).where(
                                 KnowledgeFile.knowledge_id == target_space_id,

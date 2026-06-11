@@ -231,6 +231,55 @@ async def test_invalid_name_conflict_folder_same_dir(async_db_session):
 
 
 @pytest.mark.asyncio
+async def test_cross_space_folder_name_conflict_rejected(async_db_session):
+    """AC-12 (2026-06-11): cross-space FOLDER move also checks same-level folder
+    name conflict in the TARGET space."""
+    await _seed_spaces(async_db_session)
+    # target space 2: folder "dst"(200) already contains folder "dup"(201)
+    await _add(async_db_session, id=200, knowledge_id=2, file_name="dst", file_type=DIR, level=0, file_level_path="")
+    await _add(
+        async_db_session, id=201, knowledge_id=2, file_name="dup", file_type=DIR, level=1, file_level_path="/200"
+    )
+    # source space 1: folder "dup"(202) being moved into space-2 folder 200
+    await _add(async_db_session, id=202, knowledge_id=1, file_name="dup", file_type=DIR, level=0, file_level_path="")
+
+    svc = _svc()
+    res = await svc.move_items(1, [{"id": 202, "type": "folder"}], target_space_id=2, target_folder_id=200)
+    assert res["invalid"][0]["reason"] == "name_conflict"
+    assert res["moved"] == []
+
+
+@pytest.mark.asyncio
+async def test_cross_space_file_name_conflict_allowed(async_db_session, monkeypatch):
+    """AC-12 (2026-06-11): FILES are never name-checked on move — a same-named
+    file in the target space does NOT block a cross-space file move."""
+    await _seed_spaces(async_db_session)
+    # target space 2 root already has a file "f.pdf"(300)
+    await _add(async_db_session, id=300, knowledge_id=2, file_name="f.pdf", file_type=FILE, level=0, file_level_path="")
+    # source space 1 has same-named file "f.pdf"(301)
+    await _add(async_db_session, id=301, knowledge_id=1, file_name="f.pdf", file_type=FILE, level=0, file_level_path="")
+    doc = KnowledgeDocument(knowledge_id=1, file_level_path="")
+    async_db_session.add(doc)
+    await async_db_session.commit()
+    await async_db_session.refresh(doc)
+    async_db_session.add(
+        KnowledgeDocumentVersion(document_id=doc.id, knowledge_file_id=301, version_no=1, is_primary=True)
+    )
+    await async_db_session.commit()
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aupdate_resource_tags",
+        AsyncMock(),
+    )
+    svc = _svc()
+    svc._dispatch_cross_space_migration = AsyncMock(return_value=None)
+    res = await svc.move_items(1, [{"id": 301, "type": "file"}], target_space_id=2, target_folder_id=None)
+
+    assert res["invalid"] == []
+    assert res["moved"][0]["id"] == 301 and res["moved"][0]["cross_space"] is True
+
+
+@pytest.mark.asyncio
 async def test_no_permission_blocks_item(async_db_session):
     await _seed_spaces(async_db_session)
     await _add(async_db_session, id=10, knowledge_id=1, file_name="dst", file_type=DIR, level=0, file_level_path="")
