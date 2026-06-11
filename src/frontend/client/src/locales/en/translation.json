@@ -1751,9 +1751,8 @@
     "move_error_tenant": "The target space belongs to a different tenant; not supported",
     "move_error_target": "Invalid move target",
     "move_failed": "Move failed",
-    "move_undo_hint": "Click Undo to restore items to their original location.",
     "move_undo": "Undo",
-    "move_close": "Close",
+    "move_undo_toast": "Moved to \"{{0}}\" folder",
     "move_undone": "Move undone"
   },
   "com_subscription": {

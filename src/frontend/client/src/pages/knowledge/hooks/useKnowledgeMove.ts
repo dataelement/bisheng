@@ -11,6 +11,8 @@ import {
 import { useConfirm, useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
 
+import { showMoveUndoToast } from "../components/moveUndoToast";
+
 type Localize = ReturnType<typeof useLocalize>;
 
 /** i18n key for a per-item rejection reason (name_conflict differs by item type). */
@@ -144,6 +146,7 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
             targetSpaceId: string,
             targetFolderId: string | null,
             crossSpace: boolean,
+            targetFolderName?: string,
         ) => {
             if (!items.length) return;
             if (crossSpace) {
@@ -201,14 +204,17 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
                     status: "success",
                 });
             } else if (movedCount > 0) {
-                // Same-space: offer an undo via a confirm dialog (toast has no action).
-                const undo = await confirm({
-                    title: localize("com_knowledge.move_success", { 0: movedCount }),
-                    description: localize("com_knowledge.move_undo_hint"),
-                    confirmText: localize("com_knowledge.move_undo"),
-                    cancelText: localize("com_knowledge.move_close"),
+                // Same-space: success toast with an inline 「撤回」 action.
+                const message = targetFolderName
+                    ? localize("com_knowledge.move_undo_toast", { 0: targetFolderName })
+                    : localize("com_knowledge.move_success", { 0: movedCount });
+                showMoveUndoToast({
+                    message,
+                    actionLabel: localize("com_knowledge.move_undo"),
+                    onAction: () => {
+                        void undoMove(movedEntries);
+                    },
                 });
-                if (undo) await undoMove(movedEntries);
             }
         },
         [confirm, localize, runMove, showToast, resolveErrorMessage, onMoved, undoMove],
@@ -216,8 +222,8 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
 
     /** Dialog `onConfirm` — moves the items the picker was opened for. */
     const handleMoveConfirm = useCallback(
-        (targetSpaceId: string, targetFolderId: string | null, crossSpace: boolean) =>
-            executeMove(pendingItems, targetSpaceId, targetFolderId, crossSpace),
+        (targetSpaceId: string, targetFolderId: string | null, crossSpace: boolean, targetFolderName?: string) =>
+            executeMove(pendingItems, targetSpaceId, targetFolderId, crossSpace, targetFolderName),
         [executeMove, pendingItems],
     );
 
@@ -226,12 +232,12 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
      * Swallows the cancel/error rejection (no dialog to keep open).
      */
     const dropMoveToFolder = useCallback(
-        async (items: KnowledgeFile[], targetFolderId: string) => {
+        async (items: KnowledgeFile[], targetFolderId: string, targetFolderName?: string) => {
             // Dropping onto a folder that is itself being dragged is a no-op.
             const filtered = items.filter((f) => f.id !== targetFolderId);
             if (!filtered.length) return;
             try {
-                await executeMove(filtered, spaceId, targetFolderId, false);
+                await executeMove(filtered, spaceId, targetFolderId, false, targetFolderName);
             } catch {
                 // Reason already surfaced via toast / confirm cancel.
             }

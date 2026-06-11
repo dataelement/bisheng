@@ -1674,9 +1674,8 @@
     "move_error_tenant": "移動先スペースは別テナントに属しているため、この操作はサポートされていません",
     "move_error_target": "無効な移動先です",
     "move_failed": "移動に失敗しました",
-    "move_undo_hint": "元の場所に戻すには「元に戻す」をクリックしてください。",
     "move_undo": "元に戻す",
-    "move_close": "閉じる",
+    "move_undo_toast": "「{{0}}」フォルダーに移動しました",
     "move_undone": "移動を元に戻しました"
   },
   "com_subscription": {

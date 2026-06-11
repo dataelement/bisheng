@@ -1678,9 +1678,8 @@
     "move_error_tenant": "目标空间与源空间归属不同租户，暂不支持该操作",
     "move_error_target": "无效的移动目标",
     "move_failed": "移动失败",
-    "move_undo_hint": "如需还原到原位置，点击撤回。",
     "move_undo": "撤回",
-    "move_close": "关闭",
+    "move_undo_toast": "已移动至“{{0}}”文件夹",
     "move_undone": "已撤回移动"
   },
   "com_subscription": {

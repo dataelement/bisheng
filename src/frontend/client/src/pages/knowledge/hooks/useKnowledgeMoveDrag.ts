@@ -9,7 +9,7 @@ interface UseKnowledgeMoveDragArgs {
     /** Currently multi-selected file ids. */
     selectedFiles: Set<string>;
     /** Drop handler — undefined disables drag entirely (no move permission). */
-    onMoveToFolder?: (folderId: string, items: KnowledgeFile[]) => void;
+    onMoveToFolder?: (folderId: string, items: KnowledgeFile[], folderName: string) => void;
 }
 
 /**
@@ -63,7 +63,7 @@ export function useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder }: U
         const items = dragItemsRef.current;
         dragItemsRef.current = [];
         setDragOverFolderId(null);
-        if (items.length && onMoveToFolder) onMoveToFolder(folder.id, items);
+        if (items.length && onMoveToFolder) onMoveToFolder(folder.id, items, folder.name);
     };
 
     return {

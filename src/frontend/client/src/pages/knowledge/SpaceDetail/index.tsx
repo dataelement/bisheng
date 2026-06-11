@@ -937,7 +937,7 @@ export function KnowledgeSpaceContent({
     const cardDrag = useKnowledgeMoveDrag({
         files: displayFiles,
         selectedFiles,
-        onMoveToFolder: canUploadFile ? (folderId, items) => dropMoveToFolder(items, folderId) : undefined,
+        onMoveToFolder: canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined,
     });
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         deleteEntryIds.has(file.id)
@@ -1145,7 +1145,7 @@ export function KnowledgeSpaceContent({
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
                                     onMove={canUploadFile ? (file) => openMove([file]) : undefined}
-                                    onMoveToFolder={canUploadFile ? (folderId, items) => dropMoveToFolder(items, folderId) : undefined}
+                                    onMoveToFolder={canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}

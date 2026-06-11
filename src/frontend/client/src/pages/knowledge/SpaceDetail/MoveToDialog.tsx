@@ -35,6 +35,7 @@ interface MoveToDialogProps {
         targetSpaceId: string,
         targetFolderId: string | null,
         crossSpace: boolean,
+        targetFolderName?: string,
     ) => Promise<void> | void;
 }
 
@@ -113,7 +114,8 @@ export function MoveToDialog({
     const handleConfirm = async () => {
         setSubmitting(true);
         try {
-            await onConfirm(selectedSpaceId, currentFolderId, crossSpace);
+            const targetFolderName = folderStack.length ? folderStack[folderStack.length - 1].name : undefined;
+            await onConfirm(selectedSpaceId, currentFolderId, crossSpace, targetFolderName);
             onOpenChange(false);
         } catch {
             // Caller surfaced the reason (cancelled confirm / hard error);
