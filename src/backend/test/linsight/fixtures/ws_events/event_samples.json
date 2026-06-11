@@ -1,0 +1,134 @@
+{
+  "_meta": {
+    "contract": "C1 · WebSocket 事件协议 (A -> H)",
+    "source_of_truth": "features/v2.6.0/035-linsight-task-mode/依赖与契约约定.md §2",
+    "session_version_id": "1f3c9a20-7b4e-4d11-9c3a-0a1b2c3d4e5f",
+    "note": "One canonical sample per MessageEventType (10 types). MessageEventType enum is FROZEN (no new types). data.timestamp uses event-loop time in production; fixed floats here for determinism. task_id = md5(svid + ':' + todo_content)[:8]; when no in_progress todo, task_id == svid (session-level pseudo task)."
+  },
+  "samples": [
+    {
+      "event_type": "task_generate",
+      "data": {
+        "tasks": [
+          {"id": "a1b2c3d4", "task_id": "a1b2c3d4", "name": "收集季度财报数据", "status": "not_started"},
+          {"id": "e5f6a7b8", "task_id": "e5f6a7b8", "name": "生成分析报告", "status": "not_started"}
+        ]
+      },
+      "timestamp": 1.0
+    },
+    {
+      "event_type": "task_start",
+      "data": {"id": "a1b2c3d4", "task_id": "a1b2c3d4", "name": "收集季度财报数据", "status": "in_progress"},
+      "timestamp": 2.0
+    },
+    {
+      "event_type": "task_status_update",
+      "data": {"id": "a1b2c3d4", "task_id": "a1b2c3d4", "name": "收集季度财报数据", "status": "in_progress"},
+      "timestamp": 3.0
+    },
+    {
+      "event_type": "task_execute_step",
+      "data": {
+        "call_id": "call_0001",
+        "task_id": "a1b2c3d4",
+        "name": "search_knowledge_base",
+        "step_type": "knowledge",
+        "status": "start",
+        "call_reason": "检索 2024Q3 财报文档",
+        "params": {"query": "2024 Q3 营收 净利润", "knowledge_id": 1207},
+        "output": null,
+        "namespace": null,
+        "extra_info": {"is_thinking": false, "truncated": false}
+      },
+      "timestamp": 4.0
+    },
+    {
+      "event_type": "task_execute_step",
+      "data": {
+        "call_id": "call_0001",
+        "task_id": "a1b2c3d4",
+        "name": "search_knowledge_base",
+        "step_type": "knowledge",
+        "status": "end",
+        "call_reason": "检索 2024Q3 财报文档",
+        "params": {"query": "2024 Q3 营收 净利润", "knowledge_id": 1207},
+        "output": "命中 3 段：营收 12.4 亿，净利润 1.8 亿 ...",
+        "namespace": null,
+        "extra_info": {
+          "truncated": true,
+          "file_info": {"file_name": "2024Q3财报.pdf", "file_md5": "9f86d081884c7d659a2feaa0c55ad015", "file_url": "minio://workspace/1f3c9a20.../uploads/2024Q3财报/index.md"}
+        }
+      },
+      "timestamp": 5.0
+    },
+    {
+      "event_type": "task_end",
+      "data": {
+        "id": "a1b2c3d4",
+        "task_id": "a1b2c3d4",
+        "name": "收集季度财报数据",
+        "status": "success",
+        "result": {"answer": "已收集 2024Q3 核心财务指标。"},
+        "task_data": {}
+      },
+      "timestamp": 6.0
+    },
+    {
+      "event_type": "user_input",
+      "data": {
+        "task_id": "e5f6a7b8",
+        "call_reason": "请确认报告输出语言",
+        "step_type": "call_user_input",
+        "params": {
+          "tool_calls": [
+            {"id": "call_ui_01", "name": "ask_user", "args": {"question": "报告用中文还是英文输出？", "options": ["中文", "English"]}}
+          ]
+        }
+      },
+      "timestamp": 7.0
+    },
+    {
+      "event_type": "user_input_completed",
+      "data": {
+        "id": "e5f6a7b8",
+        "task_id": "e5f6a7b8",
+        "name": "生成分析报告",
+        "status": "user_input_completed",
+        "history": [{"role": "user", "content": "中文"}]
+      },
+      "timestamp": 8.0
+    },
+    {
+      "event_type": "final_result",
+      "data": {
+        "session_version_id": "1f3c9a20-7b4e-4d11-9c3a-0a1b2c3d4e5f",
+        "status": "completed",
+        "output_result": {
+          "answer": "## 2024Q3 财报分析\n营收 12.4 亿元，同比 +18% ...",
+          "final_files": [
+            {"path": "output/2024Q3分析报告.md", "size": 20480, "is_product": true}
+          ],
+          "all_from_session_files": [
+            {"path": "output/2024Q3分析报告.md", "size": 20480, "is_product": true},
+            {"path": "scratch/raw_metrics.csv", "size": 4096, "is_product": false}
+          ]
+        }
+      },
+      "timestamp": 9.0
+    },
+    {
+      "event_type": "error_message",
+      "data": {"error": "模型调用超时（model_id=qwen-max），已重试 3 次仍失败"},
+      "timestamp": 9.5
+    },
+    {
+      "event_type": "task_terminated",
+      "data": {
+        "message": "任务已被用户终止",
+        "session_id": "1f3c9a20-7b4e-4d11-9c3a-0a1b2c3d4e5f",
+        "terminated_at": "2026-06-11T16:45:00+08:00"
+      },
+      "timestamp": 10.0
+    }
+  ]
+}

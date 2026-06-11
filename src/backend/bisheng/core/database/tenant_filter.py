@@ -10,7 +10,6 @@ raw SQL must manually add ``WHERE tenant_id = X``.
 """
 
 import logging
-from typing import FrozenSet, Optional, Set
 
 from sqlalchemy import event, false
 from sqlmodel import Session
@@ -25,11 +24,11 @@ from bisheng.core.context.tenant import (
 
 logger = logging.getLogger(__name__)
 
-_tenant_aware_tables: Set[str] = set()
+_tenant_aware_tables: set[str] = set()
 _initialized: bool = False
 
 # Tables that have a tenant_id column but use it as a FK, not as isolation field.
-_EXCLUDED_TABLES: Set[str] = {'user_tenant'}
+_EXCLUDED_TABLES: set[str] = {"user_tenant"}
 
 # ORM modules that must be imported before _discover_tenant_aware_tables runs.
 # Without this, models that nothing in the FastAPI router chain happens to
@@ -41,55 +40,56 @@ _TENANT_AWARE_MODEL_MODULES = (
     # Already on the main router import chain — listed for completeness so
     # _force_import_all_models() guarantees them even if a future refactor
     # severs an indirect import edge.
-    'bisheng.database.models.flow',
-    'bisheng.database.models.assistant',
-    'bisheng.database.models.role',
-    'bisheng.database.models.group',
-    'bisheng.database.models.audit_log',
-    'bisheng.database.models.department',
-    'bisheng.database.models.message',
-    'bisheng.database.models.session',
-    'bisheng.knowledge.domain.models.knowledge',
-    'bisheng.knowledge.domain.models.department_knowledge_space',
-    'bisheng.llm.domain.models.llm_server',
-    'bisheng.llm.domain.models.llm_call_log',
-    'bisheng.llm.domain.models.llm_token_log',
-    'bisheng.llm.domain.models.tenant_system_model_config',
-    'bisheng.workstation.domain.models.tenant_workstation_config',
-    'bisheng.org_sync.domain.models.org_sync',
-    'bisheng.approval.domain.models.approval_request',
+    "bisheng.database.models.flow",
+    "bisheng.database.models.assistant",
+    "bisheng.database.models.role",
+    "bisheng.database.models.group",
+    "bisheng.database.models.audit_log",
+    "bisheng.database.models.department",
+    "bisheng.database.models.message",
+    "bisheng.database.models.session",
+    "bisheng.knowledge.domain.models.knowledge",
+    "bisheng.knowledge.domain.models.department_knowledge_space",
+    "bisheng.llm.domain.models.llm_server",
+    "bisheng.llm.domain.models.llm_call_log",
+    "bisheng.llm.domain.models.llm_token_log",
+    "bisheng.llm.domain.models.tenant_system_model_config",
+    "bisheng.workstation.domain.models.tenant_workstation_config",
+    "bisheng.org_sync.domain.models.org_sync",
+    "bisheng.approval.domain.models.approval_request",
     # Previously *not* on any auto-imported chain — silent tenant-id leaks.
-    'bisheng.database.models.failed_tuple',
-    'bisheng.database.models.flow_version',
-    'bisheng.database.models.role_access',
-    'bisheng.database.models.user_group',
-    'bisheng.database.models.group_resource',
-    'bisheng.database.models.tag',
-    'bisheng.database.models.template',
-    'bisheng.evaluation.domain.models.evaluation',
-    'bisheng.database.models.invite_code',
-    'bisheng.database.models.variable_value',
-    'bisheng.database.models.report',
-    'bisheng.database.models.mark_app_user',
-    'bisheng.database.models.mark_record',
-    'bisheng.database.models.mark_task',
-    'bisheng.user.domain.models.user_role',
-    'bisheng.knowledge.domain.models.knowledge_file',
-    'bisheng.tool.domain.models.gpts_tools',
-    'bisheng.share_link.domain.models.share_link',
-    'bisheng.message.domain.models.inbox_message',
-    'bisheng.message.domain.models.inbox_message_read',
-    'bisheng.channel.domain.models.channel',
-    'bisheng.channel.domain.models.article_read_record',
-    'bisheng.channel.domain.models.channel_info_source',
-    'bisheng.linsight.domain.models.linsight_execute_task',
-    'bisheng.linsight.domain.models.linsight_session_version',
-    'bisheng.linsight.domain.models.linsight_sop',
-    'bisheng.finetune.domain.models.sft_model',
-    'bisheng.finetune.domain.models.server',
-    'bisheng.finetune.domain.models.preset_train',
-    'bisheng.finetune.domain.models.model_deploy',
-    'bisheng.finetune.domain.models.finetune',
+    "bisheng.database.models.failed_tuple",
+    "bisheng.database.models.flow_version",
+    "bisheng.database.models.role_access",
+    "bisheng.database.models.user_group",
+    "bisheng.database.models.group_resource",
+    "bisheng.database.models.tag",
+    "bisheng.database.models.template",
+    "bisheng.evaluation.domain.models.evaluation",
+    "bisheng.database.models.invite_code",
+    "bisheng.database.models.variable_value",
+    "bisheng.database.models.report",
+    "bisheng.database.models.mark_app_user",
+    "bisheng.database.models.mark_record",
+    "bisheng.database.models.mark_task",
+    "bisheng.user.domain.models.user_role",
+    "bisheng.knowledge.domain.models.knowledge_file",
+    "bisheng.tool.domain.models.gpts_tools",
+    "bisheng.share_link.domain.models.share_link",
+    "bisheng.message.domain.models.inbox_message",
+    "bisheng.message.domain.models.inbox_message_read",
+    "bisheng.channel.domain.models.channel",
+    "bisheng.channel.domain.models.article_read_record",
+    "bisheng.channel.domain.models.channel_info_source",
+    "bisheng.linsight.domain.models.linsight_execute_task",
+    "bisheng.linsight.domain.models.linsight_session_version",
+    "bisheng.linsight.domain.models.linsight_sop",
+    "bisheng.linsight.domain.models.linsight_skill",
+    "bisheng.finetune.domain.models.sft_model",
+    "bisheng.finetune.domain.models.server",
+    "bisheng.finetune.domain.models.preset_train",
+    "bisheng.finetune.domain.models.model_deploy",
+    "bisheng.finetune.domain.models.finetune",
 )
 
 
@@ -101,19 +101,21 @@ def _force_import_all_models() -> None:
     not break the whole tenant filter registration.
     """
     import importlib
+
     for module_name in _TENANT_AWARE_MODEL_MODULES:
         try:
             importlib.import_module(module_name)
-        except Exception as exc:  # noqa: BLE001 - log every failure
+        except Exception as exc:
             logger.warning(
-                'Failed to import tenant-aware model module %s: %s. '
-                'Tables defined in that module will silently bypass tenant '
-                'filtering until the import is fixed.',
-                module_name, exc,
+                "Failed to import tenant-aware model module %s: %s. "
+                "Tables defined in that module will silently bypass tenant "
+                "filtering until the import is fixed.",
+                module_name,
+                exc,
             )
 
 
-def _discover_tenant_aware_tables() -> Set[str]:
+def _discover_tenant_aware_tables() -> set[str]:
     """Discover tables that have a ``tenant_id`` column from SQLModel metadata.
 
     This avoids hardcoding table names — any model with a ``tenant_id``
@@ -123,9 +125,9 @@ def _discover_tenant_aware_tables() -> Set[str]:
 
     tables = set()
     for table_name, table in SQLModel.metadata.tables.items():
-        if 'tenant_id' in table.c and table_name not in _EXCLUDED_TABLES:
+        if "tenant_id" in table.c and table_name not in _EXCLUDED_TABLES:
             tables.add(table_name)
-    logger.debug(f'Discovered {len(tables)} tenant-aware tables: {tables}')
+    logger.debug(f"Discovered {len(tables)} tenant-aware tables: {tables}")
     return tables
 
 
@@ -142,9 +144,9 @@ def register_tenant_filter_events() -> None:
     _force_import_all_models()
     _tenant_aware_tables = _discover_tenant_aware_tables()
     if not _tenant_aware_tables:
-        logger.warning('No tenant-aware tables found. Tenant filtering will be inactive.')
+        logger.warning("No tenant-aware tables found. Tenant filtering will be inactive.")
 
-    @event.listens_for(Session, 'do_orm_execute')
+    @event.listens_for(Session, "do_orm_execute")
     def _on_orm_execute(orm_execute_state):
         """Intercept ORM queries and inject tenant_id WHERE clause."""
         if is_tenant_filter_bypassed():
@@ -186,7 +188,7 @@ def register_tenant_filter_events() -> None:
 
         orm_execute_state.statement = stmt
 
-    @event.listens_for(Session, 'before_flush')
+    @event.listens_for(Session, "before_flush")
     def _on_before_flush(session, flush_context, instances):
         """Auto-fill tenant_id on new objects before INSERT."""
         if is_tenant_filter_bypassed():
@@ -195,6 +197,7 @@ def register_tenant_filter_events() -> None:
         tid = get_current_tenant_id()
         if tid is None:
             from bisheng.common.services.config_service import settings
+
             if not settings.multi_tenant.enabled:
                 tid = DEFAULT_TENANT_ID
             else:
@@ -205,7 +208,7 @@ def register_tenant_filter_events() -> None:
         for obj in session.new:
             table_name = _get_table_name(obj)
             if table_name and table_name in _tenant_aware_tables:
-                current_val = getattr(obj, 'tenant_id', None)
+                current_val = getattr(obj, "tenant_id", None)
                 if current_val is None or current_val == 0:
                     obj.tenant_id = tid
                 elif current_val != tid:
@@ -214,15 +217,15 @@ def register_tenant_filter_events() -> None:
                     # default like the v2.5 default=1 bug). Log so anomalies
                     # surface during canary rollout.
                     logger.warning(
-                        'tenant_id mismatch on write: table=%s pk=%s '
-                        'ctx_tid=%s obj_tid=%s (write proceeded as-is)',
-                        table_name, getattr(obj, 'id', None), tid, current_val,
+                        "tenant_id mismatch on write: table=%s pk=%s ctx_tid=%s obj_tid=%s (write proceeded as-is)",
+                        table_name,
+                        getattr(obj, "id", None),
+                        tid,
+                        current_val,
                     )
 
     _initialized = True
-    logger.info(
-        f'Tenant filter events registered for {len(_tenant_aware_tables)} tables'
-    )
+    logger.info(f"Tenant filter events registered for {len(_tenant_aware_tables)} tables")
 
 
 def build_tenant_filter_clause(tenant_col):
@@ -275,22 +278,22 @@ def _get_tenant_tables_from_statement(stmt):
     tables = []
 
     # Method 1: Use column_descriptions (works for select(Model) patterns)
-    if hasattr(stmt, 'column_descriptions'):
+    if hasattr(stmt, "column_descriptions"):
         for desc in stmt.column_descriptions:
-            entity = desc.get('entity')
+            entity = desc.get("entity")
             if entity is not None:
                 table_name = _get_table_name_from_class(entity)
                 if table_name and table_name in _tenant_aware_tables:
-                    table = getattr(entity, '__table__', None)
+                    table = getattr(entity, "__table__", None)
                     if table is not None and table not in tables:
                         tables.append(table)
 
     # Method 2: Fallback to froms (for joins, subqueries, etc.)
     if not tables:
-        froms = getattr(stmt, 'get_final_froms', None)
-        froms = froms() if froms else getattr(stmt, 'froms', [])
+        froms = getattr(stmt, "get_final_froms", None)
+        froms = froms() if froms else getattr(stmt, "froms", [])
         for from_clause in froms:
-            table_name = getattr(from_clause, 'name', None)
+            table_name = getattr(from_clause, "name", None)
             if table_name and table_name in _tenant_aware_tables:
                 if from_clause not in tables:
                     tables.append(from_clause)
@@ -298,12 +301,12 @@ def _get_tenant_tables_from_statement(stmt):
     return tables
 
 
-def _get_table_name_from_class(cls) -> Optional[str]:
+def _get_table_name_from_class(cls) -> str | None:
     """Get __tablename__ from an ORM class."""
-    return getattr(cls, '__tablename__', None)
+    return getattr(cls, "__tablename__", None)
 
 
-def _get_table_name(obj) -> Optional[str]:
+def _get_table_name(obj) -> str | None:
     """Get table name from an ORM instance."""
     cls = type(obj)
     return _get_table_name_from_class(cls)
@@ -323,14 +326,16 @@ def _resolve_tenant_id() -> int:
         return tid
 
     from bisheng.common.services.config_service import settings
+
     if not settings.multi_tenant.enabled:
         return DEFAULT_TENANT_ID
     else:
         from bisheng.common.errcode.tenant import NoTenantContextError
+
         raise NoTenantContextError()
 
 
-def _resolve_visible_tenant_ids() -> Optional[FrozenSet[int]]:
+def _resolve_visible_tenant_ids() -> frozenset[int] | None:
     """Resolve the visible tenant IN-list for the current request, if any."""
     if is_strict_tenant_filter():
         return None

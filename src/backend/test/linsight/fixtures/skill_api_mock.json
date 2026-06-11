@@ -1,0 +1,94 @@
+{
+  "_meta": {
+    "contract": "C3 · Skill API + 激活 + frontmatter (D -> A / I)",
+    "source_of_truth": "design §7.5 (端点) + 依赖与契约约定.md §4 (字段/激活/frontmatter)",
+    "base_path": "/api/v1/linsight",
+    "auth": {
+      "management": "get_tenant_admin_user (GET/POST/PUT/DELETE/PATCH /skill ...)",
+      "selectable": "get_login_user (GET /skill/selectable)"
+    },
+    "activation": "per-run 白名单经 config.configurable.active_skills: list[str]（skill name 列表）；[]=本轮全禁；前端不下发 None。built-in 不入表、不出 API、不受 active_skills 约束。",
+    "page_shape": "PageData[T] = {data: [...], total: int}",
+    "endpoints": [
+      "GET    /skill?keyword=&enabled=&page=&page_size=   -> PageData[SkillBrief]  (仅本租户自定义技能)",
+      "GET    /skill/selectable                           -> [SkillSelectable]     (本租户已启用，终端用户选择器)",
+      "GET    /skill/{name}                               -> SkillDetail",
+      "POST   /skill   (multipart SKILL.md | form name/description/content) -> SkillDetail",
+      "PUT    /skill/{name}                               -> SkillDetail",
+      "PATCH  /skill/{name}/status   {enabled: bool}      -> ok",
+      "DELETE /skill/{name}                               -> ok"
+    ],
+    "frontmatter_spec": {
+      "name": "必填, <=64, ^[a-z0-9-]+$",
+      "description": "必填, <=1024",
+      "license": "可选, str",
+      "allowed-tools": "可选, 工具名列表",
+      "metadata": "可选, dict",
+      "file_size_limit": "<=10MB"
+    },
+    "errcodes": {
+      "11051": "SkillValidationError (frontmatter/name 校验失败)",
+      "11052": "SkillFileTooLargeError (>10MB)",
+      "11053": "SkillNotFoundError",
+      "11054": "SkillPermissionError",
+      "11055": "SkillNameDuplicateError (重名；契约原定 11050，因 11050 被存量 SOP 检索码占用而顺延，见实际偏差记录)"
+    },
+    "deviation_note": "依赖与契约约定.md §4 原表用 /skill/{id} 与 PATCH /skill/{id}/enabled；已对齐 design §7.5：改用 /skill/{name}、PATCH /skill/{name}/status，并新增 GET /skill/selectable。"
+  },
+  "responses": {
+    "GET /skill": {
+      "code": 200,
+      "data": {
+        "data": [
+          {"id": 1, "name": "financial-report", "description": "季度财报分析技能：抽取核心指标并生成结构化报告。", "enabled": true, "source": "manual", "create_time": "2026-06-11T10:00:00+08:00"},
+          {"id": 2, "name": "contract-review", "description": "合同条款审阅技能（由 SOP 迁移）。", "enabled": false, "source": "sop_migrated", "create_time": "2026-06-10T09:30:00+08:00"}
+        ],
+        "total": 2
+      }
+    },
+    "GET /skill/selectable": {
+      "code": 200,
+      "data": [
+        {"name": "financial-report", "description": "季度财报分析技能：抽取核心指标并生成结构化报告。"}
+      ]
+    },
+    "GET /skill/financial-report": {
+      "code": 200,
+      "data": {
+        "id": 1,
+        "name": "financial-report",
+        "description": "季度财报分析技能：抽取核心指标并生成结构化报告。",
+        "enabled": true,
+        "source": "manual",
+        "create_time": "2026-06-11T10:00:00+08:00",
+        "preview": "# Financial Report Skill\n抽取营收/净利润/同比，输出 Markdown 报告……",
+        "source_text": "---\nname: financial-report\ndescription: 季度财报分析技能：抽取核心指标并生成结构化报告。\nallowed-tools:\n  - search_knowledge_base\n  - bisheng_code_interpreter\n---\n\n# Financial Report Skill\n抽取营收/净利润/同比，输出 Markdown 报告……"
+      }
+    },
+    "POST /skill (duplicate name)": {
+      "code": 11055,
+      "message": "A skill with the same name already exists"
+    },
+    "POST /skill (invalid frontmatter)": {
+      "code": 11051,
+      "message": "Skill validation failed: invalid frontmatter or name"
+    },
+    "POST /skill (too large)": {
+      "code": 11052,
+      "message": "Skill file exceeds the 10MB size limit"
+    },
+    "GET /skill/not-exist": {
+      "code": 11053,
+      "message": "Skill not found"
+    },
+    "PATCH /skill/financial-report/status": {
+      "request": {"enabled": false},
+      "code": 200,
+      "data": {"ok": true}
+    },
+    "DELETE /skill/financial-report": {
+      "code": 200,
+      "data": {"ok": true}
+    }
+  }
+}

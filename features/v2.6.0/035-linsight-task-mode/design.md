@@ -54,7 +54,7 @@ async def _create_agent(self, session_model: LinsightSessionVersion, tools: List
 
 deepagents demo 用 `ChatOpenAI` 直连 DashScope，**严禁照搬**。BiSheng 侧 model 必须经 `LLMService.get_bisheng_linsight_llm`（`task_exec.py::_get_llm` line215-226 已建立此链路），它承担两项横切职责：
 
-- **多租户解析**：`get_workbench_llm(tenant_id=...)`（line222）在 Celery Worker 子进程内显式按 `session_model.tenant_id` 取配置（INV-T18：admin-scope ContextVar 在 Worker 内未设置，必须显式透传 tenant）。
+- **多租户解析**：`get_workbench_llm(tenant_id=...)`（line222）在独立 Linsight Worker 子进程内显式按 `session_model.tenant_id` 取配置（INV-T18：admin-scope ContextVar 在 Worker 子进程内未设置，必须显式透传 tenant）。
 - **share fallback**：租户无私有模型时回落共享模型。
 
 `_create_agent` 不重新构造 model，直接复用 `self.llm`（`_execute_workflow` line158 已注入）。`create_deep_agent(model=self.llm, ...)` 接受任意 `BaseChatModel`，无须改造模型层。

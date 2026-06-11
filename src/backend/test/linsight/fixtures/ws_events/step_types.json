@@ -1,0 +1,72 @@
+{
+  "_meta": {
+    "contract": "C1 · task_execute_step.step_type 变体覆盖",
+    "note": "step_type ∈ {tool, thinking, knowledge, subagent, ui_card, call_user_input}. knowledge/call_user_input 见 event_samples.json；此处补 tool/thinking/subagent/ui_card。subagent 步骤带非空 namespace（子图前缀），前端按层级缩进渲染。start/end 两帧按 call_id 合并。"
+  },
+  "steps": [
+    {
+      "event_type": "task_execute_step",
+      "data": {
+        "call_id": "call_tool_01", "task_id": "a1b2c3d4", "name": "bisheng_code_interpreter",
+        "step_type": "tool", "status": "start", "call_reason": "运行 Python 计算同比增长率",
+        "params": {"code": "import pandas as pd; ...", "required_files": ["scratch/raw_metrics.csv"]},
+        "output": null, "namespace": null, "extra_info": {"truncated": false}
+      },
+      "timestamp": 11.0
+    },
+    {
+      "event_type": "task_execute_step",
+      "data": {
+        "call_id": "call_tool_01", "task_id": "a1b2c3d4", "name": "bisheng_code_interpreter",
+        "step_type": "tool", "status": "end", "call_reason": "运行 Python 计算同比增长率",
+        "params": {"code": "import pandas as pd; ...", "required_files": ["scratch/raw_metrics.csv"]},
+        "output": "yoy=18.2%\nnew_files=[{\"path\":\"output/chart.png\",\"size\":51200,\"is_product\":true}]",
+        "namespace": null,
+        "extra_info": {"truncated": false, "new_files": [{"path": "output/chart.png", "size": 51200, "is_product": true}]}
+      },
+      "timestamp": 12.0
+    },
+    {
+      "event_type": "task_execute_step",
+      "data": {
+        "call_id": "call_think_01", "task_id": "a1b2c3d4", "name": "thinking",
+        "step_type": "thinking", "status": "end", "call_reason": null,
+        "params": {}, "output": "需要先对齐口径：营收按合并报表，剔除汇兑损益……",
+        "namespace": null, "extra_info": {"is_thinking": true, "truncated": false}
+      },
+      "timestamp": 13.0
+    },
+    {
+      "event_type": "task_execute_step",
+      "data": {
+        "call_id": "call_sub_01", "task_id": "e5f6a7b8", "name": "research_subagent",
+        "step_type": "subagent", "status": "start", "call_reason": "派生子智能体做竞品对标",
+        "params": {"instruction": "对标三家同行 2024Q3 毛利率"},
+        "output": null, "namespace": "research_subagent:0", "extra_info": {"truncated": false}
+      },
+      "timestamp": 14.0
+    },
+    {
+      "event_type": "task_execute_step",
+      "data": {
+        "call_id": "call_sub_inner_01", "task_id": "e5f6a7b8", "name": "search_knowledge_base",
+        "step_type": "knowledge", "status": "end", "call_reason": "子智能体内检索竞品财报",
+        "params": {"query": "同行 2024Q3 毛利率"},
+        "output": "竞品 A 毛利率 32%，竞品 B 29% ...",
+        "namespace": "research_subagent:0", "extra_info": {"truncated": false}
+      },
+      "timestamp": 15.0
+    },
+    {
+      "event_type": "task_execute_step",
+      "data": {
+        "call_id": "call_ui_card_01", "task_id": "e5f6a7b8", "name": "render_chart",
+        "step_type": "ui_card", "status": "end", "call_reason": "渲染同比增长柱状图",
+        "params": {"chart_type": "bar"},
+        "output": null, "namespace": null,
+        "extra_info": {"truncated": false, "file_info": {"file_name": "chart.png", "file_md5": "0cc175b9c0f1b6a831c399e269772661", "file_url": "minio://workspace/1f3c9a20.../output/chart.png"}}
+      },
+      "timestamp": 16.0
+    }
+  ]
+}

@@ -11,8 +11,8 @@
 |------|------|------|
 | spec.md | ✅ 已评审 | 薄 spec：AC-1..8 收口，需求真相在 docs/PRD 的 PRD |
 | design.md | ✅ 已评审 | 接手第一入口（原《技术方案》改名）；2026-06-11 评审问题已修复（task_id 约定/park 终止/resume 优先级/残留清理） |
-| 契约冻结（Wave 0） | 🔲 未开始 | **阻塞所有并行 Track，必须最先完成** |
-| 实现 | 🔲 未开始 | 0 / 9 Track |
+| 契约冻结（Wave 0） | 🔄 进行中 | C1–C7 + 依赖已冻结（2026-06-11）；建表迁移已过；stub/mock/fixtures 入库；**仅 POC（T0-2）待收尾**，不阻塞分配 |
+| 实现 | 🔲 未开始 | 0 / 9 Track（Wave 0 收尾后即可分配） |
 
 ---
 
@@ -24,7 +24,7 @@
 |---|---|---|---|---|
 | **0** | 地基 / Lead | 冻结契约、引依赖、POC spike、建表、登记 release-contract | Lead（+1） | 契约文档、依赖锁版、表/迁移、共享 fixtures |
 | **A** | 内核与事件流 | `create_deep_agent` 装配 + `StreamEventMapper`（stream→`MessageEventType`） | 后端·核心 | 内核装配、事件归一层、call_reason、历史压缩 |
-| **B** | HITL & Worker | park-and-release + Redis checkpointer + 重新入队 + 协作终止 | 后端·运行时 | worker 改造、checkpointer 装配、续跑链路 |
+| **B** | HITL & Worker | park-and-release + Redis checkpointer + 重新入队 + park 期终止收口 + 排队位次 | 后端·运行时 | worker 改造、checkpointer 装配、续跑链路 |
 | **C** | 工作区与文件 | `WorkspaceBackend`（MinIO 真相+写穿缓存）+ 附件 + 代码产出捕获 | 后端·存储 | WorkspaceBackend、附件摄入、指针块、E2B copy-in/out |
 | **D** | Skill 体系 | Skill 磁盘存储 + 双中间件 + CRUD API/Service/Repo | 后端·Skill | `/skill` API、SkillsMiddleware、`linsight_skill` 表 |
 | **E** | 知识库/工具/模型 | 方案 B `SearchKnowledgeBase` + 工具包装 + 模型选择注入 | 后端·集成 | 知识库工具、模型注入、移除旧执行模式配置 |
@@ -40,7 +40,7 @@
 > **这是「约定」章**。Wave 0 必须由 Lead 牵头、相关 Track owner 参与，**先把下列 7 个契约的字段/签名定死并文档化**，之后各 Track 才能解耦并行。契约一旦冻结，变更须走「契约变更评审」（见 §5）。
 
 ### C1 · WebSocket 事件协议（A 产出 → H 消费）
-- **不变量**：前端消费的 `MessageEventType`（11 枚举，`state_message_manager.py`）**不新增类型**。新内核的步骤/子图/genUI/追问全部映射进既有类型。
+- **不变量**：前端消费的 `MessageEventType`（10 枚举，`state_message_manager.py`）**不新增类型**。新内核的步骤/子图/genUI/追问全部映射进既有类型。
 - **冻结物**：每个 `MessageEventType` 的 `data` JSON schema（尤其 `task_execute_step` 的 `step_type`/`call_reason`/`call_id`/`status`/嵌套 `namespace`/`extra_info.file_info`；`user_input` 追问卡的 `tool_calls.args` 字段）。
 - **交付**：A 在 Wave 0 末产出一组**录制的 `MessageEventType` fixtures**（JSON），H 拿它直接渲染、A 拿它写映射断言。**双方都对着 fixtures 编程，不互相等。**
 
@@ -155,7 +155,7 @@ flowchart TD
 ## 5. 分支与协作约定
 
 - **基线分支**：`feat/2.6.0/035-linsight-task-mode`（docs + 契约先落此分支）。
-- **Track 分支**：`feat/2.6.0/034-<track>`（如 `034-trackA-kernel`），PR 合入基线；基线每日/每 Wave 滚动集成。
+- **Track 分支**：`feat/2.6.0/035-<track>`（如 `035-trackA-kernel`），PR 合入基线；基线每日/每 Wave 滚动集成。
 - **代码 ownership（防冲突，按目录切）**：
 
   | Track | 独占目录 |
@@ -188,7 +188,7 @@ flowchart TD
 
 ### Track A · 内核与事件流
 - [ ] **TA-1**(测试) `StreamEventMapper` 单测：对 fixtures chunk 断言 `MessageEventType` 输出（todo/工具/thinking/子图/检索/interrupt/终态）。**依赖** T0-2。**覆盖** AC-1。
-- [ ] **TA-2** `stream_event_mapper.py` 实现（chunk→`BaseEvent`→既有 `_handle_event`，按 `call_id` 合并、`namespace` 子图归并、终态收口）。**依赖** TA-1。
+- [ ] **TA-2** `stream_event_mapper.py` 实现（chunk→`BaseEvent`→既有 `_handle_event`，按 `call_id` 合并、`namespace` 子图归并、**todo→`task_id` 稳定性投影**（design §3.3.1：`md5(svid+content)[:8]` 生成 + 三级 diff 对齐 + `ExecStep.task_id`=当前 in_progress todo、无则=svid）、终态收口）。**依赖** TA-1。
 - [ ] **TA-3** `agent_factory.py`：`create_deep_agent` 装配（model/tools/backend/checkpointer/middlewares），`call_reason` schema 注入 + 历史压缩中间件。**依赖** C2/C3/C4/C5 stub。
 - [ ] **TA-4** `_execute_workflow`/`_execute_agent_tasks` 改 `astream(stream_mode=[updates,messages,values], subgraphs=True)`。**依赖** TA-2/TA-3。**DoD**：用 stub 跑通端到端 fixtures。
 
@@ -196,13 +196,15 @@ flowchart TD
 - [ ] **TB-1**(测试) park-and-release 闭环测：假 graph interrupt → 释放 slot → 重新入队 → 异地 resume，断言 checkpointer 续跑保真。**依赖** T0-2。**覆盖** AC-5。
 - [ ] **TB-2** `checkpointer.py`：`AsyncRedisSaver` 装配（thread_id=svid，复用 RedisManager）。**依赖** C5。
 - [ ] **TB-3** worker 改造：interrupt 释放 semaphore + `release_task_ownership` + 退出循环；删 `_wait_for_input_completion` 轮询。**依赖** TB-2。
-- [ ] **TB-4** `/workbench/user-input` 追加「重新入队」+ worker 拾取识别续跑（`Command(resume)`）+ 协作终止标志。**依赖** TB-3。**DoD**：TB-1 绿，重启不丢。
+- [ ] **TB-4** `/workbench/user-input` 追加「重新入队」（**`lpush` 队头**，resume 优先于新任务）+ worker 拾取识别续跑（`Command(resume)`，拾取前**非终态校验**、终态项丢弃）+ **park 期终止收口**（终止端点直接置终态 + push `task_terminated` 末帧 + 删 thread checkpoint，**不经 worker**；执行期终止沿用既有 `_check_termination` 监控，design §4.6/§4.7）。**依赖** TB-3。**DoD**：TB-1 绿，重启不丢；park 期终止后任务不被复活。
+- [ ] **TB-5** 排队位次语义复核（FR-3.15 后端侧）：`lpush` 队头插队后 `get_queue_status`/`LinsightQueue.index` 的位次含义（resume 项是否计入他人位次、口径统一）+ 取消排队（`queue.remove`）沿用校验。**依赖** TB-4。**DoD**：位次口径写入契约 C1 旁注供 H 消费。
 
 ### Track C · 工作区与文件
 - [ ] **TC-1**(测试) `WorkspaceBackend` 单测：write 写穿、read 分页/懒加载、ls 以 MinIO 为准、多租户隔离。**覆盖** AC-6。
 - [ ] **TC-2** `workspace_backend.py` 实现（MinIO 真相 + file_dir 写穿缓存）+ `FakeWorkspaceBackend`（**Wave 0 即交付给 A/B**）。**依赖** C2。
 - [ ] **TC-3** 附件摄入：解析 markdown→MinIO，物化指针块 `<uploaded_files>`，含图文档（base64 图片）。**依赖** TC-2。
 - [ ] **TC-4** 代码产出捕获：E2B copy-in（≤阈值自动 delta push + 大文件经 code 工具入参 `required_files` 声明、worker 中转流式写入；**沙箱不可达 MinIO，禁用 presigned 自取**）+ copy-out（全树扫描→按 `SIZE_INLINE` 分流→backend）+ `run` 结果枚举新文件 + FileNotFoundError 兜底提示 + `output/`vs`scratch/` 分类。**依赖** TC-2。**DoD**：脚本产出可被 `ls`/`read` 看见、产物 promote MinIO；声明大文件可在沙箱内读到。
+- [ ] **TC-5** 文件跨 version 复用幂等（会话级记忆的**唯一后端改动**，design §9.3.8/§9.4 #11）：`_process_submitted_files` 幂等化——同会话同 `file_id` 再提交时复用正式桶产物、跳过「临时桶→正式桶」复制；临时元数据过期（24h）且无正式产物 → 判失效、返回失效标记供前端提示重传（不静默丢弃）。**依赖** TC-3。**覆盖** FR-1.8（文件记忆有效期）。
 
 ### Track D · Skill 体系
 - [ ] **TD-1** `models/linsight_skill.py` + DAO（依赖 T0-3）。
@@ -227,11 +229,12 @@ flowchart TD
 - [ ] **TG-2** 对账报告（成功/失败/跳过）。**覆盖** AC-4。
 
 ### Track H · 前端·Client 执行视图
-- [ ] **TH-1** 统一输入区：任务模式 chip + 「+」菜单（技能/知识空间/组织知识库/附件）+ 工具栏 + 模型选择器 + 提交前一览。**对** C1/C3/C4。**覆盖** FR-1.x/2.x。
+- [ ] **TH-1** 统一输入区：任务模式 chip + 「+」菜单（技能/知识空间/组织知识库/附件）+ 工具栏 + 模型选择器 + 提交前一览 + **显式开关与会话级记忆**（取消「收到消息自动退出」，仅 chip「×」退出；退出时技能即清、文件/知识库/工具会话内保留、再进回填；文件 chip 失效标记联动 TC-5，design §9.3.8）。**对** C1/C3/C4。**覆盖** FR-1.x（含 FR-1.8）/2.x。
 - [ ] **TH-2** 执行视图状态机 + 步骤流渲染（消费 C1 fixtures：todo/工具/thinking/子任务/检索/产物/genUI 注册表）。**覆盖** FR-3.x。
 - [ ] **TH-3** HITL 追问卡（从 `tool_calls.args` 渲染，单点定向隔离）。**覆盖** FR-4.x。
 - [ ] **TH-4** 产物区（预览/下载/打包/复制/溯源/查看所有文件）+ 路由守卫（C6）。**覆盖** FR-3.8/3.18。
-  **手动验证**：WS mock 回放 fixtures → 全流程 UI 正确；断连重连恢复。
+- [ ] **TH-5** 排队态（FR-3.15 前端侧）：「排队中」全局状态 + 排队文案 + 位次展示（轮询 `get_queue_status`，口径取 TB-5）+ 取消排队入口 + 离开页面保留位次、轮到自动转「规划中」。**依赖** TB-5（位次口径）。**覆盖** FR-3.15（P0）。
+  **手动验证**：WS mock 回放 fixtures → 全流程 UI 正确；断连重连恢复；排队态→规划中切换正确。
 
 ### Track I · 前端·Platform
 - [ ] **TI-1** Skill 管理页（列表/搜索/Preview·Source/上传·新建/编辑/删除/启停/校验/空态）。**对** C3 mock。**覆盖** FR-5.x。
@@ -256,4 +259,8 @@ flowchart TD
 
 > 只留一行指针，论证在 design.md（决策/坑）。推翻 ★ 决策先停下与用户确认。
 
-- （待记录）
+- **D1（Python 3.11 升级）**：deepagents 全版本要求 Python ≥3.11，后端原锁 3.10.x。经用户确认升级后端到 3.11：`requires-python>=3.11`、ruff `target-version=py311`、重建 3.11 venv。**连带**：`cchardet 2.1.7` 在 3.11 编译失败（`longintrepr.h` 移除）→ 换 `faust-cchardet`（同 `import cchardet`）。**待人工跟进**：Docker 基础镜像（`base.v8`，py3.10）重建为 3.11 + `dmPython`/`dmssl` 3.11 验证、`Dockerfile` `DM_HOME` 路径、CI 镜像、全量测试回归。design 未记录该前置，已补此偏差。
+- **D2（Skill 重名错误码 11050→11055）**：契约原定 11050=重名，但 11050 已被存量 `LinsightVectorModelError`（SOP 检索链路，§8.6 计划下线）占用；Track 0 不删在用码，故重名顺延 11055（段内未占用槽位）。新码：11051/11052/11053/11054/11055。
+- **D3（C3 端点 id→name 对齐 design §7.5）**：依赖与契约约定 §4 草案用 `/skill/{id}` + `PATCH .../enabled`；冻结时收敛到 design §7.5 的 `/skill/{name}` + `PATCH .../status` + 新增 `GET /skill/selectable`。mock 已据此产出。
+- **D4（C5 Redis checkpointer → 自研 plain-Redis，2026-06-11 决策已落）**：POC P3 实测 `langgraph-checkpoint-redis` 依赖 RediSearch（Redis Stack），现网不支持。经用户决策采用**方案②自研 plain-Redis checkpointer**。实现位置：`bisheng/linsight/domain/services/checkpointer.py`（`PlainRedisCheckpointer` + `make_checkpointer()`，Wave 0 已交付）；`langgraph-checkpoint-redis` 已从 pyproject.toml 移除，uv.lock 已重新锁定。Key schema、TTL、`adelete_thread` 见 C5 契约（§5）。Track B TB-2 直接基于此文件实现 worker 装配。
+- **D5（C2 WorkspaceBackend 须实现 deepagents BackendProtocol）**：POC P1 实测真实 backend 协议方法返回 `ReadResult/WriteResult/LsResult/EditResult`（非契约草案的 `bytes|str`），且含 `glob/grep/upload/download`。Track C 实现以 `deepagents.backends.filesystem.FilesystemBackend` 为准；fixtures 的 `FakeWorkspaceBackend` 为概念级 stub。

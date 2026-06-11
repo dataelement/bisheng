@@ -4,7 +4,7 @@ version = "2.4.0"
 description = "BISHENG backend service"
 readme = "README.md"
 license = "Apache 2.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "aiofiles>=25.1.0",
     "aiomysql>=0.3.2",
@@ -12,7 +12,9 @@ dependencies = [
     "asyncpg>=0.30.0",
     "bs4>=0.0.2",
     "captcha>=0.7.1",
-    "cchardet>=2.1.7",
+    # faust-cchardet is the maintained fork of cchardet (same `import cchardet`).
+    # The original cchardet 2.1.7 fails to build on Python 3.11+ (longintrepr.h removed).
+    "faust-cchardet>=2.1.19",
     "celery>=5.5.3",
     "chardet>=5.2.0",
     "chromadb>=1.3.4",
@@ -96,6 +98,7 @@ dependencies = [
     # Previously available transitively; the LangChain 1.x dependency graph no
     # longer pulls it in, but bisheng.user / sso_sync import it directly.
     "rsa>=4.9",
+    "deepagents>=0.6.3",
 ]
 
 [project.optional-dependencies]
@@ -127,7 +130,7 @@ dev = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 120
 exclude = [
     ".venv",
