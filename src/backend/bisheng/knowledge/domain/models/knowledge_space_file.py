@@ -119,16 +119,18 @@ class SpaceFileDao(KnowledgeFileDao):
 
     @classmethod
     async def get_max_level_in_subtree(cls, knowledge_id: int, folder_id: int, folder_level_path: str) -> int:
-        """Deepest ``level`` within a folder's own subtree (the folder itself + all
-        descendants). F034 depth check (AC-11): a folder move is allowed only if
-        ``target_level + (max_subtree_level - folder_level) <= 10``; this returns the
-        ``max_subtree_level`` term. Subtree prefix = ``{folder_level_path}/{folder_id}``;
+        """Deepest FOLDER ``level`` within a folder's own subtree (the folder itself
+        + descendant folders; files excluded — they don't count as a layer).
+        F034 depth check (AC-11): a folder move is allowed only if
+        ``target_level + (max_subtree_level - folder_level) <= 9`` (0-based, 10 layers);
+        this returns the ``max_subtree_level`` term. Subtree prefix = ``{folder_level_path}/{folder_id}``;
         the folder itself (``file_level_path == folder_level_path``) is included so a
         leaf folder still reports its own level.
         """
         subtree_prefix = f"{folder_level_path}/{folder_id}"
         statement = select(func.max(KnowledgeFile.level)).where(
             KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.file_type == FileType.DIR.value,
             or_(
                 KnowledgeFile.id == folder_id,
                 col(KnowledgeFile.file_level_path) == subtree_prefix,

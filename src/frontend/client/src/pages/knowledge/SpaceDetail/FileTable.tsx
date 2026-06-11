@@ -519,7 +519,7 @@ interface FileTableProps {
     onRename: (id: string, newName: string) => void;
     onMove?: (file: KnowledgeFile) => void;
     /** F034 drag-move: drop dragged items into a same-space folder. */
-    onMoveToFolder?: (folderId: string, items: KnowledgeFile[]) => void;
+    onMoveToFolder?: (folderId: string, items: KnowledgeFile[], folderName: string) => void;
     onDelete: (id: string) => void;
     onRetry: (id: string) => void;
     onNavigateFolder: (id: string) => void;
