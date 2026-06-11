@@ -130,23 +130,35 @@ async def test_count_over_1000_rejected(fake_dao):
     svc.add_file.assert_not_awaited()
 
 
-async def test_depth_over_10_rejected_whole_batch(fake_dao):
+async def test_depth_over_limit_rejected_whole_batch(fake_dao):
     svc = _svc()
+    # parent at level 8 = 第9层; folders A (level 9 = 第10层, OK) + B (level 10 = 第11层) → reject
     parent = MagicMock(id=9, level=8, file_level_path="/1/2/3/4/5/6/7/8")
     svc._get_folder_for_action = AsyncMock(return_value=parent)
-    # deepest folder level = 8+1 (A) +1 (B) +1 (C) = 11 > 10
     with pytest.raises(SpaceFolderDepthError):
-        await svc.upload_folder_items(5, _items("A/B/C/d.pdf"), parent_id=9)
+        await svc.upload_folder_items(5, _items("A/B/d.pdf"), parent_id=9)
     assert fake_dao.rows == []
     svc.add_file.assert_not_awaited()
 
 
-async def test_depth_exactly_10_allowed(fake_dao):
+async def test_depth_into_deepest_folder_rejected(fake_dao):
     svc = _svc()
-    parent = MagicMock(id=9, level=8, file_level_path="/1/2/3/4/5/6/7/8")
+    # parent at level 9 = 第10层 (deepest allowed): even a single-layer folder → level 10 → reject
+    parent = MagicMock(id=9, level=9, file_level_path="/1/2/3/4/5/6/7/8/9")
+    svc._get_folder_for_action = AsyncMock(return_value=parent)
+    with pytest.raises(SpaceFolderDepthError):
+        await svc.upload_folder_items(5, _items("A/d.pdf"), parent_id=9)
+    assert fake_dao.rows == []
+
+
+async def test_depth_deepest_folder_at_level_9_allowed(fake_dao):
+    svc = _svc()
+    # parent at level 7 = 第8层; folders A (level 8) + B (level 9 = 第10层) → allowed;
+    # the FILE inside B lands at level 10 but files don't count as a layer
+    parent = MagicMock(id=9, level=7, file_level_path="/1/2/3/4/5/6/7")
     svc._get_folder_for_action = AsyncMock(return_value=parent)
     await svc.upload_folder_items(5, _items("A/B/d.pdf"), parent_id=9)
-    assert {r.level for r in fake_dao.rows} == {9, 10}
+    assert {r.level for r in fake_dao.rows} == {8, 9}
 
 
 async def test_top_level_name_conflict_rejected(fake_dao):
