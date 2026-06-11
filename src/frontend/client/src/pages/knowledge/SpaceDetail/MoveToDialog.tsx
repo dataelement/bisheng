@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, File as FileIcon, Folder as FolderIcon, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
     FileType,
@@ -57,6 +57,15 @@ export function MoveToDialog({
 
     const currentFolderId = folderStack.length ? folderStack[folderStack.length - 1].id : null;
     const crossSpace = selectedSpaceId !== currentSpaceId;
+
+    // Reset to the source space root on every open — the picker should never
+    // reopen deep inside a folder the user browsed to last time.
+    useEffect(() => {
+        if (open) {
+            setSelectedSpaceId(currentSpaceId);
+            setFolderStack([]);
+        }
+    }, [open, currentSpaceId]);
 
     const { data: uploadable = [] } = useQuery({
         queryKey: ["move-uploadable-spaces"],
