@@ -70,7 +70,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                         <AlertDialogTitle className="text-center text-xl font-medium pt-2">
                             {options.title || "提示"}
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-center py-4 text-base text-slate-600">
+                        <AlertDialogDescription className="text-center py-4 text-base text-slate-600 whitespace-pre-line">
                             {options.description}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
