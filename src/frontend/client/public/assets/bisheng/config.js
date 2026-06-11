@@ -7,8 +7,8 @@ window.BRAND_CONFIG = {
         zh: "灵思",
         en: "Linsight"
     },
-    URLLoadingIcon: "",
-    loadingIcon: "",
+    URLLoadingIcon: "/assets/bisheng/loading.svg",
+    loadingIcon: "/assets/bisheng/loading.svg",
     loadingAnimation: ""
 };
 
