@@ -8,8 +8,7 @@ from .manager import (
     get_database_connection,
     sync_get_database_connection,
     get_async_db_session,
-    get_sync_db_session,
-    async_execute_autocommit
+    get_sync_db_session
 )
 
 __all__ = [
@@ -17,6 +16,5 @@ __all__ = [
     'get_database_connection',
     'sync_get_database_connection',
     'get_async_db_session',
-    'get_sync_db_session',
-    'async_execute_autocommit'
+    'get_sync_db_session'
 ]
