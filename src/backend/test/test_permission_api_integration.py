@@ -858,6 +858,72 @@ class TestPermissionApiIntegration:
         assert body['status_code'] == 200
         assert [item['subject_id'] for item in body['data']] == [9]
 
+    def test_permissions_list_allows_active_space_admin_membership_fallback(self):
+        from bisheng.common.models.space_channel_member import UserRoleEnum
+
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=set(),
+        ), patch(
+            'bisheng.common.models.space_channel_member.SpaceChannelMemberDao.async_get_active_member_role',
+            new_callable=AsyncMock,
+            return_value=UserRoleEnum.ADMIN,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[
+                ResourcePermissionItem(
+                    subject_type='user',
+                    subject_id=9,
+                    subject_name='manager',
+                    relation='manager',
+                ),
+            ],
+        ) as mock_get_permissions, patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            with TestClient(app) as client:
+                resp = client.get('/api/v1/permissions/resources/knowledge_space/1/permissions')
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert body['data'][0]['subject_id'] == 9
+        mock_get_permissions.assert_awaited_once()
+
+    def test_permissions_list_rejects_regular_space_member_without_rebac_manage_permission(self):
+        from bisheng.common.models.space_channel_member import UserRoleEnum
+
+        app = _make_app(_ViewerUser)
+
+        with patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=set(),
+        ), patch(
+            'bisheng.common.models.space_channel_member.SpaceChannelMemberDao.async_get_active_member_role',
+            new_callable=AsyncMock,
+            return_value=UserRoleEnum.MEMBER,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions',
+            new_callable=AsyncMock,
+            return_value=[],
+        ) as mock_get_permissions:
+            with TestClient(app) as client:
+                resp = client.get('/api/v1/permissions/resources/knowledge_space/1/permissions')
+                body = resp.json()
+
+        assert body['status_code'] == 19000
+        mock_get_permissions.assert_not_awaited()
+
     def test_permissions_list_keeps_bound_viewer_grant(self):
         app = _make_app(_ViewerUser)
 

@@ -622,6 +622,38 @@ def _management_permission_ids(resource_type: str) -> set[str]:
     return set(tier_map.values())
 
 
+async def _knowledge_space_membership_permission_ids(
+    *,
+    login_user: UserPayload,
+    resource_type: str,
+    resource_id: str,
+) -> set[str]:
+    """Fallback for legacy space-member roles when ReBAC metadata drifts."""
+    if resource_type != 'knowledge_space' or not str(resource_id).isdigit():
+        return set()
+
+    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
+
+    try:
+        role = await SpaceChannelMemberDao.async_get_active_member_role(
+            int(resource_id),
+            login_user.user_id,
+        )
+    except Exception as exc:
+        logger.debug(
+            'Could not resolve space membership fallback for user=%s space=%s: %s',
+            login_user.user_id,
+            resource_id,
+            exc,
+        )
+        return set()
+    if role == UserRoleEnum.CREATOR:
+        return default_knowledge_space_permissions('owner')
+    if role == UserRoleEnum.ADMIN:
+        return default_knowledge_space_permissions('manager')
+    return set()
+
+
 async def _get_caller_grant_permission_ids(
     *,
     login_user: UserPayload,
@@ -658,6 +690,13 @@ async def _get_caller_grant_permission_ids(
         caller_permission_ids.update(
             _default_permission_ids_for_relation(resource_type, implicit_relation),
         )
+    caller_permission_ids.update(
+        await _knowledge_space_membership_permission_ids(
+            login_user=login_user,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        ),
+    )
 
     return caller_permission_ids
 
@@ -683,6 +722,13 @@ async def _has_resource_permission_management_access(
             resource_type,
             resource_id,
             nearest_binding_wins=_lineage_binding_can_override(resource_type),
+        )
+        effective_permission_ids.update(
+            await _knowledge_space_membership_permission_ids(
+                login_user=login_user,
+                resource_type=resource_type,
+                resource_id=resource_id,
+            ),
         )
         return bool(management_permission_ids & effective_permission_ids)
 

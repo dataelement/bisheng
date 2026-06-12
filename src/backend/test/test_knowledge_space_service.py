@@ -46,6 +46,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendFileReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
+    PortalFileCandidate,
     PORTAL_SEARCH_ES_RECALL_LIMIT,
     PORTAL_SEARCH_OVERSAMPLE_FACTOR,
     PORTAL_SEARCH_VECTOR_RECALL_LIMIT,
@@ -1555,6 +1556,241 @@ async def test_shougang_portal_vector_search_reuses_embedding_for_spaces_with_sa
     assert [call[0] for call in vector_search_calls] == ['col_12', 'col_18']
     assert all(call[2]['expr'] == 'document_id in [1580, 1801]' for call in vector_search_calls)
     assert [chunk.file_id for chunk in chunks] == [1801, 1580]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_es_search_boosts_phrase_matches(service):
+    space = _make_space(space_id=12, user_id=7)
+    space.index_name = 'idx_12'
+    captured_body = {}
+
+    class FakeEsClient:
+        async def search(self, index, body):
+            captured_body['index'] = index
+            captured_body['body'] = body
+            return {'hits': {'hits': []}}
+
+    fake_es_vector = SimpleNamespace(client=FakeEsClient())
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeRag.init_knowledge_es_vectorstore',
+        new_callable=AsyncMock,
+        return_value=fake_es_vector,
+    ):
+        chunks = await service._search_shougang_portal_es_chunks(
+            spaces=[space],
+            keyword='热轧振动纹治理',
+            filter_file_ids=None,
+            limit=12,
+        )
+
+    assert chunks == []
+    assert captured_body['index'] == ['idx_12']
+    text_query = captured_body['body']['query']['bool']['must'][0]['bool']
+    assert text_query['minimum_should_match'] == 1
+    should_clauses = text_query['should']
+    assert should_clauses[0]['match']['text']['query'] == '热轧振动纹治理'
+    assert should_clauses[1]['match_phrase']['text']['boost'] == 3.0
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_semantic_search_uses_configured_rerank_model(service, monkeypatch):
+    monkeypatch.setenv('BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID', '77')
+    space = _make_space(space_id=12, user_id=7)
+    space.name = '热轧知识库'
+    files = [
+        _make_file(file_id=5101, knowledge_id=12, file_name='热轧泛化资料.pdf'),
+        _make_file(file_id=5102, knowledge_id=12, file_name='热轧振动纹治理专题.pdf'),
+    ]
+    file_map = {int(file.id): file for file in files}
+    es_chunks = [
+        SimpleNamespace(
+            file_id=5101,
+            knowledge_id=12,
+            content='热轧相关泛化描述',
+            source='es',
+            retriever='es',
+            rank=1,
+            score=18.0,
+            metadata={'document_id': 5101},
+        ),
+        SimpleNamespace(
+            file_id=5102,
+            knowledge_id=12,
+            content='精轧机振动纹治理原因和处理步骤',
+            source='es',
+            retriever='es',
+            rank=2,
+            score=12.0,
+            metadata={'document_id': 5102},
+        ),
+    ]
+
+    class FakeRerank:
+        async def acompress_documents(self, documents, query):
+            assert query == '热轧振动纹如何治理'
+            by_file_id = {doc.metadata['file_id']: doc for doc in documents}
+            return [
+                SimpleNamespace(metadata={**by_file_id[5102].metadata, 'relevance_score': 0.96}),
+                SimpleNamespace(metadata={**by_file_id[5101].metadata, 'relevance_score': 0.12}),
+            ]
+
+    async def fake_get_files(**kwargs):
+        return [file_map[file_id] for file_id in kwargs['extra_file_ids'] if file_id in file_map]
+
+    async def fake_enrich(input_files):
+        return [{**file.model_dump(), 'tags': []} for file in input_files]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch.object(
+        service,
+        '_search_shougang_portal_es_chunks',
+        new_callable=AsyncMock,
+        return_value=es_chunks,
+        create=True,
+    ), patch.object(
+        service,
+        '_search_shougang_portal_vector_chunks',
+        new_callable=AsyncMock,
+        return_value=[],
+        create=True,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        side_effect=fake_get_files,
+    ), patch.object(
+        service,
+        '_filter_visible_child_items',
+        new_callable=AsyncMock,
+        side_effect=lambda items, **_: items,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        side_effect=fake_enrich,
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_rerank',
+        new_callable=AsyncMock,
+        return_value=FakeRerank(),
+    ) as mock_get_rerank:
+        result = await service.search_shougang_portal_files(
+            ShougangPortalFileSearchReq(q='热轧振动纹如何治理', space_ids=[12], sort='relevance')
+        )
+
+    mock_get_rerank.assert_awaited_once_with(model_id=77)
+    assert [item['id'] for item in result['data']] == [5102, 5101]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_request_rerank_model_overrides_env_model(service, monkeypatch):
+    monkeypatch.setenv('BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID', '77')
+    candidates = [
+        PortalFileCandidate(file_id=7101, knowledge_id=12, fusion_score=0.9),
+        PortalFileCandidate(file_id=7102, knowledge_id=12, fusion_score=0.8),
+    ]
+
+    class FakeRerank:
+        async def acompress_documents(self, documents, query):
+            return [
+                SimpleNamespace(metadata={**documents[1].metadata, 'relevance_score': 0.91}),
+                SimpleNamespace(metadata={**documents[0].metadata, 'relevance_score': 0.11}),
+            ]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_rerank',
+        new_callable=AsyncMock,
+        return_value=FakeRerank(),
+    ) as mock_get_rerank:
+        result = await service._rerank_shougang_portal_file_candidates(
+            keyword='热轧振动纹',
+            candidates=candidates,
+            file_map={},
+            rerank_model_id='88',
+        )
+
+    mock_get_rerank.assert_awaited_once_with(model_id=88)
+    assert [candidate.file_id for candidate in result] == [7101, 7102]
+    assert candidates[1].rerank_score == 0.91
+    assert candidates[0].rerank_score == 0.11
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_empty_request_rerank_model_disables_env_model(service, monkeypatch):
+    monkeypatch.setenv('BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID', '77')
+    req = ShougangPortalFileSearchReq(q='热轧振动纹', space_ids=[12], sort='relevance', rerank_model_id='')
+    candidates = [
+        PortalFileCandidate(file_id=7201, knowledge_id=12, fusion_score=0.9),
+        PortalFileCandidate(file_id=7202, knowledge_id=12, fusion_score=0.8),
+    ]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_rerank',
+        new_callable=AsyncMock,
+    ) as mock_get_rerank:
+        result = await service._rerank_shougang_portal_file_candidates(
+            keyword='热轧振动纹',
+            candidates=candidates,
+            file_map={},
+            rerank_model_id=req.rerank_model_id,
+            rerank_model_id_provided=service._is_pydantic_field_set(req, 'rerank_model_id'),
+        )
+
+    mock_get_rerank.assert_not_awaited()
+    assert result is candidates
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_rerank_not_configured_keeps_fusion_order(service, monkeypatch):
+    from bisheng.knowledge.domain.services import knowledge_space_service as service_module
+
+    monkeypatch.delenv('BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID', raising=False)
+    monkeypatch.setattr(service_module, 'PORTAL_SEARCH_RERANK_MODEL_ID', '')
+    candidates = [
+        PortalFileCandidate(file_id=6101, knowledge_id=12, fusion_score=0.9),
+        PortalFileCandidate(file_id=6102, knowledge_id=12, fusion_score=0.8),
+    ]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_rerank',
+        new_callable=AsyncMock,
+        side_effect=AssertionError('rerank should be skipped when no model id is configured'),
+    ):
+        result = await service._rerank_shougang_portal_file_candidates(
+            keyword='热轧振动纹',
+            candidates=candidates,
+            file_map={},
+        )
+
+    assert result is candidates
+    assert [candidate.file_id for candidate in result] == [6101, 6102]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_rerank_failure_falls_back_to_fusion_order(service, monkeypatch):
+    monkeypatch.setenv('BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID', '77')
+    candidates = [
+        PortalFileCandidate(file_id=6201, knowledge_id=12, fusion_score=0.9),
+        PortalFileCandidate(file_id=6202, knowledge_id=12, fusion_score=0.8),
+    ]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.LLMService.get_bisheng_rerank',
+        new_callable=AsyncMock,
+        side_effect=RuntimeError('rerank unavailable'),
+    ) as mock_get_rerank:
+        result = await service._rerank_shougang_portal_file_candidates(
+            keyword='热轧振动纹',
+            candidates=candidates,
+            file_map={},
+        )
+
+    mock_get_rerank.assert_awaited_once_with(model_id=77)
+    assert result is candidates
+    assert [candidate.file_id for candidate in result] == [6201, 6202]
+    assert all(candidate.rerank_score is None for candidate in result)
 
 
 @pytest.mark.asyncio
@@ -4648,6 +4884,54 @@ class TestManagePermissionBoundaries:
         mock_require_permission_id.assert_awaited_once_with('knowledge_space', 1, 'manage_space_relation')
         mock_require_manage.assert_not_awaited()
         mock_require_write.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_update_member_role_syncs_direct_space_user_permissions(self, service):
+        from bisheng.knowledge.domain.schemas.knowledge_space_schema import UpdateSpaceMemberRoleRequest
+
+        target_member = _make_member(user_id=8, user_role=UserRoleEnum.MEMBER)
+        request = UpdateSpaceMemberRoleRequest(space_id=1, user_id=8, role='admin')
+
+        with patch.object(
+            service, '_require_permission_id', new_callable=AsyncMock,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_active_member_role',
+            new_callable=AsyncMock,
+            return_value=UserRoleEnum.CREATOR,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member',
+            new_callable=AsyncMock,
+            return_value=target_member,
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.update',
+            new_callable=AsyncMock,
+            return_value=target_member,
+        ), patch.object(
+            service, '_user_can_manage_space',
+            new_callable=AsyncMock,
+            return_value=False,
+        ), patch.object(
+            service, '_send_admin_assignment_notification',
+            new_callable=AsyncMock,
+        ), patch.object(
+            service.__class__,
+            'sync_direct_space_user_permissions',
+            new_callable=AsyncMock,
+        ) as mock_sync_permissions:
+            result = await service.update_member_role(request)
+
+        assert result is True
+        assert target_member.user_role == UserRoleEnum.ADMIN
+        mock_sync_permissions.assert_awaited_once_with(
+            1,
+            8,
+            UserRoleEnum.ADMIN,
+            is_active=True,
+        )
 
     @pytest.mark.asyncio
     async def test_update_space_uses_edit_permission_when_auth_type_is_present(self, service):

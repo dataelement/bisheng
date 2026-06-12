@@ -101,10 +101,41 @@ def test_openapi_file_detail_depends_on_developer_token_user():
     assert params["login_user"].default.dependency is get_developer_token_user
 
 
+def test_openapi_knowledge_list_depends_on_developer_token_user():
+    params = signature(filelib_mod.get_knowledge).parameters
+    assert params["login_user"].default.dependency is get_developer_token_user
+
+
 def test_parse_document_type_code_from_file_encoding():
     assert _parse_document_type_code("SGGF-RPT-QM-20260400000007") == "RPT"
     assert _parse_document_type_code("rpt-qm") == "RPT"
     assert _parse_document_type_code(None) == ""
+
+
+async def test_openapi_knowledge_list_uses_developer_token_user(monkeypatch):
+    request = MagicMock()
+    developer_user = MagicMock()
+    list_knowledge = AsyncMock(return_value=([{"id": 118, "name": "GR00011"}], 1))
+    monkeypatch.setattr(filelib_mod.KnowledgeService, "get_knowledge", list_knowledge)
+
+    response = await filelib_mod.get_knowledge(
+        request=request,
+        knowledge_type=filelib_mod.KnowledgeTypeEnum.NORMAL.value,
+        name="GR",
+        page_size=20,
+        page_num=2,
+        login_user=developer_user,
+    )
+
+    list_knowledge.assert_awaited_once_with(
+        request,
+        developer_user,
+        filelib_mod.KnowledgeTypeEnum.NORMAL,
+        "GR",
+        page=2,
+        limit=20,
+    )
+    assert response.data == {"data": [{"id": 118, "name": "GR00011"}], "total": 1}
 
 
 async def test_openapi_file_list_enriches_shougang_fields(monkeypatch):

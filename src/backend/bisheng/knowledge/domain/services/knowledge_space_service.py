@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import secrets
 import tempfile
 import time
@@ -15,6 +16,7 @@ from typing import Any, List, Optional, Dict, TYPE_CHECKING
 from fastapi import Request
 from langchain_core.documents import Document
 from loguru import logger
+from pydantic import BaseModel
 from sqlalchemy import func, update
 from sqlmodel import select
 
@@ -244,6 +246,7 @@ PORTAL_SEARCH_RRF_K = 60
 PORTAL_SEARCH_ES_WEIGHT = 1.0
 PORTAL_SEARCH_VECTOR_WEIGHT = 1.0
 PORTAL_SEARCH_RERANK_MODEL_ID = ""
+PORTAL_SEARCH_RERANK_MODEL_ID_ENV = "BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID"
 _PORTAL_VISIBLE_SPACE_CACHE_TTL = 5.0
 _PORTAL_VISIBLE_SPACE_CACHE: Dict[tuple, tuple[float, List[Knowledge]]] = {}
 _PORTAL_VISIBLE_SPACE_CACHE_LOCK = asyncio.Lock()
@@ -278,10 +281,23 @@ class PortalFileCandidate:
 class PortalSearchPerfContext:
     started_at: float
     stage: str = "start"
+    keyword: str = ""
+    sort: str = ""
+    tag_enabled: bool = False
+    file_ext: str = ""
     space_count: int = 0
+    es_chunk_count: int = 0
+    vector_chunk_count: int = 0
     candidate_count: int = 0
+    visible_candidate_count: int = 0
+    final_count: int = 0
     visible_check_count: int = 0
     fast_path_public_space_count: int = 0
+    rerank_model_id: str = ""
+    rerank_enabled: bool = False
+    rerank_attempted: bool = False
+    rerank_error: str = ""
+    top_results: List[Dict[str, Any]] = field(default_factory=list)
     success: bool = False
     error: str = ""
 
@@ -3002,6 +3018,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def search_shougang_portal_files(self, req: ShougangPortalFileSearchReq) -> Dict:
         perf = PortalSearchPerfContext(started_at=time.monotonic())
+        perf.keyword = (req.q or "").strip()
+        perf.sort = req.sort
+        perf.tag_enabled = bool(req.tag)
+        perf.file_ext = str(req.file_ext or "")
         perf_token = _portal_search_perf_var.set(perf)
         fga_token = begin_fga_read_stats()
         try:
@@ -3015,13 +3035,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
             fga_stats = finish_fga_read_stats(fga_token)
             duration_ms = int((time.monotonic() - perf.started_at) * 1000)
             payload = {
+                "keyword": perf.keyword,
+                "sort": perf.sort,
+                "tag_enabled": perf.tag_enabled,
+                "file_ext": perf.file_ext,
                 "space_count": perf.space_count,
+                "es_chunk_count": perf.es_chunk_count,
+                "vector_chunk_count": perf.vector_chunk_count,
                 "candidate_count": perf.candidate_count,
+                "visible_candidate_count": perf.visible_candidate_count,
+                "final_count": perf.final_count,
                 "visible_check_count": perf.visible_check_count,
                 "fga_read_count": fga_stats.read_count,
                 "cache_hit_count": fga_stats.cache_hit_count,
                 "singleflight_wait_count": fga_stats.singleflight_wait_count,
                 "fast_path_public_space_count": perf.fast_path_public_space_count,
+                "rerank_model_id": perf.rerank_model_id,
+                "rerank_enabled": perf.rerank_enabled,
+                "rerank_attempted": perf.rerank_attempted,
+                "rerank_error": perf.rerank_error,
+                "top_results": perf.top_results,
                 "duration_ms": duration_ms,
                 "success": perf.success,
                 "stage": perf.stage,
@@ -3112,6 +3145,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             tag_file_ids: Optional[List[int]],
     ) -> Dict:
         keyword = (req.q or "").strip()
+        perf = _get_portal_search_perf()
+        if perf is not None:
+            perf.keyword = keyword
+            perf.sort = req.sort
+            perf.tag_enabled = bool(req.tag)
+            perf.file_ext = str(req.file_ext or "")
         es_chunks, vector_chunks = await asyncio.gather(
             self._search_shougang_portal_es_chunks(
                 spaces=spaces,
@@ -3126,6 +3165,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 limit=PORTAL_SEARCH_VECTOR_RECALL_LIMIT * PORTAL_SEARCH_OVERSAMPLE_FACTOR,
             ),
         )
+        if perf is not None:
+            perf.es_chunk_count = len(es_chunks)
+            perf.vector_chunk_count = len(vector_chunks)
         candidates = self._group_shougang_portal_chunks_by_file(es_chunks + vector_chunks)
         ranked_candidates = self._score_shougang_portal_file_candidates(candidates)
         _increment_portal_search_perf("candidate_count", len(ranked_candidates))
@@ -3141,18 +3183,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         if not visible_candidates:
             return self._build_shougang_portal_search_response([])
+        if perf is not None:
+            perf.visible_candidate_count = len(visible_candidates)
 
         if req.sort != 'updated_at':
             visible_candidates = await self._rerank_shougang_portal_file_candidates(
                 keyword=keyword,
                 candidates=visible_candidates,
                 file_map=visible_file_map,
+                rerank_model_id=req.rerank_model_id,
+                rerank_model_id_provided=self._is_pydantic_field_set(req, "rerank_model_id"),
             )
         visible_candidates = self._sort_shougang_portal_semantic_candidates(
             candidates=visible_candidates,
             sort=req.sort,
             file_map=visible_file_map,
         )[:PORTAL_SEARCH_FINAL_LIMIT]
+        if perf is not None:
+            perf.final_count = len(visible_candidates)
+            self._set_shougang_portal_search_top_result_debug(visible_candidates, visible_file_map)
         items = await self._map_shougang_portal_candidate_items(
             candidates=visible_candidates,
             file_map=visible_file_map,
@@ -3268,17 +3317,33 @@ class KnowledgeSpaceService(KnowledgeUtils):
         index_names = [str(space.index_name) for space in spaces if space.index_name]
         if not keyword or not index_names:
             return []
-        must_query: Dict[str, Any] = {
-            "match": {
-                "text": {
-                    "query": keyword,
-                }
-            }
+        text_query: Dict[str, Any] = {
+            "bool": {
+                "should": [
+                    {
+                        "match": {
+                            "text": {
+                                "query": keyword,
+                                "boost": 1.0,
+                            }
+                        }
+                    },
+                    {
+                        "match_phrase": {
+                            "text": {
+                                "query": keyword,
+                                "boost": 3.0,
+                            }
+                        }
+                    },
+                ],
+                "minimum_should_match": 1,
+            },
         }
         filters: List[Dict[str, Any]] = []
         if filter_file_ids:
             filters.append({"terms": {"metadata.document_id": filter_file_ids}})
-        query: Dict[str, Any] = {"bool": {"must": [must_query]}}
+        query: Dict[str, Any] = {"bool": {"must": [text_query]}}
         if filters:
             query["bool"]["filter"] = filters
         try:
@@ -3570,11 +3635,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             keyword: str,
             candidates: List[PortalFileCandidate],
             file_map: Dict[int, KnowledgeFile],
+            rerank_model_id: Optional[str] = None,
+            rerank_model_id_provided: bool = False,
     ) -> List[PortalFileCandidate]:
-        model_id = str(PORTAL_SEARCH_RERANK_MODEL_ID or "").strip()
+        model_id = self._resolve_shougang_portal_rerank_model_id(
+            rerank_model_id,
+            request_model_id_provided=rerank_model_id_provided,
+        )
+        perf = _get_portal_search_perf()
+        if perf is not None:
+            perf.rerank_model_id = model_id
         if not model_id or not candidates:
             return candidates
         try:
+            if perf is not None:
+                perf.rerank_attempted = True
             rerank_model = await LLMService.get_bisheng_rerank(model_id=int(model_id))
             documents = [
                 Document(
@@ -3589,11 +3664,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ]
             reranked_docs = await rerank_model.acompress_documents(documents=documents, query=keyword)
         except Exception as exc:
+            if perf is not None:
+                perf.rerank_error = type(exc).__name__
             logger.warning("skip shougang portal semantic rerank: keyword={} error={}", keyword, exc)
             return candidates
 
         if not reranked_docs:
             return candidates
+        if perf is not None:
+            perf.rerank_enabled = True
         candidate_map = {candidate.file_id: candidate for candidate in candidates}
         for doc in reranked_docs:
             file_id = self._coerce_shougang_portal_int((doc.metadata or {}).get("file_id"))
@@ -3605,6 +3684,29 @@ class KnowledgeSpaceService(KnowledgeUtils):
             except (TypeError, ValueError):
                 candidate.rerank_score = None
         return candidates
+
+    @staticmethod
+    def _resolve_shougang_portal_rerank_model_id(
+            request_model_id: Optional[str] = None,
+            *,
+            request_model_id_provided: bool = False,
+    ) -> str:
+        if request_model_id_provided:
+            return str(request_model_id or "").strip()
+        request_model_id = str(request_model_id or "").strip()
+        if request_model_id:
+            return request_model_id
+        env_model_id = os.getenv(PORTAL_SEARCH_RERANK_MODEL_ID_ENV, "").strip()
+        if env_model_id:
+            return env_model_id
+        return str(PORTAL_SEARCH_RERANK_MODEL_ID or "").strip()
+
+    @staticmethod
+    def _is_pydantic_field_set(model: BaseModel, field_name: str) -> bool:
+        fields_set = getattr(model, "model_fields_set", None)
+        if fields_set is None:
+            fields_set = getattr(model, "__fields_set__", set())
+        return field_name in fields_set
 
     def _get_shougang_portal_candidate_rerank_text(
             self,
@@ -3648,6 +3750,31 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ),
             reverse=True,
         )
+
+    def _set_shougang_portal_search_top_result_debug(
+            self,
+            candidates: List[PortalFileCandidate],
+            file_map: Dict[int, KnowledgeFile],
+    ) -> None:
+        perf = _get_portal_search_perf()
+        if perf is None:
+            return
+        top_results: List[Dict[str, Any]] = []
+        for index, candidate in enumerate(candidates[:5], start=1):
+            file = file_map.get(candidate.file_id)
+            top_results.append({
+                "rank": index,
+                "file_id": candidate.file_id,
+                "knowledge_id": candidate.knowledge_id,
+                "file_name": str(getattr(file, "file_name", "") or ""),
+                "es_rank": candidate.es_best_rank,
+                "vector_rank": candidate.vector_best_rank,
+                "es_score": candidate.es_best_score,
+                "vector_score": candidate.vector_best_score,
+                "fusion_score": round(float(candidate.fusion_score or 0.0), 6),
+                "rerank_score": candidate.rerank_score,
+            })
+        perf.top_results = top_results
 
     @staticmethod
     def _get_shougang_portal_file_update_timestamp(file: Optional[KnowledgeFile]) -> float:
@@ -4660,6 +4787,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # 6. Update role in SpaceChannelMember
         target_membership.user_role = UserRoleEnum(req.role)
         await SpaceChannelMemberDao.update(target_membership)
+        await self.__class__.sync_direct_space_user_permissions(
+            req.space_id,
+            target_membership.user_id,
+            target_membership.user_role,
+            is_active=True,
+        )
 
         if should_notify_admin_assignment and not had_manage_access:
             await self._send_admin_assignment_notification(
