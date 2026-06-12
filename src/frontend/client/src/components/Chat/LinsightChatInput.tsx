@@ -206,7 +206,9 @@ const LinsightChatInput = memo(
                 question: trimmed,
                 // feedback: '',
                 tools: linsightTools,
-                model: 'gpt-4',
+                // F035: real per-task model comes from the model selector (P2);
+                // empty falls back to the tenant's linsight default model server-side
+                model: '',
                 enableWebSearch: false,
                 useKnowledgeBase: true,
             });

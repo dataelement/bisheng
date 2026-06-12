@@ -8,6 +8,7 @@ import {
     useSetRecoilState
 } from 'recoil';
 import { SSE } from 'sse.js';
+import { startLinsight } from '~/api/linsight';
 import { SopStatus } from '~/components/Sop/SOPEditor';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import { useToastContext } from '~/Providers';
@@ -284,6 +285,9 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                     personal_knowledge_enabled,
                     files: linsightSubmission.files,
                     tools,
+                    // F035: per-task model selection; null lets the backend fall back
+                    // to the tenant's linsight default model
+                    model: linsightSubmission.model || null,
                 }
 
                 const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/submit`, {
@@ -364,8 +368,21 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                             updatedAt: ""
                         });
                     });
-                    // 开启生成sop
-                    generateSop(versionId, linsightSubmission.sameSopId)
+                    // F035 deepagents: no SOP generation step anymore — kick off
+                    // execution right after the session is created; the WS stream
+                    // (task-message-stream) takes over from here.
+                    startLinsight(versionId).then(() => {
+                        updateLinsight(versionId, { status: SopStatus.Running })
+                        setLoading(false)
+                    }).catch((err) => {
+                        console.error('start-execute failed :>> ', err);
+                        if (versionId === activeVersionIdRef.current) {
+                            showToast({ message: '任务启动失败，请联系管理员检查灵思任务执行模型状态', status: 'error' });
+                            setError(true)
+                            setLoading(false)
+                        }
+                        updateLinsight(versionId, { taskError: String(err), status: SopStatus.Stoped })
+                    })
                 })
 
                 sse.addEventListener('open', () => {

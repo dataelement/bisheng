@@ -125,7 +125,8 @@ export const router = createBrowserRouter([
               {
                 path: 'linsight/:conversationId?',
                 element: (
-                  <MenuApprovalPluginGate pluginId="home">
+                  // F035: task mode has its own menu permission key, split from `home`
+                  <MenuApprovalPluginGate pluginId="linsight_task_mode">
                     <Sop />
                   </MenuApprovalPluginGate>
                 ),
@@ -133,7 +134,7 @@ export const router = createBrowserRouter([
               {
                 path: 'linsight/case/:sopId',
                 element: (
-                  <MenuApprovalPluginGate pluginId="home">
+                  <MenuApprovalPluginGate pluginId="linsight_task_mode">
                     <Sop />
                   </MenuApprovalPluginGate>
                 ),
