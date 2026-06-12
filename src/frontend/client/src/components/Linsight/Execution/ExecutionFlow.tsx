@@ -22,6 +22,7 @@ import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLocalize } from '~/hooks';
 import { ClarifyCard } from './ClarifyCard';
 import { IntentRow } from './IntentRow';
+import { LegacySopRow } from './LegacySopRow';
 import { PlanningRow } from './PlanningRow';
 import { QueueCard } from './QueueCard';
 import { StepList } from './StepList';
@@ -118,6 +119,9 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false }
                             </div>
                         </div>
                     )}
+
+                    {/* legacy SOP document (read-only, pre-F035 sessions only) */}
+                    <LegacySopRow sop={linsight?.sop} />
 
                     {/* queueing card (auto-disappears when the worker picks us up) */}
                     {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}

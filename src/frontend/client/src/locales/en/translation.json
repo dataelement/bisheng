@@ -2203,5 +2203,6 @@
       "folderNotFound": "Folder not found or deleted",
       "renderFailed": "Failed to generate file, please try again"
     }
-  }
+  },
+  "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)"
 }

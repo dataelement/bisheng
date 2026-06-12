@@ -2126,5 +2126,6 @@
       "folderNotFound": "フォルダが見つかりません/削除されました",
       "renderFailed": "ファイル生成に失敗しました。再度お試しください"
     }
-  }
+  },
+  "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント"
 }

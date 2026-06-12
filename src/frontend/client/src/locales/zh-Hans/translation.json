@@ -2132,5 +2132,6 @@
       "folderNotFound": "文件夹不存在或已删除",
       "renderFailed": "文件生成失败，请稍后重试"
     }
-  }
+  },
+  "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）"
 }
