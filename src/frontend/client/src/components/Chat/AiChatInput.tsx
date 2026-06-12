@@ -12,6 +12,7 @@ import {
     useState,
     type KeyboardEvent,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import { useRecoilValue } from "recoil";
 import { File_Accept } from "~/common";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
@@ -27,6 +28,7 @@ import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
+import { TaskModeToggle } from "~/components/Linsight/Input/TaskModeToggle";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
@@ -126,6 +128,8 @@ export interface AiChatInputFeatures {
     tools?: boolean;
     fileUpload?: boolean;
     voiceInput?: boolean;
+    /** F035 Track H: show the task-mode entry (daily chat surface only). */
+    taskModeEntry?: boolean;
 }
 
 interface AiChatInputProps {
@@ -186,6 +190,9 @@ const AiChatInput = memo(
             tools = true,
             fileUpload = true,
             voiceInput = true,
+            // Off by default: AiChatInput is reused by other surfaces (e.g.
+            // Subscription AiAssistantPanel) that must not expose task mode.
+            taskModeEntry = false,
         } = features ?? {};
 
         // Upload size limit comes from /api/v1/env (Recoil bishengConfState),
@@ -269,6 +276,8 @@ const AiChatInput = memo(
         const kbDisabled = !!disabled;
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
+
+        const navigate = useNavigate();
 
         // Drag & paste file support (only when not disabled by exclusion)
         const { isDragging, handlePaste } = useFileDropAndPaste({
@@ -497,6 +506,16 @@ const AiChatInput = memo(
                                         }
                                     }}
                                     disabled={toolsDisabled}
+                                />
+                            )}
+                            {/* F035 Track H: minimal task-mode entry — jumps to the
+                                dedicated /linsight route (task mode is implemented
+                                separately; spec §-1). */}
+                            {taskModeEntry && !isLingsi && (bsConfig?.linsightConfig?.linsight_entry ?? true) && (
+                                <TaskModeToggle
+                                    active={false}
+                                    disabled={!!disabled}
+                                    onClick={() => navigate('/linsight/new')}
                                 />
                             )}
                         </div>

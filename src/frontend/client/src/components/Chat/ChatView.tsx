@@ -392,6 +392,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             <AiChatInput
                               disabled={!bsConfig?.models?.length || !!shareToken}
                               isStreaming={isStreaming}
+                              features={{ taskModeEntry: true }}
                               onScrollToBottom={() => { }}
                               modelOptions={bsConfig?.models}
                               modelValue={chatModel.id}
@@ -463,6 +464,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             isStreaming={isStreaming}
+                            features={{ taskModeEntry: true }}
                             onScrollToBottom={() => { }}
                             modelOptions={bsConfig?.models}
                             modelValue={chatModel.id}

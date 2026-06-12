@@ -5,6 +5,7 @@ import { checkSopQueueStatus, getCaseDetail, getLinsightSessionVersionList, getL
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
+import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { LoadingIcon } from '../ui/icon/Loading';
 import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
@@ -41,7 +42,15 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                 versions={versions}
             />
 
-            {isLoading ? <LoadingBox /> : <div className='w-full h-[calc(100vh-68px)] p-2 pt-0'>
+            {isLoading ? <LoadingBox /> : versionId === 'new' && !sopId ? (
+                /* F035 Track H (P2): fresh-task landing — the new unified
+                   task-mode input replaces the legacy LinsightChatInput entry. */
+                <div className='w-full h-[calc(100vh-68px)] flex flex-col justify-center'>
+                    <div className='w-full max-w-[800px] mx-auto px-4 pb-24'>
+                        <TaskModeInput conversationId={conversationId || 'new'} />
+                    </div>
+                </div>
+            ) : <div className='w-full h-[calc(100vh-68px)] p-2 pt-0'>
                 <div className='h-full flex gap-2'>
                     <SOPEditor
                         sopError={error}

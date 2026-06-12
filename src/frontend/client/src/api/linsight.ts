@@ -92,6 +92,37 @@ export function getLinsightTools(): Promise<any> {
     return request.get('/api/v1/tool/linsight/preset');
 }
 
+/** F035 Track H: enabled skills for the end-user picker (plain login auth). */
+export interface SelectableSkill {
+    name: string;
+    display_name: string;
+    description: string;
+}
+
+export function getSelectableSkills(): Promise<SelectableSkill[]> {
+    return request.get('/api/v1/linsight/skill/selectable').then((res: any) => res?.data || []);
+}
+
+/**
+ * F035 Track H: workbench model config for the task-mode model selector.
+ * Returns the daily-chat model list plus `linsight_default_model_id`
+ * (admin-marked default execution model for Linsight).
+ */
+export interface LinsightModelConfig {
+    models?: { id: string | number; name?: string; displayName?: string }[];
+    linsight_default_model_id?: string | null;
+}
+
+export function getLinsightModelConfig(): Promise<LinsightModelConfig> {
+    return request.get('/api/v1/llm/workbench').then((res: any) => {
+        const body = res?.data ?? {};
+        // F022 wraps the config as {data, inherited_from_root, fallback_blocked};
+        // unwrap defensively so both shapes keep working.
+        const cfg = body && typeof body.data === 'object' && body.data !== null ? body.data : body;
+        return cfg || {};
+    });
+}
+
 
 // 获取个人知识库信息
 export function getPersonalKnowledgeInfo(): Promise<any> {

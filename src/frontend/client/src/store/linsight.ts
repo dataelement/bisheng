@@ -93,6 +93,8 @@ export type SubmissionState = {
     feedback?: string;
     tools: ToolConfig[];
     model: string;
+    /** F035 Track H: skill names picked in the task-mode input (enabled skills only). */
+    skills?: string[];
     enableWebSearch: boolean;
     useKnowledgeBase: boolean;
     prevVersionId?: string;
@@ -109,5 +111,53 @@ export const submissionState = atomFamily<SubmissionState | null, string>({
 export const filesByIndex = atomFamily<Map<string, ExtendedFile>, string | number>({
     key: 'linsightFilesByIndex',
     default: new Map(),
+});
+
+// ── F035 Track H: task-mode unified input ────────────────────────────────────
+
+export type TaskModeKnowledgeItem = {
+    id: string;
+    name: string;
+    /** 'space' = personal knowledge space, 'org' = organization knowledge base */
+    type: 'space' | 'org';
+};
+
+export type TaskModeToolItem = {
+    id: string | number;
+    name: string;
+    checked: boolean;
+    /** Raw tool object from bsConfig.linsightConfig.tools (used by convertTools on submit). */
+    data?: any;
+};
+
+export type TaskModeSkill = {
+    name: string;
+    display_name: string;
+    description?: string;
+};
+
+export type TaskModeContext = {
+    knowledge: TaskModeKnowledgeItem[];
+    tools: TaskModeToolItem[];
+    files: any[];
+};
+
+/**
+ * Session-level memory (PRD §4.1.2): knowledge / tools / files selections are
+ * keyed per conversation and survive leaving task mode (navigate back to /c),
+ * so they are refilled when the user re-enters task mode.
+ */
+export const taskModeContextState = atomFamily<TaskModeContext, string>({
+    key: 'taskModeContextState',
+    default: { knowledge: [], tools: [], files: [] },
+});
+
+/**
+ * Skill selections are intentionally separate from taskModeContextState:
+ * exiting task mode clears skills while keeping the rest (PRD §4.1.2).
+ */
+export const taskModeSkillsState = atomFamily<TaskModeSkill[], string>({
+    key: 'taskModeSkillsState',
+    default: [],
 });
 

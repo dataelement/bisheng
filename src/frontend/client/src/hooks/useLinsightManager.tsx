@@ -288,6 +288,9 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                     // F035: per-task model selection; null lets the backend fall back
                     // to the tenant's linsight default model
                     model: linsightSubmission.model || null,
+                    // F035 Track H: user-picked skill names (forward-compatible —
+                    // the submit schema does not consume this field yet)
+                    skills: linsightSubmission.skills || [],
                 }
 
                 const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/submit`, {
