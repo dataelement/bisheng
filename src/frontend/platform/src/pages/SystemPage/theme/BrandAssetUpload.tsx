@@ -39,7 +39,7 @@ interface BrandAssetUploadProps {
     onChange: (asset: BrandAsset) => void;
     onPreview?: () => void;
     onUploaded?: (asset: BrandAsset) => void;
-    onDeleted?: (deletedAsset: BrandAssetOption, fallbackAsset: BrandAsset) => void;
+    onDeleted?: (deletedAsset: BrandAssetOption, fallbackAsset: BrandAsset, deletedWasSelected: boolean) => void;
     onUrlAdded?: (asset: BrandAsset) => void;
 }
 
@@ -100,6 +100,16 @@ function AssetOptionContent({
         event.stopPropagation();
     };
 
+    const handleDeletePointerUp = (event: PointerEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+    };
+
+    const handleDeleteMouseUp = (event: MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.stopPropagation();
+    };
+
     const handleDeleteClick = (event: MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
         event.stopPropagation();
@@ -137,7 +147,9 @@ function AssetOptionContent({
                     title={t("theme.brandDeleteAsset")}
                     disabled={deleting}
                     onPointerDown={handleDeletePointerDown}
+                    onPointerUp={handleDeletePointerUp}
                     onMouseDown={handleDeleteMouseDown}
+                    onMouseUp={handleDeleteMouseUp}
                     onClick={handleDeleteClick}
                 >
                     {deleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
@@ -166,6 +178,7 @@ export default function BrandAssetUpload({
     const { t } = useTranslation();
     const { toast } = useToast();
     const inputRef = useRef<HTMLInputElement>(null);
+    const suppressSelectValueRef = useRef("");
     const [uploading, setUploading] = useState(false);
     const [deletingValue, setDeletingValue] = useState("");
     const [urlDialogOpen, setUrlDialogOpen] = useState(false);
@@ -219,6 +232,8 @@ export default function BrandAssetUpload({
     };
 
     const handleAssetSelect = (assetValue: string) => {
+        if (suppressSelectValueRef.current === assetValue) return;
+
         const selected = effectiveOptions.find((option) => getOptionValue(option) === assetValue);
         if (!selected) return;
         onChange({
@@ -241,12 +256,19 @@ export default function BrandAssetUpload({
         if (option.is_default) return;
 
         const optionValue = getOptionValue(option);
+        suppressSelectValueRef.current = optionValue;
+        window.setTimeout(() => {
+            if (suppressSelectValueRef.current === optionValue) {
+                suppressSelectValueRef.current = "";
+            }
+        }, 500);
+        const deletedWasSelected = optionValue === selectedValue;
         if (!option.relative_path) {
             const fallbackAsset = getFallbackAsset();
-            if (optionValue === selectedValue) {
+            if (deletedWasSelected) {
                 onChange(fallbackAsset);
             }
-            onDeleted?.(option, fallbackAsset);
+            onDeleted?.(option, fallbackAsset, deletedWasSelected);
             toast({
                 title: t("prompt"),
                 variant: "success",
@@ -269,10 +291,10 @@ export default function BrandAssetUpload({
             file_name: defaultAsset.file_name || getFileName(defaultAsset),
         };
 
-        if (optionValue === selectedValue) {
+        if (deletedWasSelected) {
             onChange(fallbackAsset);
         }
-        onDeleted?.(option, fallbackAsset);
+        onDeleted?.(option, fallbackAsset, deletedWasSelected);
         toast({
             title: t("prompt"),
             variant: "success",
