@@ -2,7 +2,6 @@ import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm";
 import { Button } from "@/components/bs-ui/button";
 import { Label } from "@/components/bs-ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { QuestionTooltip } from "@/components/bs-ui/tooltip";
@@ -62,8 +61,7 @@ export default function WorkbenchModel({ onBack }) {
 
     const [form, setForm] = useState<any>({
         sourceModelId: null,
-        extractModelId: null,
-        executionMode: 'ReAct',
+        linsightDefaultModelId: null,
         asrModelId: null,
         ttsModelId: null,
         knowledgeSpaceLlmId: null,
@@ -79,7 +77,7 @@ export default function WorkbenchModel({ onBack }) {
     const { data: linsightConfig, isLoading: loading, refetch: refetchConfig, error } = useLinsightConfig();
 
     const handleSave = async () => {
-        const { extractModelId, sourceModelId, executionMode, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
+        const { linsightDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
         const errors = [];
         if (!models.length) {
             errors.push('请至少配置一个对话模型');
@@ -89,9 +87,9 @@ export default function WorkbenchModel({ onBack }) {
         try {
             const data = {
                 models,
-                task_model: { id: String(extractModelId) },
                 embedding_model: { id: String(sourceModelId) },
-                linsight_executor_mode: executionMode,
+                // Linsight default executor model: one of the workbench chat models' id.
+                linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
                 asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
                 tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
                 // “应用会话标题生成模型”
@@ -106,8 +104,7 @@ export default function WorkbenchModel({ onBack }) {
             const newConfig = updatedConfig.data;
             setForm({
                 sourceModelId: newConfig?.embedding_model?.id || null,
-                extractModelId: newConfig?.task_model?.id || null,
-                executionMode: newConfig?.linsight_executor_mode || 'ReAct',
+                linsightDefaultModelId: newConfig?.linsight_default_model_id || null,
                 asrModelId: newConfig?.asr_model?.id || null,
                 ttsModelId: newConfig?.tts_model?.id || null,
                 chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
@@ -116,9 +113,8 @@ export default function WorkbenchModel({ onBack }) {
             });
 
             lastSaveFormDataRef.current = {
-                task_model: { id: newConfig?.task_model?.id },
                 embedding_model: { id: newConfig?.embedding_model?.id },
-                linsight_executor_mode: newConfig?.linsight_executor_mode || 'ReAct',
+                linsight_default_model_id: newConfig?.linsight_default_model_id || null,
                 abstract_prompt: newConfig?.abstract_prompt || defalutPrompt,
                 asr_model: { id: newConfig?.asr_model?.id },
                 tts_model: { id: newConfig?.tts_model?.id },
@@ -171,8 +167,7 @@ export default function WorkbenchModel({ onBack }) {
         if (linsightConfig) {
             setForm({
                 sourceModelId: linsightConfig.embedding_model?.id || null,
-                extractModelId: linsightConfig.task_model?.id || null,
-                executionMode: linsightConfig.linsight_executor_mode || 'ReAct',
+                linsightDefaultModelId: linsightConfig.linsight_default_model_id || null,
                 asrModelId: linsightConfig.asr_model?.id || null,
                 ttsModelId: linsightConfig.tts_model?.id || null,
                 chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
@@ -181,9 +176,8 @@ export default function WorkbenchModel({ onBack }) {
             });
 
             lastSaveFormDataRef.current = {
-                task_model: { id: linsightConfig.task_model?.id },
                 embedding_model: { id: linsightConfig.embedding_model?.id },
-                linsight_executor_mode: linsightConfig.linsight_executor_mode || 'ReAct',
+                linsight_default_model_id: linsightConfig.linsight_default_model_id || null,
                 abstract_prompt: linsightConfig.abstract_prompt || defalutPrompt,
                 asr_model: { id: linsightConfig.asr_model?.id },
                 tts_model: { id: linsightConfig.tts_model?.id },
@@ -218,14 +212,24 @@ export default function WorkbenchModel({ onBack }) {
                     models={form.models}
                     errors={[]}
                     error={''}
+                    linsightDefaultModelId={form.linsightDefaultModelId}
+                    onLinsightDefaultChange={(id) => setForm((prev) => ({ ...prev, linsightDefaultModelId: id }))}
                     onAdd={() => setForm((prev) => ({
                         ...prev,
                         models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', visual: false }],
                     }))}
-                    onRemove={(index) => setForm((prev) => ({
-                        ...prev,
-                        models: prev.models.filter((_, i) => i !== index),
-                    }))}
+                    onRemove={(index) => setForm((prev) => {
+                        const removed = prev.models[index];
+                        // If the removed model was the Linsight default, clear the selection.
+                        const linsightDefaultModelId = removed?.id && removed.id === prev.linsightDefaultModelId
+                            ? null
+                            : prev.linsightDefaultModelId;
+                        return {
+                            ...prev,
+                            models: prev.models.filter((_, i) => i !== index),
+                            linsightDefaultModelId,
+                        };
+                    })}
                     onModelChange={(index, id) => setForm((prev) => ({
                         ...prev,
                         models: prev.models.map((item, i) => i === index ? { ...item, id } : item),
@@ -249,40 +253,6 @@ export default function WorkbenchModel({ onBack }) {
                 onChange={(val) => setForm({ ...form, sourceModelId: val })}
                 required
             />
-            <h3 className="bisheng-label">{t('model.lingsiTaskModel')}</h3>
-            <div className="border rounded-lg p-4 -mt-3">
-                <div className="flex gap-4">
-                    <div className="flex-1">
-                        <ModelSelect
-                            close
-                            label={t('model.model')}
-                            tooltipText={t('model.lingsiTaskModelTooltip')}
-                            value={form.extractModelId}
-                            options={llmOptions}
-                            onChange={(val) => setForm({ ...form, extractModelId: val })}
-                            required
-                        />
-                    </div>
-                    <div className="flex-1">
-                        <Label className="bisheng-label">
-                            <span>{t('model.executionMode')}</span>
-                            <QuestionTooltip className="relative top-0.5 ml-1" content={t('model.executionModeTooltip')}></QuestionTooltip>
-                        </Label>
-                        <Select
-                            value={form.executionMode}
-                            onValueChange={(val) => setForm({ ...form, executionMode: val })}
-                        >
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder={t('model.selectExecutionMode')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="func_call">{t('model.functionCall')}</SelectItem>
-                                <SelectItem value="react">{t('model.react')}</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-            </div>
             <h3 className="bisheng-label">{t('model.workbenchVoiceModel')}</h3>
             <div className="border rounded-lg p-4 -mt-3 space-y-4">
                 <ModelSelect
@@ -334,10 +304,9 @@ export function useLinsightConfig() {
             // Badge / Banner without re-fetching.
             const cfg = env?.data || {
                 models: [],
-                task_model: null,
                 embedding_model: null,
                 abstract_prompt: defalutPrompt,
-                linsight_executor_mode: "ReAct",
+                linsight_default_model_id: null,
                 asr_model: null,
                 tts_model: null,
                 knowledge_space_llm: null,
