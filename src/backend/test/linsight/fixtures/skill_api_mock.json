@@ -2,74 +2,92 @@
   "_meta": {
     "contract": "C3 · Skill API + 激活 + frontmatter (D -> A / I)",
     "source_of_truth": "design §7.5 (端点) + 依赖与契约约定.md §4 (字段/激活/frontmatter)",
+    "contract_change_log": [
+      "2026-06-12 (D 发起, A/I 同步): +display_name (展示名称, 前端一律显示它; name=技能 ID 仍为唯一键/激活键/目录名); 上传多形态 .md/.zip/.skill/文件夹; 技能为 bundle 目录形态 (+SkillDetail.files[], +GET /skill/{name}/file); 管理列表不展示 name/source"
+    ],
     "base_path": "/api/v1/linsight",
     "auth": {
       "management": "get_tenant_admin_user (GET/POST/PUT/DELETE/PATCH /skill ...)",
       "selectable": "get_login_user (GET /skill/selectable)"
     },
-    "activation": "per-run 白名单经 config.configurable.active_skills: list[str]（skill name 列表）；[]=本轮全禁；前端不下发 None。built-in 不入表、不出 API、不受 active_skills 约束。",
+    "activation": "per-run 白名单经 config.configurable.active_skills: list[str]（skill name=技能 ID 列表，display_name 仅 UI 层）；[]=本轮全禁；前端不下发 None。built-in 不入表、不出 API、不受 active_skills 约束。",
     "page_shape": "PageData[T] = {data: [...], total: int}",
     "endpoints": [
-      "GET    /skill?keyword=&enabled=&page=&page_size=   -> PageData[SkillBrief]  (仅本租户自定义技能)",
+      "GET    /skill?keyword=&enabled=&page=&page_size=   -> PageData[SkillBrief]  (仅本租户自定义技能; keyword 匹配 display_name/description)",
       "GET    /skill/selectable                           -> [SkillSelectable]     (本租户已启用，终端用户选择器)",
-      "GET    /skill/{name}                               -> SkillDetail",
-      "POST   /skill   (multipart SKILL.md | form name/description/content) -> SkillDetail",
-      "PUT    /skill/{name}                               -> SkillDetail",
+      "GET    /skill/{name}                               -> SkillDetail (含 files[] bundle 文件树)",
+      "GET    /skill/{name}/file?path=                    -> {path, content}       (bundle 附属文件只读; 防穿越; 不存在 11053)",
+      "POST   /skill   (multipart file=.md|.zip|.skill 或 form display_name/name/description/content) -> SkillDetail",
+      "PUT    /skill/{name}   (form 仅改 SKILL.md | multipart 整包替换)            -> SkillDetail",
       "PATCH  /skill/{name}/status   {enabled: bool}      -> ok",
-      "DELETE /skill/{name}                               -> ok"
+      "DELETE /skill/{name}                               -> ok (删除整个技能目录)"
     ],
     "frontmatter_spec": {
-      "name": "必填, <=64, ^[a-z0-9-]+$",
+      "name": "必填, <=64, ^[a-z0-9]+(-[a-z0-9]+)*$（小写/数字/单连字符，须=目录名，对齐 deepagents _validate_skill_name）",
       "description": "必填, <=1024",
       "license": "可选, str",
       "allowed-tools": "可选, 工具名列表",
-      "metadata": "可选, dict",
-      "file_size_limit": "<=10MB"
+      "metadata": "可选, dict[str,str]",
+      "metadata.display-name": "展示名称（中文），缺省回退 name",
+      "metadata.sop-id": "迁移溯源（仅 Track G 迁移产物）",
+      "bundle": ".zip/.skill/文件夹根目录须含 SKILL.md，目录结构原样落盘；整包 <=10MB",
+      "file_size_limit": "<=10MB（整包）"
     },
     "errcodes": {
-      "11051": "SkillValidationError (frontmatter/name 校验失败)",
-      "11052": "SkillFileTooLargeError (>10MB)",
-      "11053": "SkillNotFoundError",
+      "11051": "SkillValidationError (frontmatter/技能 ID 校验失败、压缩包缺 SKILL.md、name≠目录名)",
+      "11052": "SkillFileTooLargeError (整包 >10MB)",
+      "11053": "SkillNotFoundError (技能不存在、built-in 名、附属文件 path 不存在)",
       "11054": "SkillPermissionError",
-      "11055": "SkillNameDuplicateError (重名；契约原定 11050，因 11050 被存量 SOP 检索码占用而顺延，见实际偏差记录)"
+      "11055": "SkillNameDuplicateError (name 或 display_name 任一同租户重复；契约原定 11050，因被存量 SOP 检索码占用而顺延)"
     },
-    "deviation_note": "依赖与契约约定.md §4 原表用 /skill/{id} 与 PATCH /skill/{id}/enabled；已对齐 design §7.5：改用 /skill/{name}、PATCH /skill/{name}/status，并新增 GET /skill/selectable。"
+    "deviation_note": "依赖与契约约定.md §4 原表用 /skill/{id} 与 PATCH /skill/{id}/enabled；已对齐 design §7.5：改用 /skill/{name}、PATCH /skill/{name}/status，并新增 GET /skill/selectable。2026-06-12 增量见 contract_change_log。"
   },
   "responses": {
     "GET /skill": {
       "code": 200,
       "data": {
         "data": [
-          {"id": 1, "name": "financial-report", "description": "季度财报分析技能：抽取核心指标并生成结构化报告。", "enabled": true, "source": "manual", "create_time": "2026-06-11T10:00:00+08:00"},
-          {"id": 2, "name": "contract-review", "description": "合同条款审阅技能（由 SOP 迁移）。", "enabled": false, "source": "sop_migrated", "create_time": "2026-06-10T09:30:00+08:00"}
+          {"id": 1, "name": "ji-du-cai-bao-fen-xi", "display_name": "季度财报分析", "description": "季度财报分析技能：抽取核心指标并生成结构化报告。", "enabled": true, "source": "manual", "create_time": "2026-06-11T10:00:00+08:00"},
+          {"id": 2, "name": "he-tong-tiao-kuan-shen-yue", "display_name": "合同条款审阅", "description": "逐条审阅合同风险条款，标注风险等级并给出修订建议。", "enabled": false, "source": "sop_migrated", "create_time": "2026-06-10T09:30:00+08:00"}
         ],
         "total": 2
-      }
+      },
+      "_ui_note": "管理列表仅展示 display_name/description/enabled；name 详情可见；source 不展示（内部溯源）"
     },
     "GET /skill/selectable": {
       "code": 200,
       "data": [
-        {"name": "financial-report", "description": "季度财报分析技能：抽取核心指标并生成结构化报告。"}
+        {"name": "ji-du-cai-bao-fen-xi", "display_name": "季度财报分析", "description": "季度财报分析技能：抽取核心指标并生成结构化报告。"}
       ]
     },
-    "GET /skill/financial-report": {
+    "GET /skill/ji-du-cai-bao-fen-xi": {
       "code": 200,
       "data": {
         "id": 1,
-        "name": "financial-report",
+        "name": "ji-du-cai-bao-fen-xi",
+        "display_name": "季度财报分析",
         "description": "季度财报分析技能：抽取核心指标并生成结构化报告。",
         "enabled": true,
         "source": "manual",
         "create_time": "2026-06-11T10:00:00+08:00",
-        "preview": "# Financial Report Skill\n抽取营收/净利润/同比，输出 Markdown 报告……",
-        "source_text": "---\nname: financial-report\ndescription: 季度财报分析技能：抽取核心指标并生成结构化报告。\nallowed-tools:\n  - search_knowledge_base\n  - bisheng_code_interpreter\n---\n\n# Financial Report Skill\n抽取营收/净利润/同比，输出 Markdown 报告……"
+        "preview": "# 季度财报分析\n抽取营收/净利润/同比，输出 Markdown 报告……",
+        "source_text": "---\nname: ji-du-cai-bao-fen-xi\ndescription: 季度财报分析技能：抽取核心指标并生成结构化报告。\nmetadata:\n  display-name: 季度财报分析\nallowed-tools: search_knowledge_base bisheng_code_interpreter\n---\n\n# 季度财报分析\n抽取营收/净利润/同比，输出 Markdown 报告……",
+        "files": [
+          {"path": "SKILL.md", "size": 512},
+          {"path": "scripts/calc_ratio.py", "size": 1024},
+          {"path": "reference/indicators.md", "size": 2048}
+        ]
       }
     },
-    "POST /skill (duplicate name)": {
+    "GET /skill/ji-du-cai-bao-fen-xi/file?path=scripts/calc_ratio.py": {
+      "code": 200,
+      "data": {"path": "scripts/calc_ratio.py", "content": "\"\"\"Compute YoY/QoQ ratios.\"\"\"\n\ndef yoy(cur, prev):\n    return (cur - prev) / prev\n"}
+    },
+    "POST /skill (duplicate name or display_name)": {
       "code": 11055,
       "message": "A skill with the same name already exists"
     },
-    "POST /skill (invalid frontmatter)": {
+    "POST /skill (invalid frontmatter / zip without SKILL.md)": {
       "code": 11051,
       "message": "Skill validation failed: invalid frontmatter or name"
     },
@@ -81,12 +99,12 @@
       "code": 11053,
       "message": "Skill not found"
     },
-    "PATCH /skill/financial-report/status": {
+    "PATCH /skill/ji-du-cai-bao-fen-xi/status": {
       "request": {"enabled": false},
       "code": 200,
       "data": {"ok": true}
     },
-    "DELETE /skill/financial-report": {
+    "DELETE /skill/ji-du-cai-bao-fen-xi": {
       "code": 200,
       "data": {"ok": true}
     }

@@ -99,6 +99,7 @@ dependencies = [
     # longer pulls it in, but bisheng.user / sso_sync import it directly.
     "rsa>=4.9",
     "deepagents>=0.6.3",
+    "pypinyin>=0.55.0",
 ]
 
 [project.optional-dependencies]

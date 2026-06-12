@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>灵思 · Skill 体系方案确认 Demo（F035 Track D/G · v2）</title>
+<style>
+/* ============ 活字印刷 · 纸墨印章主题 ============ */
+:root{
+  --paper:#f6f2ea;
+  --panel:#fffdf8;
+  --panel-deep:#fbf8f1;
+  --ink:#211d18;
+  --ink-soft:#5c554a;
+  --ink-faint:#9a9183;
+  --line:#e3dccd;
+  --line-strong:#cfc5b0;
+  --seal:#bf3a1d;
+  --seal-deep:#9c2c13;
+  --seal-wash:#f7e3dc;
+  --jade:#2f6e5a;
+  --jade-wash:#e2efe8;
+  --amber:#a06a12;
+  --amber-wash:#f6ecd7;
+  --code-bg:#26221c;
+  --code-ink:#e9e2d3;
+  --mono:"JetBrains Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  --serif:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+  --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC",sans-serif;
+  --shadow:0 1px 2px rgba(33,29,24,.05),0 8px 24px -12px rgba(33,29,24,.18);
+  --shadow-lift:0 2px 4px rgba(33,29,24,.06),0 16px 40px -16px rgba(33,29,24,.28);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{
+  font-family:var(--sans);color:var(--ink);background:var(--paper);
+  background-image:
+    radial-gradient(1200px 500px at 85% -10%, rgba(191,58,29,.045), transparent 60%),
+    radial-gradient(900px 420px at -5% 110%, rgba(47,110,90,.05), transparent 55%),
+    repeating-linear-gradient(0deg, transparent 0 23px, rgba(33,29,24,.022) 23px 24px);
+  min-height:100vh;line-height:1.6;
+}
+::selection{background:var(--seal-wash)}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit}
+
+header{display:flex;align-items:center;gap:18px;padding:14px 28px 0;animation:fadeDown .5s ease both}
+.seal{
+  width:46px;height:46px;border-radius:8px;flex:none;
+  background:linear-gradient(145deg,var(--seal),var(--seal-deep));
+  color:#fff7ef;font-family:var(--serif);font-weight:700;font-size:24px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:inset 0 0 0 2px rgba(255,247,239,.35),inset 0 0 14px rgba(0,0,0,.25),var(--shadow);
+  transform:rotate(-3deg);
+}
+.brand h1{font-family:var(--serif);font-size:20px;font-weight:700;letter-spacing:.5px}
+.brand p{font-size:11.5px;color:var(--ink-faint);margin-top:-2px}
+.brand p code{font-family:var(--mono);font-size:10.5px}
+.head-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.api-toggle{
+  display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-soft);
+  border:1px solid var(--line-strong);border-radius:999px;padding:5px 12px;background:var(--panel);transition:all .2s;
+}
+.api-toggle:hover{border-color:var(--seal)}
+.api-toggle .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-faint);transition:background .2s}
+.api-toggle.on{color:var(--seal);border-color:var(--seal);background:var(--seal-wash)}
+.api-toggle.on .dot{background:var(--seal)}
+.ghost-btn{font-size:12px;border:1px solid var(--line-strong);background:var(--panel);border-radius:999px;padding:5px 12px;color:var(--ink-soft);transition:all .2s}
+.ghost-btn:hover{border-color:var(--ink);color:var(--ink)}
+
+.decisions{margin:16px 28px 0;display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.decision{
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+  position:relative;overflow:hidden;box-shadow:var(--shadow);animation:fadeUp .55s ease both;
+}
+.decision:nth-child(2){animation-delay:.06s}
+.decision:nth-child(3){animation-delay:.12s}
+.decision:nth-child(4){animation-delay:.18s}
+.decision::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--seal)}
+.decision .tag{font-family:var(--mono);font-size:10px;color:var(--seal);background:var(--seal-wash);border-radius:4px;padding:1px 6px;letter-spacing:.5px}
+.decision h3{font-family:var(--serif);font-size:13.5px;margin:5px 0 2px}
+.decision p{font-size:11.5px;color:var(--ink-soft);line-height:1.55}
+.decision p code{font-family:var(--mono);font-size:10.5px;background:var(--panel-deep);border:1px solid var(--line);border-radius:4px;padding:0 3px}
+
+nav.tabs{display:flex;gap:6px;margin:18px 28px 0;border-bottom:2px solid var(--line-strong);animation:fadeUp .55s .1s ease both;flex-wrap:wrap}
+.tab{
+  font-family:var(--serif);font-size:15px;letter-spacing:1px;border:none;background:none;
+  padding:10px 20px 8px;color:var(--ink-soft);position:relative;border-radius:8px 8px 0 0;transition:color .2s;
+}
+.tab .num{font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-right:6px;letter-spacing:0}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--seal);background:linear-gradient(180deg,var(--seal-wash),transparent)}
+.tab.active::after{content:"";position:absolute;left:0;right:0;bottom:-2px;height:2px;background:var(--seal)}
+.tab small{font-size:10px;color:var(--ink-faint)}
+
+main{padding:20px 28px 60px}
+.view{display:none;animation:fadeUp .4s ease both}
+.view.active{display:block}
+
+.api{
+  display:none;font-family:var(--mono);font-size:10px;letter-spacing:0;
+  background:var(--code-bg);color:var(--code-ink);border-radius:4px;padding:2px 7px;
+  vertical-align:middle;white-space:nowrap;
+}
+.api b{color:#f0b35e;font-weight:600}
+.api.new::after{content:"＋display_name";color:#e8836a;margin-left:6px}
+body.show-api .api{display:inline-block}
+.i18n{
+  display:none;font-family:var(--mono);font-size:9.5px;color:var(--amber);
+  background:var(--amber-wash);border-radius:4px;padding:1px 5px;vertical-align:middle;white-space:nowrap;
+}
+body.show-api .i18n{display:inline-block}
+
+/* ---------- view 0 : workbench config ---------- */
+.cfg-shell{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.cfg-tabs{display:flex;gap:4px;padding:12px 18px 0;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel-deep))}
+.cfg-tab{font-size:13px;border:none;background:none;padding:7px 16px;border-radius:8px 8px 0 0;color:var(--ink-soft)}
+.cfg-tab.act{background:var(--ink);color:var(--paper)}
+.cfg-tab.gone{color:var(--ink-faint);text-decoration:line-through;position:relative;cursor:not-allowed}
+.cfg-tab.gone::after{content:"已并入日常";position:absolute;top:-9px;right:-12px;font-size:9px;color:#fff;background:var(--seal);border-radius:4px;padding:0 5px;text-decoration:none}
+.cfg-body{padding:20px;display:grid;gap:16px;max-width:1080px}
+.cfg-block{border:1px solid var(--line);border-radius:12px;padding:14px 18px;background:var(--panel)}
+.cfg-block.merged{border-left:3px solid var(--seal)}
+.cfg-block h3{font-family:var(--serif);font-size:14.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.cfg-block .from{font-size:10.5px;color:var(--amber);background:var(--amber-wash);border:1px solid #e8d6ad;border-radius:4px;padding:1px 7px;font-weight:400}
+.cfg-block .body{margin-top:9px}
+.cfg-block input[type=text]{
+  width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:7px 11px;font-size:13px;background:var(--panel);color:var(--ink);outline:none;
+}
+.cfg-block input[type=text]:focus{border-color:var(--ink)}
+.cfg-block .note{font-size:11.5px;color:var(--ink-soft);margin-top:6px}
+.cfg-block .note b{color:var(--seal)}
+.tool-chips{display:flex;gap:8px;flex-wrap:wrap}
+.tool-chip{font-size:12px;border:1px solid var(--line-strong);background:var(--panel-deep);border-radius:7px;padding:3px 10px;color:var(--ink-soft);display:inline-flex;gap:6px;align-items:center}
+.tool-chip .x{opacity:.5;cursor:pointer}
+.removed-block{
+  border:1px dashed var(--line-strong);border-radius:12px;padding:14px 18px;background:repeating-linear-gradient(45deg,var(--panel-deep) 0 10px,var(--panel) 10px 20px);
+}
+.removed-block h3{font-family:var(--serif);font-size:14.5px;color:var(--ink-faint);text-decoration:line-through;display:flex;gap:9px;align-items:center}
+.removed-block .gone-tag{font-size:10.5px;color:#fff;background:var(--seal);border-radius:4px;padding:1px 7px;text-decoration:none;font-weight:400}
+.removed-block p{font-size:12px;color:var(--ink-soft);margin-top:6px}
+.skill-mgr-preview{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.skill-mgr-preview .mini-list{flex:1;min-width:240px;display:grid;gap:5px}
+.mini-item{display:flex;align-items:center;gap:8px;font-size:12px;border:1px solid var(--line);border-radius:7px;padding:5px 10px;background:var(--panel-deep)}
+.mini-item .st{width:7px;height:7px;border-radius:50%;background:var(--jade)}
+.mini-item .st.off{background:var(--ink-faint)}
+.mini-item small{color:var(--ink-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- view 1 : admin ---------- */
+.admin-shell{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.admin-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel-deep));flex-wrap:wrap}
+.admin-head h2{font-family:var(--serif);font-size:16px;margin-right:6px}
+.admin-head .crumb{font-size:11px;color:var(--ink-faint)}
+.admin-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border-radius:8px;border:1px solid var(--line-strong);background:var(--panel);padding:6px 14px;font-size:12.5px;color:var(--ink);transition:all .18s}
+.btn:hover{border-color:var(--ink);transform:translateY(-1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.btn.primary:hover{background:#000}
+.btn.seal-btn{background:var(--seal);border-color:var(--seal);color:#fff7ef}
+.btn.seal-btn:hover{background:var(--seal-deep)}
+.btn.danger{color:var(--seal);border-color:var(--seal-wash);background:var(--seal-wash)}
+.btn.danger:hover{border-color:var(--seal)}
+
+.admin-body{display:grid;grid-template-columns:340px 1fr;min-height:520px}
+.list-pane{border-right:1px solid var(--line);display:flex;flex-direction:column;background:var(--panel-deep)}
+.list-tools{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;gap:8px}
+.search{flex:1;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line-strong);border-radius:8px;padding:5px 10px}
+.search input{border:none;outline:none;background:none;width:100%;font-size:12.5px;color:var(--ink)}
+.search svg{flex:none;opacity:.45}
+.filter-sel{border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);font-size:12px;padding:5px 8px;color:var(--ink-soft);outline:none}
+.list-meta{padding:6px 14px;font-size:11px;color:var(--ink-faint);display:flex;justify-content:space-between;align-items:center}
+.skill-list{overflow:auto;flex:1}
+.skill-item{padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;position:relative;transition:background .15s}
+.skill-item:hover{background:rgba(191,58,29,.04)}
+.skill-item.sel{background:var(--panel);box-shadow:inset 3px 0 0 var(--seal)}
+.skill-item .row1{display:flex;align-items:center;gap:8px}
+.skill-item .dname{font-weight:600;font-size:13.5px;font-family:var(--serif)}
+.skill-item .desc{font-size:11.5px;color:var(--ink-soft);margin-top:3px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.skill-item .chev{border:none;background:none;color:var(--ink-faint);font-size:10px;flex:none;transition:transform .15s;padding:0 2px;margin-left:-4px}
+.skill-item .chev.open{transform:rotate(90deg)}
+.file-tree{border-bottom:1px solid var(--line);background:var(--panel);padding:3px 0}
+.file-row{display:flex;align-items:center;gap:7px;padding:4px 14px 4px 34px;font-family:var(--mono);font-size:11px;color:var(--ink-soft);cursor:pointer;border-left:3px solid transparent}
+.file-row:hover{background:var(--seal-wash)}
+.file-row.sel{background:var(--panel-deep);border-left-color:var(--seal);color:var(--ink)}
+.file-row .dir{color:var(--ink-faint)}
+.badge{font-size:10px;border-radius:4px;padding:1px 6px;flex:none;letter-spacing:.3px}
+.badge.off{background:#eee9df;color:var(--ink-faint);border:1px solid var(--line-strong)}
+.badge.on-b{background:var(--jade-wash);color:var(--jade);border:1px solid #c4ddd0}
+.sw{width:34px;height:19px;border-radius:999px;background:#d8d0bf;position:relative;flex:none;border:none;transition:background .2s;margin-left:auto}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .2s}
+.sw.on{background:var(--jade)}
+.sw.on::after{left:17px}
+.empty{padding:60px 30px;text-align:center;color:var(--ink-faint)}
+.empty .glyph{font-family:var(--serif);font-size:42px;opacity:.25}
+.empty p{font-size:12.5px;margin:8px 0 14px}
+
+.detail-pane{display:flex;flex-direction:column;min-width:0}
+.detail-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.detail-head .dn{font-family:var(--serif);font-size:17px;font-weight:700}
+.detail-head .slug-chip{font-family:var(--mono);font-size:11px;color:var(--ink-soft);background:var(--panel-deep);border:1px solid var(--line);border-radius:5px;padding:1px 7px}
+.viewmode{margin-left:auto;display:flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
+.viewmode button{border:none;background:var(--panel);font-size:12px;padding:5px 14px;color:var(--ink-soft)}
+.viewmode button.act{background:var(--ink);color:var(--paper)}
+.detail-body{flex:1;overflow:auto;padding:20px 24px}
+.preview h1{font-family:var(--serif);font-size:20px;margin-bottom:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.preview h2{font-family:var(--serif);font-size:15px;margin:16px 0 6px}
+.preview p,.preview li{font-size:13px;color:var(--ink-soft)}
+.preview ol,.preview ul{padding-left:22px;margin:4px 0}
+.preview .fm-card{
+  background:var(--panel-deep);border:1px dashed var(--line-strong);border-radius:8px;
+  padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--ink-soft);
+  display:grid;grid-template-columns:110px 1fr;row-gap:3px;
+}
+.preview .fm-card b{color:var(--ink);font-weight:600;font-family:var(--mono);font-size:11px}
+.srcview{font-family:var(--mono);font-size:12px;background:var(--code-bg);color:var(--code-ink);border-radius:10px;padding:18px 20px;white-space:pre-wrap;word-break:break-all;line-height:1.7}
+.srcview .fm{color:#8fb573}
+
+/* ---------- view 2 : selector ---------- */
+.chat-stage{max-width:860px;margin:10px auto;display:grid;gap:16px}
+.stage-note{font-size:12px;color:var(--ink-faint);text-align:center}
+.chat-input-card{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-lift);padding:14px 16px;position:relative}
+.ctx-chips{display:flex;gap:8px;flex-wrap:wrap;min-height:28px;margin-bottom:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;border-radius:999px;padding:3px 11px;border:1px solid var(--line-strong);background:var(--panel-deep);color:var(--ink-soft);animation:popIn .25s ease both}
+.chip.mode{background:var(--seal);border-color:var(--seal);color:#fff7ef;font-weight:600}
+.chip.skill-chip{background:var(--jade-wash);border-color:#c4ddd0;color:var(--jade)}
+.chip .x{cursor:pointer;opacity:.6;font-style:normal}
+.chip .x:hover{opacity:1}
+.fake-textarea{font-size:14px;color:var(--ink-faint);padding:6px 4px 14px;border-bottom:1px dashed var(--line)}
+.input-toolbar{display:flex;align-items:center;gap:10px;padding-top:10px}
+.plus-btn{width:30px;height:30px;border-radius:8px;border:1px solid var(--line-strong);background:var(--panel-deep);font-size:17px;color:var(--ink-soft);line-height:1;transition:all .2s}
+.plus-btn:hover,.plus-btn.open{border-color:var(--seal);color:var(--seal);transform:rotate(90deg)}
+.send-btn{margin-left:auto;width:34px;height:34px;border-radius:10px;border:none;background:var(--ink);color:var(--paper);font-size:15px;transition:background .2s}
+.send-btn:hover{background:var(--seal)}
+.plus-menu{
+  position:absolute;left:14px;bottom:64px;background:var(--panel);border:1px solid var(--line-strong);
+  border-radius:12px;box-shadow:var(--shadow-lift);width:230px;padding:6px;display:none;z-index:30;animation:popIn .18s ease both;
+}
+.plus-menu.open{display:block}
+.plus-menu .mi{display:flex;align-items:center;gap:9px;width:100%;border:none;background:none;border-radius:8px;padding:8px 10px;font-size:13px;color:var(--ink);text-align:left}
+.plus-menu .mi:hover{background:var(--seal-wash)}
+.plus-menu .mi small{margin-left:auto;color:var(--ink-faint);font-size:10px}
+.plus-menu .mi .chk{width:14px;text-align:center;color:var(--seal);font-weight:700}
+.plus-menu .mi.dim{opacity:.45;cursor:not-allowed}
+.plus-menu .divider{height:1px;background:var(--line);margin:5px 8px}
+.plus-menu .grp-label{font-size:9.5px;color:var(--ink-faint);padding:2px 10px 1px;letter-spacing:1px}
+.picker{position:absolute;left:14px;bottom:64px;width:380px;background:var(--panel);border:1px solid var(--line-strong);border-radius:14px;box-shadow:var(--shadow-lift);display:none;z-index:31;overflow:hidden;animation:popIn .18s ease both}
+.picker.open{display:block}
+.picker-head{padding:12px 14px 8px;border-bottom:1px solid var(--line)}
+.picker-head .t{display:flex;align-items:center;gap:8px;font-family:var(--serif);font-size:14px;font-weight:700}
+.picker-head .t .clear{margin-left:auto;font-size:11px;color:var(--seal);background:none;border:none}
+.picker-list{max-height:260px;overflow:auto}
+.pick-item{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
+.pick-item:hover{background:var(--panel-deep)}
+.pick-item input{margin-top:3px;accent-color:var(--seal)}
+.pick-item .pi-name{font-weight:600;font-size:13px;font-family:var(--serif)}
+.pick-item .pi-desc{font-size:11.5px;color:var(--ink-soft)}
+.picker-foot{padding:9px 14px;font-size:11px;color:var(--ink-faint);background:var(--panel-deep)}
+.payload-card{background:var(--code-bg);border-radius:14px;padding:16px 20px;color:var(--code-ink);font-family:var(--mono);font-size:12px;line-height:1.8;box-shadow:var(--shadow)}
+.payload-card .cm{color:#7d766a}
+.payload-card .k{color:#f0b35e}
+.payload-card .s{color:#8fb573}
+.payload-card h4{font-family:var(--serif);color:#cfc5b0;font-size:12px;letter-spacing:1px;margin-bottom:8px;font-weight:400}
+.rule-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rule{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--ink-soft)}
+.rule b{color:var(--ink);font-family:var(--serif)}
+
+/* ---------- view 3 : migration ---------- */
+.mig-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:16px;align-items:start}
+.term{background:var(--code-bg);border-radius:14px;box-shadow:var(--shadow-lift);overflow:hidden}
+.term-bar{display:flex;align-items:center;gap:6px;padding:10px 14px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.07)}
+.term-bar .dot2{width:10px;height:10px;border-radius:50%}
+.term-bar .title{font-family:var(--mono);font-size:11px;color:#9a9183;margin-left:8px}
+.term-bar .term-actions{margin-left:auto;display:flex;gap:8px}
+.term-bar button{font-family:var(--mono);font-size:11px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:none;color:var(--code-ink);padding:3px 10px;transition:all .2s}
+.term-bar button:hover{border-color:#f0b35e;color:#f0b35e}
+.term-body{font-family:var(--mono);font-size:12px;color:var(--code-ink);padding:16px 18px;min-height:380px;max-height:520px;overflow:auto;line-height:1.75;white-space:pre-wrap;word-break:break-all}
+.tl{opacity:0;transform:translateY(4px);animation:lineIn .25s ease forwards}
+.tl .p{color:#7d766a}
+.tl .ok{color:#8fb573}
+.tl .warn{color:#f0b35e}
+.tl .err{color:#e8836a}
+.tl .hl{color:#7eb8c9}
+.mig-side{display:grid;gap:14px}
+.mig-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow)}
+.mig-card h3{font-family:var(--serif);font-size:14px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.mig-card table{width:100%;border-collapse:collapse;font-size:12px}
+.mig-card td,.mig-card th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.mig-card th{font-size:11px;color:var(--ink-faint);font-weight:500}
+.mig-card td.mono{font-family:var(--mono);font-size:11px}
+.mig-card .note{font-size:11.5px;color:var(--ink-soft)}
+.mig-card .note b{color:var(--seal)}
+
+/* ---------- modal ---------- */
+.mask{position:fixed;inset:0;background:rgba(33,29,24,.42);backdrop-filter:blur(2px);display:none;align-items:flex-start;justify-content:center;z-index:90;padding:7vh 16px;overflow:auto}
+.mask.open{display:flex}
+.modal{background:var(--panel);border-radius:16px;box-shadow:var(--shadow-lift);width:640px;max-width:100%;animation:popIn .22s ease both;overflow:hidden}
+.modal.small{width:430px}
+.modal-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--panel),var(--panel-deep))}
+.modal-head h3{font-family:var(--serif);font-size:16px}
+.modal-head .close{margin-left:auto;border:none;background:none;font-size:17px;color:var(--ink-faint)}
+.modal-head .close:hover{color:var(--seal)}
+.modal-body{padding:18px 20px;max-height:62vh;overflow:auto}
+.modal-foot{display:flex;gap:10px;justify-content:flex-end;align-items:center;padding:13px 20px;border-top:1px solid var(--line);background:var(--panel-deep)}
+.modal-foot .hint{margin-right:auto;font-size:11px;color:var(--ink-faint)}
+.field{margin-bottom:14px}
+.field label{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;margin-bottom:5px;flex-wrap:wrap}
+.field label .req{color:var(--seal)}
+.field label .sub{font-weight:400;color:var(--ink-faint);font-size:11px}
+.field input[type=text],.field textarea{
+  width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:7px 11px;font-size:13px;
+  background:var(--panel);color:var(--ink);outline:none;transition:border .15s,box-shadow .15s;
+}
+.field input::placeholder,.field textarea::placeholder{color:#b8af9e}
+.field textarea{font-family:var(--mono);font-size:12px;min-height:110px;resize:vertical}
+.field input:focus,.field textarea:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(33,29,24,.07)}
+.field.err input,.field.err textarea{border-color:var(--seal);box-shadow:0 0 0 3px rgba(191,58,29,.1)}
+.field .msg{font-size:11.5px;margin-top:4px;display:none}
+.field.err .msg{display:block;color:var(--seal)}
+.field .ok-msg{font-size:11.5px;margin-top:4px;color:var(--jade);display:none}
+.field.okay .ok-msg{display:block}
+.slug-row{display:flex;gap:8px;align-items:center}
+.slug-row input{font-family:var(--mono);font-size:12px}
+.slug-row .regen{flex:none;font-size:11px;border:1px solid var(--line-strong);background:var(--panel-deep);border-radius:6px;padding:6px 10px;color:var(--ink-soft)}
+.slug-row .regen:hover{border-color:var(--seal);color:var(--seal)}
+.charcount{margin-left:auto;font-weight:400;font-size:10.5px;color:var(--ink-faint)}
+/* upload (claude-web style) */
+.dropzone{
+  border:2px dashed var(--line-strong);border-radius:12px;padding:30px;text-align:center;color:var(--ink-soft);
+  transition:all .2s;margin-bottom:14px;background:var(--panel-deep);
+}
+.dropzone.hover{border-color:var(--seal);background:var(--seal-wash);color:var(--seal)}
+.dropzone .big{font-size:30px;opacity:.4;line-height:1}
+.dropzone .main-t{font-size:14px;margin-top:8px}
+.dropzone .sub-t{font-size:11px;color:var(--ink-faint);margin-top:2px}
+.freq{font-size:11.5px;color:var(--ink-soft);margin-bottom:12px}
+.freq b{font-weight:600;color:var(--ink);display:block;margin-bottom:3px;font-size:11px}
+.freq ul{padding-left:18px;display:grid;gap:2px}
+.freq code{font-family:var(--mono);font-size:10.5px;background:var(--panel-deep);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.freq .links{margin-top:5px}
+.freq .links a{color:var(--seal);font-size:11px}
+.mock-files{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mock-file{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px 11px;text-align:left;font-size:12px;transition:all .15s}
+.mock-file:hover{border-color:var(--seal);transform:translateY(-1px)}
+.mock-file .fn{font-family:var(--mono);font-size:11px;font-weight:600}
+.mock-file .fs{color:var(--ink-faint);font-size:10.5px}
+.vresult{border-radius:10px;padding:11px 14px;font-size:12.5px;margin-top:14px;display:none}
+.vresult.bad{display:block;background:var(--seal-wash);border:1px solid #ecc4b6;color:var(--seal-deep)}
+.vresult.good{display:block;background:var(--jade-wash);border:1px solid #c4ddd0;color:var(--jade)}
+.vresult code{font-family:var(--mono);font-size:11px}
+.vresult .ec{font-family:var(--mono);font-size:10px;background:rgba(0,0,0,.08);padding:1px 6px;border-radius:4px;margin-left:6px}
+.vresult pre{font-family:var(--mono);font-size:11px;margin-top:6px;line-height:1.6}
+.del-warn{display:flex;gap:12px;align-items:flex-start;font-size:13px}
+.del-warn .icon{width:36px;height:36px;border-radius:10px;background:var(--seal-wash);color:var(--seal);display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+
+/* ---------- drawer ---------- */
+.drawer{
+  position:fixed;top:0;right:-500px;width:490px;height:100vh;background:var(--panel);z-index:95;
+  border-left:1px solid var(--line-strong);box-shadow:-12px 0 40px rgba(33,29,24,.15);
+  transition:right .3s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;
+}
+.drawer.open{right:0}
+.drawer-head{display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.drawer-head h3{font-family:var(--serif);font-size:16px}
+.drawer-head .close{margin-left:auto;border:none;background:none;font-size:17px;color:var(--ink-faint)}
+.drawer-body{overflow:auto;padding:16px 20px;font-size:12px}
+.drawer-body h4{font-family:var(--serif);font-size:13px;margin:14px 0 6px;color:var(--seal)}
+.drawer-body h4:first-child{margin-top:0}
+.ep-table{width:100%;border-collapse:collapse}
+.ep-table td{padding:5px 6px;border-bottom:1px solid var(--line);font-size:11px;vertical-align:top}
+.ep-table .m{font-family:var(--mono);font-weight:700;width:48px}
+.ep-table .pth{font-family:var(--mono)}
+.schema{font-family:var(--mono);font-size:11px;background:var(--code-bg);color:var(--code-ink);border-radius:8px;padding:12px 14px;line-height:1.7;white-space:pre;overflow:auto}
+.schema .new{color:#e8836a}
+.schema .cm{color:#7d766a}
+.drawer-body .dnote{color:var(--ink-soft);font-size:11.5px;margin-top:6px}
+
+#toasts{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:120;display:grid;gap:8px;justify-items:center}
+.toast{background:var(--ink);color:var(--paper);border-radius:10px;padding:9px 16px;font-size:12.5px;box-shadow:var(--shadow-lift);display:flex;align-items:center;gap:10px;animation:popIn .25s ease both;max-width:80vw}
+.toast.gone{animation:fadeOut .3s ease both}
+.toast .api{display:inline-block;background:rgba(255,255,255,.12)}
+
+.footnote{margin:26px 28px 0;font-size:11px;color:var(--ink-faint);text-align:center}
+.footnote b{color:var(--seal)}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes popIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+@keyframes lineIn{to{opacity:1;transform:none}}
+@keyframes fadeOut{to{opacity:0;transform:translateY(8px)}}
+@media (max-width:1080px){
+  .decisions{grid-template-columns:1fr 1fr}
+  .admin-body{grid-template-columns:1fr}
+  .mig-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body class="show-api">
+
+<header>
+  <div class="seal">技</div>
+  <div class="brand">
+    <h1>灵思 · Skill 体系方案确认</h1>
+    <p>F035 Track D（Skill 体系）/ Track G（存量迁移） · 契约 <code>C3</code> + <code>display_name</code> 扩展 · v2（含 06-12 补充需求） · 交互 mock 未连后端</p>
+  </div>
+  <div class="head-right">
+    <button class="ghost-btn" onclick="openDrawer()">契约速览</button>
+    <button class="api-toggle on" id="apiToggle" onclick="toggleApi()"><span class="dot"></span>API / i18n 标注</button>
+  </div>
+</header>
+
+<section class="decisions">
+  <div class="decision">
+    <span class="tag">决策 ①</span>
+    <h3>展示名称 + 技能 ID 双字段</h3>
+    <p>前端各处一律显示<b>展示名称</b>（中文）；<b>技能 ID</b>（<code>[a-z0-9-]</code>，deepagents 硬约束）为唯一键 / 激活键 / 落盘目录名，列表不展示。</p>
+  </div>
+  <div class="decision">
+    <span class="tag">决策 ②</span>
+    <h3>迁移 ID = 中文转拼音</h3>
+    <p>存量 SOP：展示名称沿用原名，技能 ID 经 pypinyin 生成（如 <code>biao-shu-zhuan-xie-liu-cheng</code>），重名加 <code>-2/-3</code> 后缀。<b>列表不标记迁移来源</b>。</p>
+  </div>
+  <div class="decision">
+    <span class="tag">决策 ③</span>
+    <h3>对账报告不产品化</h3>
+    <p>管理页无提示条/报告/待办；脚本输出 JSON 摘要作<b>运维产物</b>（PRD §4.6.2 已修订）。</p>
+  </div>
+  <div class="decision">
+    <span class="tag">决策 ④</span>
+    <h3>灵思 tab 并入日常</h3>
+    <p>入口开关移除（改走角色菜单）；展示名/提示语改「任务模式」；工具<b>直接共用日常「可用工具」</b>（灵思工具配置废弃不迁移）；指导手册库→技能管理；「+」菜单任务模式与添加 Skill 组合排布（PRD §4.8/§4.1.3）。</p>
+  </div>
+</section>
+
+<nav class="tabs">
+  <button class="tab active" data-v="v0" onclick="switchView('v0')"><span class="num">壹</span>工作台配置 <small>合并后 · 管理端</small></button>
+  <button class="tab" data-v="v1" onclick="switchView('v1')"><span class="num">贰</span>技能管理 <small>租户管理员</small></button>
+  <button class="tab" data-v="v2" onclick="switchView('v2')"><span class="num">叁</span>技能选择器 <small>终端用户</small></button>
+  <button class="tab" data-v="v3" onclick="switchView('v3')"><span class="num">肆</span>存量迁移 <small>Track G 脚本</small></button>
+</nav>
+
+<main>
+<!-- ============ View 0 : workbench config (merged) ============ -->
+<section class="view active" id="v0">
+  <div class="cfg-shell">
+    <div class="cfg-tabs">
+      <button class="cfg-tab act">日常</button>
+      <button class="cfg-tab gone" onclick="toast('「灵思」tab 已移除：配置项并入「日常」（PRD §4.8）')">灵思</button>
+      <button class="cfg-tab" style="opacity:.5">订阅</button>
+      <button class="cfg-tab" style="opacity:.5">知识空间</button>
+      <span style="margin-left:auto;font-size:11px;color:var(--ink-faint);padding:6px 4px">构建 / 工作台配置 —— 「日常」tab 内与本次相关的区块（其余既有配置省略）</span>
+    </div>
+    <div class="cfg-body">
+
+      <div class="removed-block">
+        <h3>灵思入口 <span style="text-decoration:none">🔘</span> <span class="gone-tag">移除</span></h3>
+        <p>任务模式入口授权改由「系统 - 角色管理 - 可见菜单 → 首页 → <b>任务模式</b>」统一控制（PRD §4.7.7，Track F 落地；存量「可进工作台」角色自动回填开启）。不再有租户级总开关。</p>
+      </div>
+
+      <div class="cfg-block merged">
+        <h3>任务模式展示名称 <span class="from">原「灵思模式展示名称」· 并入</span> <span class="i18n">workbench_conf.sidebar_name（沿用存量值）</span></h3>
+        <div class="body"><input type="text" value="任务模式" placeholder="如：任务模式"></div>
+      </div>
+
+      <div class="cfg-block merged">
+        <h3>任务模式输入框提示语 <span class="from">原「输入框提示语」· 并入</span></h3>
+        <div class="body"><input type="text" value="描述你的任务目标，也可以用通俗的语言描述希望如何实现，这有助于得到符合预期的结果～"></div>
+        <p class="note">任务模式下输入框占位文案取此值（PRD §4.1.1）；存量配置值升级时沿用。</p>
+      </div>
+
+      <div class="cfg-block">
+        <h3>可用工具 <span class="from" style="background:var(--jade-wash);color:var(--jade);border-color:#c4ddd0">日常 tab 既有配置 · 任务模式直接共用</span></h3>
+        <div class="body tool-chips">
+          <span class="tool-chip">≡ BISHENG_MCP <i class="x">×</i></span>
+          <span class="tool-chip">≡ antvis/mcp-server-chart <i class="x">×</i></span>
+          <span class="tool-chip">≡ 代码执行器 <i class="x">×</i></span>
+          <span class="tool-chip">≡ 联网搜索 <i class="x">×</i></span>
+          <span class="tool-chip" style="border-style:dashed;color:var(--ink-faint)">＋ 全量工具（内置 / API / MCP）</span>
+        </div>
+        <p class="note">任务模式与日常对话<b>共用这一份「可用工具」</b>，不新增配置项、不做数据迁移；用户在输入区工具栏按轮选用（不生成 chip，沿用既有交互）（PRD FR-8.4）。</p>
+      </div>
+
+      <div class="removed-block">
+        <h3>灵思可选工具 <span class="gone-tag">废弃移除 · 不迁移</span></h3>
+        <p>不并入、不做并集迁移——任务模式直接共用上方「可用工具」。原灵思工具中日常未配置的项升级后默认不可用，需管理员在「可用工具」中手动添加（升级说明提示，PRD §4.8.3）。</p>
+      </div>
+
+      <div class="cfg-block merged">
+        <h3>技能管理 <span class="from">原「灵思指导手册库」· 升级替换</span> <span class="api new"><b>GET</b> /api/v1/linsight/skill</span></h3>
+        <div class="body skill-mgr-preview">
+          <div class="mini-list" id="miniList"></div>
+          <button class="btn seal-btn" onclick="switchView('v1')">进入技能管理 →</button>
+        </div>
+        <p class="note">SOP 列表（从运行记录导入 / 从本地文件导入 / 新建指导手册 / 精选）整体下线；存量 SOP 经迁移脚本转为技能（见「肆 · 存量迁移」）。</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============ View 1 : skill admin ============ -->
+<section class="view" id="v1">
+  <div class="admin-shell">
+    <div class="admin-head">
+      <h2>技能管理</h2>
+      <span class="crumb">构建 / 工作台配置（日常）/ 技能管理</span>
+      <span class="api new"><b>GET</b> /api/v1/linsight/skill?keyword=&amp;enabled=&amp;page=&amp;page_size=</span>
+      <div class="admin-actions">
+        <button class="btn" onclick="openUpload()">上传 Skill <span class="api"><b>POST</b> /skill (multipart)</span></button>
+        <button class="btn seal-btn" onclick="openCreate()">新建 Skill <span class="api" style="background:rgba(0,0,0,.25)"><b>POST</b> /skill (form)</span></button>
+      </div>
+    </div>
+    <div class="admin-body">
+      <aside class="list-pane">
+        <div class="list-tools">
+          <div class="search">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="kw" placeholder="搜索展示名称 / 描述…" oninput="renderList()">
+          </div>
+          <select class="filter-sel" id="statusFilter" onchange="renderList()">
+            <option value="all">全部</option>
+            <option value="on">已启用</option>
+            <option value="off">已停用</option>
+          </select>
+        </div>
+        <div class="list-meta">
+          <span id="listCount"></span>
+          <span style="font-family:var(--mono);font-size:10px">仅展示 display_name · 无来源标识</span>
+        </div>
+        <div class="skill-list" id="skillList"></div>
+      </aside>
+      <div class="detail-pane" id="detailPane"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ View 2 : selector ============ -->
+<section class="view" id="v2">
+  <div class="chat-stage">
+    <p class="stage-note">终端用户视角 · 统一输入区 · 「+」菜单中<b>任务模式与添加 Skill 组合排布</b>（参考确认图：上传文件 ｜ 分隔线 ｜ 任务模式 / 添加 Skill）· 与技能管理共享同一份状态</p>
+    <div class="chat-input-card">
+      <div class="ctx-chips" id="ctxChips"></div>
+      <div class="fake-textarea" id="fakePh">帮我根据上传的招标文件写一份投标书初稿…</div>
+      <div class="input-toolbar">
+        <button class="plus-btn" id="plusBtn" onclick="togglePlus()">＋</button>
+        <span style="font-size:11px;color:var(--ink-faint)">工具栏（独立入口·沿用既有交互）</span>
+        <button class="send-btn" onclick="trySubmit()">↑</button>
+      </div>
+      <!-- plus menu : new grouped layout -->
+      <div class="plus-menu" id="plusMenu">
+        <button class="mi" onclick="toast('上传附件（mock）· 解析四态见 §4.2')">⊕ 上传文件</button>
+        <button class="mi dim">⊞ 知识空间 <small>Track H</small></button>
+        <button class="mi dim">⊟ 组织知识库 <small>Track H</small></button>
+        <div class="divider"></div>
+        <button class="mi" id="miMode" onclick="toggleMode()"><span class="chk" id="modeChk">✓</span>◎ 任务模式</button>
+        <button class="mi" id="miSkill" onclick="openPicker()"><span class="chk"></span>⚒ 添加 Skill <small id="miCount"></small> <small>›</small></button>
+      </div>
+      <!-- skill picker -->
+      <div class="picker" id="picker">
+        <div class="picker-head">
+          <div class="t">添加 Skill
+            <span class="api new"><b>GET</b> /skill/selectable</span>
+            <button class="clear" onclick="clearPicks()">清空已选</button>
+          </div>
+          <div class="search" style="margin-top:8px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="pickKw" placeholder="按展示名称 / 摘要过滤…" oninput="renderPicker()">
+          </div>
+        </div>
+        <div class="picker-list" id="pickList"></div>
+        <div class="picker-foot">扁平列表 · 仅本租户<b>已启用</b>的自定义技能（显示展示名称）· built-in 不出现 · 勾了才用、不勾不用</div>
+      </div>
+    </div>
+    <div class="payload-card">
+      <h4>── 提交时实际下发（鉴权 get_login_user）──</h4>
+      <div id="payloadBox"></div>
+    </div>
+    <div class="rule-cards">
+      <div class="rule"><b>组合排布与联动</b><br>「任务模式」「添加 Skill」同分组相邻；任务模式未开启时点「添加 Skill」<b>自动先开启任务模式</b>再打开选择器；退出任务模式（chip「×」或菜单取消）即清空技能勾选（PRD §4.1.2/4.1.3）。</div>
+      <div class="rule"><b>失效联动</b><br>已勾选的技能被管理员停用/删除 → chip 自动移除 + 轻提示，不阻塞提交其余上下文（试试：去技能管理停用「标书撰写流程」再回来）。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ View 3 : migration ============ -->
+<section class="view" id="v3">
+  <div class="mig-grid">
+    <div class="term">
+      <div class="term-bar">
+        <span class="dot2" style="background:#e8836a"></span><span class="dot2" style="background:#f0b35e"></span><span class="dot2" style="background:#8fb573"></span>
+        <span class="title">bisheng-backend · scripts/migrate_sop_to_skill.py</span>
+        <div class="term-actions">
+          <button onclick="runMigration(false)">▶ dry-run（默认）</button>
+          <button onclick="runMigration(true)">▶▶ --apply</button>
+        </div>
+      </div>
+      <div class="term-body" id="termBody"><span style="color:#7d766a">点右上角按钮运行迁移演示…
+（dry-run 只读不写；--apply 落盘 SKILL.md + 写 linsight_skill 表，幂等可重跑）</span></div>
+    </div>
+    <div class="mig-side">
+      <div class="mig-card">
+        <h3><span style="color:var(--seal)">▸</span> 技能 ID 归一化规则（design §8.2 修订稿）</h3>
+        <table>
+          <tr><th>SOP 原名（→ 展示名称）</th><th>技能 ID（拼音）</th></tr>
+          <tr><td>标书撰写流程</td><td class="mono">biao-shu-zhuan-xie-liu-cheng</td></tr>
+          <tr><td>客户投诉处理SOP</td><td class="mono">ke-hu-tou-su-chu-li-sop</td></tr>
+          <tr><td>客户投诉处理SOP <i style="color:var(--ink-faint)">(同租户重名)</i></td><td class="mono">ke-hu-tou-su-chu-li-sop-2</td></tr>
+          <tr><td>季度财报分析 v2.0（修订）</td><td class="mono">ji-du-cai-bao-fen-xi-v2-0</td></tr>
+        </table>
+        <p class="note" style="margin-top:8px">小写拼音以 <b>-</b> 连接 · 数字/英文原样保留 · 其余符号归并为 <b>-</b> · 截断 ≤64 · 同租户重名追加 <b>-2/-3</b>（展示名称同步加「（2）」）· <code style="font-family:var(--mono)">ORDER BY tenant_id,id</code> 保证重跑后缀稳定。</p>
+      </div>
+      <div class="mig-card">
+        <h3><span style="color:var(--seal)">▸</span> 落盘产物（每个 SOP 一个目录）</h3>
+        <div class="schema">data/skills/{tenant_id}/
+└─ biao-shu-zhuan-xie-liu-cheng/
+   └─ SKILL.md
+      ---
+      name: biao-shu-zhuan-xie-liu-cheng
+      description: 投标书撰写标准流程…
+      metadata:
+        <span class="new">display-name: 标书撰写流程</span>
+        <span class="new">sop-id: "17"</span>  <span class="cm"># 内部溯源/幂等, 前端不展示</span>
+      ---
+      （SOP content 原文）</div>
+      </div>
+      <div class="mig-card">
+        <h3><span style="color:var(--seal)">▸</span> 迁移结果核对（PRD §4.6.2 已修订）</h3>
+        <p class="note">脚本输出 <b>JSON 迁移摘要</b>（stdout + 文件），仅运维核对用；管理页<b>无</b>提示条/报告/待办界面，迁移技能与手动新建<b>一致呈现、不作来源区分</b>。失败项由运维联动管理员在管理页重建；超大项拆分后重新上传。</p>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<p class="footnote">确认要点：① 工作台配置合并后「日常」tab 区块编排（工具<b>直接共用</b>「可用工具」、不迁移） ② 管理页列表<b>仅展示名称</b>、详情才见技能 ID ③ 新建表单「<b>技能 ID</b>」命名与 placeholder 引导（开「API / i18n 标注」可见） ④ 上传支持 <b>.md / .zip / .skill / 文件夹</b> ⑤ 「+」菜单任务模式与添加 Skill 组合排布 ⑥ <b>bundle 文件树</b>浏览与附属文件只读查看（试试列表中的「尽调报告工具包」▶）。确认后落 C3 契约变更与 Track D 实现。</p>
+
+<!-- ============ drawer ============ -->
+<aside class="drawer" id="drawer">
+  <div class="drawer-head"><h3>C3 契约速览（display_name + 多形态上传扩展）</h3><button class="close" onclick="closeDrawer()">✕</button></div>
+  <div class="drawer-body">
+    <h4>端点（/api/v1/linsight 前缀）</h4>
+    <table class="ep-table">
+      <tr><td class="m">GET</td><td class="pth">/skill</td><td>管理列表，PageData[SkillBrief]，get_tenant_admin_user</td></tr>
+      <tr><td class="m">GET</td><td class="pth">/skill/selectable</td><td>终端选择器，仅已启用，get_login_user</td></tr>
+      <tr><td class="m">GET</td><td class="pth">/skill/{name}</td><td>详情（frontmatter + 正文 + bundle 文件树 files[]）</td></tr>
+      <tr><td class="m">GET</td><td class="pth">/skill/{name}/file?path=</td><td>读取 bundle 附属文件内容（只读 · <b style="color:#e8836a">新增</b>）</td></tr>
+      <tr><td class="m">POST</td><td class="pth">/skill</td><td>multipart（.md / .zip / .skill / 文件夹打包）或 form 新建，默认启用</td></tr>
+      <tr><td class="m">PUT</td><td class="pth">/skill/{name}</td><td>编辑：form 仅改 SKILL.md；multipart 整包替换（保持同一技能 ID）</td></tr>
+      <tr><td class="m">PATCH</td><td class="pth">/skill/{name}/status</td><td>{enabled:bool} 启停</td></tr>
+      <tr><td class="m">DEL</td><td class="pth">/skill/{name}</td><td>删除（前端二次确认）</td></tr>
+    </table>
+    <p class="dnote">built-in 不在 /skill 命名空间：对其任何操作一律 <b>404</b>（不泄露存在性）。压缩包/文件夹：根目录须含 SKILL.md，附属文件随技能目录整体落盘，整包 ≤10MB。</p>
+    <h4>SkillBrief（红色为本次契约变更新增）</h4>
+    <div class="schema">{
+  "id": 1,
+  "name": "biao-shu-zhuan-xie-liu-cheng",  <span class="cm">// 技能 ID, 唯一键（列表 UI 不展示）</span>
+  <span class="new">"display_name": "标书撰写流程",</span>          <span class="cm">// 前端一律显示它</span>
+  "description": "投标书撰写标准流程…",
+  "enabled": true,
+  "source": "sop_migrated",               <span class="cm">// 内部溯源, 前端不展示不区分</span>
+  "create_time": "2026-06-12T10:00:00+08:00"
+}</div>
+    <h4>SkillSelectable</h4>
+    <div class="schema">{ "name": "…", <span class="new">"display_name": "…",</span> "description": "…" }</div>
+    <h4>SkillDetail 增量（bundle 文件树）</h4>
+    <div class="schema">{ ...SkillBrief, "preview": "…", "source_text": "…",
+  <span class="new">"files": [{"path":"SKILL.md","size":1024},
+            {"path":"scripts/collect_data.py","size":2048}]</span> }
+<span class="cm">// 附属文件内容经 GET /skill/{name}/file?path= 按需读取（只读）
+// 编辑仅作用 SKILL.md；附属文件更新走 PUT multipart 整包替换</span></div>
+    <h4>激活（C3 不变）</h4>
+    <div class="schema">config.configurable.active_skills: ["id-a","id-b"]
+<span class="cm">// 勾选技能的「技能 ID」列表；[] = 全禁；前端不下发 null
+// 展示名称仅 UI 层，激活仍按技能 ID（name）</span></div>
+    <h4>frontmatter 规范</h4>
+    <div class="schema">name:        必填 ≤64 ^[a-z0-9]+(-[a-z0-9]+)*$，须=目录名
+description: 必填 ≤1024
+allowed-tools / license: 可选
+metadata:    可选 dict[str,str]
+  <span class="new">display-name: 展示名称（缺省回退 name）</span>
+  <span class="new">sop-id: 迁移溯源（仅迁移产物）</span>
+单 .md 或 zip 整包 ≤10MB；zip/.skill/文件夹根目录须含 SKILL.md</div>
+    <h4>错误码（110 段）</h4>
+    <div class="schema">11051 SkillValidationError    frontmatter/ID 校验失败、压缩包缺 SKILL.md
+11052 SkillFileTooLargeError  整包 &gt;10MB
+11053 SkillNotFoundError      不存在（含 built-in 名）
+11054 SkillPermissionError    无权限
+11055 SkillNameDuplicateError 重名（技能 ID 或展示名称）</div>
+  </div>
+</aside>
+
+<!-- ============ create / edit modal ============ -->
+<div class="mask" id="createMask">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="createTitle">新建 Skill</h3>
+      <span class="api new" id="createApi"><b>POST</b> /skill (form)</span>
+      <button class="close" onclick="closeMask('createMask')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field" id="f_dname">
+        <label>展示名称 <span class="req">*</span><span class="sub">用户在列表/选择器看到的名称，支持中文</span><span class="i18n">skill.form.displayNamePh</span><span class="charcount" id="dnameCount"></span></label>
+        <input type="text" id="in_dname" placeholder="给技能起一个用户易识别的名称，如：季度财报分析" oninput="onDnameInput()">
+        <p class="msg" id="m_dname"></p>
+      </div>
+      <div class="field" id="f_slug">
+        <label>技能 ID <span class="req">*</span><span class="sub">系统级唯一标识 · 由展示名称自动生成，可修改</span><span class="i18n">skill.form.skillIdPh</span></label>
+        <div class="slug-row">
+          <input type="text" id="in_slug" placeholder="小写字母 / 数字 / 连字符，如 ji-du-cai-bao-fen-xi" oninput="validateForm()">
+          <button class="regen" onclick="regenSlug()">↻ 重新生成</button>
+        </div>
+        <p class="msg" id="m_slug"></p>
+        <p class="ok-msg" id="ok_slug"></p>
+      </div>
+      <div class="field" id="f_desc">
+        <label>描述 <span class="req">*</span><span class="sub">≤1024 · 模型按它判断何时调用该技能</span><span class="i18n">skill.form.descPh</span><span class="charcount" id="descCount"></span></label>
+        <input type="text" id="in_desc" placeholder="一句话说明技能做什么、何时使用，如：抽取财报核心指标并生成结构化分析报告" oninput="validateForm()">
+        <p class="msg" id="m_desc"></p>
+      </div>
+      <div class="field" id="f_content">
+        <label>技能正文 <span class="req">*</span><span class="sub">SKILL.md 正文（Markdown）· frontmatter 由系统生成，无需手写</span><span class="i18n">skill.form.contentPh</span></label>
+        <textarea id="in_content" placeholder="# 技能说明&#10;&#10;## 适用场景&#10;什么情况下使用本技能…&#10;&#10;## 步骤&#10;1. 第一步…&#10;2. 第二步…" oninput="validateForm()"></textarea>
+        <p class="msg" id="m_content"></p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <span class="hint">即时校验 · 文案全部走 i18n（中/英/日）· 保存前可 Preview/Source 复核 · 新建默认启用</span>
+      <button class="btn" onclick="closeMask('createMask')">取消</button>
+      <button class="btn primary" id="saveBtn" onclick="saveCreate()" disabled>保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ upload modal (claude-web style) ============ -->
+<div class="mask" id="uploadMask">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>上传 Skill</h3>
+      <span class="api new"><b>POST</b> /skill (multipart)</span>
+      <button class="close" onclick="closeMask('uploadMask')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" ondragover="event.preventDefault();this.classList.add('hover')" ondragleave="this.classList.remove('hover')" ondrop="event.preventDefault();this.classList.remove('hover');toast('demo 环境请点击下方预置文件模拟')">
+        <div class="big">⿻</div>
+        <div class="main-t">拖拽或点击上传</div>
+        <div class="sub-t">支持 .md 文件、.zip / .skill 压缩包、整个文件夹</div>
+      </div>
+      <div class="freq">
+        <b>文件要求</b>
+        <ul>
+          <li><code>.md</code> 文件须包含 YAML frontmatter（<code>name</code> 与 <code>description</code> 必填）</li>
+          <li><code>.zip</code> / <code>.skill</code> 压缩包须在根目录包含 <code>SKILL.md</code>，可携带脚本、参考资料等附属文件</li>
+          <li>文件夹拖入视同压缩包，目录结构原样保留</li>
+          <li>整包大小 ≤ 10MB</li>
+        </ul>
+        <div class="links"><a href="javascript:toast('跳转技能编写指南（mock）')">查看技能编写指南</a> · <a href="javascript:toast('查看示例 SKILL.md（mock）')">查看示例</a></div>
+      </div>
+      <div class="mock-files">
+        <button class="mock-file" onclick="mockUpload('ok_md')"><div class="fn">contract-risk-scan.md</div><div class="fs">8.2 KB · 单 .md · frontmatter 合规</div></button>
+        <button class="mock-file" onclick="mockUpload('ok_zip')"><div class="fn">report-toolkit.skill</div><div class="fs">1.2 MB · 压缩包 · 含 SKILL.md + 脚本/模板</div></button>
+        <button class="mock-file" onclick="mockUpload('folder')"><div class="fn">market-research/（文件夹）</div><div class="fs">3 个文件 · 根目录含 SKILL.md</div></button>
+        <button class="mock-file" onclick="mockUpload('nozip')"><div class="fn">tools-pack.zip</div><div class="fs">640 KB · 压缩包内无 SKILL.md</div></button>
+        <button class="mock-file" onclick="mockUpload('big')"><div class="fn">huge-knowledge-pack.zip</div><div class="fs">12.4 MB · 超出大小上限</div></button>
+        <button class="mock-file" onclick="mockUpload('badfm')"><div class="fn">Bad_Name_Skill.md</div><div class="fs">3.0 KB · name 含大写/下划线 + 缺 description</div></button>
+      </div>
+      <div class="vresult" id="upResult"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="hint">校验失败就地报错、不落盘；校验通过 → Preview 确认后保存（默认启用）</span>
+      <button class="btn" onclick="closeMask('uploadMask')">取消</button>
+      <button class="btn primary" id="upSaveBtn" onclick="saveUpload()" disabled>确认保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ delete confirm ============ -->
+<div class="mask" id="delMask">
+  <div class="modal small">
+    <div class="modal-head"><h3>删除技能</h3><button class="close" onclick="closeMask('delMask')">✕</button></div>
+    <div class="modal-body">
+      <div class="del-warn">
+        <div class="icon">!</div>
+        <div>确认删除「<b id="delName"></b>」？<br>
+        <span style="color:var(--ink-soft);font-size:12px">删除后终端用户将无法再选用该技能，且不可恢复；正被用户勾选（未提交）的会在其输入区标失效并自动移除。</span></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <span class="hint api" style="margin-right:auto"><b>DELETE</b> /skill/{name}</span>
+      <button class="btn" onclick="closeMask('delMask')">取消</button>
+      <button class="btn danger" onclick="confirmDelete()">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+/* mock pinyin (demo-only mini dict; real impl: backend pypinyin / frontend pinyin-pro) */
+const PY = {标:'biao',书:'shu',撰:'zhuan',写:'xie',流:'liu',程:'cheng',季:'ji',度:'du',财:'cai',报:'bao',分:'fen',析:'xi',合:'he',同:'tong',条:'tiao',款:'kuan',审:'shen',阅:'yue',客:'ke',户:'hu',投:'tou',诉:'su',处:'chu',理:'li',周:'zhou',汇:'hui',总:'zong',舆:'yu',情:'qing',监:'jian',测:'ce',日:'ri',数:'shu',据:'ju',生:'sheng',成:'cheng2',知:'zhi',识:'shi',库:'ku',检:'jian2',索:'suo',文:'wen',档:'dang',翻:'fan',译:'yi',邮:'you',件:'jian3',回:'hui2',复:'fu',市:'shi2',场:'chang',调:'diao',研:'yan',产:'chan',品:'pin',需:'xu',求:'qiu',评:'ping',用:'yong',例:'li2',代:'dai',码:'ma',质:'zhi2',量:'liang',安:'an',全:'quan',巡:'xun',培:'pei',训:'xun2',计:'ji2',划:'hua',招:'zhao',聘:'pin2',面:'mian',试:'shi3',绩:'ji3',效:'xiao',考:'kao',核:'he2',预:'yu2',算:'suan',编:'bian',制:'zhi3',采:'cai2',购:'gou',验:'yan2',收:'shou',销:'xiao2',售:'shou2',线:'xian',运:'yun',营:'ying',活:'huo',动:'dong',策:'ce2',风:'feng',险:'xian2',扫:'sao',描:'miao',会:'hui3',议:'yi2',纪:'ji4',要:'yao',整:'zheng',告:'gao',危:'wei',机:'ji5',公:'gong',关:'guan',法:'fa',务:'wu',规:'gui',税:'shui',申:'shen2',智:'zhi4',能:'neng',助:'zhu',手:'shou3'};
+function slugify(s){
+  let out=[];
+  for(const ch of s){
+    if(/[a-zA-Z0-9]/.test(ch)) out.push(ch.toLowerCase());
+    else if(PY[ch]) out.push('-'+PY[ch].replace(/[0-9]/g,'')+'-');
+    else out.push('-');
+  }
+  return out.join('').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,64);
+}
+
+/* shared mock state */
+let skills=[
+ {id:1,name:'biao-shu-zhuan-xie-liu-cheng',display_name:'标书撰写流程',description:'投标书撰写标准流程：解析招标文件→提取评分点→生成大纲→分章节撰写→合规自查。',enabled:true,source:'sop_migrated',content:'# 标书撰写流程\n\n## 适用场景\n收到招标文件，需要产出投标书初稿。\n\n## 步骤\n1. 通读招标文件，提取资质要求与评分办法\n2. 按评分点生成投标书大纲\n3. 分章节撰写（技术方案 / 商务应答 / 资质证明）\n4. 合规自查：废标项逐条核对\n5. 输出 Word 初稿到 output/ 目录',sop_id:'17'},
+ {id:7,name:'due-diligence-toolkit',display_name:'尽调报告工具包',description:'客户尽调标准流程：清单核对→数据采集脚本→输出尽调报告（bundle：含附属脚本与参考清单）。',enabled:true,source:'manual',content:'# 尽调报告工具包\n\n## 适用场景\n需要对目标客户/项目做尽职调查并产出报告。\n\n## 步骤\n1. 按 reference/checklist.md 核对资料完整性\n2. 运行 scripts/collect_data.py 采集工商/司法公开数据\n3. 交叉验证后输出尽调报告到 output/',sop_id:null,files:[
+   {path:'SKILL.md'},
+   {path:'reference/checklist.md',content:'# 尽调资料清单\n\n- [ ] 营业执照 / 统一社会信用代码\n- [ ] 近三年财务报表\n- [ ] 重大诉讼与行政处罚记录\n- [ ] 主要股东与实际控制人结构\n- [ ] 核心资质证书有效期\n'},
+   {path:'scripts/collect_data.py',content:'"""Collect public registry data for due diligence."""\nimport httpx\n\nAPI = "https://registry.example.com/search"\n\n\ndef collect(company: str) -> dict:\n    resp = httpx.get(API, params={"q": company}, timeout=30)\n    resp.raise_for_status()\n    return resp.json()\n'},
+   {path:'LICENSE.txt',content:'MIT License\n\nCopyright (c) 2026 BiSheng\n\nPermission is hereby granted, free of charge, ...'}
+ ]},
+ {id:2,name:'ji-du-cai-bao-fen-xi',display_name:'季度财报分析',description:'抽取营收/净利润/同比环比等核心指标，输出结构化 Markdown 分析报告。',enabled:true,source:'manual',content:'# 季度财报分析\n\n1. read_file 读取财报 PDF 解析稿\n2. 抽取核心指标（营收 / 净利 / 毛利率 / 现金流）\n3. 用代码解释器算同比环比\n4. 输出结构化分析报告',sop_id:null},
+ {id:3,name:'he-tong-tiao-kuan-shen-yue',display_name:'合同条款审阅',description:'逐条审阅合同风险条款，标注风险等级并给出修订建议。',enabled:false,source:'sop_migrated',content:'# 合同条款审阅\n\n1. 解析合同正文\n2. 对照风险条款清单逐条核对\n3. 输出风险标注 + 修订建议',sop_id:'23'},
+ {id:4,name:'ke-hu-tou-su-chu-li-sop',display_name:'客户投诉处理SOP',description:'按投诉分级标准处理客户投诉：定级→响应→跟进→复盘归档。',enabled:true,source:'sop_migrated',content:'# 客户投诉处理\n\n1. 投诉定级（P0-P3）\n2. 按级别选择响应模板\n3. 处理进度跟进\n4. 复盘并归档',sop_id:'31'},
+ {id:5,name:'zhou-bao-hui-zong',display_name:'周报汇总',description:'汇总组内成员周报，按项目维度归并并生成管理层摘要。',enabled:true,source:'manual',content:'# 周报汇总\n\n1. 收集各成员周报文件\n2. 按项目归并\n3. 生成管理层一页纸摘要',sop_id:null},
+ {id:6,name:'yu-qing-jian-ce-ri-bao',display_name:'舆情监测日报',description:'聚合多渠道舆情线索，分级标注并产出当日舆情简报。',enabled:true,source:'sop_migrated',content:'# 舆情监测日报\n\n1. 检索知识库中的当日舆情线索\n2. 分级（正面/中性/风险）\n3. 产出简报',sop_id:'45'},
+];
+let nextId=8;
+let selectedName=skills[0].name;
+let selectedFile='SKILL.md';
+let expanded=new Set(['due-diligence-toolkit']);
+let detailMode='preview';
+let taskMode=true;                                  // view2: task-mode toggle state
+let picks=new Set(['biao-shu-zhuan-xie-liu-cheng']);
+let editingName=null;
+let pendingUpload=null;
+
+const $=id=>document.getElementById(id);
+function esc(s){return (s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function toast(msg,api){
+  const t=document.createElement('div');t.className='toast';
+  t.innerHTML=esc(msg)+(api?` <span class="api">${esc(api)}</span>`:'');
+  $('toasts').appendChild(t);
+  setTimeout(()=>{t.classList.add('gone');setTimeout(()=>t.remove(),320)},3400);
+}
+function toggleApi(){document.body.classList.toggle('show-api');$('apiToggle').classList.toggle('on')}
+function switchView(v){
+  document.querySelectorAll('.view').forEach(e=>e.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('active',e.dataset.v===v));
+  $(v).classList.add('active');
+  history.replaceState(null,'','#'+v);
+  if(v==='v0')renderMini();
+  if(v==='v2'){syncPicks();renderChips();renderPicker();renderPayload();renderPlusMenu()}
+  if(v==='v3'&&!$('termBody').dataset.ran){$('termBody').dataset.ran='1';runMigration(false)}
+}
+function openDrawer(){$('drawer').classList.add('open')}
+function closeDrawer(){$('drawer').classList.remove('open')}
+function closeMask(id){$(id).classList.remove('open')}
+
+/* ---- view 0 mini list ---- */
+function renderMini(){
+  $('miniList').innerHTML=skills.slice(0,4).map(s=>`
+    <div class="mini-item"><span class="st ${s.enabled?'':'off'}"></span><b>${esc(s.display_name)}</b><small>${esc(s.description)}</small></div>`).join('')
+    +`<div class="mini-item" style="justify-content:center;color:var(--ink-faint)">… 共 ${skills.length} 个技能</div>`;
+}
+
+/* ---- view 1 list + detail ---- */
+function filteredSkills(){
+  const kw=$('kw').value.trim().toLowerCase();
+  const st=$('statusFilter').value;
+  return skills.filter(s=>{
+    if(st==='on'&&!s.enabled)return false;
+    if(st==='off'&&s.enabled)return false;
+    if(kw&&!(s.display_name.toLowerCase().includes(kw)||s.description.toLowerCase().includes(kw)))return false;
+    return true;
+  });
+}
+function renderList(){
+  const arr=filteredSkills();
+  $('listCount').textContent=`共 ${skills.length} 个技能 · 当前显示 ${arr.length}`;
+  if(!skills.length){
+    $('skillList').innerHTML=`<div class="empty"><div class="glyph">技</div><p>还没有技能，点「上传 / 新建」创建第一个</p><button class="btn seal-btn" onclick="openCreate()">新建 Skill</button></div>`;
+    renderDetail();return;
+  }
+  if(!arr.length){
+    $('skillList').innerHTML=`<div class="empty"><p>未找到匹配的技能</p><button class="btn" onclick="$('kw').value='';$('statusFilter').value='all';renderList()">清除筛选条件</button></div>`;
+    renderDetail();return;
+  }
+  $('skillList').innerHTML=arr.map(s=>{
+    const isB=s.files&&s.files.length>1;
+    const isExp=isB&&expanded.has(s.name);
+    const tree=isExp?`<div class="file-tree">${s.files.map(f=>{
+      const sel=s.name===selectedName&&selectedFile===f.path;
+      const label=f.path.includes('/')?`<span class="dir">${esc(f.path.split('/')[0])}/</span>${esc(f.path.split('/').slice(1).join('/'))}`:esc(f.path);
+      return `<div class="file-row ${sel?'sel':''}" onclick="selectFile('${s.name}','${f.path}')">${label}</div>`;
+    }).join('')}</div>`:'';
+    return `
+    <div class="skill-item ${s.name===selectedName?'sel':''}" onclick="selectSkill('${s.name}')">
+      <div class="row1">
+        ${isB?`<button class="chev ${isExp?'open':''}" title="展开 bundle 文件树" onclick="event.stopPropagation();toggleExpand('${s.name}')">▶</button>`:''}
+        <span class="dname">${esc(s.display_name)}</span>
+        ${s.enabled?'':'<span class="badge off">已停用</span>'}
+        <button class="sw ${s.enabled?'on':''}" title="启用/停用" onclick="event.stopPropagation();toggleEnable('${s.name}')"></button>
+      </div>
+      <div class="desc">${esc(s.description)}</div>
+    </div>${tree}`;
+  }).join('');
+  renderDetail();
+}
+function selectSkill(n){selectedName=n;selectedFile='SKILL.md';renderList()}
+function toggleExpand(n){expanded.has(n)?expanded.delete(n):expanded.add(n);renderList()}
+function selectFile(n,p){selectedName=n;selectedFile=p;renderList()}
+function toggleEnable(n){
+  const s=skills.find(x=>x.name===n);if(!s)return;
+  s.enabled=!s.enabled;
+  if(!s.enabled&&picks.has(n))picks.delete(n);
+  toast(`「${s.display_name}」已${s.enabled?'启用':'停用'} · ${s.enabled?'即时出现在':'即时从'}终端选择器${s.enabled?'':'消失'}`,`PATCH /skill/${n}/status {"enabled":${s.enabled}}`);
+  renderList();
+}
+function frontmatterOf(s){
+  return `---\nname: ${s.name}\ndescription: ${s.description}\nmetadata:\n  display-name: ${s.display_name}${s.sop_id?`\n  sop-id: "${s.sop_id}"`:''}\n---\n\n`;
+}
+function renderDetail(){
+  const s=skills.find(x=>x.name===selectedName)||skills[0];
+  if(!s){$('detailPane').innerHTML=`<div class="empty" style="margin:auto"><div class="glyph">阅</div><p>选中左侧技能查看详情</p></div>`;return}
+  selectedName=s.name;
+  const isB=s.files&&s.files.length>1;
+  const sub=(isB&&selectedFile!=='SKILL.md')?(s.files.find(x=>x.path===selectedFile)||null):null;
+  const head=`
+    <div class="detail-head">
+      <span class="dn">${esc(s.display_name)}</span>
+      <span class="slug-chip" title="技能 ID（详情可见，列表不展示）">ID: ${esc(s.name)}</span>
+      ${isB?`<span class="slug-chip" title="bundle：含附属文件">⧉ ${s.files.length} files</span>`:''}
+      <span class="badge ${s.enabled?'on-b':'off'}">${s.enabled?'已启用':'已停用'}</span>
+      ${sub
+        ?`<span class="slug-chip" style="color:var(--seal);border-color:var(--seal-wash)">${esc(sub.path)} · 只读</span>
+          <span class="api"><b>GET</b> /skill/${esc(s.name)}/file?path=${esc(sub.path)}</span>
+          <button class="btn" style="padding:4px 12px;margin-left:auto" onclick="selectFile('${s.name}','SKILL.md')">← 返回 SKILL.md</button>`
+        :`<span class="api new"><b>GET</b> /skill/${esc(s.name)}</span>
+          <div class="viewmode">
+            <button class="${detailMode==='preview'?'act':''}" onclick="detailMode='preview';renderDetail()">Preview</button>
+            <button class="${detailMode==='source'?'act':''}" onclick="detailMode='source';renderDetail()">Source</button>
+          </div>`}
+      <button class="btn" style="padding:4px 12px" onclick="openEdit('${s.name}')">编辑 <span class="api"><b>PUT</b> /skill/${esc(s.name)}</span></button>
+      <button class="btn danger" style="padding:4px 12px" onclick="openDelete('${s.name}')">删除</button>
+    </div>`;
+  let body;
+  if(sub){
+    body=`<div class="detail-body">
+      <p style="font-size:11.5px;color:var(--ink-faint);margin-bottom:10px">bundle 附属文件只读查看；编辑仅作用于 SKILL.md，更新附属文件需重新上传整包替换（保持同一技能 ID）。</p>
+      <div class="srcview">${esc(sub.content||'')}</div></div>`;
+  }else if(detailMode==='source'){
+    const src=frontmatterOf(s)+s.content;
+    body=`<div class="detail-body"><div class="srcview">${esc(src).replace(/^(---[\s\S]*?---)/,m=>`<span class="fm">${m}</span>`)}</div></div>`;
+  }else{
+    const md=s.content.split('\n').map(l=>{
+      if(l.startsWith('# '))return`<h1>${esc(l.slice(2))}</h1>`;
+      if(l.startsWith('## '))return`<h2>${esc(l.slice(3))}</h2>`;
+      if(/^\d+\. /.test(l))return`<li>${esc(l.replace(/^\d+\. /,''))}</li>`;
+      if(l.trim()==='')return'';
+      return`<p>${esc(l)}</p>`;
+    }).join('');
+    body=`<div class="detail-body"><div class="preview">
+      <div class="fm-card">
+        <b>展示名称</b><span>${esc(s.display_name)}</span>
+        <b>技能 ID</b><span style="font-family:var(--mono);font-size:11px">${esc(s.name)}</span>
+        <b>描述</b><span>${esc(s.description)}</span>
+        <b>磁盘路径</b><span style="font-family:var(--mono);font-size:11px">data/skills/{tenant_id}/${esc(s.name)}/SKILL.md</span>
+      </div>${md}</div></div>`;
+  }
+  $('detailPane').innerHTML=head+body;
+}
+
+/* ---- create / edit ---- */
+function openCreate(){
+  editingName=null;
+  $('createTitle').textContent='新建 Skill';
+  $('createApi').innerHTML='<b>POST</b> /skill (form)';
+  ['in_dname','in_slug','in_desc','in_content'].forEach(i=>$(i).value='');
+  validateForm();
+  $('createMask').classList.add('open');
+}
+function openEdit(n){
+  const s=skills.find(x=>x.name===n);if(!s)return;
+  editingName=n;
+  $('createTitle').textContent='编辑 Skill';
+  $('createApi').innerHTML=`<b>PUT</b> /skill/${esc(n)}`;
+  $('in_dname').value=s.display_name;$('in_slug').value=s.name;
+  $('in_desc').value=s.description;$('in_content').value=s.content;
+  validateForm();
+  $('createMask').classList.add('open');
+}
+function onDnameInput(){
+  if(!editingName)$('in_slug').value=slugify($('in_dname').value);
+  validateForm();
+}
+function regenSlug(){$('in_slug').value=slugify($('in_dname').value);validateForm();toast('技能 ID 已按展示名称重新生成（真实实现：pypinyin / pinyin-pro 全量字库）')}
+function setErr(fid,mid,msg){const f=$(fid);if(msg){f.classList.add('err');$(mid).textContent=msg}else{f.classList.remove('err');$(mid).textContent=''}}
+function validateForm(){
+  const dn=$('in_dname').value.trim(),slug=$('in_slug').value.trim(),
+        desc=$('in_desc').value.trim(),content=$('in_content').value.trim();
+  let ok=true;
+  $('dnameCount').textContent=`${dn.length}/255`;
+  $('descCount').textContent=`${desc.length}/1024`;
+  let m='';
+  if(!dn)m='请填写技能显示名称';
+  else if(dn.length>255)m='显示名称过长，请控制在 255 字符以内';
+  else if(skills.some(s=>s.display_name===dn&&s.name!==editingName))m='已存在同名技能，请换一个名称 — 错误码 11055';
+  setErr('f_dname','m_dname',m);ok=ok&&!m;
+  let ms='';const re=/^[a-z0-9]+(-[a-z0-9]+)*$/;
+  if(!slug)ms='技能 ID 不能为空（可点「重新生成」）';
+  else if(slug.length>64)ms='技能 ID 过长，请控制在 64 个字符以内';
+  else if(!re.test(slug))ms='仅支持小写字母、数字和单个连字符（deepagents 硬约束），可点「重新生成」自动转换';
+  else if(skills.some(s=>s.name===slug&&s.name!==editingName))ms='已存在相同技能 ID，请换一个 — 错误码 11055';
+  setErr('f_slug','m_slug',ms);ok=ok&&!ms;
+  const fs=$('f_slug');
+  if(!ms&&slug){fs.classList.add('okay');$('ok_slug').textContent=`✓ 落盘目录：data/skills/{tenant_id}/${slug}/SKILL.md`}
+  else fs.classList.remove('okay');
+  let md_='';
+  if(!desc)md_='请填写技能描述';
+  else if(desc.length>1024)md_='描述过长，请控制在 1024 个字符以内';
+  setErr('f_desc','m_desc',md_);ok=ok&&!md_;
+  let mc='';
+  if(!content)mc='请填写技能内容';
+  setErr('f_content','m_content',mc);ok=ok&&!mc;
+  $('saveBtn').disabled=!ok;
+  return ok;
+}
+function saveCreate(){
+  if(!validateForm())return;
+  const dn=$('in_dname').value.trim(),slug=$('in_slug').value.trim(),
+        desc=$('in_desc').value.trim(),content=$('in_content').value.trim();
+  if(editingName){
+    const s=skills.find(x=>x.name===editingName);
+    Object.assign(s,{display_name:dn,name:slug,description:desc,content});
+    selectedName=slug;
+    toast(`「${dn}」已保存 · 立即对终端用户生效`,`PUT /skill/${editingName} → 200`);
+  }else{
+    skills.unshift({id:nextId++,name:slug,display_name:dn,description:desc,enabled:true,source:'manual',content,sop_id:null});
+    selectedName=slug;
+    toast(`「${dn}」已创建并默认启用 · 即时出现在终端选择器`,`POST /skill → 200 SkillDetail`);
+  }
+  closeMask('createMask');renderList();
+}
+
+/* ---- upload mock ---- */
+function openUpload(){pendingUpload=null;$('upResult').className='vresult';$('upResult').innerHTML='';$('upSaveBtn').disabled=true;$('uploadMask').classList.add('open')}
+function mockUpload(kind){
+  const r=$('upResult');pendingUpload=null;$('upSaveBtn').disabled=true;
+  if(kind==='big'){
+    r.className='vresult bad';
+    r.innerHTML=`<b>✕ 文件超过 10MB 上限，请精简后重传</b><span class="ec">11052 SkillFileTooLargeError</span><br>整包体积即时拦截，不进入解包校验。`;
+  }else if(kind==='nozip'){
+    r.className='vresult bad';
+    r.innerHTML=`<b>✕ 压缩包中未找到 SKILL.md，请检查目录结构</b><span class="ec">11051 SkillValidationError</span><br>压缩包/文件夹根目录必须包含 <code>SKILL.md</code>；将其置于根目录后重新上传。`;
+  }else if(kind==='badfm'){
+    r.className='vresult bad';
+    r.innerHTML=`<b>✕ 校验失败（逐项列出，不只报第一条）</b><span class="ec">11051 SkillValidationError</span><br>
+      · <code>name: Bad_Name_Skill</code> — 技能 ID 仅支持小写字母/数字/单连字符，且须与目录名一致<br>
+      · <code>description</code> 缺失 — frontmatter 必填<br>修正文件后重新上传。`;
+  }else if(kind==='ok_md'){
+    r.className='vresult good';
+    r.innerHTML=`<b>✓ 校验通过</b> — <code>contract-risk-scan.md</code>（展示名称：合同风险扫描）<br>单 .md · frontmatter 合规 · 8.2KB · 「确认保存」即落盘 + 写表 + authorize owner tuple。`;
+    pendingUpload={name:'contract-risk-scan',display_name:'合同风险扫描',description:'扫描合同文本中的高风险条款，输出风险清单与修订建议。',content:'# 合同风险扫描\n\n1. 解析合同正文\n2. 风险条款模式匹配\n3. 输出风险清单'};
+    $('upSaveBtn').disabled=false;
+  }else if(kind==='ok_zip'){
+    r.className='vresult good';
+    r.innerHTML=`<b>✓ 校验通过</b> — <code>report-toolkit.skill</code>（展示名称：报告生成工具包）<br>压缩包 · 根目录含 SKILL.md · 附属文件随技能目录整体落盘：<pre>report-toolkit/
+├─ SKILL.md          (frontmatter: name + display-name)
+├─ scripts/render_chart.py
+└─ templates/weekly.md.tpl</pre>`;
+    pendingUpload={name:'report-toolkit',display_name:'报告生成工具包',description:'按模板生成图文周报：渲染图表脚本 + 周报模板打包复用。',content:'# 报告生成工具包\n\n1. 读取数据\n2. 运行 scripts/render_chart.py 生成图表\n3. 套用 templates/weekly.md.tpl 输出周报',files:[{path:'SKILL.md'},{path:'scripts/render_chart.py',content:'"""Render weekly metrics chart."""\nimport matplotlib.pyplot as plt\n\n\ndef render(data, out_path):\n    fig, ax = plt.subplots()\n    ax.plot(data["dates"], data["values"])\n    fig.savefig(out_path)\n'},{path:'templates/weekly.md.tpl',content:'# {{title}} 周报（{{week}}）\n\n## 核心指标\n{{metrics_table}}\n\n## 图表\n![weekly](./chart.png)\n'}]};
+    $('upSaveBtn').disabled=false;
+  }else{ // folder
+    r.className='vresult good';
+    r.innerHTML=`<b>✓ 校验通过</b> — <code>market-research/</code> 文件夹（展示名称：市场调研流程）<br>文件夹视同压缩包：前端打包后整体上传，目录结构原样保留（3 个文件，根目录含 SKILL.md）。`;
+    pendingUpload={name:'market-research',display_name:'市场调研流程',description:'目标市场调研：竞品收集→数据交叉验证→输出调研报告。',content:'# 市场调研流程\n\n1. 竞品信息收集\n2. 数据交叉验证\n3. 输出调研报告',files:[{path:'SKILL.md'},{path:'reference/sources.md',content:'# 信息源清单\n\n- 行业研究报告库\n- 上市公司公告\n- 竞品官网与发布会记录\n'},{path:'scripts/crawl.py',content:'"""Crawl competitor public info."""\nimport httpx\n\n\ndef crawl(urls):\n    return [httpx.get(u, timeout=30).text for u in urls]\n'}]};
+    $('upSaveBtn').disabled=false;
+  }
+}
+function saveUpload(){
+  if(!pendingUpload)return;
+  skills.unshift({id:nextId++,enabled:true,source:'manual',sop_id:null,...pendingUpload});
+  selectedName=pendingUpload.name;selectedFile='SKILL.md';
+  if(pendingUpload.files)expanded.add(pendingUpload.name);
+  toast(`「${pendingUpload.display_name}」上传成功并默认启用`,'POST /skill (multipart) → 200');
+  closeMask('uploadMask');renderList();
+}
+
+/* ---- delete ---- */
+let delTarget=null;
+function openDelete(n){
+  const s=skills.find(x=>x.name===n);if(!s)return;
+  delTarget=n;$('delName').textContent=s.display_name;
+  $('delMask').classList.add('open');
+}
+function confirmDelete(){
+  const s=skills.find(x=>x.name===delTarget);
+  skills=skills.filter(x=>x.name!==delTarget);
+  if(picks.has(delTarget))picks.delete(delTarget);
+  if(selectedName===delTarget)selectedName=skills[0]?.name??null;
+  closeMask('delMask');
+  toast(`「${s.display_name}」已删除 · 终端选择器即时移除`,`DELETE /skill/${delTarget} → 200`);
+  renderList();
+}
+
+/* ---- view 2 : mode + picker ---- */
+function syncPicks(){
+  let dropped=[];
+  for(const n of [...picks]){
+    const s=skills.find(x=>x.name===n);
+    if(!s||!s.enabled){picks.delete(n);dropped.push(s?s.display_name:n)}
+  }
+  if(dropped.length)toast(`技能「${dropped.join('、')}」已不可用，已自动移除（管理端停用/删除联动）`);
+}
+function selectable(){return skills.filter(s=>s.enabled)}
+function renderPlusMenu(){
+  $('modeChk').textContent=taskMode?'✓':'';
+  $('miMode').title=taskMode?'再次点击退出任务模式':'点击进入任务模式';
+  $('miSkill').style.opacity=taskMode?'1':'.75';
+  $('miCount').textContent=taskMode?`已选 ${picks.size}`:'自动开启任务模式';
+  $('fakePh').textContent=taskMode?'描述你的任务目标，也可以用通俗的语言描述希望如何实现…':'发送消息…';
+}
+function toggleMode(){
+  taskMode=!taskMode;
+  if(!taskMode&&picks.size){picks.clear();toast('已退出任务模式 · 技能勾选随之清除（文件/知识库/工具会话内保留，PRD §4.1.2）')}
+  else toast(taskMode?'已进入任务模式':'已退出任务模式');
+  renderPlusMenu();renderChips();renderPayload();
+}
+function togglePlus(){
+  $('picker').classList.remove('open');
+  $('plusMenu').classList.toggle('open');
+  $('plusBtn').classList.toggle('open');
+  renderPlusMenu();
+}
+function openPicker(){
+  if(!taskMode){taskMode=true;renderChips();toast('已自动开启任务模式（添加 Skill 是任务模式专属能力）')}
+  $('plusMenu').classList.remove('open');$('picker').classList.add('open');renderPicker();renderPlusMenu();
+}
+function renderPicker(){
+  const kw=($('pickKw').value||'').trim().toLowerCase();
+  const arr=selectable().filter(s=>!kw||s.display_name.toLowerCase().includes(kw)||s.description.toLowerCase().includes(kw));
+  $('pickList').innerHTML=arr.length?arr.map(s=>`
+    <label class="pick-item">
+      <input type="checkbox" ${picks.has(s.name)?'checked':''} onchange="togglePick('${s.name}')">
+      <div>
+        <div class="pi-name">${esc(s.display_name)}</div>
+        <div class="pi-desc">${esc(s.description)}</div>
+      </div>
+    </label>`).join(''):`<div class="empty" style="padding:30px"><p>未找到匹配的技能</p></div>`;
+}
+function togglePick(n){
+  picks.has(n)?picks.delete(n):picks.add(n);
+  renderChips();renderPayload();renderPicker();renderPlusMenu();
+}
+function clearPicks(){picks.clear();renderChips();renderPayload();renderPicker();toast('已清空本轮技能勾选 → active_skills: []（全禁）')}
+function renderChips(){
+  const chips=[];
+  if(taskMode)chips.push(`<span class="chip mode">任务模式 <i class="x" onclick="toggleMode()">✕</i></span>`);
+  for(const n of picks){
+    const s=skills.find(x=>x.name===n);if(!s)continue;
+    chips.push(`<span class="chip skill-chip">⚒ ${esc(s.display_name)} <i class="x" onclick="togglePick('${n}')">✕</i></span>`);
+  }
+  $('ctxChips').innerHTML=chips.join('')||'<span style="font-size:11px;color:var(--ink-faint);padding:4px 2px">（日常模式 · 无任务模式 chip）</span>';
+}
+function renderPayload(){
+  if(!taskMode){
+    $('payloadBox').innerHTML=`<span class="cm">// 日常模式：走既有对话链路，不下发 active_skills；
+// 文件/知识库/工具的选择被会话记住，再次进入任务模式时回填（PRD §4.1.2）</span>`;
+    return;
+  }
+  const arr=[...picks];
+  $('payloadBox').innerHTML=
+`{
+  <span class="k">"question"</span>: <span class="s">"帮我根据上传的招标文件写一份投标书初稿…"</span>,
+  <span class="k">"active_skills"</span>: [${arr.map(n=>`<span class="s">"${n}"</span>`).join(', ')}],  <span class="cm">// 技能 ID 列表；[] = 全禁，不下发 null</span>
+  <span class="k">"model_id"</span>: <span class="s">"…"</span>, <span class="k">"tools"</span>: […], <span class="k">"files"</span>: […]   <span class="cm">// 其余上下文（C4/C2，非本 Track）</span>
+}
+<span class="cm">// UI 显示展示名称，提交下发技能 ID —— Worker 侧注入 config.configurable.active_skills
+// built-in 技能不受白名单约束、始终生效、本选择器不可见</span>`;
+}
+function trySubmit(){
+  toast(taskMode?'提交任务（mock）· active_skills 见下方 payload':'日常模式发送（mock）· 不带 active_skills');
+}
+
+/* ---- view 3 : migration ---- */
+const MIG_LINES_COMMON=[
+ ['p','$ uv run python scripts/migrate_sop_to_skill.py MODE_FLAG'],
+ ['','[init] app context ready · bypass_tenant_filter ON · 遍历 linsight_sop ORDER BY tenant_id, id'],
+ ['','[scan] 共发现 8 条 SOP（tenant 1: 5 条 · tenant 2: 3 条）'],
+ ['',''],
+ ['hl','── tenant_id=1 ──────────────────────────────'],
+ ['ok','[OK]      sop#17 「标书撰写流程」 → biao-shu-zhuan-xie-liu-cheng'],
+ ['ok','[OK]      sop#23 「合同条款审阅」 → he-tong-tiao-kuan-shen-yue'],
+ ['ok','[OK]      sop#31 「客户投诉处理SOP」 → ke-hu-tou-su-chu-li-sop'],
+ ['warn','[RENAMED] sop#38 「客户投诉处理SOP」 → ke-hu-tou-su-chu-li-sop-2   (同租户重名, 展示名称=客户投诉处理SOP（2）)'],
+ ['err','[SKIP]    sop#40 「全集团制度汇编」 content=61,204 字符 > 50,000   (SKIPPED_OVERSIZE, 拆分后经管理页重建)'],
+ ['hl','── tenant_id=2 ──────────────────────────────'],
+ ['ok','[OK]      sop#45 「舆情监测日报」 → yu-qing-jian-ce-ri-bao'],
+ ['warn','[GEN]     sop#52 「会议纪要整理」 description 缺失 → generate_sop_summary 生成 (--no-llm 可跳过, 走默认文案)'],
+ ['ok','[OK]      sop#52 「会议纪要整理」 → hui-yi-ji-yao-zheng-li'],
+ ['err','[FAIL]    sop#60 「（空名称）」 name 为空且 content 解析失败  (PARSE_FAILED, 详见摘要)'],
+ ['',''],
+];
+const MIG_SUMMARY=[
+ ['hl','══ 迁移摘要（stdout + migrate_sop_to_skill_report.json · 仅运维产物, 无管理页报告界面）══'],
+ ['','{'],
+ ['','  "summary": {"total": 8, "success": 5, "renamed": 1, "skipped": 1, "failed": 1},'],
+ ['','  "skipped": [{"tenant_id":1,"sop_id":40,"reason":"SKIPPED_OVERSIZE","content_len":61204}],'],
+ ['','  "failed":  [{"tenant_id":2,"sop_id":60,"reason":"PARSE_FAILED","error":"empty name & body"}]'],
+ ['','}'],
+];
+function runMigration(apply){
+  const lines=[...MIG_LINES_COMMON.map(l=>[l[0],l[1].replace('MODE_FLAG',apply?'--apply':'')]),...MIG_SUMMARY];
+  if(apply){
+    lines.splice(lines.length-6,0,
+      ['ok','[write] 6 个 SKILL.md 已落盘 data/skills/{tenant_id}/<技能ID>/ · linsight_skill 表 upsert 6 行 (source 仅内部溯源, 前端不展示)'],
+      ['','[idempotent] 重跑：同 sop-id 幂等覆盖写, 后缀顺序稳定 (ORDER BY tenant_id,id)'],['','']);
+  }else{
+    lines.splice(lines.length-6,0,['warn','[dry-run] 未写入任何数据 · 加 --apply 正式执行'],['','']);
+  }
+  const box=$('termBody');box.innerHTML='';
+  lines.forEach((l,i)=>{
+    const d=document.createElement('div');d.className='tl';d.style.animationDelay=(i*0.13)+'s';
+    d.innerHTML=l[0]?`<span class="${l[0]}">${esc(l[1])}</span>`:esc(l[1]);
+    if(l[1]==='')d.innerHTML='&nbsp;';
+    box.appendChild(d);
+  });
+  setTimeout(()=>box.scrollTo({top:box.scrollHeight,behavior:'smooth'}),lines.length*130+200);
+}
+
+/* ---- init ---- */
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.picker')&&!e.target.closest('.plus-menu')&&!e.target.closest('.plus-btn')){
+    $('picker')?.classList.remove('open');$('plusMenu')?.classList.remove('open');$('plusBtn')?.classList.remove('open');
+  }
+});
+renderList();renderMini();renderChips();renderPayload();renderPicker();renderPlusMenu();
+const h=location.hash.replace('#','');
+if(['v1','v2','v3'].includes(h))switchView(h);
+</script>
+</body>
+</html>
