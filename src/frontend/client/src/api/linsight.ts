@@ -1,14 +1,6 @@
 import {LinsightInfo} from "~/store/linsight";
 import request from "./request";
 
-// 保存修改sop
-export function saveSop(data: {
-    sop_content: string,
-    linsight_session_version_id: string,
-}): Promise<any> {
-    return request.post('/api/v1/linsight/workbench/sop-modify', data);
-}
-
 // 获取灵思会话信息
 export function getLinsightSessionVersionList(ConversationId: string, shareToken: string): Promise<any> {
     const headers = shareToken ? {'share-token': shareToken} : {}
@@ -72,20 +64,6 @@ export function userStopLinsightEvent(linsight_session_version_id: string): Prom
         linsight_session_version_id
     });
 }
-
-// 反馈
-export function submitLinsightFeedback(versionid, data: {
-    feedback: string,
-    score: number,
-    is_reexecute: boolean,
-    cancel_feedback: boolean
-}): Promise<any> {
-    return request.post('/api/v1/linsight/workbench/submit-feedback',
-        {linsight_session_version_id: versionid, ...data},
-        {showError: true}
-    )
-}
-
 
 // 获取灵思工具
 export function getLinsightTools(): Promise<any> {
@@ -192,17 +170,8 @@ export function checkSopQueueStatus(id: string) {
     })
 }
 
-// Selected Cases
-export function getFeaturedCases(page: number): Promise<any> {
-    return request.get('/api/v1/linsight/sop/showcase', {
-        params: {
-            page,
-            page_size: 12
-        }
-    });
-}
-
 // Get case details based on SOP ID
+// LEGACY (F035): kept only for the /linsight/case share page (read-only).
 export function getCaseDetail(sop_id: string): Promise<any> {
     return request.get('/api/v1/linsight/sop/showcase/result', {
         params: {

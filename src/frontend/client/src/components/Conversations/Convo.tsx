@@ -1,4 +1,4 @@
-import { Check, X } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 import LingsiIcon from '~/components/ui/icon/Lingsi';
 import TodayItemIcon from '~/components/ui/icon/TodayItem';
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
@@ -15,6 +15,7 @@ import { Constants } from "~/types/chat";
 import { useLocalize, usePrefersMobileLayout, useNavigateToConvo } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import store from "~/store";
+import { linsightMapState, SopStatus } from "~/store/linsight";
 import { cn } from "~/utils";
 import { ConvoOptions } from "./ConvoOptions";
 
@@ -168,6 +169,25 @@ export default function Conversation({
     [title]
   );
 
+  // F035 Track H (P5): task-mode conversations (flowType 20) show a spinner
+  // while a linsight session of this conversation is executing. Status comes
+  // from the in-memory linsight store (live WS-driven sessions only); the
+  // conversation list API carries no execution status, so after a refresh the
+  // spinner appears once the session is opened and its state is restored.
+  const linsightMap = useRecoilValue(linsightMapState);
+  // flowType comes from the conversation-list mapping but is missing on the
+  // legacy TConversation type (pre-existing gap), hence the narrow cast.
+  const convoFlowType = (conversation as { flowType?: number } | undefined)?.flowType;
+  const isTaskRunning: boolean = useMemo(() => {
+    if (convoFlowType !== 20) return false;
+    for (const linsight of linsightMap.values()) {
+      if (linsight?.session_id === conversationId && linsight.status === SopStatus.Running) {
+        return true;
+      }
+    }
+    return false;
+  }, [linsightMap, convoFlowType, conversationId]);
+
   const isActiveConvo: boolean = useMemo(
     () =>
       currentConvoId === conversationId ||
@@ -254,7 +274,11 @@ export default function Conversation({
             alt={conversation?.flowType}
           >
             {conversation?.flowType === 20 ? (
-              <LingsiIcon className="size-[24px] shrink-0" />
+              isTaskRunning ? (
+                <Loader2 className="size-[24px] shrink-0 animate-spin text-[#335CFF]" />
+              ) : (
+                <LingsiIcon className="size-[24px] shrink-0" />
+              )
             ) : (
               <TodayItemIcon className="size-[24px] shrink-0 text-[#6B778D]" />
             )}

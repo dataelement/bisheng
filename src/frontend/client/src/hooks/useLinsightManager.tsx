@@ -9,11 +9,10 @@ import {
 } from 'recoil';
 import { SSE } from 'sse.js';
 import { startLinsight } from '~/api/linsight';
-import { SopStatus } from '~/components/Sop/SOPEditor';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import { useToastContext } from '~/Providers';
 import store from '~/store';
-import { activeSessionIdState, LinsightInfo, linsightMapState, submissionState, SubmissionState } from '~/store/linsight';
+import { activeSessionIdState, LinsightInfo, linsightMapState, SopStatus, submissionState, SubmissionState } from '~/store/linsight';
 import {
     addConversation,
     formatTime,
@@ -165,13 +164,12 @@ export const useLinsightSessionManager = (versionId: string) => {
 
 
 /**
- * 生成sop
- * @param versionId 
- * sessionId规则说明
- * 新建会话 [new]
- * 重新执行 [会话id-版本id]
+ * F035 Track H (P5): submit pipeline for a new task-mode session.
+ * Watches submissionState(versionId) and drives the workbench submit SSE,
+ * then starts execution directly (no SOP generation step anymore).
+ * sessionId规则说明: 新建会话 [new]
  */
-export const useGenerateSop = (versionId, setVersionId, setVersions) => {
+export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
     const [loading, setLoading] = useState(false); // 多会话共用
     const { linsightSubmission, clearLinsightSubmission } = useLinsightSessionManager(versionId)
     const { createLinsight, updateLinsight } = useLinsightManager()
@@ -192,82 +190,6 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
             setLoading(false)
         }, 2000);
     }, [versionId])
-
-    // 生成会话
-    const generateSop = (_versionId, sameSopId, linsightSubmission?: any) => {
-        const payload = {
-            linsight_session_version_id: _versionId,
-            feedback_content: linsightSubmission?.feedback,
-            reexecute: false
-        }
-        if (linsightSubmission) {
-            payload.previous_session_version_id = linsightSubmission.prevVersionId
-            payload.reexecute = true
-        }
-
-        if (sameSopId) {
-            payload.sop_id = sameSopId
-        }
-
-        const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/generate-sop`, {
-            payload: JSON.stringify(payload),
-            headers: {
-                'Content-Type': 'application/json'
-            },
-        });
-
-        let content = ''
-        sse.addEventListener('generate_sop_content', (e: MessageEvent) => {
-            const data = JSON.parse(e.data);
-            content += data.content
-            updateLinsight(_versionId, {
-                sopError: '',
-                sop: content.replace(/^---/, '').replace('```markdown\n', '```'),
-                inputSop: false
-            })
-        })
-
-        sse.addEventListener('sop_generate_complete', (e: MessageEvent) => {
-            // const data = JSON.parse(e.data);
-            updateLinsight(_versionId, {
-                status: SopStatus.SopGenerated,
-            })
-        })
-
-        sse.addEventListener('search_sop_error', (e: MessageEvent) => {
-            // const data = JSON.parse(e.data);
-            showToast({
-                message: e.data,
-                status: 'warning',
-            });
-            updateLinsight(_versionId, {
-                sopError: e.data
-            })
-        })
-
-        sse.addEventListener('open', () => {
-            console.log('connection is opened');
-            // setLoading(false)
-        });
-
-        sse.addEventListener('error', async (e: MessageEvent) => {
-            console.error('object :>> ', e);
-            if (_versionId === activeVersionIdRef.current) { // 只有当前活跃会话才展示错误
-                showToast({
-                    message: 'SOP 生成失败，请联系管理员检查灵思任务执行模型状态',
-                    status: 'error',
-                });
-                setError(true)
-                setLoading(false)
-            }
-            updateLinsight(_versionId, {
-                sopError: e.data,
-                status: SopStatus.SopGenerated,
-            })
-        })
-        sse.stream();
-    }
-
 
     useEffect(() => {
         if (linsightSubmission) {
@@ -408,9 +330,9 @@ export const useGenerateSop = (versionId, setVersionId, setVersions) => {
                     })
                 })
                 sse.stream();
-            } else {
-                generateSop(versionId, linsightSubmission.sameSopId, linsightSubmission)
             }
+            // F035 Track H (P5): the legacy non-isNew branch (re-execute via the
+            // removed generate-sop SSE) is gone together with SOPEditor/TaskFlow.
 
             updateLinsight(versionId, {
                 status: SopStatus.SopGenerating,

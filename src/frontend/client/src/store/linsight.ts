@@ -2,6 +2,29 @@
 import { atom, atomFamily } from 'recoil';
 import { ExtendedFile } from '~/common';
 
+/**
+ * Linsight session lifecycle status.
+ * F035 Track H (P5): migrated out of the removed legacy SOPEditor component;
+ * the SOP-stage values (SopGenerating/SopGenerated) are kept for backward
+ * compatibility with historical sessions restored from the backend.
+ */
+export const enum SopStatus {
+    /* 未开始 */
+    NotStarted = 'not_started',
+    /* SOP生成中 */
+    SopGenerating = 'sopGenerating',
+    /* SOP生成完成 */
+    SopGenerated = 'sopGenerated',
+    /* 开始执行 */
+    Running = 'running',
+    /* 执行完成 */
+    completed = 'completed',
+    /* 反馈完成 */
+    FeedbackCompleted = 'feedbackCompleted',
+    /* stop */
+    Stoped = 'stoped'
+}
+
 export type LinsightInfo = {
     title: string;
     user_id: number;

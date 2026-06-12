@@ -9,7 +9,7 @@
  */
 import { CircleAlert, FolderOpen, OctagonX } from 'lucide-react';
 import { useMemo, useRef, type ReactNode } from 'react';
-import { SopStatus } from '~/components/Sop/SOPEditor';
+import { SopStatus } from '~/store/linsight';
 import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';

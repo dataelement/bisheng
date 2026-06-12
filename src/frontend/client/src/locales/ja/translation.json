@@ -609,6 +609,7 @@
   "com_nav_speech_cancel_error": "音声再生を停止できません。ページの更新が必要な場合があります。",
   "com_nav_speech_to_text": "音声認識",
   "com_nav_start_new_chat": "新しい会話",
+  "com_nav_start_new_task": "新しいタスク",
   "com_nav_stop_generating": "生成を停止",
   "com_nav_text_to_speech": "読み上げ",
   "com_nav_theme": "テーマ",

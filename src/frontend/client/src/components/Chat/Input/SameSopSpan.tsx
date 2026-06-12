@@ -1,3 +1,6 @@
+// LEGACY (F035): "make same style" label from the removed SOP-based lingsi flow;
+// kept only because the dormant legacy ChatForm / useSubmitMessage paths still
+// import sameSopLabelState. Remove together with the /linsight/case share page.
 import { ArrowRight, CircleX } from "lucide-react";
 import { atom, useRecoilState } from "recoil";
 import { Button } from "~/components/ui";

@@ -628,6 +628,7 @@
   "com_nav_speech_cancel_error": "Unable to stop audio playback. You may need to refresh the page.",
   "com_nav_speech_to_text": "Speech to Text",
   "com_nav_start_new_chat": "New Chat",
+  "com_nav_start_new_task": "New Task",
   "com_nav_stop_generating": "Stop generating",
   "com_nav_text_to_speech": "Text to Speech",
   "com_nav_theme": "Theme",

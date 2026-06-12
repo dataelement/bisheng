@@ -1,11 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRight, MousePointerClick } from 'lucide-react';
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
 import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
-import { getFeaturedCases } from '~/api/linsight';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
@@ -17,12 +15,8 @@ import useChatModelMemo from '~/hooks/useChatModelMemo';
 import useLocalize from '~/hooks/useLocalize';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
-import { Button } from '../ui';
 import { Card, CardContent } from '../ui/Card';
-import { sameSopLabelState } from './Input/SameSopSpan';
-import InvitationCodeForm from './InviteCode';
 import Landing from './Landing';
-import LinsightChatInput from './LinsightChatInput';
 import Presentation from './Presentation';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import AppAvator from '../Avator';
@@ -53,8 +47,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const location = useLocation();
   const conversationId = (cid ?? id) || 'new';
 
-  const [showCode, setShowCode] = useState(false);
-  const [isLingsi, setIsLingsi] = useState(false);
   const [inputText, setInputText] = useState('');
 
   const { data: bsConfig } = useGetBsConfig();
@@ -171,7 +163,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     isStreaming,
     sendMessage,
     stopGenerating,
-    clearConversation,
     regenerate,
   } = useAiChat(conversationId, false, shareToken);
 
@@ -239,47 +230,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     }
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
 
-  // Reset lingsi mode when messages exist
-  useEffect(() => {
-    if (messages.length > 0) {
-      setIsLingsi(false);
-    }
-  }, [messages.length]);
-
-  // Lingsi mode cases scroll loading
-  const casesRef = useRef(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = async (e: Event) => {
-      const target = e.target as HTMLDivElement;
-      const { scrollTop, scrollHeight, clientHeight } = target;
-      if (scrollTop + clientHeight >= scrollHeight - 10 && !isLoadingMore && casesRef.current) {
-        setIsLoadingMore(true);
-        try {
-          const hasMore = await (casesRef.current as any).loadMore();
-          if (!hasMore) {
-            console.log('No more data to load');
-          }
-        } catch (error) {
-          console.error('Error loading more data:', error);
-        } finally {
-          setIsLoadingMore(false);
-        }
-      }
-    };
-
-    const chatContainer = chatContainerRef.current;
-    if (chatContainer) {
-      chatContainer.addEventListener('scroll', handleScroll);
-    }
-    return () => {
-      if (chatContainer) {
-        chatContainer.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, [isLoadingMore]);
 
   const handleSend = useCallback((text: string, files?: any[] | null) => {
     sendMessage(text, files);
@@ -291,25 +242,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
 
   return (
-    <Presentation isLingsi={isLingsi}>
+    <Presentation isLingsi={false}>
       <div className={cn('h-full')}>
-        {/* Lingsi video background */}
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="auto"
-          className={cn(
-            'absolute size-full object-cover object-center',
-            'transition-opacity duration-500 ease-out',
-            isLingsi ? 'opacity-100' : 'opacity-0'
-          )}
-        >
-          <source src={`${__APP_ENV__.BASE_URL}/assets/linsi-bg.mp4`} type="video/mp4" />
-          <img src={`${__APP_ENV__.BASE_URL}/assets/lingsi-bg.png`} alt="" />
-        </video>
-
         <div
           ref={chatContainerRef}
           className={cn("relative z-10 h-full noscrollbar", !hasMessages && "overflow-y-auto")}
@@ -325,7 +259,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming;
             return (
               <div className={cn(
-                showCode ? 'hidden' : 'flex flex-col relative',
+                'flex flex-col relative',
                 useMessagesLayout ? 'h-full' : ''
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
@@ -369,98 +303,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           </div>
                         ) : (
                         <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-3">
-                          {isLingsi ? (
-                            <LinsightChatInput
-                              disabled={!!shareToken}
-                              isStreaming={isStreaming}
-                              isLingsi
-                              onSend={handleSend}
-                              onStop={stopGenerating}
-                              onNewChat={() => {
-                                setSelectedOrgKbs([]);
-                                setSearchType('');
-                                clearConversation();
-                                navigate('/c/new');
-                                document.getElementById('create-convo-btn')?.click();
-                              }}
-                              value={inputText}
-                              onChange={setInputText}
-                              bsConfig={bsConfig}
-                              setShowCode={setShowCode}
-                            />
-                          ) : (
-                            <AiChatInput
-                              disabled={!bsConfig?.models?.length || !!shareToken}
-                              isStreaming={isStreaming}
-                              features={{ taskModeEntry: true }}
-                              onScrollToBottom={() => { }}
-                              modelOptions={bsConfig?.models}
-                              modelValue={chatModel.id}
-                              onModelChange={(val) => {
-                                const model = bsConfig?.models?.find((m) => m.id === val);
-                                setChatModel({
-                                  id: Number(val),
-                                  name: model?.displayName || '',
-                                });
-                              }}
-                              onSend={handleSend}
-                              onStop={stopGenerating}
-                              value={inputText}
-                              onChange={setInputText}
-                              bsConfig={bsConfig}
-                              selectedOrgKbs={selectedOrgKbs}
-                              onSelectedOrgKbsChange={setSelectedOrgKbs}
-                              searchType={searchType}
-                              onSearchTypeChange={setSearchType}
-                            />
-                          )}
-                        </div>
-                        )
-                      )}
-                    </div>
-
-                    {citationPanelElement}
-                  </div>
-                ) : (
-                  /* Landing page branch — Landing+input are pinned at ~25vh
-                     from the viewport top via padding-top (independent of how
-                     tall DailyFeaturedApps below becomes), so the welcome
-                     block stays in roughly the same screen position whether
-                     apps are absent or fill multiple rows. Apps follow
-                     directly after the input with only their own mt-4 gap. */
-                  <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[20vh]">
-                    <div className="shrink-0">
-                      <Landing
-                        lingsi={isLingsi}
-                        lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
-                        setLingsi={setIsLingsi}
-                        isNew={isNew}
-                      />
-                    </div>
-
-                    {/* Input area for landing page */}
-                    {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-3">
-                        {isLingsi ? (
-                          <LinsightChatInput
-                            disabled={!!shareToken}
-                            isStreaming={isStreaming}
-                            isLingsi
-                            onSend={handleSend}
-                            onStop={stopGenerating}
-                            onNewChat={() => {
-                              setSelectedOrgKbs([]);
-                              setSearchType('');
-                              clearConversation();
-                              navigate('/c/new');
-                              document.getElementById('create-convo-btn')?.click();
-                            }}
-                            value={inputText}
-                            onChange={setInputText}
-                            bsConfig={bsConfig}
-                            setShowCode={setShowCode}
-                          />
-                        ) : (
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             isStreaming={isStreaming}
@@ -485,22 +327,71 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             searchType={searchType}
                             onSearchTypeChange={setSearchType}
                           />
-                        )}
+                        </div>
+                        )
+                      )}
+                    </div>
+
+                    {citationPanelElement}
+                  </div>
+                ) : (
+                  /* Landing page branch — Landing+input are pinned at ~25vh
+                     from the viewport top via padding-top (independent of how
+                     tall DailyFeaturedApps below becomes), so the welcome
+                     block stays in roughly the same screen position whether
+                     apps are absent or fill multiple rows. Apps follow
+                     directly after the input with only their own mt-4 gap. */
+                  <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[20vh]">
+                    <div className="shrink-0">
+                      {/* F035 Track H (P5): the in-place lingsi mode is gone —
+                          selecting the task tab now jumps to the dedicated
+                          /linsight task-mode landing page. */}
+                      <Landing
+                        lingsi={false}
+                        lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
+                        setLingsi={(bl: boolean) => {
+                          if (bl) navigate('/linsight/new');
+                        }}
+                        isNew={isNew}
+                      />
+                    </div>
+
+                    {/* Input area for landing page */}
+                    {!shareToken && (
+                      <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-3">
+                        <AiChatInput
+                          disabled={!bsConfig?.models?.length || !!shareToken}
+                          isStreaming={isStreaming}
+                          features={{ taskModeEntry: true }}
+                          onScrollToBottom={() => { }}
+                          modelOptions={bsConfig?.models}
+                          modelValue={chatModel.id}
+                          onModelChange={(val) => {
+                            const model = bsConfig?.models?.find((m) => m.id === val);
+                            setChatModel({
+                              id: Number(val),
+                              name: model?.displayName || '',
+                            });
+                          }}
+                          onSend={handleSend}
+                          onStop={stopGenerating}
+                          value={inputText}
+                          onChange={setInputText}
+                          bsConfig={bsConfig}
+                          selectedOrgKbs={selectedOrgKbs}
+                          onSelectedOrgKbsChange={setSelectedOrgKbs}
+                          searchType={searchType}
+                          onSearchTypeChange={setSearchType}
+                        />
                       </div>
                     )}
-                    <DailyFeaturedApps t={t} isLingsi={isLingsi} />
+                    <DailyFeaturedApps t={t} />
                   </div>
                 )}
               </div>
             );
           })()}
-
-          {/* Lingsi Cases */}
-          <Cases ref={casesRef} t={t} isLingsi={isLingsi} setIsLingsi={setIsLingsi} />
         </div>
-
-        {/* Invitation Code */}
-        <InvitationCodeForm showCode={showCode} setShowCode={setShowCode} />
 
         {/* F028: portal-style sheets/modals (the floating toolbar lives next to the input) */}
         {activeConvoId && selectionState.active && selectionState.chatId === activeConvoId && (
@@ -525,7 +416,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   );
 };
 
-const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi: boolean }) => {
+const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { setConversation } = store.useCreateConversationAtom(0)
@@ -535,7 +426,7 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   const { data: dailyApps = [] } = useQuery<any[]>(
     ['recommendedApps'],
     () => getRecommendedAppsApi().then((res: any) => res?.data ?? []),
-    { enabled: !isLingsi, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false },
+    { staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false },
   )
 
   const handleCardClick = (agent: any) => {
@@ -574,7 +465,7 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
   }
   const displayApps = dailyApps
 
-  if (isLingsi || dailyApps.length === 0) return null
+  if (dailyApps.length === 0) return null
 
 
   return (
@@ -631,115 +522,3 @@ const DailyFeaturedApps = ({ t, isLingsi }: { t: (k: string) => string; isLingsi
 }
 
 export default memo(ChatView);
-
-
-// ==================== Lingsi Cases Component (preserved as-is) ====================
-const Cases = forwardRef(({ t, isLingsi, setIsLingsi }: any, ref) => {
-  const [_, setSameSopLabel] = useRecoilState(sameSopLabelState);
-  const [casesData, setCasesData] = useState<any[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const queryParams = typeof window !== 'undefined' ? new URLSearchParams(location.search) : null;
-  const sopid = queryParams?.get('sopid');
-  const sopName = queryParams?.get('name');
-  const sopSharePath = queryParams?.get('path');
-
-  const handleCardClick = (sopId: string) => {
-    window.open(`${__APP_ENV__.BASE_URL}/linsight/case/${sopId}`);
-  };
-
-  const loadMore = async (): Promise<boolean> => {
-    if (!hasMore || isLoading) return false;
-
-    setIsLoading(true);
-    try {
-      const nextPage = currentPage + 1;
-      const res = await getFeaturedCases(nextPage);
-
-      if (res.data.items.length > 0) {
-        setCasesData((prev) => [...prev, ...res.data.items]);
-        setCurrentPage(nextPage);
-        setHasMore(res.data.items.length === 12);
-        return true;
-      } else {
-        setHasMore(false);
-        return false;
-      }
-    } catch (error) {
-      console.error('Error loading more cases:', error);
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useImperativeHandle(ref, () => ({
-    loadMore,
-  }));
-
-  useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        const res = await getFeaturedCases(1);
-        setCasesData(res.data.items);
-        setHasMore(res.data.items.length === 12);
-
-        if (sopid) {
-          const caseItem = res.data.items.find((item: any) => item.id === Number(sopid));
-          if (caseItem) {
-            setSameSopLabel({ ...caseItem });
-            setIsLingsi(true);
-          }
-        } else if (sopName && sopSharePath) {
-          setSameSopLabel({ id: '', name: decodeURIComponent(sopName), url: decodeURIComponent(sopSharePath) });
-          setIsLingsi(true);
-        }
-      } catch (error) {
-        console.error('Error loading initial cases:', error);
-      }
-    };
-
-    loadInitialData();
-  }, [sopid, setIsLingsi]);
-
-  if (!isLingsi) return null;
-  if (casesData.length === 0) return null;
-
-  return (
-    <div className="relative w-full mt-8 pb-20">
-      <p className="text-sm text-center text-gray-400">{t('com_case_featured')}</p>
-      <div className="flex flex-wrap pt-4 mx-auto gap-2 w-[782px]">
-        {casesData.map((caseItem) => (
-          <Card
-            key={caseItem.id}
-            className="w-[254px] py-0 rounded-2xl shadow-none hover:shadow-xl group relative overflow-hidden"
-          >
-            <CardContent className="flex flex-col justify-between h-[98px] p-4">
-              <div className="text-sm font-medium text-gray-800 line-clamp-2">{caseItem.name}</div>
-              <div className="absolute bottom-2 right-4 flex justify-end space-x-2 mt-2 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
-                <Button
-                  variant="default"
-                  className="bg-primary text-white rounded-full h-8 px-3 text-xs flex items-center space-x-0"
-                  onClick={() => setSameSopLabel({ ...caseItem })}
-                >
-                  <MousePointerClick className="w-3.5 h-3.5" />
-                  <span>{t('com_make_samestyle')}</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="rounded-full w-8 h-8 p-0 text-xs flex items-center space-x-1 bg-transparent"
-                  onClick={() => handleCardClick(caseItem.id.toString())}
-                >
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-});

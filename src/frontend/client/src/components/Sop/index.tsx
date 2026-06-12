@@ -3,14 +3,14 @@ import { useParams } from 'react-router-dom';
 import { useActivate } from 'react-activation';
 import { checkSopQueueStatus, getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
-import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
+import { useLinsightManager, useLinsightSubmit } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { ExecutionFlow } from '~/components/Linsight/Execution/ExecutionFlow';
 import { LoadingIcon } from '../ui/icon/Loading';
 import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
-import { SopStatus } from './SOPEditor';
+import { SopStatus } from '~/store/linsight';
 import { useLocalize } from '~/hooks';
 import { MousePointerClick } from 'lucide-react';
 import { Button } from '../ui';
@@ -24,7 +24,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     const sopId = conversationId ? (conversationId.match(/case(\d+)/)?.[1] || '') : sid; // Compatible with historical cases 
 
     const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData({ conversationId, sopId, vid, shareToken });
-    const [isLoading, error] = useGenerateSop(versionId, setVersionId, setVersions)
+    const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions)
     const { getLinsight } = useLinsightManager()
 
     return (
@@ -52,9 +52,8 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                     </div>
                 </div>
             ) : (
-                /* F035 Track H (P3): new conversational execution view replaces the
-                   legacy SOPEditor/TaskFlow split panes (old components kept on disk
-                   until P5 removes them). */
+                /* F035 Track H (P3): new conversational execution view — replaced
+                   the legacy SOPEditor/TaskFlow split panes (removed in P5). */
                 <div className='w-full h-[calc(100vh-68px)]'>
                     <ExecutionFlow
                         versionId={versionId}
@@ -69,6 +68,10 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
 }
 
 // 分享页做同款
+// LEGACY (F035): kept only for the /linsight/case share page. The SOP-based
+// "make same style" injection was removed with the de-SOP submit pipeline, so
+// this button now only lands on the chat landing page (?name/?path are no
+// longer consumed). Remove or repoint once product decides the share-page fate.
 export const ShareSameSopControls = ({ name }) => {
     const localize = useLocalize();
 
@@ -131,7 +134,7 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
     };
 
     // KeepAlive restore: when navigating back to /linsight/new, reset stale state
-    // so useGenerateSop watches submissionState('new') instead of the old versionId.
+    // so useLinsightSubmit watches submissionState('new') instead of the old versionId.
     useActivate(() => {
         const path = window.location.pathname;
         if (path.endsWith('/linsight/new') || path.endsWith('/linsight')) {

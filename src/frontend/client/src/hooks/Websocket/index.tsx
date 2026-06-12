@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { userInputLinsightEvent, userStopLinsightEvent } from "~/api/linsight";
-import { SopStatus } from "~/components/Sop/SOPEditor";
+import { SopStatus } from "~/store/linsight";
 import { useToastContext } from "~/Providers";
 import { toggleNav } from "~/utils";
 import { useLinsightManager } from "../useLinsightManager";

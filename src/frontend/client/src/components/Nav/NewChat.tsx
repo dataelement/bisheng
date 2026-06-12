@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus, Search } from 'lucide-react';
+import { Glasses, Plus, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
@@ -7,7 +7,7 @@ import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { useGetBsConfig, useGetEndpointsQuery } from '~/hooks/queries/data-provider';
 import type { TConversation, TMessage } from '~/types/chat';
 import { Constants, QueryKeys } from '~/types/chat';
-import { useLocalize, useNewConvo } from '~/hooks';
+import { useAuthContext, useLocalize, useNewConvo } from '~/hooks';
 import store from '~/store';
 import { cn, getEndpointField, getIconEndpoint, getIconKey } from '~/utils';
 import { MobileSidebarHeaderTabs } from '~/components/Nav/MobileSidebarHeaderTabs';
@@ -80,8 +80,27 @@ export default function NewChat({
   const { data: bsConfig } = useGetBsConfig()
   const navigate = useNavigate();
   const localize = useLocalize();
+  const { user } = useAuthContext();
 
   const { conversation } = store.useCreateConversationAtom(index);
+
+  // F035 Track H (P5): "new task" sidebar entry — only for users holding the
+  // linsight_task_mode menu permission (backend web_menu mapped to plugins;
+  // absent plugins array = legacy mode, everything allowed) and when the
+  // admin hasn't disabled the linsight entry.
+  const plugins: string[] | null = Array.isArray((user as any)?.plugins)
+    ? ((user as any)?.plugins as string[])
+    : null;
+  const showNewTaskEntry =
+    (plugins ? plugins.includes('linsight_task_mode') : true) &&
+    ((bsConfig as any)?.linsightConfig?.linsight_entry ?? true);
+
+  const handleNewTask = () => {
+    navigate('/linsight/new');
+    if (isSmallScreen) {
+      toggleNav();
+    }
+  };
 
   const clickHandler = (event: React.MouseEvent<HTMLElement>) => {
     if (event.button === 0 && !(event.ctrlKey || event.metaKey)) {
@@ -141,11 +160,25 @@ export default function NewChat({
                   <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_chat')}</span>
                 </Button>
               </div>
+              {showNewTaskEntry && (
+                <div className="mt-2 flex w-full gap-1">
+                  {/* 新建任务 */}
+                  <Button
+                    variant="outline"
+                    className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[5px] h-auto shadow-none text-[#212121] font-normal"
+                    aria-label={localize('com_nav_start_new_task')}
+                    onClick={handleNewTask}
+                  >
+                    <Glasses className='size-[20px] text-[#212121]' />
+                    <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_task')}</span>
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}
         {isSmallScreen && (
-          <div className='flex w-full gap-1 px-3 pb-6 pt-4'>
+          <div className='flex w-full flex-col gap-2 px-3 pb-6 pt-4'>
             {/* 新建btn */}
             <Button
               variant="outline"
@@ -162,6 +195,17 @@ export default function NewChat({
               <Plus className='size-4 text-[#212121]' />
               <span className="text-[13px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_chat')}</span>
             </Button>
+            {showNewTaskEntry && (
+              <Button
+                variant="outline"
+                className="flex h-9 w-full items-center justify-center gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#212121] hover:bg-[#F7F8FA]"
+                aria-label={localize('com_nav_start_new_task')}
+                onClick={handleNewTask}
+              >
+                <Glasses className='size-4 text-[#212121]' />
+                <span className="text-[13px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_task')}</span>
+              </Button>
+            )}
           </div>
         )}
       </div>
