@@ -96,7 +96,8 @@ export const useLinsightWebSocket = (versionId) => {
                                 }
                                 parentsToUpdate.get(parentId).push({
                                     id: _task.id,
-                                    name: _task.task_data.display_target,
+                                    // F035 deepagents events carry a flat `name`; legacy ones nest task_data.display_target
+                                    name: _task.name ?? _task.task_data?.display_target ?? '',
                                     status: _task.status,
                                     history: [],
                                 });
@@ -106,7 +107,7 @@ export const useLinsightWebSocket = (versionId) => {
                                 if (!exists) {
                                     updatedTasks.push({
                                         id: _task.id,
-                                        name: _task.task_data.display_target,
+                                        name: _task.name ?? _task.task_data?.display_target ?? '',
                                         status: _task.status,
                                         history: [],
                                         children: [],
@@ -144,11 +145,13 @@ export const useLinsightWebSocket = (versionId) => {
                         return { tasks: updatedTasks };
                     });
                     break;
-                case 'user_input':
+                case 'user_input': {
                     const { task_id, call_reason, params } = taskData.data;
                     updateLinsight(id, (prev) => {
+                        let matched = false;
                         const newTasks = prev.tasks.map(task => {
                             if (task.id === task_id) {
+                                matched = true;
                                 // 更新父任务
                                 return {
                                     ...task,
@@ -164,8 +167,9 @@ export const useLinsightWebSocket = (versionId) => {
                                 return {
                                     ...task,
                                     // status: taskData.event_type,
-                                    children: task.children.map(child => {
+                                    children: (task.children || []).map(child => {
                                         if (child.id === task_id) {
+                                            matched = true;
                                             // 更新子任务
                                             return {
                                                 ...child, // 关键修复：使用 child 而不是 task
@@ -183,10 +187,50 @@ export const useLinsightWebSocket = (versionId) => {
                                 };
                             }
                         });
-                        return { tasks: newTasks };
+                        if (matched) return { tasks: newTasks };
+                        // F035 Track H: session-level pseudo task (task_id == session_version_id),
+                        // e.g. pre-planning intent clarification — keep it at flow level
+                        return {
+                            sessionSteps: [...(prev.sessionSteps || []), { step_type: 'call_user_input', ...taskData.data }]
+                        };
                     });
                     break;
-                case 'user_input_completed':
+                }
+                case 'user_input_completed': {
+                    // F035 Track H: stamp the answered clarify entries so the active
+                    // ClarifyCard collapses into an intent-summary row (spec §2).
+                    const completedId = taskData.data.id ?? taskData.data.task_id;
+                    const answer = (taskData.data.history || [])
+                        .filter((h: any) => h?.role === 'user')
+                        .map((h: any) => h?.content)
+                        .join('\n');
+                    const markHistory = (history: any[]) => (history || []).map((h: any) =>
+                        h?.step_type === 'call_user_input' && !h.is_completed
+                            ? { ...h, is_completed: true, user_input: h.user_input || answer }
+                            : h
+                    );
+                    updateLinsight(id, (prev) => ({
+                        tasks: prev.tasks.map(task =>
+                            task.id === completedId
+                                ? { ...task, history: markHistory(task.history || []) }
+                                : {
+                                    ...task,
+                                    children: (task.children || []).map(child =>
+                                        child.id === completedId
+                                            ? { ...child, history: markHistory(child.history || []) }
+                                            : child
+                                    )
+                                }
+                        ),
+                        sessionSteps: (prev.sessionSteps || []).map((s: any) =>
+                            s?.step_type === 'call_user_input' && s.task_id === completedId && !s.is_completed
+                                ? { ...s, is_completed: true, user_input: s.user_input || answer }
+                                : s
+                        ),
+                    }));
+                }
+                // falls through: shared status update below
+                // eslint-disable-next-line no-fallthrough
                 case 'task_start':
                 case 'task_end':
                     updateLinsight(id, (prev) => {
@@ -224,20 +268,23 @@ export const useLinsightWebSocket = (versionId) => {
                     break;
                 case 'task_execute_step':
                     updateLinsight(id, (prev) => {
+                        let matched = false;
                         const newTasks = prev.tasks.map(task => {
                             if (task.id === taskData.data.task_id) {
+                                matched = true;
                                 return {
                                     ...task,
-                                    history: [...task.history, taskData.data]
+                                    history: [...(task.history || []), taskData.data]
                                 };
                             } else {
                                 return {
                                     ...task,
-                                    children: task.children.map(child => {
+                                    children: (task.children || []).map(child => {
                                         if (child.id === taskData.data.task_id) {
+                                            matched = true;
                                             return {
                                                 ...child,
-                                                history: [...child.history, taskData.data]
+                                                history: [...(child.history || []), taskData.data]
                                             };
                                         }
                                         return child;
@@ -246,8 +293,11 @@ export const useLinsightWebSocket = (versionId) => {
                             }
                         });
 
+                        if (matched) return { tasks: newTasks };
+                        // F035 Track H: session-level steps (task_id == session_version_id,
+                        // e.g. planning-stage tool calls) live at flow level
                         return {
-                            tasks: newTasks
+                            sessionSteps: [...(prev.sessionSteps || []), taskData.data]
                         };
                     });
                     break;
@@ -347,6 +397,12 @@ export const useLinsightWebSocket = (versionId) => {
             // @ts-ignore
             updateLinsight(versionId, (prev) => ({
                 ...prev,
+                // F035 Track H: optimistic stamp for session-level clarify entries too
+                sessionSteps: (prev.sessionSteps || []).map((s: any) =>
+                    s?.step_type === 'call_user_input' && !s.is_completed
+                        ? { ...s, is_completed: true, user_input: s.user_input || user_input, files: s.files || files }
+                        : s
+                ),
                 tasks: prev.tasks.map(task => ({
                     ...task,
                     status: task_id === task.id ? "success" : task.status,

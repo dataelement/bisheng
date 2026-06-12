@@ -6,13 +6,13 @@ import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } fro
 import { useGenerateSop, useLinsightManager } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
+import { ExecutionFlow } from '~/components/Linsight/Execution/ExecutionFlow';
 import { LoadingIcon } from '../ui/icon/Loading';
 import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
-import { SOPEditor, SopStatus } from './SOPEditor';
-import { TaskFlow } from './TaskFlow';
+import { SopStatus } from './SOPEditor';
 import { useLocalize } from '~/hooks';
-import { CheckIcon, MousePointerClick } from 'lucide-react';
+import { MousePointerClick } from 'lucide-react';
 import { Button } from '../ui';
 
 export default function index({ id = '', vid = '', shareToken = '' }) {
@@ -25,6 +25,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
 
     const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData({ conversationId, sopId, vid, shareToken });
     const [isLoading, error] = useGenerateSop(versionId, setVersionId, setVersions)
+    const { getLinsight } = useLinsightManager()
 
     return (
         <div className='relative h-full bg-gradient-to-b from-[#F4F8FF] to-white'>
@@ -50,23 +51,19 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                         <TaskModeInput conversationId={conversationId || 'new'} />
                     </div>
                 </div>
-            ) : <div className='w-full h-[calc(100vh-68px)] p-2 pt-0'>
-                <div className='h-full flex gap-2'>
-                    <SOPEditor
-                        sopError={error}
-                        isSharePage={isSharePage}
+            ) : (
+                /* F035 Track H (P3): new conversational execution view replaces the
+                   legacy SOPEditor/TaskFlow split panes (old components kept on disk
+                   until P5 removes them). */
+                <div className='w-full h-[calc(100vh-68px)]'>
+                    <ExecutionFlow
                         versionId={versionId}
-                        onRun={checkQueueStatus}
-                    />
-
-                    <TaskFlow
-                        isSharePage={isSharePage}
-                        versionId={versionId}
-                        setVersions={setVersions}
-                        setVersionId={setVersionId}
+                        conversationId={conversationId}
+                        isSharePage={!!(isSharePage || sopId)}
+                        shareControls={<ShareSameSopControls name={getLinsight(versionId)?.title || ''} />}
                     />
                 </div>
-            </div>}
+            )}
         </div>
     );
 }

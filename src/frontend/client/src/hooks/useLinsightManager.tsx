@@ -471,7 +471,8 @@ function buildTaskTree(tasks) {
     const newTasks = tasks.map(task => {
         const taskTree = {
             id: task.id,
-            name: task.task_data?.display_target || '',
+            // F035 deepagents tasks carry a flat `name`; legacy ones nest task_data.display_target
+            name: task.task_data?.display_target || task.name || '',
             status: hasTerminated ? 'not_started' : task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
             history: task.history || [],
             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
@@ -480,7 +481,7 @@ function buildTaskTree(tasks) {
             children: task.children?.map(child => {
                 return {
                     id: child.id,
-                    name: child.task_data?.display_target || '',
+                    name: child.task_data?.display_target || child.name || '',
                     status: child.status === 'waiting_for_user_input' ? 'user_input' : child.status,
                     history: child.history || [],
                     event_type: child.status === 'waiting_for_user_input' ? 'user_input' : '',

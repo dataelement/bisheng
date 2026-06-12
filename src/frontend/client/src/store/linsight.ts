@@ -53,6 +53,14 @@ export type LinsightInfo = {
     summary: string;
     file_list: any[];
     queueCount: number;
+    /**
+     * F035 Track H (P3): flow-level events whose task_id matches no task —
+     * the session pseudo task (task_id == session_version_id), e.g. planning
+     * stage steps and pre-planning clarify (user_input) requests. Appended by
+     * the WS hook; rendered by Linsight/Execution/ExecutionFlow. Optional so
+     * the legacy Sop view keeps working untouched until P5 removes it.
+     */
+    sessionSteps?: any[];
 }
 
 interface ApiTool {
