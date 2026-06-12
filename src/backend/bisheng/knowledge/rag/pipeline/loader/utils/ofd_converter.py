@@ -13,6 +13,8 @@ conversions isolated.
 import contextlib
 import io
 import os
+import shutil
+import subprocess
 import threading
 
 from loguru import logger
@@ -23,6 +25,93 @@ from bisheng.common.errcode.knowledge import OfdConvertError
 _ofd_workdir = threading.local()
 _patch_lock = threading.Lock()
 _patched = False
+
+# easyofd's draw_chars hard-codes ``setFont("宋体")`` and its font_map also draws
+# 楷体/黑体; we register these exact names so those calls resolve to a real glyph
+# source instead of falling back to Helvetica (which has no CJK glyphs → blank).
+_HARDCODED_CJK_FONT_NAMES = ("宋体", "楷体", "黑体")
+
+# Probed in order, first existing wins. Covers our deploy image (fonts-wqy-zenhei)
+# and common dev hosts (Debian/Ubuntu Noto CJK, macOS). Not exhaustive — fc-match
+# is the cross-distro fallback in _detect_cjk_font.
+_CJK_FONT_CANDIDATES = (
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # deploy image (fonts-wqy-zenhei)
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+    "/System/Library/Fonts/Supplemental/Songti.ttc",  # macOS dev
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+)
+
+# Warn at most once per process when the host has no CJK font; repeated conversions
+# shouldn't spam the log, but the misconfiguration must not be silent.
+_warned_missing_font = False
+
+
+def _detect_cjk_font() -> str | None:
+    """Return a path to a CJK-capable font file on this host, or None if none.
+
+    Tries well-known paths first, then ``fc-match`` (fontconfig) so we pick up
+    whatever CJK font a distro actually shipped without hard-coding every layout.
+    """
+    for path in _CJK_FONT_CANDIDATES:
+        if os.path.isfile(path):
+            return path
+
+    fc_match = shutil.which("fc-match")
+    if fc_match:
+        try:
+            # -f %{file} prints the resolved font file path; :lang=zh asks for one
+            # that can render Chinese.
+            out = subprocess.run(
+                [fc_match, "-f", "%{file}", ":lang=zh"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            ).stdout.strip()
+            if out and os.path.isfile(out):
+                return out
+        except (subprocess.SubprocessError, OSError):
+            logger.warning("fc-match CJK font probe failed", exc_info=True)
+
+    return None
+
+
+def _ensure_cjk_fonts_registered() -> None:
+    """Register easyofd's hard-coded CJK font names against a host CJK font.
+
+    easyofd draws every glyph with ``setFont("宋体")`` but only registers that
+    name if a file literally named ``simsun.ttc`` is on reportlab's search path —
+    which our deploy image lacks, so text renders blank. reportlab's font registry
+    is process-global and shared with easyofd, so registering the names here makes
+    its draw calls resolve, with no change to the library. Idempotent.
+    """
+    global _warned_missing_font
+
+    font_path = _detect_cjk_font()
+    if not font_path:
+        if not _warned_missing_font:
+            logger.warning(
+                "no CJK font found on host; OFD previews will render without "
+                "Chinese text. Install a CJK font (e.g. fonts-wqy-zenhei) in the image."
+            )
+            _warned_missing_font = True
+        return
+
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    registered = pdfmetrics.getRegisteredFontNames()
+    for name in _HARDCODED_CJK_FONT_NAMES:
+        if name in registered:
+            continue
+        try:
+            # subfontIndex=0 is needed for .ttc collections (wqy-zenhei, Songti)
+            # and harmless for plain .ttf.
+            pdfmetrics.registerFont(TTFont(name, font_path, subfontIndex=0))
+        except Exception:
+            logger.warning("failed to register CJK font {!r} from {}", name, font_path, exc_info=True)
 
 
 def _ensure_easyofd_patched() -> None:
@@ -61,6 +150,7 @@ def convert_ofd_to_pdf(input_path: str, output_dir: str) -> str:
     from easyofd import OFD
 
     _ensure_easyofd_patched()
+    _ensure_cjk_fonts_registered()
 
     input_path = os.path.abspath(input_path)
     output_dir = os.path.abspath(output_dir)
