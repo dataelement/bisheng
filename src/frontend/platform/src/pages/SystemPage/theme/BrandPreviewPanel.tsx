@@ -127,9 +127,6 @@ function LoginPreview({
                                 className="h-10 max-w-[170px] object-contain"
                             />
                         </Highlight>
-                        <Highlight active={target === "brandName"}>
-                            <p className="text-center text-sm text-muted-foreground">{title}</p>
-                        </Highlight>
                         <div className="space-y-3">
                             <SkeletonLine className="h-9" />
                             <SkeletonLine className="h-9" />
