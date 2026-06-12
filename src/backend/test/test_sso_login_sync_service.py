@@ -5,7 +5,7 @@ Covers the 11-step happy path plus the branch cases:
   miss, Redis lock contention, disabled user.
 - T14: disabled / archived / orphaned leaf tenant → 19303.
 
-Cross-source reuse (T9) and tenant_mapping (T10) live in dedicated files
+Source-preserving cross-source reuse (T9) and tenant_mapping (T10) live in dedicated files
 so each suite has a single orchestration concern.
 
 All downstream collaborators are AsyncMock'd — this keeps the test fast
@@ -60,7 +60,7 @@ def _user(user_id=7, delete=0, source='sso', external_id='u1',
 
 
 def _dept(ext, *, id=1, path='/', is_deleted=0, is_tenant_root=0,
-          mounted_tenant_id=None, source='sso', status='active'):
+          mounted_tenant_id=None, source='wecom', status='active'):
     return SimpleNamespace(
         id=id, external_id=ext, path=path, is_deleted=is_deleted,
         is_tenant_root=is_tenant_root,
@@ -111,7 +111,7 @@ def patches(monkeypatch):
     monkeypatch.setattr(
         m.UserDao, 'add_user_and_default_role',
         AsyncMock(side_effect=lambda u: _user(user_id=7, user_name=u.user_name,
-                                               email=u.email, source='sso',
+                                               email=u.email, source=u.source,
                                                external_id=u.external_id)),
     )
     monkeypatch.setattr(
@@ -119,6 +119,15 @@ def patches(monkeypatch):
     )
     monkeypatch.setattr(
         m.UserDao, 'aget_token_version', AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(
+        m.LegacyRBACSyncService, 'sync_user_auth_created',
+        AsyncMock(return_value=None),
+    )
+    from bisheng.database.models.tenant import UserTenantDao
+    monkeypatch.setattr(
+        UserTenantDao, 'aactivate_user_tenant',
+        AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
     )
 
     monkeypatch.setattr(
@@ -157,14 +166,13 @@ def patches(monkeypatch):
     dept_execute = AsyncMock()
     monkeypatch.setattr(dch.DepartmentChangeHandler, 'execute_async', dept_execute)
 
-    # AuditLog for cross-source migration
-    monkeypatch.setattr(
-        m.AuditLogDao, 'ainsert_v2', AsyncMock(return_value=None),
-    )
-
     # sync_user — returns an active leaf tenant by default.
     sync_user = AsyncMock(return_value=_tenant(tid=15, status='active'))
     monkeypatch.setattr(m.UserTenantSyncService, 'sync_user', sync_user)
+    monkeypatch.setattr(
+        m.UserService, '_reject_login_if_user_has_no_usable_access',
+        AsyncMock(return_value=None),
+    )
 
     # JWT signer
     monkeypatch.setattr(m, 'AuthJwt', MagicMock(return_value=MagicMock()))
@@ -498,7 +506,7 @@ class TestDepartmentAdminFgaReconcile:
         )
         m = patches.module
         m.UserDepartmentDao.aget_user_departments = AsyncMock(
-            return_value=[SimpleNamespace(department_id=11)],
+            return_value=[SimpleNamespace(department_id=11, is_primary=1)],
         )
         m.DepartmentDao.aget_by_ids = AsyncMock(
             return_value=[_dept('D1', id=11)],
@@ -551,7 +559,7 @@ class TestDepartmentAdminFgaReconcile:
         )
         m = patches.module
         m.UserDepartmentDao.aget_user_departments = AsyncMock(
-            return_value=[SimpleNamespace(department_id=11)],
+            return_value=[SimpleNamespace(department_id=11, is_primary=1)],
         )
         m.DepartmentDao.aget_by_ids = AsyncMock(
             return_value=[_dept('D1', id=11)],
@@ -594,7 +602,7 @@ class TestDepartmentAdminFgaReconcile:
         )
         m = patches.module
         m.UserDepartmentDao.aget_user_departments = AsyncMock(
-            return_value=[SimpleNamespace(department_id=11)],
+            return_value=[SimpleNamespace(department_id=11, is_primary=1)],
         )
         m.DepartmentDao.aget_by_ids = AsyncMock(
             return_value=[_dept('D1', id=11)],

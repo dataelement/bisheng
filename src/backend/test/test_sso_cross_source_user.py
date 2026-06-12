@@ -1,9 +1,9 @@
-"""Tests for F014 cross-source user reuse branch (T9).
+"""Tests for F014 source-preserving cross-source user reuse branch (T9).
 
 PRD §9.2.6 + Phase-3 decision 2: when an SSO payload's external_user_id
-already exists under a *different* source (e.g., feishu via F009 org-sync),
-reuse the record and migrate ``source='sso'`` instead of creating a
-duplicate account. Writes an ``action='user.source_migrated'`` audit row.
+already exists under a *different* source (e.g., manually imported
+``source='local'`` users), reuse the record and preserve its original
+``source`` instead of creating a duplicate account.
 
 All downstream DAOs/services are mocked; we only care about the decision
 tree inside :meth:`LoginSyncService._upsert_user`.
@@ -86,10 +86,31 @@ def patches(monkeypatch):
         AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(
+        m.UserDepartmentDao, 'aget_user_departments',
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        m.DepartmentChangeHandler, 'execute_async',
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
         m.UserTenantSyncService, 'sync_user', AsyncMock(return_value=_tenant()),
     )
     monkeypatch.setattr(
+        m.UserService, '_reject_login_if_user_has_no_usable_access',
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
         m.UserDao, 'aget_token_version', AsyncMock(return_value=0),
+    )
+    monkeypatch.setattr(
+        m.LegacyRBACSyncService, 'sync_user_auth_created',
+        AsyncMock(return_value=None),
+    )
+    from bisheng.database.models.tenant import UserTenantDao
+    monkeypatch.setattr(
+        UserTenantDao, 'aactivate_user_tenant',
+        AsyncMock(return_value=SimpleNamespace(tenant_id=1)),
     )
     monkeypatch.setattr(m, 'AuthJwt', MagicMock(return_value=MagicMock()))
     monkeypatch.setattr(
@@ -105,11 +126,10 @@ def patches(monkeypatch):
 # =========================================================================
 
 @pytest.mark.asyncio
-class TestCrossSourceReuseAndMigrate:
+class TestCrossSourceReusePreservesSource:
 
-    async def test_feishu_user_reused_and_source_migrated(self, patches):
-        """Existing source='feishu' user → reuse + UPDATE source='sso'
-        + audit ``user.source_migrated``."""
+    async def test_feishu_user_reused_and_source_preserved(self, patches):
+        """Existing source='feishu' user → reuse without changing source."""
         from bisheng.sso_sync.domain.services.login_sync_service import (
             LoginSyncService,
         )
@@ -118,52 +138,44 @@ class TestCrossSourceReuseAndMigrate:
         aget_src = AsyncMock(return_value=None)
         aget_any = AsyncMock(return_value=feishu_user)
         update = AsyncMock(return_value=None)
-        audit = AsyncMock(return_value=None)
         add = AsyncMock(return_value=None)
         patches.UserDao.aget_by_source_external_id = aget_src
         patches.UserDao.aget_by_external_id = aget_any
         patches.UserDao.aupdate_user = update
         patches.UserDao.add_user_and_default_role = add
-        patches.AuditLogDao.ainsert_v2 = audit
 
-        resp = await LoginSyncService.execute(_payload(), request_ip='1.2.3.4')
+        resp = await LoginSyncService.execute(
+            _payload(), request_ip='1.2.3.4', row_source='sso',
+        )
 
         # Result: reused the feishu user's id.
         assert resp.user_id == 7
-        # source mutated on the user object before update
-        assert feishu_user.source == 'sso'
+        assert feishu_user.source == 'feishu'
         update.assert_awaited()
         add.assert_not_awaited()  # no new user created
-        # Audit written
-        audit.assert_awaited()
-        action = audit.await_args.kwargs.get('action')
-        metadata = audit.await_args.kwargs.get('metadata') or {}
-        assert action == 'user.source_migrated'
-        assert metadata.get('old_source') == 'feishu'
-        assert metadata.get('new_source') == 'sso'
 
     async def test_cross_source_reuse_syncs_user_attrs(self, patches):
         from bisheng.sso_sync.domain.services.login_sync_service import (
             LoginSyncService,
         )
         local_user = _user(user_id=7, source='local', external_id='u1',
-                           user_name='Old', email='old@x.com',
+                           user_name='u1', email='old@x.com',
                            phone_number=None)
         patches.UserDao.aget_by_source_external_id = AsyncMock(return_value=None)
         patches.UserDao.aget_by_external_id = AsyncMock(return_value=local_user)
         update = AsyncMock(return_value=None)
         patches.UserDao.aupdate_user = update
         patches.UserDao.add_user_and_default_role = AsyncMock()
-        patches.AuditLogDao.ainsert_v2 = AsyncMock(return_value=None)
 
         await LoginSyncService.execute(
             _payload(name='Alice', email='alice@x.com', phone='13800000000'),
             request_ip='1.2.3.4',
+            row_source='sso',
         )
 
         update.assert_awaited_once()
         updated_user = update.await_args.args[0]
-        assert updated_user.source == 'sso'
+        assert updated_user.source == 'local'
         assert updated_user.user_name == 'Alice'
         assert updated_user.email == 'alice@x.com'
         assert updated_user.phone_number == '13800000000'
@@ -179,18 +191,15 @@ class TestCrossSourceReuseAndMigrate:
         patches.UserDao.aget_by_external_id = AsyncMock(return_value=None)
         add = AsyncMock(return_value=created)
         patches.UserDao.add_user_and_default_role = add
-        audit = AsyncMock()
-        patches.AuditLogDao.ainsert_v2 = audit
 
         resp = await LoginSyncService.execute(
             _payload(external_user_id='u2', name='Bob', email='bob@x.com'),
             request_ip='1.2.3.4',
+            row_source='sso',
         )
 
         add.assert_awaited_once()
         assert resp.user_id == 11
-        # No migration audit (nothing migrated)
-        audit.assert_not_awaited()
 
     async def test_cross_source_deleted_account_raises_forbidden(self, patches):
         """If the legacy cross-source account is already disabled (delete=1),
@@ -206,15 +215,15 @@ class TestCrossSourceReuseAndMigrate:
         patches.UserDao.add_user_and_default_role = AsyncMock()
 
         with pytest.raises(Exception) as exc_info:
-            await LoginSyncService.execute(_payload(), request_ip='1.2.3.4')
+            await LoginSyncService.execute(
+                _payload(), request_ip='1.2.3.4', row_source='sso',
+            )
         assert getattr(exc_info.value, 'status_code', 0) == \
             UserForbiddenError.Code
         patches.UserDao.add_user_and_default_role.assert_not_awaited()
 
     async def test_same_source_race_reused_no_migration(self, patches):
-        """Rare race: another writer has already flipped the row to
-        source='sso' between our two DAO lookups. Adopt the row, but do
-        NOT write a migration audit (nothing to migrate)."""
+        """Rare race: another writer has already created the same source row."""
         from bisheng.sso_sync.domain.services.login_sync_service import (
             LoginSyncService,
         )
@@ -223,11 +232,10 @@ class TestCrossSourceReuseAndMigrate:
         patches.UserDao.aget_by_external_id = AsyncMock(return_value=raced)
         patches.UserDao.aupdate_user = AsyncMock()
         patches.UserDao.add_user_and_default_role = AsyncMock()
-        audit = AsyncMock()
-        patches.AuditLogDao.ainsert_v2 = audit
 
-        resp = await LoginSyncService.execute(_payload(), request_ip='1.2.3.4')
+        resp = await LoginSyncService.execute(
+            _payload(), request_ip='1.2.3.4', row_source='sso',
+        )
 
         assert resp.user_id == 7
-        audit.assert_not_awaited()
         patches.UserDao.add_user_and_default_role.assert_not_awaited()

@@ -2,7 +2,8 @@
 
 End-to-end handler for ``POST /api/v1/internal/sso/login-sync``. See spec
 §5.1 for the full 11-step contract: HMAC → Redis dedup lock → parent-chain
-check → tenant_mapping → user upsert (incl. cross-source adoption) →
+check → tenant_mapping → user upsert (incl. source-preserving cross-source
+adoption) →
 UserDepartment primary/secondary assignment → UserTenantSyncService leaf
 derivation → leaf status check → JWT signing.
 """
@@ -34,7 +35,6 @@ from bisheng.database.constants import (
     USER_DISABLE_SOURCE_GATEWAY,
     USER_DISABLE_SOURCE_ORG_SYNC,
 )
-from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.database.models.department_admin_grant import (
     DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
@@ -62,7 +62,6 @@ from bisheng.sso_sync.domain.services.tenant_mapping_handler import (
     TenantMappingHandler,
 )
 from bisheng.tenant.domain.constants import (
-    TenantAuditAction,
     UserTenantSyncTrigger,
 )
 from bisheng.tenant.domain.services.user_tenant_sync_service import (
@@ -228,7 +227,7 @@ class LoginSyncService:
         )
 
     # -----------------------------------------------------------------------
-    # Helper: user upsert with cross-source fallback.
+    # Helper: user upsert with source-preserving cross-source fallback.
     # -----------------------------------------------------------------------
 
     @classmethod
@@ -250,36 +249,22 @@ class LoginSyncService:
                     # explicitly states account state (e.g. WeCom enable/disable).
                     if payload.account_disabled is None:
                         raise UserForbiddenError.http_exception()
-                old_source = legacy.source
-                write_migration_audit = False
+                old_source = getattr(legacy, 'source', None)
                 if old_source == row_source:
                     # Race: another writer flipped the row between our two
-                    # lookups. Adopt it as-is, no migration audit needed.
+                    # lookups. Adopt it as-is.
                     user = legacy
                 else:
-                    legacy.source = row_source
-                    write_migration_audit = True
-                    full_department_override = old_source == 'local'
+                    logger.info(
+                        'SSO login-sync reused existing cross-source user '
+                        'without source migration: user_id=%s external_id=%s '
+                        'existing_source=%s login_source=%s',
+                        legacy.user_id, ext, old_source, row_source,
+                    )
                     user = legacy
                 cls._apply_user_attrs(user, attrs)
                 cls._touch_user_sync_time(user)
                 await UserDao.aupdate_user(user)
-                if write_migration_audit:
-                    await AuditLogDao.ainsert_v2(
-                        tenant_id=ROOT_TENANT_ID,
-                        operator_id=0,
-                        operator_tenant_id=ROOT_TENANT_ID,
-                        action=TenantAuditAction.USER_SOURCE_MIGRATED.value,
-                        target_type='user',
-                        target_id=str(legacy.user_id),
-                        metadata={
-                            'old_source': old_source,
-                            'new_source': row_source,
-                            'external_id': ext,
-                            'via': 'sso_realtime',
-                        },
-                        ip_address=request_ip,
-                    )
             else:
                 new_delete = 1 if payload.account_disabled is True else 0
                 ds = cls._disable_source_for_row(row_source, new_delete)
@@ -307,7 +292,7 @@ class LoginSyncService:
                     # (user_tenant_sync_service.py:88). Without is_active=1
                     # the sync flips status + bumps token_version, which
                     # invalidates any JWT already on the client side.
-                    # Old (migrated) users avoid this because F011's backfill
+                    # Existing users avoid this because F011's backfill
                     # set is_active=1 for them.
                     from bisheng.database.models.tenant import UserTenantDao
                     activated = await UserTenantDao.aactivate_user_tenant(
