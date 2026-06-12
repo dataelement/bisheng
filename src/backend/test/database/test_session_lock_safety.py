@@ -1,31 +1,29 @@
 """Regression tests for the connection-pool / row-lock leak triggered during
 stress testing.
 
-Root cause (see incident on the 109 DaMeng deployment):
+Root cause (109 DaMeng deployment):
 1. ``async_session`` caught ``Exception`` for its rollback path, but
    ``asyncio.CancelledError`` is a ``BaseException`` (Py3.8+). A cancelled
    request therefore skipped rollback, leaving an open transaction that held a
    row lock ("idle in transaction") and stalled the whole pool.
 2. ``MessageSessionDao.touch_session`` did ``UPDATE ... (await) ... COMMIT`` —
-   the window between acquiring the row lock and committing could be cut by a
-   cancellation, leaking the lock. Running the bump in AUTOCOMMIT removes the
-   window: the DB releases the lock the instant the statement executes.
-"""
+   a cancellation between acquiring the row lock and committing leaked the
+   lock. The write is now shielded so it always runs to completion.
 
+   (AUTOCOMMIT was tried first but the dmAsync dialect cannot reset the
+   isolation level on connection checkin while a transaction is open
+   -> [CODE:-6510], so ``asyncio.shield`` is used instead.)
+"""
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 
 import pytest
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from bisheng.core.database.connection import DatabaseConnectionManager
-
-
-def _sqlite_async_engine(url: str = "sqlite+aiosqlite://"):
-    return create_async_engine(url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +32,9 @@ def _sqlite_async_engine(url: str = "sqlite+aiosqlite://"):
 
 
 async def test_async_session_rolls_back_on_cancellederror():
-    engine = _sqlite_async_engine()
+    engine = create_async_engine(
+        "sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
     mgr = DatabaseConnectionManager("sqlite+aiosqlite://")
     mgr._async_engine = engine
 
@@ -56,48 +56,35 @@ async def test_async_session_rolls_back_on_cancellederror():
 
 
 # ---------------------------------------------------------------------------
-# Fix #2 — autocommit helper persists immediately (no lingering transaction)
+# Fix #2 — touch_session's write must complete even if the caller is cancelled
 # ---------------------------------------------------------------------------
 
 
-async def test_async_execute_autocommit_commits(tmp_path):
-    url = f"sqlite+aiosqlite:///{tmp_path / 'lock_safety.db'}"
-    setup_engine = create_async_engine(url)
-    async with setup_engine.begin() as conn:
-        await conn.execute(text("CREATE TABLE t (id INTEGER PRIMARY KEY, v INTEGER)"))
-        await conn.execute(text("INSERT INTO t (id, v) VALUES (1, 0)"))
-    await setup_engine.dispose()
-
-    mgr = DatabaseConnectionManager(url)
-    await mgr.async_execute_autocommit(text("UPDATE t SET v = 42 WHERE id = 1"))
-
-    # A brand-new engine guarantees a separate connection: under file SQLite it
-    # only sees the row if the helper actually committed.
-    verify_engine = create_async_engine(url)
-    async with verify_engine.connect() as conn:
-        value = (await conn.execute(text("SELECT v FROM t WHERE id = 1"))).scalar()
-    await verify_engine.dispose()
-
-    assert value == 42
-
-
-# ---------------------------------------------------------------------------
-# Fix #2 — touch_session delegates to the autocommit helper, not session+commit
-# ---------------------------------------------------------------------------
-
-
-async def test_touch_session_uses_autocommit(monkeypatch):
+async def test_touch_session_completes_write_despite_cancellation(monkeypatch):
     from bisheng.database.models import session as session_module
 
-    captured: dict = {}
+    events: list[str] = []
 
-    async def _fake_autocommit(statement):
-        captured["statement"] = statement
+    class _FakeSession:
+        async def exec(self, statement):
+            events.append("exec")
 
-    monkeypatch.setattr(session_module, "async_execute_autocommit", _fake_autocommit)
+        async def commit(self):
+            await asyncio.sleep(0)  # suspension point a cancel could hit
+            events.append("commit")
 
-    await session_module.MessageSessionDao.touch_session("chat-abc")
+    @asynccontextmanager
+    async def _fake_get_async_db_session():
+        yield _FakeSession()
 
-    compiled = str(captured["statement"]).lower()
-    assert "message_session" in compiled
-    assert "update_time" in compiled
+    monkeypatch.setattr(session_module, "get_async_db_session", _fake_get_async_db_session)
+
+    task = asyncio.ensure_future(session_module.MessageSessionDao.touch_session("chat-abc"))
+    await asyncio.sleep(0)  # let the shielded write start
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # The shielded write must still finish committing despite the cancellation.
+    await asyncio.sleep(0.05)
+    assert events == ["exec", "commit"]

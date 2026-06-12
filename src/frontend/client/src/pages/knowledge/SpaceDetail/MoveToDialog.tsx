@@ -54,7 +54,6 @@ export function MoveToDialog({
     const localize = useLocalize();
     const [selectedSpaceId, setSelectedSpaceId] = useState(currentSpaceId);
     const [folderStack, setFolderStack] = useState<FolderCrumb[]>([]);
-    const [submitting, setSubmitting] = useState(false);
 
     const currentFolderId = folderStack.length ? folderStack[folderStack.length - 1].id : null;
     const crossSpace = selectedSpaceId !== currentSpaceId;
@@ -111,18 +110,15 @@ export function MoveToDialog({
         setFolderStack((stack) => stack.slice(0, keep));
     };
 
-    const handleConfirm = async () => {
-        setSubmitting(true);
-        try {
-            const targetFolderName = folderStack.length ? folderStack[folderStack.length - 1].name : undefined;
-            await onConfirm(selectedSpaceId, currentFolderId, crossSpace, targetFolderName);
-            onOpenChange(false);
-        } catch {
-            // Caller surfaced the reason (cancelled confirm / hard error);
-            // keep the dialog open so the user can adjust or retry.
-        } finally {
-            setSubmitting(false);
-        }
+    const handleConfirm = () => {
+        // Close the picker BEFORE running the move. executeMove shows its own
+        // feedback (cross-space confirm, partial "move the rest" dialog, toasts);
+        // if this Radix Dialog were still open it would aria-hide / disable those
+        // nested layers and hide toasts behind its overlay. The move owns all
+        // subsequent UI; cancel/error rejections are already surfaced there.
+        const targetFolderName = folderStack.length ? folderStack[folderStack.length - 1].name : undefined;
+        onOpenChange(false);
+        Promise.resolve(onConfirm(selectedSpaceId, currentFolderId, crossSpace, targetFolderName)).catch(() => {});
     };
 
     return (
@@ -221,11 +217,10 @@ export function MoveToDialog({
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
                         {localize("cancel")}
                     </Button>
-                    <Button onClick={handleConfirm} disabled={submitting}>
-                        {submitting && <Loader2 className="mr-1 size-4 animate-spin" />}
+                    <Button onClick={handleConfirm}>
                         {localize("com_knowledge.move_here")}
                     </Button>
                 </DialogFooter>

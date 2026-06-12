@@ -189,19 +189,6 @@ class DatabaseConnectionManager:
             finally:
                 await session.close()
 
-    async def async_execute_autocommit(self, statement) -> None:
-        """Execute a single write statement in AUTOCOMMIT mode.
-
-        The statement is committed server-side in the same round-trip, so any
-        row lock it takes is released the instant it executes -- there is no
-        open-transaction window between the write and a separate COMMIT that a
-        cancelled request could leak (idle-in-transaction). Use for hot
-        single-row updates such as ``message_session.update_time``.
-        """
-        engine = self.async_engine.execution_options(isolation_level="AUTOCOMMIT")
-        async with engine.connect() as conn:
-            await conn.execute(statement)
-
     async def create_db_and_tables(self) -> None:
         """Creation of databases and tables"""
 

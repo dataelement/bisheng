@@ -346,7 +346,7 @@ export function KnowledgeSpaceHeader({
                                 {localize("com_knowledge.batch_retry")}
                             </DropdownMenuItem>
                         )}
-                        {canBatchMove && onBatchMove && (
+                        {onBatchMove && (
                             <DropdownMenuItem onClick={onBatchMove} className="cursor-pointer">
                                 <FolderInput className="mr-2 size-4" />
                                 {localize("com_knowledge.move")}

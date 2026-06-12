@@ -288,6 +288,9 @@ export function KnowledgeSpaceContent({
     );
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
+    // Move permission is separate from upload (both can_edit tier, but a role may
+    // grant one without the other). Drives the single-item move menu's greyed state.
+    const [canMoveFile, setCanMoveFile] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
@@ -329,7 +332,14 @@ export function KnowledgeSpaceContent({
                 "upload_file",
                 { signal: controller.signal },
             ),
-        ]).then(([createFolderResult, uploadFileResult]) => {
+            checkPermission(
+                objectType,
+                objectId,
+                "can_edit",
+                "move_file",
+                { signal: controller.signal },
+            ),
+        ]).then(([createFolderResult, uploadFileResult, moveFileResult]) => {
             if (cancelled) return;
             setCanCreateFolder(
                 createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
@@ -337,10 +347,14 @@ export function KnowledgeSpaceContent({
             setCanUploadFile(
                 uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed)
             );
+            setCanMoveFile(
+                moveFileResult.status === "fulfilled" && Boolean(moveFileResult.value?.allowed)
+            );
         }).catch(() => {
             if (!cancelled) {
                 setCanCreateFolder(false);
                 setCanUploadFile(false);
+                setCanMoveFile(false);
             }
         });
 
@@ -792,7 +806,7 @@ export function KnowledgeSpaceContent({
     };
 
     // F034: move selected files/folders (same-space or cross-space) via MoveToDialog.
-    const { moveDialogOpen, setMoveDialogOpen, openMove, handleMoveConfirm, dropMoveToFolder } = useKnowledgeMove({
+    const { moveDialogOpen, setMoveDialogOpen, openMove, requestBatchMove, handleMoveConfirm, dropMoveToFolder } = useKnowledgeMove({
         spaceId: space.id,
         onMoved: () => {
             setSelectedFiles(new Set());
@@ -809,8 +823,15 @@ export function KnowledgeSpaceContent({
         (f) => selectedFiles.has(f.id) && isKnowledgeItemUploading(f),
     );
     const handleBatchMove = () => {
-        if (selectionHasUploading) return;
-        openMove(selectedList);
+        // Uploading placeholders have no backend id yet → excluded.
+        const movable = selectedList.filter((f) => !isKnowledgeItemUploading(f));
+        if (!movable.length) return;
+        // Frontend pre-flight (space-level move permission, simple block): if the
+        // user can't move in this space, every selected item is denied → block
+        // dialog before the picker. The backend re-validates per item on the move.
+        const permitted = canMoveFile ? movable : [];
+        const denied = canMoveFile ? [] : movable;
+        requestBatchMove(permitted, denied);
     };
 
     const handleBatchDelete = async () => {
@@ -853,6 +874,10 @@ export function KnowledgeSpaceContent({
             return;
         }
         clearPendingDeletion(allIds);
+        // Refresh the left sidebar folder tree (deleted folders) and the
+        // "相似文档" pending count (deleted files may have been pending).
+        dispatchKnowledgeSpaceFilesRefresh();
+        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
     };
 
     const handleDelete = async (fileId: string) => {
@@ -1102,7 +1127,8 @@ export function KnowledgeSpaceContent({
                                             onSelect={(selected) => handleSelectFile(file.id, selected)}
                                             onDownload={() => handleSingleDownload(file.id)}
                                             onRename={(newName) => onRenameFile(file.id, newName)}
-                                            onMove={canUploadFile ? () => openMove([file]) : undefined}
+                                            onMove={() => openMove([file])}
+                                            canMove={canMoveFile}
                                             onDelete={() => handleDelete(file.id)}
                                             onEditTags={() => handleOpenEditTags(file.id)}
                                             onRetry={() => handleSingleRetry(file.id)}
@@ -1148,7 +1174,8 @@ export function KnowledgeSpaceContent({
                                     onDownload={(id) => handleSingleDownload(id)}
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
-                                    onMove={canUploadFile ? (file) => openMove([file]) : undefined}
+                                    onMove={(file) => openMove([file])}
+                                    canMove={canMoveFile}
                                     onMoveToFolder={canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}

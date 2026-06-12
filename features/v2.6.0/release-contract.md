@@ -82,7 +82,7 @@
 | 120 | workstation | F028 沿用现有 `common/errcode/workstation.py`，会话导出 / 导入知识空间错误码段位 12060-12079，不得与既有 1204X / 1205X 冲突 |
 | 109 | knowledge | F030 沿用现有 `common/errcode/knowledge.py`，新增 `KnowledgeTypeNotSupportedError`(10962)；复用 10900/10901/10991。180 (knowledge_space) 复用 18001/18010/18040 |
 | 109 | knowledge | F032 沿用现有 `common/errcode/knowledge.py`，新增 `OfdConvertError`(10917)；不得与既有 10915/10916/10962 冲突 |
-| 110 | linsight | F035 沿用现有 `common/errcode/linsight.py`，Skill 管理占用段位 **11050–11069**（11050 重名 / 11051 校验失败 / 11052 超 10MB / 11053 不存在 / 11054 无权限），不得与既有 110xx（≤11040+）冲突 |
+| 110 | linsight | F035 沿用现有 `common/errcode/linsight.py`，Skill 管理占用段位 **11050–11069**。实际落码（避让段内既有码）：**11051** 校验失败 / **11052** 超 10MB / **11053** 不存在 / **11054** 无权限 / **11055** 重名。⚠️ 重名由原定 11050 顺延 11055：11050/11060/11070 已被存量 SOP 检索码（`LinsightVectorModelError`/`LinsightDocSearchError`/`LinsightDocNotFoundError`，design §8.6 计划下线）占用——原契约「既有 110xx ≤11040」的判断有误（既有码实达 11190），下线完成后该段彻底归 Skill |
 | 180 | knowledge_space | F034 沿用现有 `common/errcode/knowledge_space.py`，新增 `SpaceMoveInvalidTargetError`(18033) / `SpaceFolderUploadCountExceededError`(18025)；复用 18011（层级）/ 18012（文件夹重名）/ 18021 / 18024（容量）/ 18040 / 18041（跨租户）；§5.5 文件夹上传租户容量超限复用 190 段 19403 |
 
 ---
@@ -102,3 +102,4 @@
 | 2026-06-10 | 登记 F033 部门知识空间成员授权范围收敛：表 1 标注"无新增领域对象"（仅在 ReBAC 授权/列表接口对 `knowledge_space` 按 `DepartmentKnowledgeSpace` 绑定收敛至部门子树/子树成员、禁用 user_group）、表 3 追加依赖 F006/F007 + 部门空间能力；复用 `PermissionDeniedError`，未新增错误码/表/对外 API/不变量；普通知识空间授权路径零变化 | F033 |
 | 2026-06-11 | 登记 F035 灵思任务模式（deepagents 适配层）：表 1 新增 `LinsightSkill` 领域归属（元数据 `linsight_skill` 表 + SKILLS_ROOT 磁盘正文；含旧内核下线与 SOP→Skill 迁移写行为）、表 3 追加依赖多租户基线/角色菜单/F029/F030；新增 110 段错误码 11050–11069、`linsight_skill` 表 + Alembic、`/skill` API、「任务模式」菜单子项；WS 协议 `MessageEventType` 不新增枚举；未新增不变量；设计真相在 feature 目录 design.md | F035 |
 | 2026-06-11 | 登记 F034 知识空间文件/文件夹移动（同空间 + 跨空间）+ §5.5 文件夹上传：表 1 标注"无新增领域对象"（经 `KnowledgeSpaceService` 新增移动写行为 + 跨空间检索数据迁移 celery 任务 + 文件夹上传批量编排按相对路径重建目录树）、表 3 追加依赖 F004/F008、F027、F039；新增 180 段错误码 `SpaceMoveInvalidTargetError`(18033)、`SpaceFolderUploadCountExceededError`(18025)；新增细粒度权限 id `move_file`/`move_folder`（can_edit 档，不改 OpenFGA 模型）；新增对外 API 移动接口与 `folders/upload`；未新增不变量 | F034 |
+| 2026-06-11 | F035 Track 0 落地修正：①**后端升级 Python 3.10→3.11**（deepagents 全版本要求 ≥3.11；连带 `cchardet`→`faust-cchardet`；Docker 基础镜像/dmPython 3.11 待人工跟进）；②110 段错误码实际落码 11051–11055（重名由 11050 顺延 11055，避让存量 SOP 检索码），更正原「既有 110xx ≤11040」误判。详见 `035-linsight-task-mode/tasks.md §8` D1/D2 | F035（含全后端 Python 基线） |

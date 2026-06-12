@@ -40,11 +40,10 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
     - echo $REPO
     - REPO2=$(echo $REPO | sed 's/http:\\/\\///g')
     - sed  '/apt-get/ s|$| '"$PROXY"'|' Dockerfile
-    - sed -i.bak 's/uv cache clean.*$/ /' Dockerfile
-    - sed -i '6i\RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
-    - sed -i '7i\ENV UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
-    - sed -i '8i\ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
-    - sed -i '9i\ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
+    # 删掉 `&& uv cache clean`（连同 && 一起删，避免留下悬空操作符导致 sh 语法错误 exit 2）
+    - sed -i -E 's/[[:space:]]*&&[[:space:]]*uv cache clean.*$//' Dockerfile
+    # 在 `RUN uv sync` 行之前插入国内镜像 ENV：用 awk 按内容锚定（不依赖行号，Dockerfile 改动也不会插错位），ENV 在 uv sync 之前生效
+    - awk '/^RUN uv sync/ && !x {print "ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; x=1} {print}' Dockerfile > Dockerfile.tmp && mv Dockerfile.tmp Dockerfile
     - cat Dockerfile
 
   - name: build_docker
@@ -208,11 +207,10 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
         path: /app/build/
     commands:
     - cd ./src/backend
-    - sed -i.bak 's/uv cache clean.*$/ /' Dockerfile
-    - sed -i '6i\RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
-    - sed -i '7i\ENV UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
-    - sed -i '8i\ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
-    - sed -i '9i\ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple' Dockerfile
+    # 删掉 `&& uv cache clean`（连同 && 一起删，避免留下悬空操作符导致 sh 语法错误 exit 2）
+    - sed -i -E 's/[[:space:]]*&&[[:space:]]*uv cache clean.*$//' Dockerfile
+    # 在 `RUN uv sync` 行之前插入国内镜像 ENV：用 awk 按内容锚定（不依赖行号，Dockerfile 改动也不会插错位），ENV 在 uv sync 之前生效
+    - awk '/^RUN uv sync/ && !x {print "ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple"; print "ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"; x=1} {print}' Dockerfile > Dockerfile.tmp && mv Dockerfile.tmp Dockerfile
     - cat Dockerfile
 
   - name: build_docker

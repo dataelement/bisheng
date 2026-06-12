@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from enum import Enum
 from typing import Optional, List
@@ -6,7 +7,7 @@ from sqlalchemy import Integer
 from sqlmodel import Field, Column, DateTime, text, select, func, update, col
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session, async_execute_autocommit
+from bisheng.core.database import get_sync_db_session, get_async_db_session
 from bisheng.core.database.dialect_helpers import JsonType, UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.models.user_group import UserGroupDao
 
@@ -313,10 +314,18 @@ class MessageSessionDao(MessageSessionBase):
         statement = update(MessageSession).where(col(MessageSession.chat_id) == chat_id).values(
             update_time=datetime.now()
         )
-        # Run in AUTOCOMMIT: the row lock on this hot conversation row is
-        # released the instant the UPDATE executes, so a cancelled request
-        # cannot leak it (idle-in-transaction) in a UPDATE -> COMMIT window.
-        await async_execute_autocommit(statement)
+
+        async def _run() -> None:
+            async with get_async_db_session() as session:
+                await session.exec(statement)
+                await session.commit()
+
+        # Shield the UPDATE -> COMMIT so a cancelled request cannot interrupt it
+        # between taking the row lock and committing, which would leak the lock
+        # (idle-in-transaction) and stall the pool. AUTOCOMMIT was avoided
+        # because the dmAsync dialect cannot reset the isolation level on
+        # connection checkin while a transaction is open ([CODE:-6510]).
+        await asyncio.shield(_run())
 
     @classmethod
     def update_session_name_sync(cls, chat_id: str, name: str):

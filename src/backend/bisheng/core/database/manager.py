@@ -190,15 +190,3 @@ def get_sync_db_session():
     db_manager = sync_get_database_connection()
     with db_manager.create_session() as session:
         yield session
-
-
-async def async_execute_autocommit(statement) -> None:
-    """Execute a single write statement in AUTOCOMMIT mode on the global engine.
-
-    Thin wrapper over ``DatabaseConnectionManager.async_execute_autocommit``.
-    Use for hot single-row updates (e.g. ``message_session.update_time``) so a
-    cancelled request cannot leak a row lock in the window between the UPDATE
-    and a separate COMMIT.
-    """
-    db_manager = await get_database_connection()
-    await db_manager.async_execute_autocommit(statement)

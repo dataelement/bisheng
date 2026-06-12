@@ -14,7 +14,7 @@
   - **同空间**：纯元数据 + 权限 tuple 操作（改 `file_level_path` / `level` + 换 OpenFGA `parent` tuple），秒级、可撤回，不触碰向量 / 解析 / minio。
   - **跨空间**：元数据即时迁移（含版本链整链）+ 检索数据（Milvus/ES chunk）异步迁移；二次确认、无撤回，迁移期文件显示「处理中」。
 - **非目标**：
-  - 跨空间不查重名、不迁移空间标签（PRD 拍板）。
+  - 跨空间不迁移空间标签（PRD 拍板）。重名校验：**文件夹**同空间 + 跨空间均查同级文件夹重名；**文件**不查（产品 2026-06-11 修订，见 AC-12）。
   - 不重新解析文档（跨空间迁移以 ES 已有文本块为源，不重跑 ETL）。
 
 ---
@@ -103,7 +103,7 @@
 `前端选中项+目标 → POST /knowledge/space/{space_id}/files/move → 逐项校验(权限/循环/层级/重名) → 改 level_path+level、级联子树、换 parent tuple → 返回每项结果 → 列表刷新 + toast(撤回)`
 
 **跨空间移动（同步改元数据 + 异步迁数据）**：
-`二次确认 → 同一接口(target_space_id≠当前) → 校验(权限/层级;无重名校验) → 事务内: 版本链整链改 knowledge_id + 重算路径 + 换 parent tuple + SUCCESS 文件置 REBUILDING → 派发 migrate_file_vectors celery(逐文件) → 任务: 源ES读chunk → 改metadata → 目标空间 add_texts(目标模型重嵌入,双写Milvus+ES) → 删源空间数据 → 状态置回 SUCCESS / 失败置 FAILED`
+`二次确认 → 同一接口(target_space_id≠当前) → 校验(权限/层级;**文件夹查同级重名、文件不查**) → 事务内: 版本链整链改 knowledge_id + 重算路径 + 换 parent tuple + SUCCESS 文件置 REBUILDING → 派发 migrate_file_vectors celery(逐文件) → 任务: 源ES读chunk → 改metadata → 目标空间 add_texts(目标模型重嵌入,双写Milvus+ES) → 删源空间数据 → 状态置回 SUCCESS / 失败置 FAILED`
 
 **「移动到」弹窗**：
 左侧空间列表 = 用户有 `upload_file` 权限的空间（ReBAC `list_accessible_ids` 过滤）；右侧 = 选中空间的 `list_space_children`（文件夹可选/无上传权限置灰，文件仅有查看权限时展示且置灰）。
@@ -210,7 +210,7 @@
 
 ## 7. 测试与可观测
 
-- **后端单测**（`test/knowledge/`）：AC-10/11/12（循环/超层/同空间重名;跨空间不查重名）、AC-08（不校验子项）、AC-13（各状态可移）、AC-09（继承随新父、直绑不变）、级联路径重写、**版本链整链迁移**（主+历史 knowledge_id 一致）、批量两步（skip_invalid）、迁移任务幂等（重复执行不重复写/删错）。
+- **后端单测**（`test/knowledge/`）：AC-10/11/12（循环/超层/**文件夹重名**同空间+跨空间均拒、**文件**不查重名）、AC-08（不校验子项）、AC-13（各状态可移）、AC-09（继承随新父、直绑不变）、级联路径重写、**版本链整链迁移**（主+历史 knowledge_id 一致）、批量两步（skip_invalid）、迁移任务幂等（重复执行不重复写/删错）。
 - **集成**：跨空间移动后——目标空间检索能命中、源空间检索不再命中、版本管理页关系完整、迁移失败置 FAILED 可重试。
 - **手动验证**：本地起后端（:7860,`config=config.yaml uv run uvicorn bisheng.main:app`）+ client（:4001,`npm run dev`）,或用 120 测试环境（`http://192.168.106.120:8901/workspace/`,admin 账号）;准备两个空间（可配不同 embedding 模型）,互移文件/文件夹/多版本文件,观察 REBUILDING→SUCCESS 流转与两侧检索结果。
 - 关键日志：move_items 每项 reason;migrate 任务 file_id+源/目标空间+chunk 数;失败必须 raise 不可静默。
@@ -355,3 +355,4 @@
 | 2026-06-11 | 修正坑 6 / §8：核实「删旧空间丢图」不成立——空间删除（`delete_knowledge_file_in_minio`）只按文件记录删对象，从不按 `knowledge/images/` 前缀清理，移走文件的图不会裂；真实问题是 images 目录无人清理（存储泄漏，另立项） | 用户要求核实删除链路 |
 | 2026-06-11 | 修复层级限制双 bug：①off-by-one——空文件夹可移入第 10 层（阈值 `>10` 实为允许 0-based level 10 = 第 11 层，收紧为 `>9`）②子树深度误计文件——改为只数文件夹（文件不算层，文件可移入第 10 层）。move_items 与 upload_folder_items 同步修正，测试更新至新口径（28 绿） | 用户实测发现 |
 | 2026-06-11 | Wave 5 文件夹上传实现完成（T013~T016）：后端 `upload_folder_items` + `POST /{space_id}/folders/upload` + 18025（13 个新测试绿，知识模块零回归）；前端递归读全树、全层级静默过滤（隐藏按 path 段）、`uploadFolderApi` 走 `skip403Redirect` 统一 toast（AC-32）。契约偏差：items 增加 `size` 字段（§9.4 已更新）。AC-32 产品补充已落 spec | Wave 5 实现落地 |
+| 2026-06-11 | AC-12 修订：跨空间移动**文件夹**也做同级文件夹重名校验（原 PRD「跨空间不查重名」改为仅对**文件**不查）。实现仅去掉 `move_items` 重名校验上的 `and not cross_space` 门（dup 查询本就按 `target_space_id` 查目标空间，零额外逻辑） | 产品补充需求 |
