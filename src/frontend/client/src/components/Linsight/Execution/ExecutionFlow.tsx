@@ -7,9 +7,14 @@
  * WS hook (task-message-stream) is mounted here so the event pump stays alive
  * after the old TaskFlow stops rendering.
  */
-import { CircleAlert, OctagonX } from 'lucide-react';
+import { CircleAlert, FolderOpen, OctagonX } from 'lucide-react';
 import { useMemo, useRef, type ReactNode } from 'react';
 import { SopStatus } from '~/components/Sop/SOPEditor';
+import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
+import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
+import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
+import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
+import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
@@ -61,6 +66,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     const stopped = status === SopStatus.Stoped;
     const queueing = running && (linsight?.queueCount || 0) > 0;
 
+    // P4 artifacts: output files + the shared right-side panel (workspace/preview)
+    const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
+    const artifactsPanel = useArtifactsPanel();
+
     // clarify requests: the newest unanswered one is the active card;
     // session-level answered ones become flow-level intent rows
     // (task-level answered ones render inside their TaskStepRow)
@@ -86,7 +95,20 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     useAutoScroll(scrollRef, [tasks, sessionSteps, status]);
 
     return (
-        <div className="flex h-full w-full flex-col">
+        <div className="relative flex h-full w-full flex-col">
+            {/* workspace entry (spec §5 fig 9: top-right icon, shown once completed) */}
+            {completed && fileList.length > 0 && (
+                <button
+                    type="button"
+                    title={localize('com_linsight_workspace')}
+                    aria-label={localize('com_linsight_workspace')}
+                    className="absolute right-4 top-3 z-10 rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm hover:bg-gray-50"
+                    onClick={artifactsPanel.openWorkspace}
+                >
+                    <FolderOpen size={16} />
+                </button>
+            )}
+
             {/* ── conversational flow ─────────────────────────────────────── */}
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-hover">
                 <div className="mx-auto w-full max-w-[800px] px-4 pb-6 pt-4">
@@ -141,16 +163,15 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         </div>
                     )}
 
-                    {/* ── artifacts area: P4 slot (report link / file cards / drawer) ── */}
+                    {/* ── artifacts area (P4): report link / answer markdown / file card ── */}
                     {completed && (
                         <div data-slot="execution-artifacts" className="mt-4">
-                            {/* P4 replaces this placeholder with the report link row,
-                                summary markdown and the output-file card. */}
-                            {linsight?.output_result?.answer && (
-                                <div className="whitespace-pre-wrap rounded-2xl border border-gray-100 bg-white p-4 text-sm leading-6 text-gray-800">
-                                    {linsight.output_result.answer}
-                                </div>
-                            )}
+                            <ResultSection
+                                answer={linsight?.output_result?.answer}
+                                files={fileList}
+                                versionId={versionId}
+                                onPreview={(file) => artifactsPanel.openPreview(file)}
+                            />
                         </div>
                     )}
                 </div>
@@ -174,6 +195,21 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     />
                 )}
             </div>
+
+            {/* ── right-side area: workspace drawer / file preview (mutually exclusive) ── */}
+            <WorkspaceDrawer
+                open={artifactsPanel.workspaceOpen}
+                onOpenChange={artifactsPanel.setWorkspaceOpen}
+                files={fileList}
+                onPreview={(file) => artifactsPanel.openPreview(file, true)}
+            />
+            <FilePreviewPanel
+                open={!!artifactsPanel.previewFile}
+                onOpenChange={(open) => !open && artifactsPanel.closePreview()}
+                file={artifactsPanel.previewFile}
+                versionId={versionId}
+                onBack={artifactsPanel.fromWorkspace ? artifactsPanel.backToWorkspace : undefined}
+            />
         </div>
     );
 }
