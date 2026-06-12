@@ -3,7 +3,7 @@ import { userContext } from "@/contexts/userContext";
 import { ScopeBar } from "@/pages/ModelPage/manage/ScopeBar";
 import { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import LingSiWork from "./LingSiWork";
+import { AppCenter } from "./AppCenter";
 import Index from "./index";
 import Subscribe from "./Subscribe";
 import KnowledgeSpace from "./KnowledgeSpace";
@@ -28,24 +28,29 @@ export default function DialogueWork() {
               setScopeVersion((value) => value + 1);
             }}
           />
+          {/* F035 (PRD §4.8): the 灵思 tab is merged into 首页 (home) — task-mode
+              display name / input placeholder live there now, the entry toggle
+              moved to role menus, tools share the home pool, and the SOP
+              manual library is replaced by skill management. The app-center
+              copy moved out into its own 应用 tab. */}
           <TabsList className="">
-            <TabsTrigger value="client">{t('bench.daily')}</TabsTrigger>
-            <TabsTrigger value="lingsi" className="roundedrounded-xl">{t('bench.lingsi')}</TabsTrigger>
-            <TabsTrigger value="subscribe">{t('bench.subscribe')}</TabsTrigger>
+            <TabsTrigger value="client">{t('bench.home')}</TabsTrigger>
             <TabsTrigger value="knowledgeSpace">{t('bench.knowledgeSpace')}</TabsTrigger>
+            <TabsTrigger value="subscribe">{t('bench.subscribe')}</TabsTrigger>
+            <TabsTrigger value="appCenter">{t('bench.appCenter')}</TabsTrigger>
           </TabsList>
         </div>
         <TabsContent value="client" key="client-tab">
           <Index scopeVersion={scopeVersion} />
         </TabsContent>
-        <TabsContent value="lingsi">
-          <LingSiWork scopeVersion={scopeVersion} />
+        <TabsContent value="knowledgeSpace">
+          <KnowledgeSpace scopeVersion={scopeVersion} />
         </TabsContent>
         <TabsContent value="subscribe">
           <Subscribe scopeVersion={scopeVersion} />
         </TabsContent>
-        <TabsContent value="knowledgeSpace">
-          <KnowledgeSpace scopeVersion={scopeVersion} />
+        <TabsContent value="appCenter">
+          <AppCenter scopeVersion={scopeVersion} />
         </TabsContent>
       </Tabs>
     </div>

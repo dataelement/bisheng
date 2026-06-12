@@ -52,6 +52,13 @@ const getBrandTitle = (brandName?: BrandText) => {
         : (brandName?.en || brandName?.zh || "");
 };
 
+const hasInvalidBrandText = (brandName: BrandText) => (
+    brandName.zh.includes("<")
+    || brandName.zh.includes(">")
+    || brandName.en.includes("<")
+    || brandName.en.includes(">")
+);
+
 const omitLinsightAgentName = (config: BrandConfig) => {
     const payload = { ...config } as Partial<BrandConfig>;
     delete payload.linsightAgentName;
@@ -282,6 +289,7 @@ export default function BrandCustomization() {
         key: BrandAssetKey,
         deletedAsset: BrandAssetOption,
         fallbackAsset: BrandAsset,
+        deletedWasSelected: boolean,
     ) => {
         const deletedValue = getAssetValue(deletedAsset);
         setAssetOptions((current) => ({
@@ -289,7 +297,7 @@ export default function BrandCustomization() {
             [key]: (current[key] || []).filter((option) => getAssetValue(option) !== deletedValue),
         }));
         setConfig((current) => {
-            if (getAssetValue(current.assets[key]) !== deletedValue) {
+            if (!deletedWasSelected || getAssetValue(current.assets[key]) !== deletedValue) {
                 return current;
             }
             return {
@@ -380,6 +388,7 @@ export default function BrandCustomization() {
     const handleLoadingIconDeleted = (
         deletedAsset: BrandAssetOption,
         fallbackAsset: BrandAsset,
+        deletedWasSelected: boolean,
     ) => {
         const deletedValue = getAssetValue(deletedAsset);
         if (deletedAsset.relative_path) {
@@ -390,7 +399,7 @@ export default function BrandCustomization() {
 
         setConfig((current) => {
             const currentValue = getAssetValue(current.loading.icon) || current.URLLoadingIcon || "";
-            const shouldResetCurrent = currentValue === deletedValue;
+            const shouldResetCurrent = deletedWasSelected && currentValue === deletedValue;
             return {
                 ...current,
                 URLLoadingIcon: shouldResetCurrent ? fallbackAsset.url : current.URLLoadingIcon,
@@ -420,6 +429,15 @@ export default function BrandCustomization() {
     };
 
     const handleSave = async () => {
+        if (hasInvalidBrandText(config.brandName)) {
+            toast({
+                title: t("prompt"),
+                variant: "warning",
+                description: t("theme.brandNameInvalidCharacters"),
+            });
+            return;
+        }
+
         setSaving(true);
         const saved = await captureAndAlertRequestErrorHoc(saveBrandConfigApi(normalizeForSave(config)));
         setSaving(false);
@@ -491,7 +509,9 @@ export default function BrandCustomization() {
                                     onChange={(asset) => handleAssetChange(key, asset)}
                                     onPreview={() => setPreviewTarget(key)}
                                     onUploaded={(asset) => handleAssetUploaded(key, asset)}
-                                    onDeleted={(deletedAsset, fallbackAsset) => handleAssetDeleted(key, deletedAsset, fallbackAsset)}
+                                    onDeleted={(deletedAsset, fallbackAsset, deletedWasSelected) => (
+                                        handleAssetDeleted(key, deletedAsset, fallbackAsset, deletedWasSelected)
+                                    )}
                                 />
                             ))}
                         </div>

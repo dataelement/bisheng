@@ -17,6 +17,8 @@ autogen_coding/
 .claude/settings.local.json
 # Personal notes (lilu's local reference docs, not for sharing)
 .claude/docs/
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock
 
 
 

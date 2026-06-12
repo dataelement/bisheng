@@ -1,6 +1,6 @@
 # Tasks: 灵思任务模式 · deepagents 适配层（F035）— 多人并行开发拆分
 
-**关联**: [spec.md](./spec.md)（AC 收口） · [design.md](./design.md)（设计真相，§1–§9 终稿修订已内联） · [契约约定](./依赖与契约约定.md) · [PRD](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/2.6%20灵思%20Linsight%20迁移%20deepagents%20框架%20PRD.md)（需求真相）
+**关联**: [spec.md](./spec.md)（AC 收口） · [design.md](./design.md)（设计真相，§1–§9 终稿修订已内联） · [契约约定](./依赖与契约约定.md) · [PRD](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/灵思%20Linsight%20迁移%20deepagents%20框架%20PRD.md)（需求真相）
 **版本**: v2.6.0
 
 ---
@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 薄 spec：AC-1..8 收口，需求真相在 docs/PRD 的 PRD |
 | design.md | ✅ 已评审 | 接手第一入口（原《技术方案》改名）；2026-06-11 评审问题已修复（task_id 约定/park 终止/resume 优先级/残留清理） |
 | 契约冻结（Wave 0） | 🔄 进行中 | C1–C7 + 依赖已冻结（2026-06-11）；建表迁移已过；stub/mock/fixtures 入库；**仅 POC（T0-2）待收尾**，不阻塞分配 |
-| 实现 | 🔲 未开始 | 0 / 9 Track（Wave 0 收尾后即可分配） |
+| 实现 | 🔄 进行中 | 2 / 9 Track：**D/G 已完成**（2026-06-12，test/linsight 96 测试绿、全量回归与基线一致零新增失败；display_name 列 alembic 迁移与迁移脚本端到端待真实 MySQL 环境验证）；其余待开工 |
 
 ---
 
@@ -207,12 +207,12 @@ flowchart TD
 - [ ] **TC-5** 文件跨 version 复用幂等（会话级记忆的**唯一后端改动**，design §9.3.8/§9.4 #11）：`_process_submitted_files` 幂等化——同会话同 `file_id` 再提交时复用正式桶产物、跳过「临时桶→正式桶」复制；临时元数据过期（24h）且无正式产物 → 判失效、返回失效标记供前端提示重传（不静默丢弃）。**依赖** TC-3。**覆盖** FR-1.8（文件记忆有效期）。
 
 ### Track D · Skill 体系
-- [ ] **TD-1** `models/linsight_skill.py` + DAO（依赖 T0-3）。
-- [ ] **TD-2** 错误码 11050–11069（`common/errcode/linsight.py`）。
-- [ ] **TD-3**(测试) `SkillService` 单测：CRUD、重名校验、frontmatter 校验、租户隔离。
-- [ ] **TD-4** `skill_store.py`（磁盘 SKILLS_ROOT，元数据 DB）+ `skill_middleware.py`（SkillsMiddleware + 白名单，顺序约束）。**依赖** TD-1。
-- [ ] **TD-5**(测试) `/skill` API 集成测。
-- [ ] **TD-6** `api/endpoints/skill.py` + router 注册（鉴权 `get_tenant_admin_user`）。**依赖** TD-4/TD-5。**DoD**：C3 契约可用，给 I mock 对齐。
+- [x] **TD-1** `models/linsight_skill.py`（+`display_name` 列，新 alembic revision，偏差 D6）+ DAO（依赖 T0-3）。
+- [x] **TD-2** 错误码 11050–11069（`common/errcode/linsight.py`，Wave 0 已落 11051–11055，核对即可）。
+- [x] **TD-3**(测试) `SkillService` 单测：CRUD、name/display_name 双重名校验、frontmatter 校验、bundle 解包/防穿越、租户隔离。
+- [x] **TD-4** `skill_store.py`（磁盘 SKILLS_ROOT 配置化 + bundle 落盘 + 拼音 slugify，元数据 DB）+ `skill_middleware.py`（白名单为 SkillsMiddleware **子类**实现，偏差 D8）。**依赖** TD-1。
+- [x] **TD-5**(测试) `/skill` API 集成测（含 `/skill/{name}/file`、multipart .md/.zip、built-in 404）。
+- [x] **TD-6** `api/endpoints/skill.py` + router 注册（鉴权 `get_tenant_admin_user`；`/selectable` 用 `get_login_user`）。**依赖** TD-4/TD-5。**DoD**：C3 契约（2026-06-12 增量版）可用，给 I mock 对齐。
 
 ### Track E · 知识库/工具/模型
 - [ ] **TE-1** `SearchKnowledgeBase` 包成 `BaseTool`（方案 B），ReBAC 代用户过滤（对齐 INV-7）。**覆盖** FR-3.5。
@@ -225,8 +225,8 @@ flowchart TD
 - [ ] **TF-3** Skill 多租户隔离校验（`linsight_skill.tenant_id` + 跨租户不展示）。**覆盖** AC-7。
 
 ### Track G · 存量迁移（D 之后）
-- [ ] **TG-1** `scripts/migrate_sop_to_skill.py`：遍历 `linsight_sop`→`linsight_skill`+磁盘 SKILL.md，幂等可重入。**依赖** TD-4。
-- [ ] **TG-2** 对账报告（成功/失败/跳过）。**覆盖** AC-4。
+- [x] **TG-1** `scripts/migrate_sop_to_skill.py`：遍历 `linsight_sop`→`linsight_skill`+磁盘 SKILL.md（display_name=原名、name=拼音 slug、metadata.sop-id 溯源），幂等可重入，dry-run 默认/`--apply` 写入。**依赖** TD-4。
+- [x] **TG-2** 迁移摘要输出（stdout + JSON 文件：成功/失败/跳过+原因；**运维产物，无管理页报告**，偏差 D7）。**覆盖** AC-4。
 
 ### Track H · 前端·Client 执行视图
 - [ ] **TH-1** 统一输入区：任务模式 chip + 「+」菜单（技能/知识空间/组织知识库/附件）+ 工具栏 + 模型选择器 + 提交前一览 + **显式开关与会话级记忆**（取消「收到消息自动退出」，仅 chip「×」退出；退出时技能即清、文件/知识库/工具会话内保留、再进回填；文件 chip 失效标记联动 TC-5，design §9.3.8）。**对** C1/C3/C4。**覆盖** FR-1.x（含 FR-1.8）/2.x。
@@ -237,7 +237,9 @@ flowchart TD
   **手动验证**：WS mock 回放 fixtures → 全流程 UI 正确；断连重连恢复；排队态→规划中切换正确。
 
 ### Track I · 前端·Platform
-- [ ] **TI-1** Skill 管理页（列表/搜索/Preview·Source/上传·新建/编辑/删除/启停/校验/空态）。**对** C3 mock。**覆盖** FR-5.x。
+- [x] **TI-1** Skill 管理页（列表/搜索/Preview·Source/上传·新建/编辑/删除/启停/校验/空态）。**对** C3 mock。**覆盖** FR-5.x。
+  ↳ 2026-06-12 由 D/G owner 代完成（用户授权越界）：`components/LinSight/skill/{SkillManagement,SkillFormDrawer,SkillUploadDialog,SkillDetailSheet}.tsx` + `skillApi`；列表仅展示 display_name（FR-5.1）、bundle 文件树详情（FR-5.14）、上传 .md/.zip/.skill（**文件夹上传暂缓**：需引入 jszip 前端打包，留 Track I 后续）、技能 ID 自动拼音走后端 `GET /skill/slugify`（新增 helper，复用 slugify_pinyin）。
+- [x] **TI-4**（新增，PRD §4.8 / FR-8.x，偏差 D9）工作台配置「灵思」tab 并入「日常」：移除灵思 tab（`DialogueWork.tsx`）；「任务模式展示名称/任务模式输入框提示语」并入日常 tab（读写 `workstation/config/linsight` 的 `tab_display_name/input_placeholder`，`linsight_entry/tools` 字段原样回写不丢）；技能管理区挂首页 tab「推荐应用」上方。**2026-06-12 二次调整（用户确认）**：「日常」tab 更名「首页」（bench.home）；移除「日常模式展示名称」配置项（值仍随保存原样回写）；新增「应用」tab（`AppCenter.tsx`）承载「应用中心欢迎语/描述」（仍写 daily 配置，整包 round-trip）。`LingSiWork.tsx` 成为死代码，随 AC-8 SOP 链路下线一并清理。
 - [ ] **TI-2** 模型配置：工作台对话模型行「灵思默认模型」单选；移除「灵思任务执行模型」区。**对** C4。**覆盖** §4.1.10。
 - [ ] **TI-3** 角色编辑器「工作台菜单→首页→任务模式」开关。**对** C6。**覆盖** FR-7.8。
 
@@ -264,3 +266,7 @@ flowchart TD
 - **D3（C3 端点 id→name 对齐 design §7.5）**：依赖与契约约定 §4 草案用 `/skill/{id}` + `PATCH .../enabled`；冻结时收敛到 design §7.5 的 `/skill/{name}` + `PATCH .../status` + 新增 `GET /skill/selectable`。mock 已据此产出。
 - **D4（C5 Redis checkpointer → 自研 plain-Redis，2026-06-11 决策已落）**：POC P3 实测 `langgraph-checkpoint-redis` 依赖 RediSearch（Redis Stack），现网不支持。经用户决策采用**方案②自研 plain-Redis checkpointer**。实现位置：`bisheng/linsight/domain/services/checkpointer.py`（`PlainRedisCheckpointer` + `make_checkpointer()`，Wave 0 已交付）；`langgraph-checkpoint-redis` 已从 pyproject.toml 移除，uv.lock 已重新锁定。Key schema、TTL、`adelete_thread` 见 C5 契约（§5）。Track B TB-2 直接基于此文件实现 worker 装配。
 - **D5（C2 WorkspaceBackend 须实现 deepagents BackendProtocol）**：POC P1 实测真实 backend 协议方法返回 `ReadResult/WriteResult/LsResult/EditResult`（非契约草案的 `bytes|str`），且含 `glob/grep/upload/download`。Track C 实现以 `deepagents.backends.filesystem.FilesystemBackend` 为准；fixtures 的 `FakeWorkspaceBackend` 为概念级 stub。
+- **D6（display_name + 技能 ID + bundle，2026-06-12 用户确认，C3 契约变更）**：deepagents 0.6.8 硬校验 frontmatter `name` 仅 `[a-z0-9-]`（中文被拒）且须=目录名 → 新增 `display_name`（DB 列 + `metadata.display-name` + API 字段），前端一律显示展示名称、管理列表不展示技能 ID 与来源；上传支持 .md/.zip/.skill/文件夹（bundle 目录形态，整包≤10MB），新增 `GET /skill/{name}/file` 与 `SkillDetail.files[]`；迁移 slug 用 **pypinyin 转拼音**（新依赖 pypinyin）。消费方 A（active_skills 语义不变）/ I（UI 字段）已在契约 §4 标注。PRD §4.5/§1.4 同步。
+- **D7（对账报告降级为脚本运维产物，2026-06-12 用户决策）**：管理页不做迁移提示条/对账报告/待办消除；脚本输出 JSON 摘要（stdout+文件）。PRD §4.6 整改（FR-6.x 收敛 11→9 条）、spec AC-4 改写、design §8.3 改名「迁移摘要结构」。
+- **D8（SkillWhitelistMiddleware 以 SkillsMiddleware 子类实现）**：deepagents 0.6.8 无原生白名单钩子（SkillsMiddleware 仅 backend/sources/system_prompt）→ 自研 `TenantSkillsMiddleware(SkillsMiddleware)`，在 `before_agent/abefore_agent` 过滤 `skills_metadata`（built-in 永放行；租户技能按 `config.configurable.active_skills` ∩ DB enabled）。单类实现消除 design §7.2 的双中间件顺序约束（无 GenerativeUIMiddleware 顺序风险），语义与契约 C3 不变。
+- **D9（工作台配置合并，2026-06-12 用户新增需求，PRD 新增 §4.8）**：管理端「灵思」tab 并入「日常」——入口开关移除（TF 菜单权限承接）、展示名称/提示语更名「任务模式」、**「灵思可选工具」配置废弃（任务模式直接共用日常「可用工具」，不做数据迁移）**、指导手册库整体替换为技能管理。**跨 Track 影响**：TI-2 扩为配置页合并（platform UI）、TE 工具来源改读日常配置、TF 不变；Track D 仅承接「技能管理挂载位置」语义，API 不受影响。

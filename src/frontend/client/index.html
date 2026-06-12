@@ -58,6 +58,16 @@
           height: 100vh;
           background-color: ${backgroundColor};
         }
+
+        #loading-container img {
+          width: 80px;
+          height: 80px;
+          object-fit: contain;
+        }
+
+        #loading-container img:not([src]) {
+          display: none;
+        }
       `;
     document.head.appendChild(loadingContainerStyle);
   </script>
@@ -66,8 +76,33 @@
 
 <body>
   <div id="root">
-    <div id="loading-container"></div>
+    <div id="loading-container">
+      <img id="loading-icon" alt="" />
+    </div>
   </div>
+  <script>
+    (function () {
+      var config = window.BRAND_CONFIG || {};
+      var loadingIcon =
+        config.URLLoadingIcon ||
+        config.loadingIcon ||
+        (config.loading && config.loading.icon && config.loading.icon.url) ||
+        "";
+      var iconElement = document.getElementById("loading-icon");
+
+      if (!loadingIcon || !iconElement) return;
+
+      var absoluteUrlPattern = /^(https?:|data:|blob:|\/\/)/i;
+      var resolvedIcon = loadingIcon;
+
+      if (!absoluteUrlPattern.test(loadingIcon)) {
+        var baseUrl = (brandBaseUrl || "").replace(/\/$/, "");
+        resolvedIcon = baseUrl + (loadingIcon.charAt(0) === "/" ? loadingIcon : "/" + loadingIcon);
+      }
+
+      iconElement.setAttribute("src", resolvedIcon);
+    })();
+  </script>
 </body>
 
 </html>

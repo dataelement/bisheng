@@ -269,3 +269,25 @@ The 3rd argument can be omitted if one of these environment variables is set:
 - `OPENFGA_TUPLE_DB_URL`
 - `OPENFGA_DATASTORE_URL`
 - `OPENFGA_DATASTORE_URI`
+
+## Linsight Scripts (F035)
+
+### `migrate_sop_to_skill.sh` / `migrate_sop_to_skill.py`
+
+One-shot migration of legacy `linsight_sop` rows into tenant custom skills
+(`linsight_skill` + `SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md`).
+`display_name` keeps the original (Chinese) SOP name; the skill ID is a
+pypinyin slug; `metadata.sop-id` makes re-runs idempotent. Prints and writes a
+JSON migration summary (ops artifact — there is no in-product migration report).
+
+Usage (from `src/backend/`, dry-run by default):
+
+```bash
+bash scripts/migrate_sop_to_skill.sh                       # dry-run, all tenants
+bash scripts/migrate_sop_to_skill.sh apply                 # persist
+bash scripts/migrate_sop_to_skill.sh --no-llm apply        # skip LLM summaries for missing descriptions
+bash scripts/migrate_sop_to_skill.sh --tenant-id 2 apply   # single tenant
+```
+
+Options: `--apply` (persist), `--no-llm`, `--tenant-id <id>`,
+`--report-file <path>` (default `./migrate_sop_to_skill_report.json`).

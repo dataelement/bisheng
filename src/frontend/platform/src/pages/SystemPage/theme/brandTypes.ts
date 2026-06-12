@@ -37,11 +37,15 @@ export const DEFAULT_BRAND_CONFIG: BrandConfig = {
         },
     },
     loading: {
-        icon: null,
+        icon: {
+            url: "/assets/bisheng/loading.svg",
+            relative_path: "",
+            file_name: "loading.svg",
+        },
         iconOptions: [],
         animation: "",
     },
-    URLLoadingIcon: "",
+    URLLoadingIcon: "/assets/bisheng/loading.svg",
 };
 
 export const cloneBrandConfig = (config: BrandConfig): BrandConfig => (

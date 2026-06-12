@@ -9,7 +9,16 @@ window.BRAND_CONFIG = {
     },
     URLLoadingIcon: "/assets/bisheng/loading.svg",
     loadingIcon: "/assets/bisheng/loading.svg",
-    loadingAnimation: ""
+    loadingAnimation: "",
+    loading: {
+        icon: {
+            url: "/assets/bisheng/loading.svg",
+            relative_path: "",
+            file_name: "loading.svg"
+        },
+        iconOptions: [],
+        animation: ""
+    }
 };
 
 // Application-wide runtime config (separate from BRAND_CONFIG above).

@@ -518,6 +518,8 @@ interface FileTableProps {
     onEditTags: (id: string) => void;
     onRename: (id: string, newName: string) => void;
     onMove?: (file: KnowledgeFile) => void;
+    /** Space-level move permission; when false the row's move item shows greyed. */
+    canMove?: boolean;
     /** F034 drag-move: drop dragged items into a same-space folder. */
     onMoveToFolder?: (folderId: string, items: KnowledgeFile[], folderName: string) => void;
     onDelete: (id: string) => void;
@@ -541,7 +543,7 @@ interface FileTableProps {
     canManageMembers?: boolean;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onMove, onMoveToFolder, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onMove, canMove = false, onMoveToFolder, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, versionManagementEnabled, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -650,6 +652,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onEditTags={() => onEditTags(file.id)}
                                 onRename={(newName) => onRename(file.id, newName)}
                                 onMove={onMove ? () => onMove(file) : undefined}
+                                canMove={canMove}
                                 onDelete={() => onDelete(file.id)}
                                 onRetry={() => onRetry?.(file.id)}
                                 onNavigateFolder={() => onNavigateFolder?.(file.id)}
@@ -721,6 +724,7 @@ function FileRow({
     onEditTags,
     onRename,
     onMove,
+    canMove = false,
     onDelete,
     onRetry,
     onNavigateFolder,
@@ -758,6 +762,7 @@ function FileRow({
     onEditTags: () => void;
     onRename: (newName: string) => void;
     onMove?: () => void;
+    canMove?: boolean;
     onDelete: () => void;
     onRetry: () => void;
     onNavigateFolder?: () => void;
@@ -877,8 +882,9 @@ function FileRow({
                                 {localize("com_knowledge.rename")}
                             </DropdownMenuItem>
                         )}
-                        {onMove && !isCreating && !isUploading && (
+                        {onMove && !isCreating && (
                             <DropdownMenuItem
+                                disabled={!canMove || isUploading}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onMove();
