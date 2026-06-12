@@ -114,7 +114,6 @@
     "tailwindcss-animate": "^1.0.5",
     "tailwindcss-radix": "^2.8.0",
     "uuid": "^11.1.0",
-    "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^3.1.1",
     "xlsx": "^0.18.5",

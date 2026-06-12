@@ -13,7 +13,7 @@ export function getLinsightSessionVersionList(ConversationId: string, shareToken
         return res.data.map(item => {
                 return {
                     ...item,
-                    sop: item.sop?.replace(/^---/, '')?.replace(/\`\`\`markdown/g, '```') ?? '' // 去除markdown标记，否则vditor编辑器会显示为代码块
+                    sop: item.sop?.replace(/^---/, '')?.replace(/\`\`\`markdown/g, '```') ?? '' // strip markdown fences from legacy SOP text for plain rendering
                 }
             }
         )

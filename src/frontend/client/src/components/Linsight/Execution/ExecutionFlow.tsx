@@ -8,7 +8,7 @@
  * after the old TaskFlow stops rendering.
  */
 import { CircleAlert, FolderOpen, OctagonX } from 'lucide-react';
-import { useMemo, useRef, type ReactNode } from 'react';
+import { useMemo, useRef } from 'react';
 import { SopStatus } from '~/store/linsight';
 import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
@@ -34,8 +34,6 @@ interface ExecutionFlowProps {
     /** conversation id for the input's per-session memory */
     conversationId?: string;
     isSharePage?: boolean;
-    /** share-page footer (e.g. "make same style"), injected to avoid imports back into Sop */
-    shareControls?: ReactNode;
 }
 
 /** Collect every clarify (call_user_input) entry across session + tasks. */
@@ -51,7 +49,7 @@ function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[])
     return entries;
 }
 
-export function ExecutionFlow({ versionId, conversationId, isSharePage = false, shareControls }: ExecutionFlowProps) {
+export function ExecutionFlow({ versionId, conversationId, isSharePage = false }: ExecutionFlowProps) {
     const localize = useLocalize();
     const { getLinsight } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
@@ -186,9 +184,9 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     </div>
                 )}
                 <TaskPanel tasks={tasks} completed={completed} />
-                {isSharePage ? (
-                    (completed || stopped) && shareControls
-                ) : (
+                {/* Share pages are read-only — no input, no footer controls
+                    ("make same style" removed per product decision, F035). */}
+                {!isSharePage && (
                     <TaskModeInput
                         conversationId={conversationId || linsight?.session_id || 'new'}
                         disabled={running || !!pendingInput}

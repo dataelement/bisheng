@@ -46,7 +46,6 @@ import './locales/i18n';
 import App from './App';
 import './style.css';
 import './mobile.css';
-import './vditor.css';
 import { ApiErrorBoundaryProvider } from './hooks/ApiErrorBoundaryContext';
 
 if (__VCONSOLE_ENABLED__) {

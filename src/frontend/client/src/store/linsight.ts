@@ -129,7 +129,6 @@ export type SubmissionState = {
     enableWebSearch: boolean;
     useKnowledgeBase: boolean;
     prevVersionId?: string;
-    sameSopId?: string | number;
 };
 
 // 使用atomFamily管理每个会话的状态 会话id-版本id:状态

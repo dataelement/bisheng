@@ -11,9 +11,6 @@ import { LoadingIcon } from '../ui/icon/Loading';
 import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
 import { SopStatus } from '~/store/linsight';
-import { useLocalize } from '~/hooks';
-import { MousePointerClick } from 'lucide-react';
-import { Button } from '../ui';
 
 export default function index({ id = '', vid = '', shareToken = '' }) {
     // 获取url参数
@@ -59,7 +56,6 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                         versionId={versionId}
                         conversationId={conversationId}
                         isSharePage={!!(isSharePage || sopId)}
-                        shareControls={<ShareSameSopControls name={getLinsight(versionId)?.title || ''} />}
                     />
                 </div>
             )}
@@ -67,25 +63,8 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     );
 }
 
-// 分享页做同款
-// LEGACY (F035): kept only for the /linsight/case share page. The SOP-based
-// "make same style" injection was removed with the de-SOP submit pipeline, so
-// this button now only lands on the chat landing page (?name/?path are no
-// longer consumed). Remove or repoint once product decides the share-page fate.
-export const ShareSameSopControls = ({ name }) => {
-    const localize = useLocalize();
-
-    return <div className="px-4 pb-6">
-        <div className="flex gap-3 p-4 px-6 justify-between items-center bg-white rounded-3xl border border-gray-100 relative">
-            <div className="flex items-center gap-2">
-            </div>
-            <Button className="px-6" onClick={() => window.open(`${__APP_ENV__.BASE_URL}/c/new?name=${encodeURIComponent(name)}&path=${encodeURIComponent(location.pathname)}`)} >
-                <MousePointerClick className="w-3.5 h-3.5" />
-                {localize('com_make_samestyle')}
-            </Button>
-        </div>
-    </div >
-}
+// "Make same style" (做同款) removed per product decision (F035): the SOP-based
+// injection it relied on no longer exists in the de-SOP pipeline.
 
 
 export const useLinsightData = ({ vid, sopId, conversationId, shareToken }

@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
 import { v4 } from 'uuid';
 import { useAddedChatContext, useChatContext, useChatFormContext } from '~/Providers';
-import { sameSopLabelState } from '~/components/Chat/Input/SameSopSpan';
 import { Constants } from '~/types/chat';
 import { useAuthContext } from '~/hooks/AuthContext';
 import store from '~/store';
@@ -28,7 +27,6 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
   const setActivePrompt = useSetRecoilState(store.activePromptByIndex(index));
   const { setLinsightSubmission } = useLinsightSessionManager('new')
   const setFilesToDelete = useSetFilesToDelete();
-  const [sameSopLabel, setSameSopLabel] = useRecoilState(sameSopLabelState)
 
   const submitMessage = useCallback(
     (data?: {
@@ -43,7 +41,6 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
 
       if (data?.linsight) {
         setLinsightSubmission('new', {
-          sameSopId: sameSopLabel?.id || undefined,
           isNew: true,
           files: Array.from(data.files?.values() || []).map(item => ({
             file_id: item.file_id,
@@ -53,7 +50,8 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
           question: data?.text,
           // feedback: '',
           tools: data.tools,
-          model: 'gpt-4',
+          // empty -> backend falls back to the tenant's linsight default model
+          model: '',
           enableWebSearch: false,
           useKnowledgeBase: true,
           orgKnowledgeBaseIds: data.knowledge?.orgKbIds ?? [],
@@ -62,8 +60,7 @@ export default function useSubmitMessage(helpers?: { clearDraft?: () => void }) 
         methods.reset();
         setFiles?.(new Map())
         setFilesToDelete({});
-        helpers?.clearDraft && helpers.clearDraft();
-        return setSameSopLabel(null);
+        return;
       }
       // 检查最新消息是否在会话中
       const rootMessages = getMessages();
