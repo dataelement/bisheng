@@ -491,7 +491,7 @@ class TestListRoles:
 class TestRoleDaoVisibility:
     def test_dept_admin_query_includes_unscoped_tenant_roles(self):
         source = (
-            Path(__file__).resolve().parents[1]
+            Path(__file__).resolve().parents[2]
             / 'bisheng'
             / 'database'
             / 'models'

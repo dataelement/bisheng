@@ -33,14 +33,13 @@ def _load_tasks_module() -> ModuleType:
 
     # Provide a stub parent package to satisfy `bisheng.worker.tenant_reconcile.tasks`
     # resolution without triggering worker/__init__.py.
-    if 'bisheng.worker' not in sys.modules or not isinstance(
-        getattr(sys.modules['bisheng.worker'], '__path__', None), list,
-    ):
+    _worker_path = getattr(sys.modules.get('bisheng.worker'), '__path__', None)
+    if not (isinstance(_worker_path, list) and _worker_path):
         stub_pkg = ModuleType('bisheng.worker')
         stub_pkg.__path__ = [str(
             Path('/opt/bisheng/src/backend/bisheng/worker')
             if Path('/opt/bisheng/src/backend/bisheng/worker').exists()
-            else Path(__file__).parent.parent / 'bisheng' / 'worker'
+            else Path(__file__).parent.parent.parent / 'bisheng' / 'worker'
         )]
         sys.modules['bisheng.worker'] = stub_pkg
     if 'bisheng.worker.tenant_reconcile' not in sys.modules:

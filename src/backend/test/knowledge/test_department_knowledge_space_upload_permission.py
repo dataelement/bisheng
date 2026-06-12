@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from test.test_knowledge_space_service import (
+from test.knowledge.test_knowledge_space_service import (
     _load_service_class,
     _make_file,
     _make_login_user,

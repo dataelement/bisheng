@@ -20,7 +20,7 @@ def _load_tenant_context():
     """Load worker/tenant_context.py directly, bypassing worker/__init__.py."""
     import os
     module_path = os.path.join(
-        os.path.dirname(__file__), '..', 'bisheng', 'worker', 'tenant_context.py',
+        os.path.dirname(__file__), '..', '..', 'bisheng', 'worker', 'tenant_context.py',
     )
     module_path = os.path.abspath(module_path)
     spec = importlib.util.spec_from_file_location('bisheng.worker.tenant_context', module_path)

@@ -8,7 +8,7 @@ import pytest
 
 
 def _load_tool_service_module():
-    service_dir = Path(__file__).resolve().parents[1] / 'bisheng' / 'tool' / 'domain' / 'services'
+    service_dir = Path(__file__).resolve().parents[2] / 'bisheng' / 'tool' / 'domain' / 'services'
     stubbed = [
         'bisheng.api.services.audit_log',
         'bisheng.api.utils',

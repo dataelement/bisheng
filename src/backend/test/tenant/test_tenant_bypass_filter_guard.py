@@ -41,7 +41,7 @@ import os
 from typing import List, Set, Tuple
 
 _BISHENG_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', 'bisheng'),
+    os.path.join(os.path.dirname(__file__), '..', '..', 'bisheng'),
 )
 _SKIP_DIR_FRAGMENTS = (
     f'{os.sep}test{os.sep}',

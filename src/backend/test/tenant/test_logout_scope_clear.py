@@ -32,7 +32,7 @@ import pytest
 
 
 USER_PY = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent.parent.parent
     / 'bisheng' / 'user' / 'api' / 'user.py'
 )
 

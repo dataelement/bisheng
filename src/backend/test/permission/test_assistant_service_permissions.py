@@ -11,7 +11,7 @@ from bisheng.database.models.role_access import AccessType
 
 
 def _load_assistant_service_module():
-    service_dir = Path(__file__).resolve().parents[1] / 'bisheng' / 'api' / 'services'
+    service_dir = Path(__file__).resolve().parents[2] / 'bisheng' / 'api' / 'services'
     stubbed = [
         'bisheng.api',
         'bisheng.api.services',

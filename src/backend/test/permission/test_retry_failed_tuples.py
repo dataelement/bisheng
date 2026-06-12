@@ -7,7 +7,7 @@ from types import SimpleNamespace
 def _load_retry_module():
     fake_celery = SimpleNamespace(task=lambda *args, **kwargs: (lambda fn: fn))
     sys.modules['bisheng.worker.main'] = SimpleNamespace(bisheng_celery=fake_celery)
-    path = Path(__file__).resolve().parents[1] / 'bisheng/worker/permission/retry_failed_tuples.py'
+    path = Path(__file__).resolve().parents[2] / 'bisheng/worker/permission/retry_failed_tuples.py'
     spec = importlib.util.spec_from_file_location('retry_failed_tuples_under_test', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

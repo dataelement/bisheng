@@ -55,7 +55,7 @@ def _load_reconcile_tasks_module() -> ModuleType:
     # Path is derived from this test file so the loader works from any
     # worktree/CI checkout (F012's hard-coded /opt/bisheng/ fallback
     # would shadow a worktree copy with the CI main-line tree).
-    backend_root = Path(__file__).resolve().parent.parent / 'bisheng' / 'worker'
+    backend_root = Path(__file__).resolve().parent.parent.parent / 'bisheng' / 'worker'
     if 'bisheng.worker' not in sys.modules or not isinstance(
         getattr(sys.modules['bisheng.worker'], '__path__', None), list,
     ):

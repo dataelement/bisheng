@@ -35,7 +35,7 @@ from sqlalchemy.engine import Engine
 
 
 _F034_PATH = (
-    Path(__file__).resolve().parent.parent
+    Path(__file__).resolve().parent.parent.parent
     / 'bisheng/core/database/alembic/versions/v2_5_1_f034_tenant_system_model_config.py'
 )
 

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from bisheng.database.models.flow import FlowType
 def _load_apps_module():
-    api_dir = Path(__file__).resolve().parents[1] / 'bisheng' / 'workstation' / 'api'
+    api_dir = Path(__file__).resolve().parents[2] / 'bisheng' / 'workstation' / 'api'
     endpoints_dir = api_dir / 'endpoints'
     stubbed_module_names = [
         'bisheng.workstation.api',

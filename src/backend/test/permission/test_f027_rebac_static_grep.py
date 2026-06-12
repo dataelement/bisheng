@@ -17,7 +17,7 @@ import subprocess
 from pathlib import Path
 
 
-_BISHENG = Path(__file__).resolve().parents[1] / "bisheng"
+_BISHENG = Path(__file__).resolve().parents[2] / "bisheng"
 
 
 def _grep_count(pattern: str, *paths: str, extra_args: list[str] | None = None) -> int:

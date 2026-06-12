@@ -10,7 +10,7 @@ from bisheng.database.models.flow import FlowType
 
 
 def _load_workflow_service_module():
-    service_dir = Path(__file__).resolve().parents[1] / 'bisheng' / 'api' / 'services'
+    service_dir = Path(__file__).resolve().parents[2] / 'bisheng' / 'api' / 'services'
     stubbed = [
         'bisheng.api',
         'bisheng.api.services',

@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from test.test_knowledge_space_service import _load_service_class
+from test.knowledge.test_knowledge_space_service import _load_service_class
 
 
 @pytest.mark.asyncio

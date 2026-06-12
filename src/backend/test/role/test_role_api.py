@@ -101,7 +101,7 @@ class TestRoleEndpoints:
     def test_group_roles_admin_uses_visible_role_catalog(self):
         """Legacy user-role editor endpoint must include v2.5 roles with group_id=NULL."""
         source = (
-            Path(__file__).resolve().parents[1]
+            Path(__file__).resolve().parents[2]
             / 'bisheng'
             / 'api'
             / 'v1'
@@ -118,7 +118,7 @@ class TestRoleEndpoints:
     def test_user_role_save_uses_v25_role_catalog(self):
         """Saving user-role edits must accept v2.5 roles with group_id=NULL."""
         source = (
-            Path(__file__).resolve().parents[1]
+            Path(__file__).resolve().parents[2]
             / 'bisheng'
             / 'user'
             / 'api'

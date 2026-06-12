@@ -39,7 +39,7 @@ def _load_tasks_module() -> ModuleType:
         # test works under any checkout root (main repo, worktrees,
         # /opt/bisheng, /opt/bisheng-f019, etc.). A hard-coded /opt path
         # would break the moment we run inside a worktree.
-        worker_path = Path(__file__).resolve().parent.parent / 'bisheng' / 'worker'
+        worker_path = Path(__file__).resolve().parent.parent.parent / 'bisheng' / 'worker'
         stub_pkg = ModuleType('bisheng.worker')
         stub_pkg.__path__ = [str(worker_path)]
         sys.modules['bisheng.worker'] = stub_pkg
