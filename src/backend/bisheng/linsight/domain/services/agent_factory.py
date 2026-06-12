@@ -109,12 +109,14 @@ async def _resolve_model(session_model, model_id: str | None) -> BaseChatModel:
 
     resolved_id = model_id
     if resolved_id is None:
-        # C4 (Track E) introduces ``linsight_default_model_id``; until it lands
-        # we fall back to the existing task_model.id. TODO(F035 C4): switch to
-        # workbench_conf.linsight_default_model_id once Track E merges.
-        resolved_id = getattr(workbench_conf, "linsight_default_model_id", None)
+        # F035 (Track E): per-task model omitted -> fall back to the tenant
+        # Linsight default model id. task_model has been removed.
+        resolved_id = workbench_conf.linsight_default_model_id
         if resolved_id is None:
-            resolved_id = workbench_conf.task_model.id
+            raise ValueError(
+                "No model resolved: per-task model_id is empty and the tenant "
+                "linsight_default_model_id is not configured"
+            )
 
     return await LLMService.get_bisheng_linsight_llm(
         invoke_user_id=session_model.user_id,

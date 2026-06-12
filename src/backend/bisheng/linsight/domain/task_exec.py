@@ -338,9 +338,13 @@ class LinsightWorkflowTask:
             # _create_agent.
             workbench_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id)
             linsight_conf = settings.get_linsight_conf()
+            # F035: single default-model id replaces the removed task_model.
+            model_id = workbench_conf.linsight_default_model_id
+            if not model_id:
+                raise ValueError("linsight_default_model_id is not configured")
             return await LLMService.get_bisheng_linsight_llm(
                 invoke_user_id=invoke_user_id,
-                model_id=workbench_conf.task_model.id,
+                model_id=model_id,
                 temperature=linsight_conf.default_temperature,
             )
         except Exception:

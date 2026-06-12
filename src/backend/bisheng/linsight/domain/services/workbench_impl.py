@@ -107,7 +107,7 @@ class LinsightWorkbenchImpl:
         linsight_conf = settings.get_linsight_conf()
         llm = await LLMService.get_bisheng_linsight_llm(
             invoke_user_id=invoke_user_id,
-            model_id=workbench_conf.task_model.id,
+            model_id=workbench_conf.linsight_default_model_id,
             temperature=linsight_conf.default_temperature,
         )
         return llm, workbench_conf
@@ -195,6 +195,7 @@ class LinsightWorkbenchImpl:
                 org_knowledge_enabled=submit_obj.org_knowledge_enabled,
                 personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
                 files=processed_files,
+                model=submit_obj.model,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
 
@@ -401,7 +402,7 @@ class LinsightWorkbenchImpl:
     async def _get_workbench_config(cls):
         """Get and validate the workbench configuration"""
         workbench_conf = await LLMService.get_workbench_llm()
-        if not workbench_conf or not workbench_conf.task_model:
+        if not workbench_conf or not workbench_conf.linsight_default_model_id:
             raise cls.BishengLLMError(
                 "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model"
             )
@@ -663,7 +664,6 @@ class LinsightWorkbenchImpl:
             query=session_version.question,
             llm=llm,
             tools=tools,
-            task_mode=workbench_conf.linsight_executor_mode,
             exec_config=exec_config,
         )
 

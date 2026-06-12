@@ -1,7 +1,7 @@
 import io
 import json
 import uuid
-from typing import List, Dict, Literal
+from typing import Literal
 
 import openpyxl
 from fastapi import UploadFile
@@ -17,29 +17,36 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.errcode.linsight import (
-    LinsightAddSopError, LinsightUpdateSopError, LinsightDeleteSopError,
-    LinsightVectorModelError, LinsightDocSearchError, LinsightDocNotFoundError, SopContentOverLimitError
+    LinsightAddSopError,
+    LinsightDeleteSopError,
+    LinsightDocNotFoundError,
+    LinsightDocSearchError,
+    LinsightUpdateSopError,
+    LinsightVectorModelError,
+    SopContentOverLimitError,
 )
 from bisheng.common.errcode.server import (
-    NoEmbeddingModelError, EmbeddingModelNotExistError, EmbeddingModelTypeError, UploadFileEmptyError
+    EmbeddingModelNotExistError,
+    EmbeddingModelTypeError,
+    NoEmbeddingModelError,
+    UploadFileEmptyError,
 )
 from bisheng.common.services.config_service import settings
 from bisheng.core.ai import FakeEmbeddings
-from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.core.prompts.manager import get_prompt_manager
+from bisheng.database.models.tenant import ROOT_TENANT_ID
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOP, LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
 from bisheng.linsight.domain.schemas.linsight_schema import SopRecordRead
 from bisheng.llm.domain.const import LLMModelType
-from bisheng.llm.domain.models import LLMDao
 from bisheng.llm.domain.services import LLMService
 from bisheng.llm.domain.share_fallback import (
     get_model_by_id_with_share_fallback,
 )
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import util
-from bisheng_langchain.rag.init_retrievers import KeywordRetriever, BaselineVectorRetriever
+from bisheng_langchain.rag.init_retrievers import BaselineVectorRetriever, KeywordRetriever
 from bisheng_langchain.retrievers import EnsembleRetriever
 from bisheng_langchain.vectorstores import Milvus
 
@@ -50,7 +57,7 @@ class SOPManageService:
     collection_name = "col_linsight_sop"
 
     @staticmethod
-    async def generate_sop_summary(invoke_user_id: int, sop_content: str, llm: BaseChatModel = None) -> Dict[str, str]:
+    async def generate_sop_summary(invoke_user_id: int, sop_content: str, llm: BaseChatModel = None) -> dict[str, str]:
         """BuatSOPAbstract"""
         default_summary = {"sop_title": "SOP Title", "sop_description": "SOP Description"}
 
@@ -64,20 +71,17 @@ class SOPManageService:
                 # 锚到 Root 以保留原行为。SOP 真要按租户分库属于 v2.6+ 工作。
                 workbench_conf = await LLMService.get_workbench_llm(tenant_id=ROOT_TENANT_ID)
                 linsight_conf = settings.get_linsight_conf()
-                llm = await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
-                                                                model_id=workbench_conf.task_model.id,
-                                                                temperature=linsight_conf.default_temperature)
+                llm = await LLMService.get_bisheng_linsight_llm(
+                    invoke_user_id=invoke_user_id,
+                    model_id=workbench_conf.linsight_default_model_id,
+                    temperature=linsight_conf.default_temperature,
+                )
             prompt_service = await get_prompt_manager()
             prompt_obj = prompt_service.render_prompt(
-                namespace="sop",
-                prompt_name="gen_sop_summary",
-                sop_detail=sop_content
+                namespace="sop", prompt_name="gen_sop_summary", sop_detail=sop_content
             )
 
-            prompt = [
-                ("system", prompt_obj.prompt.system),
-                ("user", prompt_obj.prompt.user)
-            ]
+            prompt = [("system", prompt_obj.prompt.system), ("user", prompt_obj.prompt.user)]
 
             response = await llm.ainvoke(prompt)
             if not response.content:
@@ -103,8 +107,9 @@ class SOPManageService:
         return await LinsightSOPDao.create_sop_record(sop_record)
 
     @staticmethod
-    async def get_sop_record(keyword: str = None, sort: str = None, page: int = 1, page_size: int = 10) -> \
-            (List[SopRecordRead], int):
+    async def get_sop_record(
+        keyword: str = None, sort: str = None, page: int = 1, page_size: int = 10
+    ) -> (list[SopRecordRead], int):
         """
         Query by keywordSOPRecord
         """
@@ -120,9 +125,7 @@ class SOPManageService:
             return [], 0
 
         all_users = await UserDao.afilter_users(user_ids=[one.user_id for one in res])
-        all_users = {
-            one.user_id: one.user_name for one in all_users
-        }
+        all_users = {one.user_id: one.user_name for one in all_users}
 
         result = []
         for one in res:
@@ -140,8 +143,9 @@ class SOPManageService:
         await LinsightSOPDao.update_sop_record_feedback(session_version_id, feedback)
 
     @classmethod
-    async def sync_sop_record(cls, record_ids: list[int], override: bool = False, save_new: bool = False) \
-            -> list[str] | None:
+    async def sync_sop_record(
+        cls, record_ids: list[int], override: bool = False, save_new: bool = False
+    ) -> list[str] | None:
         """
         SynchronousSOPRecord
         :param record_ids: SOPRecordIDVertical
@@ -154,9 +158,9 @@ class SOPManageService:
         return await cls._sync_sop_record(sop_records, override, save_new)
 
     @staticmethod
-    async def _sync_sop_record(sop_records: list[LinsightSOPRecord], override: bool = False, save_new: bool = False) \
-            -> list[str] | None:
-
+    async def _sync_sop_record(
+        sop_records: list[LinsightSOPRecord], override: bool = False, save_new: bool = False
+    ) -> list[str] | None:
         """
         If there is a duplicateSOPrecords, returning a list of duplicate record names
         """
@@ -187,54 +191,65 @@ class SOPManageService:
             override_name_dict = {}
             for one in sop_list:
                 if one_record := records_name_dict.get(one.name):
-                    await SOPManageService.update_sop(SOPManagementUpdateSchema(
-                        id=one.id,
-                        name=one.name,
-                        description=one_record.description,
-                        content=one_record.content,
-                        rating=one_record.rating,
-                        linsight_version_id=one_record.linsight_version_id,
-                        showcase=False,
-                        user_id=one_record.user_id,
-                    ))
+                    await SOPManageService.update_sop(
+                        SOPManagementUpdateSchema(
+                            id=one.id,
+                            name=one.name,
+                            description=one_record.description,
+                            content=one_record.content,
+                            rating=one_record.rating,
+                            linsight_version_id=one_record.linsight_version_id,
+                            showcase=False,
+                            user_id=one_record.user_id,
+                        )
+                    )
                     override_name_dict[one.name] = True
             # Add the restsopRecord
             for one in records_name_dict.values():
                 if one.name in override_name_dict:
                     continue
-                await SOPManageService.add_sop(SOPManagementSchema(
-                    name=one.name,
-                    description=one.description,
-                    content=one.content,
-                    rating=one.rating,
-                    linsight_version_id=one.linsight_version_id,
-                ), one.user_id)
+                await SOPManageService.add_sop(
+                    SOPManagementSchema(
+                        name=one.name,
+                        description=one.description,
+                        content=one.content,
+                        rating=one.rating,
+                        linsight_version_id=one.linsight_version_id,
+                    ),
+                    one.user_id,
+                )
         elif save_new:
             for one in sop_records:
                 new_name = one.name
                 if new_name in repeat_names:
                     # Add suffix if there are duplicate records, Limit Length500characters
                     new_name = f"{one.name} 副本"
-                await SOPManageService.add_sop(SOPManagementSchema(
-                    name=new_name,
-                    description=one.description,
-                    content=one.content,
-                    rating=one.rating,
-                    linsight_version_id=one.linsight_version_id,
-                ), one.user_id)
+                await SOPManageService.add_sop(
+                    SOPManagementSchema(
+                        name=new_name,
+                        description=one.description,
+                        content=one.content,
+                        rating=one.rating,
+                        linsight_version_id=one.linsight_version_id,
+                    ),
+                    one.user_id,
+                )
         else:
             # Explain that there is a duplicate record, which needs to be confirmed by the user
             if sop_list:
                 return list(repeat_names)
             # Insert a record into the database
             for one in sop_records:
-                await SOPManageService.add_sop(SOPManagementSchema(
-                    name=one.name,
-                    description=one.description,
-                    content=one.content,
-                    rating=one.rating,
-                    linsight_version_id=one.linsight_version_id,
-                ), one.user_id)
+                await SOPManageService.add_sop(
+                    SOPManagementSchema(
+                        name=one.name,
+                        description=one.description,
+                        content=one.content,
+                        rating=one.rating,
+                        linsight_version_id=one.linsight_version_id,
+                    ),
+                    one.user_id,
+                )
         if oversize_records:
             raise SopContentOverLimitError(data={"sop_name": "、".join(oversize_records)})
         return None
@@ -271,25 +286,24 @@ class SOPManageService:
                 if description and len(str(description)) >= 1000:
                     error_msg.append("description_over_size")
                 if error_msg:
-                    error_rows.append({
-                        "index": i,
-                        "error_msg": error_msg
-                    })
+                    error_rows.append({"index": i, "error_msg": error_msg})
                 else:
-                    success_rows.append({
-                        "name": str(name),
-                        "description": str(description) if description is not None else "",
-                        "content": str(content),
-                    })
+                    success_rows.append(
+                        {
+                            "name": str(name),
+                            "description": str(description) if description is not None else "",
+                            "content": str(content),
+                        }
+                    )
         finally:
             if wb:
                 wb.close()
         return success_rows, error_rows
 
     @classmethod
-    async def upload_sop_file(cls, login_user: UserPayload, file: UploadFile, ignore_error: bool, override: bool,
-                              save_new: bool) \
-            -> (List[Dict], List[Dict], List[str]):
+    async def upload_sop_file(
+        cls, login_user: UserPayload, file: UploadFile, ignore_error: bool, override: bool, save_new: bool
+    ) -> (list[dict], list[dict], list[str]):
         """
         Upload itSOPDoc.
         :param login_user: Logged in user information
@@ -309,8 +323,14 @@ class SOPManageService:
         return [], [], repeat_name_list
 
     @classmethod
-    async def get_sop_list(cls, keywords: str = None, sort: Literal["asc", "desc"] = "desc", showcase: bool = False,
-                           page: int = 1, page_size: int = 10) -> dict:
+    async def get_sop_list(
+        cls,
+        keywords: str = None,
+        sort: Literal["asc", "desc"] = "desc",
+        showcase: bool = False,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> dict:
         """
         DapatkanSOPVertical
         :param keywords: Keyword
@@ -320,9 +340,9 @@ class SOPManageService:
         :param showcase: Whether to show only the selected cases ofSOP
         :return: SOPLists and totals
         """
-        sop_pages = await LinsightSOPDao.get_sop_page(keywords=keywords, showcase=showcase, page=page,
-                                                      page_size=page_size,
-                                                      sort=sort)
+        sop_pages = await LinsightSOPDao.get_sop_page(
+            keywords=keywords, showcase=showcase, page=page, page_size=page_size, sort=sort
+        )
         user_ids = list(set([one["user_id"] for one in sop_pages["items"]]))
         user_map = UserDao.aget_user_by_ids(user_ids=user_ids)
         user_map = {one.user_id: one.user_name for one in await user_map}
@@ -359,11 +379,11 @@ class SOPManageService:
 
         vector_store_id = uuid.uuid4().hex
 
-        embeddings = await LLMService.get_bisheng_linsight_embedding(model_id=embed_info.id,
-                                                                     invoke_user_id=user_id)
+        embeddings = await LLMService.get_bisheng_linsight_embedding(model_id=embed_info.id, invoke_user_id=user_id)
         try:
-            vector_client: Milvus = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
-                                                                         embeddings=embeddings)
+            vector_client: Milvus = KnowledgeRag.init_milvus_vectorstore(
+                SOPManageService.collection_name, embeddings=embeddings
+            )
 
             es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=SOPManageService.collection_name)
             metadatas = [{"vector_store_id": vector_store_id}]
@@ -381,8 +401,9 @@ class SOPManageService:
         return resp_200(data=sop_model)
 
     @staticmethod
-    async def update_sop(sop_obj: SOPManagementUpdateSchema,
-                         update_version_id: bool = True) -> UnifiedResponseModel | None:
+    async def update_sop(
+        sop_obj: SOPManagementUpdateSchema, update_version_id: bool = True
+    ) -> UnifiedResponseModel | None:
         """
         UpdateSOP
         :param sop_obj:
@@ -397,7 +418,6 @@ class SOPManageService:
             sop_obj.linsight_version_id = existing_sop[0].linsight_version_id
 
         if sop_obj.content != existing_sop[0].content:
-
             # Get the current global configuration ofembeddingModels
             workbench_conf = await LLMService.get_workbench_llm(tenant_id=ROOT_TENANT_ID)
             try:
@@ -408,13 +428,15 @@ class SOPManageService:
                 return NoEmbeddingModelError.return_resp()
 
             vector_store_id = existing_sop[0].vector_store_id
-            embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=sop_obj.user_id,
-                                                                         model_id=int(emb_model_id))
+            embeddings = await LLMService.get_bisheng_linsight_embedding(
+                invoke_user_id=sop_obj.user_id, model_id=int(emb_model_id)
+            )
 
             # Update Vector Store
             try:
-                vector_client = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
-                                                                     embeddings=embeddings)
+                vector_client = KnowledgeRag.init_milvus_vectorstore(
+                    SOPManageService.collection_name, embeddings=embeddings
+                )
                 es_client = KnowledgeRag.init_es_vectorstore(index_name=SOPManageService.collection_name)
                 await vector_client.adelete(expr=f"vector_store_id == '{vector_store_id}'")
                 await es_client.adelete([vector_store_id])
@@ -479,7 +501,7 @@ class SOPManageService:
 
     # sop Library Retrieval
     @classmethod
-    async def search_sop(cls, invoke_user_id: int, query: str, k: int = 3) -> (List[Document], BaseErrorCode | None):
+    async def search_sop(cls, invoke_user_id: int, query: str, k: int = 3) -> (list[Document], BaseErrorCode | None):
         """
         CariSOP
         :param k:
@@ -498,11 +520,12 @@ class SOPManageService:
             else:
                 try:
                     emb_model_id = workbench_conf.embedding_model.id
-                    embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
-                                                                                 model_id=int(emb_model_id))
+                    embeddings = await LLMService.get_bisheng_linsight_embedding(
+                        invoke_user_id=invoke_user_id, model_id=int(emb_model_id)
+                    )
                     await embeddings.aembed_query("test")
                 except Exception as e:
-                    logger.error(f"Vector retrieval model initialization failed: {str(e)}")
+                    logger.error(f"Vector retrieval model initialization failed: {e!s}")
                     vector_search = False
                     error_msg = LinsightVectorModelError
 
@@ -511,19 +534,22 @@ class SOPManageService:
             retrievers = []
             if vector_search and es_search:
                 emb_model_id = workbench_conf.embedding_model.id
-                embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
-                                                                             model_id=int(emb_model_id))
+                embeddings = await LLMService.get_bisheng_linsight_embedding(
+                    invoke_user_id=invoke_user_id, model_id=int(emb_model_id)
+                )
 
-                vector_client = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
-                                                                     embeddings=embeddings)
+                vector_client = KnowledgeRag.init_milvus_vectorstore(
+                    SOPManageService.collection_name, embeddings=embeddings
+                )
 
                 es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=SOPManageService.collection_name)
 
-                keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": 100},
-                                                     text_splitter=text_splitter)
-                baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client,
-                                                                    search_kwargs={"k": 100},
-                                                                    text_splitter=text_splitter)
+                keyword_retriever = KeywordRetriever(
+                    keyword_store=es_client, search_kwargs={"k": 100}, text_splitter=text_splitter
+                )
+                baseline_vector_retriever = BaselineVectorRetriever(
+                    vector_store=vector_client, search_kwargs={"k": 100}, text_splitter=text_splitter
+                )
 
                 retrievers = [keyword_retriever, baseline_vector_retriever]
 
@@ -531,22 +557,25 @@ class SOPManageService:
                 # Search with keywords only
                 es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=SOPManageService.collection_name)
 
-                keyword_retriever = KeywordRetriever(keyword_store=es_client, search_kwargs={"k": 100},
-                                                     text_splitter=text_splitter)
+                keyword_retriever = KeywordRetriever(
+                    keyword_store=es_client, search_kwargs={"k": 100}, text_splitter=text_splitter
+                )
                 retrievers = [keyword_retriever]
 
             elif vector_search and not es_search:
                 # Use vector retrieval only
                 emb_model_id = workbench_conf.embedding_model.id
-                embeddings = await LLMService.get_bisheng_linsight_embedding(invoke_user_id=invoke_user_id,
-                                                                             model_id=int(emb_model_id))
+                embeddings = await LLMService.get_bisheng_linsight_embedding(
+                    invoke_user_id=invoke_user_id, model_id=int(emb_model_id)
+                )
 
-                vector_client = KnowledgeRag.init_milvus_vectorstore(SOPManageService.collection_name,
-                                                                     embeddings=embeddings)
+                vector_client = KnowledgeRag.init_milvus_vectorstore(
+                    SOPManageService.collection_name, embeddings=embeddings
+                )
 
-                baseline_vector_retriever = BaselineVectorRetriever(vector_store=vector_client,
-                                                                    search_kwargs={"k": 100},
-                                                                    text_splitter=text_splitter)
+                baseline_vector_retriever = BaselineVectorRetriever(
+                    vector_store=vector_client, search_kwargs={"k": 100}, text_splitter=text_splitter
+                )
                 retrievers = [baseline_vector_retriever]
             else:
                 error_msg = LinsightDocSearchError
@@ -560,8 +589,9 @@ class SOPManageService:
             if not results:
                 return [], error_msg
 
-            vector_store_ids = [doc.metadata.get("vector_store_id") for doc in results if
-                                doc.metadata.get("vector_store_id")]
+            vector_store_ids = [
+                doc.metadata.get("vector_store_id") for doc in results if doc.metadata.get("vector_store_id")
+            ]
 
             # accordingvector_store_idsQuerying repositoriessop
             sop_models = await LinsightSOPDao.get_sop_by_vector_store_ids(vector_store_ids)
@@ -575,7 +605,7 @@ class SOPManageService:
 
             return results, error_msg
         except Exception as e:
-            logger.error(f"Failed to search the instruction manual: {str(e)}")
+            logger.error(f"Failed to search the instruction manual: {e!s}")
             return [], LinsightDocNotFoundError
 
     # RebuildSOP VectorStore
@@ -613,22 +643,22 @@ class SOPManageService:
 
                 batch_size = 16
                 for i in range(0, len(contents), batch_size):
-                    batch_contents = contents[i:i + batch_size]
-                    batch_metadatas = metadatas[i:i + batch_size]
+                    batch_contents = contents[i : i + batch_size]
+                    batch_metadatas = metadatas[i : i + batch_size]
 
                     # Add NewSOPData to vector storage
                     vector_client.add_texts(batch_contents, metadatas=batch_metadatas)
 
-                logger.info("SOPVector store rebuild completed: {}".format(len(sops)))
+                logger.info(f"SOPVector store rebuild completed: {len(sops)}")
 
             # Userun_asyncRun Synchronization Function
             await util.sync_func_to_async(sync_func)(all_sops, embeddings)
             return None
 
-
         except Exception as e:
-            logger.exception(f"RebuildSOPVector store failed: {str(e)}")
+            logger.exception(f"RebuildSOPVector store failed: {e!s}")
             return None
+
 
 # if __name__ == '__main__':
 #     # test code

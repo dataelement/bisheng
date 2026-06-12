@@ -1,38 +1,38 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Union
 
 from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, Integer, text
-from sqlmodel import Field, select, delete, col
+from sqlmodel import Field, col, delete, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
-
-
+from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
+
 
 class RoleAccessBase(SQLModelSerializable):
     role_id: int = Field(index=True)
     third_id: str = Field(index=False)
     type: int = Field(index=False)
-    tenant_id: Optional[int] = Field(
+    tenant_id: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
 
 class RoleAccess(RoleAccessBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
 
 
 class RoleAccessRead(RoleAccessBase):
-    id: Optional[int] = None
+    id: int | None = None
 
 
 class RoleAccessCreate(RoleAccessBase):
@@ -43,32 +43,33 @@ class WebMenuResource(Enum):
     """Front-end menu bar resources — updated for v2.5 PRD (F005)."""
 
     # Level-1 menus
-    WORKSTATION = 'workstation'           # Workspace (user portal)
-    ADMIN = 'admin'                       # Admin console (management portal)
+    WORKSTATION = "workstation"  # Workspace (user portal)
+    ADMIN = "admin"  # Admin console (management portal)
     # Level-2 menus — build / resources
-    BUILD = 'build'                       # Application build
-    CREATE_APP = 'create_app'             # Entry for "新建应用"/"管理应用模板" (sub-toggle of BUILD)
-    KNOWLEDGE = 'knowledge'               # Knowledge management
-    CREATE_KNOWLEDGE = 'create_knowledge' # Admin KB list: "创建" (doc/QA lib); sub-toggle of KNOWLEDGE
-    KNOWLEDGE_SPACE = 'knowledge_space'   # Knowledge space
-    MODEL = 'model'                       # Model management
-    TOOL = 'tool'                         # Tool management
-    MCP = 'mcp'                           # MCP services
-    CHANNEL = 'channel'                   # Channel management
+    BUILD = "build"  # Application build
+    CREATE_APP = "create_app"  # Entry for "新建应用"/"管理应用模板" (sub-toggle of BUILD)
+    KNOWLEDGE = "knowledge"  # Knowledge management
+    CREATE_KNOWLEDGE = "create_knowledge"  # Admin KB list: "创建" (doc/QA lib); sub-toggle of KNOWLEDGE
+    KNOWLEDGE_SPACE = "knowledge_space"  # Knowledge space
+    MODEL = "model"  # Model management
+    TOOL = "tool"  # Tool management
+    MCP = "mcp"  # MCP services
+    CHANNEL = "channel"  # Channel management
     # Level-2 menus — evaluation / data
-    EVALUATION = 'evaluation'             # Model evaluation
-    DATASET = 'dataset'                   # Dataset management
-    MARK_TASK = 'mark_task'               # Annotation tasks
-    BOARD = 'board'                       # Dashboard / kanban
+    EVALUATION = "evaluation"  # Model evaluation
+    DATASET = "dataset"  # Dataset management
+    MARK_TASK = "mark_task"  # Annotation tasks
+    BOARD = "board"  # Dashboard / kanban
     # System management
-    SUBSCRIPTION = 'subscription'         # Subscription management
+    SUBSCRIPTION = "subscription"  # Subscription management
     # Workbench sidebar (user portal) — granular toggles under ``workstation``
-    HOME = 'home'                         # Chat / 首页
-    APPS = 'apps'                         # 应用中心 / Agent hub
+    HOME = "home"  # Chat / 首页
+    LINSIGHT_TASK_MODE = "linsight_task_mode"  # 灵思任务模式 (sub-toggle under 首页, F035)
+    APPS = "apps"  # 应用中心 / Agent hub
     # Deprecated (AD-07, kept for backward compat)
-    FRONTEND = 'frontend'                 # deprecated
-    BACKEND = 'backend'                   # deprecated
-    CREATE_DASHBOARD = 'create_dashboard' # deprecated
+    FRONTEND = "frontend"  # deprecated
+    BACKEND = "backend"  # deprecated
+    CREATE_DASHBOARD = "create_dashboard"  # deprecated
 
 
 class AccessType(Enum):
@@ -95,18 +96,17 @@ class RoleRefresh(BaseModel):
 
 
 class RoleAccessDao(RoleAccessBase):
-
     @classmethod
-    def get_role_access(cls, role_ids: List[int], access_type: AccessType) -> List[RoleAccess]:
+    def get_role_access(cls, role_ids: list[int], access_type: AccessType) -> list[RoleAccess]:
         with get_sync_db_session() as session:
             if access_type:
                 return session.exec(
-                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
-                                             RoleAccess.type == access_type.value)).all()
+                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids), RoleAccess.type == access_type.value)
+                ).all()
             return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
 
     @classmethod
-    async def aget_role_access(cls, role_ids: List[int], access_type: AccessType = None) -> List[RoleAccess]:
+    async def aget_role_access(cls, role_ids: list[int], access_type: AccessType = None) -> list[RoleAccess]:
         statement = select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))
         if access_type:
             statement = statement.where(RoleAccess.type == access_type.value)
@@ -115,15 +115,17 @@ class RoleAccessDao(RoleAccessBase):
             return (await session.exec(statement)).all()
 
     @classmethod
-    def get_role_access_batch(cls, role_ids: List[int], access_type: List[AccessType]) -> List[RoleAccess]:
+    def get_role_access_batch(cls, role_ids: list[int], access_type: list[AccessType]) -> list[RoleAccess]:
         with get_sync_db_session() as session:
             if access_type:
                 return session.exec(
-                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
-                                             RoleAccess.type.in_([x.value for x in access_type]))).all()
+                    select(RoleAccess).where(
+                        RoleAccess.role_id.in_(role_ids), RoleAccess.type.in_([x.value for x in access_type])
+                    )
+                ).all()
 
     @classmethod
-    async def aget_role_access_batch(cls, role_ids: List[int], access_type: List[AccessType]) -> List[RoleAccess]:
+    async def aget_role_access_batch(cls, role_ids: list[int], access_type: list[AccessType]) -> list[RoleAccess]:
         statement = select(RoleAccess).where(col(RoleAccess.role_id).in_(role_ids))
         if access_type:
             statement = statement.where(col(RoleAccess.type).in_([x.value for x in access_type]))
@@ -132,41 +134,47 @@ class RoleAccessDao(RoleAccessBase):
             return (await session.exec(statement)).all()
 
     @classmethod
-    def judge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[RoleAccess]:
+    def judge_role_access(cls, role_ids: list[int], third_id: str, access_type: AccessType) -> RoleAccess | None:
         with get_sync_db_session() as session:
-            return session.exec(select(RoleAccess).filter(
-                RoleAccess.role_id.in_(role_ids),
-                RoleAccess.type == access_type.value,
-                RoleAccess.third_id == third_id
-            )).first()
+            return session.exec(
+                select(RoleAccess).filter(
+                    RoleAccess.role_id.in_(role_ids),
+                    RoleAccess.type == access_type.value,
+                    RoleAccess.third_id == third_id,
+                )
+            ).first()
 
     @classmethod
-    async def ajudge_role_access(cls, role_ids: List[int], third_id: str, access_type: AccessType) -> Optional[
-        RoleAccess]:
+    async def ajudge_role_access(
+        cls, role_ids: list[int], third_id: str, access_type: AccessType
+    ) -> RoleAccess | None:
         statement = select(RoleAccess).filter(
             col(RoleAccess.role_id).in_(role_ids),
             col(RoleAccess.type) == access_type.value,
-            col(RoleAccess.third_id) == third_id
+            col(RoleAccess.third_id) == third_id,
         )
         async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
 
     @classmethod
-    def find_role_access(cls, role_ids: List[int], third_ids: List[str], access_type: AccessType) -> List[RoleAccess]:
+    def find_role_access(cls, role_ids: list[int], third_ids: list[str], access_type: AccessType) -> list[RoleAccess]:
         with get_sync_db_session() as session:
             if access_type:
                 return session.exec(
-                    select(RoleAccess).where(RoleAccess.role_id.in_(role_ids),
-                                             RoleAccess.third_id.in_(third_ids),
-                                             RoleAccess.type == access_type.value)).all()
+                    select(RoleAccess).where(
+                        RoleAccess.role_id.in_(role_ids),
+                        RoleAccess.third_id.in_(third_ids),
+                        RoleAccess.type == access_type.value,
+                    )
+                ).all()
             return session.exec(select(RoleAccess).where(RoleAccess.role_id.in_(role_ids))).all()
 
     @classmethod
-    async def afind_role_access(cls, role_ids: List[int], third_ids: List[str], access_type: AccessType) -> List[
-        RoleAccess]:
+    async def afind_role_access(
+        cls, role_ids: list[int], third_ids: list[str], access_type: AccessType
+    ) -> list[RoleAccess]:
         statement = select(RoleAccess).where(
-            col(RoleAccess.role_id).in_(role_ids),
-            col(RoleAccess.third_id).in_(third_ids)
+            col(RoleAccess.role_id).in_(role_ids), col(RoleAccess.third_id).in_(third_ids)
         )
         if access_type:
             statement = statement.where(col(RoleAccess.type) == access_type.value)
@@ -174,15 +182,17 @@ class RoleAccessDao(RoleAccessBase):
             return (await session.exec(statement)).all()
 
     @classmethod
-    async def update_role_access_all(cls, role_id: int, access_type: AccessType,
-                                     access_ids: List[Union[str, int]]) -> None:
+    async def update_role_access_all(
+        cls, role_id: int, access_type: AccessType, access_ids: list[Union[str, int]]
+    ) -> None:
         """
         Update the role's permissions, delete it first and add it later
         """
         async with get_async_db_session() as session:
             # Clear all old permissions first
-            statement = delete(RoleAccess).where(col(RoleAccess.role_id) == str(role_id),
-                                                 col(RoleAccess.type) == access_type.value)
+            statement = delete(RoleAccess).where(
+                col(RoleAccess.role_id) == str(role_id), col(RoleAccess.type) == access_type.value
+            )
             await session.exec(statement)
             # Add New Permission
             for access_id in access_ids:
