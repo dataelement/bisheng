@@ -137,7 +137,10 @@ class LinsightWorkflowTask:
         except TaskAlreadyInProgressError:
             logger.warning(f"Task already in progress: session_version_id={self.session_version_id}")
         except TaskExecutionError as e:
-            logger.error(f"Task execution failed:<g id='1'></g> : session_version_id={self.session_version_id}")
+            logger.error(
+                f"Task execution failed: {e} : session_version_id={self.session_version_id}",
+                exc_info=True,
+            )
             await self._handle_execution_error(e)
         except Exception as e:
             logger.error(f"Unknown error: session_version_id={self.session_version_id}, error={e}")
