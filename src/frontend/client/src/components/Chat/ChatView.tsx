@@ -343,17 +343,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                      directly after the input with only their own mt-4 gap. */
                   <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[20vh]">
                     <div className="shrink-0">
-                      {/* F035 Track H (P5): the in-place lingsi mode is gone —
-                          selecting the task tab now jumps to the dedicated
-                          /linsight task-mode landing page. */}
-                      <Landing
-                        lingsi={false}
-                        lingsiEntry={(bsConfig as any)?.linsightConfig?.linsight_entry ?? true}
-                        setLingsi={(bl: boolean) => {
-                          if (bl) navigate('/linsight/new');
-                        }}
-                        isNew={isNew}
-                      />
+                      {/* F035 Track H (P5): daily/task mode switch removed —
+                          task mode is reached via the sidebar "new task" entry
+                          and the input-bar task-mode button. */}
+                      <Landing isNew={isNew} />
                     </div>
 
                     {/* Input area for landing page */}

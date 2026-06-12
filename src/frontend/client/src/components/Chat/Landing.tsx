@@ -3,19 +3,13 @@ import { useSearchParams } from "react-router-dom";
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
-import { useInterruptAudio } from '../Voice/textToSpeechStore';
 import ConvoStarter from './ConvoStarter';
-import SegmentSelector from './SegmentSelector';
 
-export default function Landing({ Header, isNew, lingsi, lingsiEntry, setLingsi }: {
+export default function Landing({ Header, isNew }: {
   Header?: ReactNode;
   isNew?: boolean;
-  lingsi: boolean;
-  lingsiEntry?: boolean;
-  setLingsi: (val: boolean) => void;
 }) {
   const { data: bsConfig } = useGetBsConfig();
-  const interruptAudio = useInterruptAudio();
   const localize = useLocalize();
   const [searchParams] = useSearchParams();
   const defaultCategory = searchParams.get('category') || 'favorites';
@@ -45,20 +39,6 @@ export default function Landing({ Header, isNew, lingsi, lingsiEntry, setLingsi 
         <div className="max-w-lg touch-mobile:max-w-full text-center mt-3 touch-mobile:mt-3 text-sm touch-mobile:text-[13px] font-normal text-gray-500 touch-mobile:text-[#4e5969] leading-relaxed">
           {bsConfig?.functionDescription}
         </div>
-
-        {/* Mode switch — above starters to match 576 设计稿 */}
-        {lingsiEntry && (
-          <div className="w-full max-w-md touch-mobile:max-w-full mx-auto mt-5 touch-mobile:mt-5 px-0">
-            <SegmentSelector
-              lingsi={lingsi}
-              bsConfig={bsConfig}
-              onChange={(bl) => {
-                setLingsi(bl);
-                interruptAudio();
-              }}
-            />
-          </div>
-        )}
 
         {/* Conversation starters */}
         <div className="mt-6 touch-mobile:mt-5 w-full max-w-2xl flex flex-wrap justify-center gap-2 touch-mobile:gap-2 touch-mobile:px-0">
