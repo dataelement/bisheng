@@ -2607,6 +2607,7 @@
     "disabledToast": "Disabled — removed from the end-user picker",
     "deleted": "Deleted",
     "saved": "Saved",
+    "count": "{{count}} total",
     "form": {
       "displayName": "Display Name",
       "displayNameDesc": "The name end users see (Chinese OK)",
@@ -2625,7 +2626,9 @@
       "idInvalid": "Skill ID allows lowercase letters, digits and single hyphens only",
       "idTooLong": "Skill ID must be at most 64 characters",
       "save": "Save",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "editSubtitle": "Changes take effect for end users as soon as you save",
+      "createSubtitle": "Create a skill end users can select in task mode"
     },
     "uploadDialog": {
       "title": "Upload Skill",

@@ -1,13 +1,15 @@
 // F035: create / edit a tenant custom skill (form path — SKILL.md only).
-// The skill ID is auto-suggested from the display name via the backend
-// pypinyin helper (single source of truth with the SOP migration script).
+// Rendered as a right-side drawer on the same rail as the detail sheet, so
+// opening edit from the detail reads as the panel turning over into its form
+// (delete-confirm and upload stay centered modals). The skill ID is
+// auto-suggested from the display name via the backend pypinyin helper.
 import { Button } from "@/components/bs-ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input, Textarea } from "@/components/bs-ui/input";
 import { Label } from "@/components/bs-ui/label";
+import { Sheet, SheetContent } from "@/components/bs-ui/sheet";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { SkillDetail, skillApi } from "@/controllers/API/linsight";
-import { RefreshCw } from "lucide-react";
+import { Info, Pencil, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSkillErrorMessage } from "./skillErrors";
@@ -44,6 +46,9 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
             setDisplayName(editing.display_name);
             setName(editing.name);
             setDescription(editing.description);
+            // `preview` is the SKILL.md body without frontmatter — exactly what the
+            // form-update path expects, since the backend regenerates frontmatter
+            // from name/description/display_name via compose_skill_md.
             setContent(editing.preview);
         } else {
             setDisplayName('');
@@ -126,12 +131,25 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
     );
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[760px]">
-                <DialogHeader>
-                    <DialogTitle>{editing ? t('skillManage.edit') : t('skillManage.create')}</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-2 max-h-[64vh] overflow-y-auto pr-1">
+        <Sheet open={open} onOpenChange={onOpenChange}>
+            <SheetContent className="sm:max-w-[680px] w-[92vw] p-0 gap-0 flex flex-col bg-background">
+                {/* header — mirrors the detail sheet so edit reads as the panel flipping into its form */}
+                <div className="shrink-0 flex items-start gap-3 px-6 py-5 pr-12 border-b">
+                    <div className="size-9 mt-0.5 shrink-0 rounded-xl grid place-items-center text-primary bg-gradient-to-br from-[#EEF2FF] to-[#E2EAFF]">
+                        {editing ? <Pencil className="size-[18px]" /> : <Plus className="size-5" />}
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-[17px] font-semibold leading-tight text-foreground">
+                            {editing ? t('skillManage.edit') : t('skillManage.create')}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {editing ? t('skillManage.form.editSubtitle') : t('skillManage.form.createSubtitle')}
+                        </p>
+                    </div>
+                </div>
+
+                {/* body — top fields fixed, the SKILL.md body textarea fills remaining height */}
+                <div className="flex-1 min-h-0 overflow-hidden flex flex-col gap-4 px-6 py-5">
                     <div>
                         {fieldLabel(t('skillManage.form.displayName'), t('skillManage.form.displayNameDesc'))}
                         <Input
@@ -171,23 +189,35 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
                         />
                         {errors.description && <p className="text-xs text-red-500 mt-1">{errors.description}</p>}
                     </div>
-                    <div>
+                    {/* content — flexes to fill the full-height drawer, a tall calm authoring canvas */}
+                    <div className="flex flex-col flex-1 min-h-0">
                         {fieldLabel(t('skillManage.form.content'), t('skillManage.form.contentDesc'))}
                         <Textarea
                             value={content}
-                            rows={10}
-                            className="font-mono text-sm"
+                            boxClassName="flex-1 min-h-0"
+                            className="h-full resize-none font-mono text-sm"
                             placeholder={t('skillManage.form.contentPh')}
                             onChange={(e) => { setContent(e.target.value); setErrors(prev => ({ ...prev, content: undefined })); }}
                         />
                         {errors.content && <p className="text-xs text-red-500 mt-1">{errors.content}</p>}
                     </div>
                 </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>{t('skillManage.form.cancel')}</Button>
-                    <Button onClick={handleSave} disabled={saving}>{t('skillManage.form.save')}</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+
+                {/* footer — edit mode echoes the immutable ID for reassurance */}
+                <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-3.5 border-t bg-background/90 backdrop-blur">
+                    {editing ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
+                            <Info className="size-3.5" />ID: {name}
+                        </span>
+                    ) : (
+                        <span />
+                    )}
+                    <div className="flex gap-3">
+                        <Button variant="outline" onClick={() => onOpenChange(false)}>{t('skillManage.form.cancel')}</Button>
+                        <Button onClick={handleSave} disabled={saving}>{t('skillManage.form.save')}</Button>
+                    </div>
+                </div>
+            </SheetContent>
+        </Sheet>
     );
 }

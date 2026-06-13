@@ -16,6 +16,7 @@ import {
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { SkillBrief, SkillDetail, skillApi } from "@/controllers/API/linsight";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { ChevronRight, Plus, Sparkles, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SkillDetailSheet } from "./SkillDetailSheet";
@@ -103,10 +104,16 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
             .catch(err => toast({ variant: 'error', description: getSkillErrorMessage(err, t) }));
     };
 
-    const openEdit = (skill: SkillBrief) => {
-        skillApi.getSkillDetail(skill.name)
-            .then(res => { setEditing(res); setFormOpen(true); })
-            .catch(err => toast({ variant: 'error', description: getSkillErrorMessage(err, t) }));
+    // From the detail sheet: close it first, then open the next overlay once the
+    // exit animation finishes — stacking two Radix modals traps focus/clicks.
+    const handleEditFromDetail = (d: SkillDetail) => {
+        setDetail(null);
+        setTimeout(() => { setEditing(d); setFormOpen(true); }, 200);
+    };
+
+    const handleDeleteFromDetail = (d: SkillDetail) => {
+        setDetail(null);
+        setTimeout(() => handleDelete(d), 200);
     };
 
     const handleCreate = () => {
@@ -139,8 +146,12 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
                     </SelectContent>
                 </Select>
                 <div className="ml-auto flex gap-2">
-                    <Button variant="outline" onClick={() => setUploadOpen(true)}>{t('skillManage.upload')}</Button>
-                    <Button onClick={handleCreate}>{t('skillManage.create')}</Button>
+                    <Button variant="outline" onClick={() => setUploadOpen(true)}>
+                        <Upload className="size-4 mr-1.5" />{t('skillManage.upload')}
+                    </Button>
+                    <Button onClick={handleCreate}>
+                        <Plus className="size-4 mr-1.5" />{t('skillManage.create')}
+                    </Button>
                 </div>
             </div>
             <div className="border rounded-md">
@@ -151,7 +162,7 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
                             <TableHead>{t('skillManage.columns.description')}</TableHead>
                             <TableHead className="w-24">{t('skillManage.columns.status')}</TableHead>
                             <TableHead className="w-40">{t('skillManage.columns.createTime')}</TableHead>
-                            <TableHead className="w-44">{t('skillManage.columns.actions')}</TableHead>
+                            <TableHead className="w-8" />
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -161,33 +172,52 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
                             </TableRow>
                         )}
                         {skills.map(skill => (
-                            <TableRow key={skill.id}>
-                                <TableCell className="font-medium">{skill.display_name}</TableCell>
+                            <TableRow
+                                key={skill.id}
+                                className="group cursor-pointer hover:bg-primary/5"
+                                onClick={() => openDetail(skill)}
+                            >
+                                <TableCell className="font-medium">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="size-[34px] shrink-0 rounded-[9px] grid place-items-center text-primary bg-gradient-to-br from-[#EEF2FF] to-[#E2EAFF]">
+                                            <Sparkles className="size-[17px]" />
+                                        </div>
+                                        <span className="truncate min-w-0">{skill.display_name}</span>
+                                    </div>
+                                </TableCell>
                                 <TableCell className="max-w-[320px] truncate" title={skill.description}>{skill.description}</TableCell>
-                                <TableCell>
+                                {/* Quick toggle stays inline; stop the click from opening the detail sheet */}
+                                <TableCell onClick={(e) => e.stopPropagation()}>
                                     <Switch checked={skill.enabled} onCheckedChange={(checked) => handleToggle(skill, checked)} />
                                 </TableCell>
                                 <TableCell className="text-muted-foreground text-xs">
                                     {skill.create_time?.replace('T', ' ').slice(0, 16) ?? '--'}
                                 </TableCell>
-                                <TableCell>
-                                    <Button variant="link" size="sm" className="px-1" onClick={() => openDetail(skill)}>{t('skillManage.detail')}</Button>
-                                    <Button variant="link" size="sm" className="px-1" onClick={() => openEdit(skill)}>{t('skillManage.editAction')}</Button>
-                                    <Button variant="link" size="sm" className="px-1 text-red-500" onClick={() => handleDelete(skill)}>{t('skillManage.deleteAction')}</Button>
+                                {/* chevron nudges right + turns brand-blue on row hover — a quiet "clickable" cue */}
+                                <TableCell className="text-[#C4C9D4] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary">
+                                    <ChevronRight className="size-4" />
                                 </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
                 </Table>
             </div>
-            {total > PAGE_SIZE && (
-                <div className="flex justify-end mt-2">
-                    <AutoPagination page={page} pageSize={PAGE_SIZE} total={total} onChange={(p) => setPage(p)} />
+            {total > 0 && (
+                <div className="flex items-center justify-between mt-2">
+                    <span className="text-xs text-muted-foreground">{t('skillManage.count', { count: total })}</span>
+                    {total > PAGE_SIZE && (
+                        <AutoPagination page={page} pageSize={PAGE_SIZE} total={total} onChange={(p) => setPage(p)} />
+                    )}
                 </div>
             )}
             <SkillUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} onUploaded={refresh} />
             <SkillFormDrawer open={formOpen} editing={editing} onOpenChange={setFormOpen} onSaved={refresh} />
-            <SkillDetailSheet detail={detail} onOpenChange={(open) => !open && setDetail(null)} />
+            <SkillDetailSheet
+                detail={detail}
+                onOpenChange={(open) => !open && setDetail(null)}
+                onEdit={handleEditFromDetail}
+                onDelete={handleDeleteFromDetail}
+            />
         </div>
     );
 }

@@ -1,12 +1,15 @@
 // F035: skill detail — bundle file tree on the left, file content on the
 // right. SKILL.md gets a Preview/Source toggle; bundle assets are read-only.
 import { Badge } from "@/components/bs-ui/badge";
+import { Button } from "@/components/bs-ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/bs-ui/sheet";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { SkillDetail, skillApi } from "@/controllers/API/linsight";
-import { FileText } from "lucide-react";
+import { FileText, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { getSkillErrorMessage } from "./skillErrors";
 
 const SKILL_MD = 'SKILL.md';
@@ -14,9 +17,13 @@ const SKILL_MD = 'SKILL.md';
 interface SkillDetailSheetProps {
     detail: SkillDetail | null;
     onOpenChange: (open: boolean) => void;
+    // Edit/delete are the detail view's only action hub — the list row has no
+    // per-row actions, so these route back to the parent for orchestration.
+    onEdit: (detail: SkillDetail) => void;
+    onDelete: (detail: SkillDetail) => void;
 }
 
-export function SkillDetailSheet({ detail, onOpenChange }: SkillDetailSheetProps) {
+export function SkillDetailSheet({ detail, onOpenChange, onEdit, onDelete }: SkillDetailSheetProps) {
     const { t } = useTranslation();
     const [selectedPath, setSelectedPath] = useState(SKILL_MD);
     const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -39,6 +46,8 @@ export function SkillDetailSheet({ detail, onOpenChange }: SkillDetailSheetProps
 
     if (!detail) return null;
     const isSkillMd = selectedPath === SKILL_MD;
+    // Preview = rendered Markdown of the body; Source = raw SKILL.md (with frontmatter).
+    const isRenderedPreview = isSkillMd && mode === 'preview';
     const content = isSkillMd
         ? (mode === 'preview' ? detail.preview : detail.source_text)
         : (assetCache[selectedPath] ?? '');
@@ -47,12 +56,23 @@ export function SkillDetailSheet({ detail, onOpenChange }: SkillDetailSheetProps
         <Sheet open={!!detail} onOpenChange={onOpenChange}>
             <SheetContent className="sm:max-w-[860px] w-[90vw] flex flex-col">
                 <SheetHeader>
-                    <SheetTitle className="flex items-center gap-2 flex-wrap">
+                    <SheetTitle className="flex items-center gap-2 flex-wrap pr-8">
+                        <span className="size-7 shrink-0 rounded-lg grid place-items-center text-primary bg-gradient-to-br from-[#EEF2FF] to-[#E2EAFF]">
+                            <Sparkles className="size-4" />
+                        </span>
                         <span>{detail.display_name}</span>
                         <span className="text-xs font-mono font-normal text-muted-foreground border rounded px-1.5 py-0.5">ID: {detail.name}</span>
                         <Badge variant={detail.enabled ? 'default' : 'secondary'} className="font-normal">
                             {detail.enabled ? t('skillManage.statusEnabled') : t('skillManage.statusDisabled')}
                         </Badge>
+                        <div className="ml-auto flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => onEdit(detail)}>
+                                <Pencil className="size-3.5 mr-1" />{t('skillManage.editAction')}
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-500" onClick={() => onDelete(detail)}>
+                                <Trash2 className="size-3.5 mr-1" />{t('skillManage.deleteAction')}
+                            </Button>
+                        </div>
                     </SheetTitle>
                 </SheetHeader>
                 <p className="text-sm text-muted-foreground">{detail.description}</p>
@@ -91,9 +111,15 @@ export function SkillDetailSheet({ detail, onOpenChange }: SkillDetailSheetProps
                                 <span className="text-xs text-muted-foreground">{t('skillManage.detailSheet.readonlyAsset')}</span>
                             )}
                         </div>
-                        <pre className="flex-1 overflow-auto border rounded-md p-3 text-xs whitespace-pre-wrap break-all bg-muted/30 font-mono">
-                            {content}
-                        </pre>
+                        {isRenderedPreview ? (
+                            <div className="flex-1 overflow-auto border rounded-md p-5 bg-background prose prose-sm max-w-none dark:prose-invert">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{detail.preview}</ReactMarkdown>
+                            </div>
+                        ) : (
+                            <pre className="flex-1 overflow-auto border rounded-md p-3 text-xs whitespace-pre-wrap break-all bg-muted/30 font-mono">
+                                {content}
+                            </pre>
+                        )}
                     </div>
                 </div>
             </SheetContent>

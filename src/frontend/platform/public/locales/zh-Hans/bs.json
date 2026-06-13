@@ -2552,6 +2552,7 @@
     "disabledToast": "已停用，已从终端用户输入区移除",
     "deleted": "已删除",
     "saved": "保存成功",
+    "count": "共 {{count}} 条",
     "form": {
       "displayName": "显示名称",
       "displayNameDesc": "用户在列表/选择器看到的名称，支持中文",
@@ -2570,7 +2571,9 @@
       "idInvalid": "技能 ID 仅支持小写字母、数字和单个连字符",
       "idTooLong": "技能 ID 过长，请控制在 64 个字符以内",
       "save": "保存",
-      "cancel": "取消"
+      "cancel": "取消",
+      "editSubtitle": "修改后保存即时对终端用户生效",
+      "createSubtitle": "创建终端用户可在任务模式中选用的技能"
     },
     "uploadDialog": {
       "title": "上传 Skill",

@@ -2552,6 +2552,7 @@
     "disabledToast": "無効化しました。エンドユーザーの選択リストから削除されました",
     "deleted": "削除しました",
     "saved": "保存しました",
+    "count": "全 {{count}} 件",
     "form": {
       "displayName": "表示名",
       "displayNameDesc": "エンドユーザーに表示される名前",
@@ -2570,7 +2571,9 @@
       "idInvalid": "スキル ID は小文字・数字・単一ハイフンのみ使用できます",
       "idTooLong": "スキル ID は 64 文字以内にしてください",
       "save": "保存",
-      "cancel": "キャンセル"
+      "cancel": "キャンセル",
+      "editSubtitle": "保存するとエンドユーザーに即時反映されます",
+      "createSubtitle": "エンドユーザーがタスクモードで選択できるスキルを作成します"
     },
     "uploadDialog": {
       "title": "スキルをアップロード",
