@@ -28,7 +28,6 @@ import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import InputFiles from "~/pages/appChat/components/InputFiles";
 import { useFileDropAndPaste } from "~/pages/appChat/useFileDropAndPaste";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { TaskModeToggle } from "~/components/Linsight/Input/TaskModeToggle";
 import { checkIfScrollable, cn, removeFocusRings } from "~/utils";
 import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
@@ -475,6 +474,8 @@ const AiChatInput = memo(
                                     showFileUpload={showUpload}
                                     fileUploadDisabled={filesDisabled}
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
+                                    showTaskModeEntry={taskModeEntry && (bsConfig?.linsightConfig?.linsight_entry ?? true)}
+                                    onEnterTaskMode={() => navigate('/linsight/new')}
                                 />
                             )}
                             {/* Model select */}
@@ -506,16 +507,6 @@ const AiChatInput = memo(
                                         }
                                     }}
                                     disabled={toolsDisabled}
-                                />
-                            )}
-                            {/* F035 Track H: minimal task-mode entry — jumps to the
-                                dedicated /linsight route (task mode is implemented
-                                separately; spec §-1). */}
-                            {taskModeEntry && !isLingsi && (bsConfig?.linsightConfig?.linsight_entry ?? true) && (
-                                <TaskModeToggle
-                                    active={false}
-                                    disabled={!!disabled}
-                                    onClick={() => navigate('/linsight/new')}
                                 />
                             )}
                         </div>

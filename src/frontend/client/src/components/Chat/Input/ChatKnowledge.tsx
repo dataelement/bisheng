@@ -2,6 +2,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Glasses,
   Loader2,
   PaperclipIcon,
   Plus,
@@ -264,6 +265,8 @@ export const ChatKnowledge = ({
   showFileUpload = false,
   fileUploadDisabled = false,
   onFileUploadClick,
+  showTaskModeEntry = false,
+  onEnterTaskMode,
 }: {
   config?: BsConfig;
   disabled: boolean;
@@ -273,6 +276,11 @@ export const ChatKnowledge = ({
   showFileUpload?: boolean;
   fileUploadDisabled?: boolean;
   onFileUploadClick?: () => void;
+  /** F035 (PRD §4.1.3): render the "任务模式" entry as a separate group at the
+   *  bottom of the "+" menu. Daily chat → navigates to /linsight; routing is
+   *  delegated to the caller so this component stays route-free. */
+  showTaskModeEntry?: boolean;
+  onEnterTaskMode?: () => void;
 }) => {
   const localize = useLocalize();
   const PAGE_SIZE = 20;
@@ -811,6 +819,26 @@ export const ChatKnowledge = ({
               </DropdownMenuSub>
             )}
 
+          </>
+        )}
+
+        {/* F035 (PRD §4.1.3) — 任务模式组：以分隔线与上方通用上下文组隔开。
+            桌面端与移动端 root 面板都展示；进入任务模式跳转 /linsight。 */}
+        {showTaskModeEntry && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
+          <>
+            <div className="my-1 h-px bg-slate-100" />
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                onEnterTaskMode?.();
+              }}
+              className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
+            >
+              <Glasses size={18} strokeWidth={1.5} className="text-slate-600" />
+              <span className="text-[14px] font-normal text-slate-700">
+                {localize('com_linsight_task_mode')}
+              </span>
+            </DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>
