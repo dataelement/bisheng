@@ -1,0 +1,397 @@
+"""
+Expert QA API Endpoints - HTTP 路由处理层
+"""
+
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.schemas.api import resp_200, resp_500
+
+
+from bisheng.qa_expert.domain.schemas import (
+    ExpertCreateRequest, ExpertUpdateRequest, ExpertResponse,
+    QuestionCreateRequest, QuestionDetailResponse, QuestionSimpleResponse,
+    AnswerCreateRequest, AnswerDetailResponse,
+    CommentCreateRequest, CommentDetailResponse,
+    VoteRequest, AdoptAnswerRequest,
+    QANotificationResponse,
+    QuestionListQuery, QuestionPageData, QuestionStatsResponse,
+    DraftCreateRequest, DraftResponse
+)
+from bisheng.qa_expert.domain.services import (
+    ExpertService, QuestionService, AnswerService,
+    CommentService, VoteService
+)
+from bisheng.user_group.domain.services.user_group_service import UserGroupService
+
+router = APIRouter(prefix="/qa_experts", tags=["Expert QA"])
+
+# ==================== 专家管理 Endpoints ====================
+
+async def get_expert_service() -> ExpertService:
+    """依赖注入：专家服务"""
+    return ExpertService()
+
+
+
+@router.get("/experts", response_model=list[ExpertResponse])
+async def list_experts(
+    page: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+  
+):
+    """列表查询专家"""
+    expert_groups= await UserGroupService.alist_groups(page, limit, "专家", user)
+    first_item = expert_groups['data'][0] if expert_groups['data'] else None
+    data = await UserGroupService.aget_members(first_item['id'], 1, 1000, "", user) if first_item else None
+    return resp_200(data=data)
+
+
+
+# ==================== 问题管理 Endpoints ====================
+
+async def get_question_service() -> QuestionService:
+    """依赖注入：问题服务"""
+    return QuestionService()
+
+
+@router.post("/questions", response_model=QuestionDetailResponse)
+async def create_question(
+    request: QuestionCreateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: QuestionService = Depends(get_question_service)
+):
+    """发起提问"""
+    if not user.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    
+
+    question = await service.create_question(user.user_id, request,user.user_name)
+    return resp_200(data=question)
+
+
+@router.get("/questions", response_model=QuestionPageData)
+async def list_questions(
+    query: QuestionListQuery = Depends(),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: QuestionService = Depends(get_question_service)
+):
+    """问题列表"""
+    user_id = user.user_id if query.my_questions else None
+    
+    questions, total = await service.list_questions(
+        business_domain=query.business_domain,
+        status=query.status,
+        sort_by=query.sort_by,
+        user_id=user_id,
+        skip=(query.page - 1) * query.page_size,
+        limit=query.page_size
+    )
+        
+    return resp_200(data={
+        "questions": questions,
+        "total": total,
+
+    })
+
+
+@router.get("/questions/{question_id}", response_model=QuestionDetailResponse)
+async def get_question_detail(
+    question_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: QuestionService = Depends(get_question_service)
+):
+    """获取问题详情"""
+    try:
+        question = await service.get_question_detail(question_id, user.user_id)
+        return resp_200(data=question)
+    except Exception as e:
+        return resp_500(code=500, msg=str(e))
+
+
+@router.post("/questions/{question_id}/adopt", response_model=QuestionDetailResponse)
+async def adopt_answer(
+    question_id: int,
+    request: AdoptAnswerRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+
+    service: QuestionService = Depends(get_question_service)
+):
+    """采纳最佳回答"""
+    try:
+        question = await service.adopt_answer(
+            question_id,
+            request.answer_id,
+            user.user_id
+        )
+
+        return resp_200(data=question)
+    except Exception as e:
+    
+        return resp_500(code=500, msg=str(e))
+
+
+# ==================== 回答管理 Endpoints ====================
+
+async def get_answer_service() -> AnswerService:
+    """依赖注入：回答服务"""
+    return AnswerService()
+
+
+@router.post("/answers", response_model=AnswerDetailResponse)
+async def create_answer(
+    request: AnswerCreateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: AnswerService = Depends(get_answer_service)
+):
+    """发布回答"""
+    if not user.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    
+    answer = await service.create_answer(user.user_id, request)
+    return resp_200(data=answer)
+  
+
+
+
+@router.get("/questions/{question_id}/answers", response_model=list[AnswerDetailResponse])
+async def get_answers(
+    question_id: int,
+    page: int = Query(0, ge=0),
+    page_size: int = Query(100, ge=1, le=1000),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+   
+    service: AnswerService = Depends(get_answer_service)
+):
+    """获取问题的所有回答"""
+    answers, total = await service.get_answers(question_id, (page - 1) * page_size, page_size)
+    return resp_200(data={
+        "answers": answers,
+        "total": total
+    })
+
+
+@router.put("/answers/{answer_id}", response_model=AnswerDetailResponse)
+async def update_answer(
+    answer_id: int,
+    request: AnswerCreateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+   
+    service: AnswerService = Depends(get_answer_service)
+):
+    """更新回答"""
+    try:
+        answer = await service.update_answer(
+    
+            answer_id,
+            user.user_id,
+            content=request.content,
+            attachments=request.attachments,
+            related_docs=request.related_docs
+        )
+       
+        return resp_200(data=answer)
+    except Exception as e:
+    
+        return resp_500(code=500, msg=str(e))
+
+
+@router.delete("/answers/{answer_id}")
+async def delete_answer(
+    answer_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+ 
+    service: AnswerService = Depends(get_answer_service)
+):
+    """删除回答"""
+    try:
+        success = await service.delete_answer(answer_id, user.user_id)
+ 
+        return resp_200(data={"success": success})
+    except Exception as e:
+
+        return resp_500(code=500, msg=str(e))
+
+
+# ==================== 评论管理 Endpoints ====================
+
+async def get_comment_service() -> CommentService:
+    """依赖注入：评论服务"""
+    return CommentService()
+
+
+@router.post("/comments", response_model=CommentDetailResponse)
+async def create_comment(
+    request: CommentCreateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: CommentService = Depends(get_comment_service)
+):
+    """发布评论/追问"""
+    if not user.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    
+
+    comment = await service.create_comment(user.user_id, request)
+
+    return resp_200(data=comment)
+  
+
+
+@router.get("/answers/{answer_id}/comments", response_model=list[CommentDetailResponse])
+async def get_comments(
+    answer_id: int,
+    page: int = Query(0, ge=0),
+    page_size: int = Query(100, ge=1, le=1000),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+
+    service: CommentService = Depends(get_comment_service)
+):
+    """获取回答的评论"""
+    comments, total = await service.get_comments(answer_id, (page - 1) * page_size, page_size)
+    return resp_200(data={
+        "comments": comments,
+        "total": total
+    })
+
+
+# ==================== 投票 Endpoints ====================
+
+async def get_vote_service() -> VoteService:
+    """依赖注入：投票服务"""
+    return VoteService()
+
+
+@router.post("/votes/question", response_model=dict)
+async def vote_question(
+    request: VoteRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+
+    service: VoteService = Depends(get_vote_service)
+):
+    """给问题点赞"""
+    if not user.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        success = await service.vote_question(user.user_id, request.target_id)
+    
+        return resp_200(data={"success": success})
+    except Exception as e:
+        return resp_500(code=500, msg=str(e))
+
+
+@router.post("/votes/answer", response_model=dict)
+async def vote_answer(
+    request: VoteRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: VoteService = Depends(get_vote_service)
+):
+    """给回答点赞（有用）"""
+    if not user.user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        success = await service.vote_answer( user.user_id, request.target_id)
+        
+        return resp_200(data={"success": success})
+    except Exception as e:
+        
+        return resp_500(code=500, msg=str(e))
+
+
+# ==================== 通知 Endpoints ====================
+
+@router.get("/notifications", response_model=list[QANotificationResponse])
+async def get_notifications(
+    unread_only: bool = Query(False),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    
+):
+    """获取通知列表"""
+    from bisheng.qa_expert.domain.repositories import NotificationRepository
+    
+    repo = NotificationRepository()
+    notifications, total = await repo.get_user_notifications(
+
+        user.user_id,
+        unread_only=unread_only,
+        skip=skip,
+        limit=limit
+    )
+    
+    return resp_200(data={
+        "notifications": notifications,
+        "total": total
+    })
+
+
+@router.post("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+
+):
+    """标记通知为已读"""
+    from bisheng.qa_expert.domain.repositories import NotificationRepository
+    
+    repo = NotificationRepository()
+    success = await repo.mark_as_read(notification_id)
+  
+    
+    return resp_200(data={"success": success})
+
+
+# ==================== 草稿 Endpoints ====================
+
+@router.post("/drafts", response_model=DraftResponse)
+async def save_draft(
+    request: DraftCreateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+
+):
+    """保存问题草稿"""
+    from bisheng.qa_expert.domain.repositories import DraftRepository
+    
+    repo = DraftRepository()
+    draft = await repo.create_or_update( user.user_id, **request.dict())
+ 
+    
+    return resp_200(data=draft)
+
+
+@router.get("/drafts", response_model=DraftResponse)
+async def get_draft(
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    
+):
+    """获取问题草稿"""
+    from bisheng.qa_expert.domain.repositories import DraftRepository
+    
+    repo = DraftRepository()
+    draft = await repo.get_draft(user.user_id)
+    
+    if not draft:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    
+    return resp_200(data=draft)
+
+
+@router.delete("/drafts")
+async def delete_draft(
+    user: UserPayload = Depends(UserPayload.get_login_user),
+
+):
+    """删除问题草稿"""
+    from bisheng.qa_expert.domain.repositories import DraftRepository
+    
+    repo = DraftRepository()
+    success = await repo.delete_draft(user.user_id)
+
+    return resp_200(data={"success": success})
+
+
