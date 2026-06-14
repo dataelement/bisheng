@@ -72,6 +72,9 @@ class LinsightWorkflowTask:
         self._is_terminated = False
         self._termination_task: asyncio.Task | None = None
         self._final_result: TaskEnd | None = None
+        # Fallback answer captured from the agent's final message when no
+        # TaskEnd is emitted (direct-answer/greeting short-circuit, F035).
+        self._last_assistant_text: str | None = None
         self.file_dir: str | None = None
         self.session_version_id: str | None = None
         self.step_event_extra_files: list[
@@ -284,8 +287,13 @@ class LinsightWorkflowTask:
             # Build Tool List
             linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
             tools.extend(linsight_tools)
-            # Create agent (deepagents CompiledStateGraph, F035 §2.1)
-            agent = await self._create_agent(session_model, tools)
+            # Create agent (deepagents CompiledStateGraph, F035 §2.1).
+            # Durable Redis checkpointer (same as the resume path) so a HITL
+            # interrupt parked here is locatable on resume — which rebuilds the
+            # agent on the same thread_id in a possibly different worker process.
+            from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+
+            agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
 
             # Check if terminated during initialization
             self._check_termination()
@@ -506,6 +514,13 @@ class LinsightWorkflowTask:
                 subgraphs=True,
             ):
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
+                # Capture the agent's latest top-level reply as a fallback
+                # answer for the no-TaskEnd case (e.g. a greeting the planner
+                # answers directly without spawning sub-tasks).
+                if mode == "values" and not namespace and isinstance(raw, dict):
+                    text = self._extract_last_message_text(raw.get("messages"))
+                    if text:
+                        self._last_assistant_text = text
                 for event in mapper.normalize(mode, raw, namespace=namespace):
                     await self._handle_event(agent, event, session_model)
             return True
@@ -593,6 +608,31 @@ class LinsightWorkflowTask:
             return mode, raw, None
         # Defensive: unexpected shape — treat as a values snapshot with no ns.
         return "values", chunk, None
+
+    @staticmethod
+    def _extract_last_message_text(messages) -> str | None:
+        """Pull plain text from the last message of a graph values snapshot.
+
+        Tolerates LangChain message objects and dicts, and content that is a
+        string or a list of content blocks (multimodal/tool-call shape).
+        """
+        if not messages:
+            return None
+        last = messages[-1]
+        content = getattr(last, "content", None)
+        if content is None and isinstance(last, dict):
+            content = last.get("content")
+        if isinstance(content, str):
+            return content.strip() or None
+        if isinstance(content, list):
+            parts: list[str] = []
+            for block in content:
+                if isinstance(block, str):
+                    parts.append(block)
+                elif isinstance(block, dict) and isinstance(block.get("text"), str):
+                    parts.append(block["text"])
+            return "".join(parts).strip() or None
+        return None
 
     # ==================== Event processing ====================
 
@@ -757,13 +797,45 @@ class LinsightWorkflowTask:
     async def _handle_task_completion(self, session_model: LinsightSessionVersion):
         """Processing Task Completion"""
         if not self._final_result:
-            logger.error("No final task results found")
+            # No TaskEnd was emitted — the agent answered directly without
+            # planning sub-tasks (e.g. a greeting). Don't leave the frontend
+            # stuck on '规划中': fall back to the agent's final message so the
+            # user still gets a reply and the session closes.
+            logger.warning("No final task result; using direct-answer fallback")
+            await self._handle_direct_answer_completion(session_model)
             return
 
         if self._final_result.status == TaskStatus.SUCCESS.value:
             await self._handle_task_success(session_model)
         else:
             await self._handle_task_failure(session_model, "Task execution failed:<g id='1'></g> ")
+
+    async def _handle_direct_answer_completion(self, session_model: LinsightSessionVersion):
+        """Complete a session that produced no TaskEnd event.
+
+        The deepagents planner can answer trivial inputs (greetings, plain Q&A)
+        directly without emitting sub-tasks, so ``self._final_result`` stays
+        unset. Push the agent's final message as the result and close the
+        session COMPLETED so the user still gets feedback instead of an endless
+        '规划中'. Fall back to a clean failure if no text was captured, so the
+        frontend still unsticks.
+        """
+        answer = (self._last_assistant_text or "").strip()
+        if not answer:
+            await self._handle_task_failure(session_model, "Task produced no result")
+            return
+
+        session_model.status = SessionVersionStatusEnum.COMPLETED
+        session_model.output_result = {
+            "answer": answer,
+            "final_files": [],
+            "all_from_session_files": [],
+        }
+        await self._state_manager.set_session_version_info(session_model)
+        await self._state_manager.push_message(
+            MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
+        )
+        logger.info("Task completed via direct-answer fallback (no sub-tasks)")
 
     async def _handle_task_success(self, session_model: LinsightSessionVersion):
         """Processing task successful"""

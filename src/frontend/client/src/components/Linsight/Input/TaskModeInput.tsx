@@ -182,6 +182,9 @@ export function TaskModeInput({ conversationId = 'new', disabled = false }: Task
             skills: skills.map((s) => s.name),
             enableWebSearch: false,
             useKnowledgeBase: context.knowledge.length > 0,
+            // F035: continue the current session on follow-up rounds. conversationId
+            // is the real session id in the execution view, 'new' on the landing page.
+            sessionId: conversationId && conversationId !== 'new' ? conversationId : undefined,
         });
 
         setText('');
@@ -192,7 +195,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false }: Task
         if (!location.pathname.includes('/linsight')) navigate('/linsight/new');
     }, [
         text, context, disabled, fileUploading, filesParsing, model, skills,
-        localize, location.pathname, navigate, setContext, setLinsightSubmission,
+        localize, location.pathname, navigate, setContext, setLinsightSubmission, conversationId,
     ]);
 
     const handleKeyDown = useCallback(

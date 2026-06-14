@@ -37,6 +37,9 @@ class LinsightQuestionSubmitSchema(BaseModel):
     # F035: per-task selected execution model id; None falls back to the tenant
     # ``linsight_default_model_id`` at resolve time (agent_factory._resolve_model).
     model: str | None = Field(None, description="Per-task selected execution model id")
+    # F035: continue an existing session (a follow-up round in the same 会话).
+    # None creates a brand-new session.
+    session_id: str | None = Field(None, description="Existing session id to continue; None creates a new session")
 
     @field_validator("tools")
     @classmethod

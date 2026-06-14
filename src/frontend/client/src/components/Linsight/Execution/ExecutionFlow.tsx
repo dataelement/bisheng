@@ -7,7 +7,7 @@
  * WS hook (task-message-stream) is mounted here so the event pump stays alive
  * after the old TaskFlow stops rendering.
  */
-import { CircleAlert, FolderOpen, OctagonX } from 'lucide-react';
+import { CircleAlert, OctagonX } from 'lucide-react';
 import { useMemo, useRef } from 'react';
 import { SopStatus } from '~/store/linsight';
 import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
@@ -35,6 +35,9 @@ interface ExecutionFlowProps {
     /** conversation id for the input's per-session memory */
     conversationId?: string;
     isSharePage?: boolean;
+    /** workspace/preview panel state — lifted to Sop/index so the Header's
+        workspace button drives the same drawer */
+    artifactsPanel: ReturnType<typeof useArtifactsPanel>;
 }
 
 /** Collect every clarify (call_user_input) entry across session + tasks. */
@@ -50,7 +53,7 @@ function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[])
     return entries;
 }
 
-export function ExecutionFlow({ versionId, conversationId, isSharePage = false }: ExecutionFlowProps) {
+export function ExecutionFlow({ versionId, conversationId, isSharePage = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
     const { getLinsight } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
@@ -67,7 +70,6 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false }
 
     // P4 artifacts: output files + the shared right-side panel (workspace/preview)
     const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
-    const artifactsPanel = useArtifactsPanel();
 
     // clarify requests: the newest unanswered one is the active card;
     // session-level answered ones become flow-level intent rows
@@ -95,19 +97,6 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false }
 
     return (
         <div className="relative flex h-full w-full flex-col">
-            {/* workspace entry (spec §5 fig 9: top-right icon, shown once completed) */}
-            {completed && fileList.length > 0 && (
-                <button
-                    type="button"
-                    title={localize('com_linsight_workspace')}
-                    aria-label={localize('com_linsight_workspace')}
-                    className="absolute right-4 top-3 z-10 rounded-lg border border-gray-200 bg-white p-2 text-gray-600 shadow-sm hover:bg-gray-50"
-                    onClick={artifactsPanel.openWorkspace}
-                >
-                    <FolderOpen size={16} />
-                </button>
-            )}
-
             {/* ── conversational flow ─────────────────────────────────────── */}
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-hover">
                 <div className="mx-auto w-full max-w-[800px] px-4 pb-6 pt-4">

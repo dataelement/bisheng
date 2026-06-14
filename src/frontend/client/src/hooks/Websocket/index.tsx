@@ -96,8 +96,9 @@ export const useLinsightWebSocket = (versionId) => {
                                 }
                                 parentsToUpdate.get(parentId).push({
                                     id: _task.id,
-                                    // F035 deepagents events carry a flat `name`; legacy ones nest task_data.display_target
-                                    name: _task.name ?? _task.task_data?.display_target ?? '',
+                                    // F035 deepagents tasks carry the title at task_data.name;
+                                    // tolerate a flat name / legacy display_target too.
+                                    name: _task.name ?? _task.task_data?.name ?? _task.task_data?.display_target ?? '',
                                     status: _task.status,
                                     history: [],
                                 });
@@ -107,7 +108,7 @@ export const useLinsightWebSocket = (versionId) => {
                                 if (!exists) {
                                     updatedTasks.push({
                                         id: _task.id,
-                                        name: _task.name ?? _task.task_data?.display_target ?? '',
+                                        name: _task.name ?? _task.task_data?.name ?? _task.task_data?.display_target ?? '',
                                         status: _task.status,
                                         history: [],
                                         children: [],

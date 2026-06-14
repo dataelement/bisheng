@@ -35,7 +35,7 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                 <span className="shrink-0 font-medium text-gray-700">
                     {allDone ? localize('com_linsight_task_panel_done') : localize('com_linsight_task_panel')}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-left text-gray-500">{headTask?.name}</span>
+                <span className="min-w-0 flex-1 truncate text-left text-gray-500">{headTask?.name || headTask?.task_data?.name}</span>
                 <span className="shrink-0 text-xs text-gray-400">
                     {doneCount}/{tasks.length}
                 </span>
@@ -62,7 +62,7 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                                     )}
                                 </span>
                                 <span className={cn('min-w-0 flex-1 truncate', done ? 'text-gray-400' : 'text-gray-700')}>
-                                    {task.name}
+                                    {task.name || task.task_data?.name}
                                 </span>
                             </li>
                         );

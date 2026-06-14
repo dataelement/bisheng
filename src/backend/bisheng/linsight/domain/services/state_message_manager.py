@@ -1,17 +1,20 @@
 import asyncio
 import pickle
 from enum import Enum
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.core.cache.redis_manager import get_redis_client_sync, get_redis_client
-from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum, LinsightExecuteTaskDao, \
-    LinsightExecuteTask
+from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
+from bisheng.linsight.domain.models.linsight_execute_task import (
+    ExecuteTaskStatusEnum,
+    LinsightExecuteTask,
+    LinsightExecuteTaskDao,
+)
 from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion, LinsightSessionVersionDao
+from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
 from bisheng.utils.util import retry_async
 from bisheng_langchain.linsight.event import BaseEvent
 
@@ -20,6 +23,7 @@ class MessageEventType(str, Enum):
     """
     Message event type enumeration
     """
+
     #  tasks starting
     TASK_START = "task_start"
     # Generate Tasks
@@ -44,9 +48,10 @@ class MessageEventType(str, Enum):
 
 class MessageData(BaseModel):
     """Message Data Model"""
+
     event_type: MessageEventType
-    data: Dict[str, Any]
-    timestamp: Optional[float] = Field(default_factory=lambda: asyncio.get_event_loop().time())
+    data: dict[str, Any]
+    timestamp: float | None = Field(default_factory=lambda: asyncio.get_event_loop().time())
 
 
 class LinsightStateMessageManager:
@@ -72,9 +77,9 @@ class LinsightStateMessageManager:
         # Redis keyManaging
         self._key_prefix = f"{self.KEY_PREFIX}{session_version_id}:"
         self._keys = {
-            'session_version_info': f"{self._key_prefix}session_version_info",
-            'messages': f"{self._key_prefix}messages",
-            'execution_tasks': f"{self._key_prefix}execution_tasks:"
+            "session_version_info": f"{self._key_prefix}session_version_info",
+            "messages": f"{self._key_prefix}messages",
+            "execution_tasks": f"{self._key_prefix}execution_tasks:",
         }
 
     async def _handle_redis_operation(self, operation, *args, **kwargs):
@@ -108,15 +113,11 @@ class LinsightStateMessageManager:
         """
         self._logger.info(f"Pushing message: {message.event_type}")
 
-        await self._handle_redis_operation(
-            self._redis_client.arpush,
-            self._keys['messages'],
-            message.model_dump()
-        )
+        await self._handle_redis_operation(self._redis_client.arpush, self._keys["messages"], message.model_dump())
         self._logger.info(f"Message pushed: {message.event_type}")
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def pop_message(self) -> Optional[MessageData]:
+    async def pop_message(self) -> MessageData | None:
         """
         FROMRedisA message pops up in the list
 
@@ -124,8 +125,7 @@ class LinsightStateMessageManager:
             Message Model orNone
         """
         try:
-
-            message_data = await self._redis_client.ablpop(self._keys['messages'])
+            message_data = await self._redis_client.ablpop(self._keys["messages"])
 
             if message_data:
                 return MessageData.model_validate(message_data)
@@ -151,9 +151,9 @@ class LinsightStateMessageManager:
 
                 # Write AgainRedis
                 await pipe.set(
-                    self._keys['session_version_info'],
+                    self._keys["session_version_info"],
                     pickle.dumps(session_version_model.model_dump()),
-                    ex=self.DEFAULT_EXPIRATION
+                    ex=self.DEFAULT_EXPIRATION,
                 )
                 await pipe.execute()
 
@@ -164,7 +164,7 @@ class LinsightStateMessageManager:
                 raise
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def get_session_version_info(self) -> Optional[LinsightSessionVersion]:
+    async def get_session_version_info(self) -> LinsightSessionVersion | None:
         """
         Get session version information
 
@@ -172,10 +172,7 @@ class LinsightStateMessageManager:
             Session Version Information Model orNone
         """
         try:
-            info = await self._handle_redis_operation(
-                self._redis_client.aget,
-                self._keys['session_version_info']
-            )
+            info = await self._handle_redis_operation(self._redis_client.aget, self._keys["session_version_info"])
             if not info:
                 self._logger.warning(f"No session version info found for {self._session_version_id}")
                 session_version_model = await LinsightSessionVersionDao.get_by_id(self._session_version_id)
@@ -190,7 +187,7 @@ class LinsightStateMessageManager:
             return session_version_model
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def set_execution_tasks(self, tasks: List[LinsightExecuteTask]) -> None:
+    async def set_execution_tasks(self, tasks: list[LinsightExecuteTask]) -> None:
         """
         Set Execution Information
 
@@ -203,13 +200,9 @@ class LinsightStateMessageManager:
 
         try:
             # Batch WriteRedis
-            tasks_mapping = {
-                f"{self._keys['execution_tasks']}{task.id}": task.model_dump()
-                for task in tasks
-            }
+            tasks_mapping = {f"{self._keys['execution_tasks']}{task.id}": task.model_dump() for task in tasks}
 
             await self._redis_client.amset(tasks_mapping, expiration=self.DEFAULT_EXPIRATION)
-
 
         except Exception as e:
             self._logger.error(f"Failed to set execution tasks: {e}")
@@ -217,11 +210,8 @@ class LinsightStateMessageManager:
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def update_execution_task_status(
-            self,
-            task_id: str,
-            status: ExecuteTaskStatusEnum,
-            **kwargs
-    ) -> Dict[str, Any]:
+        self, task_id: str, status: ExecuteTaskStatusEnum, **kwargs
+    ) -> dict[str, Any]:
         """
         Update Execution Status
 
@@ -235,21 +225,19 @@ class LinsightStateMessageManager:
         """
         try:
             # Update database first
-            task_model = await LinsightExecuteTaskDao.update_by_id(
-                task_id,
-                status=status,
-                **kwargs
-            )
+            task_model = await LinsightExecuteTaskDao.update_by_id(task_id, status=status, **kwargs)
+            if task_model is None:
+                # Orphan task_id (e.g. a session-level interrupt whose task_id is
+                # the session id when no sub-task was in progress). Skip instead
+                # of crashing on None.model_dump() and retrying 3x.
+                self._logger.warning(f"Task {task_id} not found; skipping status update")
+                return {}
 
             # Update againRedis
             task_key = f"{self._keys['execution_tasks']}{task_id}"
             task_data = task_model.model_dump()
 
-            await self._redis_client.aset(
-                task_key,
-                task_data,
-                expiration=self.DEFAULT_EXPIRATION
-            )
+            await self._redis_client.aset(task_key, task_data, expiration=self.DEFAULT_EXPIRATION)
 
             self._logger.info(f"Updated task {task_id} status to {status}")
             return task_data
@@ -259,7 +247,7 @@ class LinsightStateMessageManager:
             raise
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def set_user_input(self, task_id: str, user_input: str, files: List[Dict[str, str]] = None) -> None:
+    async def set_user_input(self, task_id: str, user_input: str, files: list[dict[str, str]] = None) -> None:
         """
         Set User Input
 
@@ -271,7 +259,6 @@ class LinsightStateMessageManager:
         task_key = f"{self._keys['execution_tasks']}{task_id}"
 
         try:
-
             task_model = await self.get_execution_task(task_id)
 
             if not task_model:
@@ -297,9 +284,7 @@ class LinsightStateMessageManager:
 
             # Database updating
             await LinsightExecuteTaskDao.update_by_id(
-                task_id,
-                status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
-                history=task_model.history
+                task_id, status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED, history=task_model.history
             )
 
             self._logger.info(f"Set user input for task {task_id}")
@@ -309,7 +294,7 @@ class LinsightStateMessageManager:
             raise ServerError.http_exception()
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
-    async def get_execution_task(self, task_id: str) -> Optional[LinsightExecuteTask]:
+    async def get_execution_task(self, task_id: str) -> LinsightExecuteTask | None:
         """
         Get task execution information
 
@@ -327,8 +312,13 @@ class LinsightStateMessageManager:
             if task_data:
                 return LinsightExecuteTask.model_validate(task_data)
 
-            # Automatically close purchase order afterRedisNo data in, fetching from database
+            # Not in Redis — fall back to the database.
             task_model = await LinsightExecuteTaskDao.get_by_id(task_id)
+            if task_model is None:
+                # Unknown task_id (e.g. a top-level step whose task_id is the
+                # session id when no sub-task was planned). Don't call
+                # set_execution_tasks([None]) — that raises NoneType.id.
+                return None
             await self.set_execution_tasks([task_model])
             return task_model
 
@@ -351,7 +341,12 @@ class LinsightStateMessageManager:
             task_data = await self.get_execution_task(task_id)
 
             if not task_data:
-                raise ValueError(f"Task with ID {task_id} not found in Redis.")
+                # Orphan step: a top-level agent step whose task_id is the
+                # session id (no sub-task was planned for it). Skip persistence
+                # instead of failing the whole run — the caller still streams
+                # the step to the client via push_message.
+                self._logger.warning(f"Task {task_id} not found; skipping step persistence")
+                return
 
             task_model = LinsightExecuteTask.model_validate(task_data)
 
@@ -363,16 +358,9 @@ class LinsightStateMessageManager:
             task_model.history.append(step.model_dump())
 
             # Update Redis and database
-            await self._redis_client.aset(
-                task_key,
-                task_model.model_dump(),
-                expiration=self.DEFAULT_EXPIRATION
-            )
+            await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)
 
-            await LinsightExecuteTaskDao.update_by_id(
-                task_id,
-                history=task_model.history
-            )
+            await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
 
             self._logger.info(f"Added step to task {task_id}")
 
@@ -399,7 +387,8 @@ class LinsightStateMessageManager:
 
             if not tasks:
                 tasks = await LinsightExecuteTaskDao.get_by_session_version_id(
-                    session_version_id=self._session_version_id)
+                    session_version_id=self._session_version_id
+                )
             return tasks
 
         except Exception as e:
@@ -422,7 +411,7 @@ class LinsightStateMessageManager:
             self._logger.error(f"Failed to cleanup session data: {e}")
             raise
 
-    async def get_session_stats(self) -> Dict[str, Any]:
+    async def get_session_stats(self) -> dict[str, Any]:
         """
         Get session statistics
 
@@ -431,22 +420,22 @@ class LinsightStateMessageManager:
         """
         try:
             stats = {
-                'session_version_id': self._session_version_id,
-                'message_count': await self._redis_client.allen(self._keys['messages']),
-                'has_session_info': await self._redis_client.aexists(self._keys['session_version_info']),
-                'task_count': 0
+                "session_version_id": self._session_version_id,
+                "message_count": await self._redis_client.allen(self._keys["messages"]),
+                "has_session_info": await self._redis_client.aexists(self._keys["session_version_info"]),
+                "task_count": 0,
             }
 
             # Calculate number of tasks
             pattern = f"{self._keys['execution_tasks']}*"
             task_keys = await self._redis_client.akeys(pattern)
-            stats['task_count'] = len(task_keys)
+            stats["task_count"] = len(task_keys)
 
             return stats
 
         except Exception as e:
             self._logger.error(f"Failed to get session stats: {e}")
-            return {'error': str(e)}
+            return {"error": str(e)}
 
     # Clean up all session-relatedRedisDATA
     @classmethod

@@ -171,7 +171,11 @@ export const useLinsightSessionManager = (versionId: string) => {
  */
 export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
     const [loading, setLoading] = useState(false); // 多会话共用
-    const { linsightSubmission, clearLinsightSubmission } = useLinsightSessionManager(versionId)
+    // F035: a new round always submits under the 'new' key (the next version has
+    // no id yet). Watch 'new' fixed — NOT `versionId` — otherwise follow-up rounds
+    // after the first one (versionId is a real id by then) never fire and
+    // "continue conversation" looks dead.
+    const { linsightSubmission, clearLinsightSubmission } = useLinsightSessionManager('new')
     const { createLinsight, updateLinsight } = useLinsightManager()
     const queryClient = useQueryClient();
     const { showToast } = useToastContext();
@@ -213,6 +217,9 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                     // F035 Track H: user-picked skill names (forward-compatible —
                     // the submit schema does not consume this field yet)
                     skills: linsightSubmission.skills || [],
+                    // F035: continue an existing session (follow-up round) so the
+                    // backend appends a version instead of creating a new 会话.
+                    session_id: linsightSubmission.sessionId || null,
                 }
 
                 const sse = new SSE(`${__APP_ENV__.BASE_URL}/api/v1/linsight/workbench/submit`, {
@@ -340,7 +347,7 @@ export const useLinsightSubmit = (versionId, setVersionId, setVersions) => {
                 sopError: '',
                 sop: ''
             })
-            clearLinsightSubmission(versionId)
+            clearLinsightSubmission('new')
             setError(false)
         }
     }, [linsightSubmission])

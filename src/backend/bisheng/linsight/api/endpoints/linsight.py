@@ -414,18 +414,22 @@ async def start_execute_sop(
         queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
 
         await queue.put(data=linsight_session_version_id)
-        # will besopWrite to record table
-        background_tasks.add_task(
-            SOPManageService.add_sop_record,
-            LinsightSOPRecord(
-                name=session_version_model.title,
-                description=None,
-                user_id=login_user.user_id,
-                content=session_version_model.sop,
-                linsight_version_id=session_version_model.id,
-                create_time=session_version_model.create_time,
-            ),
-        )
+        # Persist a SOP record only when the session actually carries SOP content.
+        # Post-de-SOP (F035), session_version_model.sop can be None; writing it
+        # would violate the linsight_sop_record.content NOT NULL constraint and
+        # is meaningless without the removed "做同款" reuse flow.
+        if session_version_model.sop:
+            background_tasks.add_task(
+                SOPManageService.add_sop_record,
+                LinsightSOPRecord(
+                    name=session_version_model.title,
+                    description=None,
+                    user_id=login_user.user_id,
+                    content=session_version_model.sop,
+                    linsight_version_id=session_version_model.id,
+                    create_time=session_version_model.create_time,
+                ),
+            )
 
     except Exception as e:
         logger.error(f"Failed to start the Ideas task: {e!s}")

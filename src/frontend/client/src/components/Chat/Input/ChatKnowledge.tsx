@@ -828,8 +828,11 @@ export const ChatKnowledge = ({
           <>
             <div className="my-1 h-px bg-slate-100" />
             <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
+              onSelect={() => {
+                // Close the menu before navigating: keeping it open while the
+                // trigger unmounts on route change leaves the popover anchorless
+                // and it jumps to the top-left corner.
+                setRootOpen(false);
                 onEnterTaskMode?.();
               }}
               className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"

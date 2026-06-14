@@ -43,7 +43,7 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
     return (
         <StepRow
             icon={statusIcon(task.status)}
-            title={task.name}
+            title={task.name || task.task_data?.name}
             running={running}
             titleClassName={cn(done && 'text-gray-400')}
         >

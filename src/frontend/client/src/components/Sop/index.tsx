@@ -7,8 +7,8 @@ import { useLinsightManager, useLinsightSubmit } from '~/hooks/useLinsightManage
 import { formatTime } from '~/utils';
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { ExecutionFlow } from '~/components/Linsight/Execution/ExecutionFlow';
+import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { LoadingIcon } from '../ui/icon/Loading';
-import { LoadingBox } from './components/SopLoading';
 import { Header } from './Header';
 import { SopStatus } from '~/store/linsight';
 
@@ -23,6 +23,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData({ conversationId, sopId, vid, shareToken });
     const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions)
     const { getLinsight } = useLinsightManager()
+    const artifactsPanel = useArtifactsPanel();
 
     return (
         <div className='relative h-full bg-gradient-to-b from-[#F4F8FF] to-white'>
@@ -36,11 +37,12 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                 chatId={conversationId}
                 setVersionId={switchVersion}
                 versionId={versionId}
-                isSharePage={isSharePage || sid} // when case sharebutton is hide 
+                isSharePage={isSharePage || sid} // when case sharebutton is hide
                 versions={versions}
+                onOpenWorkspace={artifactsPanel.openWorkspace}
             />
 
-            {isLoading ? <LoadingBox /> : versionId === 'new' && !sopId ? (
+            {versionId === 'new' && !sopId ? (
                 /* F035 Track H (P2): fresh-task landing — the new unified
                    task-mode input replaces the legacy LinsightChatInput entry. */
                 <div className='w-full h-[calc(100vh-68px)] flex flex-col justify-center'>
@@ -56,6 +58,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                         versionId={versionId}
                         conversationId={conversationId}
                         isSharePage={!!(isSharePage || sopId)}
+                        artifactsPanel={artifactsPanel}
                     />
                 </div>
             )}

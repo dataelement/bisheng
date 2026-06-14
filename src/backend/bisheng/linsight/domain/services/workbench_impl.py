@@ -154,37 +154,49 @@ class LinsightWorkbenchImpl:
             LinsightError: When creating a session fails
         """
         try:
-            # Generate Unique SessionsID
-            chat_id = uuid.uuid4().hex
+            # Continue an existing session when session_id is supplied, else
+            # start a fresh one. Continuing reuses the MessageSession and only
+            # appends a new version, so follow-up rounds stay in one 会话 (F035).
+            continuing = bool(submit_obj.session_id)
+            chat_id = submit_obj.session_id or uuid.uuid4().hex
 
-            # Process files (if present)
+            message_session = None
+            if continuing:
+                message_session = await MessageSessionDao.async_get_one(chat_id)
+                if message_session is None or message_session.user_id != login_user.user_id:
+                    # Stale / invalid / foreign session_id -> fall back to new.
+                    continuing = False
+                    chat_id = uuid.uuid4().hex
+
+            # Process files (if present) — after chat_id is finalized
             processed_files = await cls._process_submitted_files(submit_obj.files, chat_id)
 
-            # Create a message session
-            message_session = MessageSession(
-                chat_id=chat_id,
-                flow_id=ApplicationTypeEnum.LINSIGHT.value,
-                name="New Chat",
-                flow_name="New Chat",
-                flow_type=FlowType.LINSIGHT.value,
-                user_id=login_user.user_id,
-            )
+            if not continuing:
+                # Create a message session
+                message_session = MessageSession(
+                    chat_id=chat_id,
+                    flow_id=ApplicationTypeEnum.LINSIGHT.value,
+                    name="New Chat",
+                    flow_name="New Chat",
+                    flow_type=FlowType.LINSIGHT.value,
+                    user_id=login_user.user_id,
+                )
 
-            message_session = await MessageSessionDao.async_insert_one(message_session)
+                message_session = await MessageSessionDao.async_insert_one(message_session)
 
-            # RecordTelemetryJournal
-            await telemetry_service.log_event(
-                user_id=login_user.user_id,
-                event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
-                trace_id=trace_id_var.get(),
-                event_data=NewMessageSessionEventData(
-                    session_id=message_session.chat_id,
-                    app_id=ApplicationTypeEnum.LINSIGHT.value,
-                    source="platform",
-                    app_name=ApplicationTypeEnum.LINSIGHT.value,
-                    app_type=ApplicationTypeEnum.LINSIGHT,
-                ),
-            )
+                # RecordTelemetryJournal
+                await telemetry_service.log_event(
+                    user_id=login_user.user_id,
+                    event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                    trace_id=trace_id_var.get(),
+                    event_data=NewMessageSessionEventData(
+                        session_id=message_session.chat_id,
+                        app_id=ApplicationTypeEnum.LINSIGHT.value,
+                        source="platform",
+                        app_name=ApplicationTypeEnum.LINSIGHT.value,
+                        app_type=ApplicationTypeEnum.LINSIGHT,
+                    ),
+                )
 
             # Create Ideas Conversation Version
             linsight_session_version = LinsightSessionVersion(

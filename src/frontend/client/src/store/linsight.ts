@@ -129,6 +129,8 @@ export type SubmissionState = {
     enableWebSearch: boolean;
     useKnowledgeBase: boolean;
     prevVersionId?: string;
+    /** F035: existing session id to continue (follow-up round); undefined = new session. */
+    sessionId?: string;
 };
 
 // 使用atomFamily管理每个会话的状态 会话id-版本id:状态
