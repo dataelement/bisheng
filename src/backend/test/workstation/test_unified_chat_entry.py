@@ -85,6 +85,20 @@ def test_to_linsight_submit_maps_question_session_and_knowledge():
     assert submit.org_knowledge_enabled is True  # derived from non-empty org ids
 
 
+def test_to_linsight_submit_forwards_per_task_model():
+    """The frontend-selected per-task model id must be forwarded, not dropped.
+
+    Regression: _to_linsight_submit hard-coded model=None, so a task-mode turn
+    always lost the selected model. _resolve_model then fell back to the tenant
+    linsight_default_model_id and failed outright when that was unconfigured.
+    """
+    data = APIChatCompletion(clientTimestamp="t", conversationId="c", model="20", text="hi", task_mode=True)
+
+    submit = chat_service._to_linsight_submit(data)
+
+    assert submit.model == "20"
+
+
 def test_to_linsight_submit_no_knowledge_defaults_false():
     data = APIChatCompletion(clientTimestamp="t", conversationId="c", model="m", text="hi", task_mode=True)
 

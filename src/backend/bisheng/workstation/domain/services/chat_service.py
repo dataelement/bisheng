@@ -1779,8 +1779,12 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
 def _to_linsight_submit(data: APIChatCompletion):
     """Map the unified chat request to a linsight submit schema (F035 Track J).
 
-    Sound mappings only — question, conversation (session_id) and knowledge
-    booleans. Tools/files are NOT mapped from the daily-shaped fields: daily and
+    Sound mappings only — question, conversation (session_id), the per-task
+    execution model (``data.model``, same workstation model-id the daily path
+    uses) and knowledge booleans. The model MUST be forwarded: dropping it makes
+    every task-mode turn fall back to the tenant ``linsight_default_model_id``,
+    which fails outright when that is unconfigured.
+    Tools/files are NOT mapped from the daily-shaped fields: daily and
     task use different subsystems (flat ToolPayload vs grouped linsight tools;
     separate upload buckets), so a daily selection is not a valid linsight one.
     Task-mode tools/files come from linsight-native selection forwarded by the
@@ -1794,5 +1798,5 @@ def _to_linsight_submit(data: APIChatCompletion):
         session_id=data.conversationId,
         personal_knowledge_enabled=bool(ukb.personal_knowledge_enabled) if ukb else False,
         org_knowledge_enabled=bool(ukb.organization_knowledge_ids) if ukb else False,
-        model=None,
+        model=data.model,
     )
