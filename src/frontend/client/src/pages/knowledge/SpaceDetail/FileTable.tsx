@@ -6,6 +6,7 @@ import {
     TableRow,
 } from "@/components/ui/Table";
 import { Outlined } from "bisheng-icons";
+import { FolderInput, GitBranch, History, FileSearch } from "lucide-react";
 import {
     Checkbox,
     DropdownMenu,
@@ -547,6 +548,18 @@ interface FileTableProps {
     deleteEntryIds?: Set<string>;
     downloadEntryIds?: Set<string>;
     onManagePermission?: (id: string) => void;
+    /** F034: open the move dialog for a file/folder. Shown when provided. */
+    onMove?: (file: KnowledgeFile) => void;
+    /** F034: whether a file/folder can be moved (move permission in this space). */
+    canMove?: boolean;
+    /** Version management gating for per-row version actions / badges. */
+    versionManagementEnabled?: boolean;
+    /** Open the version-management (similar-document linking) dialog for a file. */
+    onOpenVersionManagement?: (file: KnowledgeFile) => void;
+    /** Open the version-history sheet for a file. */
+    onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    /** Whether the current user can manage members (gates the "similar" pill). */
+    canManageMembers?: boolean;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
@@ -560,7 +573,7 @@ interface FileTableProps {
     bottomSpacing?: number;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMove = false, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -671,6 +684,12 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                         ? () => onManagePermission(file.id)
                                         : undefined
                                 }
+                                onMove={onMove ? () => onMove(file) : undefined}
+                                canMove={canMove}
+                                versionManagementEnabled={versionManagementEnabled}
+                                onOpenVersionManagement={onOpenVersionManagement}
+                                onOpenVersionHistory={onOpenVersionHistory}
+                                canManageMembers={canManageMembers}
                                 canRename={Boolean(renameEntryIds?.has(file.id))}
                                 canDelete={Boolean(deleteEntryIds?.has(file.id))}
                                 canDownload={Boolean(downloadEntryIds?.has(file.id))}
@@ -720,6 +739,12 @@ function FileRow({
     onValidateName,
     onCancelCreate,
     onManagePermission,
+    onMove,
+    canMove = false,
+    versionManagementEnabled = false,
+    onOpenVersionManagement,
+    onOpenVersionHistory,
+    canManageMembers = false,
     canRename = false,
     canDelete = false,
     canDownload = false,
@@ -747,6 +772,12 @@ function FileRow({
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
     onManagePermission?: () => void;
+    onMove?: () => void;
+    canMove?: boolean;
+    versionManagementEnabled?: boolean;
+    onOpenVersionManagement?: (file: KnowledgeFile) => void;
+    onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    canManageMembers?: boolean;
     canRename?: boolean;
     canDelete?: boolean;
     canDownload?: boolean;
@@ -792,7 +823,10 @@ function FileRow({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission);
+    const showMoveItem = Boolean(onMove) && !isCreating;
+    const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
+    const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
+    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory;
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
     const showRowActions = rowHovered || moreMenuOpen;
@@ -841,6 +875,17 @@ function FileRow({
                                 label={localize("com_knowledge.rename")}
                             />
                         )}
+                        {showMoveItem && (
+                            <ActionMenuItem
+                                disabled={!canMove}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onMove?.();
+                                }}
+                                icon={<FolderInput />}
+                                label={localize("com_knowledge.move")}
+                            />
+                        )}
                         {isAdmin && hasRetryOption && (
                             <ActionMenuItem
                                 onClick={(e) => {
@@ -859,6 +904,26 @@ function FileRow({
                                 }}
                                 icon={<Outlined.PeopleSafe />}
                                 label={localize("com_permission.manage_permission")}
+                            />
+                        )}
+                        {showVersionManagement && (
+                            <ActionMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenVersionManagement?.(file);
+                                }}
+                                icon={<GitBranch />}
+                                label={localize("com_knowledge.version.menu_version_management")}
+                            />
+                        )}
+                        {showVersionHistory && (
+                            <ActionMenuItem
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onOpenVersionHistory?.(file);
+                                }}
+                                icon={<History />}
+                                label={localize("com_knowledge.version.menu_version_history")}
                             />
                         )}
                         {canDelete && (
@@ -939,25 +1004,45 @@ function FileRow({
                             className="flex-1 h-7 px-2 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal text-[#1d2129]"
                         />
                     ) : (
-                        <span
-                            className={cn(
-                                "text-sm truncate flex-1",
-                                namePreviewable
-                                    ? "cursor-pointer text-[#212121] hover:text-[#4080FF]"
-                                    : "cursor-default text-[#999]"
+                        <>
+                            {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
+                                <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
+                                    {`V${file.version_no}`}
+                                </span>
                             )}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (isFolder) {
-                                    onNavigateFolder?.();
-                                    return;
-                                }
-                                if (!namePreviewable) return;
-                                onPreview?.();
-                            }}
-                        >
-                            <span className="block truncate">{renderHighlightedName(file.name, highlightKeyword)}</span>
-                        </span>
+                            {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onOpenVersionManagement?.(file);
+                                    }}
+                                    className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+                                >
+                                    <FileSearch className="size-3" />
+                                    {localize("com_knowledge.version.pill_similar")}
+                                </button>
+                            )}
+                            <span
+                                className={cn(
+                                    "text-sm truncate flex-1",
+                                    namePreviewable
+                                        ? "cursor-pointer text-[#212121] hover:text-[#4080FF]"
+                                        : "cursor-default text-[#999]"
+                                )}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isFolder) {
+                                        onNavigateFolder?.();
+                                        return;
+                                    }
+                                    if (!namePreviewable) return;
+                                    onPreview?.();
+                                }}
+                            >
+                                <span className="block truncate">{renderHighlightedName(file.name, highlightKeyword)}</span>
+                            </span>
+                        </>
                     )}
                     {/* Inline status tag — non-folder files in any non-success state. */}
                     {!isFolder && file.status && file.status !== FileStatus.SUCCESS && (

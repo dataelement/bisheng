@@ -1,4 +1,4 @@
-import { Download, MoreVertical } from "lucide-react";
+import { Download, MoreVertical, FolderInput, GitBranch, History, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
@@ -48,9 +48,21 @@ interface FileCardProps {
     onValidateName?: (newName: string) => string | null;
     onCancelCreate?: () => void;
     onManagePermission?: () => void;
+    /** F034: open the move dialog for this file/folder. Shown when provided. */
+    onMove?: () => void;
+    /** F034: whether this file/folder can be moved (move permission in this space). */
+    canMove?: boolean;
     canRename?: boolean;
     canDelete?: boolean;
     canDownload?: boolean;
+    /** Version management gating for per-row version actions / badges. */
+    versionManagementEnabled?: boolean;
+    /** Open the version-management (similar-document linking) dialog for this file. */
+    onOpenVersionManagement?: (file: KnowledgeFile) => void;
+    /** Open the version-history sheet for this file. */
+    onOpenVersionHistory?: (file: KnowledgeFile) => void;
+    /** Whether the current user can manage members (gates the "similar" pill). */
+    canManageMembers?: boolean;
     disableClickNavigate?: boolean;
     hideSelectionCheckbox?: boolean;
     /** H5: render as list-row (not card tile). */
@@ -78,9 +90,15 @@ export function FileCard({
     onValidateName,
     onCancelCreate,
     onManagePermission,
+    onMove,
+    canMove = false,
     canRename = false,
     canDelete = false,
     canDownload = false,
+    versionManagementEnabled = false,
+    onOpenVersionManagement,
+    onOpenVersionHistory,
+    canManageMembers = false,
     disableClickNavigate = false,
     hideSelectionCheckbox = false,
     mobileListMode = false,
@@ -224,14 +242,34 @@ export function FileCard({
         }
 
         return (
-            <span
-                className={cn(
-                    "line-clamp-2 min-h-[40px] break-all leading-5",
-                    nameToneClass,
+            <div className="flex min-w-0 items-start gap-1.5">
+                {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
+                    <span className="mt-0.5 flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
+                        {`V${file.version_no}`}
+                    </span>
                 )}
-            >
-                {renderHighlightedName(file.name, highlightKeyword)}
-            </span>
+                {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenVersionManagement?.(file);
+                        }}
+                        className="mt-0.5 flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+                    >
+                        <FileSearch className="size-3" />
+                        {localize("com_knowledge.version.pill_similar")}
+                    </button>
+                )}
+                <span
+                    className={cn(
+                        "line-clamp-2 min-h-[40px] min-w-0 break-all leading-5",
+                        nameToneClass,
+                    )}
+                >
+                    {renderHighlightedName(file.name, highlightKeyword)}
+                </span>
+            </div>
         );
     };
 
@@ -259,7 +297,11 @@ export function FileCard({
             (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
         )
     );
-    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission);
+    // Version row actions visible for this file (parsed non-folder for management; multi-version for history).
+    const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
+    const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
+    const showMoveItem = Boolean(onMove) && !isCreating;
+    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory;
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
@@ -517,11 +559,33 @@ export function FileCard({
                                                 label={localize("com_knowledge.rename")}
                                             />
                                         )}
+                                        {showMoveItem && (
+                                            <ActionMenuItem
+                                                disabled={!canMove}
+                                                onClick={(e) => { e.stopPropagation(); onMove?.(); }}
+                                                icon={<FolderInput />}
+                                                label={localize("com_knowledge.move")}
+                                            />
+                                        )}
                                         {isAdmin && hasRetryOption && (
                                             <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
                                                 icon={<Outlined.Refresh />}
                                                 label={localize("com_knowledge.retry")}
+                                            />
+                                        )}
+                                        {showVersionManagement && (
+                                            <ActionMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                                                icon={<GitBranch />}
+                                                label={localize("com_knowledge.version.menu_version_management")}
+                                            />
+                                        )}
+                                        {showVersionHistory && (
+                                            <ActionMenuItem
+                                                onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                                                icon={<History />}
+                                                label={localize("com_knowledge.version.menu_version_history")}
                                             />
                                         )}
                                         {canDelete && (
@@ -639,11 +703,33 @@ export function FileCard({
                                         label={localize("com_knowledge.rename")}
                                     />
                                 )}
+                                {showMoveItem && (
+                                    <ActionMenuItem
+                                        disabled={!canMove}
+                                        onClick={(e) => { e.stopPropagation(); onMove?.(); }}
+                                        icon={<FolderInput />}
+                                        label={localize("com_knowledge.move")}
+                                    />
+                                )}
                                 {isAdmin && hasRetryOption && (
                                     <ActionMenuItem
                                         onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
                                         icon={<Outlined.Refresh />}
                                         label={localize("com_knowledge.retry")}
+                                    />
+                                )}
+                                {showVersionManagement && (
+                                    <ActionMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
+                                        icon={<GitBranch />}
+                                        label={localize("com_knowledge.version.menu_version_management")}
+                                    />
+                                )}
+                                {showVersionHistory && (
+                                    <ActionMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
+                                        icon={<History />}
+                                        label={localize("com_knowledge.version.menu_version_history")}
                                     />
                                 )}
                                 {canDelete && (

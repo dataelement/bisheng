@@ -1,7 +1,8 @@
 import { Fragment, useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
-import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FolderPlus, FolderInput, Loader2 } from "lucide-react";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
@@ -13,10 +14,13 @@ import {
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
+import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
     getAllowedExtensions,
     getFileInputAccept,
+    isKnowledgeItemUploading,
     triggerUrlDownload,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
@@ -26,13 +30,17 @@ import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
+import { MoveToDialog } from "./MoveToDialog";
+import { VersionManagementDialog } from "./VersionManagementDialog";
+import { VersionHistorySheet } from "./VersionHistorySheet";
+import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
-import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef, useVersionManagementEnabled } from "~/hooks";
 import {
     knowledgeSpaceDropdownSurfaceClassName,
     SidebarListMoreMenuContent,
@@ -245,6 +253,44 @@ export function KnowledgeSpaceContent({
         space.id,
         "manage_space_relation",
     );
+    // ─── Version Management ──────────────────────────────────────────────
+    const versionManagementEnabled = useVersionManagementEnabled();
+    const queryClient = useQueryClient();
+    const spaceIdNum = Number(space.id);
+
+    const [versionMgmtFile, setVersionMgmtFile] = useState<KnowledgeFile | null>(null);
+    const [versionHistoryFile, setVersionHistoryFile] = useState<KnowledgeFile | null>(null);
+    const [similarDialogOpen, setSimilarDialogOpen] = useState(false);
+
+    const { data: pendingSimilarList = [] } = useQuery({
+        queryKey: ["pending-similar", spaceIdNum],
+        queryFn: () => getPendingSimilarFilesApi(spaceIdNum),
+        enabled: versionManagementEnabled && spaceIdNum > 0 && canManageMembers,
+    });
+    const pendingSimilarCount = pendingSimilarList.length;
+
+    // SimHash scan runs asynchronously on the backend after a file's parse finishes,
+    // so files can transition has_similar=false → true outside the pending-similar polling
+    // cadence. Watch the has_similar id set on the visible file list AND the total file
+    // count (the latter catches cross-folder deletions of similar-marked children).
+    const similarFileIdsKey = displayFiles
+        .filter((f) => f.has_similar && !f.is_multi_version)
+        .map((f) => f.id)
+        .sort()
+        .join(",");
+    useEffect(() => {
+        if (!versionManagementEnabled || spaceIdNum <= 0) return;
+        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
+    }, [similarFileIdsKey, total, versionManagementEnabled, spaceIdNum, queryClient]);
+
+    // Invalidate pending-similar and trigger file list refresh after any version action.
+    const handleVersionAction = () => {
+        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
+        queryClient.invalidateQueries({ queryKey: ["file-versions"] });
+        // Signal parent to reload file list (same pattern used by batch delete/retry).
+        onDeleteFile("");
+    };
+
     // Share = copy the space share link (mirrors the desktop CopyShareLinkButton);
     // only when the space is shareable and not private.
     const showShareInMenu = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
@@ -258,6 +304,9 @@ export function KnowledgeSpaceContent({
     };
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
+    // Move permission is separate from upload (both can_edit tier, but a role may
+    // grant one without the other). Drives the move menu items' greyed state.
+    const [canMoveFile, setCanMoveFile] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
@@ -299,7 +348,14 @@ export function KnowledgeSpaceContent({
                 "upload_file",
                 { signal: controller.signal },
             ),
-        ]).then(([createFolderResult, uploadFileResult]) => {
+            checkPermission(
+                objectType,
+                objectId,
+                "can_edit",
+                "move_file",
+                { signal: controller.signal },
+            ),
+        ]).then(([createFolderResult, uploadFileResult, moveFileResult]) => {
             if (cancelled) return;
             setCanCreateFolder(
                 createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
@@ -307,10 +363,14 @@ export function KnowledgeSpaceContent({
             setCanUploadFile(
                 uploadFileResult.status === "fulfilled" && Boolean(uploadFileResult.value?.allowed)
             );
+            setCanMoveFile(
+                moveFileResult.status === "fulfilled" && Boolean(moveFileResult.value?.allowed)
+            );
         }).catch(() => {
             if (!cancelled) {
                 setCanCreateFolder(false);
                 setCanUploadFile(false);
+                setCanMoveFile(false);
             }
         });
 
@@ -668,6 +728,37 @@ export function KnowledgeSpaceContent({
         setIsBatchTagging(true);
     };
 
+    // F034: move selected files/folders (same-space or cross-space) via MoveToDialog.
+    // TODO(merge-followup): the pre-merge build also wired drag-to-folder move
+    // (useKnowledgeMoveDrag + dropMoveToFolder) onto the table rows / card tiles.
+    // That requires restructuring beta1's row/card render (drag sources + folder drop
+    // targets) and risks the sticky-column / responsive layout, so it's deferred here;
+    // dialog-based move (batch + per-row) is fully wired.
+    const { moveDialogOpen, setMoveDialogOpen, openMove, requestBatchMove, handleMoveConfirm } = useKnowledgeMove({
+        spaceId: space.id,
+        onMoved: () => {
+            setSelectedFiles(new Set());
+            queryClient.invalidateQueries({ queryKey: ["file-versions"] });
+            onDeleteFile(""); // generic "file list changed, reload" signal (same as batch delete).
+            // Refresh the left sidebar folder tree(s). No spaceId → global refresh,
+            // so a cross-space move updates both the source and target trees.
+            dispatchKnowledgeSpaceFilesRefresh();
+        },
+    });
+    const handleBatchMove = () => {
+        // Uploading placeholders have no backend id yet → excluded.
+        const movable = displayFiles.filter(
+            (f) => selectedFiles.has(f.id) && !isKnowledgeItemUploading(f),
+        );
+        if (!movable.length) return;
+        // Frontend pre-flight (space-level move permission, simple block): if the user
+        // can't move in this space, every selected item is denied → block dialog before
+        // the picker. The backend re-validates per item on the move.
+        const permitted = canMoveFile ? movable : [];
+        const denied = canMoveFile ? [] : movable;
+        requestBatchMove(permitted, denied);
+    };
+
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
@@ -697,9 +788,10 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    const handlePreviewFile = (fileId: string) => {
+    const handlePreviewFile = (fileId: string, explicitFileName?: string) => {
         const file = displayFiles.find(f => f.id === fileId);
-        const fileName = file?.name || localize("com_knowledge.unknown_file");
+        // Version files aren't in displayFiles, so accept an explicit name for them.
+        const fileName = explicitFileName || file?.name || localize("com_knowledge.unknown_file");
         // Use extension from filename for preview viewer dispatch instead of API type field
         const ext = fileName.split('.').pop()?.toLowerCase() || "";
         const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(ext)}&spaceId=${encodeURIComponent(space.id)}`;
@@ -848,6 +940,9 @@ export function KnowledgeSpaceContent({
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+    // Uploading placeholders have no backend identity yet — a selection containing one
+    // cannot be moved (the menu entry is disabled below).
+    const selectionHasUploading = selectedList.some((f) => isKnowledgeItemUploading(f));
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         deleteEntryIds.has(file.id)
     );
@@ -885,6 +980,7 @@ export function KnowledgeSpaceContent({
         },
         (isAdmin && !hasFoldersSelected) && { key: "tag", label: localize("com_knowledge.batch_add_tags"), Icon: Outlined.Tag, onClick: handleBatchTag },
         (isAdmin && hasFailedFiles) && { key: "retry", label: localize("com_knowledge.retry"), Icon: Outlined.Refresh, onClick: handleBatchRetry },
+        (canMoveFile && !selectionHasUploading) && { key: "move", label: localize("com_knowledge.move"), Icon: FolderInput, onClick: handleBatchMove },
         canManageSinglePermission && { key: "permission", label: localize("com_permission.manage_permission"), Icon: Outlined.PeopleSafe, onClick: () => handleManagePermission(singleSelectedId!) },
         canBatchDelete && { key: "delete", label: localize("com_knowledge.delete"), Icon: Outlined.Delete, onClick: handleBatchDelete, danger: true },
     ].filter(Boolean) as BatchAction[];
@@ -1096,10 +1192,16 @@ export function KnowledgeSpaceContent({
                 canBatchDownload={canBatchDownload}
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
+                onBatchMove={handleBatchMove}
+                canBatchMove={canMoveFile && !selectionHasUploading}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
                 canShareSpace={canShareSpace}
+                versionManagementEnabled={versionManagementEnabled}
+                pendingSimilarCount={pendingSimilarCount}
+                onProcessSimilar={() => setSimilarDialogOpen(true)}
+                canManageMembers={canManageMembers}
             />
             </div>
             )}
@@ -1185,6 +1287,8 @@ export function KnowledgeSpaceContent({
                                             onSelect={(selected) => handleSelectFile(file.id, selected)}
                                             onDownload={() => handleSingleDownload(file.id)}
                                             onRename={(newName) => onRenameFile(file.id, newName)}
+                                            onMove={() => openMove([file])}
+                                            canMove={canMoveFile}
                                             onDelete={() => handleDelete(file.id)}
                                             onEditTags={() => handleOpenEditTags(file.id)}
                                             onRetry={() => handleSingleRetry(file.id)}
@@ -1193,6 +1297,10 @@ export function KnowledgeSpaceContent({
                                             onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                             onCancelCreate={onCancelCreateFolder}
                                             onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
+                                            versionManagementEnabled={versionManagementEnabled}
+                                            onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
+                                            onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
+                                            canManageMembers={canManageMembers}
                                             canRename={renameEntryIds.has(file.id)}
                                             canDelete={deleteEntryIds.has(file.id)}
                                             canDownload={downloadEntryIds.has(file.id)}
@@ -1220,6 +1328,8 @@ export function KnowledgeSpaceContent({
                                     onDownload={(id) => handleSingleDownload(id)}
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
+                                    onMove={(file) => openMove([file])}
+                                    canMove={canMoveFile}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}
@@ -1231,6 +1341,10 @@ export function KnowledgeSpaceContent({
                                     deleteEntryIds={deleteEntryIds}
                                     downloadEntryIds={downloadEntryIds}
                                     onManagePermission={handleManagePermission}
+                                    versionManagementEnabled={versionManagementEnabled}
+                                    onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
+                                    onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
+                                    canManageMembers={canManageMembers}
                                     sortBy={sortBy}
                                     sortDirection={sortDirection}
                                     onSort={handleSort}
@@ -1343,6 +1457,68 @@ export function KnowledgeSpaceContent({
                     showMembersTab={false}
                     showPermissionTab
                 />
+            )}
+
+            {/* F034: Move files/folders (same-space + cross-space) */}
+            <MoveToDialog
+                open={moveDialogOpen}
+                onOpenChange={setMoveDialogOpen}
+                currentSpaceId={space.id}
+                currentSpaceName={space.name}
+                onConfirm={handleMoveConfirm}
+            />
+
+            {versionManagementEnabled && (
+                <>
+                    <VersionManagementDialog
+                        open={versionMgmtFile !== null}
+                        onOpenChange={(o) => { if (!o) setVersionMgmtFile(null); }}
+                        spaceId={spaceIdNum}
+                        file={versionMgmtFile}
+                        onLinked={() => {
+                            handleVersionAction();
+                            setVersionMgmtFile(null);
+                        }}
+                    />
+                    <VersionHistorySheet
+                        open={versionHistoryFile !== null}
+                        onOpenChange={(o) => { if (!o) setVersionHistoryFile(null); }}
+                        fileId={versionHistoryFile ? Number(versionHistoryFile.id) : null}
+                        documentTitle={versionHistoryFile?.name}
+                        canManage={isAdmin}
+                        onPreview={(versionFileId, fileName) => handlePreviewFile(String(versionFileId), fileName)}
+                        onDownload={async (versionFileId, fileName) => {
+                            try {
+                                const downloadData = await getFileDownloadApi(
+                                    String(space.id),
+                                    String(versionFileId),
+                                );
+                                const downloadUrl = downloadData.original_url;
+                                if (!downloadUrl) {
+                                    showToast({
+                                        message: localize("com_knowledge.get_download_link_failed"),
+                                        status: "error",
+                                    });
+                                    return;
+                                }
+                                triggerUrlDownload(downloadUrl, fileName);
+                            } catch {
+                                showToast({
+                                    message: localize("com_knowledge.download_failed"),
+                                    status: "error",
+                                });
+                            }
+                        }}
+                        onPrimaryChanged={handleVersionAction}
+                        onDeleted={handleVersionAction}
+                    />
+                    <SimilarDocumentDialog
+                        open={similarDialogOpen}
+                        onOpenChange={setSimilarDialogOpen}
+                        spaceId={spaceIdNum}
+                        onProcessed={handleVersionAction}
+                    />
+                </>
             )}
         </div>
     );
