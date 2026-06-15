@@ -369,23 +369,6 @@ def _increment_portal_search_perf(field: str, amount: int = 1) -> None:
         setattr(perf, field, getattr(perf, field) + amount)
 
 
-# F036-①: inheritance fast-path toggle. When enabled, child items whose lineage (the item
-# itself or any ancestor folder) carries no explicit binding skip the full per-item ReBAC
-# evaluation and instead inherit a per-ancestor-chain decision (computed once) -- plus an
-# owner short-circuit (`item.user_id == current user`). Safe only under the verified invariant
-# "every non-owner file/folder grant has a binding" (owner/parent tuples are additive/structural
-# and ignored). Default OFF; flip via env for canary / load test. The full path stays as the
-# oracle + fallback so the result set is identical (covered by equivalence tests).
-import os as _os  # noqa: E402  (local toggle read; avoid touching the top import block)
-
-_CHILD_PERMISSION_FAST_PATH_ENABLED = _os.getenv("BS_REBAC_CHILD_FASTPATH", "false").lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
-
-
 class KnowledgeSpaceService(KnowledgeUtils):
     """Service for Knowledge Space operations.
     Instance-based; each method receives login_user as an argument.
@@ -4309,9 +4292,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 result.append(space_id)
         return result
 
-    async def _get_shougang_portal_tag_file_ids(
-        self, space_ids: list[int], tag_name: str | None
-    ) -> list[int] | None:
+    async def _get_shougang_portal_tag_file_ids(self, space_ids: list[int], tag_name: str | None) -> list[int] | None:
         if not tag_name:
             return None
         tag_map = await TagDao.aget_tags_by_business_ids(
@@ -5879,27 +5860,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         return len(visible_files)
 
-    async def _filter_visible_child_items(
+    async def _filter_visible_child_items_reference(
         self,
         items: list[KnowledgeFile],
         *,
         space_id: int,
         context: dict | None = None,
     ) -> list[KnowledgeFile]:
-        _increment_portal_search_perf("visible_check_count", len(items))
-        permission_context = context or await self._build_child_permission_context(space_id)
-        if not _CHILD_PERMISSION_FAST_PATH_ENABLED:
-            return await self._filter_visible_child_items_full(items, space_id=space_id, context=permission_context)
-        return await self._filter_visible_child_items_fast(items, space_id=space_id, context=permission_context)
+        """Reference (oracle) path: full per-item ReBAC evaluation (pre-F036 behaviour).
 
-    async def _filter_visible_child_items_full(
-        self,
-        items: list[KnowledgeFile],
-        *,
-        space_id: int,
-        context: dict,
-    ) -> list[KnowledgeFile]:
-        """Oracle path: full per-item ReBAC evaluation (pre-F036 behaviour)."""
+        Retained as the equivalence oracle for F036 tests and as a documented fallback if the
+        invariant behind the optimized path (every non-owner file/folder grant carries a binding)
+        ever needs to be re-verified against the live tuple store. NOT on the hot path.
+        """
+        permission_context = context or await self._build_child_permission_context(space_id)
         semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
 
         async def can_view(item: KnowledgeFile) -> bool:
@@ -5908,19 +5882,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 effective_permissions = await self._get_child_item_effective_permission_ids(
                     item,
                     space_id=space_id,
-                    context=context,
+                    context=permission_context,
                 )
                 return permission_id in effective_permissions
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
         return [item for item, allowed in zip(items, visibility) if allowed]
 
-    async def _filter_visible_child_items_fast(
+    async def _filter_visible_child_items(
         self,
         items: list[KnowledgeFile],
         *,
         space_id: int,
-        context: dict,
+        context: dict | None = None,
     ) -> list[KnowledgeFile]:
         """F036-① inheritance fast-path. Visibility-equivalent to the full path under the verified
         invariant "every non-owner file/folder grant has a binding".
@@ -5932,7 +5906,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
           (computed once per distinct chain; ancestor-folder bindings are honoured inside the
           chain eval via nearest-binding-wins).
         """
-        binding_index = context["binding_index"]
+        _increment_portal_search_perf("visible_check_count", len(items))
+        permission_context = context or await self._build_child_permission_context(space_id)
+        binding_index = permission_context["binding_index"]
         bound_ff = {key for key in binding_index if key[0] in ("knowledge_file", "folder")}
         user_id = self.login_user.user_id
         chain_cache: dict[tuple[int, ...], set[str]] = {}
@@ -5942,7 +5918,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             key = tuple(ancestor_ids)
             if key not in chain_cache:
                 chain_cache[key] = await self._chain_effective_permission_ids(
-                    ancestor_ids, space_id=space_id, context=context
+                    ancestor_ids, space_id=space_id, context=permission_context
                 )
             return chain_cache[key]
 
@@ -5954,7 +5930,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     effective_permissions = await self._get_child_item_effective_permission_ids(
                         item,
                         space_id=space_id,
-                        context=context,
+                        context=permission_context,
                     )
                 return permission_id in effective_permissions
             item_owner = getattr(item, "user_id", None)

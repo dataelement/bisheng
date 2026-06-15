@@ -15,13 +15,13 @@
 **依赖**: F004（ReBAC core）、F008（resource-rebac-adaptation）、F027（cursor 扫描循环，本特性在其 `_scan_visible_child_items` 上改造）
 
 > **范围边界**
-> - **本次纳入**（三项均为**请求内**优化，无跨请求状态）：
->   - ① **继承快速通道**：页内子项中，lineage（自身 + 各级父文件夹 + 空间）里**不存在任何文件/文件夹级绑定**的项，直接套用「空间级继承决策」（整请求只算一次），不再逐项跑完整 ReBAC；只有 lineage 含更近绑定的项才做完整 `nearest_binding_wins` 评估。
->   - ② **整页批量预取 tuple**：对「页内项 + 其祖先文件夹 + 空间」一次性批量读 OpenFGA tuple 填入**请求级** `tuple_cache`，消除逐项 `read_tuples` 的 I/O 扇出。
->   - ③ **bindings 建索引**：把本请求已加载的 bindings 预处理为 `(resource_type, resource_id, relation) → [binding]` 查表，`_resolve_binding_for_tuple` 由「每 tuple 线性扫全表」改 O(1)。
->   - 改造点集中在 `FineGrainedPermissionService` 与 `KnowledgeSpaceService` 的子项可见性过滤链路；同链路被其它 ReBAC 列表复用处一并受益。
+> - **本次纳入**（两项均为**请求内**优化，无跨请求状态、**无开关默认启用**）：
+>   - ① **继承快速通道**：页内子项中，lineage（自身 + 各级父文件夹 + 空间）里**不存在任何文件/文件夹级绑定**的项，直接套用「空间级继承决策」（整请求只算一次），不再逐项跑完整 ReBAC；只有 lineage 含更近绑定的项才做完整 `nearest_binding_wins` 评估；owner（`item.user_id==当前用户`）短路可见。
+>   - ③ **bindings 建索引**：把本请求已加载的 bindings 预处理为按资源 key 分组的查表，`_resolve_binding_for_tuple` 由「每 tuple 线性扫全表」改 O(1)。
+>   - 改造点集中在 `FineGrainedPermissionService` 与 `KnowledgeSpaceService` 的子项可见性过滤链路；同链路被其它 ReBAC 列表复用处一并受益。完整逐项路径以 `_filter_visible_child_items_reference` 保留作等价测试 oracle。
 > - **本次明确排除**：
 >   - **不改变任何权限语义**：可见性结果必须与改造前逐项评估**逐位等价**（含 INV-7）。语义变更属越权风险，禁止。
+>   - **② 整页批量预取 tuple —— 经核实不可行**：OpenFGA `/read` 无多对象批量原语；且其想省的逐项 `read_tuples` I/O 已被 ① 跳过评估覆盖（继承项连自身 tuple 都不读）。详见 design 决策 2。
 >   - **不引入跨请求权限缓存**（曾考虑的 models/bindings/部门路径/用户主体跨请求缓存方案已砍）：该缓存只省「每请求构建一次上下文」的边际成本（非每项成本，非本瓶颈），却需把失效逻辑挂进授权/部门/组织同步等**其它领域的写路径**，跨域耦合不划算。若将来 profiling 证明上下文构建成新瓶颈，再按 design §8 用「读侧从数据版本派生 key」的解耦方式引入。
 >   - 不改 cursor 协议 / 分页语义（INV-6 归 F027）。
 >   - 不改 relation-model / binding 的**数据模型**与授权写入 UI（归 F004/F008/资源授权页）。
