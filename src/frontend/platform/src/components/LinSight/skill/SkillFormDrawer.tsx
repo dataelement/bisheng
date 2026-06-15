@@ -36,11 +36,17 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
     const [saving, setSaving] = useState(false);
     // Once the admin edits the skill ID by hand, stop auto-suggesting.
     const idTouchedRef = useRef(false);
+    // Render mirror of idTouchedRef: the regenerate entry only appears after the
+    // ID is hand-edited, so it never shows as a no-op while the ID auto-tracks the
+    // display name. (ref stays the source of truth — the debounced slug callback
+    // reads it inside a stale closure where a state value would be outdated.)
+    const [idTouched, setIdTouched] = useState(false);
     const slugTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
     useEffect(() => {
         if (!open) return;
         idTouchedRef.current = false;
+        setIdTouched(false);
         setErrors({});
         if (editing) {
             setDisplayName(editing.display_name);
@@ -76,12 +82,14 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
 
     const handleNameChange = (value: string) => {
         idTouchedRef.current = true;
+        setIdTouched(true);
         setName(value);
         setErrors(prev => ({ ...prev, name: undefined }));
     };
 
     const handleRegenerate = () => {
         idTouchedRef.current = false;
+        setIdTouched(false);
         requestSlug(displayName);
     };
 
@@ -171,7 +179,7 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
                                 placeholder={t('skillManage.form.skillIdPh')}
                                 onChange={(e) => handleNameChange(e.target.value)}
                             />
-                            {!editing && (
+                            {!editing && idTouched && (
                                 <Button variant="outline" size="sm" className="h-9 shrink-0" onClick={handleRegenerate}>
                                     <RefreshCw className="size-3.5 mr-1" />{t('skillManage.form.regenerate')}
                                 </Button>

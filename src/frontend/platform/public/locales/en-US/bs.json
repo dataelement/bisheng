@@ -2619,7 +2619,7 @@
       "descriptionDesc": "The model uses it to decide when to invoke this skill",
       "descriptionPh": "One sentence: what it does and when to use it",
       "content": "Skill Body",
-      "contentDesc": "SKILL.md markdown body",
+      "contentDesc": "The steps and rules the model follows to perform the task",
       "contentPh": "# About this skill\n\n## When to use\n…\n\n## Steps\n1. …",
       "requiredField": "This field is required",
       "idInvalid": "Skill ID allows lowercase letters, digits and single hyphens only",

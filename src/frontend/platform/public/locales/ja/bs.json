@@ -2564,7 +2564,7 @@
       "descriptionDesc": "モデルはこれを基にスキルの呼び出しを判断します",
       "descriptionPh": "何をするスキルか、いつ使うかを一文で",
       "content": "スキル本文",
-      "contentDesc": "SKILL.md 本文",
+      "contentDesc": "モデルが従う実行手順とルールを記述します",
       "contentPh": "# スキル説明\n\n## 適用シーン\n…\n\n## 手順\n1. …",
       "requiredField": "必須項目です",
       "idInvalid": "スキル ID は小文字・数字・単一ハイフンのみ使用できます",
