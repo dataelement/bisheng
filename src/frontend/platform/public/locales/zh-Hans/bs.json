@@ -2527,8 +2527,7 @@
   },
   "skillManage": {
     "title": "技能管理",
-    "subtitle": "终端用户在任务模式「+ → 添加技能」中可选用的本租户自定义技能；新建/启停即时影响输入区可见技能",
-    "searchPlaceholder": "搜索展示名称 / 描述",
+    "searchPlaceholder": "搜索名称/描述",
     "statusAll": "全部",
     "statusEnabled": "已启用",
     "statusDisabled": "已停用",
@@ -2538,7 +2537,7 @@
     "columns": {
       "displayName": "展示名称",
       "description": "描述",
-      "status": "启停",
+      "status": "状态",
       "createTime": "创建时间",
       "actions": "操作"
     },

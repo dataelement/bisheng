@@ -125,8 +125,7 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
 
     return (
         <div className="mb-6">
-            <p className="text-lg font-bold mb-1">{t('skillManage.title')}</p>
-            <p className="text-sm text-muted-foreground mb-3">{t('skillManage.subtitle')}</p>
+            <p className="text-lg font-bold mb-3">{t('skillManage.title')}</p>
             <div className="flex items-center gap-2 mb-3">
                 <SearchInput
                     placeholder={t('skillManage.searchPlaceholder')}
@@ -155,7 +154,9 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
                 </div>
             </div>
             <div className="border rounded-md">
-                <Table>
+                {/* table-fixed: honor column widths so the description truncates instead of
+                    widening the table and triggering a horizontal scrollbar */}
+                <Table className="table-fixed">
                     <TableHeader>
                         <TableRow>
                             <TableHead className="w-56">{t('skillManage.columns.displayName')}</TableHead>
@@ -185,7 +186,7 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
                                         <span className="truncate min-w-0">{skill.display_name}</span>
                                     </div>
                                 </TableCell>
-                                <TableCell className="max-w-[320px] truncate" title={skill.description}>{skill.description}</TableCell>
+                                <TableCell className="truncate" title={skill.description}>{skill.description}</TableCell>
                                 {/* Quick toggle stays inline; stop the click from opening the detail sheet */}
                                 <TableCell onClick={(e) => e.stopPropagation()}>
                                     <Switch checked={skill.enabled} onCheckedChange={(checked) => handleToggle(skill, checked)} />
