@@ -157,9 +157,9 @@ const Nav = ({
                 <nav
                   id="chat-history-nav"
                   aria-label={localize('com_ui_chat_history')}
-                  className="flex h-full min-h-0 w-full flex-col gap-4 py-5 px-3 max-[767px]:gap-0 max-[767px]:p-0"
+                  className="flex h-full min-h-0 w-full flex-col gap-0 pt-7 pb-5 px-3 max-[767px]:gap-0 max-[767px]:p-0"
                 >
-                  {/* 新建 */}
+                  {/* New chat header and buttons */}
                   <NewChat
                     toggleNav={toggleNavVisible}
                     isSmallScreen={isSmallScreen}
@@ -171,7 +171,7 @@ const Nav = ({
                     )}
                     ref={containerRef}
                   >
-                    {/* 会话列表 */}
+                    {/* Conversation history list */}
                     <Conversations
                       conversations={conversations}
                       moveToTop={moveToTop}

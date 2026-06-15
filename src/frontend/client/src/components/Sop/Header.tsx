@@ -21,7 +21,7 @@ export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId
             {isLoading ?
                 <Skeleton className="h-7 w-[250px] rounded-lg bg-gray-100 opacity-100" />
                 : <div className="flex items-center gap-3">
-                    <FileText className="size-4" />
+                    {/* <FileText className="size-4" /> */}
                     <span className="text-base font-medium text-gray-900">
                         {title || linsight?.title}
                     </span>

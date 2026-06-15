@@ -612,7 +612,7 @@
   "com_nav_source_buffer_error": "设置音频播放时发生错误。请刷新页面。",
   "com_nav_speech_cancel_error": "无法停止音频播放。您可能需要刷新页面。",
   "com_nav_speech_to_text": "语音转文本",
-  "com_nav_start_new_chat": "开始新对话",
+  "com_nav_start_new_chat": "新建对话",
   "com_nav_start_new_task": "新建任务",
   "com_nav_stop_generating": "停止生成",
   "com_nav_text_to_speech": "文本转语音",

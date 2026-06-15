@@ -27,14 +27,14 @@ const Conversations = ({
   );
 
   return (
-    <div className="text-token-text-primary flex flex-col gap-2 px-2 pb-2 text-sm">
+    <div className="text-token-text-primary flex flex-col gap-2 pb-2 text-sm">
       <div>
         {groupedConversations.map(([groupName, convos]) => (
           <div key={groupName}>
             <div
-              className="text-black opacity-60 pt-4 text-[12px] mb-1"
+              className="text-[#8C8C8C] pt-6 pb-2 text-[13px] font-normal pl-3 select-none"
             >
-              {/* time */}
+              {/* Date group label */}
               {localize(groupName as TranslationKeys) || groupName}
             </div>
             {convos.map((convo, i) => (

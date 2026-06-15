@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Glasses, Plus, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
@@ -138,15 +139,15 @@ export default function NewChat({
           />
         ) : (
           <div>
-            <div className="border-b border-[#e5e6eb] pb-4">
-              <div className="flex items-center text-[16px] font-medium">
-                <span className="leading-6 text-[#212121]">{localize('com_nav_home')}</span>
+            <div className="pb-0">
+              <div className="flex items-center pl-3">
+                <span className="text-base font-bold leading-8 text-[#1A1A1A]">{localize('com_nav_home')}</span>
               </div>
-              <div className="mt-4 flex w-full gap-1">
-                {/* 新建btn */}
+              <div className="mt-5 flex w-full flex-col gap-1">
+                {/* Create chat button */}
                 <Button
                   variant="outline"
-                  className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[5px] h-auto shadow-none text-[#212121] font-normal"
+                  className="w-full flex items-center justify-start gap-[8px] border-none rounded-lg px-2 py-1.5 h-auto shadow-none text-[#1A1A1A] font-normal hover:bg-[#F5F5F5] transition-colors"
                   aria-label={localize('com_ui_new_chat')}
                   onClick={() => {
                     document.getElementById("create-convo-btn")?.click();
@@ -156,33 +157,31 @@ export default function NewChat({
                     }, 300);
                   }}
                 >
-                  <Plus className='size-[20px] text-[#212121]' />
+                  <Outlined.MessagePlus size={16} className='text-[#1A1A1A]' />
                   <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_chat')}</span>
                 </Button>
-              </div>
-              {showNewTaskEntry && (
-                <div className="mt-2 flex w-full gap-1">
-                  {/* 新建任务 */}
+                {showNewTaskEntry && (
+                  /* Create task button */
                   <Button
                     variant="outline"
-                    className="w-full flex items-center justify-center gap-[8px] border border-[#e3e3e3] rounded-[6px] px-[12px] py-[5px] h-auto shadow-none text-[#212121] font-normal"
+                    className="w-full flex items-center justify-start gap-[8px] border-none rounded-lg px-2 py-1.5 h-auto shadow-none text-[#1A1A1A] font-normal hover:bg-[#F5F5F5] transition-colors"
                     aria-label={localize('com_nav_start_new_task')}
                     onClick={handleNewTask}
                   >
-                    <Glasses className='size-[20px] text-[#212121]' />
+                    <Outlined.Binoculars size={16} className='text-[#1A1A1A]' />
                     <span className="text-[14px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_task')}</span>
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         )}
         {isSmallScreen && (
           <div className='flex w-full flex-col gap-2 px-3 pb-6 pt-4'>
-            {/* 新建btn */}
+            {/* Create chat button for mobile */}
             <Button
               variant="outline"
-              className="flex h-9 w-full items-center justify-center gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#212121] hover:bg-[#F7F8FA]"
+              className="flex h-9 w-full items-center justify-center gap-2 border border-[#EBECF0] bg-white rounded-lg text-[13px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
               aria-label={localize('com_ui_new_chat')}
               onClick={() => {
                 document.getElementById("create-convo-btn")?.click();
@@ -192,17 +191,18 @@ export default function NewChat({
                 }, 300);
               }}
             >
-              <Plus className='size-4 text-[#212121]' />
+              <Outlined.MessagePlus size={16} className='text-[#1A1A1A]' />
               <span className="text-[13px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_chat')}</span>
             </Button>
             {showNewTaskEntry && (
+              /* Create task button for mobile */
               <Button
                 variant="outline"
-                className="flex h-9 w-full items-center justify-center gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#212121] hover:bg-[#F7F8FA]"
+                className="flex h-9 w-full items-center justify-center gap-2 border border-[#EBECF0] bg-white rounded-lg text-[13px] text-[#1A1A1A] hover:bg-[#F5F5F5]"
                 aria-label={localize('com_nav_start_new_task')}
                 onClick={handleNewTask}
               >
-                <Glasses className='size-4 text-[#212121]' />
+                <Outlined.Binoculars size={16} className='text-[#1A1A1A]' />
                 <span className="text-[13px] leading-[20px] whitespace-nowrap">{localize('com_nav_start_new_task')}</span>
               </Button>
             )}

@@ -1,5 +1,6 @@
 import {
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Glasses,
@@ -9,6 +10,7 @@ import {
   SearchIcon,
   Sparkles,
 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   getMineSpacesApi,
@@ -259,6 +261,7 @@ const KnowledgeListPanel = ({
 
 // --- main ---
 export const ChatKnowledge = ({
+  variant = 'plus',
   config,
   disabled,
   value = [],
@@ -269,7 +272,12 @@ export const ChatKnowledge = ({
   showTaskModeEntry = false,
   onEnterTaskMode,
   renderSkillSubmenu,
+  taskModeActive = false,
 }: {
+  /** Controls the trigger button and which menu sections render:
+   *  - 'plus'      → "+" trigger; file-upload + task-mode (+ optional add-skill) sections.
+   *  - 'knowledge' → pill trigger; knowledge-space + org-knowledge submenus only. */
+  variant?: 'plus' | 'knowledge';
   config?: BsConfig;
   disabled: boolean;
   value: KnowledgeItem[];
@@ -283,11 +291,10 @@ export const ChatKnowledge = ({
    *  delegated to the caller so this component stays route-free. */
   showTaskModeEntry?: boolean;
   onEnterTaskMode?: () => void;
-  /** F035 (PRD §4.1.3): "添加 Skill" — grouped with 任务模式. Renders a hover
-   *  submenu (desktop) / drill panel (mobile) with the caller-provided skill
-   *  picker. `close` lets the picker dismiss the "+" menu before navigating
-   *  (selecting a skill enters task mode), avoiding the anchorless-popover jump. */
+  /** F035: "添加 Skill" hover submenu (desktop) / drill panel (mobile); selecting a skill enters task mode. */
   renderSkillSubmenu?: (close: () => void) => ReactNode;
+  /** When already in task mode, show the entry checked (toggle indicator). */
+  taskModeActive?: boolean;
 }) => {
   const localize = useLocalize();
   const PAGE_SIZE = 20;
@@ -456,12 +463,11 @@ export const ChatKnowledge = ({
   const hasAnySelection = value.length > 0;
   const orgEnabled = !!config?.knowledgeBase?.enabled;
 
-  const [openSub, setOpenSub] = useState<'space' | 'org' | null>(null);
+  const [openSub, setOpenSub] = useState<'org' | null>(null);
   // 仅 <=576 走移动端下钻面板；577~768 保持桌面级联交互（右侧展开）
   const isMobile = useMediaQuery('(max-width: 576px)');
-  const [mobilePanel, setMobilePanel] = useState<'root' | 'space' | 'org' | 'skill'>('root');
+  const [mobilePanel, setMobilePanel] = useState<'root' | 'org' | 'skill'>('root');
   const menuContentRef = useRef<HTMLDivElement>(null);
-  const spaceLayout = useSubMenuLayout(menuContentRef, 'space', openSub === 'space');
   const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
 
   const handleRootOpenChange = useCallback((open: boolean) => {
@@ -475,8 +481,13 @@ export const ChatKnowledge = ({
   const [mobileDrillMaxH, setMobileDrillMaxH] = useState<number | undefined>(undefined);
   const [mobileMenuSide, setMobileMenuSide] = useState<'top' | 'bottom'>('bottom');
 
+  // A "tall list panel" needs the adaptive height cap on mobile: the knowledge
+  // pill always shows the spaces list directly, and the "+" menu shows the org
+  // list once drilled into ('org'). The "+" root (short action items) does not.
+  const mobileTallPanel = variant === 'knowledge' || mobilePanel !== 'root';
+
   useLayoutEffect(() => {
-    if (!isMobile || !rootOpen || mobilePanel === 'root') {
+    if (!isMobile || !rootOpen || !mobileTallPanel) {
       setMobileDrillMaxH(undefined);
       setMobileMenuSide('bottom');
       return;
@@ -508,7 +519,7 @@ export const ChatKnowledge = ({
       window.removeEventListener('resize', run);
       window.removeEventListener('scroll', run, true);
     };
-  }, [isMobile, rootOpen, mobilePanel]);
+  }, [isMobile, rootOpen, mobileTallPanel]);
 
   return (
     <DropdownMenu open={rootOpen} onOpenChange={handleRootOpenChange}>
@@ -516,21 +527,50 @@ export const ChatKnowledge = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild disabled={disabled}>
-              <button
-                ref={triggerRef}
-                type="button"
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-black/5 transition-colors outline-none",
-                  disabled && "opacity-50 cursor-not-allowed"
-                )}
-                aria-label={localize('com_knowledge_add_file')}
-              >
-                <Plus size={18} strokeWidth={1.5} />
-              </button>
+              {variant === 'knowledge' ? (
+                <button
+                  ref={triggerRef}
+                  type="button"
+                  className={cn(
+                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-white",
+                    value.length > 0 && "text-blue-600",
+                    disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
+                  )}
+                  aria-label={localize('com_ui_knowledge_space')}
+                >
+                  <span
+                    aria-hidden
+                    className="size-4 shrink-0 bg-[#165DFF]"
+                    style={{
+                      WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
+                      maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
+                      WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+                      WebkitMaskPosition: 'center', maskPosition: 'center',
+                      WebkitMaskSize: 'contain', maskSize: 'contain',
+                    }}
+                  />
+                  <span>{localize('com_ui_knowledge_space')}</span>
+                  <ChevronDown size={14} className="text-slate-400" />
+                </button>
+              ) : (
+                <button
+                  ref={triggerRef}
+                  type="button"
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-white transition-colors outline-none",
+                    disabled && "opacity-50 cursor-not-allowed"
+                  )}
+                  aria-label={localize('com_knowledge_add_file')}
+                >
+                  <Plus size={18} strokeWidth={1.5} />
+                </button>
+              )}
             </DropdownMenuTrigger>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={6}>
-            {localize('com_knowledge_add_file')}
+            {variant === 'knowledge'
+              ? localize('com_ui_knowledge_space')
+              : localize('com_knowledge_add_file')}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -542,19 +582,25 @@ export const ChatKnowledge = ({
         collisionPadding={isMobile ? MOBILE_MENU_COLLISION : BOTTOM_GAP}
         sticky={isMobile ? 'partial' : undefined}
         className={cn(
-          'w-[200px] flex flex-col gap-0 rounded-2xl border-slate-100 p-1.5 shadow-xl',
+          'flex flex-col gap-0 rounded-2xl border-slate-100 shadow-xl',
+          // variant-aware width/padding: the pill (knowledge) shows a list
+          // directly, so it needs the wider list layout; the "+" menu stays
+          // compact for its short action items.
+          variant === 'knowledge'
+            ? 'w-[280px] overflow-hidden p-3'
+            : 'w-[200px] p-1.5',
           isMobile && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
           isMobile &&
-          mobilePanel !== 'root' &&
+          mobileTallPanel &&
           'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
         )}
         style={
-          isMobile && mobilePanel !== 'root' && mobileDrillMaxH !== undefined
+          isMobile && mobileTallPanel && mobileDrillMaxH !== undefined
             ? { maxHeight: mobileDrillMaxH }
             : undefined
         }
       >
-        {showFileUpload && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
+        {variant === 'plus' && showFileUpload && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
           <DropdownMenuItem
             disabled={fileUploadDisabled}
             onSelect={(e) => {
@@ -573,81 +619,9 @@ export const ChatKnowledge = ({
           </DropdownMenuItem>
         )}
 
-        {/* 移动端：同级覆盖 + 返回；桌面端：Radix Sub 左右级联 */}
-        {isMobile && mobilePanel === 'root' && (
-          <>
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
-                setMobilePanel('space');
-              }}
-              className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 outline-none"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="relative shrink-0">
-                  <img
-                    src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg`}
-                    alt=""
-                    className="size-[18px] text-slate-600"
-                  />
-                  {selectedKnowledgeSpaces.length > 0 && (
-                    <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-                  )}
-                </div>
-                <span className="truncate text-[14px] font-normal text-slate-700">
-                  {localize('com_ui_knowledge_space')}
-                </span>
-              </div>
-              <ChevronRight className="size-4 shrink-0 text-slate-400" strokeWidth={2} />
-            </DropdownMenuItem>
-            {config?.knowledgeBase?.enabled !== false && (
-              <DropdownMenuItem
-                onSelect={(e) => {
-                  e.preventDefault();
-                  setMobilePanel('org');
-                }}
-                className="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 outline-none"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="relative shrink-0">
-                    <img
-                      src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/books.svg`}
-                      alt=""
-                      className="size-[18px] text-slate-600"
-                    />
-                    {selectedOrgKbs.length > 0 && (
-                      <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-                    )}
-                  </div>
-                  <span className="truncate text-[14px] font-normal text-slate-700">
-                    {localize('com_tools_org_knowledge')}
-                  </span>
-                </div>
-                <ChevronRight className="size-4 shrink-0 text-slate-400" strokeWidth={2} />
-              </DropdownMenuItem>
-            )}
-          </>
-        )}
-
-        {isMobile && mobilePanel === 'space' && (
+        {/* Knowledge pill (mobile): show the SPACES list directly — no drill. */}
+        {variant === 'knowledge' && isMobile && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
-              <button
-                type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
-                aria-label={localize('com_ui_go_back')}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setMobilePanel('root');
-                }}
-              >
-                <ChevronLeft className="size-5" strokeWidth={2} />
-              </button>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
-                {localize('com_ui_knowledge_space')}
-              </span>
-            </div>
             <KnowledgeListPanel
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
@@ -663,7 +637,122 @@ export const ChatKnowledge = ({
           </div>
         )}
 
-        {isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
+        {/* Knowledge pill (desktop): show the SPACES list directly — no sub. */}
+        {variant === 'knowledge' && !isMobile && (
+          <div className="flex min-h-0 w-full flex-1 flex-col">
+            <p className="mb-1 shrink-0 py-1.5 text-sm font-medium leading-5">
+              {localize('com_ui_knowledge_space')}
+            </p>
+            <KnowledgeListPanel
+              placeholder={localize('com_chat_knowledge_placeholder_search_space')}
+              keyword={spaceKeyword}
+              setKeyword={setSpaceKeyword}
+              items={filteredSpaces}
+              selectedItems={selectedKnowledgeSpaces}
+              onToggle={(item) => handleToggle(item, 'space')}
+              isFetching={spaceFetching}
+              hasMore={false}
+              onLoadMore={() => { }}
+              emptyText={localize('com_chat_knowledge_empty_no_spaces')}
+            />
+          </div>
+        )}
+
+        {/* Org knowledge selector — moved into the "+" menu, below upload.
+            Desktop: cascading submenu. Gated by KB feature flag. */}
+        {variant === 'plus' && !isMobile && config?.knowledgeBase?.enabled !== false && (
+          <DropdownMenuSub
+            open={openSub === 'org'}
+            onOpenChange={(o) => {
+              if (o) setOpenSub('org');
+              else setOpenSub((cur) => (cur === 'org' ? null : cur));
+            }}
+          >
+            <DropdownMenuSubTrigger
+              data-sub-key="org"
+              className={cn(
+                'mt-0.5 flex cursor-pointer items-center justify-between rounded-xl px-2 py-1.5 outline-none',
+                '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <img
+                    src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/books.svg`}
+                    alt=""
+                    className="size-[18px] text-slate-600"
+                  />
+                  {selectedOrgKbs.length > 0 && (
+                    <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
+                  )}
+                </div>
+                <span className="text-[14px] font-normal text-slate-700">
+                  {localize('com_tools_org_knowledge')}
+                </span>
+              </div>
+            </DropdownMenuSubTrigger>
+
+            <DropdownMenuSubContent
+              alignOffset={orgLayout.alignOffset}
+              collisionPadding={BOTTOM_GAP}
+              className="ml-2 flex w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-2xl"
+              style={
+                {
+                  '--tw-enter-duration': '0.35s',
+                  '--tw-enter-easing': 'ease-in-out',
+                  maxHeight: orgLayout.maxH,
+                } as React.CSSProperties
+              }
+            >
+              <p className="mb-1 shrink-0 py-1.5 text-sm font-medium leading-5">
+                {localize('com_tools_org_knowledge')}
+              </p>
+              <KnowledgeListPanel
+                placeholder={localize('com_tools_knowledge_base_search')}
+                keyword={orgKeyword}
+                setKeyword={setOrgKeyword}
+                items={sortedOrgKbs}
+                selectedItems={selectedOrgKbs}
+                onToggle={(item) => handleToggle(item, 'org')}
+                isFetching={orgFetching}
+                hasMore={hasMoreOrg}
+                onLoadMore={() => setOrgPage((p) => p + 1)}
+                emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
+              />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+
+        {/* Org knowledge selector (mobile): drill option on the "+" root. */}
+        {variant === 'plus' && isMobile && mobilePanel === 'root' && config?.knowledgeBase?.enabled !== false && (
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              setMobilePanel('org');
+            }}
+            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 outline-none"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="relative shrink-0">
+                <img
+                  src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/books.svg`}
+                  alt=""
+                  className="size-[18px] text-slate-600"
+                />
+                {selectedOrgKbs.length > 0 && (
+                  <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
+                )}
+              </div>
+              <span className="truncate text-[14px] font-normal text-slate-700">
+                {localize('com_tools_org_knowledge')}
+              </span>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-slate-400" strokeWidth={2} />
+          </DropdownMenuItem>
+        )}
+
+        {/* Org knowledge selector (mobile): drill panel. */}
+        {variant === 'plus' && isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
             <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
               <button
@@ -697,141 +786,9 @@ export const ChatKnowledge = ({
           </div>
         )}
 
-        {!isMobile && (
-          <>
-            <DropdownMenuSub
-              open={openSub === 'space'}
-              onOpenChange={(o) => {
-                if (o) setOpenSub('space');
-                else setOpenSub((cur) => (cur === 'space' ? null : cur));
-              }}
-            >
-              <DropdownMenuSubTrigger
-                data-sub-key="space"
-                className={cn(
-                  'flex cursor-pointer items-center justify-between rounded-xl outline-none',
-                  '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <img
-                      src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg`}
-                      alt=""
-                      className="size-[18px] text-slate-600"
-                    />
-                    {selectedKnowledgeSpaces.length > 0 && (
-                      <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-                    )}
-                  </div>
-                  <span className="text-[14px] font-normal text-slate-700">
-                    {localize('com_ui_knowledge_space')}
-                  </span>
-                </div>
-              </DropdownMenuSubTrigger>
-
-              <DropdownMenuSubContent
-                alignOffset={spaceLayout.alignOffset}
-                collisionPadding={BOTTOM_GAP}
-                className="ml-2 flex w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-2xl"
-                style={
-                  {
-                    '--tw-enter-duration': '0.35s',
-                    '--tw-enter-easing': 'ease-in-out',
-                    maxHeight: spaceLayout.maxH,
-                  } as React.CSSProperties
-                }
-              >
-                <p className="mb-1 shrink-0 py-1.5 text-sm font-medium leading-5">
-                  {localize('com_ui_knowledge_space')}
-                </p>
-                <KnowledgeListPanel
-                  placeholder={localize('com_chat_knowledge_placeholder_search_space')}
-                  keyword={spaceKeyword}
-                  setKeyword={setSpaceKeyword}
-                  items={filteredSpaces}
-                  selectedItems={selectedKnowledgeSpaces}
-                  onToggle={(item) => handleToggle(item, 'space')}
-                  isFetching={spaceFetching}
-                  hasMore={false}
-                  onLoadMore={() => { }}
-                  emptyText={localize('com_chat_knowledge_empty_no_spaces')}
-                />
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-
-            {/* 组织知识库 — hidden when admin disables the KB feature
-                (bsConfig.knowledgeBase.enabled === false). Knowledge space above
-                is a user-scoped feature and stays visible. */}
-            {config?.knowledgeBase?.enabled !== false && (
-              <DropdownMenuSub
-                open={openSub === 'org'}
-                onOpenChange={(o) => {
-                  if (o) setOpenSub('org');
-                  else setOpenSub((cur) => (cur === 'org' ? null : cur));
-                }}
-              >
-                <DropdownMenuSubTrigger
-                  data-sub-key="org"
-                  className={cn(
-                    'mt-0.5 flex cursor-pointer items-center justify-between rounded-xl outline-none',
-                    '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <img
-                        src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/books.svg`}
-                        alt=""
-                        className="size-[18px] text-slate-600"
-                      />
-                      {selectedOrgKbs.length > 0 && (
-                        <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-                      )}
-                    </div>
-                    <span className="text-[14px] font-normal text-slate-700">
-                      {localize('com_tools_org_knowledge')}
-                    </span>
-                  </div>
-                </DropdownMenuSubTrigger>
-
-                <DropdownMenuSubContent
-                  alignOffset={orgLayout.alignOffset}
-                  collisionPadding={BOTTOM_GAP}
-                  className="ml-2 flex w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-2xl"
-                  style={
-                    {
-                      '--tw-enter-duration': '0.35s',
-                      '--tw-enter-easing': 'ease-in-out',
-                      maxHeight: orgLayout.maxH,
-                    } as React.CSSProperties
-                  }
-                >
-                  <p className="mb-1 shrink-0 py-1.5 text-sm font-medium leading-5">
-                    {localize('com_tools_org_knowledge')}
-                  </p>
-                  <KnowledgeListPanel
-                    placeholder={localize('com_tools_knowledge_base_search')}
-                    keyword={orgKeyword}
-                    setKeyword={setOrgKeyword}
-                    items={sortedOrgKbs}
-                    selectedItems={selectedOrgKbs}
-                    onToggle={(item) => handleToggle(item, 'org')}
-                    isFetching={orgFetching}
-                    hasMore={hasMoreOrg}
-                    onLoadMore={() => setOrgPage((p) => p + 1)}
-                    emptyText={localize('com_chat_knowledge_empty_no_org_kbs')}
-                  />
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            )}
-
-          </>
-        )}
-
         {/* F035 (PRD §4.1.3) — 任务模式组：以分隔线与上方通用上下文组隔开。
             桌面端与移动端 root 面板都展示；进入任务模式跳转 /linsight。 */}
-        {showTaskModeEntry && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
+        {variant === 'plus' && showTaskModeEntry && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
           <>
             <div className="my-1 h-px bg-slate-100" />
             <DropdownMenuItem
@@ -844,10 +801,11 @@ export const ChatKnowledge = ({
               }}
               className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
             >
-              <Glasses size={18} strokeWidth={1.5} className="text-slate-600" />
-              <span className="text-[14px] font-normal text-slate-700">
+              <Outlined.Binoculars size={18} className={taskModeActive ? 'text-blue-600' : 'text-slate-600'} />
+              <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-600' : 'text-slate-700')}>
                 {localize('com_linsight_task_mode')}
               </span>
+              {taskModeActive && <Check size={14} className="text-blue-600" />}
             </DropdownMenuItem>
             {/* 添加 Skill — 桌面：悬停展开技能选择器；移动 root：下钻进技能面板。
                 选中技能即进入任务模式（由 renderSkillSubmenu 内部导航），故传入
