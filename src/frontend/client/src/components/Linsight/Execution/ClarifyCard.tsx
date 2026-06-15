@@ -24,6 +24,18 @@ interface ClarifyCardProps {
 
 const CUSTOM_KEY = '__custom__';
 
+// Split option text like "Option Title (Option Description)" into two parts
+const parseOption = (text: string) => {
+    const match = text.match(/^([^(]+)\s*(\([^)]+\))$/);
+    if (match) {
+        return {
+            title: match[1].trim(),
+            desc: match[2].trim(),
+        };
+    }
+    return { title: text, desc: '' };
+};
+
 export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardProps) {
     const localize = useLocalize();
     const request = useMemo(() => parseClarifyRequest(data), [data]);
@@ -110,59 +122,68 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
         : !!freeText.trim();
 
     return (
-        <div className="my-2 w-full rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-            {/* header: guide text + pager + close */}
-            <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-gray-800">
+        <div
+            className="my-3 w-full rounded-2xl border border-[#EEF2F6] bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
+            style={{
+                backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'5\' height=\'5\'%3E%3Ccircle cx=\'0.5\' cy=\'0.5\' r=\'0.5\' fill=\'%23EAEEFF\'/%3E%3C/svg%3E")',
+                backgroundSize: '5px 5px',
+            }}
+        >
+            {/* Header: Guide text + Close button */}
+            <div className="flex items-center justify-between pb-1">
+                <p className="text-[16px] font-semibold text-[#212121]">
                     {request.callReason || localize('com_linsight_clarify_title')}
                 </p>
                 <button
                     type="button"
                     onClick={handleClose}
-                    className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-100"
+                    className="shrink-0 rounded-full p-1 text-[#8C8C8C] hover:bg-gray-100 transition-colors"
                     aria-label="close"
                 >
                     <X size={16} />
                 </button>
             </div>
 
-            {/* body: current question */}
+            {/* Body: Current question */}
             {q ? (
-                <div className="mt-3">
-                    <div className="flex items-center gap-2 text-sm text-gray-700">
-                        <span className="font-medium">{q.question}</span>
-                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-400">
-                            {q.multiple
-                                ? localize('com_linsight_clarify_multi')
-                                : localize('com_linsight_clarify_single')}
-                        </span>
+                <div className="mt-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-bold text-[#1A1A1A]">{q.question}</span>
+                            <span className="text-[14px] text-[#8C8C8C] select-none">
+                                {q.multiple
+                                    ? localize('com_linsight_clarify_multi')
+                                    : localize('com_linsight_clarify_single')}
+                            </span>
+                        </div>
                         {questions.length > 1 && (
-                            <div className="ml-auto flex items-center gap-1 text-xs text-gray-400">
+                            <div className="flex items-center gap-2 text-sm text-[#8C8C8C] select-none">
                                 <button
                                     type="button"
                                     disabled={page === 0}
                                     onClick={() => setPage(page - 1)}
-                                    className="rounded p-0.5 hover:bg-gray-100 disabled:opacity-30"
+                                    className="rounded-full p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
                                 >
-                                    <ChevronLeft size={14} />
+                                    <ChevronLeft size={16} />
                                 </button>
-                                <span>
+                                <span className="font-medium">
                                     {page + 1}/{questions.length}
                                 </span>
                                 <button
                                     type="button"
                                     disabled={page === questions.length - 1}
                                     onClick={() => setPage(page + 1)}
-                                    className="rounded p-0.5 hover:bg-gray-100 disabled:opacity-30"
+                                    className="rounded-full p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
                                 >
-                                    <ChevronRight size={14} />
+                                    <ChevronRight size={16} />
                                 </button>
                             </div>
                         )}
                     </div>
-                    <ul className="mt-2 space-y-1.5">
+                    <ul className="mt-4 space-y-3">
                         {q.options.map((option, i) => {
                             const active = selected.includes(option);
+                            const { title: optTitle, desc: optDesc } = parseOption(option);
                             return (
                                 <li key={i}>
                                     <button
@@ -170,57 +191,78 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         disabled={disabled || submitted}
                                         onClick={() => handleSelect(q, option)}
                                         className={cn(
-                                            'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-                                            active ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50',
+                                            'flex w-full items-start gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all duration-200 select-none border-0',
+                                            active
+                                                ? 'bg-[#EDF2FF] text-[#335CFF] font-medium shadow-[0_2px_8px_rgba(51,92,255,0.08)]'
+                                                : 'text-[#1A1A1A] hover:bg-gray-50/80',
                                         )}
                                     >
-                                        <span className="flex-1">
-                                            {i + 1}. {option}
-                                        </span>
-                                        {active && <Check size={14} className="shrink-0" />}
+                                        <span className="shrink-0 font-medium text-[#8C8C8C]">{i + 1}.</span>
+                                        <div className="flex-1 min-w-0">
+                                            <span className={cn(active ? 'text-[#335CFF]' : 'text-[#1A1A1A]')}>{optTitle}</span>
+                                            {optDesc && (
+                                                <span className={cn('ml-1 text-[13px] font-normal', active ? 'text-[#335CFF]/80' : 'text-[#8C8C8C]')}>
+                                                    {optDesc}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {active && <Check size={16} className="shrink-0 text-[#335CFF] self-center" />}
                                     </button>
                                 </li>
                             );
                         })}
-                        {/* trailing "type your own" entry: inline input (design fig.1).
-                            Focusing or typing selects the custom option. */}
-                        <li className="flex items-center gap-2 rounded-lg px-3 py-1.5">
-                            <span className="shrink-0 text-sm text-gray-400">{q.options.length + 1}.</span>
-                            <input
-                                type="text"
-                                disabled={disabled || submitted}
-                                value={customText[q.id] || ''}
-                                placeholder={localize('com_linsight_clarify_custom')}
-                                onFocus={() => !customSelected && handleSelect(q, CUSTOM_KEY)}
-                                onChange={(e) => {
-                                    setCustomText((prev) => ({ ...prev, [q.id]: e.target.value }));
-                                    if (!customSelected) handleSelect(q, CUSTOM_KEY);
-                                }}
-                                className={cn(
-                                    'flex-1 bg-transparent text-sm outline-none placeholder:text-gray-400',
-                                    customSelected ? 'text-blue-700' : 'text-gray-700',
+                        {/* Trailing "type your own" entry: inline input */}
+                        <li>
+                            <div
+                                className="flex items-center gap-2 rounded-xl bg-[#F5F7FA] px-4 py-2.5 transition-all duration-200"
+                            >
+                                <span className="shrink-0 text-sm font-medium text-[#8C8C8C]">
+                                    {q.options.length + 1}.
+                                </span>
+                                <input
+                                    type="text"
+                                    disabled={disabled || submitted}
+                                    value={customText[q.id] || ''}
+                                    placeholder={localize('com_linsight_clarify_custom')}
+                                    onFocus={() => !customSelected && handleSelect(q, CUSTOM_KEY)}
+                                    onChange={(e) => {
+                                        setCustomText((prev) => ({ ...prev, [q.id]: e.target.value }));
+                                        if (!customSelected) handleSelect(q, CUSTOM_KEY);
+                                    }}
+                                    className={cn(
+                                        'flex-1 bg-transparent text-sm outline-none placeholder:text-[#8C8C8C]',
+                                        customSelected ? 'text-[#335CFF] font-medium' : 'text-[#1A1A1A]',
+                                    )}
+                                />
+                                {customSelected && customText[q.id]?.trim() && (
+                                    <Check size={16} className="shrink-0 text-[#335CFF]" />
                                 )}
-                            />
+                            </div>
                         </li>
                     </ul>
                 </div>
             ) : (
-                /* defensive fallback: nothing parseable -> plain textarea */
+                /* Defensive fallback: nothing parseable -> plain textarea */
                 <Textarea
                     value={freeText}
                     disabled={disabled || submitted}
-                    rows={3}
+                    rows={4}
                     maxLength={10000}
                     placeholder={localize('com_linsight_clarify_input_placeholder')}
                     onChange={(e) => setFreeText(e.target.value)}
-                    className="mt-3 resize-none text-sm"
+                    className="mt-4 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-[#8C8C8C] focus-visible:ring-0 focus-visible:outline-none"
                 />
             )}
 
-            {/* footer: confirm (when answered) + skip */}
-            <div className="mt-3 flex items-center justify-end gap-3">
+            {/* Footer: Confirm (when answered) + Skip */}
+            <div className="mt-6 flex items-center justify-end gap-4">
                 {hasAnswer && (q?.multiple || customSelected || !q) && (
-                    <Button size="sm" className="h-7 px-4" disabled={disabled || submitted} onClick={handleConfirm}>
+                    <Button
+                        size="sm"
+                        disabled={disabled || submitted}
+                        onClick={handleConfirm}
+                        className="h-8 rounded-lg bg-[#335CFF] text-white hover:bg-[#1E4DFF] px-4 text-xs font-semibold shadow-[0_2px_8px_rgba(51,92,255,0.2)] transition-all duration-200"
+                    >
                         {page < questions.length - 1
                             ? localize('com_linsight_clarify_next')
                             : localize('com_linsight_clarify_submit')}
@@ -230,10 +272,10 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                     type="button"
                     disabled={disabled || submitted}
                     onClick={handleSkipCurrent}
-                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                    className="flex items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
                 >
                     {localize('com_linsight_clarify_skip')}
-                    <ArrowRight size={12} />
+                    <ArrowRight size={14} className="ml-1 shrink-0" />
                 </button>
             </div>
         </div>

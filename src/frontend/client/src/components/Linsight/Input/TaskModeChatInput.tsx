@@ -144,6 +144,9 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
     return (
         <AiChatInput
             disabled={!bsConfig?.models?.length}
+            // Task mode uses its own input placeholder (daily falls back to
+            // bsConfig.inputPlaceholder inside AiChatInput).
+            placeholder={(bsConfig as any)?.linsightConfig?.input_placeholder || localize('com_linsight_input_placeholder')}
             features={{
                 taskModeEntry: false,
                 taskMode: true,

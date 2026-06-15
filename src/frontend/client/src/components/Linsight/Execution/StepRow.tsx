@@ -9,7 +9,7 @@ import { cn } from '~/utils';
 
 /** Shared spinner glyph for in-progress steps. */
 export function RunningSpinner() {
-    return <LoaderCircle size={14} className="animate-spin text-blue-500" />;
+    return <span className="size-[6px] animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-[#212121]" />;
 }
 
 /** Shared style for expanded detail text blocks. */
@@ -49,23 +49,26 @@ export function StepRow({ icon, title, children, running = false, rightExtra, cl
     const open = collapsible && (manualOpen ?? running);
 
     return (
-        <div className={cn('w-full', className)}>
+        <div className={cn('w-full mb-6', className)}>
             <button
                 type="button"
                 className={cn(
-                    'group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm',
+                    'group flex w-full items-center gap-2 rounded-lg text-left text-sm',
                     collapsible ? 'cursor-pointer hover:bg-black/[0.03]' : 'cursor-default',
                 )}
                 onClick={() => collapsible && setManualOpen(!open)}
             >
                 <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
-                <span className={cn('min-w-0 flex-1 truncate text-gray-700', titleClassName)}>{title}</span>
-                {rightExtra}
+                {/* min-w-0 (not flex-1) so the chevron sits right after the title
+                    text instead of being pushed to the far right; long titles
+                    still shrink + truncate. */}
+                <span className={cn('min-w-0 truncate text-[#8C8C8C]', titleClassName)}>{title}</span>
                 {collapsible && (
-                    <span className="shrink-0 text-gray-400">
+                    <span className="shrink-0 text-[#8C8C8C]">
                         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </span>
                 )}
+                {rightExtra}
             </button>
             {open && <div className="ml-6 mt-0.5 border-l border-gray-200 pb-1 pl-3">{children}</div>}
         </div>

@@ -3,7 +3,7 @@
  * Shown after a user_input request is answered (user_input_completed) —
  * expand to review the confirmed items (question -> answer pairs).
  */
-import { Check } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
 import { StepRow, detailTextCls } from './StepRow';
 import type { ExecStepEventData } from './stepUtils';
@@ -17,7 +17,7 @@ export function IntentRow({ data }: { data: ExecStepEventData }) {
 
     return (
         <StepRow
-            icon={<Check size={14} className="text-green-500" />}
+            icon={<Outlined.Clap className="size-4 text-[#1A1A1A]" />}
             title={localize('com_linsight_intent_confirmed')}
             running={false}
         >

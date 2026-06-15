@@ -3,7 +3,8 @@
  * expanded: the sub-step flow of that task (tool/knowledge/thinking/subagent/
  * ui_card rows, grouped by the event's task_id) plus answered clarify rows.
  */
-import { Check, Circle, XCircle } from 'lucide-react';
+import { Circle, XCircle } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { cn } from '~/utils';
 import { RunningSpinner, StepRow } from './StepRow';
 import { StepList } from './StepList';
@@ -22,10 +23,10 @@ export interface ExecTask {
 }
 
 function statusIcon(status: string) {
-    if (isTaskDone(status)) return <Check size={14} className="text-gray-400" />;
+    if (isTaskDone(status)) return <Outlined.DoubleCheck size={14} className="text-[#333]" />;
     if (isTaskRunning(status)) return <RunningSpinner />;
     if (TASK_ERROR_STATUSES.includes(status)) return <XCircle size={14} className="text-red-400" />;
-    return <Circle size={10} className="text-gray-300" />;
+    return <Circle size={10} className="text-[#333]" />;
 }
 
 export function TaskStepRow({ task }: { task: ExecTask }) {

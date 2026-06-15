@@ -31,7 +31,7 @@ export function KnowledgeRow({ step }: { step: MergedStep }) {
     const hits = knowledgeHits(step);
     return (
         <StepRow
-            icon={step.running ? <RunningSpinner /> : <ScrollText size={14} className="text-gray-400" />}
+            icon={step.running ? <RunningSpinner /> : <ScrollText size={14} className="text-[#333]" />}
             title={step.name}
             running={step.running}
         >

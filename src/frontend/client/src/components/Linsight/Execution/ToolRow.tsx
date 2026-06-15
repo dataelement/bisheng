@@ -13,7 +13,7 @@ export function ToolRow({ step }: { step: MergedStep }) {
     const paramsText = formatStepParams(step.params);
     return (
         <StepRow
-            icon={step.running ? <RunningSpinner /> : <Wrench size={14} className="text-gray-400" />}
+            icon={step.running ? <RunningSpinner /> : <Wrench size={14} className="text-[#333]" />}
             title={step.name}
             running={step.running}
         >

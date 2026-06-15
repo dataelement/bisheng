@@ -13,7 +13,7 @@ export function ThinkingRow({ step }: { step: MergedStep }) {
     const localize = useLocalize();
     return (
         <StepRow
-            icon={step.running ? <RunningSpinner /> : <Lightbulb size={14} className="text-gray-400" />}
+            icon={step.running ? <RunningSpinner /> : <Lightbulb size={14} className="text-[#333]" />}
             title={step.name || localize('com_linsight_thinking')}
             running={step.running}
             titleClassName="text-gray-500"

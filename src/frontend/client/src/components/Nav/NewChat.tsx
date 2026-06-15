@@ -97,10 +97,18 @@ export default function NewChat({
     ((bsConfig as any)?.linsightConfig?.linsight_entry ?? true);
 
   const handleNewTask = () => {
-    navigate('/linsight/new');
+    // F035: task mode is now a local toggle on the daily welcome page (/c),
+    // not a separate route. Land on /c/new with nav state so ChatView starts
+    // in task mode; execution still navigates to /linsight on submit.
+    newConvo();
+    navigate('/c/new', { state: { taskMode: true } });
     if (isSmallScreen) {
       toggleNav();
     }
+    queryClient.setQueryData<TMessage[]>(
+      [QueryKeys.messages, conversation?.conversationId ?? Constants.NEW_CONVO],
+      [],
+    );
   };
 
   const clickHandler = (event: React.MouseEvent<HTMLElement>) => {

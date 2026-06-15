@@ -533,22 +533,26 @@ export const ChatKnowledge = ({
                   type="button"
                   className={cn(
                     "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-white",
-                    value.length > 0 && "text-blue-600",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
                 >
-                  <span
-                    aria-hidden
-                    className="size-4 shrink-0 bg-[#165DFF]"
-                    style={{
-                      WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
-                      maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
-                      WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
-                      WebkitMaskPosition: 'center', maskPosition: 'center',
-                      WebkitMaskSize: 'contain', maskSize: 'contain',
-                    }}
-                  />
+                  <div className="relative shrink-0">
+                    <span
+                      aria-hidden
+                      className="block size-4 bg-[#165DFF]"
+                      style={{
+                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
+                        maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
+                        WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center', maskPosition: 'center',
+                        WebkitMaskSize: 'contain', maskSize: 'contain',
+                      }}
+                    />
+                    {value.length > 0 && (
+                      <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
+                    )}
+                  </div>
                   <span>{localize('com_ui_knowledge_space')}</span>
                   <ChevronDown size={14} className="text-slate-400" />
                 </button>

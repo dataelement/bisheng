@@ -13,6 +13,9 @@ import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useChatModelMemo from '~/hooks/useChatModelMemo';
 import useLocalize from '~/hooks/useLocalize';
+import { useLinsightSessionManager } from '~/hooks/useLinsightManager';
+import { taskModeSkillsState } from '~/store/linsight';
+import { useRecoilValue } from 'recoil';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
 import { Card, CardContent } from '../ui/Card';
@@ -48,6 +51,20 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const conversationId = (cid ?? id) || 'new';
 
   const [inputText, setInputText] = useState('');
+
+  // F035: task mode is a LOCAL toggle on the daily welcome page — no route jump.
+  // The route stays `/c`; only submitting in task mode navigates to /linsight.
+  // Initial value comes from nav state so the sidebar "新建任务" entry can land
+  // here already in task mode (see Nav/NewChat handleNewTask).
+  const [taskMode, setTaskMode] = useState<boolean>(
+    !!(location.state as any)?.taskMode,
+  );
+
+  // F035 task-submit pipeline (reused intact from TaskModeChatInput): the
+  // welcome page builds the linsight submission under the 'new' key and the
+  // existing Sop + useLinsightSubmit picks it up to run execution.
+  const { setLinsightSubmission } = useLinsightSessionManager('new');
+  const taskModeSkills = useRecoilValue(taskModeSkillsState('new'));
 
   const { data: bsConfig } = useGetBsConfig();
   const { user } = useAuthContext();
@@ -217,6 +234,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const navigate = useNavigate();
 
+  // F035: sync the local task-mode toggle to navigation. ChatView is NOT
+  // remounted across `/c/:id` param changes (same route element), so the
+  // useState initializer above only runs on first mount. This effect picks up
+  // subsequent navigations:
+  //  - sidebar "新建任务" lands on /c/new with state.taskMode=true → enter task mode.
+  //  - any navigation to an existing conversation (id !== 'new') leaves task
+  //    mode (you are viewing a daily chat, not composing a task).
+  // location.key changes on every navigation so re-entering /c/new with the
+  // same state still re-triggers.
+  useEffect(() => {
+    if (conversationId !== 'new') {
+      setTaskMode(false);
+      return;
+    }
+    if ((location.state as any)?.taskMode) {
+      setTaskMode(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key, conversationId]);
+
   // Sync URL: ONLY when we were on /new and the hook just assigned a real ID.
   // Do NOT navigate if the user is clicking around in the sidebar (that changes
   // conversationId from params which should NOT be overridden by stale activeConvoId).
@@ -233,9 +270,83 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const handleSend = useCallback((text: string, files?: any[] | null) => {
-    sendMessage(text, files);
+    // Daily path — UNCHANGED.
+    if (!taskMode) {
+      sendMessage(text, files);
+      setInputText('');
+      return;
+    }
+
+    // Task path — build the linsight submission EXACTLY like
+    // TaskModeChatInput.handleSend, then hand off to the existing Sop +
+    // useLinsightSubmit pipeline via setLinsightSubmission('new', ...).
+    const trimmed = text.trim();
+    const fileList = files || [];
+    if (!trimmed && !fileList.length) return;
+
+    // Tools come from the user's actual daily-picker selection
+    // (selectedAgentTools), mapped into the convertTools `tool.data` shape.
+    // `is_preset` is recovered from bsConfig.tools by id.
+    const availableTools: any[] = Array.isArray((bsConfig as any)?.tools)
+      ? (bsConfig as any).tools
+      : [];
+    const presetById = new Map(availableTools.map((tool: any) => [tool.id, tool.is_preset]));
+    const mappedSelectedTools = selectedAgentTools.map((group) => ({
+      id: group.id,
+      checked: true,
+      data: {
+        id: group.id,
+        name: group.name,
+        is_preset: presetById.get(group.id),
+        description: group.description,
+        children: (group.children || []).map((c) => ({
+          id: c.id,
+          name: c.name,
+          tool_key: c.tool_key,
+          desc: c.desc,
+        })),
+      },
+    }));
+    // org knowledge → pseudo 'pro_knowledge' entry (convertTools reads it).
+    const orgKnowledgeSelected = selectedOrgKbs.some((k) => k.type === 'org');
+    const submissionTools = [
+      {
+        id: 'pro_knowledge',
+        name: t('com_tools_org_knowledge'),
+        checked: orgKnowledgeSelected,
+      },
+      ...mappedSelectedTools,
+    ];
+
+    setLinsightSubmission('new', {
+      isNew: true,
+      files: fileList.map((item: any) => ({
+        file_id: item.file_id,
+        file_name: item.filename || item.file_name || item.name,
+        parsing_status: item.parsing_status || 'completed',
+      })),
+      question: trimmed,
+      tools: submissionTools as any,
+      model: chatModel.id ? String(chatModel.id) : '',
+      skills: taskModeSkills.map((s) => s.name),
+      enableWebSearch: false,
+      useKnowledgeBase: selectedOrgKbs.length > 0,
+      sessionId: undefined,
+    });
     setInputText('');
-  }, [sendMessage]);
+    navigate('/linsight/new');
+  }, [
+    taskMode,
+    sendMessage,
+    bsConfig,
+    selectedAgentTools,
+    selectedOrgKbs,
+    chatModel,
+    taskModeSkills,
+    t,
+    setLinsightSubmission,
+    navigate,
+  ]);
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
@@ -355,7 +466,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         <AiChatInput
                           disabled={!bsConfig?.models?.length || !!shareToken}
                           isStreaming={isStreaming}
-                          features={{ taskModeEntry: true }}
+                          features={{ taskModeEntry: true, taskMode }}
+                          onToggleTaskMode={() => setTaskMode((v) => !v)}
+                          placeholder={taskMode
+                            ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
+                            : undefined}
                           onScrollToBottom={() => { }}
                           modelOptions={bsConfig?.models}
                           modelValue={chatModel.id}

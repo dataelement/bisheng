@@ -381,7 +381,7 @@
   "com_linsight_subagent_delegate": "自动委派 · {{0}} 个 {{1}} 子智能体",
   "com_linsight_subagent_running": "执行中",
   "com_linsight_subagent_tools_called": "已调用 {{0}} 个工具",
-  "com_linsight_clarify_title": "为了更好地完成任务，请确认以下问题",
+  "com_linsight_clarify_title": "为了开展高质量调研，请确认以下问题：",
   "com_linsight_clarify_single": "单选",
   "com_linsight_clarify_multi": "多选",
   "com_linsight_clarify_custom": "自行输入",

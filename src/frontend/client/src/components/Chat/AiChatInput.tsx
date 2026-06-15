@@ -186,6 +186,13 @@ interface AiChatInputProps {
     onSearchTypeChange?: (type: string) => void;
     /** Support Lingsi mode UI differences */
     isLingsi?: boolean;
+    /**
+     * F035: toggle task mode in place (no route jump). When provided, the
+     * task-mode entry / toggle / skill-pick call this instead of navigating, so
+     * the daily welcome page (/c) can own task mode as local state. When absent,
+     * the legacy navigate fallback is used (the /linsight Sop usage relies on it).
+     */
+    onToggleTaskMode?: () => void;
 }
 
 const AiChatInput = memo(
@@ -210,6 +217,7 @@ const AiChatInput = memo(
         searchType = "",
         onSearchTypeChange,
         isLingsi = false,
+        onToggleTaskMode,
     }: AiChatInputProps) => {
         const {
             modelSelect = true,
@@ -519,16 +527,22 @@ const AiChatInput = memo(
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
                                     // Task mode toggle present in both modes (plan-mode style).
                                     showTaskModeEntry={(taskModeEntry || taskMode) && (bsConfig?.linsightConfig?.linsight_entry ?? true)}
-                                    onEnterTaskMode={() => navigate(taskMode ? '/c/new' : '/linsight/new')}
+                                    onEnterTaskMode={onToggleTaskMode ? onToggleTaskMode : () => navigate(taskMode ? '/c/new' : '/linsight/new')}
                                     taskModeActive={taskMode}
                                     renderSkillSubmenu={(close) => (
                                         <SkillSelector
                                             selected={dailySkills}
                                             onChange={(next) => {
                                                 setDailySkills(next);
-                                                // Picking a skill enters task mode: close the menu, then navigate.
                                                 close();
-                                                navigate('/linsight/new');
+                                                // Picking a skill enters task mode. On the daily
+                                                // welcome page do it in place (callback); otherwise
+                                                // fall back to navigating to the linsight landing.
+                                                if (onToggleTaskMode) {
+                                                    onToggleTaskMode();
+                                                } else {
+                                                    navigate('/linsight/new');
+                                                }
                                             }}
                                         />
                                     )}
@@ -574,9 +588,14 @@ const AiChatInput = memo(
                                 />
                             )}
                             {/* Task-mode toggle — sits to the right of the tools
-                                block; clicking exits task mode (back to /c/new). */}
+                                block; clicking exits task mode (flips the local
+                                state in place; falls back to navigate for the
+                                legacy /linsight Sop usage). */}
                             {taskMode && (
-                                <TaskModeToggle active onClick={() => navigate('/c/new')} />
+                                <TaskModeToggle
+                                    active
+                                    onClick={onToggleTaskMode ? onToggleTaskMode : () => navigate('/c/new')}
+                                />
                             )}
                         </div>
 
