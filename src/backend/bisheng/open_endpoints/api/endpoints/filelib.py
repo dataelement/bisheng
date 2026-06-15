@@ -315,13 +315,19 @@ async def get_knowledge(*,
                                                     alias='type'),
                         name: str = None,
                         page_size: Optional[int] = 10,
-                        page_num: Optional[int] = 1,
+                        cursor: Optional[str] = None,
                         login_user: UserPayload = Depends(get_developer_token_user)):
     """ Read all knowledge base information. """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
-    res, total = await KnowledgeService.get_knowledge(request, login_user, knowledge_type, name, page=page_num,
-                                                      limit=page_size)
-    return resp_200(data={'data': res, 'total': total})
+    result = await KnowledgeService.get_knowledge(
+        request,
+        login_user,
+        knowledge_type,
+        name=name,
+        cursor=cursor,
+        page_size=page_size,
+    )
+    return resp_200(data=result)
 
 
 @router.delete('/{knowledge_id}', status_code=200)
