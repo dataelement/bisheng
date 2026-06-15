@@ -28,11 +28,11 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                 onClick={() => setOpen(!open)}
                 className="flex w-full items-center gap-2 px-4 py-3 text-left"
             >
-                <Outlined.ListSuccess size={18} className="shrink-0 text-[#212121]" />
-                <span className="shrink-0 text-[15px] font-medium text-[#212121]">
+                <Outlined.ListSuccess size={16} className="shrink-0 text-[#212121]" />
+                <span className="shrink-0 text-[16px] font-medium text-[#212121]">
                     {allDone ? localize('com_linsight_task_panel_done') : localize('com_linsight_task_panel')}
                 </span>
-                <span className="shrink-0 text-[13px] text-[#999]">
+                <span className="shrink-0 text-[14px] text-[#999]">
                     {doneCount}/{tasks.length}
                 </span>
                 <span className="ml-auto shrink-0 text-[#999]">
@@ -47,14 +47,14 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                         const done = isTaskDone(task.status);
                         const running = isTaskRunning(task.status);
                         return (
-                            <li key={task.id} className="flex items-center gap-2.5 py-2 text-sm">
-                                <span className="flex size-[18px] shrink-0 items-center justify-center">
+                            <li key={task.id} className="flex items-center gap-2.5 py-2 text-[14px]">
+                                <span className="flex size-4 shrink-0 items-center justify-center">
                                     {done ? (
-                                        <Outlined.CheckCircle size={18} className="text-gray-300" />
+                                        <Outlined.CheckCircle size={16} className="text-gray-300" />
                                     ) : running ? (
-                                        <Outlined.Loading size={18} className="animate-spin text-primary" />
+                                        <Outlined.Loading size={16} className="animate-spin text-primary" />
                                     ) : (
-                                        <Outlined.Round size={18} className="text-gray-300" />
+                                        <Outlined.Round size={16} className="text-gray-300" />
                                     )}
                                 </span>
                                 <span
