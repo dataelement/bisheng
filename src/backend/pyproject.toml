@@ -71,6 +71,11 @@ dependencies = [
     "dmAsync; sys_platform != 'darwin'",
     # SQLAlchemy dialect for DaMeng — registers dm+dmPython:// and dm+dmAsync://
     "dmSQLAlchemy; sys_platform != 'darwin'",
+    # dmAsync imports async_timeout at runtime (dmAsync/pool.py) but its wheel
+    # metadata fails to declare it. redis only pulls async-timeout for Python
+    # < 3.11.3, so on the 3.11-slim runtime it is otherwise absent. Declare it
+    # explicitly to fix dmAsync's missing transitive dependency.
+    "async-timeout>=4.0.3; sys_platform != 'darwin'",
     "pypandoc>=1.15",
     "python-docx>=1.2.0",
     "python-pptx>=1.0.2",
