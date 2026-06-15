@@ -43,9 +43,16 @@ interface TaskModeInputProps {
     /** Session key for per-session memory; 'new' for a fresh task. */
     conversationId?: string;
     disabled?: boolean;
+    /**
+     * F035 multi-turn: when provided (execution view), a send is a follow-up
+     * turn in the CURRENT conversation — routed to /workbench/continue (same
+     * session_version + agent thread, context preserved) instead of creating a
+     * new session. Absent on the landing page, where a send starts a new task.
+     */
+    onFollowUp?: (question: string) => void;
 }
 
-export function TaskModeInput({ conversationId = 'new', disabled = false }: TaskModeInputProps) {
+export function TaskModeInput({ conversationId = 'new', disabled = false, onFollowUp }: TaskModeInputProps) {
     const localize = useLocalize();
     const navigate = useNavigate();
     const location = useLocation();
@@ -157,9 +164,27 @@ export function TaskModeInput({ conversationId = 'new', disabled = false }: Task
         navigate('/c/new');
     }, [navigate, setSkills]);
 
+    const clearInputAfterSend = useCallback(() => {
+        setText('');
+        setContext((prev) => ({ ...prev, files: [] }));
+        setUploadingFiles([]);
+        inputFilesRef.current?.clear();
+        if (textAreaRef.current) textAreaRef.current.style.height = 'auto';
+    }, [setContext]);
+
     const handleSend = useCallback(() => {
         const trimmed = text.trim();
         if ((!trimmed && !context.files.length) || disabled || fileUploading || filesParsing) return;
+
+        // F035 multi-turn: in the execution view a send continues the current
+        // conversation (same session_version + agent thread, context kept) rather
+        // than spawning a new session. Follow-up turns are text-only for now.
+        if (onFollowUp) {
+            if (!trimmed) return;
+            onFollowUp(trimmed);
+            clearInputAfterSend();
+            return;
+        }
 
         // convertTools (useLinsightManager) maps the pseudo 'pro_knowledge' entry
         // to org_knowledge_enabled; concrete tools ride along via `data`.
@@ -196,6 +221,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false }: Task
     }, [
         text, context, disabled, fileUploading, filesParsing, model, skills,
         localize, location.pathname, navigate, setContext, setLinsightSubmission, conversationId,
+        onFollowUp, clearInputAfterSend,
     ]);
 
     const handleKeyDown = useCallback(

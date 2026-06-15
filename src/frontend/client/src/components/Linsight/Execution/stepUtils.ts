@@ -65,6 +65,11 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
 
     (history || []).forEach((frame, idx) => {
         if (!frame || frame.step_type === 'call_user_input') return; // user-input handled by ClarifyCard/IntentRow
+        // `ask_user` is the HITL interrupt mechanism, surfaced as a ClarifyCard /
+        // IntentRow — not a normal tool step. Its tool-call frame emits a `start`
+        // but never an `end` (interrupt() halts the graph), so rendering it as a
+        // ToolRow would spin forever. Drop it.
+        if (frame.name === 'ask_user') return;
         const callId = frame.call_id || `__step_${idx}`;
         const existing = byId.get(callId);
         if (!existing) {

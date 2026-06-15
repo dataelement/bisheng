@@ -84,7 +84,25 @@ export type LinsightInfo = {
      * the legacy Sop view keeps working untouched until P5 removes it.
      */
     sessionSteps?: any[];
+    /**
+     * F035 multi-turn: snapshots of completed prior rounds in this conversation.
+     * The top-level fields (question / tasks / sessionSteps / output_result)
+     * always represent the CURRENTLY-ACTIVE round (WS events update them in
+     * place). On a follow-up turn we snapshot the active round into `history`
+     * then reset the active fields, so ExecutionFlow can render every round
+     * stacked. The agent keeps full context server-side (same thread_id), so
+     * each round still reads against the whole conversation.
+     */
+    history?: LinsightRoundSnapshot[];
 }
+
+export type LinsightRoundSnapshot = {
+    question: string;
+    tasks: any[];
+    sessionSteps: any[];
+    output_result: null | any;
+    file_list: any[];
+};
 
 interface ApiTool {
     id: string | number;

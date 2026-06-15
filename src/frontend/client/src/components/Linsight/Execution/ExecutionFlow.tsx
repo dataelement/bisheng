@@ -21,6 +21,7 @@ import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLocalize } from '~/hooks';
 import { ClarifyCard } from './ClarifyCard';
+import { ConversationRound } from './ConversationRound';
 import { IntentRow } from './IntentRow';
 import { LegacySopRow } from './LegacySopRow';
 import { PlanningRow } from './PlanningRow';
@@ -55,7 +56,7 @@ function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[])
 
 export function ExecutionFlow({ versionId, conversationId, isSharePage = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
-    const { getLinsight } = useLinsightManager();
+    const { getLinsight, continueConversation } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
     const { stop, sendInput } = useLinsightWebSocket(versionId);
 
@@ -100,7 +101,18 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
             {/* ── conversational flow ─────────────────────────────────────── */}
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-hover">
                 <div className="mx-auto w-full max-w-[800px] px-4 pb-6 pt-4">
-                    {/* user question bubble */}
+                    {/* F035 multi-turn: completed prior rounds, stacked above the
+                        active round so the conversation reads top-to-bottom. */}
+                    {(linsight?.history || []).map((round, i) => (
+                        <ConversationRound
+                            key={`round_${i}`}
+                            round={round}
+                            versionId={versionId}
+                            onPreview={(file) => artifactsPanel.openPreview(file)}
+                        />
+                    ))}
+
+                    {/* user question bubble (active round) */}
                     {linsight?.question && (
                         <div className="mb-4 flex justify-end">
                             <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-tr-sm bg-blue-50 px-4 py-2.5 text-sm text-gray-800">
@@ -181,8 +193,20 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     ("make same style" removed per product decision, F035). */}
                 {!isSharePage && (
                     <TaskModeInput
-                        conversationId={conversationId || linsight?.session_id || 'new'}
+                        // The landing route URL is rewritten via history.replaceState after the
+                        // first submit, so react-router's `conversationId` stays 'new'. Treat
+                        // 'new'/empty as "no real id yet" and fall back to the live session_id,
+                        // otherwise follow-up rounds drop session_id and spawn a new session.
+                        conversationId={
+                            conversationId && conversationId !== 'new'
+                                ? conversationId
+                                : linsight?.session_id || 'new'
+                        }
                         disabled={running || !!pendingInput}
+                        // F035 multi-turn: a send here continues THIS conversation
+                        // (same session_version + agent thread) instead of starting
+                        // a new session. versionId is the live session_version id.
+                        onFollowUp={(question) => continueConversation(versionId, question)}
                     />
                 )}
             </div>

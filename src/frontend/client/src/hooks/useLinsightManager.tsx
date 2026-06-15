@@ -8,7 +8,7 @@ import {
     useSetRecoilState
 } from 'recoil';
 import { SSE } from 'sse.js';
-import { startLinsight } from '~/api/linsight';
+import { continueLinsight, startLinsight } from '~/api/linsight';
 import { ConversationData, QueryKeys } from '~/types/chat';
 import { useToastContext } from '~/Providers';
 import store from '~/store';
@@ -67,6 +67,37 @@ export const useLinsightManager = () => {
         return linsightMap.get(versionId) || null;
     };
 
+    // F035 多轮对话：在已完成的同一会话里追加新一轮。
+    // 复用同一 session_version (versionId) + 同一 agent thread，后端保留全部上下文；
+    // 前端把当前轮快照进 history，再清空顶层字段开新轮，WS 事件继续更新顶层（=当前轮）。
+    const continueConversation = useCallback(async (versionId: string, question: string) => {
+        updateLinsight(versionId, (prev) => ({
+            history: [
+                ...(prev.history || []),
+                {
+                    question: prev.question,
+                    tasks: prev.tasks || [],
+                    sessionSteps: prev.sessionSteps || [],
+                    output_result: prev.output_result,
+                    file_list: prev.file_list || [],
+                },
+            ],
+            question,
+            tasks: [],
+            sessionSteps: [],
+            output_result: null,
+            file_list: [],
+            taskError: '',
+            status: SopStatus.Running,
+        }));
+        try {
+            await continueLinsight(versionId, question);
+        } catch (e) {
+            console.error('continueLinsight failed :>> ', e);
+            updateLinsight(versionId, { status: SopStatus.Stoped, taskError: String(e) });
+        }
+    }, [updateLinsight]);
+
     // 切换当前会话
     const switchSession = useCallback((versionId: string) => {
         setActiveSessionId(versionId);
@@ -122,6 +153,7 @@ export const useLinsightManager = () => {
         getLinsight,
         switchSession,
         switchAndUpdateLinsight,
+        continueConversation,
         linsightMap
     };
 };

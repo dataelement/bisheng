@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from typing import List, Dict, Any
+from typing import Any
 
 from loguru import logger
 
@@ -9,30 +9,34 @@ from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
-from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao, ExecuteTaskStatusEnum, \
-    LinsightExecuteTask
-from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
-    LinsightSessionVersion
+from bisheng.linsight.domain.models.linsight_execute_task import (
+    ExecuteTaskStatusEnum,
+    LinsightExecuteTask,
+    LinsightExecuteTaskDao,
+)
+from bisheng.linsight.domain.models.linsight_session_version import (
+    LinsightSessionVersion,
+    LinsightSessionVersionDao,
+    SessionVersionStatusEnum,
+)
 from bisheng.utils import util
 from bisheng_langchain.linsight.event import ExecStep
 
 # The corresponding file parameter name of the Inscription file processing tool
-local_file_tool_dict = {
-    "add_text_to_file": "file_path",
-    "replace_file_lines": "file_path"
-}
+local_file_tool_dict = {"add_text_to_file": "file_path", "replace_file_lines": "file_path"}
 
 # Step event extra processing tool corresponding to parameter name,
 step_event_extra_tool_dict = {
     "add_text_to_file": "file_path",
     "replace_file_lines": "file_path",
-    "read_text_file": "file_path"
+    "read_text_file": "file_path",
 }
 
 
 # Get all manipulated files in a task
-async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask], file_details: List[Dict]) -> \
-        list[Any] | list[Exception | BaseException | None]:
+async def get_all_files_from_session(
+    execution_tasks: list[LinsightExecuteTask], file_details: list[dict]
+) -> list[Any] | list[Exception | BaseException | None]:
     """
     Get all manipulated files in a session
     :param file_details:
@@ -45,9 +49,10 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
     # Deduplication
     seen = set()
     all_from_session_files = [
-        file for file in all_from_session_files
-        if (file_tuple := (file["file_name"], file["file_path"], file["file_md5"])) not in seen and not seen.add(
-            file_tuple)
+        file
+        for file in all_from_session_files
+        if (file_tuple := (file["file_name"], file["file_path"], file["file_md5"])) not in seen
+        and not seen.add(file_tuple)
     ]
 
     if not all_from_session_files:
@@ -55,16 +60,14 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
         return []
 
     # Upload files toMinIO
-    async def upload_file_to_minio(file_info: Dict) -> dict | None:
+    async def upload_file_to_minio(file_info: dict) -> dict | None:
         """Upload files toMinIOand returns file information"""
         try:
             minio_client = await get_minio_storage()
             object_name = f"linsight/session_files/{execution_tasks[0].session_version_id}/{file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
             await minio_client.put_object(
-                bucket_name=minio_client.bucket,
-                object_name=object_name,
-                file=file_info["file_path"]
+                bucket_name=minio_client.bucket, object_name=object_name, file=file_info["file_path"]
             )
             file_info["file_url"] = object_name
             return file_info
@@ -73,33 +76,27 @@ async def get_all_files_from_session(execution_tasks: List[LinsightExecuteTask],
             return None
 
     # Upload files in parallel toMinIO
-    upload_tasks = [
-        upload_file_to_minio(file_info)
-        for file_info in all_from_session_files
-    ]
+    upload_tasks = [upload_file_to_minio(file_info) for file_info in all_from_session_files]
     upload_results = await asyncio.gather(*upload_tasks, return_exceptions=True)
     # Filter failed uploads
     all_from_session_files = [
-        result for result in upload_results
-        if result is not None and not isinstance(result, Exception)
+        result for result in upload_results if result is not None and not isinstance(result, Exception)
     ]
     # Record failed uploads
-    failed_uploads = [
-        result for result in upload_results
-        if isinstance(result, Exception)
-    ]
+    failed_uploads = [result for result in upload_results if isinstance(result, Exception)]
 
     if failed_uploads:
         logger.warning(f"Some files failed to upload: {len(failed_uploads)} files")
 
     logger.debug(
-        f"Number of files manipulated in the session: {len(all_from_session_files)}Document Description: {all_from_session_files}")
+        f"Number of files manipulated in the session: {len(all_from_session_files)}Document Description: {all_from_session_files}"
+    )
 
     return all_from_session_files
 
 
 # Read File Directory File Details
-async def read_file_directory(file_dir: str) -> List[Dict[str, str]]:
+async def read_file_directory(file_dir: str) -> list[dict[str, str]]:
     """Read file details in file directory"""
     if not file_dir or not os.path.exists(file_dir):
         return []
@@ -108,18 +105,20 @@ async def read_file_directory(file_dir: str) -> List[Dict[str, str]]:
     file_details = []
     for file in files:
         file_md5 = await util.async_calculate_md5(file)
-        file_details.append({
-            "file_name": os.path.basename(file),
-            "file_path": file,
-            "file_md5": file_md5,
-            "file_id": uuid.uuid4().hex[:8]  # Generate unique filesID
-        })
+        file_details.append(
+            {
+                "file_name": os.path.basename(file),
+                "file_path": file,
+                "file_md5": file_md5,
+                "file_id": uuid.uuid4().hex[:8],  # Generate unique filesID
+            }
+        )
 
     return file_details
 
 
 # Get the final result file
-async def get_final_result_file(session_model: LinsightSessionVersion, file_details, answer) -> List[Dict]:
+async def get_final_result_file(session_model: LinsightSessionVersion, file_details, answer) -> list[dict]:
     """
     Get the final result file
     :param file_details:
@@ -129,29 +128,36 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
     """
     # Final Result File
     final_result_files = []
+    answer = answer or ""
 
     for file_info in file_details:
         file_name: str = file_info["file_name"]
-        # Determine if the filename isanswerIn String
-        if file_name in answer:
-            # If the file name is in the answer, add it to the answer
-            final_result_files.append({
-                "file_name": file_name,
-                "file_path": file_info["file_path"],
-                "file_md5": file_info["file_md5"],
-                "file_id": file_info["file_id"]
-            })
+        file_path: str = file_info["file_path"] or ""
+        # A file is a deliverable if it lives under the workspace `output/` zone
+        # (design §9.3.2: output/ = 交付物区) OR its name is referenced verbatim in
+        # the answer. The legacy "name must appear in answer" heuristic alone is
+        # brittle — the deepagents planner writes to output/ but its final reply
+        # often doesn't echo the exact filename, so deliverables vanished from the
+        # result panel. The output/ check makes deliverables show regardless.
+        is_output = "/output/" in file_path.replace(os.sep, "/")
+        if is_output or file_name in answer:
+            final_result_files.append(
+                {
+                    "file_name": file_name,
+                    "file_path": file_info["file_path"],
+                    "file_md5": file_info["file_md5"],
+                    "file_id": file_info["file_id"],
+                }
+            )
 
-    async def upload_file_to_minio(final_file_info: Dict) -> dict | None:
+    async def upload_file_to_minio(final_file_info: dict) -> dict | None:
         """Upload files toMinIOand returns file information"""
         try:
             object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
             # Use async upload if available, otherwise wrap sync call
             minio_client = await get_minio_storage()
             await minio_client.put_object(
-                bucket_name=minio_client.bucket,
-                object_name=object_name,
-                file=final_file_info["file_path"]
+                bucket_name=minio_client.bucket, object_name=object_name, file=final_file_info["file_path"]
             )
             final_file_info["file_url"] = object_name
             return final_file_info
@@ -161,24 +167,17 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
 
     # Upload files toMinIO (Parallel Processing)
     if final_result_files:
-        upload_tasks = [
-            upload_file_to_minio(final_file_info)
-            for final_file_info in final_result_files
-        ]
+        upload_tasks = [upload_file_to_minio(final_file_info) for final_file_info in final_result_files]
 
         upload_results = await asyncio.gather(*upload_tasks, return_exceptions=True)
 
         # Filter failed uploads
         final_result_files = [
-            result for result in upload_results
-            if result is not None and not isinstance(result, Exception)
+            result for result in upload_results if result is not None and not isinstance(result, Exception)
         ]
 
         # Record failed uploads
-        failed_uploads = [
-            result for result in upload_results
-            if isinstance(result, Exception)
-        ]
+        failed_uploads = [result for result in upload_results if isinstance(result, Exception)]
         if failed_uploads:
             logger.warning(f"Some files failed to upload: {len(failed_uploads)} files")
 
@@ -193,7 +192,8 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
     :param event: Event Object
     """
     logger.debug(
-        f"extra processing of step events,call_id: {event.call_id}, name: {event.name}, status: {event.status}")
+        f"extra processing of step events,call_id: {event.call_id}, name: {event.name}, status: {event.status}"
+    )
     try:
         if event.status == "end" and event.name in step_event_extra_tool_dict.keys():
             file_path = event.params.get(step_event_extra_tool_dict[event.name], "")
@@ -223,11 +223,12 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
                 existing_file = next((f for f in step_event_extra_files if f["file_md5"] == file_md5), None)
                 if existing_file:
                     logger.debug(
-                        f"Step event extra processing, file already exists: {existing_file['file_name']}, file_md5: {file_md5}")
+                        f"Step event extra processing, file already exists: {existing_file['file_name']}, file_md5: {file_md5}"
+                    )
                     event.extra_info["file_info"] = {
                         "file_name": file_name,
                         "file_md5": existing_file["file_md5"],
-                        "file_url": existing_file["file_url"]
+                        "file_url": existing_file["file_url"],
                     }
                     return event
 
@@ -236,17 +237,9 @@ async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
 
             minio_client = await get_minio_storage()
             # Upload files toMinIO
-            await minio_client.put_object(
-                bucket_name=minio_client.bucket,
-                object_name=object_name,
-                file=file_path
-            )
+            await minio_client.put_object(bucket_name=minio_client.bucket, object_name=object_name, file=file_path)
 
-            event.extra_info["file_info"] = {
-                "file_name": file_name,
-                "file_md5": file_md5,
-                "file_url": object_name
-            }
+            event.extra_info["file_info"] = {"file_name": file_name, "file_md5": file_md5, "file_url": object_name}
 
             # Add to Step Event Extra File List
             task_exec_obj.step_event_extra_files.append(event.extra_info["file_info"])
@@ -314,7 +307,7 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
             await LinsightSessionVersionDao.batch_update_session_versions_status(
                 session_version_ids=tasks_to_terminate,
                 status=SessionVersionStatusEnum.FAILED,
-                output_result={"error_message": "Worker node crash detected"}
+                output_result={"error_message": "Worker node crash detected"},
             )
 
             # 更新 execution task 状态
@@ -323,8 +316,8 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
                 status=ExecuteTaskStatusEnum.FAILED,
                 where=(
                     LinsightExecuteTask.status != ExecuteTaskStatusEnum.SUCCESS,
-                    LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED
-                )
+                    LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED,
+                ),
             )
 
         logger.warning(f"Terminated {len(tasks_to_terminate)} incomplete tasks due to worker node crash.")
@@ -344,7 +337,8 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
 
         else:
             logger.warning(
-                "Not enabled in system configuration Linsight Invitation code function, skip rollback operation")
+                "Not enabled in system configuration Linsight Invitation code function, skip rollback operation"
+            )
 
         logger.info("Check and terminate incomplete task action completed")
     except Exception as e:

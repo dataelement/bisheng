@@ -35,19 +35,34 @@ _TERMINAL_SESSION_STATUSES = frozenset(
 )
 
 
-def encode_queue_item(session_version_id: str, resume: bool = False, user_input: Any = None) -> dict:
+def encode_queue_item(
+    session_version_id: str,
+    resume: bool = False,
+    user_input: Any = None,
+    continue_question: str | None = None,
+) -> dict:
     """Build a Linsight queue item.
 
     park-and-release uses JSON-shaped dict items so a resume pick-up can be told
     apart from a fresh task. ``resume=True`` items carry the user's answer and are
     lpush'd to the head of the queue by the /workbench/user-input endpoint so the
     parked task continues ahead of newly-queued tasks (PRD §4.4.4).
+
+    ``continue_question`` (F035 multi-turn) carries a follow-up user turn for an
+    already-finished conversation: the worker feeds it as a new HumanMessage into
+    the SAME thread (thread_id = session_version_id) so the agent keeps prior
+    context. Distinct from ``resume`` (which answers a parked ask_user interrupt).
     """
-    return {"session_version_id": session_version_id, "resume": resume, "user_input": user_input}
+    return {
+        "session_version_id": session_version_id,
+        "resume": resume,
+        "user_input": user_input,
+        "continue_question": continue_question,
+    }
 
 
 def parse_queue_item(raw: Any) -> dict:
-    """Normalise a raw queue item into ``{session_version_id, resume, user_input}``.
+    """Normalise a raw queue item into ``{session_version_id, resume, user_input, continue_question}``.
 
     Backward compatible: a bare ``session_version_id`` string (the legacy queue
     format) is treated as a new task (``resume=False``).
@@ -57,9 +72,10 @@ def parse_queue_item(raw: Any) -> dict:
             "session_version_id": raw.get("session_version_id"),
             "resume": bool(raw.get("resume", False)),
             "user_input": raw.get("user_input"),
+            "continue_question": raw.get("continue_question"),
         }
     # Legacy bare-string item == new task.
-    return {"session_version_id": raw, "resume": False, "user_input": None}
+    return {"session_version_id": raw, "resume": False, "user_input": None, "continue_question": None}
 
 
 def _item_session_version_id(raw: Any) -> str | None:
@@ -281,7 +297,12 @@ class ScheduleCenterProcess(Process):
         await node_manager.register_task_ownership(session_version_id)
 
         exec_task = LinsightWorkflowTask()
-        if item["resume"]:
+        if item.get("continue_question") is not None:
+            logger.info(
+                f"Continuing conversation session_version_id: {session_version_id} on node {node_manager.node_id}"
+            )
+            task = asyncio.create_task(exec_task.async_continue(session_version_id, question=item["continue_question"]))
+        elif item["resume"]:
             logger.info(f"Resuming session_version_id: {session_version_id} on node {node_manager.node_id}")
             task = asyncio.create_task(exec_task.async_resume(session_version_id, user_input=item["user_input"]))
         else:

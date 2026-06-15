@@ -441,6 +441,62 @@ async def start_execute_sop(
     )
 
 
+@router.post("/workbench/continue", summary="Continue a task-mode conversation with a new turn")
+async def continue_conversation(
+    session_version_id: str = Body(..., description="Existing session version id to continue", embed=True),
+    question: str = Body(..., description="Follow-up user message", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    """Continue an already-finished task-mode conversation (F035 multi-turn).
+
+    A follow-up turn does NOT create a new session version: it re-enters the same
+    session_version + same LangGraph thread so the agent keeps prior context. We
+    flip the (terminal) session back to IN_PROGRESS — otherwise the worker's
+    non-terminal guard would discard the queue item — then enqueue a
+    continue-typed item. Answering a parked ask_user interrupt is a different
+    flow (/workbench/user-input, resume); this endpoint is for new turns after a
+    round has fully completed.
+    """
+    session_version_model = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id=session_version_id)
+    if not session_version_model:
+        return NotFoundError.return_resp()
+
+    if login_user.user_id != session_version_model.user_id:
+        return UnAuthorizedError.return_resp()
+
+    if session_version_model.status not in [
+        SessionVersionStatusEnum.COMPLETED,
+        SessionVersionStatusEnum.FAILED,
+    ]:
+        # A running / parked session cannot take a new top-level turn; parked
+        # tasks are continued via /workbench/user-input instead.
+        return LinsightSessionVersionRunningError.return_resp()
+
+    await MessageSessionDao.touch_session(session_version_model.session_id)
+
+    # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
+    # non-terminal guard accepts the continue item.
+    await LinsightSessionVersionDao.batch_update_session_versions_status(
+        [session_version_id], SessionVersionStatusEnum.IN_PROGRESS
+    )
+
+    try:
+        from bisheng.linsight.worker import LinsightQueue, encode_queue_item
+
+        redis_client = await get_redis_client()
+        queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
+        await queue.put(data=encode_queue_item(session_version_id, continue_question=question))
+    except Exception as e:
+        logger.error(f"Failed to continue the Ideas conversation: {e!s}")
+        # Roll back the status flip so the conversation isn't stuck IN_PROGRESS.
+        await LinsightSessionVersionDao.batch_update_session_versions_status(
+            [session_version_id], SessionVersionStatusEnum.COMPLETED
+        )
+        return LinsightStartTaskError.return_resp(data=str(e))
+
+    return resp_200(data=True, message="Follow-up turn accepted; results stream via the message flow")
+
+
 # workbench User input
 @router.post("/workbench/user-input", summary="User input Ideas", response_model=UnifiedResponseModel)
 async def user_input(
@@ -471,18 +527,31 @@ async def user_input(
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_id)
 
-    # Idempotency guard: if the task is already USER_INPUT_COMPLETED, a resume
-    # payload was already enqueued by the first submit; skip re-enqueue so a
-    # double-submit cannot spawn two resume pick-ups for the same thread.
-    existing_task = await state_message_manager.get_execution_task(linsight_execute_task_id)
-    already_completed = existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
-
     # If there are documents Process files first
     processed_files = await LinsightWorkbenchImpl.human_participate_add_file(session_version_model, files=files)
 
-    await state_message_manager.set_user_input(
-        task_id=linsight_execute_task_id, user_input=input_content, files=processed_files
-    )
+    # Session-level clarify (ask_user fired before any todo exists): the interrupt
+    # routes to the session pseudo task (task_id == session_version_id), which has
+    # NO LinsightExecuteTask row, so set_user_input would 500. The resume only
+    # needs the user_input VALUE (the worker reads it from the queue item, not the
+    # task); persistence here is just for display/idempotency. So for the
+    # session-level case we skip set_user_input and enqueue the resume directly.
+    session_level = linsight_execute_task_id == session_version_id
+
+    if session_level:
+        already_completed = False
+    else:
+        # Idempotency guard: if the task is already USER_INPUT_COMPLETED, a resume
+        # payload was already enqueued by the first submit; skip re-enqueue so a
+        # double-submit cannot spawn two resume pick-ups for the same thread.
+        existing_task = await state_message_manager.get_execution_task(linsight_execute_task_id)
+        already_completed = (
+            existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
+        )
+
+        await state_message_manager.set_user_input(
+            task_id=linsight_execute_task_id, user_input=input_content, files=processed_files
+        )
 
     # park-and-release (design §4.6): re-enqueue the parked task at the HEAD of
     # the queue so it resumes ahead of newly-queued tasks (PRD §4.4.4). A parked

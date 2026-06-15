@@ -48,6 +48,14 @@ export function startLinsight(versionId: string): Promise<any> {
     });
 }
 
+// F035 多轮对话：在已完成的同一会话里追加新一轮（复用同一 session_version + agent thread，保留上下文）
+export function continueLinsight(session_version_id: string, question: string): Promise<any> {
+    return request.post('/api/v1/linsight/workbench/continue', {
+        session_version_id,
+        question
+    });
+}
+
 // 用户任务中输入事件
 export function userInputLinsightEvent(session_version_id: string, linsight_execute_task_id: string, input_content: string, files: any[]): Promise<any> {
     return request.post('/api/v1/linsight/workbench/user-input', {

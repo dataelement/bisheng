@@ -75,6 +75,10 @@ class LinsightWorkflowTask:
         # Fallback answer captured from the agent's final message when no
         # TaskEnd is emitted (direct-answer/greeting short-circuit, F035).
         self._last_assistant_text: str | None = None
+        # Set when an ask_user interrupt parked the task (WAITING_FOR_USER_INPUT).
+        # astream then halts with no TaskEnd, but this is NOT a direct-answer
+        # completion — the task must stay parked, not push a FINAL_RESULT.
+        self._waiting_for_input: bool = False
         self.file_dir: str | None = None
         self.session_version_id: str | None = None
         self.step_event_extra_files: list[
@@ -238,6 +242,12 @@ class LinsightWorkflowTask:
             agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
             self._check_termination()
             await self._drive_resume(agent, session_model, user_input)
+            # Finalize the resumed turn. Without this the resumed task never
+            # pushes FINAL_RESULT (the frontend keeps spinning on the answered
+            # ask_user) — the fresh/continue paths finalize, the resume path
+            # historically did not. _handle_task_completion no-ops if the agent
+            # parked AGAIN (another ask_user this round) via _waiting_for_input.
+            await self._handle_task_completion(session_model)
         finally:
             for one in tools:
                 if one.name == "bisheng_code_interpreter":
@@ -268,6 +278,99 @@ class LinsightWorkflowTask:
             subgraphs=True,
         ):
             mode, raw, namespace = self._unpack_stream_chunk(chunk)
+            if mode == "values" and not namespace and isinstance(raw, dict):
+                text = self._extract_last_message_text(raw.get("messages"))
+                if text:
+                    self._last_assistant_text = text
+            for event in mapper.normalize(mode, raw, namespace=namespace):
+                await self._handle_event(agent, event, session_model)
+
+    # ==================== Continue (multi-turn conversation) ====================
+
+    async def async_continue(self, session_version_id: str, question: str) -> None:
+        """Continue a finished conversation with a new user turn (F035 multi-turn).
+
+        Unlike ``async_resume`` (which answers a parked ask_user interrupt via
+        ``Command(resume=...)``), this feeds a brand-new ``HumanMessage`` into the
+        SAME LangGraph thread (``thread_id = session_version_id``). Because the
+        Redis checkpointer persists the full message history, the agent keeps the
+        prior context — the follow-up is interpreted against everything said
+        before, not in isolation. One task-mode conversation therefore stays a
+        single session_version + single thread across every round (the legacy
+        "new version per submit" model is bypassed for follow-ups).
+        """
+        self.session_version_id = session_version_id
+        trace_id_var.set(self.session_version_id)
+        logger.info(f"Continue the conversation: session_version_id={self.session_version_id}")
+        tenant_context_token: Token | None = None
+        try:
+            tenant_context_token = await self._restore_tenant_context(session_version_id)
+            async with self._managed_resume() as session_model:
+                await self._continue_workflow(session_model, question)
+        except UserTerminationError:
+            logger.info(f"Continued task terminated by user: session_version_id={self.session_version_id}")
+        except TaskExecutionError as e:
+            logger.error(f"Continue task execution failed: session_version_id={self.session_version_id}, error={e}")
+            await self._handle_execution_error(e)
+        except Exception as e:
+            logger.error(f"Unknown error on continue: session_version_id={self.session_version_id}, error={e}")
+            await self._handle_execution_error(e)
+        finally:
+            if tenant_context_token is not None:
+                current_tenant_id.reset(tenant_context_token)
+
+    async def _continue_workflow(self, session_model: LinsightSessionVersion, question: str) -> None:
+        """Rebuild the agent on the same thread and drive a new user turn."""
+        from bisheng.linsight.domain.services.checkpointer import make_checkpointer
+
+        # A continued round starts from COMPLETED; flip back to IN_PROGRESS so the
+        # frontend leaves the "done" state and re-opens the WS event stream.
+        await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+
+        self.llm = await self._get_llm(
+            invoke_user_id=session_model.user_id,
+            tenant_id=session_model.tenant_id,
+        )
+        tools = await self._generate_tools(session_model)
+        try:
+            linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
+            tools.extend(linsight_tools)
+            agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
+            self._check_termination()
+            await self._drive_continue(agent, session_model, question)
+            await self._handle_task_completion(session_model)
+        finally:
+            for one in tools:
+                if one.name == "bisheng_code_interpreter":
+                    one.close()
+                    break
+
+    async def _drive_continue(self, agent, session_model: LinsightSessionVersion, question: str) -> None:
+        """Continue driver — feeds a new HumanMessage into the same thread.
+
+        Shares the astream + StreamEventMapper pipeline with the fresh/resume
+        paths so continued chunks render identically. ``thread_id`` reuse +
+        durable checkpointer mean the new turn appends to the persisted message
+        history and the agent answers with full prior context.
+        """
+        linsight_conf = settings.get_linsight_conf()
+        mapper = StreamEventMapper(svid=session_model.id)
+        config = {
+            "configurable": {"thread_id": session_model.id},
+            "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+        }
+        agent_input = {"messages": [{"role": "user", "content": question}]}
+        async for chunk in agent.astream(
+            agent_input,
+            config=config,
+            stream_mode=["updates", "messages", "values"],
+            subgraphs=True,
+        ):
+            mode, raw, namespace = self._unpack_stream_chunk(chunk)
+            if mode == "values" and not namespace and isinstance(raw, dict):
+                text = self._extract_last_message_text(raw.get("messages"))
+                if text:
+                    self._last_assistant_text = text
             for event in mapper.normalize(mode, raw, namespace=namespace):
                 await self._handle_event(agent, event, session_model)
 
@@ -424,13 +527,17 @@ class LinsightWorkflowTask:
         Returns a LangGraph ``CompiledStateGraph`` driven by ``agent.astream``.
         Model selection follows the per-task ``model`` persisted on the session
         (design §2.2.1); tenant resolution + share fallback live inside the
-        factory's call to ``LLMService.get_bisheng_linsight_llm``. Wave 1 uses
-        the FakeWorkspaceBackend stub + InMemorySaver (factory defaults); Track
-        B/C inject the real PlainRedisCheckpointer / WorkspaceBackend at
-        integration. The resume path (Track B) passes a Redis-backed
-        ``checkpointer`` so the parked interrupt checkpoint (thread_id =
-        session_version_id) is located on rebuild.
+        factory's call to ``LLMService.get_bisheng_linsight_llm``. We inject the
+        REAL WorkspaceBackend (MinIO truth + write-through cache, design §9) so
+        the agent's write_file/read_file tools actually persist — the factory's
+        FakeWorkspaceBackend default is a test stub with no ``awrite``. The
+        resume path passes a Redis-backed ``checkpointer`` so the parked
+        interrupt checkpoint (thread_id = session_version_id) is located.
         """
+        from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+        minio = await get_minio_storage()
+        backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
         return await create_linsight_agent(
             session_model=session_model,
             tools=tools,
@@ -438,6 +545,7 @@ class LinsightWorkflowTask:
             file_dir=self.file_dir,
             svid=session_model.id,
             checkpointer=checkpointer,
+            backend=backend,
         )
 
     # ==================== Mission Execution ====================
@@ -705,6 +813,12 @@ class LinsightWorkflowTask:
             MessageData(event_type=MessageEventType.USER_INPUT, data=event.model_dump())
         )
 
+        # The agent loop ends naturally after this interrupt. Mark the task as
+        # parked so _handle_task_completion does NOT mistake the missing TaskEnd
+        # for a direct-answer completion and push a FINAL_RESULT (which would
+        # close the session and hide the clarify card).
+        self._waiting_for_input = True
+
     async def _handle_exec_step(self, agent, event: ExecStep, session_model: LinsightSessionVersion):
         """Handle execution step events"""
 
@@ -796,6 +910,13 @@ class LinsightWorkflowTask:
 
     async def _handle_task_completion(self, session_model: LinsightSessionVersion):
         """Processing Task Completion"""
+        if self._waiting_for_input:
+            # An ask_user interrupt parked the task; astream halted with no
+            # TaskEnd on purpose. Leave it WAITING — the user-input endpoint
+            # will re-queue and resume it. Do not push any completion message.
+            logger.info("Task parked on user input; skipping completion handling")
+            return
+
         if not self._final_result:
             # No TaskEnd was emitted — the agent answered directly without
             # planning sub-tasks (e.g. a greeting). Don't leave the frontend
