@@ -140,7 +140,7 @@ def lower_keys(mapping: Any) -> dict[str, Any]:
 def stream_query(sql: str, params: dict[str, Any], batch_size: int = 1000) -> Iterable[dict[str, Any]]:
     with bypass_tenant_filter():
         with get_sync_db_session() as session:
-            result = session.exec(text(sql).execution_options(stream_results=True), params)
+            result = session.exec(text(sql).execution_options(stream_results=True), params=params)
             for partition in result.mappings().partitions(batch_size):
                 for row in partition:
                     yield lower_keys(row)
@@ -149,7 +149,7 @@ def stream_query(sql: str, params: dict[str, Any], batch_size: int = 1000) -> It
 def fetch_all(sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     with bypass_tenant_filter():
         with get_sync_db_session() as session:
-            result = session.exec(text(sql), params or {})
+            result = session.exec(text(sql), params=params or {})
             return [lower_keys(row) for row in result.mappings()]
 
 

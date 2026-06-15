@@ -1,6 +1,7 @@
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-from elasticsearch import Elasticsearch, AsyncElasticsearch, exceptions as es_exceptions, helpers
+from elasticsearch import AsyncElasticsearch, Elasticsearch, helpers
+from elasticsearch import exceptions as es_exceptions
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -9,37 +10,41 @@ from bisheng.common.services import telemetry_service
 from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_connection_sync
 
 common_properties = {
-    "user_id": {"type": "keyword",
-                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
-    "user_name": {"type": "keyword",
-                  "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+    "user_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+    "user_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
     "user_group_infos": {
         "type": "nested",
         "properties": {
-            "user_group_id": {"type": "keyword",
-                              "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
-            "user_group_name": {"type": "keyword",
-                                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}}
-        }
+            "user_group_id": {
+                "type": "keyword",
+                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+            },
+            "user_group_name": {
+                "type": "keyword",
+                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+            },
+        },
     },
     "user_role_infos": {
         "type": "nested",
         "properties": {
-            "role_id": {"type": "keyword",
-                        "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+            "role_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
             "role_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
-            "group_id": {"type": "keyword",
-                         "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
-        }
+            "group_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
+        },
     },
     "user_department_infos": {
         "type": "nested",
         "properties": {
-            "department_id": {"type": "keyword",
-                              "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
-            "department_name": {"type": "keyword",
-                                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}}
-        }
+            "department_id": {
+                "type": "keyword",
+                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+            },
+            "department_name": {
+                "type": "keyword",
+                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+            },
+        },
     },
     "timestamp": {"type": "date", "format": "strict_date_optional_time||epoch_second"},
 }
@@ -50,32 +55,22 @@ common_settings = {
                 "type": "ngram",
                 "min_gram": 1,
                 "max_gram": 1,
-                "token_chars": [
-                    "letter",
-                    "digit",
-                    "punctuation",
-                    "symbol"
-                ]
+                "token_chars": ["letter", "digit", "punctuation", "symbol"],
             }
         },
-        "analyzer": {
-            "single_char_analyzer": {
-                "type": "custom",
-                "tokenizer": "single_char_tokenizer"
-            }
-        }
+        "analyzer": {"single_char_analyzer": {"type": "custom", "tokenizer": "single_char_tokenizer"}},
     }
 }
 
 
 class BaseRecord(UserContext):
     timestamp: int
-    es_id: Optional[str] = Field(default=None)
+    es_id: str | None = Field(default=None)
 
 
 class BaseMidTable(BaseModel):
     _index_name: str = ""
-    _mappings: Dict[str, Any] = {}
+    _mappings: dict[str, Any] = {}
     _es_client: AsyncElasticsearch = None
     _es_client_sync: Elasticsearch = None
 
@@ -94,9 +89,9 @@ class BaseMidTable(BaseModel):
             exists = await self._es_client.indices.exists(index=self._index_name)
             if not exists:
                 # Incoming body Applications Mapping
-                await self._es_client.indices.create(index=self._index_name,
-                                                     body={"settings": common_settings,
-                                                           "mappings": {"properties": mappings}})
+                await self._es_client.indices.create(
+                    index=self._index_name, body={"settings": common_settings, "mappings": {"properties": mappings}}
+                )
         except es_exceptions.RequestError as e:
             # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):
@@ -114,9 +109,9 @@ class BaseMidTable(BaseModel):
             exists = self._es_client_sync.indices.exists(index=self._index_name)
             if not exists:
                 # Incoming body Applications Mapping
-                self._es_client_sync.indices.create(index=self._index_name,
-                                                    body={"settings": common_settings,
-                                                          "mappings": {"properties": mappings}})
+                self._es_client_sync.indices.create(
+                    index=self._index_name, body={"settings": common_settings, "mappings": {"properties": mappings}}
+                )
         except es_exceptions.RequestError as e:
             # Ignore on concurrency creation "resource_already_exists_exception"
             if "resource_already_exists_exception" not in str(e):
@@ -125,21 +120,17 @@ class BaseMidTable(BaseModel):
         return None
 
     def get_latest_record_time_sync(self) -> int | None:
-        """ Time to fetch the last record """
-        query = {
-            "size": 1,
-            "sort": [{"timestamp": {"order": "desc"}}],
-            "_source": ["timestamp"]
-        }
+        """Time to fetch the last record"""
+        query = {"size": 1, "sort": [{"timestamp": {"order": "desc"}}], "_source": ["timestamp"]}
         response = self._es_client_sync.search(index=self._index_name, body=query)
-        hits = response.get('hits', {}).get('hits', [])
+        hits = response.get("hits", {}).get("hits", [])
         if hits:
-            latest_time = hits[0]['_source']['timestamp']
+            latest_time = hits[0]["_source"]["timestamp"]
             return latest_time
         return None
 
-    def insert_records_sync(self, records: List[BaseRecord]) -> None:
-        """ Batch Insert Record """
+    def insert_records_sync(self, records: list[BaseRecord]) -> None:
+        """Batch Insert Record"""
         actions = []
         for rec in records:
             action = {
@@ -162,16 +153,26 @@ class BaseMidTable(BaseModel):
             kwargs["id"] = record.es_id
         await self._es_client.index(**kwargs)
 
-    def delete_by_query_sync(self, query: Dict[str, Any], *, refresh: bool = False) -> Dict[str, Any]:
+    def delete_by_query_sync(
+        self,
+        query: dict[str, Any],
+        *,
+        refresh: bool = False,
+        conflicts: str | None = None,
+    ) -> dict[str, Any]:
         """同步删除匹配 Elasticsearch 查询的记录。"""
         self.ensure_index_exists_sync()
+        kwargs = {}
+        if conflicts is not None:
+            kwargs["conflicts"] = conflicts
         return self._es_client_sync.delete_by_query(
             index=self._index_name,
             body={"query": query},
             refresh=refresh,
+            **kwargs,
         )
 
-    def search_from_base_sync(self, **kwargs) -> List[Dict[str, Any]]:
-        """ Synchronize search methods """
+    def search_from_base_sync(self, **kwargs) -> list[dict[str, Any]]:
+        """Synchronize search methods"""
         response = self._es_client_sync.search(index=telemetry_service.index_name, **kwargs)
-        return response.get('hits', {}).get('hits', [])
+        return response.get("hits", {}).get("hits", [])

@@ -3,6 +3,7 @@ from datetime import date, datetime, time, timedelta
 from loguru import logger
 
 from bisheng.api.services.workflow import WorkFlowService
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.telemetry.domain.mid_table.derived_events import (
     MidActiveUserJob,
@@ -106,9 +107,10 @@ def sync_derived_telemetry_mid_tables():
 
 
 if __name__ == "__main__":
-    sync_user_increment_table_all()
-    sync_knowledge_increment_table_all()
-    sync_app_increment_table_all()
-    sync_knowledge_space_content_stat_all()
-    sync_user_interact_dtl_all()
-    sync_derived_telemetry_mid_tables()
+    with bypass_tenant_filter():
+        sync_user_increment_table_all()
+        sync_knowledge_increment_table_all()
+        sync_app_increment_table_all()
+        sync_knowledge_space_content_stat_all()
+        sync_user_interact_dtl_all()
+        sync_derived_telemetry_mid_tables()
