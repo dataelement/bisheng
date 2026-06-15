@@ -1,7 +1,7 @@
 """F036-① child-listing fast-path dispatch equivalence.
 
-覆盖 AC: AC-01 / AC-02 / AC-05 (spec 2.1/2.2). 验证 `_filter_visible_child_items_fast` 的
-分发逻辑与 `_filter_visible_child_items_full` 在一致权限世界下结果逐位相等:
+覆盖 AC: AC-01 / AC-02 / AC-05 (spec 2.1/2.2). 验证 `_filter_visible_child_items` 的
+分发逻辑与 `_filter_visible_child_items_reference` 在一致权限世界下结果逐位相等:
   - 叶级 binding 命中 -> 走完整逐项评估;
   - 当前用户是 owner -> 必可见(加性 owner 授权);
   - 其余 -> 继承"父链决策".
@@ -57,8 +57,8 @@ async def _run_both(svc, items, context, *, item_visible, chain_visible):
     svc._get_child_item_effective_permission_ids = AsyncMock(side_effect=fake_item_eff)
     svc._chain_effective_permission_ids = AsyncMock(side_effect=fake_chain_eff)
 
-    fast = await svc._filter_visible_child_items_fast(items, space_id=SPACE_ID, context=context)
-    full = await svc._filter_visible_child_items_full(items, space_id=SPACE_ID, context=context)
+    fast = await svc._filter_visible_child_items(items, space_id=SPACE_ID, context=context)
+    full = await svc._filter_visible_child_items_reference(items, space_id=SPACE_ID, context=context)
     return [i.id for i in fast], [i.id for i in full]
 
 
@@ -118,7 +118,7 @@ async def test_owner_shortcircuit_required():
     svc._get_child_item_effective_permission_ids = AsyncMock(side_effect=fake_item_eff)
     svc._chain_effective_permission_ids = AsyncMock(side_effect=fake_chain_eff)
 
-    fast = await svc._filter_visible_child_items_fast(items, space_id=SPACE_ID, context=context)
+    fast = await svc._filter_visible_child_items(items, space_id=SPACE_ID, context=context)
     # owner short-circuit returns True regardless of chain/eval mocks
     assert [i.id for i in fast] == [1]
 
@@ -134,7 +134,7 @@ async def test_leaf_bound_uses_full_eval_not_chain():
     svc._get_child_item_effective_permission_ids = item_eff
     svc._chain_effective_permission_ids = chain_eff
 
-    fast = await svc._filter_visible_child_items_fast(items, space_id=SPACE_ID, context=context)
+    fast = await svc._filter_visible_child_items(items, space_id=SPACE_ID, context=context)
     assert [i.id for i in fast] == [9]
     item_eff.assert_awaited()  # leaf-bound went through per-item eval
     chain_eff.assert_not_awaited()  # and NOT through the chain

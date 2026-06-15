@@ -50,8 +50,8 @@
 
 ## 5. 结论与建议
 
-- ① 是关键优化,且经真实数据验证可见集等价;建议合入并默认开启(`BS_REBAC_CHILD_FASTPATH=true`),保留开关以便回滚。
-- 合入前补:① "有 binding 空间 + 非 admin 用户"的端到端等价 diff;② 把"非 owner 授权必有 binding"固化为不变量(authorize 写路径的 arch-guard/测试),防止未来出现裸授权 tuple 破坏快速通道前提。
+- ① 是关键优化,且经真实数据验证可见集等价;**已按决定去掉开关 `BS_REBAC_CHILD_FASTPATH`,优化逻辑成为默认且唯一路径**(完整逐项 `_filter_visible_child_items_reference` 保留作等价测试 oracle/兜底)。本报告中的 "flag OFF/ON" 是当时为 A/B 压测临时切换的方式。
+- 已补测试缺口:① "有 binding 空间 + 非 admin 用户"真实 eval 等价(`test_f036_real_eval_equivalence`);② "授权 binding ↔ fast-path bound_ff"闭环(`test_f036_invariant`)。残留非阻断建议:authorize 写路径加 arch-guard 强制"非 owner 授权必带 model_id ⟹ 写 binding"。
 - ③ 保留(零风险、O(1) 解析);在 bindings 规模增大的租户上收益会更明显。
 
 ## 附:复现实命令骨架

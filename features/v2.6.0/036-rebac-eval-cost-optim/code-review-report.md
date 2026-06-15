@@ -41,3 +41,15 @@
 ## Overall: PASS_WITH_WARNINGS
 
 HIGH 已在本轮修复；3 条 MEDIUM 中 2 条（不变量 arch-guard、非 admin·有绑定空间端到端 diff）为**默认开启 ① 前的硬性前置**，1 条（format 拆 commit）为合入时的整洁项；LOW 可选。①③ 逻辑本身、等价性与压测结论均可接受。
+
+---
+
+## 后续已处理（2026-06-15，去开关轮次）
+
+- **[Test MEDIUM ×2 — 已补]**：
+  - `test/knowledge/test_f036_real_eval_equivalence.py`：真实 FGPS（InMemoryOpenFGA + 真实 binding/model）下，非 admin 用户 + 受限 binding（空间只授 view_space）场景，fast == reference 逐位相等 —— 补齐"非 admin·有 binding 空间"的等价覆盖。
+  - `test/permission/test_f036_invariant.py`：锁定"授权 binding ↔ fast-path bound_ff"闭环，固化不变量的另一半（被授权资源必走完整评估）。
+- **[Style LOW — 已消除]**：移除开关后，中部 `import os as _os` / `# noqa: E402` 一并删除。
+- **开关移除**：按用户要求去掉 `BS_REBAC_CHILD_FASTPATH`，优化逻辑成为默认且唯一路径；完整逐项 `_filter_visible_child_items_reference` 保留作等价测试 oracle / 兜底。
+- **format 不拆**：按用户要求，文件按 ruff 格式整体提交（不拆 chore commit）。
+- **残留建议（非阻断）**：authorize 写路径加 arch-guard 强制"非 owner 授权必带 model_id（⟹ 写 binding）"，把不变量从"测试守护"升级为"代码强制"。

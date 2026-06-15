@@ -8,7 +8,7 @@
 
 ## 1. 目标与非目标
 
-- **目标**：在**不改变任何可见性结果**的前提下，把知识空间「子项列表 / 站内搜索」的逐项 ReBAC 评估从「每项一次完整评估 + 一次 OpenFGA 读」降为「多数继承项 O(1) 套用 + 少数有绑定项才完整评估 + 整页一次批量读 tuple」，消除并发下后端 CPU 被逐项评估打满的瓶颈。三项优化**全部请求内完成，无任何跨请求状态**。
+- **目标**：在**不改变任何可见性结果**的前提下，把知识空间「子项列表 / 站内搜索」的逐项 ReBAC 评估从「每项一次完整评估」降为「多数继承项 O(1) 套用 + 少数有绑定项才完整评估」，消除并发下后端 CPU 被逐项评估打满的瓶颈。优化为**默认且唯一路径（无开关）**，全部请求内完成、无任何跨请求状态。
 - **非目标**：不改权限语义/数据模型/cursor 协议/前端；不做 OpenFGA 服务端扩容；**不引入跨请求缓存**（见决策 4）。
 
 ---
@@ -65,12 +65,11 @@
 → 入口鉴权 `_require_read_permission` / `_require_permission_id`（不变）
 → `_scan_visible_child_items`（F027 cursor 批扫）每批：
   1. `SpaceFileDao.async_list_children`（DM 取一批，1–11ms）
-  2. `_filter_visible_child_items` 按开关 `_CHILD_PERMISSION_FAST_PATH_ENABLED` 分发：
-     - **OFF（默认，oracle）** → `_filter_visible_child_items_full`：每项 `_get_child_item_effective_permission_ids` 完整评估（经 ③ 索引解析；既有行为）。
-     - **ON** → `_filter_visible_child_items_fast`【新①】：每项 ——
-       · 叶级命中「有绑定资源集」→ 走完整逐项评估（nearest-wins，与 full 一致）；
+  2. `_filter_visible_child_items`【①，默认且唯一路径，无开关】：每项 ——
+       · 叶级命中「有绑定资源集」→ 走完整逐项评估 `_get_child_item_effective_permission_ids`（nearest-wins，与既有一致）；
        · `item.user_id == 当前用户`（owner）→ 直接可见；
        · 否则 → 继承「父链决策」`_chain_effective_permission_ids`（每条祖先链算一次、本请求内 memo）。
+     - `_filter_visible_child_items_reference`（完整逐项评估，旧行为）作为**等价测试 oracle / 文档化兜底**保留，不在热路径。
 → `_enrich_with_version_info` + `_handle_file_folder_extra_info`（`count_folder` 仍按需，本期不动）
 → cursor 编码返回。
 
@@ -92,7 +91,7 @@
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
 | `FineGrainedPermissionService`（`permission/domain/services/fine_grained_permission_service.py`） | 单项有效权限评估；新增 `build_binding_index` + 给 `get_effective_permission_ids_async`/`_resolve_binding_for_tuple`/`_permission_ids_from_bindings` 加可选 `binding_index`（③） | 不改判定语义；不引入跨请求状态 |
-| `KnowledgeSpaceService`（`knowledge/domain/services/knowledge_space_service.py`） | 子项扫描/过滤编排；`_filter_visible_child_items` 分发 `_full`(oracle)/`_fast`(①)，新增 `_chain_effective_permission_ids` | 不直接写 ORM |
+| `KnowledgeSpaceService`（`knowledge/domain/services/knowledge_space_service.py`） | 子项扫描/过滤编排；`_filter_visible_child_items`=① 优化路径(默认唯一)，`_filter_visible_child_items_reference`=完整逐项 oracle(测试/兜底)，新增 `_chain_effective_permission_ids` | 不直接写 ORM |
 
 ---
 
@@ -106,8 +105,8 @@
 | 4 | bindings 是 CONFIG 表里一份 JSON 全量清单，按 resource 枚举 | 不知道就会去逐资源查库判断"有无绑定" | 「有绑定资源集」直接由该清单内存派生 |
 | 5 | `_resolve_binding_for_tuple` 现为每 tuple 线性扫全 bindings | 是 CPU 隐性热点，不索引则 ③ 无效 | 决策 2 建 key 索引 |
 | 6 | 刻意**不**做跨请求缓存 | 后人"顺手加个 Redis 缓存"会重新引入跨域失效耦合 | 决策 4 + §8：要加也只能读侧版本派生 key |
-| 7 | ① 快速通道**仅在不变量"非 owner 的 file/folder 授权 100% 有 binding"成立时等价**（109 实测裸非 owner 授权=0；`owner` 加性裸 tuple 由 `item.user_id` 短路、`parent` 为结构边均忽略） | 若将来出现"裸非 owner 授权 tuple"（有 tuple 无 binding），开启 ① 后该项会被当继承处理 → 漏显/误显 | 默认 OFF；授权写路径须保证非 owner 授权必写 binding（建议加 arch-guard/测试，见 §8）；开启前须做"有 binding 空间 + 非 admin 用户"端到端 diff |
-| 8 | ① 的"父链决策"对**当前用户为 owner 的项**不适用 —— owner 经 `owner` tuple 在叶级 nearest-wins，永远可见 | 漏掉 owner 短路 → owner 看不到自己刚传的文件（false-negative） | `_filter_visible_child_items_fast` 用 `item.user_id == 当前用户` 短路；单测 `test_owner_shortcircuit_required` 守护 |
+| 7 | ① **仅在不变量"非 owner 的 file/folder 授权 100% 有 binding"成立时等价**（109 实测裸非 owner 授权=0；`owner` 加性裸 tuple 由 `item.user_id` 短路、`parent` 为结构边均忽略） | 若将来有人绕过 binding 直接写"裸非 owner 授权 tuple"，该项会被当继承处理 → 漏显/误显 | ① 为默认路径；`test_f036_invariant` 锁定"授权 binding ↔ fast-path bound_ff"闭环、`test_f036_real_eval_equivalence` 用真实 eval 验非 admin+受限 binding 等价；授权写路径须保持 binding 与 tuple 同写（design §6.2） |
+| 8 | ① 的"父链决策"对**当前用户为 owner 的项**不适用 —— owner 经 `owner` tuple 在叶级 nearest-wins，永远可见 | 漏掉 owner 短路 → owner 看不到自己刚传的文件（false-negative） | `_filter_visible_child_items` 用 `item.user_id == 当前用户` 短路；单测 `test_owner_shortcircuit_required` 守护 |
 
 ---
 
@@ -127,9 +126,14 @@
 
 ## 7. 测试与可观测
 
-- **等价性（最重要）**：构造覆盖矩阵——空间公开/私有 × 文件夹有/无绑定 × 文件有/无绑定 × 绑定授予/不授予当前用户 × 部门子树授权 × admin/创建者/成员/外部用户；对每组断言「优化前逐项评估」与「优化后」可见项集合**逐位相等**（含 INV-7 子集关系）；重点覆盖"绑定落祖先文件夹"（坑 3）。
-- **性能基线**：用原 Locust 脚本（20 并发持续）压 `/children`，记录改造前 baseline（P50≈22–24s）与改造后；AC-08 要求 P50 降 ≥70%。基线与结果落 tasks.md。
-- **可观测**：日志打印每请求「完整评估项数 / 继承项数 / 批量 tuple 读次数」；并发压测时看 `docker stats` backend CPU 应显著下降。
+- **等价性（最重要）** — 已落地测试：
+  - `test/knowledge/test_f036_child_fastpath_equivalence.py`：分发等价（owner 短路 / 叶绑定走完整 / 否则走链），一致世界下 `_filter_visible_child_items` == `_filter_visible_child_items_reference`。
+  - `test/knowledge/test_f036_real_eval_equivalence.py`：**真实 FGPS**（InMemoryOpenFGA + 真实 binding/model 解析）下，非 admin 用户 + "空间只授 view_space" 的受限场景，两条路径可见集逐位相等（覆盖"空间 view≠文件 view"、单独授权文件/文件夹、owner、继承不可见）。
+  - `test/permission/test_f036_binding_index.py`：③ 索引解析与线性扫描逐位等价、保序。
+  - `test/permission/test_f036_invariant.py`：锁定"授权 binding ↔ fast-path bound_ff"闭环（被授权的 file/folder 必走完整评估）。
+- **性能基线**：原 Locust 脚本 20 并发压 `/children`，改造前 P50≈22–24s；109 实测 flag OFF→ON：P50 4.898s→0.338s（见 loadtest-report.md）。AC-08 P50 降 ≥70% 达成。
+- **真实数据等价**：109 对 sarah/space57 跑 flag OFF vs ON 的 `/children` 4 变体，FINGERPRINT 逐位相等（见 loadtest-report.md）。
+- **可观测**：并发压测时看 `docker stats` backend CPU 应显著下降（改造前并发达 ~704%）。
 
 ---
 
