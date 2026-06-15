@@ -3,7 +3,7 @@
  * Output streams across frames (extra_info.is_thinking); stepUtils already
  * concatenates the chunks, this row just renders the text when expanded.
  */
-import { Lightbulb } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import { detailTextCls, RunningSpinner, StepRow } from './StepRow';
@@ -13,7 +13,7 @@ export function ThinkingRow({ step }: { step: MergedStep }) {
     const localize = useLocalize();
     return (
         <StepRow
-            icon={step.running ? <RunningSpinner /> : <Lightbulb size={14} className="text-[#333]" />}
+            icon={step.running ? <RunningSpinner /> : <Outlined.Bulb size={14} className="text-[#333]" />}
             title={step.name || localize('com_linsight_thinking')}
             running={step.running}
             titleClassName="text-gray-500"

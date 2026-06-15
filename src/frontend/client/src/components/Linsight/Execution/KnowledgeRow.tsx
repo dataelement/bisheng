@@ -3,7 +3,8 @@
  * fig.11). Expanded: hit entries (icon + title) best-effort parsed from
  * extra_info.file_info / output; plain output text as fallback.
  */
-import { FileText, ScrollText } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
+import { FileText } from 'lucide-react';
 import { cn } from '~/utils';
 import { detailTextCls, RunningSpinner, StepRow } from './StepRow';
 import type { MergedStep } from './stepUtils';
@@ -31,7 +32,7 @@ export function KnowledgeRow({ step }: { step: MergedStep }) {
     const hits = knowledgeHits(step);
     return (
         <StepRow
-            icon={step.running ? <RunningSpinner /> : <ScrollText size={14} className="text-[#333]" />}
+            icon={step.running ? <RunningSpinner /> : <Outlined.BookOpenText size={14} className="text-[#333]" />}
             title={step.name}
             running={step.running}
         >

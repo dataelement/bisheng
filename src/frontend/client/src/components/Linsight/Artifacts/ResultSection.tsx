@@ -60,24 +60,25 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         backgroundColor: '#fff',
                     }}
                 >
-                    {/* header: icon + title + count badge */}
-                    <div className="flex items-center gap-2 pb-4">
-                        <img
-                            className="size-5"
-                            src={`${__APP_ENV__.BASE_URL}/assets/lingsi.svg`}
-                            alt=""
-                        />
-                        <span className="text-[14px] font-medium text-[#212121]">
-                            {localize('com_linsight_output_files', { 0: String(files.length) })}
+                    {/* header: icon + title + count badge. px-1 matches the file
+                        rows so the list aligns under the title. */}
+                    <div className="flex items-center gap-2 px-1 pb-4">
+                        <Outlined.Clap className="size-4 text-[#212121]" />
+                        <span className="text-[14px] font-medium text-[#999]">
+                            {localize('com_linsight_output_files', { 0: '' }).trim()}
+                        </span>
+                        <span className="flex h-[18px] min-w-[16px] items-center justify-center rounded-full bg-gray-100 px-1.5 text-[10px] text-[#666]">
+                            {files.length}
                         </span>
                     </div>
 
-                    {/* file list */}
-                    <div className="space-y-1">
+                    {/* file list — pl-7 (icon 20 + gap 8) so file names align
+                        under the title TEXT, not the title icon. */}
+                    <div className="space-y-2 pl-7">
                         {files.map((file) => (
                             <div
                                 key={file.file_id || file.file_url}
-                                className="flex items-center justify-between rounded-lg px-1 py-2.5"
+                                className="flex items-center justify-between rounded-lg px-1 py-1 transition-colors hover:bg-gray-100"
                             >
                                 <button
                                     type="button"
@@ -86,15 +87,9 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                                 >
                                     {file.file_name}
                                 </button>
+                                {/* file-name click already previews, so the separate
+                                    preview icon is removed — only "另存为" remains. */}
                                 <div className="flex shrink-0 items-center gap-1">
-                                    <button
-                                        type="button"
-                                        aria-label={localize('com_linsight_preview')}
-                                        className="rounded-md p-1 text-[#8C8C8C] hover:text-[#335CFF] transition-colors"
-                                        onClick={() => onPreview(file)}
-                                    >
-                                        <Outlined.BookOpenText className="size-[18px]" />
-                                    </button>
                                     <SaveAsButton file={file} versionId={versionId} />
                                 </div>
                             </div>

@@ -4,6 +4,7 @@
  * side-by-side small cards. A running card shows the tool currently being
  * called inside that agent's namespace; a finished card shows "called N tools".
  */
+import { Outlined } from 'bisheng-icons';
 import { Check, Recycle } from 'lucide-react';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
@@ -50,7 +51,7 @@ export function SubagentRow({ group }: { group: SubagentGroup }) {
 
     return (
         <StepRow
-            icon={<Recycle size={14} className={cn(running ? 'text-blue-500' : 'text-gray-400')} />}
+            icon={<Outlined.PeopleRound size={14} className={cn(running ? 'text-primary' : 'text-[#333]')} />}
             title={
                 <span>
                     {localize('com_linsight_subagent_delegate', {

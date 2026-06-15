@@ -22,7 +22,7 @@ export function IntentRow({ data }: { data: ExecStepEventData }) {
             running={false}
         >
             {request.questions.length > 0 ? (
-                <ol className="space-y-1">
+                <ol className="space-y-2">
                     {request.questions.map((q, i) => (
                         <li key={q.id} className="text-xs leading-5 text-gray-600">
                             {i + 1}. {q.question}
@@ -32,7 +32,7 @@ export function IntentRow({ data }: { data: ExecStepEventData }) {
             ) : (
                 request.callReason && <p className={detailTextCls}>{request.callReason}</p>
             )}
-            {answer && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-gray-800">{answer}</p>}
+            {answer && <p className="whitespace-pre-wrap text-xs leading-5 text-gray-800">{answer}</p>}
         </StepRow>
     );
 }

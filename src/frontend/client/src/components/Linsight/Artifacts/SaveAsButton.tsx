@@ -3,7 +3,7 @@
  * expand into a small menu (original md / pdf / docx via the backend convert
  * endpoint); every other type downloads the original file directly.
  */
-import { Download } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { getMdDownload } from '~/api/linsight';
 import { NotificationSeverity } from '~/common';
@@ -90,16 +90,17 @@ export function SaveAsButton({ file, versionId, iconOnly = false }: SaveAsButton
             type="button"
             disabled={busy}
             aria-label={localize('com_linsight_save_as')}
-            className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+            className="rounded-md p-1 text-[#8C8C8C] transition-colors hover:text-[#335CFF] disabled:opacity-50"
         >
-            <Download size={16} />
+            <Outlined.AddToKnowledgeBase className="size-[18px]" />
         </button>
     ) : (
         <button
             type="button"
             disabled={busy}
-            className="shrink-0 whitespace-nowrap text-xs text-gray-500 hover:text-blue-600 disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-gray-500 transition-colors hover:text-blue-600 disabled:opacity-50"
         >
+            <Outlined.AddToKnowledgeBase className="size-4" />
             {localize('com_linsight_save_as')}
         </button>
     );

@@ -2,10 +2,9 @@
  * F035 Track H (P3): tool-call step row (step_type=tool, spec §3).
  * Header: icon + tool name; expanded: call reason + input params + output.
  */
-import { Wrench } from 'lucide-react';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
-import { detailTextCls, formatStepParams, RunningSpinner, StepRow } from './StepRow';
+import { detailTextCls, formatStepParams, RunningSpinner, StepRow, stepTypeIcon } from './StepRow';
 import type { MergedStep } from './stepUtils';
 
 export function ToolRow({ step }: { step: MergedStep }) {
@@ -13,7 +12,7 @@ export function ToolRow({ step }: { step: MergedStep }) {
     const paramsText = formatStepParams(step.params);
     return (
         <StepRow
-            icon={step.running ? <RunningSpinner /> : <Wrench size={14} className="text-[#333]" />}
+            icon={step.running ? <RunningSpinner /> : stepTypeIcon(step.name)}
             title={step.name}
             running={step.running}
         >

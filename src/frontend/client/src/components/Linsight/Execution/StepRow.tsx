@@ -3,13 +3,25 @@
  * Default open while running, auto-collapses on completion — unless the user
  * toggled manually, in which case the manual choice wins.
  */
-import { ChevronDown, ChevronRight, LoaderCircle } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
+import { ChevronDown, ChevronRight, Wrench } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { cn } from '~/utils';
 
 /** Shared spinner glyph for in-progress steps. */
 export function RunningSpinner() {
-    return <span className="size-[6px] animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-[#212121]" />;
+    return <Outlined.Loading size={14} className="animate-spin text-primary" />;
+}
+
+/** Map a step/tool name to its leading icon (completed state). */
+export function stepTypeIcon(name?: string) {
+    const n = (name || '').toLowerCase();
+    const cls = 'text-[#333]';
+    if (/agent|subagent/.test(n)) return <Outlined.PeopleRound size={14} className={cls} />;
+    if (/knowledge|knowledge_base|space|retrieval|recall|检索|知识/.test(n)) return <Outlined.BookOpenText size={14} className={cls} />;
+    if (/think|reason|思考/.test(n)) return <Outlined.Bulb size={14} className={cls} />;
+    if (/research|调研/.test(n)) return <Outlined.Dashboard size={14} className={cls} />;
+    return <Wrench size={14} className={cls} />; // default
 }
 
 /** Shared style for expanded detail text blocks. */
@@ -58,7 +70,9 @@ export function StepRow({ icon, title, children, running = false, rightExtra, cl
                 )}
                 onClick={() => collapsible && setManualOpen(!open)}
             >
-                <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
+                {/* relative z-10 + bg-white so the icon "breaks" the timeline spine
+                    (drawn in StepList) into discrete nodes and sits above it. */}
+                <span className="relative z-10 flex size-4 shrink-0 items-center justify-center bg-white">{icon}</span>
                 {/* min-w-0 (not flex-1) so the chevron sits right after the title
                     text instead of being pushed to the far right; long titles
                     still shrink + truncate. */}
@@ -70,7 +84,9 @@ export function StepRow({ icon, title, children, running = false, rightExtra, cl
                 )}
                 {rightExtra}
             </button>
-            {open && <div className="ml-6 mt-0.5 border-l border-gray-200 pb-1 pl-3">{children}</div>}
+            {/* Expanded content: no left border; aligned with the title (ml-6 =
+                icon 16 + gap 8); 8px gap from the title; 12px text. */}
+            {open && <div className="ml-6 mt-2 space-y-2 pb-1 text-xs">{children}</div>}
         </div>
     );
 }
