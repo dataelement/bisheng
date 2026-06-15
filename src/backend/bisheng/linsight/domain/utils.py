@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import uuid
 from typing import Any
@@ -9,6 +10,7 @@ from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.linsight.domain.models.linsight_execute_task import (
     ExecuteTaskStatusEnum,
     LinsightExecuteTask,
@@ -344,3 +346,106 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
     except Exception as e:
         logger.error(f"Exception occurred while checking and terminating incomplete tasks: {e}")
         return
+
+
+async def persist_task_turn_message(session_model: LinsightSessionVersion) -> ChatMessage:
+    """F035 Track J (TJ-3): write a finished task turn into the unified conversation.
+
+    A task turn is a plain bot ``ChatMessage`` in the same daily conversation
+    (``chat_id == session_id``), marked ``category=\047task\047`` and carrying a
+    pointer to the execution detail in ``extra.linsight_session_version_id`` so
+    the frontend can lazy-load tasks/sop/files. Only the final answer text +
+    pointer land here; the heavy detail stays in linsight_session_version.
+    """
+    # On success output_result carries "answer"; on failure it carries
+    # "error_message". Either way the turn must appear in the stream so the
+    # conversation isn't left with a dangling unanswered question.
+    output = session_model.output_result or {}
+    answer = output.get("answer") or output.get("error_message") or ""
+    return await ChatMessageDao.ainsert_one(
+        ChatMessage(
+            user_id=session_model.user_id,
+            chat_id=session_model.session_id,
+            flow_id="",
+            type="over",
+            is_bot=True,
+            sender="AI",
+            category="task",
+            message=answer,
+            extra=json.dumps({"linsight_session_version_id": session_model.id}),
+            source=0,
+        )
+    )
+
+
+async def persist_task_user_turn(chat_id: str, user_id: int, question: str, files: list | None = None) -> ChatMessage:
+    """F035 Track J (TJ-3): persist the task user turn into the unified conversation.
+
+    Mirrors the daily-chat question envelope (workstation/chat_service) so the
+    user turn renders identically whether or not task mode was on for the round.
+    """
+    return await ChatMessageDao.ainsert_one(
+        ChatMessage(
+            user_id=user_id,
+            chat_id=chat_id,
+            flow_id="",
+            type="over",
+            is_bot=False,
+            sender="User",
+            category="question",
+            message=json.dumps({"query": question or "", "files": files or []}, ensure_ascii=False),
+            files=json.dumps(files) if files else None,
+            extra="{}",
+            source=0,
+        )
+    )
+
+
+def _extract_user_query(message: str | None) -> str:
+    """Unwrap the daily question envelope ``{"query","files"}``; fall back to raw text."""
+    if not message:
+        return ""
+    try:
+        data = json.loads(message)
+        if isinstance(data, dict) and "query" in data:
+            return str(data.get("query") or "")
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return message
+
+
+async def build_prior_conversation_summary(chat_id: str, max_chars: int = 8000) -> str:
+    """F035 Track J (TJ-5): rebuild prior conversation context from ChatMessage.
+
+    Reads the unified conversation stream (by ``chat_id``) and pairs each user
+    question with its following bot answer — both daily and task turns. A
+    trailing unanswered question (the current turn, already seeded into the agent
+    input) forms no pair and is excluded, so it is never duplicated.
+
+    ``max_chars`` caps the injected context (design §3.8 — long histories must not
+    blow the window): the MOST RECENT pairs are kept, oldest dropped first.
+    Returns "" if there is no prior completed Q/A.
+    """
+    messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
+    pairs: list[str] = []  # chronological "用户/助手" blocks, one per completed turn
+    pending_question: str | None = None
+    for msg in messages or []:
+        if not msg.is_bot:
+            pending_question = _extract_user_query(msg.message)
+        elif pending_question is not None:
+            pairs.append(f"用户: {pending_question}\n助手: {msg.message or ''}")
+            pending_question = None
+
+    if not pairs:
+        return ""
+
+    # Keep most recent pairs within the char budget (walk newest -> oldest).
+    kept: list[str] = []
+    used = 0
+    for block in reversed(pairs):
+        if kept and used + len(block) > max_chars:
+            break
+        kept.append(block)
+        used += len(block)
+    kept.reverse()
+    return "# 前情回顾(本会话此前的对话)\n" + "\n".join(kept)

@@ -31,6 +31,7 @@ from bisheng.database.models.flow import FlowType
 from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
+from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
@@ -172,13 +173,16 @@ class LinsightWorkbenchImpl:
             processed_files = await cls._process_submitted_files(submit_obj.files, chat_id)
 
             if not continuing:
-                # Create a message session
+                # F035 Track J (unified conversation model): a task turn is not a
+                # standalone session — when no session_id is supplied (first turn,
+                # no daily conversation yet) the session is created as a daily
+                # workstation conversation (flow_type=15), mirroring
+                # workstation/chat_service. Task mode is a per-turn flag, never a
+                # session type, so flow_type=LINSIGHT(20) is no longer minted here.
                 message_session = MessageSession(
                     chat_id=chat_id,
-                    flow_id=ApplicationTypeEnum.LINSIGHT.value,
                     name="New Chat",
-                    flow_name="New Chat",
-                    flow_type=FlowType.LINSIGHT.value,
+                    flow_type=FlowType.WORKSTATION.value,
                     user_id=login_user.user_id,
                 )
 
@@ -191,10 +195,10 @@ class LinsightWorkbenchImpl:
                     trace_id=trace_id_var.get(),
                     event_data=NewMessageSessionEventData(
                         session_id=message_session.chat_id,
-                        app_id=ApplicationTypeEnum.LINSIGHT.value,
+                        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
                         source="platform",
-                        app_name=ApplicationTypeEnum.LINSIGHT.value,
-                        app_type=ApplicationTypeEnum.LINSIGHT,
+                        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                        app_type=ApplicationTypeEnum.DAILY_CHAT,
                     ),
                 )
 
@@ -210,6 +214,13 @@ class LinsightWorkbenchImpl:
                 model=submit_obj.model,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
+
+            # F035 Track J: land the user question in the unified conversation
+            # stream so the round reads as one Q→A pair regardless of task mode.
+            # (The bot answer turn is written at completion in task_exec.)
+            await linsight_execute_utils.persist_task_user_turn(
+                chat_id=chat_id, user_id=login_user.user_id, question=submit_obj.question
+            )
 
             return message_session, linsight_session_version
 

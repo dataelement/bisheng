@@ -606,8 +606,13 @@ class LinsightWorkflowTask:
         async def agent_execution():
             """Agent performs a task via astream + mapper."""
             file_list = await LinsightWorkbenchImpl.prepare_file_list(session_model)
-            # First-message input: question + sop + injected file pointer block.
-            task_input = self._build_agent_input(session_model, file_list)
+            # F035 Track J: rebuild prior conversation context (by chat_id) so a
+            # fresh task turn answers with the whole conversation in view, not just
+            # this turn's question (the per-session checkpointer can't see earlier
+            # daily/task turns — design §3.2).
+            history_summary = await linsight_execute_utils.build_prior_conversation_summary(session_model.session_id)
+            # First-message input: prior context + question + sop + file pointer block.
+            task_input = self._build_agent_input(session_model, file_list, history_summary)
             config = {
                 "configurable": {"thread_id": self.session_version_id},
                 # max_steps -> recursion_limit (design §2.5)
@@ -681,15 +686,20 @@ class LinsightWorkflowTask:
             raise TaskExecutionError(f"Agent task execution failed: {e}")
 
     @staticmethod
-    def _build_agent_input(session_model: LinsightSessionVersion, file_list) -> dict:
+    def _build_agent_input(
+        session_model: LinsightSessionVersion, file_list, history_summary: str | None = None
+    ) -> dict:
         """Assemble the first-message input for the deepagents graph.
 
-        LangGraph agents take ``{"messages": [...]}``. We seed the user turn
-        with the question + SOP guidance; the file pointer block (offload-first,
-        design §9) is appended when uploaded files exist. The deepagents kernel
-        plans the todo清单 from this seed during astream.
+        LangGraph agents take ``{"messages": [...]}``. We seed the user turn with
+        the prior conversation context (F035 Track J, by chat_id) + question + SOP
+        guidance; the file pointer block (offload-first, design §9) is appended
+        when uploaded files exist. The deepagents kernel plans the todo清单 from
+        this seed during astream.
         """
         parts: list[str] = []
+        if history_summary:
+            parts.append(history_summary)
         if session_model.question:
             parts.append(str(session_model.question))
         if session_model.sop:
@@ -953,6 +963,8 @@ class LinsightWorkflowTask:
             "all_from_session_files": [],
         }
         await self._state_manager.set_session_version_info(session_model)
+        # F035 Track J: land the answer in the unified conversation stream.
+        await linsight_execute_utils.persist_task_turn_message(session_model)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
@@ -983,6 +995,8 @@ class LinsightWorkflowTask:
 
             # Save session information and push messages
             await self._state_manager.set_session_version_info(session_model)
+            # F035 Track J: land the answer in the unified conversation stream.
+            await linsight_execute_utils.persist_task_turn_message(session_model)
             await self._state_manager.push_message(
                 MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
             )
@@ -1018,6 +1032,10 @@ class LinsightWorkflowTask:
         session_model.status = SessionVersionStatusEnum.FAILED
         session_model.output_result = {"error_message": error_msg}
         await self._state_manager.set_session_version_info(session_model)
+        # F035 Track J: still land a (failed) task turn in the unified stream so the
+        # conversation isn't left with a dangling question; extra points to the SV
+        # whose detail panel shows the failure.
+        await linsight_execute_utils.persist_task_turn_message(session_model)
 
         # Set all tasks to failed
         await self._set_tasks_failed()
