@@ -1105,8 +1105,12 @@ class LinsightWorkbenchImpl:
                     f"Failed to initialize BiSheng code interpreter tool: session_version_id={session_version.id}, error={e!s}"
                 )
 
-        # Filter Effective ToolsID
-        valid_tool_ids = [tid for tid in tool_ids if tid in config_tool_ids]
+        # Unified-resource direction (2026-06-16): task mode reuses the daily
+        # tool selection directly. The legacy per-app linsight whitelist
+        # (config_tool_ids) is no longer applied — every selected tool id (a real
+        # GptsTools id the user already has access to) binds. config_tool_ids is
+        # still computed above for the code-interpreter branch only.
+        valid_tool_ids = list(dict.fromkeys(tool_ids))  # de-dup, preserve order
 
         # Initialization Tools
         if valid_tool_ids:

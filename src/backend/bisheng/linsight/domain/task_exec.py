@@ -550,7 +550,16 @@ class LinsightWorkflowTask:
     # ==================== Mission Execution ====================
 
     async def _save_task_info(self, session_model: LinsightSessionVersion, task_info: list[dict]):
-        """Save Task Information"""
+        """Save Task Information.
+
+        Idempotent on replay: on a HITL resume LangGraph replays the graph from
+        the persisted checkpoint, so ``write_todos`` (and thus this method) can
+        fire again with the SAME task ids that were already persisted before the
+        park. A plain batch INSERT then hits a duplicate-PK IntegrityError and
+        kills the resume. So we only insert task ids that don't yet exist for this
+        session_version, and reuse the persisted rows (which carry the latest
+        status/result) for the ones that do — keeping the pushed task list whole.
+        """
         try:
             tasks = []
             # step_idIt doesn't have to be regular.step_int, FROMagentGot ittask_infoThe order is the execution order
@@ -572,17 +581,26 @@ class LinsightWorkflowTask:
                 )
                 tasks.append(task)
 
-            await LinsightExecuteTaskDao.batch_create_tasks(tasks)
-            await self._state_manager.set_execution_tasks(tasks)
+            # Skip rows already persisted for this SV (resume replay) — insert only
+            # the new ones, but keep the full ordered list (persisted row preferred,
+            # so its status/result survives) for the state push.
+            existing = await LinsightExecuteTaskDao.get_by_session_version_id(session_model.id)
+            existing_by_id = {t.id: t for t in (existing or [])}
+            new_tasks = [t for t in tasks if t.id not in existing_by_id]
+            if new_tasks:
+                await LinsightExecuteTaskDao.batch_create_tasks(new_tasks)
+
+            merged = [existing_by_id.get(t.id, t) for t in tasks]
+            await self._state_manager.set_execution_tasks(merged)
 
             # Push Generate Task Message
             await self._state_manager.push_message(
                 MessageData(
-                    event_type=MessageEventType.TASK_GENERATE, data={"tasks": [task.model_dump() for task in tasks]}
+                    event_type=MessageEventType.TASK_GENERATE, data={"tasks": [task.model_dump() for task in merged]}
                 )
             )
 
-            logger.info(f"Set {len(tasks)} execution tasks")
+            logger.info(f"Set {len(merged)} execution tasks ({len(new_tasks)} newly inserted)")
 
         except Exception as e:
             logger.error(f"Failed to save task information: {e}")
@@ -610,8 +628,13 @@ class LinsightWorkflowTask:
             # this turn's question (the per-session checkpointer can't see earlier
             # daily/task turns — design §3.2).
             history_summary = await linsight_execute_utils.build_prior_conversation_summary(session_model.session_id)
+            # F035 unified-resource: deepagents flow skips the SOP step where the
+            # knowledge list used to be injected, so resolve the user's KBs here
+            # (coarse: all org/personal KBs of the enabled type) and feed their ids
+            # to the agent — otherwise search_knowledge_base has no real id to use.
+            knowledge_block = await self._resolve_knowledge_block(session_model)
             # First-message input: prior context + question + sop + file pointer block.
-            task_input = self._build_agent_input(session_model, file_list, history_summary)
+            task_input = self._build_agent_input(session_model, file_list, history_summary, knowledge_block)
             config = {
                 "configurable": {"thread_id": self.session_version_id},
                 # max_steps -> recursion_limit (design §2.5)
@@ -686,14 +709,18 @@ class LinsightWorkflowTask:
 
     @staticmethod
     def _build_agent_input(
-        session_model: LinsightSessionVersion, file_list, history_summary: str | None = None
+        session_model: LinsightSessionVersion,
+        file_list,
+        history_summary: str | None = None,
+        knowledge_block: str | None = None,
     ) -> dict:
         """Assemble the first-message input for the deepagents graph.
 
         LangGraph agents take ``{"messages": [...]}``. We seed the user turn with
         the prior conversation context (F035 Track J, by chat_id) + question + SOP
-        guidance; the file pointer block (offload-first, design §9) is appended
-        when uploaded files exist. The deepagents kernel plans the todo清单 from
+        guidance; the file pointer block (offload-first, design §9) and the
+        available knowledge-base list (so ``search_knowledge_base`` has real ids)
+        are appended when present. The deepagents kernel plans the todo清单 from
         this seed during astream.
         """
         parts: list[str] = []
@@ -705,8 +732,41 @@ class LinsightWorkflowTask:
             parts.append(f"\n# 执行规范(SOP)\n{session_model.sop}")
         if file_list:
             parts.append(f"\n# 可用文件\n{file_list}")
+        if knowledge_block:
+            parts.append(
+                f"\n# 可用知识库(用 search_knowledge_base 检索,knowledge_id 用下方括号内的 id)\n{knowledge_block}"
+            )
         content = "\n".join(parts) if parts else (session_model.question or "")
         return {"messages": [{"role": "user", "content": content}]}
+
+    async def _resolve_knowledge_block(self, session_model: LinsightSessionVersion) -> str | None:
+        """Resolve the user's knowledge bases (coarse) into a prompt block that
+        advertises each KB's id, so the agent's search_knowledge_base tool can
+        target a real id. org_knowledge_enabled -> all NORMAL KBs; personal ->
+        all PRIVATE KBs (capped by the linsight max_knowledge_num)."""
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+
+        try:
+            linsight_conf = settings.get_linsight_conf()
+            cap = getattr(linsight_conf, "max_knowledge_num", 0) or 0
+            if cap <= 0:
+                return None
+            kbs: list = []
+            if session_model.org_knowledge_enabled:
+                kbs += await KnowledgeDao.aget_user_knowledge(
+                    session_model.user_id, None, KnowledgeTypeEnum.NORMAL, limit=cap
+                )
+            if session_model.personal_knowledge_enabled:
+                kbs += await KnowledgeDao.aget_user_knowledge(
+                    session_model.user_id, None, KnowledgeTypeEnum.PRIVATE, limit=cap
+                )
+            if not kbs:
+                return None
+            knowledge_strs = await LinsightWorkbenchImpl.prepare_knowledge_list(kbs)
+            return "\n".join(knowledge_strs) if knowledge_strs else None
+        except Exception as e:
+            logger.warning(f"Failed to resolve knowledge block: {e}")
+            return None
 
     @staticmethod
     def _unpack_stream_chunk(chunk):
