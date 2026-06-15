@@ -162,6 +162,22 @@ _PERMISSION_LEVEL_TO_RELATION = {
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
 _CHILD_PERMISSION_CHECK_CONCURRENCY = 8
 
+# F036-①: inheritance fast-path toggle. When enabled, child items whose lineage (the item
+# itself or any ancestor folder) carries no explicit binding skip the full per-item ReBAC
+# evaluation and instead inherit a per-ancestor-chain decision (computed once) -- plus an
+# owner short-circuit (`item.user_id == current user`). Safe only under the verified invariant
+# "every non-owner file/folder grant has a binding" (owner/parent tuples are additive/structural
+# and ignored). Default OFF; flip via env for canary / load test. The full path stays as the
+# oracle + fallback so the result set is identical (covered by equivalence tests).
+import os as _os  # noqa: E402  (local toggle read; avoid touching the top import block)
+
+_CHILD_PERMISSION_FAST_PATH_ENABLED = _os.getenv("BS_REBAC_CHILD_FASTPATH", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
 
 class KnowledgeSpaceService(KnowledgeUtils):
     """Service for Knowledge Space operations.
@@ -1062,6 +1078,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return {
             "models": models,
             "bindings": bindings,
+            # F036-③: build the (resource_type, resource_id)->bindings index once per request
+            # and reuse across every child item, instead of rebuilding/linear-scanning per item.
+            "binding_index": FineGrainedPermissionService.build_binding_index(bindings),
             "binding_department_paths": binding_department_paths,
             "user_subject_strings": user_subject_strings,
             "membership_permission_ids": membership_permission_ids,
@@ -1095,6 +1114,57 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return_match_metadata=True,
             tuple_cache=context["tuple_cache"],
             tuple_department_paths=context["tuple_department_paths"],
+            binding_index=context["binding_index"],
+        )
+        if not matched_lineage_binding:
+            effective_permissions.update(context["membership_permission_ids"])
+        effective_permissions.update(context["public_space_permission_ids"])
+        return effective_permissions
+
+    async def _chain_effective_permission_ids(
+        self,
+        ancestor_ids: list[int],
+        *,
+        space_id: int,
+        context: dict,
+    ) -> set[str]:
+        """F036-①: effective permission ids for the ancestor chain (nearest folder -> space),
+        excluding the leaf item itself.
+
+        Mirrors ``_get_child_item_effective_permission_ids`` exactly but starts the lineage at the
+        item's nearest ancestor folder (or the space when the item is at the space root). For a
+        child item that has no nearer-than-chain binding and is not owned by the current user, its
+        view decision is fully determined by this chain (the leaf's own tuples are either the
+        additive ``owner`` grant -- handled separately via ``user_id`` -- or the structural
+        ``parent`` edge, neither of which changes the ``view_file``/``view_folder`` boolean).
+        Result is memoized per distinct ancestor chain by the caller.
+        """
+        if ancestor_ids:
+            nearest_type, nearest_id = "folder", ancestor_ids[-1]
+            lineage: list[tuple[str, int]] = [("folder", fid) for fid in reversed(ancestor_ids)] + [
+                ("knowledge_space", space_id),
+            ]
+        else:
+            nearest_type, nearest_id = "knowledge_space", space_id
+            lineage = [("knowledge_space", space_id)]
+
+        (
+            effective_permissions,
+            matched_lineage_binding,
+        ) = await FineGrainedPermissionService.get_effective_permission_ids_async(
+            self.login_user,
+            nearest_type,
+            nearest_id,
+            models=context["models"],
+            bindings=context["bindings"],
+            binding_department_paths=context["binding_department_paths"],
+            user_subject_strings=context["user_subject_strings"],
+            lineage=lineage,
+            nearest_binding_wins=True,
+            return_match_metadata=True,
+            tuple_cache=context["tuple_cache"],
+            tuple_department_paths=context["tuple_department_paths"],
+            binding_index=context["binding_index"],
         )
         if not matched_lineage_binding:
             effective_permissions.update(context["membership_permission_ids"])
@@ -2491,8 +2561,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         context: dict | None = None,
     ) -> list[KnowledgeFile]:
-        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
         permission_context = context or await self._build_child_permission_context(space_id)
+        if not _CHILD_PERMISSION_FAST_PATH_ENABLED:
+            return await self._filter_visible_child_items_full(items, space_id=space_id, context=permission_context)
+        return await self._filter_visible_child_items_fast(items, space_id=space_id, context=permission_context)
+
+    async def _filter_visible_child_items_full(
+        self,
+        items: list[KnowledgeFile],
+        *,
+        space_id: int,
+        context: dict,
+    ) -> list[KnowledgeFile]:
+        """Oracle path: full per-item ReBAC evaluation (pre-F036 behaviour)."""
+        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
 
         async def can_view(item: KnowledgeFile) -> bool:
             async with semaphore:
@@ -2500,9 +2582,60 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 effective_permissions = await self._get_child_item_effective_permission_ids(
                     item,
                     space_id=space_id,
-                    context=permission_context,
+                    context=context,
                 )
                 return permission_id in effective_permissions
+
+        visibility = await asyncio.gather(*(can_view(item) for item in items))
+        return [item for item, allowed in zip(items, visibility) if allowed]
+
+    async def _filter_visible_child_items_fast(
+        self,
+        items: list[KnowledgeFile],
+        *,
+        space_id: int,
+        context: dict,
+    ) -> list[KnowledgeFile]:
+        """F036-① inheritance fast-path. Visibility-equivalent to the full path under the verified
+        invariant "every non-owner file/folder grant has a binding".
+
+        Per item, decide ``view_file``/``view_folder`` as:
+        - leaf carries its own file/folder binding  -> full per-item eval (nearest-wins, unchanged);
+        - current user owns the item                 -> visible (additive ``owner`` grant);
+        - otherwise                                  -> inherit the ancestor-chain decision
+          (computed once per distinct chain; ancestor-folder bindings are honoured inside the
+          chain eval via nearest-binding-wins).
+        """
+        binding_index = context["binding_index"]
+        bound_ff = {key for key in binding_index if key[0] in ("knowledge_file", "folder")}
+        user_id = self.login_user.user_id
+        chain_cache: dict[tuple[int, ...], set[str]] = {}
+        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
+
+        async def chain_perms(ancestor_ids: list[int]) -> set[str]:
+            key = tuple(ancestor_ids)
+            if key not in chain_cache:
+                chain_cache[key] = await self._chain_effective_permission_ids(
+                    ancestor_ids, space_id=space_id, context=context
+                )
+            return chain_cache[key]
+
+        async def can_view(item: KnowledgeFile) -> bool:
+            object_type = "folder" if item.file_type == FileType.DIR.value else "knowledge_file"
+            permission_id = "view_folder" if item.file_type == FileType.DIR.value else "view_file"
+            if (object_type, str(item.id)) in bound_ff:
+                async with semaphore:
+                    effective_permissions = await self._get_child_item_effective_permission_ids(
+                        item,
+                        space_id=space_id,
+                        context=context,
+                    )
+                return permission_id in effective_permissions
+            item_owner = getattr(item, "user_id", None)
+            if item_owner is not None and item_owner == user_id:
+                return True
+            ancestor_ids = [int(p) for p in (item.file_level_path or "").split("/") if p]
+            return permission_id in await chain_perms(ancestor_ids)
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
         return [item for item, allowed in zip(items, visibility) if allowed]
