@@ -152,7 +152,6 @@ export default function useAiChatSSE(submission: SSESubmission | null) {
                 // watchdog fire onEnd when the stream drops.
                 if (data.event === "linsight_task_handoff") {
                     const handoff = data.data || {};
-                    console.log("[TJ][SSE] linsight_task_handoff received:", handoff, "hasCallback:", !!onTaskHandoff);
                     onTaskHandoff?.({
                         session_version_id: String(handoff.session_version_id ?? ""),
                         chat_id: String(handoff.chat_id ?? ""),

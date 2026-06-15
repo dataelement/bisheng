@@ -1815,11 +1815,7 @@ def _to_linsight_submit(data: APIChatCompletion):
         children = [
             ToolChildrenSchema(id=int(tp.id), tool_key=tp.tool_key)
             for tp in data.tools
-            # web_search needs daily's dedicated _build_web_search_tool wiring
-            # (auth/headers); it is NOT a plain init_by_tool_id tool, so binding
-            # it into the linsight agent both mis-wires it and trips its header
-            # build. Exclude it from task-mode tools until wired natively.
-            if (tp.type or "tool") == "tool" and tp.id and tp.tool_key != "web_search"
+            if (tp.type or "tool") == "tool" and tp.id
         ]
         if children:
             submit_tools = [LinsightToolSchema(id=0, name="daily", is_preset=0, children=children)]
