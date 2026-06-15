@@ -29,7 +29,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
 )
-from bisheng.linsight.domain.services.agent_factory import create_linsight_agent
+from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
@@ -37,7 +37,6 @@ from bisheng.linsight.domain.services.state_message_manager import (
 )
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
-from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
@@ -231,10 +230,7 @@ class LinsightWorkflowTask:
         """Rebuild the agent on the same thread (Redis checkpointer) and drive resume."""
         from bisheng.linsight.domain.services.checkpointer import make_checkpointer
 
-        self.llm = await self._get_llm(
-            invoke_user_id=session_model.user_id,
-            tenant_id=session_model.tenant_id,
-        )
+        self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
             # Rebuild on the SAME thread_id with a durable checkpointer so the
@@ -327,10 +323,7 @@ class LinsightWorkflowTask:
         # frontend leaves the "done" state and re-opens the WS event stream.
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
-        self.llm = await self._get_llm(
-            invoke_user_id=session_model.user_id,
-            tenant_id=session_model.tenant_id,
-        )
+        self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
             linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
@@ -388,10 +381,7 @@ class LinsightWorkflowTask:
         await linsight_execute_utils.persist_task_turn_message(session_model)
 
         # Initialization Execution Component
-        self.llm = await self._get_llm(
-            invoke_user_id=session_model.user_id,
-            tenant_id=session_model.tenant_id,
-        )
+        self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
             # Build Tool List
@@ -450,28 +440,30 @@ class LinsightWorkflowTask:
 
     # ==================== Component Initialization ====================
 
-    async def _get_llm(self, invoke_user_id: int, tenant_id: int | None = None) -> BaseChatModel:
-        """DapatkanLLMInstances"""
+    async def _get_llm(self, session_model: LinsightSessionVersion) -> BaseChatModel:
+        """Resolve the per-task execution LLM (tool init / helper calls).
+
+        Reuses ``agent_factory._resolve_model`` so this helper LLM and the agent
+        itself share one model-resolution path: the per-task ``model`` chosen at
+        submit time (``session_model.model``), falling back to the tenant
+        ``linsight_default_model_id`` only when it is empty. Previously this
+        ignored the per-task model and always pulled the tenant default, so a
+        task with a valid frontend-selected model still failed when the tenant
+        default was missing/deleted/offline. F022 INV-T18: tenant resolution +
+        share fallback are threaded inside ``_resolve_model`` via
+        ``session_model.tenant_id`` (admin-scope ContextVar is unset in the
+        Worker subprocess).
+        """
         try:
-            # F022 INV-T18: in Celery worker context the admin-scope
-            # ContextVar is unset; we thread the LinsightSessionVersion
-            # owner tenant through the public callers of _get_llm and
-            # _create_agent.
-            workbench_conf = await LLMService.get_workbench_llm(tenant_id=tenant_id)
-            linsight_conf = settings.get_linsight_conf()
-            # F035: single default-model id replaces the removed task_model.
-            model_id = workbench_conf.linsight_default_model_id
-            if not model_id:
-                raise ValueError("linsight_default_model_id is not configured")
-            return await LLMService.get_bisheng_linsight_llm(
-                invoke_user_id=invoke_user_id,
-                model_id=model_id,
-                temperature=linsight_conf.default_temperature,
-            )
-        except Exception:
+            return await _resolve_model(session_model, getattr(session_model, "model", None))
+        except Exception as e:
+            # Keep the generic user-facing message, but chain + log the real
+            # cause so the original stack trace surfaces (project error-handling
+            # rule: never launder exceptions into a flat message).
+            logger.exception(f"Linsight LLM resolution failed: session_version_id={self.session_version_id}")
             raise TaskExecutionError(
                 "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model"
-            )
+            ) from e
 
     @create_cache_folder_async
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
