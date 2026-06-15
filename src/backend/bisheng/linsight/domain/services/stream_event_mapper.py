@@ -99,6 +99,11 @@ class StreamContext:
     open_calls: dict[str, _OpenCall] = field(default_factory=dict)
     # call_id -> buffered orphan end payload (end arrived before start, §3.7)
     orphan_ends: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # call_id shared by the deltas of the current contiguous thinking stream;
+    # None means "no open thinking segment" (closed by any non-thinking chunk).
+    current_thinking_call_id: str | None = None
+    # monotonic counter giving each thinking segment a distinct, stable call_id
+    thinking_seq: int = 0
     # terminal收口 dedup: first terminal wins, later ones dropped (§3.7)
     terminated: bool = False
 
@@ -131,19 +136,31 @@ class StreamEventMapper:
         ns = self._namespace_str(namespace)
         try:
             if mode == "updates":
-                return self._handle_updates(chunk, ns)
-            if mode == "messages":
-                return self._handle_messages(chunk, ns)
-            if mode == "values":
-                return self._handle_values(chunk, ns)
+                result = self._handle_updates(chunk, ns)
+            elif mode == "messages":
+                result = self._handle_messages(chunk, ns)
+            elif mode == "values":
+                result = self._handle_values(chunk, ns)
+            else:
+                logger.warning("stream_event_mapper: unknown stream_mode=%s", mode)
+                return []
         except Exception:
             # A malformed chunk must not crash the executor; log and skip.
             # Termination收口 is driven explicitly via terminate().
             logger.exception("stream_event_mapper failed on mode=%s", mode)
             return []
 
-        logger.warning("stream_event_mapper: unknown stream_mode=%s", mode)
-        return []
+        # A contiguous thinking stream keeps one call_id; any other chunk
+        # (tool call, answer text, todo update, …) closes the segment so the
+        # next thinking block starts a fresh row. Thinking chunks emit exactly
+        # one thinking ExecStep and must not reset their own segment.
+        if not self._is_thinking_continuation(result):
+            self.ctx.current_thinking_call_id = None
+        return result
+
+    @staticmethod
+    def _is_thinking_continuation(events: list[BaseEvent]) -> bool:
+        return len(events) == 1 and isinstance(events[0], ExecStep) and events[0].step_type == "thinking"
 
     def terminate(self, error: str | None = None, reason: str | None = None) -> list[tuple[str, dict[str, Any]]]:
         """Produce the terminal收口 pair (design §3.5).
@@ -410,8 +427,16 @@ class StreamEventMapper:
         if ns:
             extra_info["namespace"] = ns
         task_id = self.ctx.current_in_progress_task_id or self.ctx.svid
-        # thinking has no tool call_id; synthesize a stable one per task slice.
-        call_id = f"thinking:{_stable_task_id(self.ctx.svid, text)}"
+        # thinking has no tool call_id. ``messages`` mode streams it token-by-token,
+        # so hashing the per-chunk delta would mint a new id every frame and the
+        # frontend (merge-by-call_id) would render one row per token. Instead keep
+        # a single id for the whole contiguous thinking stream; ``normalize`` resets
+        # it once any non-thinking chunk closes the segment, so a thinking block that
+        # resumes after a tool call still gets a fresh row.
+        if self.ctx.current_thinking_call_id is None:
+            self.ctx.thinking_seq += 1
+            self.ctx.current_thinking_call_id = f"thinking:{task_id}:{self.ctx.thinking_seq}"
+        call_id = self.ctx.current_thinking_call_id
         return ExecStep(
             task_id=task_id,
             call_id=call_id,
