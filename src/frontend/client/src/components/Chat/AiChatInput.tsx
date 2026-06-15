@@ -22,7 +22,7 @@ import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
 import { TaskModeToggle } from "~/components/Linsight/Input/TaskModeToggle";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
-import { ArrowDown, Loader2 } from "lucide-react";
+import { ArrowDown, Loader2, Sparkles } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
@@ -98,6 +98,28 @@ const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
             <CitationFileTypeIcon fileType={resolveFileType(file)} className="mr-1 size-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
                 {file.name}
+            </span>
+            {onRemove && (
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    aria-label="Remove"
+                >
+                    ✕
+                </button>
+            )}
+        </div>
+    );
+};
+
+const SkillTag = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => {
+    const label = skill?.display_name || skill?.name || "";
+    return (
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
+            <Sparkles className="mr-1 size-4 shrink-0 text-[#165DFF]" />
+            <span className="min-w-0 flex-1 truncate text-left" title={label}>
+                {label}
             </span>
             {onRemove && (
                 <button
@@ -337,7 +359,7 @@ const AiChatInput = memo(
             [handleSend, isStreaming]
         );
 
-        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
+        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
         return (
             <div className="px-4 sm:px-0 pb-2 touch-mobile:px-0 touch-mobile:pb-2 shrink-0 relative">
                 {/* Drag-drop overlay */}
@@ -430,6 +452,14 @@ const AiChatInput = memo(
                                                 selectedOrgKbs.filter((i) => i.id !== kb.id)
                                             );
                                         } : undefined}
+                                    />
+                                ))}
+                                {/* F035: selected skills (task mode) shown as removable tags. */}
+                                {taskMode && dailySkills.map((skill) => (
+                                    <SkillTag
+                                        key={skill.name}
+                                        skill={skill}
+                                        onRemove={() => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
                                     />
                                 ))}
                             </div>
