@@ -7,8 +7,9 @@ import {
   PaperclipIcon,
   Plus,
   SearchIcon,
+  Sparkles,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   getMineSpacesApi,
   getJoinedSpacesApi,
@@ -267,6 +268,7 @@ export const ChatKnowledge = ({
   onFileUploadClick,
   showTaskModeEntry = false,
   onEnterTaskMode,
+  renderSkillSubmenu,
 }: {
   config?: BsConfig;
   disabled: boolean;
@@ -281,6 +283,11 @@ export const ChatKnowledge = ({
    *  delegated to the caller so this component stays route-free. */
   showTaskModeEntry?: boolean;
   onEnterTaskMode?: () => void;
+  /** F035 (PRD §4.1.3): "添加 Skill" — grouped with 任务模式. Renders a hover
+   *  submenu (desktop) / drill panel (mobile) with the caller-provided skill
+   *  picker. `close` lets the picker dismiss the "+" menu before navigating
+   *  (selecting a skill enters task mode), avoiding the anchorless-popover jump. */
+  renderSkillSubmenu?: (close: () => void) => ReactNode;
 }) => {
   const localize = useLocalize();
   const PAGE_SIZE = 20;
@@ -452,7 +459,7 @@ export const ChatKnowledge = ({
   const [openSub, setOpenSub] = useState<'space' | 'org' | null>(null);
   // 仅 <=576 走移动端下钻面板；577~768 保持桌面级联交互（右侧展开）
   const isMobile = useMediaQuery('(max-width: 576px)');
-  const [mobilePanel, setMobilePanel] = useState<'root' | 'space' | 'org'>('root');
+  const [mobilePanel, setMobilePanel] = useState<'root' | 'space' | 'org' | 'skill'>('root');
   const menuContentRef = useRef<HTMLDivElement>(null);
   const spaceLayout = useSubMenuLayout(menuContentRef, 'space', openSub === 'space');
   const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
@@ -842,7 +849,72 @@ export const ChatKnowledge = ({
                 {localize('com_linsight_task_mode')}
               </span>
             </DropdownMenuItem>
+            {/* 添加 Skill — 桌面：悬停展开技能选择器；移动 root：下钻进技能面板。
+                选中技能即进入任务模式（由 renderSkillSubmenu 内部导航），故传入
+                close 让选择器先关掉「+」菜单，避免 popover 跳位。 */}
+            {renderSkillSubmenu && (
+              !isMobile ? (
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger
+                    className={cn(
+                      'flex cursor-pointer items-center justify-between rounded-xl outline-none',
+                      '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Sparkles size={18} strokeWidth={1.5} className="text-slate-600" />
+                      <span className="text-[14px] font-normal text-slate-700">
+                        {localize('com_linsight_add_skill')}
+                      </span>
+                    </div>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="ml-2 flex max-h-[360px] w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-2xl">
+                    {renderSkillSubmenu(() => setRootOpen(false))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              ) : (
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setMobilePanel('skill');
+                  }}
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 outline-none"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Sparkles size={18} strokeWidth={1.5} className="text-slate-600" />
+                    <span className="truncate text-[14px] font-normal text-slate-700">
+                      {localize('com_linsight_add_skill')}
+                    </span>
+                  </div>
+                  <ChevronRight className="size-4 shrink-0 text-slate-400" strokeWidth={2} />
+                </DropdownMenuItem>
+              )
+            )}
           </>
+        )}
+
+        {/* 添加 Skill — 移动端下钻面板 */}
+        {isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+              <button
+                type="button"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                aria-label={localize('com_ui_go_back')}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMobilePanel('root');
+                }}
+              >
+                <ChevronLeft className="size-5" strokeWidth={2} />
+              </button>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
+                {localize('com_linsight_add_skill')}
+              </span>
+            </div>
+            {renderSkillSubmenu(() => setRootOpen(false))}
+          </div>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

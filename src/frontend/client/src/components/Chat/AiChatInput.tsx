@@ -13,8 +13,10 @@ import {
     type KeyboardEvent,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRecoilValue } from "recoil";
+import { useRecoilValue, useRecoilState } from "recoil";
 import { File_Accept } from "~/common";
+import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
+import { taskModeSkillsState } from "~/store/linsight";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
@@ -198,6 +200,11 @@ const AiChatInput = memo(
         // not /api/v1/workstation/config. bsConfig does not carry this field,
         // so reading it from bsConfig would silently fall back to 50MB.
         const envConfig = useRecoilValue(bishengConfState);
+
+        // F035 (PRD §4.1.3): daily "+ → 添加 Skill" picks a skill into the fresh
+        // task session ('new'), then enters task mode (/linsight/new) where the
+        // selection is refilled as a chip. Keyed 'new' to match the landing page.
+        const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
 
         const isControlled = externalValue !== undefined;
         const [internalText, setInternalText] = useState("");
@@ -476,6 +483,17 @@ const AiChatInput = memo(
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
                                     showTaskModeEntry={taskModeEntry && (bsConfig?.linsightConfig?.linsight_entry ?? true)}
                                     onEnterTaskMode={() => navigate('/linsight/new')}
+                                    renderSkillSubmenu={(close) => (
+                                        <SkillSelector
+                                            selected={dailySkills}
+                                            onChange={(next) => {
+                                                setDailySkills(next);
+                                                // Picking a skill enters task mode: close the menu, then navigate.
+                                                close();
+                                                navigate('/linsight/new');
+                                            }}
+                                        />
+                                    )}
                                 />
                             )}
                             {/* Model select */}

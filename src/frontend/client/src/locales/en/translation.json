@@ -382,6 +382,7 @@
   "com_linsight_exit_task_mode": "Exit task mode",
   "com_linsight_input_placeholder": "Enter your task goal, then leave it to $t(bisheng)$t(linsight)",
   "com_linsight_skill_empty": "No skills available",
+  "com_linsight_skill_search": "Search skills",
   "com_linsight_task_mode": "Task mode",
   "com_linsight_voice_coming_soon": "Voice input is not available yet",
   "com_linsight_intent_confirmed": "User intent confirmed",
