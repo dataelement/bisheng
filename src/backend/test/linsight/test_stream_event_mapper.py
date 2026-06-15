@@ -221,6 +221,35 @@ class TestThinking:
         assert ev.extra_info.get("is_thinking") is True
         assert "对齐口径" in (ev.output or "")
 
+    def test_streaming_thinking_deltas_share_one_call_id(self, mapper: StreamEventMapper):
+        # ``messages`` mode streams thinking token-by-token: each chunk carries a
+        # *delta*, not the accumulated text. All deltas of one contiguous thinking
+        # stream must collapse into a single step (one call_id) so the frontend
+        # merges them into one ThinkingRow instead of one row per token.
+        deltas = ["让", "我", "想想"]
+        call_ids = []
+        for d in deltas:
+            chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": d})
+            steps = [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)]
+            assert len(steps) == 1
+            call_ids.append(steps[0].call_id)
+        assert len(set(call_ids)) == 1, f"expected one stable call_id, got {call_ids}"
+
+    def test_thinking_segments_split_by_intervening_step(self, mapper: StreamEventMapper):
+        # A new thinking stream that resumes *after* a tool call is a distinct
+        # block and must get its own call_id, so it renders as a new row below
+        # the tool — not glued onto the earlier thinking row.
+        first = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "先查资料"})
+        id_a = [e for e in mapper.normalize("messages", (first, {})) if isinstance(e, ExecStep)][0].call_id
+
+        tool_msg = AIMessage(content="", tool_calls=[{"id": "call_z", "name": "search", "args": {}}])
+        mapper.normalize("messages", (tool_msg, {}))
+
+        second = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "再总结"})
+        id_b = [e for e in mapper.normalize("messages", (second, {})) if isinstance(e, ExecStep)][0].call_id
+
+        assert id_a != id_b
+
 
 # --------------------------------------------------------------------------
 # subagent namespace归并 (design §3.7, subgraphs=True)
