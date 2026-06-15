@@ -19,6 +19,7 @@ import {
     getFilePreviewApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
+    importWebLinkApi,
     pinSpaceApi,
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
@@ -27,6 +28,15 @@ import {
 } from "~/api/knowledge";
 import { checkPermission, canOpenPermissionDialog } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
+import {
+    Button,
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    Input,
+} from "~/components/ui";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useConfirm, useToastContext } from "~/Providers";
 import { usePrefersMobileLayout } from "~/hooks";
@@ -114,6 +124,10 @@ export default function PortalKnowledgeWorkbench() {
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [pendingCreateLevel, setPendingCreateLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [uploadedFilesOpen, setUploadedFilesOpen] = useState(false);
+    const [webLinkDialogOpen, setWebLinkDialogOpen] = useState(false);
+    const [webLinkUrl, setWebLinkUrl] = useState("");
+    const [webLinkTitle, setWebLinkTitle] = useState("");
+    const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
     const [spaceMenuOpenId, setSpaceMenuOpenId] = useState<string | null>(null);
     const [treeNodes, setTreeNodes] = useState<PortalFileTreeNode[]>([]);
     const [treeLoading, setTreeLoading] = useState(false);
@@ -934,6 +948,66 @@ export default function PortalKnowledgeWorkbench() {
         showToast({ message: "暂未开放", severity: NotificationSeverity.INFO });
     }, [showToast]);
 
+    const handleOpenWebLinkDialog = useCallback(() => {
+        if (!canUploadInPortal || !activeSpace) {
+            showToast({ message: "无上传权限", severity: NotificationSeverity.ERROR });
+            return;
+        }
+        setWebLinkDialogOpen(true);
+    }, [activeSpace, canUploadInPortal, showToast]);
+
+    const handleImportWebLink = useCallback(async () => {
+        const spaceId = activeSpace?.id;
+        const normalizedUrl = webLinkUrl.trim();
+        if (!spaceId) return;
+        if (!normalizedUrl) {
+            showToast({ message: "请输入网页链接", severity: NotificationSeverity.ERROR });
+            return;
+        }
+        try {
+            const parsed = new URL(normalizedUrl);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+                showToast({ message: "仅支持 http 或 https 链接", severity: NotificationSeverity.ERROR });
+                return;
+            }
+        } catch {
+            showToast({ message: "请输入有效的网页链接", severity: NotificationSeverity.ERROR });
+            return;
+        }
+
+        setWebLinkSubmitting(true);
+        try {
+            const created = await importWebLinkApi(spaceId, {
+                url: normalizedUrl,
+                title: webLinkTitle.trim() || undefined,
+                parent_id: currentFolderId ? Number(currentFolderId) : null,
+            });
+            setSearchMode(false);
+            setSearchResults([]);
+            setCurrentFolderFiles((prev) => [created, ...prev]);
+            setCurrentFileListTotal((prev) => prev + 1);
+            setWebLinkUrl("");
+            setWebLinkTitle("");
+            setWebLinkDialogOpen(false);
+            showToast({ message: "网页链接已开始导入", severity: NotificationSeverity.SUCCESS });
+        } catch (error: any) {
+            showToast({
+                message: error?.message || "网页链接导入失败",
+                severity: NotificationSeverity.ERROR,
+            });
+        } finally {
+            setWebLinkSubmitting(false);
+        }
+    }, [
+        activeSpace?.id,
+        currentFolderId,
+        setCurrentFileListTotal,
+        setCurrentFolderFiles,
+        showToast,
+        webLinkTitle,
+        webLinkUrl,
+    ]);
+
     const handleSearch = useCallback(async () => {
         const spaceId = activeSpace?.id;
         if (!spaceId) return;
@@ -1536,6 +1610,7 @@ export default function PortalKnowledgeWorkbench() {
                                                             canCreateFolder={canCreateFolderInPortal}
                                                             statusFilter={statusFilter}
                                                             onOpenUploadDialog={handleOpenUploadDialog}
+                                                            onOpenWebLinkDialog={handleOpenWebLinkDialog}
                                                             onShowUnavailable={showUnavailable}
                                                             onCreateFolder={() => fileUpload.handleCreateFolder()}
                                                             onToggleStatusFilter={handleToggleStatusFilter}
@@ -1723,6 +1798,48 @@ export default function PortalKnowledgeWorkbench() {
                 fileCategoryOptions={fileCategoryOptions}
                 encodingPrefix={fileEncodingPrefix}
             />
+            <Dialog open={webLinkDialogOpen} onOpenChange={(open) => {
+                if (webLinkSubmitting) return;
+                setWebLinkDialogOpen(open);
+            }}>
+                <DialogContent className="max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>网页链接</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <label className="block space-y-2 text-sm text-[#1d2129]">
+                            <span className="font-medium">链接地址</span>
+                            <Input
+                                value={webLinkUrl}
+                                onChange={(event) => setWebLinkUrl(event.currentTarget.value)}
+                                placeholder="https://example.com/page"
+                                disabled={webLinkSubmitting}
+                            />
+                        </label>
+                        <label className="block space-y-2 text-sm text-[#1d2129]">
+                            <span className="font-medium">显示名称</span>
+                            <Input
+                                value={webLinkTitle}
+                                onChange={(event) => setWebLinkTitle(event.currentTarget.value)}
+                                placeholder="留空则自动读取网页标题"
+                                disabled={webLinkSubmitting}
+                            />
+                        </label>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setWebLinkDialogOpen(false)}
+                            disabled={webLinkSubmitting}
+                        >
+                            取消
+                        </Button>
+                        <Button onClick={() => void handleImportWebLink()} disabled={webLinkSubmitting}>
+                            {webLinkSubmitting ? "导入中..." : "导入"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -5,8 +5,8 @@
   "linsightFullName": "{{linsightFull}}",
   "prompt": "Confirmation",
   "unsupportedFileType": "Unsupported file types: {{extensions}}",
-  "supportedFormatsWithImages": "Supported file formats: pdf (including scanned documents), txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp, wps, et, dps; each file supports up to {{maxSize}}MB; pdf supports traceability positioning.",
-  "supportedFormatsWithoutImages": "Supported file formats: pdf, txt, docx, doc, ppt, pptx, md, html, xls, xlsx, csv, wps, et, dps, each file supports up to {{maxSize}}MB",
+  "supportedFormatsWithImages": "Supported file formats: pdf (including scanned documents), txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp, wps, et, dps, mp3, wav, m4a, aac, flac, ogg, mp4, mov, avi, mkv, webm; each file supports up to {{maxSize}}MB; pdf supports traceability positioning.",
+  "supportedFormatsWithoutImages": "Supported file formats: pdf, txt, docx, doc, ppt, pptx, md, html, xls, xlsx, csv, wps, et, dps, mp3, wav, m4a, aac, flac, ogg, mp4, mov, avi, mkv, webm, each file supports up to {{maxSize}}MB",
   "pagination": {
     "totalRecords": "Total {{total}}",
     "totalWithPageSize": "Total {{total}} items, {{pageSize}} per page",

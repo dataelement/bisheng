@@ -56,12 +56,14 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
 export const ALLOWED_EXTENSIONS = [
     "pdf", "txt", "docx", "ppt", "pptx", "md", "html",
     "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
-    "wps", "dps", "et",
+    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg",
+    "mp4", "mov", "avi", "mkv", "webm",
 ] as const;
 
 /** Subset used when ETL4LM is NOT deployed — drops images. */
 const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
     "pdf", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
+    "mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "avi", "mkv", "webm",
 ];
 
 /**
@@ -79,6 +81,9 @@ export const ALLOWED_MIME_TYPES = [
     "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
     "text/markdown", "text/html", "text/csv",
     "image/png", "image/jpeg", "image/bmp",
+    "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a",
+    "audio/aac", "audio/flac", "audio/ogg",
+    "video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/x-matroska", "video/webm",
     "application/vnd.ms-works", "application/kswps", "application/wps-office.wps", // wps
     "application/vnd.wps-presentation", "application/kswps", // dps
     "application/vnd.ms-excel", "application/kset", // et
@@ -135,6 +140,19 @@ export function getFileTypeFromName(name: string): FileType {
         case "jpg": return FileType.JPG;
         case "jpeg": return FileType.JPEG;
         case "png": return FileType.PNG;
+        case "mp3":
+        case "wav":
+        case "m4a":
+        case "aac":
+        case "flac":
+        case "ogg":
+            return FileType.AUDIO;
+        case "mp4":
+        case "mov":
+        case "avi":
+        case "mkv":
+        case "webm":
+            return FileType.VIDEO;
         case "wps": return FileType.WPS;
         case "dps": return FileType.DPS;
         case "et": return FileType.ET;

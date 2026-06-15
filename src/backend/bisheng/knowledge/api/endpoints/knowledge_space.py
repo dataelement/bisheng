@@ -20,6 +20,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderCreateReq,
     FolderRenameReq,
     FileCreateReq,
+    WebLinkCreateReq,
     FileRenameReq,
     FileEncodingUpdateReq,
     MoveFileFolderReq,
@@ -527,6 +528,22 @@ async def add_file(
     file_record = await svc.add_file(
         knowledge_id=space_id,
         file_path=req.file_path,
+        parent_id=req.parent_id,
+        file_category_code=req.file_category_code,
+    )
+    return resp_200(file_record)
+
+
+@router.post("/{space_id}/web-links")
+async def import_web_link(
+    space_id: int,
+    req: WebLinkCreateReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    file_record = await svc.import_web_link(
+        knowledge_id=space_id,
+        url=req.url,
+        title=req.title,
         parent_id=req.parent_id,
         file_category_code=req.file_category_code,
     )

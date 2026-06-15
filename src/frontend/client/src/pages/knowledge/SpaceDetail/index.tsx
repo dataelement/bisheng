@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, type MouseEvent,
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -14,8 +14,11 @@ import {
 import {
     Dialog,
     DialogContent,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
+    Button,
+    Input,
 } from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import {
@@ -636,6 +639,10 @@ export function KnowledgeSpaceContent({
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
+    const [webLinkDialogOpen, setWebLinkDialogOpen] = useState(false);
+    const [webLinkUrl, setWebLinkUrl] = useState("");
+    const [webLinkTitle, setWebLinkTitle] = useState("");
+    const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
 
     const triggerUpload = () => {
         if (!canUploadFile) return;
@@ -645,6 +652,48 @@ export function KnowledgeSpaceContent({
     const triggerUploadFolder = () => {
         if (!canUploadFile) return;
         folderInputRef.current?.click();
+    };
+
+    const triggerWebLink = () => {
+        if (!canUploadFile) return;
+        setWebLinkDialogOpen(true);
+    };
+
+    const handleSubmitWebLink = async () => {
+        const normalizedUrl = webLinkUrl.trim();
+        if (!normalizedUrl) {
+            showToast({ message: "请输入网页链接", status: "error" });
+            return;
+        }
+        try {
+            const parsed = new URL(normalizedUrl);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+                showToast({ message: "仅支持 http 或 https 链接", status: "error" });
+                return;
+            }
+        } catch {
+            showToast({ message: "请输入有效的网页链接", status: "error" });
+            return;
+        }
+
+        setWebLinkSubmitting(true);
+        try {
+            const created = await importWebLinkApi(space.id, {
+                url: normalizedUrl,
+                title: webLinkTitle.trim() || undefined,
+                parent_id: currentFolderId ? Number(currentFolderId) : null,
+            });
+            setFiles((prev) => [created, ...prev]);
+            setTotal((prev) => prev + 1);
+            setWebLinkUrl("");
+            setWebLinkTitle("");
+            setWebLinkDialogOpen(false);
+            showToast({ message: "网页链接已开始导入", status: "success" });
+        } catch (error: any) {
+            showToast({ message: error?.message || "网页链接导入失败", status: "error" });
+        } finally {
+            setWebLinkSubmitting(false);
+        }
     };
 
     useEffect(() => {
@@ -1065,6 +1114,7 @@ export function KnowledgeSpaceContent({
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 onTriggerUploadFolder={triggerUploadFolder}
+                onTriggerWebLink={triggerWebLink}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
                 supportedFormatsLabel={localize(
@@ -1320,6 +1370,49 @@ export function KnowledgeSpaceContent({
                             {violationFile?.errorMessage || localize("com_knowledge.sensitive_violation_message")}
                         </div>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={webLinkDialogOpen} onOpenChange={(open) => {
+                if (webLinkSubmitting) return;
+                setWebLinkDialogOpen(open);
+            }}>
+                <DialogContent className="max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>网页链接</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <label className="block space-y-2 text-sm text-[#1d2129]">
+                            <span className="font-medium">链接地址</span>
+                            <Input
+                                value={webLinkUrl}
+                                onChange={(event) => setWebLinkUrl(event.currentTarget.value)}
+                                placeholder="https://example.com/page"
+                                disabled={webLinkSubmitting}
+                            />
+                        </label>
+                        <label className="block space-y-2 text-sm text-[#1d2129]">
+                            <span className="font-medium">显示名称</span>
+                            <Input
+                                value={webLinkTitle}
+                                onChange={(event) => setWebLinkTitle(event.currentTarget.value)}
+                                placeholder="留空则自动读取网页标题"
+                                disabled={webLinkSubmitting}
+                            />
+                        </label>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setWebLinkDialogOpen(false)}
+                            disabled={webLinkSubmitting}
+                        >
+                            {localize("com_knowledge.cancel")}
+                        </Button>
+                        <Button onClick={handleSubmitWebLink} disabled={webLinkSubmitting}>
+                            {webLinkSubmitting ? "导入中..." : "导入"}
+                        </Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 

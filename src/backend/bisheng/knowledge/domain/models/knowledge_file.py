@@ -42,6 +42,9 @@ class FileSource(Enum):
     UPLOAD = 'upload'  # user upload
     CHANNEL = 'channel'
     SPACE_UPLOAD = 'space_upload'
+    AUDIO_TRANSCRIPT = 'audio_transcript'
+    VIDEO_TRANSCRIPT = 'video_transcript'
+    WEB_LINK = 'web_link'
 
 class FileType(int, Enum):
     DIR = 0

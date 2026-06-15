@@ -65,7 +65,10 @@ function isNonEmptyText(value?: string | null): value is string {
     return Boolean(value?.trim());
 }
 
-function getFileTypeDisplay(fileName: string) {
+function getFileTypeDisplay(fileName: string, fileType?: FileType) {
+    if (fileType === FileType.AUDIO) return "音频";
+    if (fileType === FileType.VIDEO) return "视频";
+    if (fileType === FileType.WEB) return "网页";
     const name = fileName.trim();
     const dotIndex = name.lastIndexOf(".");
     if (dotIndex <= 0 || dotIndex === name.length - 1) return EMPTY_FIELD_PLACEHOLDER;
@@ -1243,7 +1246,7 @@ function FileRow({
                     style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
                 >
                     <span className="truncate block">
-                        {isFolder ? localize("com_knowledge.folder") : getFileTypeDisplay(file.name)}
+                        {isFolder ? localize("com_knowledge.folder") : getFileTypeDisplay(file.name, file.type)}
                     </span>
                 </TableCell>
             )}
