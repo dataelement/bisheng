@@ -20,6 +20,7 @@ class SkillBrief(BaseModel):
     enabled: bool
     source: str
     create_time: datetime | None = None
+    update_time: datetime | None = None
 
     @classmethod
     def from_model(cls, skill: LinsightSkill) -> SkillBrief:
@@ -31,6 +32,8 @@ class SkillBrief(BaseModel):
             enabled=bool(skill.enabled),
             source=skill.source,
             create_time=skill.create_time,
+            # never-edited skills report their creation time as the modified time
+            update_time=skill.update_time or skill.create_time,
         )
 
 

@@ -162,7 +162,7 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
                             <TableHead className="w-56">{t('skillManage.columns.displayName')}</TableHead>
                             <TableHead>{t('skillManage.columns.description')}</TableHead>
                             <TableHead className="w-24">{t('skillManage.columns.status')}</TableHead>
-                            <TableHead className="w-40">{t('skillManage.columns.createTime')}</TableHead>
+                            <TableHead className="w-40">{t('skillManage.columns.updateTime')}</TableHead>
                             <TableHead className="w-8" />
                         </TableRow>
                     </TableHeader>
@@ -192,7 +192,7 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
                                     <Switch checked={skill.enabled} onCheckedChange={(checked) => handleToggle(skill, checked)} />
                                 </TableCell>
                                 <TableCell className="text-muted-foreground text-xs">
-                                    {skill.create_time?.replace('T', ' ').slice(0, 16) ?? '--'}
+                                    {(skill.update_time ?? skill.create_time)?.replace('T', ' ').slice(0, 16) ?? '--'}
                                 </TableCell>
                                 {/* chevron nudges right + turns brand-blue on row hover — a quiet "clickable" cue */}
                                 <TableCell className="text-[#C4C9D4] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary">

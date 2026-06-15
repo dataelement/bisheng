@@ -2593,7 +2593,7 @@
       "displayName": "Display Name",
       "description": "Description",
       "status": "Status",
-      "createTime": "Created",
+      "updateTime": "Modified",
       "actions": "Actions"
     },
     "detail": "Detail",

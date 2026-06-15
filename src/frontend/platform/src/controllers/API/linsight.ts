@@ -92,6 +92,7 @@ export interface SkillBrief {
   enabled: boolean;
   source: 'manual' | 'sop_migrated';
   create_time?: string;
+  update_time?: string;
 }
 
 export interface SkillFileEntry {

@@ -91,11 +91,12 @@ export function SkillDetailSheet({ detail, onOpenChange, onEdit, onDelete }: Ski
                         <span className={`text-xs font-medium rounded-full px-[11px] py-1 whitespace-nowrap ${detail.enabled ? 'bg-[#E6EDFC] text-[#024DE3] dark:bg-primary/20 dark:text-primary' : 'bg-[#EEF0F3] text-[#6B7280] dark:bg-gray-800 dark:text-gray-400'}`}>
                             {detail.enabled ? t('skillManage.statusEnabled') : t('skillManage.statusDisabled')}
                         </span>
-                        <div className="ml-auto flex gap-2">
-                            <Button variant="outline" size="sm" className="h-8" onClick={() => onEdit(detail)}>
+                        {/* calm ghost pair — same neutral weight as the file tree; delete reddens on hover only */}
+                        <div className="ml-auto flex gap-1">
+                            <Button variant="ghost" size="sm" className="h-8 text-[#5A6172] dark:text-gray-300 hover:text-[#1F2430] dark:hover:text-gray-100 hover:bg-[#F2F4F8] dark:hover:bg-gray-800" onClick={() => onEdit(detail)}>
                                 <Pencil className="size-3.5 mr-1" />{t('skillManage.editAction')}
                             </Button>
-                            <Button variant="ghost" size="sm" className="h-8 text-[#F5483B] hover:text-[#F5483B] hover:bg-[#FFF0EF] dark:hover:bg-red-950/40" onClick={() => onDelete(detail)}>
+                            <Button variant="ghost" size="sm" className="h-8 text-[#5A6172] dark:text-gray-300 hover:text-[#F5483B] hover:bg-[#FFF0EF] dark:hover:text-[#FF6B5E] dark:hover:bg-red-950/40" onClick={() => onDelete(detail)}>
                                 <Trash2 className="size-3.5 mr-1" />{t('skillManage.deleteAction')}
                             </Button>
                         </div>

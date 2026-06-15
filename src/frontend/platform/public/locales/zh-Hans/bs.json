@@ -2538,7 +2538,7 @@
       "displayName": "展示名称",
       "description": "描述",
       "status": "状态",
-      "createTime": "创建时间",
+      "updateTime": "修改时间",
       "actions": "操作"
     },
     "detail": "详情",
@@ -2587,8 +2587,8 @@
     },
     "detailSheet": {
       "files": "文件",
-      "preview": "Preview",
-      "source": "Source",
+      "preview": "预览",
+      "source": "源码",
       "readonlyAsset": "附属文件只读，更新需重新上传整包"
     },
     "errors": {

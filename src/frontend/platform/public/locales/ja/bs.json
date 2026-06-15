@@ -2538,7 +2538,7 @@
       "displayName": "表示名",
       "description": "説明",
       "status": "状態",
-      "createTime": "作成日時",
+      "updateTime": "更新日時",
       "actions": "操作"
     },
     "detail": "詳細",
@@ -2587,8 +2587,8 @@
     },
     "detailSheet": {
       "files": "ファイル",
-      "preview": "Preview",
-      "source": "Source",
+      "preview": "プレビュー",
+      "source": "ソース",
       "readonlyAsset": "付属ファイルは読み取り専用。更新はバンドル再アップロードで"
     },
     "errors": {

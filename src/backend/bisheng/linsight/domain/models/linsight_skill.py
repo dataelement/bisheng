@@ -142,7 +142,7 @@ class LinsightSkillDao:
         async with get_async_db_session() as session:
             total = await async_get_count(session, statement)
             statement = (
-                statement.order_by(col(LinsightSkill.create_time).desc())
+                statement.order_by(col(LinsightSkill.update_time).desc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             )
