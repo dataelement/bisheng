@@ -20,7 +20,8 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
+import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useToastContext } from "~/Providers";
@@ -552,6 +553,8 @@ interface FileTableProps {
     onMove?: (file: KnowledgeFile) => void;
     /** F034: whether a file/folder can be moved (move permission in this space). */
     canMove?: boolean;
+    /** F034 drag-move: drop dragged items into a same-space folder. */
+    onMoveToFolder?: (folderId: string, items: KnowledgeFile[], folderName: string) => void;
     /** Version management gating for per-row version actions / badges. */
     versionManagementEnabled?: boolean;
     /** Open the version-management (similar-document linking) dialog for a file. */
@@ -573,7 +576,7 @@ interface FileTableProps {
     bottomSpacing?: number;
 }
 
-export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMove = false, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
+export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMove = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
     const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
@@ -598,6 +601,16 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
         if (!canEditEncoding) return;
         setEditingEncodingFile(file);
     };
+
+    // F034 same-space drag-move: rows are drag sources, folder rows are drop targets.
+    const {
+        enabled: dragMoveEnabled,
+        dragOverFolderId,
+        handleDragStart: handleRowDragStart,
+        handleFolderDragOver,
+        handleFolderDragLeave,
+        handleFolderDrop,
+    } = useKnowledgeMoveDrag({ files, selectedFiles, onMoveToFolder });
 
     const handleSubmitEncoding = async (newEncoding: string) => {
         if (!editingEncodingFile) return;
@@ -702,6 +715,12 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 onEditEncoding={handleOpenEditEncoding}
                                 highlightedTagIds={highlightedTagIds}
                                 highlightKeyword={highlightKeyword}
+                                rowDraggable={dragMoveEnabled}
+                                onRowDragStart={handleRowDragStart(file)}
+                                isFolderDragOver={dragOverFolderId === file.id}
+                                onFolderDragOver={handleFolderDragOver(file)}
+                                onFolderDragLeave={handleFolderDragLeave(file)}
+                                onFolderDrop={handleFolderDrop(file)}
                             />
                         ))}
                     </TableBody>
@@ -757,6 +776,12 @@ function FileRow({
     onEditEncoding,
     highlightedTagIds,
     highlightKeyword,
+    rowDraggable = false,
+    onRowDragStart,
+    isFolderDragOver = false,
+    onFolderDragOver,
+    onFolderDragLeave,
+    onFolderDrop,
 }: {
     file: KnowledgeFile;
     isSelected: boolean;
@@ -790,15 +815,27 @@ function FileRow({
     onEditEncoding?: (file: KnowledgeFile) => void;
     highlightedTagIds?: number[];
     highlightKeyword?: string;
+    // F034 drag-move: row is a drag source; folder rows are drop targets.
+    rowDraggable?: boolean;
+    onRowDragStart?: (e: React.DragEvent) => void;
+    isFolderDragOver?: boolean;
+    onFolderDragOver?: (e: React.DragEvent) => void;
+    onFolderDragLeave?: () => void;
+    onFolderDrop?: (e: React.DragEvent) => void;
 }) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
+    // Uploading placeholder rows have no backend identity yet — not movable.
+    const isUploading = isKnowledgeItemUploading(file);
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
-    const rowBg = isSelected
-        ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
-        : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
+    // F034: 拖拽悬停的目标文件夹整行高亮（比选中态更深的蓝，明确"放到这里"）
+    const rowBg = isFolderDragOver
+        ? "bg-[#bcd4ff] transition-colors duration-150"
+        : isSelected
+            ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
+            : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
     const {
         isRenaming,
         renameValue,
@@ -946,6 +983,11 @@ function FileRow({
     return (
         <TableRow
             data-knowledge-file-item
+            draggable={rowDraggable && !isCreating && !isRenaming && !isUploading}
+            onDragStart={rowDraggable ? onRowDragStart : undefined}
+            onDragOver={isFolder ? onFolderDragOver : undefined}
+            onDragLeave={isFolder ? onFolderDragLeave : undefined}
+            onDrop={isFolder ? onFolderDrop : undefined}
             className={cn(
                 // border-separate on the table means <tr>.border-b doesn't paint —
                 // push the row separator onto each direct <td> instead.

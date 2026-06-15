@@ -14,7 +14,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 
@@ -73,6 +73,13 @@ interface FileCardProps {
     highlightedTagIds?: number[];
     /** Keyword hit by the active search; matching substring in the file name is highlighted. */
     highlightKeyword?: string;
+    // F034 drag-move: card is a drag source; folder cards are drop targets.
+    cardDraggable?: boolean;
+    onCardDragStart?: (e: React.DragEvent) => void;
+    isFolderDragOver?: boolean;
+    onFolderDragOver?: (e: React.DragEvent) => void;
+    onFolderDragLeave?: () => void;
+    onFolderDrop?: (e: React.DragEvent) => void;
 }
 
 export function FileCard({
@@ -105,6 +112,12 @@ export function FileCard({
     hideDownloadActions = false,
     highlightedTagIds,
     highlightKeyword,
+    cardDraggable = false,
+    onCardDragStart,
+    isFolderDragOver = false,
+    onFolderDragOver,
+    onFolderDragLeave,
+    onFolderDrop,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -112,6 +125,8 @@ export function FileCard({
         "(hover: hover) and (pointer: fine)",
     );
     const isCreating = !!file.isCreating;
+    // Uploading placeholder cards have no backend identity yet — not movable.
+    const isUploading = isKnowledgeItemUploading(file);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const failureMessage = (
@@ -402,6 +417,11 @@ export function FileCard({
 
     return (
         <Card
+            draggable={cardDraggable && !isCreating && !isUploading}
+            onDragStart={cardDraggable ? onCardDragStart : undefined}
+            onDragOver={isFolder ? onFolderDragOver : undefined}
+            onDragLeave={isFolder ? onFolderDragLeave : undefined}
+            onDrop={isFolder ? onFolderDrop : undefined}
             className={cn(
                 "group rounded-[6px] overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
                 !mobileListMode && "h-[160px]",
@@ -414,7 +434,9 @@ export function FileCard({
                 isSelected
                     ? "border-[#ECECEC] shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
                     : "border-[#ECECEC] hover:border-[#c9cdd4]",
-                hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
+                hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]",
+                // F034: highlight a folder card as the drop target — card border only
+                isFolderDragOver && "border-primary"
             )}
             style={{
                 transitionProperty: 'background-color, box-shadow, border-color',

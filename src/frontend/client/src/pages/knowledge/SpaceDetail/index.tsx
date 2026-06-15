@@ -15,6 +15,7 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
+import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
@@ -728,13 +729,9 @@ export function KnowledgeSpaceContent({
         setIsBatchTagging(true);
     };
 
-    // F034: move selected files/folders (same-space or cross-space) via MoveToDialog.
-    // TODO(merge-followup): the pre-merge build also wired drag-to-folder move
-    // (useKnowledgeMoveDrag + dropMoveToFolder) onto the table rows / card tiles.
-    // That requires restructuring beta1's row/card render (drag sources + folder drop
-    // targets) and risks the sticky-column / responsive layout, so it's deferred here;
-    // dialog-based move (batch + per-row) is fully wired.
-    const { moveDialogOpen, setMoveDialogOpen, openMove, requestBatchMove, handleMoveConfirm } = useKnowledgeMove({
+    // F034: move selected files/folders (same-space or cross-space) via MoveToDialog,
+    // plus drag-to-folder move (dropMoveToFolder wired into the table/card drag sources).
+    const { moveDialogOpen, setMoveDialogOpen, openMove, requestBatchMove, handleMoveConfirm, dropMoveToFolder } = useKnowledgeMove({
         spaceId: space.id,
         onMoved: () => {
             setSelectedFiles(new Set());
@@ -989,6 +986,13 @@ export function KnowledgeSpaceContent({
     const hasOverflow = batchActions.length > MAX_INLINE;
     const inlineActions = hasOverflow ? batchActions.slice(0, MAX_INLINE - 1) : batchActions;
     const overflowActions = hasOverflow ? batchActions.slice(MAX_INLINE - 1) : [];
+
+    // F034: drag-move wiring for the card grid (table view wires its own internally).
+    const cardDrag = useKnowledgeMoveDrag({
+        files: displayFiles,
+        selectedFiles,
+        onMoveToFolder: canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined,
+    });
 
     return (
         <div
@@ -1307,6 +1311,12 @@ export function KnowledgeSpaceContent({
                                             mobileListMode={isH5}
                                             highlightedTagIds={searchTagIds}
                                             highlightKeyword={searchQuery}
+                                            cardDraggable={cardDrag.enabled}
+                                            onCardDragStart={cardDrag.handleDragStart(file)}
+                                            isFolderDragOver={cardDrag.dragOverFolderId === file.id}
+                                            onFolderDragOver={cardDrag.handleFolderDragOver(file)}
+                                            onFolderDragLeave={cardDrag.handleFolderDragLeave(file)}
+                                            onFolderDrop={cardDrag.handleFolderDrop(file)}
                                         />
                                     </div>
                                 ))}
@@ -1330,6 +1340,7 @@ export function KnowledgeSpaceContent({
                                     onRename={(id, newName) => onRenameFile(id, newName)}
                                     onMove={(file) => openMove([file])}
                                     canMove={canMoveFile}
+                                    onMoveToFolder={canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}
                                     onNavigateFolder={(id) => onNavigateFolder(id)}
