@@ -181,6 +181,41 @@ class CeleryConf(BaseModel):
                 'task': 'bisheng.worker.telemetry.mid_table.sync_mid_knowledge_space_content_stat',
                 'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
             }
+        if 'telemetry_sync_mid_active_user' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_active_user'] = {
+                'task': 'bisheng.worker.telemetry.derived_mid_table.sync_mid_active_user',
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_doc_parse_dtl' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_doc_parse_dtl'] = {
+                'task': 'bisheng.worker.telemetry.derived_mid_table.sync_mid_doc_parse_dtl',
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_knowledge_file_increment' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_knowledge_file_increment'] = {
+                'task': 'bisheng.worker.telemetry.derived_mid_table.sync_mid_knowledge_file_increment',
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_model_call_dtl' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_model_call_dtl'] = {
+                'task': 'bisheng.worker.telemetry.derived_mid_table.sync_mid_model_call_dtl',
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_sessions_increment' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_sessions_increment'] = {
+                'task': 'bisheng.worker.telemetry.derived_mid_table.sync_mid_sessions_increment',
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_tool_call_dtl' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_tool_call_dtl'] = {
+                'task': 'bisheng.worker.telemetry.derived_mid_table.sync_mid_tool_call_dtl',
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
+        if 'telemetry_sync_mid_session_run_dtl' not in self.beat_schedule:
+            self.beat_schedule['telemetry_sync_mid_session_run_dtl'] = {
+                'task': 'bisheng.worker.telemetry.derived_mid_table.sync_mid_session_run_dtl',
+                'schedule': crontab.from_string('30 0 * * *'),  # 00:30 exec every day
+            }
         if 'sync_information_article' not in self.beat_schedule:
             self.beat_schedule['sync_information_article'] = {
                 'task': 'bisheng.worker.information.article.sync_information_article',
