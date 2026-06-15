@@ -89,9 +89,9 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                                 </button>
                                 {/* file-name click already previews, so the separate
                                     preview icon is removed — only "另存为" remains. */}
-                                <div className="flex shrink-0 items-center gap-1">
+                                {/* <div className="flex shrink-0 items-center gap-1">
                                     <SaveAsButton file={file} versionId={versionId} />
-                                </div>
+                                </div> */}
                             </div>
                         ))}
                     </div>

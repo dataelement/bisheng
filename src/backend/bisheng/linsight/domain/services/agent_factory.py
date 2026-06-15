@@ -115,21 +115,15 @@ async def create_linsight_agent(
 
         checkpointer = InMemorySaver()
 
-    # F035 Track D: attach the tenant skills middleware so the agent can load +
-    # use governance-enabled skills (built-ins + tenant custom). We do NOT pass
-    # create_deep_agent's `skills=` param (that would add a second, duplicate
-    # SkillsMiddleware). Coarse for now: all enabled skills are available; a
-    # per-run whitelist (config.configurable.active_skills) would constrain to the
-    # user's picked subset once that selection is threaded + persisted.
+    # F035 Track D — skills middleware DISABLED (2026-06-16): TenantSkillsMiddleware
+    # carries its OWN FilesystemBackend (SKILLS_ROOT, virtual_mode). Added after the
+    # workspace FilesystemMiddleware it SHADOWS the agent's write_file/read_file, so
+    # deliverables written by the agent landed in the skills store instead of the
+    # workspace — the workspace ended up empty and no result document was produced.
+    # Re-enable only once skills compose without hijacking the workspace filesystem
+    # (separate file-tool namespaces). Skills are coarse/optional; the deliverable
+    # pipeline is core, so it wins.
     middlewares: list = []
-    try:
-        from bisheng.linsight.domain.services.skill_middleware import make_skills_middleware
-
-        middlewares.append(await make_skills_middleware(session_model.tenant_id))
-    except Exception as e:
-        from loguru import logger
-
-        logger.warning(f"skills middleware unavailable, running without skills: {e}")
 
     # No custom history-compression middleware: deepagents already ships a
     # built-in summarization middleware (deepagents.middleware.summarization),
