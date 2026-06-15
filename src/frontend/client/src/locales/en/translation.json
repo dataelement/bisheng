@@ -1402,7 +1402,7 @@
     "18023": "The article already exists in the knowledge space",
     "18030": "Private knowledge spaces cannot be subscribed to",
     "18031": "You have already subscribed to or applied for this knowledge space",
-    "18032": "You can subscribe to a maximum of 50 knowledge spaces",
+    "18032": "You can subscribe to a maximum of {{quota}} knowledge spaces",
     "18040": "Permission denied: only the creator or admin can perform this operation",
     "18041": "The current tenant does not match the knowledge space owner tenant. This operation is not supported here. Switch to the knowledge space tenant and try again.",
     "18050": "Tag already exists in this space",
@@ -1440,7 +1440,7 @@
     "19040": "Article not found",
     "19041": "Chat conversation not found",
     "19042": "This article contains sensitive content and cannot be viewed",
-    "19050": "Maximum limit for creating channels reached (up to 10 channels)",
+    "19050": "Maximum limit for creating channels reached (up to {{quota}} channels)",
     "19051": "Maximum limit for administrators reached (up to 5 admins)",
     "19052": "Maximum limit for subscribing channels reached (up to 20 channels)",
     "19053": "Knowledge space LLM is not configured. Please configure it in workbench settings first"

@@ -21,6 +21,7 @@ import {
 import { checkPermission } from "~/api/permission";
 import { cn } from "~/utils";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
 interface KnowledgeSpacePreviewDrawerProps {
     spaceId: string | undefined;
@@ -42,7 +43,7 @@ export function KnowledgeSpacePreviewDrawer({
     const isH5 = usePrefersMobileLayout();
     const spacePreviewScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const { showToast } = useToastContext();
-    const MAX_JOINED_SPACES = 50;
+    const { isOverQuota } = useEffectiveQuota();
 
     const [space, setSpace] = useState<KnowledgeSpace | null>(null);
     const [status, setStatus] = useState<"none" | "joined" | "pending" | "rejected">("none");
@@ -349,7 +350,7 @@ export function KnowledgeSpacePreviewDrawer({
             try {
                 try {
                     const joinedSpaces = await getJoinedSpacesApi();
-                    if (joinedSpaces.length >= MAX_JOINED_SPACES) {
+                    if (isOverQuota("knowledge_space_subscribe", joinedSpaces.length)) {
                         rollback();
                         showToast({
                             message: localize("com_knowledge.join_space_limit_reached_50"),
@@ -383,12 +384,14 @@ export function KnowledgeSpacePreviewDrawer({
                 }
             } catch (e) {
                 rollback();
+                const code = (e as any)?.status_code;
                 const rawMessage =
                     (e as any)?.message ||
                     (e as any)?.status_message ||
                     "";
 
-                if (typeof rawMessage === "string" && rawMessage.includes("maximum of 50 knowledge spaces")) {
+                // Backend errcode 18032: SpaceSubscribeLimitError (join limit reached)
+                if (code === 18032) {
                     showToast({ message: localize("com_knowledge.join_space_limit_reached_50"), severity: NotificationSeverity.WARNING });
                 } else {
                     const message =
