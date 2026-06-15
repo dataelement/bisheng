@@ -1,18 +1,17 @@
 """Dialect-agnostic helpers for DaMeng + MySQL dual-database support."""
+
 from __future__ import annotations
 
 import json as _json
-import re
 
 import sqlalchemy as sa
-from sqlalchemy import inspect, Text, CLOB, JSON
+from sqlalchemy import CLOB, JSON, Text, inspect
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.expression import FunctionElement
 from sqlalchemy.sql.schema import Computed
 from sqlalchemy.sql.sqltypes import Boolean as _Boolean
 from sqlalchemy.types import TypeDecorator
-
 
 # ---------------------------------------------------------------------------
 # Boolean DDL override for DaMeng
@@ -23,6 +22,7 @@ from sqlalchemy.types import TypeDecorator
 #
 # @compiles dispatch does not always intercept type-compiler paths in all
 # dialect configurations.  Directly patch DmTypeCompiler as a reliable fallback.
+
 
 @compiles(_Boolean, "dm")
 def _compile_boolean_dm(element, compiler, **kw):
@@ -40,8 +40,8 @@ def _patch_dm_ddl_compiler() -> None:
     This patch wraps the method to normalise 'auto' → True before the check.
     """
     try:
-        from sqlalchemy import Integer, SmallInteger, BigInteger
         from dmSQLAlchemy.base import DMDDLCompiler  # type: ignore[import]
+        from sqlalchemy import BigInteger, Integer, SmallInteger
 
         _orig = DMDDLCompiler.get_column_specification
 
@@ -49,18 +49,19 @@ def _patch_dm_ddl_compiler() -> None:
             # Temporarily promote 'auto' to True for integer PK columns so
             # dmSQLAlchemy's `== True` guard emits IDENTITY(1,1).
             promoted = False
-            if (column.autoincrement == 'auto'
-                    and column.primary_key
-                    and not column.foreign_keys   # FK columns are never autoincrement
-                    and isinstance(column.type,
-                                   (Integer, SmallInteger, BigInteger))):
-                column.__dict__['autoincrement'] = True
+            if (
+                column.autoincrement == "auto"
+                and column.primary_key
+                and not column.foreign_keys  # FK columns are never autoincrement
+                and isinstance(column.type, (Integer, SmallInteger, BigInteger))
+            ):
+                column.__dict__["autoincrement"] = True
                 promoted = True
             try:
                 return _orig(self, column, **kw)
             finally:
                 if promoted:
-                    column.__dict__['autoincrement'] = 'auto'
+                    column.__dict__["autoincrement"] = "auto"
 
         DMDDLCompiler.get_column_specification = _patched
     except (ImportError, AttributeError):
@@ -105,6 +106,7 @@ def _patch_dm_type_compiler() -> None:
         # serialises Python dicts to JSON strings on the Python side.
         try:
             from dmSQLAlchemy.base import DMDialect  # type: ignore[import]
+
             DMDialect.supports_native_json = False
         except (ImportError, AttributeError):
             pass
@@ -126,8 +128,10 @@ def _patch_dm_char_stripping() -> None:
 
     def _patched_result_processor(self, dialect, coltype):
         if dialect.name == "dm":
+
             def _strip(value):
                 return value.rstrip() if value is not None else value
+
             return _strip
         return _orig_result_processor(self, dialect, coltype)
 
@@ -143,8 +147,9 @@ _patch_dm_char_stripping()
 # Computed column DDL override for DaMeng
 # ---------------------------------------------------------------------------
 
+
 @compiles(Computed, "dm")
-def _compile_computed_dm(element, compiler, **kw):  # noqa: F811
+def _compile_computed_dm(element, compiler, **kw):
     """On DaMeng, suppress GENERATED ALWAYS AS — the column becomes a plain
     integer whose value is maintained by a BEFORE INSERT OR UPDATE trigger
     created at application startup (_ensure_dm_computed_triggers in connection.py).
@@ -164,6 +169,7 @@ class _UpdateTimeServerDefault(FunctionElement):
         sa_column=Column(DateTime, nullable=False,
                          server_default=UPDATE_TIME_SERVER_DEFAULT)
     """
+
     inherit_cache = True
     name = "update_time_server_default"
 
@@ -280,67 +286,76 @@ class LargeText(TypeDecorator):
         return dialect.type_descriptor(Text())
 
 
+def _reflect(conn, method: str, table_name: str) -> list:
+    """Reflect table metadata, tolerating DaMeng identifier-case quirks.
+
+    DaMeng (Oracle-compatible) stores unquoted identifiers as UPPERCASE, and
+    dmSQLAlchemy's Inspector is case-sensitive about the name it is handed:
+    reflecting a lowercase name can raise or return nothing for an
+    UPPERCASE-stored table (and the reverse for reserved-word tables created
+    quoted in lower-case). Try the name as given, then its upper- and
+    lower-case variants, returning the first call that succeeds without
+    raising. This mirrors the defensive pattern in
+    ``connection.py::_ensure_dm_triggers`` and prevents a reflection failure
+    from being silently misread as "object does not exist" — the bug that let
+    idempotent migration guards (e.g. ``column_exists``) wrongly re-run DDL on
+    an already-migrated DaMeng schema.
+    """
+    last_result: list = []
+    for candidate in (table_name, table_name.upper(), table_name.lower()):
+        try:
+            result = getattr(inspect(conn), method)(candidate)
+        except Exception:
+            continue
+        if result:
+            return result
+        last_result = result
+    return last_result
+
+
 def table_exists(conn, table_name: str) -> bool:
-    try:
-        return inspect(conn).has_table(table_name)
-    except Exception:
-        return False
+    for candidate in (table_name, table_name.upper(), table_name.lower()):
+        try:
+            if inspect(conn).has_table(candidate):
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def column_exists(conn, table_name: str, column_name: str) -> bool:
-    try:
-        cols = [c["name"].lower() for c in inspect(conn).get_columns(table_name)]
-        return column_name.lower() in cols
-    except Exception:
-        return False
+    cols = [c["name"].lower() for c in _reflect(conn, "get_columns", table_name)]
+    return column_name.lower() in cols
 
 
 def index_exists(conn, table_name: str, index_name: str) -> bool:
-    try:
-        names = [i["name"].lower() for i in inspect(conn).get_indexes(table_name)]
-        return index_name.lower() in names
-    except Exception:
-        return False
+    names = [i["name"].lower() for i in _reflect(conn, "get_indexes", table_name)]
+    return index_name.lower() in names
 
 
 def get_column_type(conn, table_name: str, column_name: str) -> str | None:
     """Return the SQLAlchemy type class name in lowercase, e.g. 'longtext', 'clob', 'varchar'."""
-    try:
-        for c in inspect(conn).get_columns(table_name):
-            if c["name"].lower() == column_name.lower():
-                return type(c["type"]).__name__.lower()
-        return None
-    except Exception:
-        return None
+    for c in _reflect(conn, "get_columns", table_name):
+        if c["name"].lower() == column_name.lower():
+            return type(c["type"]).__name__.lower()
+    return None
 
 
 def is_column_nullable(conn, table_name: str, column_name: str) -> bool:
-    try:
-        for c in inspect(conn).get_columns(table_name):
-            if c["name"].lower() == column_name.lower():
-                return bool(c.get("nullable", False))
-        return False
-    except Exception:
-        return False
+    for c in _reflect(conn, "get_columns", table_name):
+        if c["name"].lower() == column_name.lower():
+            return bool(c.get("nullable", False))
+    return False
 
 
 def constraint_exists(conn, table_name: str, constraint_name: str) -> bool:
-    try:
-        uqs = inspect(conn).get_unique_constraints(table_name)
-        return any(c["name"] == constraint_name for c in uqs)
-    except Exception:
-        return False
+    uqs = _reflect(conn, "get_unique_constraints", table_name)
+    return any(c["name"] == constraint_name for c in uqs)
 
 
 def get_indexes_for_column(conn, table_name: str, column_name: str) -> list[dict]:
     """Return all indexes on table_name that include column_name."""
-    try:
-        return [
-            i for i in inspect(conn).get_indexes(table_name)
-            if column_name in i.get("column_names", [])
-        ]
-    except Exception:
-        return []
+    return [i for i in _reflect(conn, "get_indexes", table_name) if column_name in i.get("column_names", [])]
 
 
 def name_sort_clauses(dialect_name: str, col: str = "name") -> list:
@@ -350,6 +365,7 @@ def name_sort_clauses(dialect_name: str, col: str = "name") -> list:
     MySQL uses REGEXP + CONVERT(... USING gbk); DM8 uses REGEXP_LIKE + NLSSORT.
     """
     from sqlalchemy import text as _text
+
     if dialect_name == "dm":
         return [
             _text(f"CASE WHEN REGEXP_LIKE({col}, '^[a-zA-Z]') THEN 0 ELSE 1 END"),
@@ -363,13 +379,10 @@ def name_sort_clauses(dialect_name: str, col: str = "name") -> list:
 
 def get_version_num_length(conn) -> int | None:
     """Return the character length of alembic_version.version_num, or None."""
-    try:
-        for c in inspect(conn).get_columns("alembic_version"):
-            if c["name"].lower() == "version_num":
-                return getattr(c["type"], "length", None)
-        return None
-    except Exception:
-        return None
+    for c in _reflect(conn, "get_columns", "alembic_version"):
+        if c["name"].lower() == "version_num":
+            return getattr(c["type"], "length", None)
+    return None
 
 
 def update_time_server_default(conn) -> sa.sql.expression.TextClause:
