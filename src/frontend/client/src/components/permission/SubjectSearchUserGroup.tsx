@@ -112,6 +112,7 @@ export function SubjectSearchUserGroup({
                 onClick={() => toggle(group)}
               >
                 <Checkbox
+                  className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                   checked={selectedIds.has(group.id)}
                   disabled={isDisabled}
                 />

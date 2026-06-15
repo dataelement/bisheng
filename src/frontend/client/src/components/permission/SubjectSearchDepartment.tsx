@@ -263,6 +263,7 @@ function TreeNode({
           <span className="w-5" />
         )}
         <Checkbox
+          className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
           checked={isChecked}
           disabled={isDisabled}
           onClick={(e) => e.stopPropagation()}

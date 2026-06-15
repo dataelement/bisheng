@@ -51,7 +51,7 @@
     "@tanstack/react-query": "^4.28.0",
     "@tanstack/react-table": "^8.11.7",
     "axios": "^1.8.4",
-    "bisheng-icons": "^0.2.8",
+    "bisheng-icons": "^0.2.17",
     "class-variance-authority": "^0.6.0",
     "clsx": "^1.2.1",
     "copy-to-clipboard": "^3.3.3",
@@ -114,7 +114,6 @@
     "tailwindcss-animate": "^1.0.5",
     "tailwindcss-radix": "^2.8.0",
     "uuid": "^11.1.0",
-    "vditor": "file:local-packages/vditor-3.11.1.tgz",
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-static-copy": "^3.1.1",
     "xlsx": "^0.18.5",
@@ -159,6 +158,5 @@
     "vite-plugin-compression2": "^2.2.1",
     "vite-plugin-node-polyfills": "^0.23.0",
     "vite-plugin-pwa": "^0.21.2"
-  },
-  "packageManager": "yarn@4.5.0+sha512.837566d24eec14ec0f5f1411adb544e892b3454255e61fdef8fd05f3429480102806bac7446bc9daff3896b01ae4b62d00096c7e989f1596f2af10b927532f39"
+  }
 }

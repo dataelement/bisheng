@@ -246,17 +246,21 @@ export default function KnowledgeSquare({
                 }}
                 className="flex-1 overflow-y-auto scrollbar-on-scroll bg-white"
             >
-                <div className="relative mx-auto mb-1 mt-6 w-full max-w-[480px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
-                    <Input
-                        type="text"
-                        placeholder={tSearchPlaceholder}
-                        value={searchQuery}
-                        onChange={handleSearch}
-                        onCompositionStart={handleSearchCompositionStart}
-                        onCompositionEnd={handleSearchCompositionEnd}
-                        className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#165DFF]"
-                    />
+                {/* Outer holds width/centering + mobile side padding; inner `relative` anchors
+                    the search icon so it stays aligned with the input after the padding inset. */}
+                <div className="mx-auto mb-1 mt-6 w-full max-w-[480px] max-[767px]:px-4">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
+                        <Input
+                            type="text"
+                            placeholder={tSearchPlaceholder}
+                            value={searchQuery}
+                            onChange={handleSearch}
+                            onCompositionStart={handleSearchCompositionStart}
+                            onCompositionEnd={handleSearchCompositionEnd}
+                            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
+                        />
+                    </div>
                 </div>
 
                 <div className="max-w-[1032px] mx-auto px-4 py-4">

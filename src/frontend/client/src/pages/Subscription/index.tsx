@@ -1,5 +1,5 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -12,9 +12,11 @@ import {
     createManagerChannelApi,
     updateChannelApi,
     getChannelDetailApi,
+    getChannelsApi,
 } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
+import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
@@ -24,21 +26,30 @@ import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
 import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import { buildCreateChannelPayload } from "./channelUtils";
 import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
-import { Menu, Plus } from "lucide-react";
-import { cn } from "~/utils";
+import { Outlined } from "bisheng-icons";
+import { useSetRecoilState } from "recoil";
+import store from "~/store";
 import { ChannelShareDialog } from "./ChannelShareDialog";
-
-const MAX_USER_CHANNELS = 10;
+import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
 const extractShareChannelIdFromPath = (pathname: string): string | undefined => {
     const matched = pathname.match(/\/channel\/share\/([^/?#]+)/);
     return matched?.[1];
 };
 
+// Detail-route channel id, parsed from the pathname (NOT useParams).
+// Must stay consistent with `isShareRoute` (also pathname-derived): under react-activation
+// KeepAlive, useParams() can return a stale channelId (e.g. a previously previewed share
+// channel) after the tab is cached and restored, while location.pathname is already fresh.
+// Reading both from the same source prevents that desync from synthesizing a bogus active channel.
+const extractDetailChannelIdFromPath = (pathname: string): string | undefined => {
+    const matched = pathname.match(/\/channel\/(?!share\/)([^/?#]+)/);
+    return matched?.[1];
+};
+
 export default function Subscription() {
     const localize = useLocalize();
     const { user, isUserLoading } = useAuthContext();
-    const { channelId } = useParams<{ channelId?: string }>();
     const navigate = useNavigate();
     const location = useLocation();
     const isShareRoute = location.pathname.includes("/channel/share/");
@@ -46,9 +57,11 @@ export default function Subscription() {
         extractShareChannelIdFromPath(location.pathname)
     );
     const [manualPreviewChannelId, setManualPreviewChannelId] = useState<string | undefined>(undefined);
-    const routePreviewChannelId = shareChannelIdFromPath || (isShareRoute ? channelId : undefined);
+    // Derive route ids from location.pathname only (never useParams): under react-activation
+    // KeepAlive, useParams() can lag behind location after the tab is cached/restored.
+    const routePreviewChannelId = shareChannelIdFromPath || (isShareRoute ? extractShareChannelIdFromPath(location.pathname) : undefined);
     const previewChannelId = routePreviewChannelId || manualPreviewChannelId;
-    const detailChannelId = !isShareRoute ? channelId : undefined;
+    const detailChannelId = !isShareRoute ? extractDetailChannelIdFromPath(location.pathname) : undefined;
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
     const [channelRefreshToken, setChannelRefreshToken] = useState(0);
     const [showChannelSquare, setShowChannelSquare] = useState(false);
@@ -71,6 +84,7 @@ export default function Subscription() {
     const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
+    const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
     const openChannelPermissionDialog = (channel: Channel) => {
@@ -340,8 +354,41 @@ export default function Subscription() {
         setPreviewDrawerOpen(true);
     }, []);
 
-    // Channel count is reported by ChannelSidebar via callback; ref avoids unnecessary re-renders
+    // Channel count is reported by ChannelSidebar (H5 drawer) via callback; ref avoids unnecessary re-renders
     const createdChannelCountRef = useRef(0);
+    const { isOverQuota } = useEffectiveQuota();
+
+    // Page owns channel list + auto-select on both PC and H5 so the page lands on a real channel
+    // by default. Channel switching UI is route-driven (system menu reveal on H5).
+    const channelPluginEnabled = channelPluginGate === "enabled";
+    const { data: createdChannelsForAuto = [], isFetched: createdAutoFetched } = useQuery({
+        queryKey: ["channels", "created", SortType.RECENT_UPDATE],
+        queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE }),
+        enabled: channelPluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+    const { data: subscribedChannelsForAuto = [], isFetched: subscribedAutoFetched } = useQuery({
+        queryKey: ["channels", "subscribed", SortType.RECENT_UPDATE],
+        queryFn: () => getChannelsApi({ type: "subscribed", sortBy: SortType.RECENT_UPDATE }),
+        enabled: channelPluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+
+    useEffect(() => {
+        createdChannelCountRef.current = createdChannelsForAuto.length;
+    }, [createdChannelsForAuto.length]);
+
+    // Auto-select first channel when nothing is active (skip while a share/preview is resolving).
+    useEffect(() => {
+        if (!channelPluginEnabled) return;
+        if (activeChannel || previewChannelId || showChannelSquare) return;
+        if (!createdAutoFetched || !subscribedAutoFetched) return;
+        if (createdChannelsForAuto.length > 0) {
+            setActiveChannel(createdChannelsForAuto[0]);
+        } else if (subscribedChannelsForAuto.length > 0) {
+            setActiveChannel(subscribedChannelsForAuto[0]);
+        }
+    }, [channelPluginEnabled, activeChannel, previewChannelId, showChannelSquare, createdAutoFetched, subscribedAutoFetched, createdChannelsForAuto, subscribedChannelsForAuto]);
 
     useEffect(() => {
         if (!isH5) setChannelListDrawerOpen(false);
@@ -356,7 +403,7 @@ export default function Subscription() {
     // Create channel - opens drawer (with limit check)
     const handleCreateChannel = () => {
         setEditingChannel(null);
-        if (createdChannelCountRef.current >= MAX_USER_CHANNELS) {
+        if (isOverQuota("channel", createdChannelCountRef.current)) {
             showToast({
                 message: localize("com_subscription.channel_limit_reached"),
                 severity: NotificationSeverity.WARNING
@@ -435,34 +482,7 @@ export default function Subscription() {
                 </div>
             ) : (
                 <>
-                    {/* PC：左侧频道列表；H5：改抽屉叠在主内容之上（见下方 fixed） */}
-                    <div className="hidden h-full shrink-0 touch-desktop:block">
-                        <ChannelSidebar
-                            activeChannelId={activeChannel?.id}
-                            suppressAutoSelect={!!previewChannelId}
-                            onChannelSelect={handleChannelSelect}
-                            onCreateChannel={handleCreateChannel}
-                            onChannelSquare={handleChannelSquare}
-                            onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
-                            onManageMembers={(channel) => {
-                                openChannelPermissionDialog(channel);
-                            }}
-                            onChannelSettings={(channel) => {
-                                setEditingChannel(null);
-                                (async () => {
-                                    try {
-                                        const detail = await getChannelDetailApi(channel.id);
-                                        setEditingChannel({ ...channel, ...detail });
-                                    } catch {
-                                        setEditingChannel(channel);
-                                    } finally {
-                                        setShowCreateChannelDrawer(true);
-                                    }
-                                })();
-                            }}
-                        />
-                    </div>
-
+                    {/* PC：频道列表已移至顶部标题下拉（ChannelSwitcher）；H5：改抽屉叠在主内容之上（见下方 fixed） */}
                     {isH5 && channelListDrawerOpen ? (
                         <div
                             className="fixed inset-0 z-[70] flex"
@@ -514,37 +534,58 @@ export default function Subscription() {
                             <ChannelLayout
                                 key={`${activeChannel.id}-${channelRefreshToken}`}
                                 channel={activeChannel}
-                                onOpenChannelNav={isH5 ? () => setChannelListDrawerOpen(true) : undefined}
-                                onGoChannelSquare={isH5 ? handleChannelSquare : undefined}
-                                onCreateChannel={isH5 ? handleCreateChannel : undefined}
+                                onChannelSelect={handleChannelSelect}
+                                onManageMembers={(channel) => openChannelPermissionDialog(channel)}
+                                onChannelSettings={(channel) => {
+                                    setEditingChannel(null);
+                                    (async () => {
+                                        try {
+                                            const detail = await getChannelDetailApi(channel.id);
+                                            setEditingChannel({ ...channel, ...detail });
+                                        } catch {
+                                            setEditingChannel(channel);
+                                        } finally {
+                                            setShowCreateChannelDrawer(true);
+                                        }
+                                    })();
+                                }}
+                                onOpenChannelNav={isH5 ? () => setSystemMenuOpen(true) : undefined}
+                                onGoChannelSquare={handleChannelSquare}
+                                onCreateChannel={handleCreateChannel}
                                 onFullScreen={(article, ai) => {
-                                    enteredFullscreenViaAiRef.current = !!ai;
+                                    // 全屏 button (ai === false): open the standalone article page in a new tab.
+                                    // AI assistant button (ai === true): keep the existing in-app fullscreen overlay
+                                    // so the assistant panel can dock alongside the article.
+                                    if (!ai) {
+                                        const url = buildClientShareUrl(`/channel/${article.channelId}/article/${article.id}`);
+                                        window.open(url, "_blank", "noopener,noreferrer");
+                                        return;
+                                    }
+                                    enteredFullscreenViaAiRef.current = true;
                                     setFullScreenArticle(article);
-                                    setShowAiAssistant(ai || false);
-                                    setShowFullScreenBtn(!!ai);
+                                    setShowAiAssistant(true);
+                                    setShowFullScreenBtn(true);
                                 }}
                             />
                         ) : (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center">
                                 {isH5 ? (
-                                    <>
+                                    <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center px-4 pt-[env(safe-area-inset-top,0px)]">
                                         <button
                                             type="button"
                                             aria-label={localize("com_nav_open_sidebar")}
-                                            onClick={() => setChannelListDrawerOpen(true)}
-                                            className={cn("absolute left-4 top-4 z-10", mobileHeadIconBtnClassName)}
+                                            onClick={() => setSystemMenuOpen(true)}
+                                            className={mobileHeadIconBtnClassName}
                                         >
-                                            <Menu className="size-4" />
+                                            <Outlined.SidebarMenu className="size-4" />
                                         </button>
-                                        <button
-                                            type="button"
-                                            aria-label={localize("com_subscription.create")}
-                                            onClick={handleCreateChannel}
-                                            className={cn("absolute right-4 top-4 z-10", mobileHeadIconBtnClassName)}
+                                        <h1
+                                            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[24px] leading-8 text-[#212121]"
+                                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
                                         >
-                                            <Plus className="size-4" />
-                                        </button>
-                                    </>
+                                            {localize("com_subscription.subscribe")}
+                                        </h1>
+                                    </div>
                                 ) : null}
                                 <img
                                     className="size-[120px] mb-4 object-contain opacity-90"

@@ -240,15 +240,10 @@ def generate_dept_id(prefix: str = 'BS') -> str:
 
 
 def _password_meets_prd_policy(plain: str) -> bool:
-    """PRD：至少 8 位，含大写、小写、数字、符号。"""
-    if len(plain) < 8:
-        return False
-    return bool(
-        re.search(r'[A-Z]', plain)
-        and re.search(r'[a-z]', plain)
-        and re.search(r'\d', plain)
-        and re.search(r'[^A-Za-z0-9\s]', plain),
-    )
+    """至少 8 位，含大写、小写、数字、符号。复用 UserService 的统一规则与
+    PASSWORD_STRENGTH_CHECK env 开关，避免与登录/改密处的校验出现分叉。"""
+    from bisheng.user.domain.services.user import UserService
+    return UserService.password_meets_policy(plain)
 
 
 async def _get_dept_or_raise(session, dept_id: str) -> Department:

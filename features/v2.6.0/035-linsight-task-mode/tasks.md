@@ -1,6 +1,6 @@
 # Tasks: 灵思任务模式 · deepagents 适配层（F035）— 多人并行开发拆分
 
-**关联**: [spec.md](./spec.md)（AC 收口） · [design.md](./design.md)（设计真相，§1–§9 终稿修订已内联） · [契约约定](./依赖与契约约定.md) · [PRD](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/2.6%20灵思%20Linsight%20迁移%20deepagents%20框架%20PRD.md)（需求真相）
+**关联**: [spec.md](./spec.md)（AC 收口） · [design.md](./design.md)（设计真相，§1–§9 终稿修订已内联） · [契约约定](./依赖与契约约定.md) · [PRD](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/灵思%20Linsight%20迁移%20deepagents%20框架%20PRD.md)（需求真相）
 **版本**: v2.6.0
 
 ---
@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 薄 spec：AC-1..8 收口，需求真相在 docs/PRD 的 PRD |
 | design.md | ✅ 已评审 | 接手第一入口（原《技术方案》改名）；2026-06-11 评审问题已修复（task_id 约定/park 终止/resume 优先级/残留清理） |
 | 契约冻结（Wave 0） | 🔄 进行中 | C1–C7 + 依赖已冻结（2026-06-11）；建表迁移已过；stub/mock/fixtures 入库；**仅 POC（T0-2）待收尾**，不阻塞分配 |
-| 实现 | 🔲 未开始 | 0 / 9 Track（Wave 0 收尾后即可分配） |
+| 实现 | 🔄 进行中 | **D/G 已完成**（2026-06-12）；**Track A 内核已落地**（`agent_factory.create_deep_agent` + `task_exec` astream/`StreamEventMapper` 已接，2026-06-15 核对确认，原"其余待开工"表述过时）；Track J（统一会话模型）已起：TJ-1 完成 |
 
 ---
 
@@ -32,6 +32,7 @@
 | **G** | 存量迁移 | `linsight_sop` → Skill 一次性脚本 + 对账报告 | 后端（D 之后） | 迁移脚本、对账报告 |
 | **H** | 前端·Client 执行视图 | 输入区 + 执行视图状态机 + 步骤流 + 追问卡 + 产物区 | 前端·client | client app 全部任务模式 UI |
 | **I** | 前端·Platform | Skill 管理页 + 模型配置 + 角色编辑器「任务模式」 | 前端·platform | platform app 管理类 UI |
+| **J** | 统一会话模型 | 任务模式收敛为日常会话(15)内的逐轮标记：统一提交入口 + `ChatMessage` 双写 + 单消息流渲染 + 路由收敛 | 后端·会话 + 前端·client | 统一提交端点、会话历史查询、单流渲染 |
 
 ---
 
@@ -207,12 +208,12 @@ flowchart TD
 - [ ] **TC-5** 文件跨 version 复用幂等（会话级记忆的**唯一后端改动**，design §9.3.8/§9.4 #11）：`_process_submitted_files` 幂等化——同会话同 `file_id` 再提交时复用正式桶产物、跳过「临时桶→正式桶」复制；临时元数据过期（24h）且无正式产物 → 判失效、返回失效标记供前端提示重传（不静默丢弃）。**依赖** TC-3。**覆盖** FR-1.8（文件记忆有效期）。
 
 ### Track D · Skill 体系
-- [ ] **TD-1** `models/linsight_skill.py` + DAO（依赖 T0-3）。
-- [ ] **TD-2** 错误码 11050–11069（`common/errcode/linsight.py`）。
-- [ ] **TD-3**(测试) `SkillService` 单测：CRUD、重名校验、frontmatter 校验、租户隔离。
-- [ ] **TD-4** `skill_store.py`（磁盘 SKILLS_ROOT，元数据 DB）+ `skill_middleware.py`（SkillsMiddleware + 白名单，顺序约束）。**依赖** TD-1。
-- [ ] **TD-5**(测试) `/skill` API 集成测。
-- [ ] **TD-6** `api/endpoints/skill.py` + router 注册（鉴权 `get_tenant_admin_user`）。**依赖** TD-4/TD-5。**DoD**：C3 契约可用，给 I mock 对齐。
+- [x] **TD-1** `models/linsight_skill.py`（+`display_name` 列，新 alembic revision，偏差 D6）+ DAO（依赖 T0-3）。
+- [x] **TD-2** 错误码 11050–11069（`common/errcode/linsight.py`，Wave 0 已落 11051–11055，核对即可）。
+- [x] **TD-3**(测试) `SkillService` 单测：CRUD、name/display_name 双重名校验、frontmatter 校验、bundle 解包/防穿越、租户隔离。
+- [x] **TD-4** `skill_store.py`（磁盘 SKILLS_ROOT 配置化 + bundle 落盘 + 拼音 slugify，元数据 DB）+ `skill_middleware.py`（白名单为 SkillsMiddleware **子类**实现，偏差 D8）。**依赖** TD-1。
+- [x] **TD-5**(测试) `/skill` API 集成测（含 `/skill/{name}/file`、multipart .md/.zip、built-in 404）。
+- [x] **TD-6** `api/endpoints/skill.py` + router 注册（鉴权 `get_tenant_admin_user`；`/selectable` 用 `get_login_user`）。**依赖** TD-4/TD-5。**DoD**：C3 契约（2026-06-12 增量版）可用，给 I mock 对齐。
 
 ### Track E · 知识库/工具/模型
 - [ ] **TE-1** `SearchKnowledgeBase` 包成 `BaseTool`（方案 B），ReBAC 代用户过滤（对齐 INV-7）。**覆盖** FR-3.5。
@@ -225,8 +226,8 @@ flowchart TD
 - [ ] **TF-3** Skill 多租户隔离校验（`linsight_skill.tenant_id` + 跨租户不展示）。**覆盖** AC-7。
 
 ### Track G · 存量迁移（D 之后）
-- [ ] **TG-1** `scripts/migrate_sop_to_skill.py`：遍历 `linsight_sop`→`linsight_skill`+磁盘 SKILL.md，幂等可重入。**依赖** TD-4。
-- [ ] **TG-2** 对账报告（成功/失败/跳过）。**覆盖** AC-4。
+- [x] **TG-1** `scripts/migrate_sop_to_skill.py`：遍历 `linsight_sop`→`linsight_skill`+磁盘 SKILL.md（display_name=原名、name=拼音 slug、metadata.sop-id 溯源），幂等可重入，dry-run 默认/`--apply` 写入。**依赖** TD-4。
+- [x] **TG-2** 迁移摘要输出（stdout + JSON 文件：成功/失败/跳过+原因；**运维产物，无管理页报告**，偏差 D7）。**覆盖** AC-4。
 
 ### Track H · 前端·Client 执行视图
 - [ ] **TH-1** 统一输入区：任务模式 chip + 「+」菜单（技能/知识空间/组织知识库/附件）+ 工具栏 + 模型选择器 + 提交前一览 + **显式开关与会话级记忆**（取消「收到消息自动退出」，仅 chip「×」退出；退出时技能即清、文件/知识库/工具会话内保留、再进回填；文件 chip 失效标记联动 TC-5，design §9.3.8）。**对** C1/C3/C4。**覆盖** FR-1.x（含 FR-1.8）/2.x。
@@ -237,9 +238,44 @@ flowchart TD
   **手动验证**：WS mock 回放 fixtures → 全流程 UI 正确；断连重连恢复；排队态→规划中切换正确。
 
 ### Track I · 前端·Platform
-- [ ] **TI-1** Skill 管理页（列表/搜索/Preview·Source/上传·新建/编辑/删除/启停/校验/空态）。**对** C3 mock。**覆盖** FR-5.x。
+- [x] **TI-1** Skill 管理页（列表/搜索/Preview·Source/上传·新建/编辑/删除/启停/校验/空态）。**对** C3 mock。**覆盖** FR-5.x。
+  ↳ 2026-06-12 由 D/G owner 代完成（用户授权越界）：`components/LinSight/skill/{SkillManagement,SkillFormDrawer,SkillUploadDialog,SkillDetailSheet}.tsx` + `skillApi`；列表仅展示 display_name（FR-5.1）、bundle 文件树详情（FR-5.14）、上传 .md/.zip/.skill（**文件夹上传暂缓**：需引入 jszip 前端打包，留 Track I 后续）、技能 ID 自动拼音走后端 `GET /skill/slugify`（新增 helper，复用 slugify_pinyin）。
+- [x] **TI-4**（新增，PRD §4.8 / FR-8.x，偏差 D9）工作台配置「灵思」tab 并入「日常」：移除灵思 tab（`DialogueWork.tsx`）；「任务模式展示名称/任务模式输入框提示语」并入日常 tab（读写 `workstation/config/linsight` 的 `tab_display_name/input_placeholder`，`linsight_entry/tools` 字段原样回写不丢）；技能管理区挂首页 tab「推荐应用」上方。**2026-06-12 二次调整（用户确认）**：「日常」tab 更名「首页」（bench.home）；移除「日常模式展示名称」配置项（值仍随保存原样回写）；新增「应用」tab（`AppCenter.tsx`）承载「应用中心欢迎语/描述」（仍写 daily 配置，整包 round-trip）。`LingSiWork.tsx` 成为死代码，随 AC-8 SOP 链路下线一并清理。
 - [ ] **TI-2** 模型配置：工作台对话模型行「灵思默认模型」单选；移除「灵思任务执行模型」区。**对** C4。**覆盖** §4.1.10。
 - [ ] **TI-3** 角色编辑器「工作台菜单→首页→任务模式」开关。**对** C6。**覆盖** FR-7.8。
+
+### Track J · 统一会话模型（任务模式收敛 · 设计见 [跨模式会话上下文共享设计](./跨模式会话上下文共享设计.md)）
+
+> 目标：会话层不再有「任务模式」概念。一条日常工作台会话（`flow_type=WORKSTATION=15`，一个 `chat_id`）承载普通轮与任务轮，任务模式降级为**逐轮处理标记**。普通轮与任务轮共享同一份 `chat_id` 下的 `ChatMessage` 历史（问答上下文双向共享、均喂模型，D2）。与 §9.3.8 的「文件/知识库/工具选择态记忆」正交，不冲突。**存量 `flow_type=20` 会话不迁移**（D3），按旧只读形态保留。**依赖 Track A 内核与事件流就绪**（任务执行链不变，仅改入口装配与落库）。
+
+**契约前置（并入 Wave 0 或集成前冻结）**：统一提交入口请求体 `{chat_id, question, task_mode:bool, tools?, model?, files?, skills?}` + 任务轮 `ChatMessage` 字段约定（`category='task'`、`extra={linsight_session_version_id}`）须登记到 [依赖与契约约定](./依赖与契约约定.md) 并在 release-contract 备案（C7）。
+
+- [x] **TJ-1**(测试) 会话历史查询契约测（读侧字段映射）：`test/workstation/test_task_turn_message_mapping.py` —— 断言 `WorkstationMessage.from_chat_message` 对任务轮（`category='task'`、`extra.linsight_session_version_id`）暴露 `category='task'` + `linsightSessionVersionId`，普通轮二者皆空。**已落** `WorkstationMessage` 新增 `category`/`linsightSessionVersionId` 字段（2026-06-15，RED→GREEN，零回归）。**覆盖** 设计 §11.2 / C8 读侧契约。
+  > 列表的时间序/分页/多租户隔离沿用既有 `aget_messages_by_chat_id` + `GET /chat/messages/{conversationId}`，无需新代码，待 TJ-4 端点联调时补集成验证。
+- [~] **TJ-2** 统一提交入口 + `task_mode` 逐轮分流（后端）：单一提交端点按 `task_mode` 路由——true→linsight deepagents 内核，false→工作台(15)日常链。`linsight/.../workbench_impl.py:submit_user_question` 改为**接收外部 `chat_id`（已存在的 15 会话）、不自建 `flow_type=20` 会话、不决定 flow_type**。**依赖** Track A（**已确认就绪**：agent_factory/create_deep_agent + task_exec astream）。**覆盖** 设计 §3.1 / P0。
+  - [x] **已落（2026-06-15）**：`submit_user_question` 不再 mint `flow_type=20`——传 `session_id` 复用既有会话（任意 flow_type，含日常 15）；无 `session_id` 时按 **D1=B** 决策新建 **`flow_type=WORKSTATION=15`** 会话（对齐 `workstation/chat_service`：flow_type/telemetry app_type=DAILY_CHAT）。测试 `test/linsight/test_unified_submit_session.py`（RED→GREEN，零回归；linsight 套件既有 2 个 hitl_worker 失败与本改动无关，已 stash 对比确认）。
+  - [x] **统一端点分流已落（2026-06-15，决策=后端统一端点 handoff）**：`APIChatCompletion` 加 `task_mode`；`stream_chat_completion` 按 `task_mode` 分流——`false`→既有日常 SSE（`_agent_stream_chat_completion`）；`true`→`_task_mode_stream_completion`（复用 TJ-2 `submit_user_question` 在当前 chat_id 建/复用会话，回传 `session_version_id` 的 SSE handoff，前端再连既有 `task-message-stream` WS）。各路径流式基建零改，仅入口统一。测试 `test/workstation/test_unified_chat_entry.py`（路由分流，2 例）。
+  - [x] **字段映射已落（2026-06-15）**：`_to_linsight_submit(data)` 映射 question + conversationId(session_id) + 知识库布尔（`use_knowledge_base.personal_knowledge_enabled`→personal；`organization_knowledge_ids` 非空→org）。测试 `test_to_linsight_submit_*`（2 例）。
+  - [ ] **设计结论 + 待补**：**工具/文件不从 daily 字段映射**——daily 与 task 用不同子系统（扁平 `ToolPayload` vs 带 children 的 linsight 工具组；不同上传桶），daily 选择对 linsight 非法。task-mode 工具/文件须走 **linsight 原生选择**（前端 TJ-6 发 linsight 形状，handler 透传）；当前 handler tools/files 留空。前端 TJ-6 还需消费 `linsight_task_handoff` 事件。
+- [~] **TJ-3** 任务轮双写 `ChatMessage`（后端）：用户轮先落库；任务执行完成回写 bot `ChatMessage`（`message=output_result.answer`、`category='task'`、`extra={linsight_session_version_id}`）；失败/进行中落占位态、HITL 等待恢复后回填**同一行**（沿用 design §4 park-and-release）；`linsight_session_version`/`ExecuteTask` 保持不变，退位为「某条 bot 消息的执行详情附属」。**依赖** TJ-2。**覆盖** 设计 §2.2 / §6 / P1。
+  - [x] **已落（2026-06-15）**：`utils.persist_task_turn_message`（bot 任务轮，`category='task'`+`extra={SV}`）接入 `task_exec._handle_task_success` 与 `_handle_direct_answer_completion`；`utils.persist_task_user_turn`（用户轮，`category='question'`，镜像日常 `{query,files}` envelope）接入 `submit_user_question`。测试 `test/linsight/test_unified_task_turn_write.py`（3 例）+ `test_unified_submit_session.py`（用户轮）；RED→GREEN，165 passed 零回归（含 `test_e2e_abc` 完成路径）。
+  - [x] **失败占位已落（2026-06-15）**：`_handle_task_failure` 也写 bot 任务轮；`persist_task_turn_message` 无 `answer` 时回退 `error_message`，会话不留悬空问。测试 `test_failed_task_turn_falls_back_to_error_message`。
+  - [x] **进行中占位 + 回填同一行已落（2026-06-15）**：`persist_task_turn_message` 改为 **upsert**（按 `chat_id`+`extra.SV` 找现有 bot 任务轮→更新，否则插入）；`_execute_workflow` 开始处先写占位（`output_result` 空→空文本行），完成/失败时回填同一行。**刷新感知**：在途/等待输入的任务轮刷新后仍在 ChatMessage 流里可见，前端按 SV 拉 linsight 详情还原 `waiting_for_user_input`/完成态。测试 `test_persist_upserts_existing_placeholder_row`；169 passed（含 e2e_abc）零回归。
+  - [ ] **待补（次要）**：用户轮 files envelope（当前仅写 question，files 留空，文件信息仍在 SV 上）；续聊 `_continue_workflow` 多轮同 SV 与 upsert 的关系（统一模型每轮新 SV，不受影响；legacy continue 路径已知局限）。
+- [~] **TJ-4** 会话历史查询端点（后端，两段式）：列表走 `ChatMessageDao.get_messages_by_chat_id`（轻量，仅带 `extra.SV` 指针，不含任务详情）；执行详情端点按 `session_version_id` 返回 tasks/sop/steps/files 供懒加载。**依赖** TJ-3。**覆盖** 设计 §11.2。
+  - [x] **已用现有端点闭环（2026-06-15，符合设计 §11.2「详情复用既有」意图，无需新端点）**：列表 = `GET /chat/messages/{conversationId}`（`chat_session/api/endpoints/session.py:33`，经 `WorkstationMessage.from_chat_message` 已带 `category`/`linsightSessionVersionId`，TJ-1 落）；详情 = `GET /workbench/execute-task-detail?session_version_id=`（tasks/steps）+ `GET /workbench/session-version-list?session_id=`（sop/output_result/files），均带属主+分享链鉴权。
+  - [ ] **待决（安全缺口，非本次引入）**：列表端点 `GET /chat/messages/{conversationId}` 仅校验登录、**未校验会话归属**（任意登录用户猜 chat_id 可读他人会话）。该端点为日常聊天共用、且涉及分享链/管理员路径，加固属跨场景改动——需与用户确认是否在 TJ-4 内硬化（C4 多租户/越权）还是单列。详情端点已有属主校验，无此问题。
+- [~] **TJ-5** 历史注入改 `chat_id` 维度（后端）：`_get_history_summary` 由 `session_version_id` 维度改为按 `chat_id` 读 `ChatMessage`（普通轮 + 任务轮答案）→ 归一文本注入既有 `history_summary` 通道；日常链注入同理读 `ChatMessage`（含任务轮答案）；token 裁剪复用 design §3.8。**依赖** TJ-3。**覆盖** 设计 §3.2 / D2 / P2。
+  - [x] **已落（2026-06-15）**：`utils.build_prior_conversation_summary(chat_id)` 按 `chat_id` 读 `ChatMessage`、配对"问题→其后回答"（普通轮+任务轮）成前情文本，**只配对已完成 Q/A → 天然排除当前未答轮**（不重复当前问题）；接入 fresh 执行路径 `task_exec._build_agent_input`（前情置于 question 之前）。测试 `test/linsight/test_unified_history_summary.py`（3 例）；168 passed 零回归（含 e2e_abc）。
+  - [x] **日常链对称已落（2026-06-15，D2）**：`MessageCategory.TASK='task'` 新增；`WorkStationService.get_chat_history` 白名单纳入 `task` 并渲染为 `AIMessage` —— 日常链续聊能看到任务轮答案。测试 `test/workstation/test_unified_daily_history.py`。
+  - [x] **token 裁剪已落（2026-06-15）**：`build_prior_conversation_summary(chat_id, max_chars=8000)` 配对成块、保留最近、按字符预算从旧到新截断。测试 `test_summary_keeps_most_recent_within_char_budget`。
+  - [ ] **暂缓（依赖/风险，待前端或具体需求再做）**：① `_continue_workflow` 续聊路径注入——其 checkpointer 已含本 session_version 历史，注入 chat_id 摘要会**重复本会话任务轮**，需先做"排除本 session 自身轮"去重；且统一模型是否仍用 continue（vs 每轮新 submit）取决于前端 TJ-6。
+- [ ] **TJ-6** 单入口 + 逐轮 `task_mode` 本地态（前端·client）：`components/Chat/AiChatInput.tsx:477-478` 任务模式入口由 `navigate('/linsight/new')` 改为**仅切输入框本地态**（不导航、不换会话）；提交时把 `task_mode` 随这一轮发出。**依赖** TJ-2。**覆盖** 设计 §4.1 / P0。
+- [ ] **TJ-7** 单消息流渲染（前端·client）：统一消息列表按 `is_bot`+`category` 分发——普通轮复用 `components/Chat/Messages`；任务轮 = 答案气泡 + 折叠富面板入口，展开按 `extra.SV` 懒加载并复用 `components/Linsight/Execution/*`（只读形态）；`linsightMapState` 降级为「当前/展开中任务轮执行态缓存」，会话真相回归日常消息 store。**依赖** TJ-4。**覆盖** 设计 §4.2 / §11.3 / P1。
+  **手动验证**：同一会话内开/关任务模式连续多轮 → 消息流时间序正确、任务轮可展开富面板、普通轮能看到前面任务轮答案；刷新后历史完整回显。
+- [ ] **TJ-8** 路由/侧边栏收敛（前端·client）：新会话不再产生 `/linsight` 独立路由项；`hooks/Conversations/useNavigateToConvo.tsx:62-69` 的 `flowType===20` 分支**仅对存量只读会话保留**，新会话走统一日常会话路由。**依赖** TJ-7。**覆盖** 设计 §4.3 / P3。
+
+> **不做**：存量 `flow_type=20` 会话迁移脚本（D3 不迁移）；新增 group/origin 锚点（统一模型下无需）。
 
 ---
 
@@ -264,3 +300,8 @@ flowchart TD
 - **D3（C3 端点 id→name 对齐 design §7.5）**：依赖与契约约定 §4 草案用 `/skill/{id}` + `PATCH .../enabled`；冻结时收敛到 design §7.5 的 `/skill/{name}` + `PATCH .../status` + 新增 `GET /skill/selectable`。mock 已据此产出。
 - **D4（C5 Redis checkpointer → 自研 plain-Redis，2026-06-11 决策已落）**：POC P3 实测 `langgraph-checkpoint-redis` 依赖 RediSearch（Redis Stack），现网不支持。经用户决策采用**方案②自研 plain-Redis checkpointer**。实现位置：`bisheng/linsight/domain/services/checkpointer.py`（`PlainRedisCheckpointer` + `make_checkpointer()`，Wave 0 已交付）；`langgraph-checkpoint-redis` 已从 pyproject.toml 移除，uv.lock 已重新锁定。Key schema、TTL、`adelete_thread` 见 C5 契约（§5）。Track B TB-2 直接基于此文件实现 worker 装配。
 - **D5（C2 WorkspaceBackend 须实现 deepagents BackendProtocol）**：POC P1 实测真实 backend 协议方法返回 `ReadResult/WriteResult/LsResult/EditResult`（非契约草案的 `bytes|str`），且含 `glob/grep/upload/download`。Track C 实现以 `deepagents.backends.filesystem.FilesystemBackend` 为准；fixtures 的 `FakeWorkspaceBackend` 为概念级 stub。
+- **D6（display_name + 技能 ID + bundle，2026-06-12 用户确认，C3 契约变更）**：deepagents 0.6.8 硬校验 frontmatter `name` 仅 `[a-z0-9-]`（中文被拒）且须=目录名 → 新增 `display_name`（DB 列 + `metadata.display-name` + API 字段），前端一律显示展示名称、管理列表不展示技能 ID 与来源；上传支持 .md/.zip/.skill/文件夹（bundle 目录形态，整包≤10MB），新增 `GET /skill/{name}/file` 与 `SkillDetail.files[]`；迁移 slug 用 **pypinyin 转拼音**（新依赖 pypinyin）。消费方 A（active_skills 语义不变）/ I（UI 字段）已在契约 §4 标注。PRD §4.5/§1.4 同步。
+- **D7（对账报告降级为脚本运维产物，2026-06-12 用户决策）**：管理页不做迁移提示条/对账报告/待办消除；脚本输出 JSON 摘要（stdout+文件）。PRD §4.6 整改（FR-6.x 收敛 11→9 条）、spec AC-4 改写、design §8.3 改名「迁移摘要结构」。
+- **D8（SkillWhitelistMiddleware 以 SkillsMiddleware 子类实现）**：deepagents 0.6.8 无原生白名单钩子（SkillsMiddleware 仅 backend/sources/system_prompt）→ 自研 `TenantSkillsMiddleware(SkillsMiddleware)`，在 `before_agent/abefore_agent` 过滤 `skills_metadata`（built-in 永放行；租户技能按 `config.configurable.active_skills` ∩ DB enabled）。单类实现消除 design §7.2 的双中间件顺序约束（无 GenerativeUIMiddleware 顺序风险），语义与契约 C3 不变。
+- **D10（统一会话模型 / 任务模式收敛，2026-06-15 用户新增需求，新增 Track J）**：会话层取消「任务模式」独立概念——任务模式降级为日常工作台会话（`flow_type=WORKSTATION=15`）内的**逐轮处理标记**，普通轮与任务轮共享同一 `chat_id` 的 `ChatMessage` 历史（问答上下文双向共享、均喂模型）。决策已定：会话 flow_type=15（D1）、问答双向共享不与 §9.3.8 冲突（§9.3.8 管选择态记忆、本项管问答内容，正交）、存量 flow_type=20 会话不迁移（D3）、纳入 F035 当前迭代（D4）。设计见 [跨模式会话上下文共享设计.md](./跨模式会话上下文共享设计.md)，任务见 Track J。**跨 Track 影响**：依赖 Track A 内核就绪；与 Track H 输入区（TH-1）协同（任务模式 chip 从「进出独立态」变为「逐轮标记」）；契约前置（统一提交入口 + ChatMessage 双写字段）须登记依赖与契约约定 + release-contract。
+- **D9（工作台配置合并，2026-06-12 用户新增需求，PRD 新增 §4.8）**：管理端「灵思」tab 并入「日常」——入口开关移除（TF 菜单权限承接）、展示名称/提示语更名「任务模式」、**「灵思可选工具」配置废弃（任务模式直接共用日常「可用工具」，不做数据迁移）**、指导手册库整体替换为技能管理。**跨 Track 影响**：TI-2 扩为配置页合并（platform UI）、TE 工具来源改读日常配置、TF 不变；Track D 仅承接「技能管理挂载位置」语义，API 不受影响。

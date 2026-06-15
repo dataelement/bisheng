@@ -2,7 +2,7 @@ import asyncio
 import json
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from fastapi import Request
@@ -14,7 +14,7 @@ from loguru import logger
 
 from bisheng.api.services import knowledge_imp
 from bisheng.api.v1.schema.chat_schema import APIChatCompletion
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
@@ -23,7 +23,6 @@ from bisheng.common.errcode.workstation import (
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,
 )
-from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
     ApplicationProcessEventData,
@@ -35,17 +34,19 @@ from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.message import ChatMessage, ChatMessageDao
 from bisheng.database.models.session import MessageSession, MessageSessionDao
+from bisheng.department.domain.services.department_flow_service import DepartmentFlowService
 from bisheng.llm.domain import LLMService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
+
 from .chat_helpers import (
+    # insert a placeholder entry in the sidebar conversation list
+    # the moment a new chat is created (title updated later via
+    # gen_title). Must be emitted *before* any category event.
+    _sse_resp,  # v2.5 Agent-mode SSE builder
     gen_title,
     read_image_as_data_url,
     user_message,  # legacy `{created: true}` envelope — tells the client to
-                   # insert a placeholder entry in the sidebar conversation list
-                   # the moment a new chat is created (title updated later via
-                   # gen_title). Must be emitted *before* any category event.
-    _sse_resp,  # v2.5 Agent-mode SSE builder
 )
 from .constants import VISUAL_MODEL_FILE_TYPES
 from .workstation_service import WorkStationService
@@ -58,8 +59,8 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
 
     file_rule = FileProcessBase(
         knowledge_id=0,
-        separator=['\n\n', '\n'],
-        separator_rule=['after', 'after'],
+        separator=["\n\n", "\n"],
+        separator_rule=["after", "after"],
         chunk_size=1000,
         chunk_overlap=0,
     )
@@ -74,7 +75,7 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
         raw_texts = [doc.page_content for doc in result.documents]
     except KnowledgeFileNotSupportedError:
         raw_texts = []
-    return knowledge_imp.KnowledgeUtils.chunk2promt(''.join(raw_texts), {'source': file_name})
+    return knowledge_imp.KnowledgeUtils.chunk2promt("".join(raw_texts), {"source": file_name})
 
 
 async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
@@ -92,7 +93,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         await MessageSessionDao.async_insert_one(
             MessageSession(
                 chat_id=conversation_id,
-                name='New Chat',
+                name="New Chat",
                 flow_type=FlowType.WORKSTATION.value,
                 user_id=login_user.user_id,
             )
@@ -104,7 +105,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
             event_data=NewMessageSessionEventData(
                 session_id=conversation_id,
                 app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                source='platform',
+                source="platform",
                 app_name=ApplicationTypeEnum.DAILY_CHAT.value,
                 app_type=ApplicationTypeEnum.DAILY_CHAT,
             ),
@@ -125,14 +126,14 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
             ChatMessage(
                 user_id=login_user.user_id,
                 chat_id=conversation_id,
-                flow_id='',
-                type='human',
+                flow_id="",
+                type="human",
                 is_bot=False,
-                sender='User',
+                sender="User",
                 files=json.dumps(data.files) if data.files else None,
-                extra=json.dumps({'parentMessageId': data.parentMessageId}),
+                extra=json.dumps({"parentMessageId": data.parentMessageId}),
                 message=data.text,
-                category='question',
+                category="question",
                 source=0,
             )
         )
@@ -161,11 +162,14 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
 #   - _prepare_tools: Entry point function; integrates tool_payloads + knowledge_bases_info -> List[BaseTool].
 # --------------------------------------------------------------------------- #
 
-from pydantic import BaseModel as PydanticBaseModel, Field as PydanticField, SkipValidation
+from typing import Annotated
 
 from langchain_core.tools import ArgsSchema, BaseTool, StructuredTool
-from typing_extensions import Annotated
+from pydantic import BaseModel as PydanticBaseModel
+from pydantic import Field as PydanticField
+from pydantic import SkipValidation
 
+from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.citation.domain.services.citation_prompt_helper import (
     CITATION_PROMPT_RULES,
     CitationRegistryCollector,
@@ -178,7 +182,6 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     save_message_citations,
     select_registry_items_for_persistence,
 )
-from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
 DEFAULT_AGENT_MAX_ITERATIONS = 50
@@ -194,7 +197,7 @@ class DailyChatCitationToolWrapper(BaseTool):
 
     name: str
     description: str
-    args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = PydanticField(default=None)
+    args_schema: Annotated[ArgsSchema | None, SkipValidation()] = PydanticField(default=None)
     tool: BaseTool
     citation_collector: CitationRegistryCollector = PydanticField(exclude=True)
 
@@ -209,10 +212,10 @@ class DailyChatCitationToolWrapper(BaseTool):
         )
 
     def _is_web_search_tool(self) -> bool:
-        return self.tool.name == 'web_search' or getattr(self.tool, 'tool_name', None) == 'web_search'
+        return self.tool.name == "web_search" or getattr(self.tool, "tool_name", None) == "web_search"
 
     def _has_knowledge_rag_tool(self) -> bool:
-        return hasattr(self.tool, 'knowledge_retriever_tool')
+        return hasattr(self.tool, "knowledge_retriever_tool")
 
     def _append_web_citation(self, output: Any) -> Any:
         if not isinstance(output, str):
@@ -251,18 +254,18 @@ class DailyChatCitationToolWrapper(BaseTool):
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         self._extend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        inputs = {'context': source_documents}
-        if 'question' in self.tool.chat_prompt.input_variables:
-            inputs['question'] = query
+        inputs = {"context": source_documents}
+        if "question" in self.tool.chat_prompt.input_variables:
+            inputs["question"] = query
         return inputs
 
     async def _abuild_knowledge_inputs(self, query: str, retrieval_result: Any) -> dict:
         source_documents = list(retrieval_result or [])
         source_documents = annotate_rag_documents_with_citations(source_documents)
         await self._aextend_citation_registry_items(collect_rag_citation_registry_items(source_documents))
-        inputs = {'context': source_documents}
-        if 'question' in self.tool.chat_prompt.input_variables:
-            inputs['question'] = query
+        inputs = {"context": source_documents}
+        if "question" in self.tool.chat_prompt.input_variables:
+            inputs["question"] = query
         return inputs
 
     def _extend_citation_registry_items(self, items: list[CitationRegistryItemSchema]) -> None:
@@ -275,32 +278,32 @@ class DailyChatCitationToolWrapper(BaseTool):
 
     def _run(self, query: str, config=None, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return self._append_web_citation(self.tool.invoke({'query': query}, config=config))
+            return self._append_web_citation(self.tool.invoke({"query": query}, config=config))
         if not self._has_knowledge_rag_tool():
-            return self.tool.invoke({'query': query}, config=config)
+            return self.tool.invoke({"query": query}, config=config)
 
-        retrieval_result = self.tool.knowledge_retriever_tool.invoke({'query': query}, config=config)
+        retrieval_result = self.tool.knowledge_retriever_tool.invoke({"query": query}, config=config)
         llm_inputs = self._build_knowledge_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
         return qa_chain.invoke(llm_inputs, config=config)
 
     async def _arun(self, query: str, config=None, **kwargs: Any) -> Any:
         if self._is_web_search_tool():
-            return await self._aappend_web_citation(await self.tool.ainvoke({'query': query}, config=config))
+            return await self._aappend_web_citation(await self.tool.ainvoke({"query": query}, config=config))
         if not self._has_knowledge_rag_tool():
-            return await self.tool.ainvoke({'query': query}, config=config)
+            return await self.tool.ainvoke({"query": query}, config=config)
 
-        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({'query': query}, config=config)
+        retrieval_result = await self.tool.knowledge_retriever_tool.ainvoke({"query": query}, config=config)
         llm_inputs = await self._abuild_knowledge_inputs(query, retrieval_result)
         qa_chain = create_stuff_documents_chain(llm=self.tool.llm, prompt=self._build_knowledge_prompt())
         return await qa_chain.ainvoke(llm_inputs, config=config)
 
 
 def _wrap_daily_chat_citation_tool(
-        tool: BaseTool,
-        citation_collector: CitationRegistryCollector,
+    tool: BaseTool,
+    citation_collector: CitationRegistryCollector,
 ) -> BaseTool:
-    if tool.name == 'web_search' or hasattr(tool, 'knowledge_retriever_tool'):
+    if tool.name == "web_search" or hasattr(tool, "knowledge_retriever_tool"):
         return DailyChatCitationToolWrapper.wrap(tool, citation_collector)
     return tool
 
@@ -315,11 +318,12 @@ async def _get_agent_max_iterations() -> int:
     """
     try:
         from bisheng.common.services.config_service import settings as bisheng_settings
+
         conf = await bisheng_settings.aget_daily_chat_conf()
         n = int(conf.agent_max_iterations)
         return n if n > 0 else DEFAULT_AGENT_MAX_ITERATIONS
     except Exception as exc:
-        logger.warning(f'Failed to read agent_max_iterations, falling back to 50: {exc}')
+        logger.warning(f"Failed to read agent_max_iterations, falling back to 50: {exc}")
         return DEFAULT_AGENT_MAX_ITERATIONS
 
 
@@ -337,14 +341,12 @@ async def _get_history_max_tokens() -> int:
     """
     try:
         from bisheng.common.services.config_service import settings as bisheng_settings
+
         conf = await bisheng_settings.aget_daily_chat_conf()
         n = int(conf.history_max_tokens)
         return n if n > 0 else DEFAULT_HISTORY_MAX_TOKENS
     except Exception as exc:
-        logger.warning(
-            f'Failed to read history_max_tokens, falling back to '
-            f'{DEFAULT_HISTORY_MAX_TOKENS}: {exc}'
-        )
+        logger.warning(f"Failed to read history_max_tokens, falling back to {DEFAULT_HISTORY_MAX_TOKENS}: {exc}")
         return DEFAULT_HISTORY_MAX_TOKENS
 
 
@@ -368,11 +370,10 @@ def _count_tokens(text: str) -> int:
     if _HISTORY_TOKENIZER is None:
         try:
             import tiktoken  # already a transitive dep via assistant_base
-            _HISTORY_TOKENIZER = tiktoken.get_encoding('cl100k_base')
+
+            _HISTORY_TOKENIZER = tiktoken.get_encoding("cl100k_base")
         except Exception as exc:
-            logger.warning(
-                f'tiktoken unavailable, falling back to char/2 estimator: {exc}'
-            )
+            logger.warning(f"tiktoken unavailable, falling back to char/2 estimator: {exc}")
             _HISTORY_TOKENIZER = False  # sentinel: never retry
     if _HISTORY_TOKENIZER is False:
         # Rough estimator: ~2 chars per token for Chinese-heavy text.
@@ -384,9 +385,9 @@ def _count_tokens(text: str) -> int:
 
 
 def _build_user_content(
-        question: str,
-        file_context: str = '',
-        knowledge_bases_info: list[dict] | None = None,
+    question: str,
+    file_context: str = "",
+    knowledge_bases_info: list[dict] | None = None,
 ) -> str:
     """Compose the user message content for the LLM.
 
@@ -400,43 +401,38 @@ def _build_user_content(
     has_file = bool(file_context)
 
     if not has_kb and not has_file:
-        logger.info(
-            f'[build_user_content] scenario=plain question_len={len(question)}'
-            f' preview={question[:120]!r}'
-        )
+        logger.info(f"[build_user_content] scenario=plain question_len={len(question)} preview={question[:120]!r}")
         return question
 
     parts: list[str] = []
     if has_kb:
         kb_brief = [
             {
-                'id': kb.get('id'),
-                'name': kb.get('name', ''),
-                'description': kb.get('description', '') or '',
-                'tags': kb.get('tags') or [],
+                "id": kb.get("id"),
+                "name": kb.get("name", ""),
+                "description": kb.get("description", "") or "",
+                "tags": kb.get("tags") or [],
             }
             for kb in knowledge_bases_info
         ]
         parts.append(
-            '<selected_knowledge_bases>\n'
-            f'{json.dumps(kb_brief, ensure_ascii=False)}\n'
-            '</selected_knowledge_bases>'
+            f"<selected_knowledge_bases>\n{json.dumps(kb_brief, ensure_ascii=False)}\n</selected_knowledge_bases>"
         )
     if has_file:
-        parts.append(f'<uploaded_file_content>\n{file_context}\n</uploaded_file_content>')
-    parts.append(f'<user_question>\n{question}\n</user_question>')
-    final_content = '\n\n'.join(parts)
+        parts.append(f"<uploaded_file_content>\n{file_context}\n</uploaded_file_content>")
+    parts.append(f"<user_question>\n{question}\n</user_question>")
+    final_content = "\n\n".join(parts)
 
     # Debug trace for QA: mirrors the exact prompt fed to the LLM.
-    scenario = 'kb+file' if (has_kb and has_file) else ('kb' if has_kb else 'file')
+    scenario = "kb+file" if (has_kb and has_file) else ("kb" if has_kb else "file")
     logger.info(
-        f'[build_user_content] scenario={scenario}'
-        f' kb_count={len(knowledge_bases_info or [])}'
-        f' file_context_len={len(file_context or "")}'
-        f' question_len={len(question)}'
-        f' final_len={len(final_content)}'
+        f"[build_user_content] scenario={scenario}"
+        f" kb_count={len(knowledge_bases_info or [])}"
+        f" file_context_len={len(file_context or '')}"
+        f" question_len={len(question)}"
+        f" final_len={len(final_content)}"
     )
-    logger.info(f'[build_user_content] final_content=\n{final_content}')
+    logger.info(f"[build_user_content] final_content=\n{final_content}")
     return final_content
 
 
@@ -457,14 +453,14 @@ def _parse_tool_results(raw_output, tool_name: str):
         try:
             return json.loads(s)
         except (json.JSONDecodeError, ValueError):
-            return [{'text': raw_output}]
-    content = getattr(raw_output, 'content', None)
+            return [{"text": raw_output}]
+    content = getattr(raw_output, "content", None)
     if content is not None and content is not raw_output:
         return _parse_tool_results(content, tool_name)
-    return [{'text': str(raw_output)}]
+    return [{"text": str(raw_output)}]
 
 
-_WEB_SEARCH_TOOL_NAMES = {'web_search', 'search_web', 'bing_search', 'tavily_search'}
+_WEB_SEARCH_TOOL_NAMES = {"web_search", "search_web", "bing_search", "tavily_search"}
 
 
 def _extract_tool_error(raw_output) -> str | None:
@@ -475,9 +471,9 @@ def _extract_tool_error(raw_output) -> str | None:
     tool-call block can be rendered as failed, while the model still receives
     the message as a normal observation.
     """
-    if getattr(raw_output, 'status', None) == 'error':
-        content = getattr(raw_output, 'content', None)
-        return str(content) if content is not None else 'tool execution failed'
+    if getattr(raw_output, "status", None) == "error":
+        content = getattr(raw_output, "content", None)
+        return str(content) if content is not None else "tool execution failed"
     return None
 
 
@@ -493,8 +489,8 @@ def _handle_agent_tool_error(e: Exception) -> str:
     react to it (retry, pick another tool, or tell the user) like a normal
     observation.
     """
-    logger.warning(f'[agent_chat] tool execution error fed back to model: {e!r}')
-    return f'工具执行失败: {e}'
+    logger.warning(f"[agent_chat] tool execution error fed back to model: {e!r}")
+    return f"工具执行失败: {e}"
 
 
 def _build_tool_meta(tool: BaseTool) -> dict:
@@ -505,17 +501,17 @@ def _build_tool_meta(tool: BaseTool) -> dict:
     the client maps known keys (search_knowledge_bases, web_search) to
     translated labels and falls back to tool.name for everything else.
     """
-    name = tool.name or ''
+    name = tool.name or ""
     lname = name.lower()
-    if name == 'search_knowledge_bases':
-        tool_type = 'knowledge'
-    elif lname in _WEB_SEARCH_TOOL_NAMES or 'web_search' in lname:
-        tool_type = 'web'
+    if name == "search_knowledge_bases":
+        tool_type = "knowledge"
+    elif lname in _WEB_SEARCH_TOOL_NAMES or "web_search" in lname:
+        tool_type = "web"
     else:
-        tool_type = 'tool'
+        tool_type = "tool"
     return {
-        'display_name': name,
-        'tool_type': tool_type,
+        "display_name": name,
+        "tool_type": tool_type,
     }
 
 
@@ -526,10 +522,10 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
     """
     try:
         if tool_id is None:
-            web_search_info = GptsToolsDao.get_tool_by_tool_key('web_search')
+            web_search_info = GptsToolsDao.get_tool_by_tool_key("web_search")
             if not web_search_info:
-                msg = '联网搜索工具未注册到 GptsTools'
-                logger.warning(f'{msg}, skipping.')
+                msg = "联网搜索工具未注册到 GptsTools"
+                logger.warning(f"{msg}, skipping.")
                 return None, msg
             tool_id = web_search_info.id
         t = await ToolExecutor.init_by_tool_id(
@@ -543,17 +539,17 @@ async def _build_web_search_tool(user_id: int, tool_id: int | None = None) -> tu
     except Exception as exc:
         err = str(exc)
         # Typical symptom for fresh installs: admin hasn't picked a provider.
-        if 'requires some parameters' in err and 'config' in err:
+        if "requires some parameters" in err and "config" in err:
             err = '联网搜索未配置：请在平台管理的"内置工具 → 联网搜索"设置服务商（Bing/Tavily/…）及 API Key'
-        logger.warning(f'Failed to initialise web_search tool: {err}')
+        logger.warning(f"Failed to initialise web_search tool: {err}")
         return None, err
 
 
 async def _build_knowledge_search_tool(
-        knowledge_bases_info: list[dict],
-        login_user: UserPayload,
-        max_token: int,
-        citation_collector: CitationRegistryCollector,
+    knowledge_bases_info: list[dict],
+    login_user: UserPayload,
+    max_token: int,
+    citation_collector: CitationRegistryCollector,
 ) -> StructuredTool | None:
     """StructuredTool wrapper around WorkStationService.queryChunksFromDB.
 
@@ -572,104 +568,89 @@ async def _build_knowledge_search_tool(
     if not knowledge_bases_info:
         return None
 
-    kb_id_whitelist = [str(kb['id']) for kb in knowledge_bases_info]
+    kb_id_whitelist = [str(kb["id"]) for kb in knowledge_bases_info]
     # Space-type KBs skip auth check in queryChunksFromDB; org-type go
     # through KnowledgeDao.ajudge_knowledge_permission. Preserve the
     # distinction the caller captured in `source` so a single LLM-chosen
     # subset still routes each id through the correct path.
-    space_id_set: set[int] = {
-        int(kb['id']) for kb in knowledge_bases_info
-        if kb.get('source') == 'space'
-    }
+    space_id_set: set[int] = {int(kb["id"]) for kb in knowledge_bases_info if kb.get("source") == "space"}
     # kb_id (str) → display name. Used by _format_chunk to embed the source KB
     # name on every chunk, so the frontend can group/dedupe by KB instead of
     # surfacing one chip per file.
-    kb_name_by_id: dict[str, str] = {
-        str(kb['id']): (kb.get('name') or '') for kb in knowledge_bases_info
-    }
+    kb_name_by_id: dict[str, str] = {str(kb["id"]): (kb.get("name") or "") for kb in knowledge_bases_info}
     desc_lines = []
     for kb in knowledge_bases_info:
-        tags = kb.get('tags') or []
-        tag_hint = f" tags={tags}" if tags else ''
+        tags = kb.get("tags") or []
+        tag_hint = f" tags={tags}" if tags else ""
         desc_lines.append(
-            f"  - id={kb.get('id')} name={kb.get('name', '')}"
-            f" desc={kb.get('description', '') or ''}{tag_hint}"
+            f"  - id={kb.get('id')} name={kb.get('name', '')} desc={kb.get('description', '') or ''}{tag_hint}"
         )
     description = (
-            'Search content in the user-selected knowledge bases. Supports querying '
-            'one or more of the available knowledge bases, with optional per-KB tag '
-            'filtering (tag_match_mode=ANY|ALL). Call this tool when the user '
-            'question can be answered by information in these knowledge bases.\n'
-            'Available knowledge bases (with file-level tags you may filter by):\n'
-            + '\n'.join(desc_lines)
+        "Search content in the user-selected knowledge bases. Supports querying "
+        "one or more of the available knowledge bases, with optional per-KB tag "
+        "filtering (tag_match_mode=ANY|ALL). Call this tool when the user "
+        "question can be answered by information in these knowledge bases.\n"
+        "Available knowledge bases (with file-level tags you may filter by):\n" + "\n".join(desc_lines)
     )
 
     class _KbFilter(PydanticBaseModel):
         knowledge_base_id: str = PydanticField(
-            description='Which KB this filter applies to. Must appear in knowledge_base_ids.',
+            description="Which KB this filter applies to. Must appear in knowledge_base_ids.",
         )
         tags: list[str] = PydanticField(
-            description='Tag names to filter files inside this KB.',
+            description="Tag names to filter files inside this KB.",
         )
         tag_match_mode: str = PydanticField(
-            default='ANY',
-            description='ANY: match any tag; ALL: must carry every tag.',
+            default="ANY",
+            description="ANY: match any tag; ALL: must carry every tag.",
         )
 
     class _Filters(PydanticBaseModel):
         knowledge_base_filters: list[_KbFilter] | None = PydanticField(
             default=None,
-            description='Per-KB tag filters.',
+            description="Per-KB tag filters.",
         )
 
     class _SearchKbArgs(PydanticBaseModel):
         knowledge_base_ids: list[str] = PydanticField(
             default_factory=lambda: list(kb_id_whitelist),
             description=(
-                'Subset of knowledge base IDs (as strings) to search; defaults '
-                'to all available. Must be a subset of the advertised IDs.'
+                "Subset of knowledge base IDs (as strings) to search; defaults "
+                "to all available. Must be a subset of the advertised IDs."
             ),
         )
         query: str = PydanticField(
-            description='Search query in natural language — typically derived from the user question.',
+            description="Search query in natural language — typically derived from the user question.",
         )
         filters: _Filters | None = PydanticField(
             default=None,
-            description='Optional search filters (per-KB tag filters).',
+            description="Optional search filters (per-KB tag filters).",
         )
 
     def _format_chunk(doc) -> str:
-        meta = getattr(doc, 'metadata', {}) or {}
-        doc_id = meta.get('document_id') or ''
-        chunk_idx = meta.get('chunk_index', '')
-        chunk_id = (
-                meta.get('chunk_id')
-                or (f'{doc_id}-{chunk_idx}' if doc_id != '' else str(chunk_idx))
-        )
-        file_title = (
-                meta.get('document_name')
-                or meta.get('source')
-                or meta.get('file_name')
-                or ''
-        )
-        file_abstract = meta.get('file_abstract') or meta.get('abstract') or ''
-        content = (getattr(doc, 'page_content', '') or '').strip()
-        kb_id_raw = meta.get('knowledge_id') or meta.get('kb_id') or ''
-        kb_id = str(kb_id_raw) if kb_id_raw not in (None, '') else ''
-        kb_name = kb_name_by_id.get(kb_id, '')
+        meta = getattr(doc, "metadata", {}) or {}
+        doc_id = meta.get("document_id") or ""
+        chunk_idx = meta.get("chunk_index", "")
+        chunk_id = meta.get("chunk_id") or (f"{doc_id}-{chunk_idx}" if doc_id != "" else str(chunk_idx))
+        file_title = meta.get("document_name") or meta.get("source") or meta.get("file_name") or ""
+        file_abstract = meta.get("file_abstract") or meta.get("abstract") or ""
+        content = (getattr(doc, "page_content", "") or "").strip()
+        kb_id_raw = meta.get("knowledge_id") or meta.get("kb_id") or ""
+        kb_id = str(kb_id_raw) if kb_id_raw not in (None, "") else ""
+        kb_name = kb_name_by_id.get(kb_id, "")
         return (
-            '{'
-            f'<knowledge_base_id>{kb_id}</knowledge_base_id>\n'
-            f'<knowledge_base_name>{kb_name}</knowledge_base_name>\n'
-            f'<chunk_id>{chunk_id}</chunk_id>\n'
-            f'<file_title>{file_title}</file_title>\n'
-            f'<file_abstract>{file_abstract}</file_abstract>\n'
-            f'<paragraph_content>{content}</paragraph_content>'
-            '}'
+            "{"
+            f"<knowledge_base_id>{kb_id}</knowledge_base_id>\n"
+            f"<knowledge_base_name>{kb_name}</knowledge_base_name>\n"
+            f"<chunk_id>{chunk_id}</chunk_id>\n"
+            f"<file_title>{file_title}</file_title>\n"
+            f"<file_abstract>{file_abstract}</file_abstract>\n"
+            f"<paragraph_content>{content}</paragraph_content>"
+            "}"
         )
 
     async def _resolve_tag_filter_file_ids(
-            kb_filters: list[_KbFilter],
+        kb_filters: list[_KbFilter],
     ) -> dict[int, set[int]] | None:
         """Resolve {kb_id: allowed_file_ids_set} from tag-name filters.
 
@@ -679,11 +660,11 @@ async def _build_knowledge_search_tool(
         if not kb_filters:
             return {}
         try:
-            from bisheng.database.models.tag import TagDao
             from bisheng.database.models.group_resource import ResourceTypeEnum
+            from bisheng.database.models.tag import TagDao
             from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
         except Exception as exc:
-            logger.warning(f'[search_kb] tag-filter unavailable: {exc}')
+            logger.warning(f"[search_kb] tag-filter unavailable: {exc}")
             return {}
 
         allowed: dict[int, set[int]] = {}
@@ -696,15 +677,21 @@ async def _build_knowledge_search_tool(
             if not tag_names:
                 continue
 
-            tag_rows = await TagDao.get_tags_by_business(
-                business_type=None,  # type: ignore[arg-type]
-                business_id=str(kb_id),
-            ) if False else []
+            tag_rows = (
+                await TagDao.get_tags_by_business(
+                    business_type=None,  # type: ignore[arg-type]
+                    business_id=str(kb_id),
+                )
+                if False
+                else []
+            )
             # Above helper is business-keyed; for file-level tags we query by
             # name against all tags and intersect with the KB's file set.
             try:
                 files = await KnowledgeFileDao.aget_file_by_filters(
-                    knowledge_id=kb_id, page=1, page_size=10000,
+                    knowledge_id=kb_id,
+                    page=1,
+                    page_size=10000,
                 )
             except Exception:
                 files = []
@@ -716,20 +703,17 @@ async def _build_knowledge_search_tool(
             # KNOWLEDGE_FILE. get_tags_by_resource is strict on resource_type,
             # so route per source — otherwise the LLM's tag filter silently
             # returns zero files for org KBs.
-            resource_type = (
-                ResourceTypeEnum.SPACE_FILE
-                if kb_id in space_id_set
-                else ResourceTypeEnum.KNOWLEDGE_FILE
-            )
+            resource_type = ResourceTypeEnum.SPACE_FILE if kb_id in space_id_set else ResourceTypeEnum.KNOWLEDGE_FILE
             tag_map = TagDao.get_tags_by_resource(
-                resource_type, kb_file_ids,
+                resource_type,
+                kb_file_ids,
             )
             wanted = set(tag_names)
-            mode = (f.tag_match_mode or 'ANY').upper()
+            mode = (f.tag_match_mode or "ANY").upper()
             matching: set[int] = set()
             for fid, tags in tag_map.items():
                 names = {t.name for t in tags if t.name}
-                if mode == 'ALL':
+                if mode == "ALL":
                     if wanted.issubset(names):
                         try:
                             matching.add(int(fid))
@@ -745,16 +729,16 @@ async def _build_knowledge_search_tool(
         return allowed
 
     async def _search(
-            knowledge_base_ids: list[str],
-            query: str,
-            filters: _Filters | None = None,
+        knowledge_base_ids: list[str],
+        query: str,
+        filters: _Filters | None = None,
     ) -> str:
         from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 
         logger.info(
-            f'[search_kb] invoke user={login_user.user_id}'
-            f' kb_ids={knowledge_base_ids} query={query!r}'
-            f' filters={filters.model_dump() if filters else None}'
+            f"[search_kb] invoke user={login_user.user_id}"
+            f" kb_ids={knowledge_base_ids} query={query!r}"
+            f" filters={filters.model_dump() if filters else None}"
         )
 
         allowed = set(kb_id_whitelist)
@@ -767,9 +751,7 @@ async def _build_knowledge_search_tool(
                     continue
         if not kb_ids_int:
             kb_ids_int = [int(k) for k in kb_id_whitelist]
-            logger.info(
-                f'[search_kb] hallucinated kb_ids; falling back to whitelist={kb_ids_int}'
-            )
+            logger.info(f"[search_kb] hallucinated kb_ids; falling back to whitelist={kb_ids_int}")
 
         # Resolve tag filters into {kb_id: allowed_file_ids}. Applied as a
         # post-retrieval filter on the docs returned by queryChunksFromDB so
@@ -779,7 +761,7 @@ async def _build_knowledge_search_tool(
                 (filters.knowledge_base_filters if filters else None) or [],
             )
         except Exception as exc:
-            logger.warning(f'[search_kb] tag resolution failed: {exc}')
+            logger.warning(f"[search_kb] tag resolution failed: {exc}")
             file_filter = {}
 
         # Split back into the two buckets so queryChunksFromDB picks the
@@ -798,16 +780,17 @@ async def _build_knowledge_search_tool(
                 login_user=login_user,
             )
         except Exception as exc:
-            logger.exception(f'[search_kb] queryChunksFromDB failed: {exc}')
+            logger.exception(f"[search_kb] queryChunksFromDB failed: {exc}")
             return json.dumps([], ensure_ascii=False)
 
         docs = list(finally_docs or [])
         if file_filter:
+
             def _doc_allowed(doc) -> bool:
-                meta = getattr(doc, 'metadata', {}) or {}
+                meta = getattr(doc, "metadata", {}) or {}
                 try:
-                    kb_id = int(meta.get('knowledge_id') or meta.get('kb_id') or 0)
-                    file_id = int(meta.get('document_id') or meta.get('file_id') or 0)
+                    kb_id = int(meta.get("knowledge_id") or meta.get("kb_id") or 0)
+                    file_id = int(meta.get("document_id") or meta.get("file_id") or 0)
                 except (TypeError, ValueError):
                     return True
                 if kb_id not in file_filter:
@@ -817,9 +800,9 @@ async def _build_knowledge_search_tool(
             pre = len(docs)
             docs = [d for d in docs if _doc_allowed(d)]
             logger.info(
-                f'[search_kb] tag-filter applied docs={pre}->{len(docs)}'
-                f' allow_map={{kb: [n_files]}}='
-                f'{ {k: len(v) for k, v in file_filter.items()} }'
+                f"[search_kb] tag-filter applied docs={pre}->{len(docs)}"
+                f" allow_map={{kb: [n_files]}}="
+                f"{ {k: len(v) for k, v in file_filter.items()} }"
             )
 
         docs = annotate_rag_documents_with_citations(docs)
@@ -833,30 +816,30 @@ async def _build_knowledge_search_tool(
         # chip in an error state with the error message, so users see which
         # KB failed and why instead of the tool silently dropping them.
         for f in failures or []:
-            kb_name = f.get('name') or ''
+            kb_name = f.get("name") or ""
             if not kb_name:
                 # fall back to the name we resolved earlier
-                kb_name = kb_name_by_id.get(str(f.get('id', '')), '')
-            err_text = str(f.get('error') or '').replace('</retrieval_error>', '')
+                kb_name = kb_name_by_id.get(str(f.get("id", "")), "")
+            err_text = str(f.get("error") or "").replace("</retrieval_error>", "")
             results.append(
-                '{'
-                f'<knowledge_base_id>{f.get("id", "")}</knowledge_base_id>\n'
-                f'<knowledge_base_name>{kb_name}</knowledge_base_name>\n'
-                f'<retrieval_error>{err_text}</retrieval_error>'
-                '}'
+                "{"
+                f"<knowledge_base_id>{f.get('id', '')}</knowledge_base_id>\n"
+                f"<knowledge_base_name>{kb_name}</knowledge_base_name>\n"
+                f"<retrieval_error>{err_text}</retrieval_error>"
+                "}"
             )
 
         logger.info(
-            f'[search_kb] returning {len(results)} chunks'
-            f' (ok={len(results) - len(failures or [])} failed={len(failures or [])})'
-            f' total_chars={sum(len(r) for r in results)}'
+            f"[search_kb] returning {len(results)} chunks"
+            f" (ok={len(results) - len(failures or [])} failed={len(failures or [])})"
+            f" total_chars={sum(len(r) for r in results)}"
         )
         return json.dumps(results, ensure_ascii=False)
 
     return StructuredTool.from_function(
         func=None,
         coroutine=_search,
-        name='search_knowledge_bases',
+        name="search_knowledge_bases",
         description=description,
         args_schema=_SearchKbArgs,
     )
@@ -886,7 +869,7 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
     try:
         kbs = await KnowledgeDao.aget_list_by_ids(ids)
     except Exception as exc:
-        logger.warning(f'Failed to load Knowledge rows for {ids}: {exc}')
+        logger.warning(f"Failed to load Knowledge rows for {ids}: {exc}")
         return []
 
     # Best-effort aggregation of file-level tags per KB. A KB with many files
@@ -894,13 +877,16 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
     # to avoid prompt bloat.
     tags_by_kb: dict[int, list[str]] = {}
     try:
-        from bisheng.database.models.tag import TagDao
         from bisheng.database.models.group_resource import ResourceTypeEnum
+        from bisheng.database.models.tag import TagDao
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+
         for kb in kbs:
             try:
                 files = await KnowledgeFileDao.aget_file_by_filters(
-                    knowledge_id=kb.id, page=1, page_size=500,
+                    knowledge_id=kb.id,
+                    page=1,
+                    page_size=500,
                 )
             except Exception:
                 files = []
@@ -913,9 +899,7 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
                 # organization knowledge base files use KNOWLEDGE_FILE. Without
                 # this, tags on org-KB files never reach the prompt.
                 resource_type = (
-                    ResourceTypeEnum.SPACE_FILE
-                    if kb.id in space_id_set
-                    else ResourceTypeEnum.KNOWLEDGE_FILE
+                    ResourceTypeEnum.SPACE_FILE if kb.id in space_id_set else ResourceTypeEnum.KNOWLEDGE_FILE
                 )
                 tag_map = TagDao.get_tags_by_resource(resource_type, file_ids)
                 seen: set[str] = set()
@@ -931,35 +915,35 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
                         break
                 tags_by_kb[kb.id] = names
             except Exception as exc:
-                logger.warning(f'Failed to aggregate tags for kb={kb.id}: {exc}')
+                logger.warning(f"Failed to aggregate tags for kb={kb.id}: {exc}")
                 tags_by_kb[kb.id] = []
     except Exception as exc:
-        logger.warning(f'Tag aggregation unavailable: {exc}')
+        logger.warning(f"Tag aggregation unavailable: {exc}")
 
     resolved = [
         {
-            'id': kb.id,
-            'name': kb.name,
-            'description': kb.description or '',
-            'tags': tags_by_kb.get(kb.id, []),
-            'source': 'space' if kb.id in space_id_set else 'organization',
+            "id": kb.id,
+            "name": kb.name,
+            "description": kb.description or "",
+            "tags": tags_by_kb.get(kb.id, []),
+            "source": "space" if kb.id in space_id_set else "organization",
         }
         for kb in kbs
     ]
     logger.info(
-        f'[resolve_user_kb] resolved {len(resolved)} kbs'
-        f' ids={[kb["id"] for kb in resolved]}'
-        f' tag_counts={[len(kb["tags"]) for kb in resolved]}'
+        f"[resolve_user_kb] resolved {len(resolved)} kbs"
+        f" ids={[kb['id'] for kb in resolved]}"
+        f" tag_counts={[len(kb['tags']) for kb in resolved]}"
     )
     return resolved
 
 
 async def _prepare_tools(
-        tool_payloads: list[dict] | None,
-        login_user: UserPayload,
-        ws_config,  # WorkstationConfig; kept untyped to avoid circular import cost
-        citation_collector: CitationRegistryCollector,
-        knowledge_bases_info: list[dict] | None = None,
+    tool_payloads: list[dict] | None,
+    login_user: UserPayload,
+    ws_config,  # WorkstationConfig; kept untyped to avoid circular import cost
+    citation_collector: CitationRegistryCollector,
+    knowledge_bases_info: list[dict] | None = None,
 ) -> tuple[list[BaseTool], list[dict]]:
     """Assemble the BaseTool list passed to LangGraph create_react_agent.
 
@@ -975,15 +959,15 @@ async def _prepare_tools(
     failures: list[dict] = []
 
     for tp in tool_payloads or []:
-        tool_type = (tp.get('type') if isinstance(tp, dict) else getattr(tp, 'type', None)) or 'tool'
-        if tool_type != 'tool':
+        tool_type = (tp.get("type") if isinstance(tp, dict) else getattr(tp, "type", None)) or "tool"
+        if tool_type != "tool":
             continue
-        tool_key = tp.get('tool_key') if isinstance(tp, dict) else getattr(tp, 'tool_key', None)
-        tool_id = tp.get('id') if isinstance(tp, dict) else getattr(tp, 'id', None)
+        tool_key = tp.get("tool_key") if isinstance(tp, dict) else getattr(tp, "tool_key", None)
+        tool_id = tp.get("id") if isinstance(tp, dict) else getattr(tp, "id", None)
 
         t = None
         err: str | None = None
-        if tool_key == 'web_search':
+        if tool_key == "web_search":
             t, err = await _build_web_search_tool(login_user.user_id, int(tool_id) if tool_id else None)
         elif tool_id:
             try:
@@ -996,25 +980,27 @@ async def _prepare_tools(
                 )
             except Exception as exc:
                 err = str(exc)
-                logger.warning(f'Failed to initialise tool id={tool_id} key={tool_key}: {err}')
+                logger.warning(f"Failed to initialise tool id={tool_id} key={tool_key}: {err}")
 
         if t is not None:
             tools.append(_wrap_daily_chat_citation_tool(t, citation_collector))
         elif err:
-            failures.append({
-                'tool_key': tool_key or str(tool_id or ''),
-                'tool_type': 'web' if tool_key == 'web_search' else 'tool',
-                # display_name is resolved on the frontend via i18n — just
-                # advertise the raw tool_key so the client can map it.
-                'display_name': tool_key or '',
-                'error': err,
-            })
+            failures.append(
+                {
+                    "tool_key": tool_key or str(tool_id or ""),
+                    "tool_type": "web" if tool_key == "web_search" else "tool",
+                    # display_name is resolved on the frontend via i18n — just
+                    # advertise the raw tool_key so the client can map it.
+                    "display_name": tool_key or "",
+                    "error": err,
+                }
+            )
 
     if knowledge_bases_info:
         kb_tool = await _build_knowledge_search_tool(
             knowledge_bases_info=knowledge_bases_info,
             login_user=login_user,
-            max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
+            max_token=getattr(ws_config, "maxTokens", 15000) or 15000,
             citation_collector=citation_collector,
         )
         if kb_tool is not None:
@@ -1028,12 +1014,12 @@ async def log_telemetry_events(user_id: str, conversation_id: str, start_time: f
     end_time = time.time()
     duration_ms = int((end_time - start_time) * 1000)
     common_data = {
-        'app_id': ApplicationTypeEnum.DAILY_CHAT.value,
-        'app_name': ApplicationTypeEnum.DAILY_CHAT.value,
-        'app_type': ApplicationTypeEnum.DAILY_CHAT,
-        'chat_id': conversation_id,
-        'start_time': int(start_time),
-        'end_time': int(end_time),
+        "app_id": ApplicationTypeEnum.DAILY_CHAT.value,
+        "app_name": ApplicationTypeEnum.DAILY_CHAT.value,
+        "app_type": ApplicationTypeEnum.DAILY_CHAT,
+        "chat_id": conversation_id,
+        "start_time": int(start_time),
+        "end_time": int(end_time),
     }
     await telemetry_service.log_event(
         user_id=user_id,
@@ -1052,6 +1038,7 @@ async def log_telemetry_events(user_id: str, conversation_id: str, start_time: f
 # =========================================================================== #
 # v2.5 — LangGraph Agent-mode chat completion                                  #
 # =========================================================================== #
+
 
 async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     """Agent-mode init: creates/fetches the conversation and inserts the user's
@@ -1077,7 +1064,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
         await MessageSessionDao.async_insert_one(
             MessageSession(
                 chat_id=conversation_id,
-                name='New Chat',
+                name="New Chat",
                 flow_type=FlowType.WORKSTATION.value,
                 user_id=login_user.user_id,
             )
@@ -1089,7 +1076,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
             event_data=NewMessageSessionEventData(
                 session_id=conversation_id,
                 app_id=ApplicationTypeEnum.DAILY_CHAT.value,
-                source='platform',
+                source="platform",
                 app_name=ApplicationTypeEnum.DAILY_CHAT.value,
                 app_type=ApplicationTypeEnum.DAILY_CHAT,
             ),
@@ -1107,17 +1094,17 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
         ChatMessage(
             user_id=login_user.user_id,
             chat_id=conversation_id,
-            flow_id='',
-            type='over',
+            flow_id="",
+            type="over",
             is_bot=False,
-            sender='User',
+            sender="User",
             files=json.dumps(data.files) if data.files else None,
-            extra='{}',
+            extra="{}",
             message=json.dumps(
-                {'query': data.text or '', 'files': data.files or []},
+                {"query": data.text or "", "files": data.files or []},
                 ensure_ascii=False,
             ),
-            category='question',
+            category="question",
             source=0,
         )
     )
@@ -1136,21 +1123,19 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
     """Split uploaded files into visual (image base64 data URLs) and doc
     (extracted text chunks concatenated up to maxTokens)."""
     if not data.files:
-        return '', []
+        return "", []
     # Skip entries without a filepath (upload in flight / failed uploads still
     # sometimes reach us). Prevents `NoneType.split` inside async_file_download.
-    valid_files = [f for f in data.files if f and f.get('filepath')]
+    valid_files = [f for f in data.files if f and f.get("filepath")]
     if not valid_files:
-        logger.info(
-            f'[process_agent_files] no files with filepath (received={len(data.files)})'
-        )
-        return '', []
-    download_tasks = [async_file_download(f.get('filepath')) for f in valid_files]
+        logger.info(f"[process_agent_files] no files with filepath (received={len(data.files)})")
+        return "", []
+    download_tasks = [async_file_download(f.get("filepath")) for f in valid_files]
     downloaded_files = await asyncio.gather(*download_tasks)
 
     visual_tasks, doc_tasks = [], []
     for filepath, filename in downloaded_files:
-        ext = filename.split('.')[-1].lower()
+        ext = filename.split(".")[-1].lower()
         if model_info.visual and ext in VISUAL_MODEL_FILE_TYPES:
             visual_tasks.append(read_image_as_data_url(filepath=filepath, filename=filename))
         else:
@@ -1165,17 +1150,19 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
         asyncio.gather(*visual_tasks),
         asyncio.gather(*doc_tasks),
     )
-    max_token = getattr(ws_config, 'maxTokens', 15000) or 15000
-    file_context = '\n'.join(doc_results)[:max_token]
+    max_token = getattr(ws_config, "maxTokens", 15000) or 15000
+    file_context = "\n".join(doc_results)[:max_token]
     logger.info(
-        f'[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}'
-        f' file_context_len={len(file_context)} max_token={max_token}'
+        f"[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}"
+        f" file_context_len={len(file_context)} max_token={max_token}"
     )
     return file_context, list(visual_results)
 
 
 async def _agent_stream_chat_completion(
-        request: Request, data: APIChatCompletion, login_user: UserPayload,
+    request: Request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
 ):
     """v2.5 LangGraph ReAct Agent chat completion.
 
@@ -1197,20 +1184,21 @@ async def _agent_stream_chat_completion(
     """
     start_time = time.time()
     try:
-        ws_config, conversation, message, bisheng_llm, model_info, is_new_conv = \
-            await _agent_initialize_chat(data, login_user)
+        ws_config, conversation, message, bisheng_llm, model_info, is_new_conv = await _agent_initialize_chat(
+            data, login_user
+        )
         conversation_id = conversation.chat_id
     except (BaseErrorCode, ValueError) as exc:
         error_response = exc if isinstance(exc, BaseErrorCode) else ServerError(message=str(exc))
         return StreamingResponse(
             iter([error_response.to_sse_event_instance_str()]),
-            media_type='text/event-stream',
+            media_type="text/event-stream",
         )
     except Exception as exc:
-        logger.exception(f'Error in agent chat completions setup: {exc}')
+        logger.exception(f"Error in agent chat completions setup: {exc}")
         return StreamingResponse(
             iter([ServerError(exception=exc).to_sse_event_instance_str()]),
-            media_type='text/event-stream',
+            media_type="text/event-stream",
         )
 
     async def _agent_event_stream_impl():
@@ -1225,7 +1213,7 @@ async def _agent_stream_chat_completion(
         #    'display_name': str, 'tool_type': str, 'args': dict,
         #    'results'?: Any, 'error'?: str | None}
         events: list[dict] = []
-        final_msg = ''
+        final_msg = ""
         # Pointer to the currently-open thinking event (None when the model is
         # emitting answer text or running a tool). Used to stream deltas and
         # finalise `duration_ms` without scanning `events`.
@@ -1235,7 +1223,7 @@ async def _agent_stream_chat_completion(
         # in O(1).
         inflight_tool_idx: dict[str, int] = {}
         error_flag = False
-        error_msg = ''
+        error_msg = ""
         citation_collector = CitationRegistryCollector()
 
         def close_thinking() -> int | None:
@@ -1251,25 +1239,28 @@ async def _agent_stream_chat_completion(
             now = time.time()
             ended_ms = int(now * 1000)
             ev = events[current_thinking_idx]
-            started_ms = ev.get('started_at')
+            started_ms = ev.get("started_at")
             if started_ms is not None:
                 duration_ms = max(0, ended_ms - started_ms)
             else:
                 duration_ms = max(0, int((now - (current_thinking_start or now)) * 1000))
-            ev['duration_ms'] = duration_ms
-            ev['ended_at'] = ended_ms
+            ev["duration_ms"] = duration_ms
+            ev["ended_at"] = ended_ms
             current_thinking_idx = None
             current_thinking_start = None
             return duration_ms
 
         # Emit first so the client can add the sidebar placeholder before any
         # streaming content arrives. onCreated hook in useAiChat keys on this.
-        yield user_message(message.id, conversation_id, 'User', data.text or '')
-        yield _sse_resp('processing', 'begin', '', conversation_id)
+        yield user_message(message.id, conversation_id, "User", data.text or "")
+        yield _sse_resp("processing", "begin", "", conversation_id)
         yield _sse_resp(
-            'question', 'over',
-            {'query': data.text or '', 'files': data.files or []},
-            conversation_id, message_id=message.id, is_bot=False,
+            "question",
+            "over",
+            {"query": data.text or "", "files": data.files or []},
+            conversation_id,
+            message_id=message.id,
+            is_bot=False,
         )
 
         try:
@@ -1290,35 +1281,38 @@ async def _agent_stream_chat_completion(
             # sees *something* (e.g. "联网搜索 失败：未配置服务商") rather than
             # the model silently hallucinating a citation.
             for f in tool_failures:
-                tc_id = f'init_fail_{uuid4().hex[:10]}'
+                tc_id = f"init_fail_{uuid4().hex[:10]}"
                 start_payload = {
-                    'tool_call_id': tc_id,
-                    'tool_name': f['tool_key'],
-                    'display_name': f['display_name'],
-                    'tool_type': f['tool_type'],
-                    'args': {},
+                    "tool_call_id": tc_id,
+                    "tool_name": f["tool_key"],
+                    "display_name": f["display_name"],
+                    "tool_type": f["tool_type"],
+                    "args": {},
                 }
-                yield _sse_resp('agent_tool_call', 'start', start_payload, conversation_id)
+                yield _sse_resp("agent_tool_call", "start", start_payload, conversation_id)
                 now_ms = int(time.time() * 1000)
                 end_payload = {
                     **start_payload,
-                    'results': [],
-                    'error': f['error'],
-                    'started_at': now_ms,
-                    'ended_at': now_ms,
-                    'duration_ms': 0,
+                    "results": [],
+                    "error": f["error"],
+                    "started_at": now_ms,
+                    "ended_at": now_ms,
+                    "duration_ms": 0,
                 }
-                events.append({'type': 'tool_call', **end_payload})
-                yield _sse_resp('agent_tool_call', 'end', end_payload, conversation_id)
+                events.append({"type": "tool_call", **end_payload})
+                yield _sse_resp("agent_tool_call", "end", end_payload, conversation_id)
 
             # ---- Step 3: process uploaded files ----
             file_context, image_bases64 = await _process_agent_files(
-                data, model_info, login_user, ws_config,
+                data,
+                model_info,
+                login_user,
+                ws_config,
             )
 
             # ---- Step 4: compose user content + history ----
             user_text = _build_user_content(
-                question=data.text or '',
+                question=data.text or "",
                 file_context=file_context,
                 knowledge_bases_info=knowledge_bases_info,
             )
@@ -1336,9 +1330,9 @@ async def _agent_stream_chat_completion(
             )[:-1]
 
             if image_bases64:
-                content_payload = [{'type': 'text', 'text': user_text}]
+                content_payload = [{"type": "text", "text": user_text}]
                 for img in image_bases64:
-                    content_payload.append({'type': 'image_url', 'image_url': {'url': img}})
+                    content_payload.append({"type": "image_url", "image_url": {"url": img}})
             else:
                 content_payload = user_text
 
@@ -1348,15 +1342,12 @@ async def _agent_stream_chat_completion(
                 # legitimately contain `{...}` JSON snippets (e.g. a tool-call
                 # schema example) that would otherwise trip KeyError.
                 sys_prompt = ws_config.systemPrompt.replace(
-                    '{cur_date}',
-                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    "{cur_date}",
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            if knowledge_bases_info or any(
-                    isinstance(tool, DailyChatCitationToolWrapper)
-                    for tool in langchain_tools
-            ):
+            if knowledge_bases_info or any(isinstance(tool, DailyChatCitationToolWrapper) for tool in langchain_tools):
                 sys_prompt = (
-                    f'{sys_prompt}\n\n{DAILY_CHAT_CITATION_PROMPT_RULES}'
+                    f"{sys_prompt}\n\n{DAILY_CHAT_CITATION_PROMPT_RULES}"
                     if sys_prompt
                     else DAILY_CHAT_CITATION_PROMPT_RULES
                 )
@@ -1364,12 +1355,12 @@ async def _agent_stream_chat_completion(
             llm_messages = list(history) + [HumanMessage(content=content_payload)]
 
             logger.info(
-                f'[agent_chat] prepared messages user={login_user.user_id}'
-                f' history_len={len(history)} has_sys_prompt={bool(sys_prompt)}'
-                f' tool_count={len(langchain_tools)}'
-                f' tool_names={[t.name for t in langchain_tools]}'
-                f' visual_count={len(image_bases64)}'
-                f' kb_count={len(knowledge_bases_info or [])}'
+                f"[agent_chat] prepared messages user={login_user.user_id}"
+                f" history_len={len(history)} has_sys_prompt={bool(sys_prompt)}"
+                f" tool_count={len(langchain_tools)}"
+                f" tool_names={[t.name for t in langchain_tools]}"
+                f" visual_count={len(image_bases64)}"
+                f" kb_count={len(knowledge_bases_info or [])}"
             )
 
             # [debug] Dump the exact, UNTRUNCATED payload sent to the LLM to
@@ -1381,50 +1372,52 @@ async def _agent_stream_chat_completion(
             #   export BISHENG_AGENT_DUMP=1   # then restart the backend
             # Accepted truthy values: 1, true, yes, on (case-insensitive).
             import os as _os
-            if _os.environ.get('BISHENG_AGENT_DUMP', '').lower() in ('1', 'true', 'yes', 'on'):
+
+            if _os.environ.get("BISHENG_AGENT_DUMP", "").lower() in ("1", "true", "yes", "on"):
                 try:
                     from bisheng.core.logger import trace_id_var
-                    trace_id = trace_id_var.get() or 'notrace'
+
+                    trace_id = trace_id_var.get() or "notrace"
                 except Exception:
-                    trace_id = 'notrace'
+                    trace_id = "notrace"
 
                 def _serialize_message(m):
-                    content = getattr(m, 'content', '')
+                    content = getattr(m, "content", "")
                     if isinstance(content, list):
                         parts = []
                         for p in content:
-                            if isinstance(p, dict) and p.get('type') == 'image_url':
-                                parts.append({'type': 'image_url', 'image_url': '<base64 omitted>'})
+                            if isinstance(p, dict) and p.get("type") == "image_url":
+                                parts.append({"type": "image_url", "image_url": "<base64 omitted>"})
                             else:
                                 parts.append(p)
                         content_out = parts
                     else:
                         content_out = content
-                    return {'role': type(m).__name__, 'content': content_out}
+                    return {"role": type(m).__name__, "content": content_out}
 
                 dump_payload = {
-                    'trace_id': trace_id,
-                    'user_id': login_user.user_id,
-                    'conversation_id': conversation_id,
-                    'tool_count': len(langchain_tools),
-                    'tool_names': [t.name for t in langchain_tools],
-                    'kb_count': len(knowledge_bases_info or []),
-                    'system_prompt': sys_prompt,
-                    'messages': [_serialize_message(m) for m in llm_messages],
+                    "trace_id": trace_id,
+                    "user_id": login_user.user_id,
+                    "conversation_id": conversation_id,
+                    "tool_count": len(langchain_tools),
+                    "tool_names": [t.name for t in langchain_tools],
+                    "kb_count": len(knowledge_bases_info or []),
+                    "system_prompt": sys_prompt,
+                    "messages": [_serialize_message(m) for m in llm_messages],
                 }
                 try:
-                    _os.makedirs('/tmp/bisheng_agent_dumps', exist_ok=True)
-                    dump_path = f'/tmp/bisheng_agent_dumps/{trace_id}.json'
-                    with open(dump_path, 'w', encoding='utf-8') as fp:
+                    _os.makedirs("/tmp/bisheng_agent_dumps", exist_ok=True)
+                    dump_path = f"/tmp/bisheng_agent_dumps/{trace_id}.json"
+                    with open(dump_path, "w", encoding="utf-8") as fp:
                         json.dump(dump_payload, fp, ensure_ascii=False, indent=2, default=str)
-                    logger.info(f'[agent_chat][dump] wrote full payload -> {dump_path}')
+                    logger.info(f"[agent_chat][dump] wrote full payload -> {dump_path}")
                 except Exception as dump_exc:
-                    logger.warning(f'[agent_chat][dump] failed: {dump_exc}')
+                    logger.warning(f"[agent_chat][dump] failed: {dump_exc}")
 
             # ---- Step 5: execute ----
             if langchain_tools:
-                from langgraph.prebuilt import ToolNode, create_react_agent
                 from langchain_core.runnables import RunnableConfig
+                from langgraph.prebuilt import ToolNode, create_react_agent
 
                 # Wrap tools in a ToolNode whose error handler feeds tool
                 # failures back to the model as observations, so a single tool
@@ -1446,172 +1439,188 @@ async def _agent_stream_chat_completion(
                 max_iter = await _get_agent_max_iterations()
 
                 async for ev in agent.astream_events(
-                        {'messages': llm_messages},
-                        version='v2',
-                        config=RunnableConfig(recursion_limit=max_iter),
+                    {"messages": llm_messages},
+                    version="v2",
+                    config=RunnableConfig(recursion_limit=max_iter),
                 ):
-                    et = ev.get('event', '')
-                    name = ev.get('name', '') or ''
+                    et = ev.get("event", "")
+                    name = ev.get("name", "") or ""
 
-                    if et == 'on_chat_model_stream':
-                        chunk = (ev.get('data') or {}).get('chunk')
+                    if et == "on_chat_model_stream":
+                        chunk = (ev.get("data") or {}).get("chunk")
                         if chunk is None:
                             continue
-                        text = getattr(chunk, 'content', '') or ''
-                        reasoning = (getattr(chunk, 'additional_kwargs', None) or {}).get(
-                            'reasoning_content', ''
-                        )
+                        text = getattr(chunk, "content", "") or ""
+                        reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get("reasoning_content", "")
                         if reasoning:
                             if current_thinking_idx is None:
                                 start_ms = int(time.time() * 1000)
-                                events.append({
-                                    'type': 'thinking',
-                                    'content': '',
-                                    'started_at': start_ms,
-                                })
+                                events.append(
+                                    {
+                                        "type": "thinking",
+                                        "content": "",
+                                        "started_at": start_ms,
+                                    }
+                                )
                                 current_thinking_idx = len(events) - 1
                                 current_thinking_start = time.time()
-                            events[current_thinking_idx]['content'] += reasoning
+                            events[current_thinking_idx]["content"] += reasoning
                             yield _sse_resp(
-                                'agent_thinking', 'stream',
-                                {'content': reasoning},
+                                "agent_thinking",
+                                "stream",
+                                {"content": reasoning},
                                 conversation_id,
                             )
                         if text:
                             d = close_thinking()
                             if d is not None:
                                 yield _sse_resp(
-                                    'agent_thinking', 'end',
-                                    {'duration_ms': d},
+                                    "agent_thinking",
+                                    "end",
+                                    {"duration_ms": d},
                                     conversation_id,
                                 )
                             final_msg += text
-                            if events and events[-1].get('type') == 'text':
-                                events[-1]['content'] = events[-1].get('content', '') + text
+                            if events and events[-1].get("type") == "text":
+                                events[-1]["content"] = events[-1].get("content", "") + text
                             else:
-                                events.append({'type': 'text', 'content': text})
+                                events.append({"type": "text", "content": text})
                             yield _sse_resp(
-                                'agent_answer', 'stream', {'msg': text}, conversation_id,
+                                "agent_answer",
+                                "stream",
+                                {"msg": text},
+                                conversation_id,
                             )
 
-                    elif et == 'on_tool_start':
+                    elif et == "on_tool_start":
                         # Close any in-flight thinking before the tool call
                         # so each ReAct round gets its own collapsible block.
                         d = close_thinking()
                         if d is not None:
                             yield _sse_resp(
-                                'agent_thinking', 'end',
-                                {'duration_ms': d},
+                                "agent_thinking",
+                                "end",
+                                {"duration_ms": d},
                                 conversation_id,
                             )
 
                         tool_name = name
-                        tc_id = str(ev.get('run_id') or f'call_{uuid4().hex[:12]}')
-                        meta = tool_meta_map.get(tool_name, {
-                            'display_name': tool_name, 'tool_type': 'tool',
-                        })
+                        tc_id = str(ev.get("run_id") or f"call_{uuid4().hex[:12]}")
+                        meta = tool_meta_map.get(
+                            tool_name,
+                            {
+                                "display_name": tool_name,
+                                "tool_type": "tool",
+                            },
+                        )
                         tool_event = {
-                            'type': 'tool_call',
-                            'tool_call_id': tc_id,
-                            'tool_name': tool_name,
-                            'display_name': meta['display_name'],
-                            'tool_type': meta['tool_type'],
-                            'args': (ev.get('data') or {}).get('input', {}),
-                            'started_at': int(time.time() * 1000),
+                            "type": "tool_call",
+                            "tool_call_id": tc_id,
+                            "tool_name": tool_name,
+                            "display_name": meta["display_name"],
+                            "tool_type": meta["tool_type"],
+                            "args": (ev.get("data") or {}).get("input", {}),
+                            "started_at": int(time.time() * 1000),
                         }
                         events.append(tool_event)
                         inflight_tool_idx[tc_id] = len(events) - 1
                         # SSE payload uses the bare tool_call shape (no type:).
                         yield _sse_resp(
-                            'agent_tool_call', 'start',
-                            {k: v for k, v in tool_event.items() if k != 'type'},
+                            "agent_tool_call",
+                            "start",
+                            {k: v for k, v in tool_event.items() if k != "type"},
                             conversation_id,
                         )
 
-                    elif et == 'on_tool_end':
-                        tc_id = str(ev.get('run_id') or '')
+                    elif et == "on_tool_end":
+                        tc_id = str(ev.get("run_id") or "")
                         idx = inflight_tool_idx.pop(tc_id, None)
-                        raw_output = (ev.get('data') or {}).get('output')
+                        raw_output = (ev.get("data") or {}).get("output")
                         ended_ms = int(time.time() * 1000)
                         if idx is not None:
                             tool_event = events[idx]
-                            results = _parse_tool_results(raw_output, tool_event.get('tool_name'))
-                            tool_event['results'] = results
-                            tool_event['error'] = _extract_tool_error(raw_output)
-                            tool_event['ended_at'] = ended_ms
-                            if tool_event.get('started_at') is not None:
-                                tool_event['duration_ms'] = max(0, ended_ms - tool_event['started_at'])
-                            payload = {k: v for k, v in tool_event.items() if k != 'type'}
+                            results = _parse_tool_results(raw_output, tool_event.get("tool_name"))
+                            tool_event["results"] = results
+                            tool_event["error"] = _extract_tool_error(raw_output)
+                            tool_event["ended_at"] = ended_ms
+                            if tool_event.get("started_at") is not None:
+                                tool_event["duration_ms"] = max(0, ended_ms - tool_event["started_at"])
+                            payload = {k: v for k, v in tool_event.items() if k != "type"}
                         else:
                             # Edge case: tool_end without a matching start. Synthesise one.
                             results = _parse_tool_results(raw_output, name)
                             tool_event = {
-                                'type': 'tool_call',
-                                'tool_call_id': tc_id,
-                                'tool_name': name,
-                                'display_name': name,
-                                'tool_type': 'tool',
-                                'args': {},
-                                'results': results,
-                                'error': _extract_tool_error(raw_output),
-                                'started_at': ended_ms,
-                                'ended_at': ended_ms,
-                                'duration_ms': 0,
+                                "type": "tool_call",
+                                "tool_call_id": tc_id,
+                                "tool_name": name,
+                                "display_name": name,
+                                "tool_type": "tool",
+                                "args": {},
+                                "results": results,
+                                "error": _extract_tool_error(raw_output),
+                                "started_at": ended_ms,
+                                "ended_at": ended_ms,
+                                "duration_ms": 0,
                             }
                             events.append(tool_event)
-                            payload = {k: v for k, v in tool_event.items() if k != 'type'}
-                        yield _sse_resp('agent_tool_call', 'end', payload, conversation_id)
+                            payload = {k: v for k, v in tool_event.items() if k != "type"}
+                        yield _sse_resp("agent_tool_call", "end", payload, conversation_id)
                     # other events (on_chain_start/on_chain_end/etc.) ignored
             else:
                 # No tools → direct streaming still in new SSE format
                 if sys_prompt:
                     llm_messages.insert(0, SystemMessage(content=sys_prompt))
                 async for chunk in bisheng_llm.astream(llm_messages):
-                    text = getattr(chunk, 'content', '') or ''
-                    reasoning = (getattr(chunk, 'additional_kwargs', None) or {}).get(
-                        'reasoning_content', ''
-                    )
+                    text = getattr(chunk, "content", "") or ""
+                    reasoning = (getattr(chunk, "additional_kwargs", None) or {}).get("reasoning_content", "")
                     if reasoning:
                         if current_thinking_idx is None:
                             start_ms = int(time.time() * 1000)
-                            events.append({
-                                'type': 'thinking',
-                                'content': '',
-                                'started_at': start_ms,
-                            })
+                            events.append(
+                                {
+                                    "type": "thinking",
+                                    "content": "",
+                                    "started_at": start_ms,
+                                }
+                            )
                             current_thinking_idx = len(events) - 1
                             current_thinking_start = time.time()
-                        events[current_thinking_idx]['content'] += reasoning
+                        events[current_thinking_idx]["content"] += reasoning
                         yield _sse_resp(
-                            'agent_thinking', 'stream',
-                            {'content': reasoning},
+                            "agent_thinking",
+                            "stream",
+                            {"content": reasoning},
                             conversation_id,
                         )
                     if text:
                         d = close_thinking()
                         if d is not None:
                             yield _sse_resp(
-                                'agent_thinking', 'end',
-                                {'duration_ms': d},
+                                "agent_thinking",
+                                "end",
+                                {"duration_ms": d},
                                 conversation_id,
                             )
                         final_msg += text
-                        if events and events[-1].get('type') == 'text':
-                            events[-1]['content'] = events[-1].get('content', '') + text
+                        if events and events[-1].get("type") == "text":
+                            events[-1]["content"] = events[-1].get("content", "") + text
                         else:
-                            events.append({'type': 'text', 'content': text})
+                            events.append({"type": "text", "content": text})
                         yield _sse_resp(
-                            'agent_answer', 'stream', {'msg': text}, conversation_id,
+                            "agent_answer",
+                            "stream",
+                            {"msg": text},
+                            conversation_id,
                         )
         except BaseErrorCode as exc:
             error_flag = True
             error_msg = str(exc)
-            logger.exception('Agent chat BaseErrorCode')
+            logger.exception("Agent chat BaseErrorCode")
             yield exc.to_sse_event_instance_str()
         except Exception as exc:
             error_flag = True
             error_msg = str(exc)
-            logger.exception('Agent chat execution error')
+            logger.exception("Agent chat execution error")
             yield ServerError(exception=exc).to_sse_event_instance_str()
 
         # Finalise any dangling thinking event (e.g. stream interrupted mid-reasoning).
@@ -1626,30 +1635,30 @@ async def _agent_stream_chat_completion(
             for tc_id, idx in inflight_tool_idx.items():
                 if 0 <= idx < len(events):
                     ev = events[idx]
-                    if ev.get('ended_at') is None:
-                        ev['ended_at'] = now_ms
-                        if ev.get('error') is None:
-                            ev['error'] = error_msg or 'tool did not complete'
-                        if 'results' not in ev:
-                            ev['results'] = []
-                        if ev.get('started_at') is not None:
-                            ev['duration_ms'] = max(0, now_ms - ev['started_at'])
+                    if ev.get("ended_at") is None:
+                        ev["ended_at"] = now_ms
+                        if ev.get("error") is None:
+                            ev["error"] = error_msg or "tool did not complete"
+                        if "results" not in ev:
+                            ev["results"] = []
+                        if ev.get("started_at") is not None:
+                            ev["duration_ms"] = max(0, now_ms - ev["started_at"])
             inflight_tool_idx.clear()
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
-        db_content: dict = {'msg': final_msg, 'events': events}
+        db_content: dict = {"msg": final_msg, "events": events}
 
         resp_msg = await ChatMessageDao.ainsert_one(
             ChatMessage(
                 user_id=conversation.user_id,
                 chat_id=conversation_id,
-                flow_id='',
-                type='end',
+                flow_id="",
+                type="end",
                 is_bot=True,
                 message=json.dumps(db_content, ensure_ascii=False),
-                category='agent_answer',
+                category="agent_answer",
                 sender=model_info.displayName,
-                extra=json.dumps({'error': True, 'error_msg': error_msg}) if error_flag else '{}',
+                extra=json.dumps({"error": True, "error_msg": error_msg}) if error_flag else "{}",
                 source=0,
             )
         )
@@ -1661,41 +1670,46 @@ async def _agent_stream_chat_completion(
             message_id=resp_msg.id,
             items=citation_items,
             chat_id=conversation_id,
-            flow_id='',
+            flow_id="",
         )
 
         yield _sse_resp(
-            'agent_answer', 'end', db_content,
-            conversation_id, message_id=resp_msg.id,
+            "agent_answer",
+            "end",
+            db_content,
+            conversation_id,
+            message_id=resp_msg.id,
             citations=citation_items,
         )
-        yield _sse_resp('processing', 'close', '', conversation_id)
+        yield _sse_resp("processing", "close", "", conversation_id)
 
         # Terminal `final` sentinel so the frontend SSE hook's onEnd() fires
         # reliably (it listens for `data.final != null`). Without this the send
         # button stays stuck in "stop" state until the TCP stream closes.
         final_payload = {
-            'final': True,
-            'conversation': {'conversationId': conversation_id},
-            'responseMessage': {
-                'messageId': resp_msg.id,
-                'conversationId': conversation_id,
+            "final": True,
+            "conversation": {"conversationId": conversation_id},
+            "responseMessage": {
+                "messageId": resp_msg.id,
+                "conversationId": conversation_id,
             },
         }
-        yield f'data: {json.dumps(final_payload, ensure_ascii=False)}\n\n'
+        yield f"data: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
 
-        if is_new_conv or (conversation.name in (None, '', 'New Chat')):
+        if is_new_conv or (conversation.name in (None, "", "New Chat")):
             asyncio.create_task(
-                gen_title(data.text or '', final_msg, bisheng_llm, conversation_id, login_user, request)
+                gen_title(data.text or "", final_msg, bisheng_llm, conversation_id, login_user, request)
             )
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
     async def event_stream():
-        dept_flow_slot: Optional[int] = None
+        dept_flow_slot: int | None = None
         flow_lim, flow_dept = await DepartmentFlowService.resolve_limit_and_dept(login_user)
         if flow_lim > 0 and flow_dept is not None:
             acquired = await DepartmentFlowService.try_acquire_daily_chat_slot(
-                flow_dept, login_user.user_id, flow_lim,
+                flow_dept,
+                login_user.user_id,
+                flow_lim,
             )
             if not acquired:
                 yield DepartmentDailyChatConcurrentLimitError().to_sse_event_instance_str()
@@ -1707,18 +1721,141 @@ async def _agent_stream_chat_completion(
         finally:
             if dept_flow_slot is not None:
                 await DepartmentFlowService.release_daily_chat_slot(
-                    dept_flow_slot, login_user.user_id,
+                    dept_flow_slot,
+                    login_user.user_id,
                 )
 
-    return StreamingResponse(event_stream(), media_type='text/event-stream')
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 async def stream_chat_completion(
-        request: Request, data: APIChatCompletion, login_user: UserPayload,
+    request: Request,
+    data: APIChatCompletion,
+    login_user: UserPayload,
 ):
     """v2.5 unified entry — every workstation chat request goes through the
     LangGraph ReAct Agent flow. When `data.tools` is empty/None the agent
     falls back to a plain `bisheng_llm.astream` branch (same new SSE format),
     so callers don't need to opt in explicitly.
+
+    F035 Track J: a single entry now serves both modes. ``data.task_mode`` routes
+    this turn to the linsight task kernel (the turn still belongs to the same
+    conversation/chat_id); otherwise the daily agent flow runs unchanged.
     """
+    if data.task_mode:
+        return await _task_mode_stream_completion(request, data, login_user)
     return await _agent_stream_chat_completion(request, data, login_user)
+
+
+async def _task_mode_stream_completion(request: Request, data: APIChatCompletion, login_user: UserPayload):
+    """F035 Track J: task-mode entry — create the linsight session inside the
+    current conversation and hand off to the existing task stream.
+
+    Per-path streaming is reused: this endpoint only creates the session_version
+    (under the conversation's chat_id) and returns a handoff event carrying its
+    id over SSE; the frontend then drives start-execute + connects to the
+    existing ``task-message-stream`` WS. Keeps the linsight execution/streaming
+    infra untouched — only the submit ENTRY is unified.
+    """
+    # Local import avoids a module-level workstation->linsight coupling/cycle.
+    from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+
+    submit_obj = _to_linsight_submit(data)
+    _session, session_version = await LinsightWorkbenchImpl.submit_user_question(submit_obj, login_user)
+
+    async def _handoff_event():
+        payload = {
+            "event": "linsight_task_handoff",
+            "data": {
+                "session_version_id": session_version.id,
+                "chat_id": session_version.session_id,
+            },
+        }
+        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(_handoff_event(), media_type="text/event-stream")
+
+
+def _to_linsight_submit(data: APIChatCompletion):
+    """Map the unified chat request to a linsight submit schema (F035 Track J).
+
+    Sound mappings only — question, conversation (session_id), the per-turn
+    execution model, and the knowledge booleans.
+
+    Model IS threaded: the daily ``model`` is an id from the same LLM registry
+    linsight resolves against (agent_factory._resolve_model), so the user's
+    picked model takes effect on the task turn (falling back to the tenant
+    linsight default only when absent).
+
+    Unified-resource direction (2026-06-16, user decision): task mode reuses the
+    DAILY resources; linsight's own resource subsystems are deprecated. Tools and
+    files are now threaded from the daily fields:
+
+    - **Tools**: daily ``ToolPayload`` ids live in the SAME ``GptsTools`` table as
+      linsight (both resolve via ``ToolExecutor``); the linsight per-app config
+      whitelist is dropped (see ``init_linsight_config_tools``), so the user's
+      daily tool selection binds directly. We wrap the flat ids into the grouped
+      linsight tool shape (``_extract_tool_ids`` reads ``children[].id``).
+    - **Files**: threaded as linsight-resolvable refs (see below).
+    """
+    from bisheng.linsight.domain.schemas.linsight_schema import (
+        LinsightQuestionSubmitSchema,
+        LinsightToolSchema,
+        SubmitFileSchema,
+        ToolChildrenSchema,
+    )
+
+    ukb = data.use_knowledge_base
+
+    # Tools: wrap the daily flat selection into one grouped linsight tool whose
+    # children carry the real GptsTools ids. The whitelist is dropped downstream,
+    # so every selected tool the user has access to binds in the task agent.
+    submit_tools = None
+    if data.tools:
+        children = [
+            ToolChildrenSchema(id=int(tp.id), tool_key=tp.tool_key)
+            for tp in data.tools
+            if (tp.type or "tool") == "tool" and tp.id
+        ]
+        if children:
+            submit_tools = [LinsightToolSchema(id=0, name="daily", is_preset=0, children=children)]
+
+    # Files (unified-resource): task mode reuses the DAILY upload bucket. Each
+    # daily file dict carries `filepath` (raw MinIO path) — pass it as `file_url`
+    # so linsight parses it on-the-fly via TempFilePipeline at ingestion. Files
+    # uploaded via the linsight pipeline (no filepath) keep the legacy path.
+    submit_files = None
+    if data.files:
+        submit_files = []
+        for item in data.files:
+            file_id = item.get("file_id") or item.get("id")
+            if not file_id:
+                continue
+            submit_files.append(
+                SubmitFileSchema(
+                    file_id=str(file_id),
+                    file_name=item.get("file_name") or item.get("filename") or item.get("name") or "",
+                    parsing_status=item.get("parsing_status") or "completed",
+                    file_url=item.get("filepath") or item.get("file_url"),
+                )
+            )
+        submit_files = submit_files or None
+
+    # Knowledge (coarse, unified-resource): the daily picker selects specific KB
+    # ids (org) + knowledge-space ids; linsight's model is two coarse booleans.
+    # Map org-KB selection -> org (NORMAL) enabled, knowledge-space selection ->
+    # personal (PRIVATE) enabled. The task agent then gets ALL the user's KBs of
+    # the enabled type injected at execution (coarse: not filtered to the exact
+    # ids — honoring the specific selection would need a per-SV id column).
+    personal_enabled = bool(ukb and (ukb.knowledge_space_ids or ukb.personal_knowledge_enabled))
+    org_enabled = bool(ukb and ukb.organization_knowledge_ids)
+
+    return LinsightQuestionSubmitSchema(
+        question=data.text or "",
+        session_id=data.conversationId,
+        personal_knowledge_enabled=personal_enabled,
+        org_knowledge_enabled=org_enabled,
+        model=data.model or None,
+        files=submit_files,
+        tools=submit_tools,
+    )

@@ -1,76 +1,73 @@
-import { useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
+import { Fragment, useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderPlus } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
+import { FolderPlus, FolderInput, Loader2 } from "lucide-react";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
+import { Outlined } from "bisheng-icons";
+import { NotificationSeverity } from "~/common";
+import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { useConfirm, useToastContext } from "~/Providers";
-import { useVersionManagementEnabled } from "~/hooks";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
-import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import { useKnowledgeMove } from "../hooks/useKnowledgeMove";
 import { useKnowledgeMoveDrag } from "../hooks/useKnowledgeMoveDrag";
+import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
-    MAX_FOLDER_UPLOAD_COUNT,
-    MAX_UPLOAD_COUNT,
-    isKnowledgeItemUploading,
     getAllowedExtensions,
     getFileInputAccept,
+    isKnowledgeItemUploading,
     triggerUrlDownload,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
-import { SearchParams } from "./CompoundSearchInput";
+import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
 import { FileTable } from "./FileTable";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
-import { MoveToDialog } from "./MoveToDialog";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
-import { LoadMore } from "./LoadMore";
-import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
+import { MoveToDialog } from "./MoveToDialog";
 import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
 import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
+import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
-import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import { useLocalize, usePrefersMobileLayout, useScrollRevealRef, useVersionManagementEnabled } from "~/hooks";
+import {
+    knowledgeSpaceDropdownSurfaceClassName,
+    SidebarListMoreMenuContent,
+    sidebarListMoreMenuItemClassName,
+    sidebarListMoreMenuIconClassName,
+    sidebarListMoreMenuLabelClassName,
+    sidebarListMoreMenuDangerItemClassName,
+    sidebarListMoreMenuDangerIconClassName,
+    sidebarListMoreMenuDangerLabelClassName,
+} from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
     files: KnowledgeFile[];
-    currentPage: number;
-    pageSize: number;
     total: number;
-    /** F027 §AC-17-client-补做: whether a next batch exists; drives LoadMore sentinel. */
+    /** Infinite scroll: load the next page (appends). */
+    onLoadMore: () => void;
+    /** Whether more pages remain to load. */
     hasMore: boolean;
-    onPageChange: (page: number) => void;
     loading: boolean;
     onSearch: (params: SearchParams) => void;
     onFilterStatus: (status: FileStatus[]) => void;
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
     onNavigateFolder: (folderId?: string) => void;
     onUploadFile: (files?: FileList | File[]) => void;
-    onUploadFolder: (
-        files: FileList | File[],
-        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
-    ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
     onRenameFile: (fileId: string, newName: string) => void;
@@ -83,31 +80,35 @@ interface KnowledgeSpaceContentProps {
     uploadingFiles?: KnowledgeFile[];
     creatingFolder?: KnowledgeFile | null;
     onCancelCreateFolder?: () => void;
-    onToggleAiAssistant?: () => void;
-    isAiAssistantOpen?: boolean;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
-    markPendingDeletion: (ids: Array<string | number>) => void;
-    clearPendingDeletion: (ids: Array<string | number>) => void;
-    setFiles: React.Dispatch<React.SetStateAction<KnowledgeFile[]>>;
-    setTotal: React.Dispatch<React.SetStateAction<number>>;
+    /** Mobile top bar — provided by the Knowledge page (index.tsx). */
+    onOpenSystemMenu?: () => void;
+    onToggleSpaceList?: () => void;
+    spaceListOpen?: boolean;
+    /** Delete current space (navigates back to the list); permission-gated by the menu. */
+    onDeleteSpace?: () => void;
+    /** Open the search page from the top-bar search icon. */
+    onOpenSearch?: () => void;
+    /** Mobile full-page search mode: replaces the top bar with an inline search header. */
+    searchMode?: boolean;
+    onCloseSearch?: () => void;
+    /** Notify the page when a mobile batch selection is active, so it can hide the AI dock. */
+    onSelectionActiveChange?: (active: boolean) => void;
 }
 
 export function KnowledgeSpaceContent({
     space,
     files,
-    currentPage,
-    pageSize,
     total,
+    onLoadMore,
     hasMore,
-    onPageChange,
     loading,
     onSearch,
     onFilterStatus,
     onSort,
     onNavigateFolder,
     onUploadFile,
-    onUploadFolder,
     onCreateFolder,
     onDownloadFile,
     onRenameFile,
@@ -120,14 +121,16 @@ export function KnowledgeSpaceContent({
     uploadingFiles = [],
     creatingFolder,
     onCancelCreateFolder,
-    onToggleAiAssistant,
-    isAiAssistantOpen,
     onCreateSpace,
     onGoKnowledgeSquare,
-    markPendingDeletion,
-    clearPendingDeletion,
-    setFiles,
-    setTotal,
+    onOpenSystemMenu,
+    onToggleSpaceList,
+    spaceListOpen = false,
+    onDeleteSpace,
+    onOpenSearch,
+    searchMode = false,
+    onCloseSearch,
+    onSelectionActiveChange,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
@@ -138,6 +141,15 @@ export function KnowledgeSpaceContent({
         ...uploadingFiles,
         ...files
     ];
+
+    // Infinite scroll: trigger the next page when the scroll container nears its bottom.
+    const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        if (!hasMore || loading) return;
+        const el = e.currentTarget;
+        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 240) {
+            onLoadMore();
+        }
+    };
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
@@ -155,21 +167,21 @@ export function KnowledgeSpaceContent({
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
-    const [violationFile, setViolationFile] = useState<KnowledgeFile | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
     // Card view: compute columns by *container width* (not viewport width).
     // Thresholds (container width):
-    // >=1296: 6, 1024-1295: 5, 768-1023: 4, 600-767: 3, 480-599: 2, <480: 1
+    // >=1296: 7, 1024-1295: 6, 768-1023: 5, 600-767: 4, 480-599: 3, 320-479: 2, <320: 1
     const cardGridRef = useRef<HTMLDivElement | null>(null);
     const calcCols = (w: number) => {
-        if (w >= 1296) return 6;
-        if (w >= 1024) return 5;
-        if (w >= 768) return 4;
-        if (w >= 600) return 3;
-        if (w >= 480) return 2;
+        if (w >= 1296) return 7;
+        if (w >= 1024) return 6;
+        if (w >= 768) return 5;
+        if (w >= 600) return 4;
+        if (w >= 480) return 3;
+        if (w >= 320) return 2;
         return 1;
     };
     const [cardCols, setCardCols] = useState(() => {
@@ -216,7 +228,7 @@ export function KnowledgeSpaceContent({
             window.removeEventListener("resize", apply);
             ro.disconnect();
         };
-    }, [viewMode, displayFiles.length, isAiAssistantOpen]);
+    }, [viewMode, displayFiles.length]);
 
     useEffect(() => {
         setSelectedFiles(new Set());
@@ -225,22 +237,23 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
-
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions([space.id]);
-    // Version-management write entries (process-similar button, list "similar"
-    // pill) gate on the user's OpenFGA relation to this space: creator (owner)
-    // or manager. We can't trust `space.role === ADMIN` alone because shared
-    // spaces can return a stale SpaceChannelMember.user_role for users whose
-    // real grant lives only in OpenFGA. checkPermission(..., "manager") covers
-    // both owner and manager — OpenFGA's owner ⊃ manager makes owners allowed too.
-    const { data: spaceManageCheck } = useQuery({
-        queryKey: ["space-manage-check", space.id],
-        queryFn: () => checkPermission("knowledge_space", space.id, "manager"),
-        enabled: !!space.id,
-    });
-    const canManageMembers = space.role === SpaceRole.CREATOR
-        || Boolean(spaceManageCheck?.allowed);
-
+    const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
+        spaceActionPermissions,
+        space.id,
+        "share_space",
+    );
+    const canDeleteSpace = isAdmin || hasKnowledgeSpacePermission(
+        spaceActionPermissions,
+        space.id,
+        "delete_space",
+    );
+    // Permission management — mirrors the desktop sidebar (KnowledgeSpaceItem) gating.
+    const canManageMembers = isAdmin || hasKnowledgeSpacePermission(
+        spaceActionPermissions,
+        space.id,
+        "manage_space_relation",
+    );
     // ─── Version Management ──────────────────────────────────────────────
     const versionManagementEnabled = useVersionManagementEnabled();
     const queryClient = useQueryClient();
@@ -258,11 +271,9 @@ export function KnowledgeSpaceContent({
     const pendingSimilarCount = pendingSimilarList.length;
 
     // SimHash scan runs asynchronously on the backend after a file's parse finishes,
-    // so files can transition has_similar=false → true outside our polling cadence
-    // for pending-similar. Watch the has_similar id set on the visible file list AND
-    // the total file count — the latter catches cross-folder deletions (e.g.
-    // deleting a folder whose children carry similar marks) where the visible
-    // displayFiles slice doesn't see the cascaded removals.
+    // so files can transition has_similar=false → true outside the pending-similar polling
+    // cadence. Watch the has_similar id set on the visible file list AND the total file
+    // count (the latter catches cross-folder deletions of similar-marked children).
     const similarFileIdsKey = displayFiles
         .filter((f) => f.has_similar && !f.is_multi_version)
         .map((f) => f.id)
@@ -273,29 +284,35 @@ export function KnowledgeSpaceContent({
         queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
     }, [similarFileIdsKey, total, versionManagementEnabled, spaceIdNum, queryClient]);
 
-    // Invalidate pending-similar and trigger file list refresh after any version action
+    // Invalidate pending-similar and trigger file list refresh after any version action.
     const handleVersionAction = () => {
         queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
         queryClient.invalidateQueries({ queryKey: ["file-versions"] });
-        // Signal parent to reload file list (same pattern used by batch delete/retry)
+        // Signal parent to reload file list (same pattern used by batch delete/retry).
         onDeleteFile("");
     };
 
-    const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
-        spaceActionPermissions,
-        space.id,
-        "share_space",
-    );
+    // Share = copy the space share link (mirrors the desktop CopyShareLinkButton);
+    // only when the space is shareable and not private.
+    const showShareInMenu = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
+    const handleCopyShareLink = async () => {
+        try {
+            await navigator.clipboard.writeText(buildClientShareUrl(`/knowledge/share/${space.id}`));
+            showToast({ message: localize("com_knowledge.share_link_copied"), severity: NotificationSeverity.SUCCESS });
+        } catch {
+            showToast({ message: localize("com_knowledge.share_link_copy_failed"), severity: NotificationSeverity.ERROR });
+        }
+    };
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
     // Move permission is separate from upload (both can_edit tier, but a role may
-    // grant one without the other). Drives the single-item move menu's greyed state.
+    // grant one without the other). Drives the move menu items' greyed state.
     const [canMoveFile, setCanMoveFile] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
         name: string;
-        type: "folder" | "knowledge_file";
+        type: "folder" | "knowledge_file" | "knowledge_space";
     } | null>(null);
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
@@ -561,16 +578,10 @@ export function KnowledgeSpaceContent({
 
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const folderInputRef = useRef<HTMLInputElement>(null);
 
     const triggerUpload = () => {
         if (!canUploadFile) return;
         fileInputRef.current?.click();
-    };
-
-    const triggerUploadFolder = () => {
-        if (!canUploadFile) return;
-        folderInputRef.current?.click();
     };
 
     useEffect(() => {
@@ -593,7 +604,7 @@ export function KnowledgeSpaceContent({
         if (e.target.files && e.target.files.length > 0) {
             const filesList = Array.from(e.target.files);
 
-            if (filesList.length > MAX_UPLOAD_COUNT) {
+            if (filesList.length > 50) {
                 showToast({ message: localize("com_knowledge.max_upload_50"), status: "error" });
                 if (fileInputRef.current) fileInputRef.current.value = "";
                 return;
@@ -620,24 +631,10 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    // Folder upload: hand the full FileList over to the hook, which handles
-    // hidden-folder rejection, dup-name check, count cap, and silent filtering.
-    const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const filesList = e.target.files;
-        if (filesList && filesList.length > 0 && canUploadFile) {
-            onUploadFolder(filesList, {
-                allowedExtensions,
-                maxSizeMB: maxFileSizeMB,
-            });
-        }
-        if (folderInputRef.current) folderInputRef.current.value = "";
-    };
-
     // ─── Drag and drop ──────────────────────────────────────────────────
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
         onUploadFile: canUploadFile ? onUploadFile : () => undefined,
-        onUploadFolder: canUploadFile ? onUploadFolder : undefined,
         maxFileSizeMB,
         enableEtl4lm,
     });
@@ -732,6 +729,33 @@ export function KnowledgeSpaceContent({
         setIsBatchTagging(true);
     };
 
+    // F034: move selected files/folders (same-space or cross-space) via MoveToDialog,
+    // plus drag-to-folder move (dropMoveToFolder wired into the table/card drag sources).
+    const { moveDialogOpen, setMoveDialogOpen, openMove, requestBatchMove, handleMoveConfirm, dropMoveToFolder } = useKnowledgeMove({
+        spaceId: space.id,
+        onMoved: () => {
+            setSelectedFiles(new Set());
+            queryClient.invalidateQueries({ queryKey: ["file-versions"] });
+            onDeleteFile(""); // generic "file list changed, reload" signal (same as batch delete).
+            // Refresh the left sidebar folder tree(s). No spaceId → global refresh,
+            // so a cross-space move updates both the source and target trees.
+            dispatchKnowledgeSpaceFilesRefresh();
+        },
+    });
+    const handleBatchMove = () => {
+        // Uploading placeholders have no backend id yet → excluded.
+        const movable = displayFiles.filter(
+            (f) => selectedFiles.has(f.id) && !isKnowledgeItemUploading(f),
+        );
+        if (!movable.length) return;
+        // Frontend pre-flight (space-level move permission, simple block): if the user
+        // can't move in this space, every selected item is denied → block dialog before
+        // the picker. The backend re-validates per item on the move.
+        const permitted = canMoveFile ? movable : [];
+        const denied = canMoveFile ? [] : movable;
+        requestBatchMove(permitted, denied);
+    };
+
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
@@ -761,13 +785,10 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    const handlePreviewFile = (fileId: string, nameOverride?: string) => {
+    const handlePreviewFile = (fileId: string, explicitFileName?: string) => {
         const file = displayFiles.find(f => f.id === fileId);
-        if (file?.status === FileStatus.VIOLATION) {
-            setViolationFile(file);
-            return;
-        }
-        const fileName = nameOverride || file?.name || localize("com_knowledge.unknown_file");
+        // Version files aren't in displayFiles, so accept an explicit name for them.
+        const fileName = explicitFileName || file?.name || localize("com_knowledge.unknown_file");
         // Use extension from filename for preview viewer dispatch instead of API type field
         const ext = fileName.split('.').pop()?.toLowerCase() || "";
         const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(ext)}&spaceId=${encodeURIComponent(space.id)}`;
@@ -805,42 +826,10 @@ export function KnowledgeSpaceContent({
         onEditTags(editingTagsFileId || "");
     };
 
-    // F034: move selected files/folders (same-space or cross-space) via MoveToDialog.
-    const { moveDialogOpen, setMoveDialogOpen, openMove, requestBatchMove, handleMoveConfirm, dropMoveToFolder } = useKnowledgeMove({
-        spaceId: space.id,
-        onMoved: () => {
-            setSelectedFiles(new Set());
-            queryClient.invalidateQueries({ queryKey: ["file-versions"] });
-            onDeleteFile(""); // generic "file list changed, reload" signal (same as batch delete)
-            // Refresh the left sidebar folder tree(s). No spaceId → global refresh,
-            // so a cross-space move updates both the source and target trees.
-            dispatchKnowledgeSpaceFilesRefresh();
-        },
-    });
-    // Uploading placeholders have no backend identity yet — a selection that
-    // contains one cannot be moved (the menu entry is also disabled below).
-    const selectionHasUploading = displayFiles.some(
-        (f) => selectedFiles.has(f.id) && isKnowledgeItemUploading(f),
-    );
-    const handleBatchMove = () => {
-        // Uploading placeholders have no backend id yet → excluded.
-        const movable = selectedList.filter((f) => !isKnowledgeItemUploading(f));
-        if (!movable.length) return;
-        // Frontend pre-flight (space-level move permission, simple block): if the
-        // user can't move in this space, every selected item is denied → block
-        // dialog before the picker. The backend re-validates per item on the move.
-        const permitted = canMoveFile ? movable : [];
-        const denied = canMoveFile ? [] : movable;
-        requestBatchMove(permitted, denied);
-    };
-
     const handleBatchDelete = async () => {
         const confirmed = await confirm({
-            title: localize("com_knowledge.confirm_delete_selected_items", { 0: selectedFiles.size }),
-            description: localize("com_knowledge.delete_folder_warning"),
-            cancelText: localize("com_knowledge.cancel"),
-            confirmText: localize("com_knowledge.delete"),
-            variant: "destructive"
+            description: `${localize("com_knowledge.confirm_delete_files_count", { 0: selectedFiles.size })}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
         });
 
         if (!confirmed) return;
@@ -852,32 +841,19 @@ export function KnowledgeSpaceContent({
 
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
-        const allIds = selectedList.map(f => f.id);
-        const removeCount = allIds.length;
-
-        // Optimistic: drop selected rows immediately + mark to suppress poll ghosts.
-        markPendingDeletion(allIds);
-        setFiles(prev => prev.filter(f => !selectedFiles.has(f.id)));
-        setTotal(prev => Math.max(0, prev - removeCount));
-        setSelectedFiles(new Set());
-        showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
 
         try {
             await batchDeleteApi(space.id, {
                 file_ids: fileIds.length ? fileIds : undefined,
                 folder_ids: folderIds.length ? folderIds : undefined,
             });
+            setSelectedFiles(new Set());
+            showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
+            // Notify parent to refresh the list
+            onDeleteFile("");
         } catch {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
-            clearPendingDeletion(allIds);
-            onDeleteFile("");
-            return;
         }
-        clearPendingDeletion(allIds);
-        // Refresh the left sidebar folder tree (deleted folders) and the
-        // "相似文档" pending count (deleted files may have been pending).
-        dispatchKnowledgeSpaceFilesRefresh();
-        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
     };
 
     const handleDelete = async (fileId: string) => {
@@ -891,11 +867,10 @@ export function KnowledgeSpaceContent({
         }
 
         const confirmed = await confirm({
-            title: isFolder ? `确认删除文件夹 "${file.name}" 吗？` : localize("com_knowledge.confirm_delete_file"),
-            description: isFolder ? localize("com_knowledge.delete_folder_permanent_warning") : undefined,
-            cancelText: localize("com_knowledge.cancel"),
-            confirmText: localize("com_knowledge.delete"),
-            variant: "destructive"
+            description: isFolder
+                ? `${localize("com_knowledge.confirm_delete_folder_name", { 0: file.name })}${localize("com_knowledge.delete_folder_permanent_warning")}`
+                : `${localize("com_knowledge.confirm_delete_file")}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
         });
 
         if (confirmed) {
@@ -962,12 +937,9 @@ export function KnowledgeSpaceContent({
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
-    // F034: drag-move wiring for the card grid (table view wires its own internally).
-    const cardDrag = useKnowledgeMoveDrag({
-        files: displayFiles,
-        selectedFiles,
-        onMoveToFolder: canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined,
-    });
+    // Uploading placeholders have no backend identity yet — a selection containing one
+    // cannot be moved (the menu entry is disabled below).
+    const selectionHasUploading = selectedList.some((f) => isKnowledgeItemUploading(f));
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         deleteEntryIds.has(file.id)
     );
@@ -975,9 +947,56 @@ export function KnowledgeSpaceContent({
         downloadEntryIds.has(file.id)
     );
 
+    // Mobile only ever shows the list form — never the multi-column card grid.
+    const effectiveViewMode: "card" | "list" = isH5 ? "list" : viewMode;
+    // Search page starts empty: show results only once a keyword/tag search is active.
+    const suppressList = searchMode && !isSearching;
+
+    // ─── Mobile batch action bar ────────────────────────────────────────
+    // Shown at the bottom (replacing the AI dock) once any file is selected. Which
+    // actions appear mirrors the desktop toolbar exactly (same permission/status gates).
+    const selectionActive = isH5 && selectedFiles.size > 0;
+    useEffect(() => {
+        onSelectionActiveChange?.(selectionActive);
+    }, [selectionActive, onSelectionActiveChange]);
+
+    // Permission management is a single-target action: only with exactly one selected item,
+    // and only when the user is allowed to manage its permission (permissionEntryIds is the
+    // permission-probed set, so this respects the user's permission).
+    const singleSelectedId = selectedFiles.size === 1 ? Array.from(selectedFiles)[0] : undefined;
+    const canManageSinglePermission = !!singleSelectedId && permissionEntryIds.has(singleSelectedId);
+
+    type BatchAction = { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; onClick: () => void; danger?: boolean };
+    const batchActions: BatchAction[] = [
+        canBatchDownload && {
+            key: "download",
+            label: localize("com_knowledge.download"),
+            Icon: Outlined.Download,
+            // A single selected file uses the single-file download (no zip); multiple → batch zip.
+            onClick: () => (selectedFiles.size === 1 ? handleSingleDownload(Array.from(selectedFiles)[0]) : handleBatchDownload()),
+        },
+        (isAdmin && !hasFoldersSelected) && { key: "tag", label: localize("com_knowledge.batch_add_tags"), Icon: Outlined.Tag, onClick: handleBatchTag },
+        (isAdmin && hasFailedFiles) && { key: "retry", label: localize("com_knowledge.retry"), Icon: Outlined.Refresh, onClick: handleBatchRetry },
+        (canMoveFile && !selectionHasUploading) && { key: "move", label: localize("com_knowledge.move"), Icon: FolderInput, onClick: handleBatchMove },
+        canManageSinglePermission && { key: "permission", label: localize("com_permission.manage_permission"), Icon: Outlined.PeopleSafe, onClick: () => handleManagePermission(singleSelectedId!) },
+        canBatchDelete && { key: "delete", label: localize("com_knowledge.delete"), Icon: Outlined.Delete, onClick: handleBatchDelete, danger: true },
+    ].filter(Boolean) as BatchAction[];
+    // Up to 3 slots inline; if more actions exist, the last slot becomes a "更多" dropdown.
+    const MAX_INLINE = 3;
+    const hasOverflow = batchActions.length > MAX_INLINE;
+    const inlineActions = hasOverflow ? batchActions.slice(0, MAX_INLINE - 1) : batchActions;
+    const overflowActions = hasOverflow ? batchActions.slice(MAX_INLINE - 1) : [];
+
+    // F034: drag-move wiring for the card grid (table view wires its own internally).
+    const cardDrag = useKnowledgeMoveDrag({
+        files: displayFiles,
+        selectedFiles,
+        onMoveToFolder: canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined,
+    });
+
     return (
         <div
-            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden"
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden max-[767px]:px-0"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -992,22 +1011,158 @@ export function KnowledgeSpaceContent({
                 onChange={handleFileChange}
                 accept={fileInputAccept}
             />
-            {/* Hidden Folder Input — `webkitdirectory` makes the picker select
-                a directory instead of files; each File carries its
-                `webkitRelativePath`. No `accept` here: filtering by extension
-                is done in the hook (silently) per spec. */}
-            <input
-                type="file"
-                multiple
-                className="hidden"
-                ref={folderInputRef}
-                onChange={handleFolderChange}
-                // `webkitdirectory`/`directory` are non-standard but accepted
-                // by every browser we ship to. React typings don't list them.
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                {...({ webkitdirectory: "", directory: "" } as any)}
-            />
-            {/* Header */}
+            {/* Mobile full-page search header: inline search box (scope + keyword + tags) + 取消.
+                Per design (Figma 11495:16476): the search-box+cancel row is 64px tall, no top padding;
+                tags flow immediately below. The 64px row is owned by CompoundSearchInput pageMode. */}
+            {isH5 && searchMode && (
+                <div className="shrink-0 rounded-t-xl bg-white px-4">
+                    <CompoundSearchInput
+                        pageMode
+                        spaceId={space.id}
+                        isRoot={currentPath.length === 0}
+                        onSearch={handleSearch}
+                        trailing={
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    handleSearch({ scope: currentPath.length === 0 ? "all" : "current", tagIds: [], keyword: "" });
+                                    onCloseSearch?.();
+                                }}
+                                className="shrink-0 text-sm text-[#999]"
+                            >
+                                {localize("com_knowledge.cancel")}
+                            </button>
+                        }
+                    />
+                </div>
+            )}
+
+            {/* Mobile top bar: system menu + space-name dropdown + search/sort/more.
+                Search/sort/more are greyed + disabled while the space-list dropdown is open. */}
+            {isH5 && !searchMode && (
+                /* Root has no padding on mobile; the inner row's px-4 gives the 16px gutter. */
+                <div className="shrink-0 rounded-t-xl bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                    <div className="flex h-11 w-full min-w-0 items-center gap-3 px-4">
+                        {/* Left group — fixed width that mirrors the right group, so the
+                            center title stays screen-centered even when truncated.
+                            84px = search(20) + gap(12) + sort(20) + gap(12) + more(20). */}
+                        <div className="flex min-w-[84px] shrink-0 items-center justify-start">
+                            <button
+                                type="button"
+                                aria-label={localize("com_nav_open_sidebar")}
+                                onClick={() => onOpenSystemMenu?.()}
+                                disabled={spaceListOpen}
+                                className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121]", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                            >
+                                <Outlined.SidebarMenu className="size-5" />
+                            </button>
+                        </div>
+                        {/* Center group — title grows then truncates while staying centered */}
+                        <button
+                            type="button"
+                            onClick={() => onToggleSpaceList?.()}
+                            aria-expanded={spaceListOpen}
+                            className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
+                        >
+                            <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                                {currentPath.length > 0 ? currentPath[currentPath.length - 1].name : space.name}
+                            </span>
+                            <Outlined.Down className={cn("size-5 shrink-0 text-[#86909C] transition-transform", spaceListOpen && "rotate-180")} />
+                        </button>
+                        {/* Right group — same fixed width as the left group */}
+                        <div className="flex min-w-[84px] shrink-0 items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                aria-label={localize("com_knowledge.search")}
+                                onClick={() => onOpenSearch?.()}
+                                className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121]", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                            >
+                                <Outlined.Search className="size-5" />
+                            </button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild disabled={spaceListOpen}>
+                                    <button
+                                        type="button"
+                                        aria-label={localize("com_knowledge.sort_field")}
+                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121] outline-none", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                                    >
+                                        <Outlined.Sort className="size-5" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                                    <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
+                                    {[
+                                        { value: SortType.NAME, label: localize("com_knowledge.sort_by_name_label") },
+                                        { value: SortType.TYPE, label: localize("com_knowledge.sort_by_type_label") },
+                                        { value: SortType.UPDATE_TIME, label: localize("com_knowledge.sort_by_update_time_label") },
+                                    ].map((opt) => (
+                                        <DropdownMenuItem
+                                            key={opt.value}
+                                            onClick={() => handleSort(opt.value)}
+                                            className="flex items-center justify-between gap-6"
+                                        >
+                                            <span>{opt.label}</span>
+                                            {sortBy === opt.value && (
+                                                <span className="shrink-0 text-xs text-[#86909c]">
+                                                    {sortDirection === SortDirection.ASC ? "↑" : "↓"}
+                                                </span>
+                                            )}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild disabled={spaceListOpen}>
+                                    <button
+                                        type="button"
+                                        aria-label={localize("com_knowledge.more")}
+                                        className={cn("inline-flex size-5 shrink-0 items-center justify-center text-[#212121] outline-none", spaceListOpen && "pointer-events-none text-[#C9CDD4]")}
+                                    >
+                                        <Outlined.MoreCircle className="size-5" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <SidebarListMoreMenuContent>
+                                    {canUploadFile && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerUpload}>
+                                            <Outlined.Upload className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.upload_file")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canCreateFolder && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onCreateFolder()}>
+                                            <FolderPlus className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.new_folder")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {showShareInMenu && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={handleCopyShareLink}>
+                                            <Outlined.Share className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.share")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canManageMembers && (
+                                        <DropdownMenuItem
+                                            className={sidebarListMoreMenuItemClassName}
+                                            onClick={() => setPermTarget({ id: space.id, name: space.name, type: "knowledge_space" })}
+                                        >
+                                            <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
+                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.member_management")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                    {canDeleteSpace && (
+                                        <DropdownMenuItem className={sidebarListMoreMenuDangerItemClassName} onClick={() => onDeleteSpace?.()}>
+                                            <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
+                                            <span className={sidebarListMoreMenuDangerLabelClassName}>{localize("com_knowledge.delete_space")}</span>
+                                        </DropdownMenuItem>
+                                    )}
+                                </SidebarListMoreMenuContent>
+                            </DropdownMenu>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Header (desktop only; on mobile these actions live in the top-bar menu) */}
+            {!isH5 && (
             <div className="shrink-0">
             <KnowledgeSpaceHeader
                 space={space}
@@ -1026,7 +1181,6 @@ export function KnowledgeSpaceContent({
                 onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
-                onTriggerUploadFolder={triggerUploadFolder}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
                 supportedFormatsLabel={localize(
@@ -1043,12 +1197,10 @@ export function KnowledgeSpaceContent({
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchMove={handleBatchMove}
-                canBatchMove={canUploadFile && !selectionHasUploading}
+                canBatchMove={canMoveFile && !selectionHasUploading}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
-                onToggleAiAssistant={onToggleAiAssistant}
-                isAiAssistantOpen={isAiAssistantOpen}
                 canShareSpace={canShareSpace}
                 versionManagementEnabled={versionManagementEnabled}
                 pendingSimilarCount={pendingSimilarCount}
@@ -1056,6 +1208,7 @@ export function KnowledgeSpaceContent({
                 canManageMembers={canManageMembers}
             />
             </div>
+            )}
 
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -1080,7 +1233,19 @@ export function KnowledgeSpaceContent({
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    {displayFiles.length === 0 ? (
+                    {suppressList ? (
+                        // Search page before any query — intentionally empty.
+                        <div className="min-h-0 flex-1" />
+                    ) : loading && displayFiles.length === 0 ? (
+                        // Space switching / first load: show a spinner instead of the
+                        // "no files here" empty illustration. The fileManager hook clears
+                        // `files` immediately on activeSpace change, so this branch fires
+                        // for the entire fetch window — the right pane no longer keeps
+                        // showing the previous space's contents while the API responds.
+                        <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
+                            <Loader2 className="size-8 animate-spin text-[#86909C]" />
+                        </div>
+                    ) : displayFiles.length === 0 ? (
                         <div className="flex h-full flex-1 flex-col items-center justify-center py-10 text-center">
                             <img
                                 className="size-[120px] mb-4 object-contain opacity-90"
@@ -1100,20 +1265,19 @@ export function KnowledgeSpaceContent({
                             </p>
                         </div>
                     ) : (isH5 || viewMode === "card") ? (
-                        // key forces React to fully unmount/remount on card<->list
-                        // toggle instead of reusing the same <div> — avoids the
-                        // stale paint where card items linger over the list view.
-                        <div key="ksp-view-card" ref={fileListScrollRevealRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
+                        <div ref={fileListScrollRevealRef} onScroll={handleListScroll} className="min-h-0 flex-1 overflow-y-auto scrollbar-on-scroll">
                             <div
                                 ref={cardGridRef}
                                 className={cn(
-                                    "w-full min-w-0 py-4",
-                                    viewMode === "list"
-                                        ? "grid grid-cols-1 gap-2"
+                                    // pb-[112px] reserves room for the bottom AI dock (40px gap + 56px input + 16px safe-area)
+                                    // so the last card row clears the dock with a 40px visual gap above the input top.
+                                    "w-full min-w-0 pt-4 pb-[112px]",
+                                    effectiveViewMode === "list"
+                                        ? "grid grid-cols-1 gap-0"
                                         : "grid gap-4"
                                 )}
                                 style={
-                                    viewMode === "card"
+                                    effectiveViewMode === "card"
                                         ? { gridTemplateColumns: `repeat(${cardCols}, minmax(0, 1fr))` }
                                         : undefined
                                 }
@@ -1137,14 +1301,16 @@ export function KnowledgeSpaceContent({
                                             onValidateName={(newName) => validateFileName(newName, file.type === FileType.FOLDER, file.id, !!file.isCreating)}
                                             onCancelCreate={onCancelCreateFolder}
                                             onManagePermission={permissionEntryIds.has(file.id) ? () => handleManagePermission(file.id) : undefined}
-                                            canRename={renameEntryIds.has(file.id)}
-                                            canDelete={deleteEntryIds.has(file.id)}
-                                            canDownload={downloadEntryIds.has(file.id)}
-                                            mobileListMode={isH5 && viewMode === "list"}
                                             versionManagementEnabled={versionManagementEnabled}
                                             onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                             onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                             canManageMembers={canManageMembers}
+                                            canRename={renameEntryIds.has(file.id)}
+                                            canDelete={deleteEntryIds.has(file.id)}
+                                            canDownload={downloadEntryIds.has(file.id)}
+                                            mobileListMode={isH5}
+                                            highlightedTagIds={searchTagIds}
+                                            highlightKeyword={searchQuery}
                                             cardDraggable={cardDrag.enabled}
                                             onCardDragStart={cardDrag.handleDragStart(file)}
                                             isFolderDragOver={cardDrag.dragOverFolderId === file.id}
@@ -1155,17 +1321,15 @@ export function KnowledgeSpaceContent({
                                     </div>
                                 ))}
                             </div>
-                            {hasMore && (
-                                <LoadMore
-                                    onLoad={() => onPageChange(currentPage + 1)}
-                                    loading={loading}
-                                />
-                            )}
                         </div>
                     ) : (
-                        <div key="ksp-view-list" className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll border-t border-[#e5e6eb]">
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
+                            <div ref={tableScrollRevealRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#e5e6eb]">
                                 <FileTable files={displayFiles}
+                                    onScroll={handleListScroll}
+                                    /* Reserve 112px under the last row so the bottom AI dock leaves
+                                       a 40px visual gap above the input. */
+                                    bottomSpacing={112}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
@@ -1188,56 +1352,90 @@ export function KnowledgeSpaceContent({
                                     deleteEntryIds={deleteEntryIds}
                                     downloadEntryIds={downloadEntryIds}
                                     onManagePermission={handleManagePermission}
-                                    sortBy={sortBy}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
                                     versionManagementEnabled={versionManagementEnabled}
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                     canManageMembers={canManageMembers}
+                                    sortBy={sortBy}
+                                    sortDirection={sortDirection}
+                                    onSort={handleSort}
+                                    highlightedTagIds={searchTagIds}
+                                    highlightKeyword={searchQuery}
                                 />
-                                {hasMore && (
-                                    <LoadMore
-                                        onLoad={() => onPageChange(currentPage + 1)}
-                                        loading={loading}
-                                    />
-                                )}
                             </div>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Footer：与上方同宽（外层 px-4）；桌面 mt-auto；手机列表区内置底栏，随面板高度固定可见 */}
-            <div
-                className={cn(
-                    "w-full min-w-0 shrink-0 max-[767px]:pb-[env(safe-area-inset-bottom,0px)]",
-                    !isH5 && "mt-auto",
-                )}
-            >
-                <div
-                    className={cn(
-                        "flex w-full min-w-0 flex-shrink-0 flex-wrap items-center justify-between gap-y-1 py-3",
-                        isH5 && "flex-nowrap justify-end",
-                        !isH5 && "border-t border-[#e5e6eb] bg-white",
-                    )}
-                >
-                    {!isH5 && (
-                        isSearching && selectedFiles.size > 0 ? (
-                            <SelectionPathBreadcrumb
-                                spaceId={space.id}
-                                spaceName={space.name}
-                                selectedFiles={selectedFiles}
-                                displayFiles={displayFiles}
-                            />
-                        ) : (
-                            <div />
-                        )
-                    )}
-
-                    {/* F027 §AC-17-client-补做: PaginationBar removed; infinite scroll via <LoadMore /> sentinel inside the scroll containers above. */}
+            {/* Footer：仅在搜索且有选中时展示所选文件的路径面包屑（无分页器） */}
+            {!isH5 && isSearching && selectedFiles.size > 0 && (
+                <div className="mt-auto w-full min-w-0 shrink-0">
+                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white py-3">
+                        <SelectionPathBreadcrumb
+                            spaceId={space.id}
+                            spaceName={space.name}
+                            selectedFiles={selectedFiles}
+                            displayFiles={displayFiles}
+                        />
+                    </div>
                 </div>
-            </div>
+            )}
+
+            {/* Mobile batch action bar — pinned to the bottom, replaces the AI dock while
+                files are selected. Actions + permissions mirror the desktop toolbar. */}
+            {selectionActive && batchActions.length > 0 && (
+                /* Floating capsule: 16px from left/right/bottom, 12px inner padding. Buttons share
+                   width evenly (flex-1); a 12px-tall divider sits between them. */
+                <div className="absolute inset-x-0 bottom-[max(16px,env(safe-area-inset-bottom))] z-30 px-4">
+                    <div className="flex w-full items-center rounded-[20px] border border-[#EBECF0] bg-white p-3 shadow-[0_6px_24px_0_rgba(0,17,147,0.12)]">
+                        {inlineActions.map((a, i) => (
+                            <Fragment key={a.key}>
+                                {i > 0 && <span className="h-3 w-px shrink-0 bg-[#EBECF0]" aria-hidden />}
+                                <button
+                                    type="button"
+                                    onClick={a.onClick}
+                                    className={cn(
+                                        "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm",
+                                        a.danger ? "text-[#F53F3F]" : "text-[#212121]",
+                                    )}
+                                >
+                                    <a.Icon className="size-4" />
+                                    {a.label}
+                                </button>
+                            </Fragment>
+                        ))}
+                        {overflowActions.length > 0 && (
+                            <>
+                                {inlineActions.length > 0 && <span className="h-3 w-px shrink-0 bg-[#EBECF0]" aria-hidden />}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button
+                                            type="button"
+                                            className="flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm text-[#212121]"
+                                        >
+                                            <Outlined.More className="size-4" />
+                                            {localize("com_knowledge.more")}
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent side="top" align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                                        {overflowActions.map((a) => (
+                                            <DropdownMenuItem
+                                                key={a.key}
+                                                onClick={a.onClick}
+                                                className={a.danger ? sidebarListMoreMenuDangerItemClassName : sidebarListMoreMenuItemClassName}
+                                            >
+                                                <a.Icon className={a.danger ? sidebarListMoreMenuDangerIconClassName : sidebarListMoreMenuIconClassName} />
+                                                <span className={a.danger ? sidebarListMoreMenuDangerLabelClassName : sidebarListMoreMenuLabelClassName}>{a.label}</span>
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Edit Tags Modal */}
             <EditTagsModal
@@ -1254,32 +1452,6 @@ export function KnowledgeSpaceContent({
                 }
             />
 
-            {/* F034: Move files/folders (same-space + cross-space) */}
-            <MoveToDialog
-                open={moveDialogOpen}
-                onOpenChange={setMoveDialogOpen}
-                currentSpaceId={space.id}
-                currentSpaceName={space.name}
-                onConfirm={handleMoveConfirm}
-            />
-
-            <Dialog open={!!violationFile} onOpenChange={(open) => {
-                if (!open) setViolationFile(null);
-            }}>
-                <DialogContent className="max-w-[520px]">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {localize("com_knowledge.sensitive_violation_title")}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="text-sm text-[#1d2129]">
-                        <div className="rounded-md bg-[#fff2f0] px-3 py-2 text-[#f53f3f]">
-                            {violationFile?.errorMessage || localize("com_knowledge.sensitive_violation_message")}
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
-
             {permTarget && (
                 <KnowledgeSpaceShareDialog
                     open={!!permTarget}
@@ -1295,9 +1467,17 @@ export function KnowledgeSpaceContent({
                     showShareTab={false}
                     showMembersTab={false}
                     showPermissionTab
-                    isDepartmentSpace={permTarget.type === "knowledge_space" && space?.spaceKind === "department"}
                 />
             )}
+
+            {/* F034: Move files/folders (same-space + cross-space) */}
+            <MoveToDialog
+                open={moveDialogOpen}
+                onOpenChange={setMoveDialogOpen}
+                currentSpaceId={space.id}
+                currentSpaceName={space.name}
+                onConfirm={handleMoveConfirm}
+            />
 
             {versionManagementEnabled && (
                 <>

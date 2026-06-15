@@ -1,8 +1,7 @@
-import { Building2, ChevronDown, ChevronRight, LogOut, MoreHorizontal, Pin, PinOff, Settings, UsersRound } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace, SpaceRole, SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } from "~/api/knowledge";
-import { NotificationSeverity } from "~/common";
 import {
     DropdownMenu,
     DropdownMenuItem,
@@ -10,7 +9,6 @@ import {
 } from "~/components/ui/DropdownMenu";
 import {
     SidebarListMoreMenuContent,
-    SidebarListMoreMenuDivider,
     sidebarListMoreMenuDangerIconClassName,
     sidebarListMoreMenuDangerItemClassName,
     sidebarListMoreMenuDangerLabelClassName,
@@ -18,14 +16,11 @@ import {
     sidebarListMoreMenuItemClassName,
     sidebarListMoreMenuLabelClassName,
 } from "~/components/SidebarListMoreMenu";
-import { useConfirm, useToastContext } from "~/Providers";
+import { useConfirm } from "~/Providers";
 import { useLocalize } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
-import { getFullWidthLength } from "~/utils";
-import { ChannelPinIcon } from "~/components/icons/channels";
-import ClosedIcon from "~/components/ui/icon/ClosedIcon";
-import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 import { KnowledgeFolderTree, type FolderSelectPayload } from "./KnowledgeFolderTree";
+import { DynamicEllipsisName } from "./DynamicEllipsisName";
 
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
@@ -41,6 +36,12 @@ interface KnowledgeSpaceItemProps {
     canEditSpace?: boolean;
     canDeleteSpace?: boolean;
     canManageMembers?: boolean;
+    /** Hide the per-row "..." menu (e.g. the compact dropdown's tree). */
+    hideMoreMenu?: boolean;
+    /** Compact dropdown styling: 14px space/folder icons, slightly looser tree node spacing. */
+    compact?: boolean;
+    /** Fired after a folder is navigated to (so a host drawer can close itself). */
+    onAfterNavigate?: () => void;
 }
 
 export default function KnowledgeSpaceItem({
@@ -48,7 +49,6 @@ export default function KnowledgeSpaceItem({
     isActive,
     type,
     onSelect,
-    onUpdate,
     onDelete,
     onLeave,
     onPin,
@@ -57,12 +57,13 @@ export default function KnowledgeSpaceItem({
     canEditSpace = false,
     canDeleteSpace = false,
     canManageMembers = false,
+    hideMoreMenu = false,
+    compact = false,
+    onAfterNavigate,
 }: KnowledgeSpaceItemProps) {
     const localize = useLocalize();
-    const [isEditing, setIsEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [expanded, setExpanded] = useState(isActive);
-    const { showToast } = useToastContext();
     const confirm = useConfirm();
     const navigate = useNavigate();
     const { spaceId, folderId: urlFolderId } = useParams<{ spaceId?: string; folderId?: string }>();
@@ -76,19 +77,26 @@ export default function KnowledgeSpaceItem({
         if (isActive) setExpanded(true);
     }, [isActive]);
 
+    // Only highlight the space row when this space is active AND no folder
+    // inside it is selected — folders take over the active styling once chosen
+    // so only one row in the tree appears active at a time.
+    const isFolderSelectedHere = isActive && !!urlFolderId;
+    const showSpaceHighlight = isActive && !isFolderSelectedHere;
+
     const handleSelectFolder = (folder: FolderSelectPayload | null) => {
         if (folder) {
             navigate(`/knowledge/space/${space.id}/folder/${folder.id}`);
         } else {
             navigate(`/knowledge/space/${space.id}`);
         }
+        onAfterNavigate?.();
     };
 
     const rename = (e: React.FocusEvent<HTMLInputElement>) => {
         const newName = e.target.value.trim();
         setIsEditing(false);
         if (!newName) return;
-        if (getFullWidthLength(newName) > 30) {
+        if (getFullWidthLength(newName) > 50) {
             return showToast({
                 message: localize("com_knowledge.max_20_chars_spaced"),
                 severity: NotificationSeverity.ERROR
@@ -100,26 +108,27 @@ export default function KnowledgeSpaceItem({
     };
 
     return (
-        <div>
+        <div className="flex flex-col gap-0.5">
             {/* Space row */}
             <div
-                className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
-                    ? "bg-[#E6EDFC] border-primary shadow-sm"
-                    : "border-transparent hover:bg-[#F7F7F7]"
+                data-ee-row
+                className={`group flex items-center justify-between h-7 rounded-md cursor-pointer border ${showSpaceHighlight
+                    ? "bg-[#EEEEEE] border-transparent"
+                    : "border-transparent hover:bg-[#F4F4F4]"
                     }`}
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
                     transitionTimingFunction: 'ease-in-out'
                 }}
-                onClick={() => !isEditing && onSelect(space)}
+                onClick={() => onSelect(space)}
             >
-                <div className="flex items-center gap-1 flex-1 min-w-0">
+                <div className="flex items-center flex-1">
                     {/* Expand/collapse chevron — only shown when treeEnabled */}
                     {treeEnabled && (
                         <button
                             type="button"
-                            className="flex size-4 shrink-0 items-center justify-center rounded hover:bg-black/10 transition-colors"
+                            className="flex size-5 shrink-0 items-center justify-center"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setExpanded((prev) => !prev);
@@ -127,57 +136,62 @@ export default function KnowledgeSpaceItem({
                             aria-label={expanded ? "Collapse folder tree" : "Expand folder tree"}
                         >
                             {expanded ? (
-                                <ChevronDown className="size-3 text-[#8D93A0]" />
+                                <Outlined.Down className="size-4 text-[#8D93A0]" />
                             ) : (
-                                <ChevronRight className="size-3 text-[#8D93A0]" />
+                                <Outlined.Right className="size-4 text-[#8D93A0]" />
                             )}
                         </button>
                     )}
 
-                    <div className={`flex-shrink-0 flex items-center justify-center size-5 rounded-md ${isActive ? "bg-white" : ""}`}>
+                    <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
                         {type === "department" ? (
-                            <Building2 className={`size-[14px] ${isActive ? "text-primary" : "text-[#86909C]"}`} />
+                            <Outlined.City className={`${compact ? "size-3.5" : "size-4"} ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         ) : (
-                            <SpaceNotebookIcon active={isActive} />
+                            <Outlined.Notebook className={`${compact ? "size-3.5" : "size-4"} ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         )}
                     </div>
 
-                    {isEditing ? (
-                        <input
-                            type="text"
-                            defaultValue={space.name}
-                            className="flex-1 px-1 min-w-0 text-[14px] bg-white rounded focus:outline-none"
-                            autoFocus
-                            onBlur={rename}
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") e.currentTarget.blur();
-                                else if (e.key === "Escape") setIsEditing(false);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                        />
-                    ) : (
-                        <div className="flex flex-1 min-w-0 items-center gap-1">
-                            <span onDoubleClick={() => canEditSpace && setIsEditing(true)} className="truncate text-[14px] text-[#1d2129]">
-                                {space.name}
-                            </span>
-                            {space.isPinned && (
-                                <ChannelPinIcon className="h-[14px] w-[14px] shrink-0" aria-hidden />
-                            )}
-                        </div>
-                    )}
+                    <DynamicEllipsisName
+                        name={space.name}
+                        textClassName={`text-[12px] leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}
+                        trailing={
+                            space.isPinned ? (
+                                <Outlined.Pin className="size-3 shrink-0 text-[#86909C]" aria-hidden />
+                            ) : null
+                        }
+                    />
                 </div>
 
-                <div className="relative flex h-5 w-8 flex-shrink-0 items-center justify-end">
+                {/* More-menu trigger. The button reserves real layout width so the item name
+                    ends *before* it — when an item is scrolled to its end the name's tail stays
+                    fully visible instead of being hidden under the button. Only the 20px button
+                    itself carries an opaque bg (matching the row state) to cover text it floats
+                    over; the 12px right gap stays transparent.
+                      • w-8 (32px border box) + pr-3 (12px) → 20px button + 12px transparent gap;
+                        justify-start keeps the button on the left.
+                      • sticky right-1 (4px): margin-box right edge sticks 4px from the viewport.
+                      • -mr-3 (-12px): negative right margin lets the box extend past the list's
+                        right padding so the button can reach its intended offset from the edge. */}
+                {!hideMoreMenu && (
+                <div className="sticky right-1 z-[1] ml-2 -mr-3 pr-3 flex h-5 w-8 flex-shrink-0 items-center justify-start">
                     <DropdownMenu onOpenChange={setMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
                                 className={`
-                                    absolute right-0 flex items-center justify-center p-1 rounded-md hover:bg-black/5 transition-opacity duration-200 outline-none
-                                    ${menuOpen ? "opacity-100 z-10" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100 z-10"}
+                                    flex size-5 items-center justify-center rounded-md outline-none
+                                    ${showSpaceHighlight ? "bg-[#EEEEEE] hover:!bg-[#E4E4E4]" : "bg-[#FBFBFB] group-hover:bg-[#F4F4F4] hover:!bg-[#E4E4E4]"}
+                                    ${menuOpen ? "opacity-100" : "coarse-pointer:opacity-100 fine-pointer:opacity-0 fine-pointer:group-hover:opacity-100"}
                                 `}
+                                // Match the row's background-color transition (350ms ease-in-out)
+                                // so the button bg fades in sync with the row; keep opacity at 200ms.
+                                style={{
+                                    transitionProperty: "opacity, background-color",
+                                    transitionDuration: "200ms, 350ms",
+                                    transitionTimingFunction: "ease, ease-in-out",
+                                }}
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                <MoreHorizontal className="size-4 text-[#4e5969]" />
+                                <Outlined.More className="size-4 text-[#4e5969]" />
                             </button>
                         </DropdownMenuTrigger>
 
@@ -187,7 +201,7 @@ export default function KnowledgeSpaceItem({
                                     className={sidebarListMoreMenuItemClassName}
                                     onClick={() => onSettings?.(space)}
                                 >
-                                    <Settings className={sidebarListMoreMenuIconClassName} />
+                                    <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                                     <span className={sidebarListMoreMenuLabelClassName}>
                                         {localize("com_knowledge.space_settings")}
                                     </span>
@@ -198,7 +212,7 @@ export default function KnowledgeSpaceItem({
                                     className={sidebarListMoreMenuItemClassName}
                                     onClick={() => onManageMembers?.(space)}
                                 >
-                                    <UsersRound className={sidebarListMoreMenuIconClassName} />
+                                    <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
                                     <span className={sidebarListMoreMenuLabelClassName}>
                                         {localize("com_knowledge.member_management")}
                                     </span>
@@ -210,30 +224,33 @@ export default function KnowledgeSpaceItem({
                             >
                                 {space.isPinned ? (
                                     <>
-                                        <PinOff className={sidebarListMoreMenuIconClassName} />
+                                        <Outlined.PinOff className={sidebarListMoreMenuIconClassName} />
                                         <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.unpin")}</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Pin className={sidebarListMoreMenuIconClassName} />
+                                        <Outlined.Pin className={sidebarListMoreMenuIconClassName} />
                                         <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.pin_space")}</span>
                                     </>
                                 )}
                             </DropdownMenuItem>
 
-                            <SidebarListMoreMenuDivider />
-
                             {(canDeleteSpace || type === "joined") && (
                                 <DropdownMenuItem
                                     onClick={async () => {
-                                        const actionName = canDeleteSpace ? localize("com_knowledge.dissolve_space") : localize("com_knowledge.exit_space");
-                                        const description = canDeleteSpace ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
-                                        const ok = await confirm({
-                                            title: localize("com_knowledge.prompt"),
-                                            description,
-                                            confirmText: canDeleteSpace ? localize("com_knowledge.delete") : localize("com_knowledge.exit"),
-                                            cancelText: localize("com_knowledge.cancel")
-                                        });
+                                        // Delete-space uses the destructive variant (matches file-delete).
+                                        // Exit-space keeps the default prompt — it's not destructive.
+                                        const ok = canDeleteSpace
+                                            ? await confirm({
+                                                description: `${localize("com_knowledge.confirm_delete_space_name", { 0: space.name })}${localize("com_knowledge.delete_irreversible_warning")}`,
+                                                variant: "destructive",
+                                            })
+                                            : await confirm({
+                                                title: localize("com_knowledge.prompt"),
+                                                description: localize("com_knowledge.confirm_exit_space"),
+                                                confirmText: localize("com_knowledge.exit"),
+                                                cancelText: localize("com_knowledge.cancel"),
+                                            });
 
                                         if (ok) {
                                             canDeleteSpace ? onDelete(space.id) : onLeave(space.id);
@@ -242,9 +259,9 @@ export default function KnowledgeSpaceItem({
                                     className={sidebarListMoreMenuDangerItemClassName}
                                 >
                                     {canDeleteSpace ? (
-                                        <ClosedIcon className={sidebarListMoreMenuDangerIconClassName} />
+                                        <Outlined.Delete className={sidebarListMoreMenuDangerIconClassName} />
                                     ) : (
-                                        <LogOut className={sidebarListMoreMenuDangerIconClassName} />
+                                        <Outlined.LogOut className={sidebarListMoreMenuDangerIconClassName} />
                                     )}
                                     <span className={sidebarListMoreMenuDangerLabelClassName}>
                                         {canDeleteSpace ? localize("com_knowledge.delete_space") : localize("com_knowledge.exit_space_short")}
@@ -254,12 +271,17 @@ export default function KnowledgeSpaceItem({
                         </SidebarListMoreMenuContent>
                     </DropdownMenu>
                 </div>
+                )}
             </div>
 
-            {/* Folder tree — nested under this space row when expanded */}
+            {/* Folder tree — nested under this space row when expanded.
+                No wrapper indent: each tree node uses its own paddingLeft
+                ((depth+1)*20) so depth-0 folders align with the space row's
+                icon position, matching the design's 20px-per-level structure. */}
             {expanded && treeEnabled && (
-                <div className="pl-7">
+                <div>
                     <KnowledgeFolderTree
+                        compact={compact}
                         knowledgeId={space.id}
                         currentFolderId={urlFolderId && spaceId === space.id ? urlFolderId : undefined}
                         // Mirror the right-side panel: MEMBER-role users hide FAILED

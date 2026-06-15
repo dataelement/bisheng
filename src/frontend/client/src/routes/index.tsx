@@ -25,6 +25,7 @@ import AppRoot from './AppRoot';
 import Root from './Root';
 import Knowledge from '~/pages/knowledge';
 import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
+import ArticlePage from '~/pages/Subscription/Article/ArticlePage';
 import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
@@ -125,7 +126,8 @@ export const router = createBrowserRouter([
               {
                 path: 'linsight/:conversationId?',
                 element: (
-                  <MenuApprovalPluginGate pluginId="home">
+                  // F035: task mode has its own menu permission key, split from `home`
+                  <MenuApprovalPluginGate pluginId="linsight_task_mode">
                     <Sop />
                   </MenuApprovalPluginGate>
                 ),
@@ -133,7 +135,7 @@ export const router = createBrowserRouter([
               {
                 path: 'linsight/case/:sopId',
                 element: (
-                  <MenuApprovalPluginGate pluginId="home">
+                  <MenuApprovalPluginGate pluginId="linsight_task_mode">
                     <Sop />
                   </MenuApprovalPluginGate>
                 ),
@@ -205,6 +207,7 @@ export const router = createBrowserRouter([
 
       { path: 'share/:token/:vid?', element: <Share /> },
       { path: 'knowledge/file/:fileId', element: <FilePreviewPage /> },
+      { path: 'channel/:channelId/article/:articleId', element: <ArticlePage /> },
     ],
   },
   // Standalone chat — guest (no login, outside AuthLayout to avoid 401 redirect)

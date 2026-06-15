@@ -29,9 +29,12 @@ interface ModelManagementProps {
     onModelChange: (index: number, id: string) => void;
     onNameChange: (index: number, name: string) => void;
     onVisualToggle?: (index: number, enabled: boolean) => void;
+    /** Linsight default model: the model id used as the default executor for Linsight tasks. */
+    linsightDefaultModelId?: string | null;
+    onLinsightDefaultChange?: (id: string) => void;
 }
 export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps>(
-    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onVisualToggle }, ref) => {
+    ({ models, errors, error, onAdd, onRemove, onModelChange, onNameChange, onVisualToggle, linsightDefaultModelId, onLinsightDefaultChange }, ref) => {
         // `assistant` mode hits /api/v1/llm/assistant/llm_list which is already
         // filtered to the admin-configured assistant allowlist (default model
         // and its server are placed first). Avoids the fetch-all + client-side
@@ -70,7 +73,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
 
         return (
             <div className="mt-2 border p-4 rounded-md bg-background">
-                <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "1.35fr 1fr 72px 36px" }}>
+                <div className="grid mb-4 items-center" style={{ gridTemplateColumns: "1.35fr 1fr 72px 116px 36px" }}>
                     <div className="">
                         <Label className="bisheng-label">{t('bench.model')}</Label>
                     </div>
@@ -81,6 +84,10 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                         <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('bench.vision')}</Label>
                         <QuestionTooltip className="text-[#999999]" content={t('bench.visionText')} />
                     </div>
+                    <div className="flex items-center justify-center">
+                        <Label className="bisheng-label whitespace-nowrap mr-0.5">{t('model:model.linsightDefaultModel')}</Label>
+                        <QuestionTooltip className="text-[#999999]" content={t('model:model.linsightDefaultModelTooltip')} />
+                    </div>
                     <div className="text-center">
                     </div>
                 </div>
@@ -90,7 +97,7 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                         key={model.key}
                         ref={(el) => setItemRef(el, index)}
                         className="grid items-center mb-4"
-                        style={{ gridTemplateColumns: "1.35fr 1fr 72px 36px" }}
+                        style={{ gridTemplateColumns: "1.35fr 1fr 72px 116px 36px" }}
                     >
                         <div className="pr-2" id={model.id}>
                             {assistantLlmOptions.length > 0 ? (
@@ -131,6 +138,18 @@ export const ModelManagement = forwardRef<HTMLDivElement[], ModelManagementProps
                                         onVisualToggle(index, checked);
                                     }
                                 }}
+                            />
+                        </div>
+
+                        {/* Linsight default model: single-select radio across the whole column */}
+                        <div className="flex items-center justify-center">
+                            <input
+                                type="radio"
+                                name="linsight-default-model"
+                                className="size-4 cursor-pointer accent-primary disabled:cursor-not-allowed"
+                                checked={!!model.id && model.id === linsightDefaultModelId}
+                                disabled={!model.id}
+                                onChange={() => model.id && onLinsightDefaultChange?.(model.id)}
                             />
                         </div>
 

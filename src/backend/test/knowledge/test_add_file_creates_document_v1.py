@@ -16,7 +16,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from test.test_knowledge_space_service import (
+from test.knowledge.test_knowledge_space_service import (
     _load_service_class,
     _make_file,
     _make_login_user,

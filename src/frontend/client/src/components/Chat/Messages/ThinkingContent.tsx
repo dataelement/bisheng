@@ -2,28 +2,19 @@
  * ThinkingContent — collapsible "思考内容" block. Lives inside a
  * DeepThinkingGroup wrapper which owns the duration display, so this
  * component intentionally has no timer or duration text.
+ *
+ * Layout follows the timeline-item design: a left rail (16px icon +
+ * 1px vertical connector) next to a body column (trigger + collapsible text).
  */
-import { CircleCheck, ChevronDown } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { memo, useCallback, useState, type FC, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
 import { cn } from "~/utils";
 import store from "~/store";
 
-const BUTTON_STYLES = {
-    base: "group mb-2 flex w-fit max-w-full items-center justify-center py-2 text-sm leading-[18px] animate-thinking-appear",
-    icon: "icon-sm ml-1.5 transform-gpu text-text-primary transition-transform duration-200",
-} as const;
-
-const CONTENT_STYLES = {
-    wrapper: "relative mt-2 pt-3 pl-3 text-text-secondary",
-    border:
-        "absolute left-1.5 h-[calc(100%)] border-l border-border-medium dark:border-border-heavy",
-    text: "whitespace-pre-wrap leading-[26px] text-sm",
-} as const;
-
 export interface ThinkingContentProps {
     reasoning: string;
-    /** Whether to render a short vertical timeline connector below this card.
+    /** Whether to render the vertical timeline connector below the icon.
      *  Set to true when something follows in the timeline (e.g., tool cards),
      *  so the timeline is continuous even when this section is collapsed. */
     showConnector?: boolean;
@@ -41,38 +32,40 @@ const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning, showConnect
     if (!reasoning) return null;
 
     return (
-        <>
-            <button
-                type="button"
-                onClick={handleClick}
-                className={BUTTON_STYLES.base}
-            >
-                <CircleCheck size={14} className="mr-1.5 text-gray-400" />
-                <span>思考内容</span>
-                <ChevronDown
-                    className={cn(BUTTON_STYLES.icon, isExpanded && "rotate-180")}
-                />
-            </button>
-            <div
-                className={cn(
-                    "grid transition-all duration-300 ease-out",
-                    isExpanded && "mb-4",
+        <div className="flex w-full min-w-0 gap-1.5 animate-thinking-appear">
+            <div className="flex shrink-0 flex-col items-center gap-0.5 self-stretch pt-[3px]">
+                <Outlined.CheckCircle size={16} className="shrink-0 text-[#C9CDD4]" />
+                {/* Rail line: keep the timeline continuous to the next node, and
+                    always flank this node's own expanded content. */}
+                {(showConnector || isExpanded) && (
+                    <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />
                 )}
-                style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
-            >
-                <div className="overflow-hidden min-h-0">
-                    <div className={CONTENT_STYLES.wrapper}>
-                        <div className={CONTENT_STYLES.border} />
-                        <p className={CONTENT_STYLES.text}>{reasoning}</p>
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col pb-3">
+                <button
+                    type="button"
+                    onClick={handleClick}
+                    className="group flex w-fit max-w-full items-center gap-1 text-sm leading-[22px] text-[#999999] transition-colors hover:text-[#212121]"
+                >
+                    <span>思考内容</span>
+                    <Outlined.Down
+                        size={16}
+                        className={cn(
+                            "shrink-0 transform-gpu transition-transform duration-200",
+                            isExpanded && "rotate-180",
+                        )}
+                    />
+                </button>
+                <div
+                    className={cn("grid transition-all duration-300 ease-out", isExpanded && "mt-2")}
+                    style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
+                >
+                    <div className="min-h-0 overflow-hidden">
+                        <p className="whitespace-pre-wrap text-xs leading-5 text-[#818181]">{reasoning}</p>
                     </div>
                 </div>
             </div>
-            {showConnector && !isExpanded && (
-                <div className="relative h-3 pl-3" aria-hidden="true">
-                    <div className="absolute left-1.5 h-full border-r border-border-medium dark:border-border-heavy" />
-                </div>
-            )}
-        </>
+        </div>
     );
 });
 

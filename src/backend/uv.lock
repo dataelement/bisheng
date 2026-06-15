@@ -391,6 +391,7 @@ dependencies = [
     { name = "alembic" },
     { name = "appdirs" },
     { name = "arxiv" },
+    { name = "async-timeout", marker = "sys_platform != 'darwin'" },
     { name = "asyncpg" },
     { name = "bs4" },
     { name = "captcha" },
@@ -450,6 +451,7 @@ dependencies = [
     { name = "pymupdf" },
     { name = "pymysql" },
     { name = "pypandoc" },
+    { name = "pypinyin" },
     { name = "python-docx" },
     { name = "python-pptx" },
     { name = "qdrant-client" },
@@ -496,6 +498,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.17.1" },
     { name = "appdirs", specifier = ">=1.4.4" },
     { name = "arxiv", specifier = ">=2.4.0" },
+    { name = "async-timeout", marker = "sys_platform != 'darwin'", specifier = ">=4.0.3" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "bs4", specifier = ">=0.0.2" },
     { name = "captcha", specifier = ">=0.7.1" },
@@ -556,6 +559,7 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.26.5" },
     { name = "pymysql", specifier = ">=1.1.2" },
     { name = "pypandoc", specifier = ">=1.15" },
+    { name = "pypinyin", specifier = ">=0.55.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.0" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=5.0" },
@@ -4932,6 +4936,15 @@ name = "pypika"
 version = "0.48.9"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c7/2c/94ed7b91db81d61d7096ac8f2d325ec562fc75e35f3baea8749c85b28784/PyPika-0.48.9.tar.gz", hash = "sha256:838836a61747e7c8380cd1b7ff638694b7a7335345d0f559b04b2cd832ad5378", size = 67259, upload-time = "2022-03-15T11:22:57.066Z" }
+
+[[package]]
+name = "pypinyin"
+version = "0.55.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b4/a4/784cf98c09e0dc22776b0d7d8a4a5b761218bcae4608c2416ce1e167c8af/pypinyin-0.55.0.tar.gz", hash = "sha256:b5711b3a0c6f76e67408ec6b2e3c4987a3a806b7c528076e7c7b86fcf0eaa66b", size = 839836, upload-time = "2025-07-20T12:01:50.657Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b9/7b/4cabc76fcc21c3c7d5c671d8783984d30ac9d3bb387c4ba784fca3cdfa3a/pypinyin-0.55.0-py2.py3-none-any.whl", hash = "sha256:d53b1e8ad2cdb815fb2cb604ed3123372f5a28c6f447571244aca36fc62a286f", size = 840203, upload-time = "2025-07-20T12:01:48.535Z" },
+]
 
 [[package]]
 name = "pyproject-hooks"

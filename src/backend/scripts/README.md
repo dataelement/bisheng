@@ -269,3 +269,57 @@ The 3rd argument can be omitted if one of these environment variables is set:
 - `OPENFGA_TUPLE_DB_URL`
 - `OPENFGA_DATASTORE_URL`
 - `OPENFGA_DATASTORE_URI`
+
+## Linsight Scripts (F035)
+
+### `migrate_sop_to_skill.sh` / `migrate_sop_to_skill.py`
+
+One-shot migration of legacy `linsight_sop` rows into tenant custom skills
+(`linsight_skill` + `SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md`).
+`display_name` keeps the original (Chinese) SOP name; the skill ID is a
+pypinyin slug; `metadata.sop-id` makes re-runs idempotent. Prints and writes a
+JSON migration summary (ops artifact — there is no in-product migration report).
+
+Usage (from `src/backend/`, dry-run by default):
+
+```bash
+bash scripts/migrate_sop_to_skill.sh                       # dry-run, all tenants
+bash scripts/migrate_sop_to_skill.sh apply                 # persist
+bash scripts/migrate_sop_to_skill.sh --no-llm apply        # skip LLM summaries for missing descriptions
+bash scripts/migrate_sop_to_skill.sh --tenant-id 2 apply   # single tenant
+```
+
+Options: `--apply` (persist), `--no-llm`, `--tenant-id <id>`,
+`--report-file <path>` (default `./migrate_sop_to_skill_report.json`).
+
+### `backfill_linsight_task_mode_web_menu.py`
+
+Grants WEB_MENU `linsight_task_mode` to every role that already has `home`.
+F035 split 任务模式 (`/linsight`) out of the shared `home` menu permission into
+its own sub-toggle; without this backfill, upgraded deployments would lose
+任务模式 access for existing roles (the route guard now checks
+`linsight_task_mode`). Idempotent & re-runnable; dry-run by default.
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_linsight_task_mode_web_menu.py            # dry-run
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_linsight_task_mode_web_menu.py --apply    # write
+```
+
+### `migrate_linsight_task_model_to_default.py`
+
+F035 Track E (deepagents). Rewrites every tenant's `linsight_llm` config row in
+`tenant_system_model_config`: drops the legacy `task_model` / `linsight_executor_mode`
+keys and sets the new single `linsight_default_model_id` (keeps the old
+`task_model.id` when it still exists in the row's `models` list, otherwise falls
+back to the first model id, or empty when `models` is empty). JSON is parsed in
+Python (no `JSON_EXTRACT`) for DM8/MySQL compatibility. Idempotent (rows without
+`task_model` are skipped) & re-runnable; dry-run by default.
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_model_to_default.py            # dry-run
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_model_to_default.py --apply    # write
+```

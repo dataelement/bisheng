@@ -1,12 +1,12 @@
-import { useState, useId, useRef, memo } from 'react';
-import * as Menu from '@ariakit/react/menu';
-import { Ellipsis, Copy, Archive, Pen, Trash } from 'lucide-react';
+import { useState, useRef, memo } from 'react';
+import { Ellipsis } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import type { MouseEvent } from 'react';
-import type * as t from '~/common';
 import { useDuplicateConversationMutation, useGetStartupConfig } from '~/hooks/queries/data-provider';
 import { useLocalize, useArchiveHandler, useNavigateToConvo } from '~/hooks';
 import { useToastContext, useChatContext } from '~/Providers';
-import { DropdownPopup } from '~/components/ui';
+import { DropdownMenu, DropdownMenuTrigger } from '~/components/ui/DropdownMenu';
+import { ActionMenuContent, ActionMenuItem } from '~/components/ActionMenu';
 import DeleteButton from './DeleteButton';
 import ShareButton from './ShareButton';
 import { cn } from '~/utils';
@@ -34,8 +34,7 @@ function ConvoOptions({
   const archiveHandler = useArchiveHandler(conversationId, true, retainView);
   const { navigateToConvo } = useNavigateToConvo(index);
   const { showToast } = useToastContext();
-  const shareButtonRef = useRef<HTMLButtonElement>(null);
-  const deleteButtonRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -61,88 +60,57 @@ function ConvoOptions({
     },
   });
 
-  const shareHandler = () => {
-    setShowShareDialog(true);
+  const handleRename = (e: Event) => {
+    renameHandler(e as unknown as MouseEvent);
   };
 
-  const deleteHandler = () => {
+  const handleDelete = () => {
     setShowDeleteDialog(true);
   };
 
-  const duplicateHandler = () => {
-    setIsPopoverActive(false);
-    duplicateConversation.mutate({
-      conversationId: conversationId ?? '',
-    });
-  };
-
-  const dropdownItems: t.MenuItemProps[] = [
-    // {
-    //   label: localize('com_ui_share'),
-    //   onClick: shareHandler,
-    //   icon: <Share2 className="icon-sm mr-2 text-text-primary" />,
-    //   show: startupConfig && startupConfig.sharedLinksEnabled,
-    //   /** NOTE: THE FOLLOWING PROPS ARE REQUIRED FOR MENU ITEMS THAT OPEN DIALOGS */
-    //   hideOnClick: false,
-    //   ref: shareButtonRef,
-    //   render: (props) => <button {...props} />,
-    // },
-    {
-      label: localize('com_ui_rename'),
-      onClick: renameHandler,
-      icon: <Pen className="icon-sm mr-2 text-text-primary" />,
-    },
-    // 隐藏复制会话
-    // {
-    //   label: localize('com_ui_duplicate'),
-    //   onClick: duplicateHandler,
-    //   icon: <Copy className="icon-sm mr-2 text-text-primary" />,
-    // },
-    // {
-    //   label: localize('com_ui_archive'),
-    //   onClick: archiveHandler,
-    //   icon: <Archive className="icon-sm mr-2 text-text-primary" />,
-    // },
-    {
-      label: localize('com_ui_delete'),
-      onClick: deleteHandler,
-      icon: <Trash className="icon-sm mr-2 text-text-primary" />,
-      hideOnClick: false,
-      ref: deleteButtonRef,
-      render: (props) => <button {...props} />,
-    },
-  ];
-
-  const menuId = useId();
-
   return (
     <>
-      <DropdownPopup
-        isOpen={isPopoverActive}
-        setIsOpen={setIsPopoverActive}
-        trigger={
-          <Menu.MenuButton
+      <DropdownMenu open={isPopoverActive} onOpenChange={setIsPopoverActive}>
+        <DropdownMenuTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
             id={`conversation-menu-${conversationId}`}
             aria-label={localize('com_nav_convo_menu_options')}
             className={cn(
-              'z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-              isActiveConvo === true
+              'z-30 inline-flex h-4 w-4 items-center justify-center gap-2 rounded-md border-none p-0 text-sm font-medium text-[#86909c] ring-ring-primary transition-all duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 fine-pointer:hover:text-[#1d2129]',
+              isActiveConvo
                 ? 'opacity-100'
-                : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[open]:opacity-100 coarse-pointer:opacity-100',
+                : 'opacity-0 focus:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 coarse-pointer:opacity-100',
             )}
+            onClick={(e) => e.stopPropagation()}
           >
-            <Ellipsis className="icon-md text-text-secondary" aria-hidden={true} />
-          </Menu.MenuButton>
-        }
-        items={dropdownItems}
-        menuId={menuId}
-      />
+            <Ellipsis className="icon-md" aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <ActionMenuContent
+          width={140}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <ActionMenuItem
+            icon={<Outlined.Edit />}
+            label={localize('com_ui_rename')}
+            onSelect={handleRename}
+          />
+          <ActionMenuItem
+            danger
+            icon={<Outlined.Delete />}
+            label={localize('com_ui_delete')}
+            onSelect={handleDelete}
+          />
+        </ActionMenuContent>
+      </DropdownMenu>
       {showShareDialog && (
         <ShareButton
           conversationId={conversationId ?? ''}
           open={showShareDialog}
           onOpenChange={setShowShareDialog}
-          triggerRef={shareButtonRef}
+          triggerRef={triggerRef}
         />
       )}
       {showDeleteDialog && (
@@ -152,7 +120,7 @@ function ConvoOptions({
           conversationId={conversationId ?? ''}
           showDeleteDialog={showDeleteDialog}
           setShowDeleteDialog={setShowDeleteDialog}
-          triggerRef={deleteButtonRef}
+          triggerRef={triggerRef}
         />
       )}
     </>

@@ -59,7 +59,11 @@ export function AiAssistantPanel({
     const isFileChatMode = !!fileChat;
     const isChannelMode = !isFileChatMode && !!articleDocId;
     const isSimpleMode = isFileChatMode || isChannelMode;
-    const allowModelSelect = !isFileChatMode;
+    // Respect the caller's `features.modelSelect` hint when provided. Defaults to the
+    // historical behaviour (off in file-chat mode). FilePreviewPage now explicitly opts
+    // in for the knowledge-space file Q&A surface — without this override the model
+    // dropdown is silently force-hidden via `modelOptions=undefined` in AiChatInput.
+    const allowModelSelect = features?.modelSelect ?? !isFileChatMode;
     const allowAdvancedSelectors = !isSimpleMode;
 
     // All three hooks always called (React hooks rules); only the active one runs
@@ -115,10 +119,11 @@ export function AiAssistantPanel({
 
     const handleClearConversation = async () => {
         const ok = await confirm({
-            title: localize("com_subscription.prompt_tip"),
+            variant: "destructive",
+            title: localize("com_subscription.clear_chat_title"),
             description: localize("com_subscription.clear_chat_confirm"),
-            confirmText: localize("com_subscription.confirm"),
-            cancelText: localize("com_subscription.cancel"),
+            confirmText: localize("com_subscription.clear_chat_action"),
+            cancelText: localize("com_subscription.clear_chat_cancel"),
         });
         if (ok) clearConversation();
     };

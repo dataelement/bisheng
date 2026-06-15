@@ -3,18 +3,18 @@ from .base import BaseErrorCode
 
 class BishengInformationUnAuthorizedError(BaseErrorCode):
     Code: int = 19001
-    Msg: str = 'Unauthorized access to Bisheng Information Service'
+    Msg: str = "Unauthorized access to Bisheng Information Service"
 
 
 class BishengInformationServiceError(BaseErrorCode):
     Code: int = 19002
-    Msg: str = 'Error occurred while accessing Bisheng Information Service'
+    Msg: str = "Error occurred while accessing Bisheng Information Service"
 
 
 # Parsing failed, please try again or submit a manual request
 class InformationSourceParseError(BaseErrorCode):
     Code: int = 19003
-    Msg: str = 'Parsing failed, please try again or submit a manual requirement'
+    Msg: str = "Parsing failed, please try again or submit a manual requirement"
 
 
 # This website cannot be crawled due to permission settings. Please enter a valid "Column List Page" URL (e.g., News, Policies and Regulations list pages).
@@ -31,90 +31,90 @@ class InformationSourcePageError(BaseErrorCode):
 
 class InformationSourceCrawlLimitError(BaseErrorCode):
     Code: int = 19006
-    Msg: str = '网站爬取数量超过当前 API key 限制'
+    Msg: str = "网站爬取数量超过当前 API key 限制"
 
 
 class InformationSourceSubscriptionLimitError(BaseErrorCode):
     Code: int = 19007
-    Msg: str = '订阅信息源数量超过当前 API key 限制'
+    Msg: str = "订阅信息源数量超过当前 API key 限制"
 
 
 class InformationSourceWechatSearchLimitError(BaseErrorCode):
     Code: int = 19008
-    Msg: str = '公众号检索次数超过当前 API key 限制'
+    Msg: str = "公众号检索次数超过当前 API key 限制"
 
 
 # Channel Management error codes, module code: 190
 class ChannelNotFoundError(BaseErrorCode):
     Code: int = 19010
-    Msg: str = 'Channel not found'
+    Msg: str = "Channel not found"
 
 
 # Private channel access permission error
 class ChannelAccessDeniedError(BaseErrorCode):
     Code: int = 19011
-    Msg: str = 'Access denied to private channel'
+    Msg: str = "Access denied to private channel"
 
 
 # Channel already subscribed or application submitted
 class ChannelAlreadySubscribedError(BaseErrorCode):
     Code: int = 19012
-    Msg: str = 'Already subscribed to this channel or application is pending'
+    Msg: str = "Already subscribed to this channel or application is pending"
 
 
 # No permission to operate channel
 class ChannelPermissionDeniedError(BaseErrorCode):
     Code: int = 19013
-    Msg: str = 'Permission denied for this channel operation'
+    Msg: str = "Permission denied for this channel operation"
 
 
 # Channel module error codes, module code: 190
 # Article not found
 class ArticleNotFoundError(BaseErrorCode):
     Code: int = 19040
-    Msg: str = 'Article not found'
+    Msg: str = "Article not found"
 
 
 # Channel chat conversation not found
 class ChannelChatConversationNotFoundError(BaseErrorCode):
     Code: int = 19041
-    Msg: str = 'Chat conversation not found'
+    Msg: str = "Chat conversation not found"
 
 
 class ArticleSensitiveViolationError(BaseErrorCode):
     Code: int = 19042
-    Msg: str = 'Article contains sensitive content and cannot be viewed'
+    Msg: str = "Article contains sensitive content and cannot be viewed"
 
 
 # User has reached the maximum limit for creating channels
 class ChannelCreateLimitExceededError(BaseErrorCode):
     Code: int = 19050
-    Msg: str = 'Maximum limit for creating channels reached (up to 10 channels)'
+    Msg: str = "Maximum limit for creating channels reached"
 
 
 # Channel has reached the maximum limit for administrators
 class ChannelAdminLimitExceededError(BaseErrorCode):
     Code: int = 19051
-    Msg: str = 'Maximum limit for administrators reached (up to 5 admins)'
+    Msg: str = "Maximum limit for administrators reached (up to 5 admins)"
 
 
 # User has reached the maximum limit for subscribing channels
 class ChannelSubscribeLimitExceededError(BaseErrorCode):
     Code: int = 19052
-    Msg: str = 'Maximum limit for subscribing channels reached (up to 20 channels)'
+    Msg: str = "Maximum limit for subscribing channels reached (up to 20 channels)"
 
 
 # Knowledge space LLM not configured
 class KnowledgeSpaceLLMNotConfiguredError(BaseErrorCode):
     Code: int = 19053
-    Msg: str = 'Knowledge space LLM is not configured. Please configure it in workbench settings first'
+    Msg: str = "Knowledge space LLM is not configured. Please configure it in workbench settings first"
 
 
 class ChannelAuthorizationSyncError(BaseErrorCode):
     Code: int = 19054
-    Msg: str = 'Channel authorization sync failed'
+    Msg: str = "Channel authorization sync failed"
 
 
 class ChannelOrganizationGrantUnsubscribeDeniedError(BaseErrorCode):
     Code: int = 19055
-    Msg: str = '本频道通过部门/用户组授权给你，暂无法取消订阅'
+    Msg: str = "本频道通过部门/用户组授权给你，暂无法取消订阅"

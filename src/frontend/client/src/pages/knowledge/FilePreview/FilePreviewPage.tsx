@@ -1,24 +1,20 @@
 /**
  * FilePreviewPage — business page for file preview.
- * Handles: AI assistant toggle, split-pane drag, and injects AI button into FilePreview via slot.
- * This is the route-level component; FilePreview itself is a reusable, decoupled component.
+ * Renders the file preview with a bottom-anchored AI dock (mirrors the knowledge
+ * space dock pattern). This is the route-level component; FilePreview itself is
+ * a reusable, decoupled component.
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { Shield } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { getFileDownloadApi, getFilePreviewApi } from "~/api/knowledge";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
-import { Button } from "~/components";
-import { AiChatIcon } from "~/components/icons";
+import { Button, DropdownMenu, DropdownMenuTrigger } from "~/components";
+import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { PermissionDialog } from "~/components/permission";
-import { AiAssistantPanel } from "~/pages/Subscription/AiChat/AiAssistantPanel";
-import { useResizablePanel } from "~/pages/Subscription/hooks/useResizablePanel";
+import { FileAiDock } from "~/pages/Subscription/AiChat/FileAiDock";
 import FilePreview from "./index";
 import { useLocalize } from "~/hooks";
-
-const AI_SPLIT_STORAGE_KEY = "file-preview-ai-split-width";
-const AI_MIN_LEFT = 480;
-const AI_MIN_RIGHT = 360;
 
 /**
  * Extract file extension from a URL path, ignoring query parameters.
@@ -156,12 +152,7 @@ export default function FilePreviewPage() {
         }
     }, [canDownload, fileId, fileName, spaceId]);
 
-    // --- AI Assistant state ---
-    const [showAiAssistant, setShowAiAssistant] = useState(false);
-    const hasAutoOpenedAiAssistant = useRef(false);
-    const splitContainerRef = useRef<HTMLDivElement>(null);
-
-    // Mobile layout (<md = 768px): AI assistant renders as full-screen overlay instead of split-pane.
+    // Mobile layout (<md = 768px): keep a bare preview + floating download (no TopBar).
     const [isMobile, setIsMobile] = useState(false);
     useEffect(() => {
         const mq = window.matchMedia("(max-width: 767px)");
@@ -171,57 +162,50 @@ export default function FilePreviewPage() {
         return () => mq.removeEventListener("change", update);
     }, []);
 
-    const { leftWidth, isResizing, startResizing } = useResizablePanel({
-        storageKey: AI_SPLIT_STORAGE_KEY,
-        defaultRatio: 0.6,
-        minLeftWidth: AI_MIN_LEFT,
-        minRightWidth: AI_MIN_RIGHT,
-        containerRef: splitContainerRef,
-    });
-
+    // Mobile only: drive the browser tab title to the file name, restoring the
+    // previous title on unmount so navigating back doesn't leave it stuck.
+    // (Desktop keeps FilePreview/index's own title sync.)
     useEffect(() => {
-        if (loading || isMobile || showAiAssistant || hasAutoOpenedAiAssistant.current || !splitContainerRef.current) return;
-        const w = splitContainerRef.current.getBoundingClientRect().width;
-        if (w < AI_MIN_LEFT + AI_MIN_RIGHT) return;
-        hasAutoOpenedAiAssistant.current = true;
-        setShowAiAssistant(true);
-    }, [loading, showAiAssistant, isMobile]);
+        if (!isMobile) return;
+        const previousTitle = document.title;
+        document.title = fileName;
+        return () => {
+            document.title = previousTitle;
+        };
+    }, [isMobile, fileName]);
 
-    // Toggle AI assistant
-    const handleToggleAiAssistant = useCallback(() => {
-        setShowAiAssistant((prev) => {
-            if (!prev && !isMobile && splitContainerRef.current) {
-                const w = splitContainerRef.current.getBoundingClientRect().width;
-                if (w < AI_MIN_LEFT + AI_MIN_RIGHT) return false;
-            }
-            return !prev;
-        });
-    }, [isMobile]);
-
-    // Extra actions injected into FilePreview's TopBar slot.
-    const topBarActions = (
-        <>
-            {canManagePermission && (
+    // Extra actions injected into FilePreview's TopBar slot:
+    // a single More dropdown that consolidates permission management + download.
+    const showMoreMenu = canManagePermission || canDownload;
+    const topBarActions = showMoreMenu ? (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
                 <Button
                     variant="outline"
-                    onClick={() => setPermissionDialogOpen(true)}
-                    className="hidden h-8 gap-1 rounded-[6px] px-2 text-sm md:inline-flex"
+                    className="h-8 w-8 p-2"
+                    aria-label={localize("com_knowledge.more")}
                 >
-                    <Shield className="size-4 text-[#4e5969]" />
-                    <span className="font-normal">{localize("com_permission.manage_permission")}</span>
+                    <Outlined.MoreCircle className="size-4 text-[#4e5969]" />
                 </Button>
-            )}
-            <Button
-                variant="ghost"
-                onClick={handleToggleAiAssistant}
-                className="ai-btn-border-draw h-8 px-1.5 text-sm gap-1 rounded-[6px] hover:bg-transparent"
-            >
-                <span className="ai-btn-shimmer-overlay" />
-                <AiChatIcon className="size-4 text-[#94BFFF]" />
-                <span className="text-[#000D4D] font-normal">{localize("com_knowledge.ai_assistant")}</span>
-            </Button>
-        </>
-    );
+            </DropdownMenuTrigger>
+            <ActionMenuContent align="end">
+                {canManagePermission && (
+                    <ActionMenuItem
+                        onClick={() => setPermissionDialogOpen(true)}
+                        icon={<Outlined.PeopleSafe />}
+                        label={localize("com_permission.manage_permission")}
+                    />
+                )}
+                {canDownload && (
+                    <ActionMenuItem
+                        onClick={handleDownloadFile}
+                        icon={<Outlined.Download />}
+                        label={localize("com_knowledge.download")}
+                    />
+                )}
+            </ActionMenuContent>
+        </DropdownMenu>
+    ) : null;
 
     // Loading state while fetching preview URL
     if (loading) {
@@ -241,8 +225,56 @@ export default function FilePreviewPage() {
         );
     }
 
+    // === Mobile: bare preview + floating download button + bottom AI dock ===
+    // Mirrors the channel ArticlePage H5 layout. No TopBar/header; the preview fills
+    // the screen, controls float, and the file-chat dock pins to the bottom.
+    if (isMobile) {
+        return (
+            <div className="relative h-screen w-screen overflow-hidden bg-white">
+                {fileId && (
+                    <PermissionDialog
+                        open={permissionDialogOpen}
+                        onOpenChange={setPermissionDialogOpen}
+                        resourceType="knowledge_file"
+                        resourceId={fileId}
+                        resourceName={fileName}
+                    />
+                )}
+
+                {/* Bare preview — header hidden, viewer fills the container. */}
+                <div className="absolute inset-0">
+                    <FilePreview
+                        fileName={fileName}
+                        fileType={fileType}
+                        fileUrl={fileUrl}
+                        conversionFailed={conversionFailed}
+                        allowDownload={canDownload}
+                        onDownloadFile={handleDownloadFile}
+                        hideHeader
+                    />
+                </div>
+
+                {/* Floating top-right download button — styled like ArticlePage's menu button. */}
+                {canDownload && (
+                    <button
+                        type="button"
+                        onClick={handleDownloadFile}
+                        aria-label={localize("com_knowledge.download_file")}
+                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] backdrop-blur-md transition-colors hover:bg-white/85"
+                    >
+                        <Outlined.Download className="size-5" />
+                    </button>
+                )}
+
+                {/* Bottom AI dock — file-scoped chat (absolute inset-x-0 bottom-0). */}
+                {spaceId && fileId && <FileAiDock spaceId={spaceId} fileId={fileId} />}
+            </div>
+        );
+    }
+
+    // ─── Desktop layout: TopBar + viewer with a bottom-anchored AI dock overlay.
     return (
-        <div ref={splitContainerRef} className="h-screen flex bg-white overflow-hidden">
+        <div className="relative h-screen flex flex-col bg-white overflow-hidden">
             {fileId && (
                 <PermissionDialog
                     open={permissionDialogOpen}
@@ -253,16 +285,7 @@ export default function FilePreviewPage() {
                 />
             )}
 
-            {/* Transparent overlay during drag — prevents iframe/children from stealing mouse events */}
-            {isResizing && (
-                <div className="fixed inset-0 z-50 cursor-col-resize" />
-            )}
-
-            {/* Left: FilePreview (pure component) */}
-            <div
-                style={{ width: showAiAssistant && !isMobile ? `${leftWidth}px` : "100%" }}
-                className="h-full flex-shrink-0 overflow-hidden"
-            >
+            <div className="min-h-0 flex-1">
                 <FilePreview
                     fileName={fileName}
                     fileType={fileType}
@@ -270,39 +293,12 @@ export default function FilePreviewPage() {
                     actions={topBarActions}
                     conversionFailed={conversionFailed}
                     allowDownload={canDownload}
+                    hideHeaderDownload
                     onDownloadFile={handleDownloadFile}
                 />
             </div>
 
-            {/* Splitter (desktop only) */}
-            {showAiAssistant && !isMobile && (
-                <div className="relative z-20 w-[1px] min-w-[1px] max-w-[1px] flex-none shrink-0">
-                    <div
-                        onMouseDown={startResizing}
-                        className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
-                    >
-                        <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
-                    </div>
-                </div>
-            )}
-
-            {/* Right: AI Assistant — desktop: split column; mobile: full-screen overlay */}
-            {showAiAssistant && (
-                <div
-                    className={
-                        isMobile
-                            ? "fixed inset-0 z-[60] flex h-full flex-col overflow-hidden bg-white"
-                            : "flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-white"
-                    }
-                >
-                    <AiAssistantPanel
-                        features={{ tools: false, modelSelect: true, knowledgeBase: false, fileUpload: false }}
-                        onClose={() => setShowAiAssistant(false)}
-                        noBorder
-                        fileChat={spaceId && fileId ? { spaceId, fileId } : undefined}
-                    />
-                </div>
-            )}
+            {spaceId && fileId && <FileAiDock spaceId={spaceId} fileId={fileId} />}
         </div>
     );
 }

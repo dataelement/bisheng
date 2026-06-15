@@ -198,6 +198,8 @@ export interface ChannelDetailResponse {
     relation?: ChannelRelation | null;
     permission_ids?: ChannelPermissionId[];
     article_count: number;
+    /** Unread article count per sub-channel, keyed by sub-channel name. */
+    sub_channel_unread_counts?: Record<string, number>;
     filter_rules?: ManagerChannelFilterRule[];
     source_infos?: Array<{
         id: string;

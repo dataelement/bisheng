@@ -370,6 +370,7 @@ export function PermissionGrantTab({
           {showDepartmentIncludeChildrenControl && (
             <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-[#212121]">
               <Checkbox
+                className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                 checked={includeChildren}
                 onCheckedChange={(value) => handleIncludeChildrenChange(value === true)}
               />

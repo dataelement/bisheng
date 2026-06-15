@@ -12,13 +12,17 @@ import {
     useState,
     type KeyboardEvent,
 } from "react";
-import { useRecoilValue } from "recoil";
+import { useNavigate } from "react-router-dom";
+import { useRecoilValue, useRecoilState } from "recoil";
 import { File_Accept } from "~/common";
+import { SkillSelector } from "~/components/Linsight/Input/SkillSelector";
+import { taskModeSkillsState } from "~/store/linsight";
 import AgentToolSelector from "~/components/Chat/Input/AgentToolSelector";
 import { ChatToolDown } from "~/components/Chat/Input/ChatFormTools";
 import { ChatKnowledge } from "~/components/Chat/Input/ChatKnowledge";
+import { TaskModeToggle } from "~/components/Linsight/Input/TaskModeToggle";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
-import { ArrowDown, Loader2 } from "lucide-react";
+import { ArrowDown, Loader2, Sparkles } from "lucide-react";
 import { SendIcon } from "~/components/svg";
 import { Button, TextareaAutosize } from "~/components/ui";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
@@ -109,6 +113,28 @@ const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     );
 };
 
+const SkillTag = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => {
+    const label = skill?.display_name || skill?.name || "";
+    return (
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
+            <Sparkles className="mr-1 size-4 shrink-0 text-[#165DFF]" />
+            <span className="min-w-0 flex-1 truncate text-left" title={label}>
+                {label}
+            </span>
+            {onRemove && (
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    aria-label="Remove"
+                >
+                    ✕
+                </button>
+            )}
+        </div>
+    );
+};
+
 const UploadingFileTag = ({ name }: { name: string }) => {
     return (
         <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700">
@@ -126,6 +152,11 @@ export interface AiChatInputFeatures {
     tools?: boolean;
     fileUpload?: boolean;
     voiceInput?: boolean;
+    /** F035 Track H: show the task-mode entry (daily chat surface only). */
+    taskModeEntry?: boolean;
+    /** F035 Track H: this input IS the task-mode landing. Adds the "添加技能"
+     *  entry to the "+" menu; everything else mirrors the daily input. */
+    taskMode?: boolean;
 }
 
 interface AiChatInputProps {
@@ -155,6 +186,13 @@ interface AiChatInputProps {
     onSearchTypeChange?: (type: string) => void;
     /** Support Lingsi mode UI differences */
     isLingsi?: boolean;
+    /**
+     * F035: toggle task mode in place (no route jump). When provided, the
+     * task-mode entry / toggle / skill-pick call this instead of navigating, so
+     * the daily welcome page (/c) can own task mode as local state. When absent,
+     * the legacy navigate fallback is used (the /linsight Sop usage relies on it).
+     */
+    onToggleTaskMode?: () => void;
 }
 
 const AiChatInput = memo(
@@ -179,6 +217,7 @@ const AiChatInput = memo(
         searchType = "",
         onSearchTypeChange,
         isLingsi = false,
+        onToggleTaskMode,
     }: AiChatInputProps) => {
         const {
             modelSelect = true,
@@ -186,12 +225,21 @@ const AiChatInput = memo(
             tools = true,
             fileUpload = true,
             voiceInput = true,
+            // Off by default: AiChatInput is reused by other surfaces (e.g.
+            // Subscription AiAssistantPanel) that must not expose task mode.
+            taskModeEntry = false,
+            taskMode = false,
         } = features ?? {};
 
         // Upload size limit comes from /api/v1/env (Recoil bishengConfState),
         // not /api/v1/workstation/config. bsConfig does not carry this field,
         // so reading it from bsConfig would silently fall back to 50MB.
         const envConfig = useRecoilValue(bishengConfState);
+
+        // F035 (PRD §4.1.3): daily "+ → 添加 Skill" picks a skill into the fresh
+        // task session ('new'), then enters task mode (/linsight/new) where the
+        // selection is refilled as a chip. Keyed 'new' to match the landing page.
+        const [dailySkills, setDailySkills] = useRecoilState(taskModeSkillsState('new'));
 
         const isControlled = externalValue !== undefined;
         const [internalText, setInternalText] = useState("");
@@ -270,6 +318,8 @@ const AiChatInput = memo(
         const toolsDisabled = !!disabled;
         const filesDisabled = !!disabled;
 
+        const navigate = useNavigate();
+
         // Drag & paste file support (only when not disabled by exclusion)
         const { isDragging, handlePaste } = useFileDropAndPaste({
             enabled: showUpload && !disabled && !filesDisabled,
@@ -317,7 +367,7 @@ const AiChatInput = memo(
             [handleSend, isStreaming]
         );
 
-        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0) && !isLingsi;
+        const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
         return (
             <div className="px-4 sm:px-0 pb-2 touch-mobile:px-0 touch-mobile:pb-2 shrink-0 relative">
                 {/* Drag-drop overlay */}
@@ -412,6 +462,14 @@ const AiChatInput = memo(
                                         } : undefined}
                                     />
                                 ))}
+                                {/* F035: selected skills (task mode) shown as removable tags. */}
+                                {taskMode && dailySkills.map((skill) => (
+                                    <SkillTag
+                                        key={skill.name}
+                                        skill={skill}
+                                        onRemove={() => setDailySkills(dailySkills.filter((s) => s.name !== skill.name))}
+                                    />
+                                ))}
                             </div>
                         </div>
                     )}
@@ -446,12 +504,13 @@ const AiChatInput = memo(
 
                     <div className="flex h-7 min-h-7 w-full min-w-0 items-center justify-between gap-1 touch-mobile:gap-0.5">
                         {/* Toolbar：flex-1 + overflow-hidden，避免与右侧语音/发送横向重叠 */}
-                        <div className="input-bottom-left flex min-w-0 flex-1 items-center gap-2 touch-mobile:-ml-1 touch-mobile:gap-1 touch-mobile:pl-0 overflow-hidden">
+                        <div className="input-bottom-left flex min-w-0 flex-1 items-center gap-1 touch-mobile:-ml-1 touch-mobile:gap-1 touch-mobile:pl-0 overflow-hidden">
                             {/* "+" menu — v2.5: combines file upload + knowledge space +
                                 org knowledge base. Renders in place of ChatKnowledge when
                                 agent mode is active (which is the v2.5 default). */}
                             {!isLingsi && onSelectedOrgKbsChange && (
                                 <ChatKnowledge
+                                    variant="plus"
                                     config={bsConfig}
                                     disabled={!!disabled}
                                     value={selectedOrgKbs}
@@ -466,15 +525,44 @@ const AiChatInput = memo(
                                     showFileUpload={showUpload}
                                     fileUploadDisabled={filesDisabled}
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
+                                    // Task mode toggle present in both modes (plan-mode style).
+                                    showTaskModeEntry={(taskModeEntry || taskMode) && (bsConfig?.linsightConfig?.linsight_entry ?? true)}
+                                    onEnterTaskMode={onToggleTaskMode ? onToggleTaskMode : () => navigate(taskMode ? '/c/new' : '/linsight/new')}
+                                    taskModeActive={taskMode}
+                                    renderSkillSubmenu={(close) => (
+                                        <SkillSelector
+                                            selected={dailySkills}
+                                            onChange={(next) => {
+                                                setDailySkills(next);
+                                                close();
+                                                // Picking a skill enters task mode. On the daily
+                                                // welcome page do it in place (callback); otherwise
+                                                // fall back to navigating to the linsight landing.
+                                                if (onToggleTaskMode) {
+                                                    onToggleTaskMode();
+                                                } else {
+                                                    navigate('/linsight/new');
+                                                }
+                                            }}
+                                        />
+                                    )}
                                 />
                             )}
-                            {/* Model select */}
-                            {modelSelect && modelOptions && !isLingsi && (
-                                <AiModelSelect
+                            {/* Knowledge-space pill — separate "+"-menu sibling that
+                                hosts only the knowledge-space / org-knowledge submenus. */}
+                            {!isLingsi && onSelectedOrgKbsChange && (
+                                <ChatKnowledge
+                                    variant="knowledge"
+                                    config={bsConfig}
                                     disabled={!!disabled}
-                                    value={modelValue}
-                                    options={modelOptions}
-                                    onChange={onModelChange!}
+                                    value={selectedOrgKbs}
+                                    onChange={(val) => {
+                                        onSelectedOrgKbsChange(val);
+                                        if (val.length > 0 && !agentMode) {
+                                            setChatFiles(null);
+                                            onSearchTypeChange?.("");
+                                        }
+                                    }}
                                 />
                             )}
                             {/* Tools picker */}
@@ -499,10 +587,29 @@ const AiChatInput = memo(
                                     disabled={toolsDisabled}
                                 />
                             )}
+                            {/* Task-mode toggle — sits to the right of the tools
+                                block; clicking exits task mode (flips the local
+                                state in place; falls back to navigate for the
+                                legacy /linsight Sop usage). */}
+                            {taskMode && (
+                                <TaskModeToggle
+                                    active
+                                    onClick={onToggleTaskMode ? onToggleTaskMode : () => navigate('/c/new')}
+                                />
+                            )}
                         </div>
 
                         {/* Send / Stop / Voice — 固定宽度列，不参与挤压 */}
                         <div className="flex shrink-0 items-center gap-1.5 touch-mobile:gap-1">
+                            {/* Model select */}
+                            {modelSelect && modelOptions && !isLingsi && (
+                                <AiModelSelect
+                                    disabled={!!disabled}
+                                    value={modelValue}
+                                    options={modelOptions}
+                                    onChange={onModelChange!}
+                                />
+                            )}
                             {showVoice && (
                                 <SpeechToTextComponent
                                     disabled={disabled}

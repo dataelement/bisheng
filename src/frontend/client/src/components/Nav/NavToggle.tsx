@@ -10,6 +10,8 @@ export default function NavToggle({
   side = 'left',
   className = '',
   translateX,
+  /** Disable the position transition so the handle tracks the divider in real time (e.g. while dragging to resize). */
+  disableTransition = false,
   /** 会话列表栏右边缘的视口 x（px）；传入后与 translateX 二选一，把手落在分隔线右侧的主内容侧 */
   anchorRightEdgePx,
 }: {
@@ -21,6 +23,7 @@ export default function NavToggle({
   className?: string;
   /** Pixel offset when sidebar is visible. Pass a number (e.g. 240) to enable, or omit/0 to disable. */
   translateX?: number;
+  disableTransition?: boolean;
   anchorRightEdgePx?: number;
 }) {
   const localize = useLocalize();
@@ -38,7 +41,7 @@ export default function NavToggle({
     <div
       className={cn(
         className,
-        'transition-transform duration-300',
+        !disableTransition && 'transition-transform duration-300',
         useAnchor && 'fixed top-1/2 z-[50] -translate-y-1/2',
         useAnchor && (navVisible ? 'rotate-0' : 'rotate-180'),
         !useAnchor && !translateX && '-translate-y-1/2',
@@ -49,7 +52,7 @@ export default function NavToggle({
           ? { left: anchorRightEdgePx }
           : translateX
             ? {
-                transition: 'transform 0.3s ease',
+                transition: disableTransition ? 'none' : 'transform 0.3s ease',
                 transform: `translateX(${navVisible ? translateX : 0}px) translateY(-50%) ${navVisible ? '' : 'rotate(180deg)'}`,
               }
             : undefined

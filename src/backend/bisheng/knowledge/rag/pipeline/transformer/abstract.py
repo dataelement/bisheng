@@ -5,6 +5,7 @@ from typing import Any
 
 from langchain_core.documents import BaseDocumentTransformer, Document
 from langchain_core.messages import HumanMessage, SystemMessage
+from loguru import logger
 
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 
@@ -111,8 +112,21 @@ class AbstractTransformer(BaseDocumentTransformer):
                 break
             text += document.page_content
         if text:
-            abstract = self._extract_abstract(llm, text, abstract_config.abstract_prompt)
-            clean_abstract = parse_document_title(abstract)
+            # Abstract generation is a best-effort enhancement, not part of the
+            # core parsing flow. If the LLM call fails for any reason (timeout,
+            # content-audit rejection, invalid model config, ...), leave the
+            # abstract empty so the file still parses successfully instead of
+            # being marked FAILED. The exception type is intentionally broad:
+            # any summary failure is non-critical, and the failure is logged.
+            try:
+                abstract = self._extract_abstract(llm, text, abstract_config.abstract_prompt)
+                clean_abstract = parse_document_title(abstract)
+            except Exception:
+                logger.opt(exception=True).warning(
+                    "abstract generation failed for file_id={}; leaving abstract empty",
+                    getattr(self.knowledge_file, "id", None),
+                )
+                clean_abstract = ""
             if self.knowledge_file:
                 self.knowledge_file.abstract = clean_abstract
             for document in documents:

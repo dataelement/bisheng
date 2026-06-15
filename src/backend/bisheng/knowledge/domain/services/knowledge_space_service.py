@@ -1062,6 +1062,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return {
             "models": models,
             "bindings": bindings,
+            # F036-③: build the (resource_type, resource_id)->bindings index once per request
+            # and reuse across every child item, instead of rebuilding/linear-scanning per item.
+            "binding_index": FineGrainedPermissionService.build_binding_index(bindings),
             "binding_department_paths": binding_department_paths,
             "user_subject_strings": user_subject_strings,
             "membership_permission_ids": membership_permission_ids,
@@ -1095,6 +1098,57 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return_match_metadata=True,
             tuple_cache=context["tuple_cache"],
             tuple_department_paths=context["tuple_department_paths"],
+            binding_index=context["binding_index"],
+        )
+        if not matched_lineage_binding:
+            effective_permissions.update(context["membership_permission_ids"])
+        effective_permissions.update(context["public_space_permission_ids"])
+        return effective_permissions
+
+    async def _chain_effective_permission_ids(
+        self,
+        ancestor_ids: list[int],
+        *,
+        space_id: int,
+        context: dict,
+    ) -> set[str]:
+        """F036-①: effective permission ids for the ancestor chain (nearest folder -> space),
+        excluding the leaf item itself.
+
+        Mirrors ``_get_child_item_effective_permission_ids`` exactly but starts the lineage at the
+        item's nearest ancestor folder (or the space when the item is at the space root). For a
+        child item that has no nearer-than-chain binding and is not owned by the current user, its
+        view decision is fully determined by this chain (the leaf's own tuples are either the
+        additive ``owner`` grant -- handled separately via ``user_id`` -- or the structural
+        ``parent`` edge, neither of which changes the ``view_file``/``view_folder`` boolean).
+        Result is memoized per distinct ancestor chain by the caller.
+        """
+        if ancestor_ids:
+            nearest_type, nearest_id = "folder", ancestor_ids[-1]
+            lineage: list[tuple[str, int]] = [("folder", fid) for fid in reversed(ancestor_ids)] + [
+                ("knowledge_space", space_id),
+            ]
+        else:
+            nearest_type, nearest_id = "knowledge_space", space_id
+            lineage = [("knowledge_space", space_id)]
+
+        (
+            effective_permissions,
+            matched_lineage_binding,
+        ) = await FineGrainedPermissionService.get_effective_permission_ids_async(
+            self.login_user,
+            nearest_type,
+            nearest_id,
+            models=context["models"],
+            bindings=context["bindings"],
+            binding_department_paths=context["binding_department_paths"],
+            user_subject_strings=context["user_subject_strings"],
+            lineage=lineage,
+            nearest_binding_wins=True,
+            return_match_metadata=True,
+            tuple_cache=context["tuple_cache"],
+            tuple_department_paths=context["tuple_department_paths"],
+            binding_index=context["binding_index"],
         )
         if not matched_lineage_binding:
             effective_permissions.update(context["membership_permission_ids"])
@@ -2484,15 +2538,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
-    async def _filter_visible_child_items(
+    async def _filter_visible_child_items_reference(
         self,
         items: list[KnowledgeFile],
         *,
         space_id: int,
         context: dict | None = None,
     ) -> list[KnowledgeFile]:
-        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
+        """Reference (oracle) path: full per-item ReBAC evaluation (pre-F036 behaviour).
+
+        Retained as the equivalence oracle for F036 tests and as a documented fallback if the
+        invariant behind the optimized path (every non-owner file/folder grant carries a binding)
+        ever needs to be re-verified against the live tuple store. NOT on the hot path.
+        """
         permission_context = context or await self._build_child_permission_context(space_id)
+        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
 
         async def can_view(item: KnowledgeFile) -> bool:
             async with semaphore:
@@ -2503,6 +2563,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     context=permission_context,
                 )
                 return permission_id in effective_permissions
+
+        visibility = await asyncio.gather(*(can_view(item) for item in items))
+        return [item for item, allowed in zip(items, visibility) if allowed]
+
+    async def _filter_visible_child_items(
+        self,
+        items: list[KnowledgeFile],
+        *,
+        space_id: int,
+        context: dict | None = None,
+    ) -> list[KnowledgeFile]:
+        """F036-① inheritance fast-path. Visibility-equivalent to the full path under the verified
+        invariant "every non-owner file/folder grant has a binding".
+
+        Per item, decide ``view_file``/``view_folder`` as:
+        - leaf carries its own file/folder binding  -> full per-item eval (nearest-wins, unchanged);
+        - current user owns the item                 -> visible (additive ``owner`` grant);
+        - otherwise                                  -> inherit the ancestor-chain decision
+          (computed once per distinct chain; ancestor-folder bindings are honoured inside the
+          chain eval via nearest-binding-wins).
+        """
+        permission_context = context or await self._build_child_permission_context(space_id)
+        binding_index = permission_context["binding_index"]
+        bound_ff = {key for key in binding_index if key[0] in ("knowledge_file", "folder")}
+        user_id = self.login_user.user_id
+        chain_cache: dict[tuple[int, ...], set[str]] = {}
+        semaphore = asyncio.Semaphore(_CHILD_PERMISSION_CHECK_CONCURRENCY)
+
+        async def chain_perms(ancestor_ids: list[int]) -> set[str]:
+            key = tuple(ancestor_ids)
+            if key not in chain_cache:
+                chain_cache[key] = await self._chain_effective_permission_ids(
+                    ancestor_ids, space_id=space_id, context=permission_context
+                )
+            return chain_cache[key]
+
+        async def can_view(item: KnowledgeFile) -> bool:
+            object_type = "folder" if item.file_type == FileType.DIR.value else "knowledge_file"
+            permission_id = "view_folder" if item.file_type == FileType.DIR.value else "view_file"
+            if (object_type, str(item.id)) in bound_ff:
+                async with semaphore:
+                    effective_permissions = await self._get_child_item_effective_permission_ids(
+                        item,
+                        space_id=space_id,
+                        context=permission_context,
+                    )
+                return permission_id in effective_permissions
+            item_owner = getattr(item, "user_id", None)
+            if item_owner is not None and item_owner == user_id:
+                return True
+            ancestor_ids = [int(p) for p in (item.file_level_path or "").split("/") if p]
+            return permission_id in await chain_perms(ancestor_ids)
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
         return [item for item, allowed in zip(items, visibility) if allowed]
@@ -4134,7 +4246,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if effective != -1:
                 count = await SpaceChannelMemberDao.async_count_user_space_subscriptions(self.login_user.user_id)
                 if count >= effective:
-                    raise SpaceSubscribeLimitError()
+                    raise SpaceSubscribeLimitError(quota=effective)
 
         previous_status = existing.status if existing else None
         if existing:

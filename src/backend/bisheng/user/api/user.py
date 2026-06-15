@@ -1164,7 +1164,7 @@ async def reset_password(
     if not login_user.check_groups_admin(user_group_ids):
         raise HTTPException(status_code=403, detail='No permission to reset password')
 
-    user_info.password = UserService.decrypt_md5_password(password)
+    user_info.password = UserService.decrypt_md5_password_strict(password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
@@ -1190,7 +1190,7 @@ async def change_password(*,
     if user_info.password != password:
         return UserPasswordError.return_resp()
 
-    user_info.password = UserService.decrypt_md5_password(new_password)
+    user_info.password = UserService.decrypt_md5_password_strict(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 
@@ -1214,7 +1214,7 @@ async def change_password_public(*,
     if user_info.password != UserService.decrypt_md5_password(password):
         return UserValidateError.return_resp()
 
-    user_info.password = UserService.decrypt_md5_password(new_password)
+    user_info.password = UserService.decrypt_md5_password_strict(new_password)
     user_info.password_update_time = datetime.now()
     UserDao.update_user(user_info)
 

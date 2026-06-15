@@ -1,7 +1,7 @@
 # Feature Spec: 灵思任务模式（deepagents 适配层，F035）
 
 - 版本：v2.6.0 · 状态：✅ 已评审（薄 spec：需求真相在 PRD，本文件只做 AC 收口与追溯锚点）
-- 关联 PRD：[2.6 灵思 Linsight 迁移 deepagents 框架 PRD](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/2.6%20灵思%20Linsight%20迁移%20deepagents%20框架%20PRD.md)（需求唯一真相，FR/边界/优先级）
+- 关联 PRD：[2.6 灵思 Linsight 迁移 deepagents 框架 PRD](../../../docs/PRD/2.6%20灵思%20deepagents%20迁移%20PRD/灵思%20Linsight%20迁移%20deepagents%20框架%20PRD.md)（需求唯一真相，FR/边界/优先级）
 - 关联设计：[design.md](./design.md)（设计真相，原《技术方案》）
 - 关联契约：[release-contract](../release-contract.md)（F035 已登记：`LinsightSkill` / 110 段 11050–11069 / `linsight_skill` 表）
 
@@ -18,7 +18,7 @@
 | AC-1 | 端到端「提交→规划→工具调用→产物→完成」全流程走 deepagents 内核，全程流式可见 | PRD §4.1/§4.3（FR-1.x/3.x） | design §2/§3 |
 | AC-2 | 基线模型评测集上 Skill 稳定触发执行，命中率 ≥95%（基线由 POC 选定） | PRD §2.1 | design §7 + POC P4 |
 | AC-3 | Skill 管理（列表/新建/导入/编辑/删除/启停）端到端可用，按租户隔离；built-in 不暴露 | PRD §4.5（FR-5.x） | design §7 |
-| AC-4 | 存量 SOP 全量转换为 Skill，产出对账报告，异常可人工处理 | PRD §4.6（FR-6.x） | design §8 |
+| AC-4 | 存量 SOP 全量转换为 Skill；脚本输出迁移摘要（stdout + JSON，运维产物，无管理页报告界面），异常记录可人工处理 | PRD §4.6（FR-6.x） | design §8 |
 | AC-5 | HITL 中断/恢复正常；现场经持久化 checkpointer 落盘，隔任意时长可续跑，Worker 重启不丢 | PRD §4.4（FR-4.4.x） | design §4（park-and-release） |
 | AC-6 | 知识库/文件/E2B 沙箱在新内核下功能正常 | PRD §4.1.5/§4.2（FR-2.x） | design §5/§9（WorkspaceBackend） |
 | AC-7 | 多租户隔离、权限、DM8 双库回归全部通过 | PRD §4.7（FR-7.x，含 §4.7.7 任务模式菜单权限） | design §6 |

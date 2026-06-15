@@ -30,9 +30,14 @@ def column_exists(table: str, column: str) -> bool:
     """True iff ``table.column`` exists. Companion to ``table_exists``.
 
     Case-insensitive for DaMeng compatibility (identifiers returned uppercase).
+    Delegates to ``dialect_helpers.column_exists`` so the DaMeng
+    identifier-case fallback (try as-given / upper / lower) is applied here
+    too — a bare ``get_columns(table)`` raises or returns nothing for an
+    UPPERCASE-stored DM table, which would wrongly report the column missing.
     """
-    needle = column.lower()
-    return needle in {c['name'].lower() for c in inspect(op.get_bind()).get_columns(table)}
+    from bisheng.core.database.dialect_helpers import column_exists as _column_exists
+
+    return _column_exists(op.get_bind(), table, column)
 
 
 def finalize_online_migration_connection(connection: Connection) -> bool:

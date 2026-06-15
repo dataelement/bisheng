@@ -3,10 +3,10 @@ import json
 import os
 import time
 from datetime import datetime
-from typing import List, Literal, Optional, Union
+from typing import Literal, Union
 from urllib import parse
 
-from fastapi import APIRouter, Depends, Body, Query, UploadFile, File, BackgroundTasks, Request, Form
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Query, Request, UploadFile
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 from sse_starlette import EventSourceResponse
@@ -16,12 +16,19 @@ from starlette.websockets import WebSocket
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
-from bisheng.common.errcode.linsight import LinsightQuestionError, LinsightUseUpError, LinsightModifySopError, \
-    LinsightStartTaskError, LinsightSessionVersionRunningError, LinsightQueueStatusError, FileUploadError, \
-    SopShowcaseError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.common.errcode.linsight import (
+    FileUploadError,
+    LinsightModifySopError,
+    LinsightQuestionError,
+    LinsightQueueStatusError,
+    LinsightSessionVersionRunningError,
+    LinsightStartTaskError,
+    LinsightUseUpError,
+    SopShowcaseError,
+)
 from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
@@ -31,18 +38,30 @@ from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
-from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
-    LinsightSessionVersion
+from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum
+from bisheng.linsight.domain.models.linsight_session_version import (
+    LinsightSessionVersion,
+    LinsightSessionVersionDao,
+    SessionVersionStatusEnum,
+)
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
 from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
-from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
-    SubmitFileSchema, LinsightToolSchema, ToolChildrenSchema
+from bisheng.linsight.domain.schemas.linsight_schema import (
+    DownloadFilesSchema,
+    LinsightQuestionSubmitSchema,
+    LinsightToolSchema,
+    SubmitFileSchema,
+    ToolChildrenSchema,
+)
 from bisheng.linsight.domain.services.message_stream_handle import MessageStreamHandle
 from bisheng.linsight.domain.services.sop_manage import SOPManageService
-from bisheng.linsight.domain.services.state_message_manager import LinsightStateMessageManager, MessageData, \
-    MessageEventType
+from bisheng.linsight.domain.services.state_message_manager import (
+    LinsightStateMessageManager,
+    MessageData,
+    MessageEventType,
+)
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 from bisheng.share_link.api.dependencies import header_share_token_parser
 from bisheng.share_link.domain.models.share_link import ShareLink
@@ -56,7 +75,8 @@ router = APIRouter()
 async def upload_file(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     Inspiration Upload File
     :param background_tasks:
@@ -77,22 +97,26 @@ async def upload_file(
             "parsing_status": upload_result.get("parsing_status"),
         }
     except Exception as e:
-        logger.error(f"Upload Failed: {str(e)}")
+        logger.error(f"Upload Failed: {e!s}")
         return FileUploadError.return_resp()
     finally:
         await file.close()
 
     # Back to upload results
-    return resp_200(data=result,
-                    message="Key file uploaded successfully! and start parsing. Please check the resolution status later.")
+    return resp_200(
+        data=result,
+        message="Key file uploaded successfully! and start parsing. Please check the resolution status later.",
+    )
 
 
 # Get file resolution status
-@router.post("/workbench/file-parsing-status", summary="Get file resolution status",
-             response_model=UnifiedResponseModel)
+@router.post(
+    "/workbench/file-parsing-status", summary="Get file resolution status", response_model=UnifiedResponseModel
+)
 async def get_file_parsing_status(
-    file_ids: List[str] = Body(..., description="Doc.IDVertical", embed=True),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    file_ids: list[str] = Body(..., description="Doc.IDVertical", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     Get file resolution status
     :param file_ids:
@@ -118,7 +142,8 @@ async def linsight_file_download(
     file_url: str = Body(..., embed=True),
     session_version_id: str = Body(..., embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
+    share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
+) -> UnifiedResponseModel:
     session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
     if not session_version_model:
         raise NotFoundError()
@@ -126,26 +151,27 @@ async def linsight_file_download(
     # judge permission
     if session_version_model.user_id != login_user.user_id and not login_user.is_admin():
         # Access by sharing a link
-        if (share_link is None or
-            share_link.meta_data is None or
-            share_link.meta_data.get("versionId") != session_version_id):
+        if (
+            share_link is None
+            or share_link.meta_data is None
+            or share_link.meta_data.get("versionId") != session_version_id
+        ):
             raise UnAuthorizedError()
 
     minio_client = await get_minio_storage()
     file_url = file_url.lstrip("/")
     if file_url.startswith(minio_client.bucket):
-        file_url = file_url[len(minio_client.bucket) + 1:]
+        file_url = file_url[len(minio_client.bucket) + 1 :]
     file_share_url = await minio_client.get_share_link(file_url)
-    return resp_200(data={
-        "file_path": file_share_url
-    })
+    return resp_200(data={"file_path": file_share_url})
 
 
 # Submit an Idea User Issue Request
 @router.post("/workbench/submit", summary="Submit an Idea User Issue Request")
 async def submit_linsight_workbench(
     submit_obj: LinsightQuestionSubmitSchema = Body(..., description="Idea User Issue Submitter"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> EventSourceResponse:
     """
     Submit an Idea User Issue Request
     :param submit_obj:
@@ -160,7 +186,6 @@ async def submit_linsight_workbench(
         Event generator for generatingSSE events
         """
         try:
-
             system_config = await settings.aget_all_config()
 
             # DapatkanLinsight_invitation_code
@@ -172,34 +197,28 @@ async def submit_linsight_workbench(
                     return
 
             message_session_model, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
-                submit_obj,
-                login_user)
+                submit_obj, login_user
+            )
 
             response_data = {
                 "message_session": message_session_model.model_dump(),
-                "linsight_session_version": linsight_session_version_model.model_dump()
+                "linsight_session_version": linsight_session_version_model.model_dump(),
             }
         except Exception as e:
             yield LinsightQuestionError(exception=e).to_sse_event_instance()
             return
 
-        yield {
-            "event": "linsight_workbench_submit",
-            "data": json.dumps(response_data)
-        }
+        yield {"event": "linsight_workbench_submit", "data": json.dumps(response_data)}
 
         # Task Title Generation
-        title_data = await LinsightWorkbenchImpl.task_title_generate(question=submit_obj.question,
-                                                                     chat_id=message_session_model.chat_id,
-                                                                     login_user=login_user)
+        title_data = await LinsightWorkbenchImpl.task_title_generate(
+            question=submit_obj.question, chat_id=message_session_model.chat_id, login_user=login_user
+        )
 
         linsight_session_version_model.title = title_data.get("task_title")
         await LinsightSessionVersionDao.insert_one(linsight_session_version_model)
 
-        yield {
-            "event": "linsight_workbench_title_generate",
-            "data": json.dumps(title_data)
-        }
+        yield {"event": "linsight_workbench_title_generate", "data": json.dumps(title_data)}
 
     return EventSourceResponse(event_generator())
 
@@ -214,7 +233,8 @@ async def generate_sop(
     reexecute: bool = Body(False, description="Whether to rerun the buildSOP"),
     sop_id: int = Body(None, description="Featured Cases'ID"),
     example_session_version_id: str = Body(default=None, description="Reference Cases'linsight_version_id"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> EventSourceResponse:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> EventSourceResponse:
     """
     Generate and Reimagine IdeasSOP
     :param previous_session_version_id:
@@ -227,7 +247,8 @@ async def generate_sop(
     """
 
     logger.info(
-        f"Start Generating and Redesigning IdeasSOP, Inscription Conversation VersionID: {linsight_session_version_id} ")
+        f"Start Generating and Redesigning IdeasSOP, Inscription Conversation VersionID: {linsight_session_version_id} "
+    )
     start_time = time.time()
 
     session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
@@ -250,13 +271,14 @@ async def generate_sop(
     if session_version.org_knowledge_enabled and linsight_conf.max_knowledge_num > 0:
         # F027: get_knowledge returns PageInfiniteCursorData; pull `.data` for the list of KBs.
         kb_page = await KnowledgeService.get_knowledge(
-            request, login_user, KnowledgeTypeEnum.NORMAL,
+            request,
+            login_user,
+            KnowledgeTypeEnum.NORMAL,
             page_size=linsight_conf.max_knowledge_num,
         )
         res = list(kb_page.data)
     if session_version.personal_knowledge_enabled:
-        knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, None,
-                                                           KnowledgeTypeEnum.PRIVATE)
+        knowledge = await KnowledgeDao.aget_user_knowledge(login_user.user_id, None, KnowledgeTypeEnum.PRIVATE)
         if knowledge:
             res.extend(knowledge)
 
@@ -272,7 +294,7 @@ async def generate_sop(
             reexecute=reexecute,
             login_user=login_user,
             knowledge_list=res,
-            example_sop=example_sop
+            example_sop=example_sop,
         )
 
         async for event in sop_generate:
@@ -281,38 +303,40 @@ async def generate_sop(
         # End
         yield {
             "event": "sop_generate_complete",
-            "data": json.dumps({"message": "SOPGeneration and re-planning complete"})
+            "data": json.dumps({"message": "SOPGeneration and re-planning complete"}),
         }
 
     try:
         return EventSourceResponse(event_generator())
     finally:
         end_time = time.time()
-        await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
-                                          trace_id=trace_id_var.get(),
-                                          event_data=ApplicationAliveEventData(
-                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
-                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
-                                              app_type=ApplicationTypeEnum.LINSIGHT,
-                                              chat_id=session_version.session_id,
-
-                                              start_time=int(start_time),
-                                              end_time=int(end_time)
-                                          ))
-        await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
-                                          trace_id=trace_id_var.get(),
-                                          event_data=ApplicationProcessEventData(
-                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
-                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
-                                              app_type=ApplicationTypeEnum.LINSIGHT,
-                                              chat_id=session_version.session_id,
-
-                                              start_time=int(start_time),
-                                              end_time=int(end_time),
-                                              process_time=int((end_time - start_time) * 1000)
-                                          ))
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+            trace_id=trace_id_var.get(),
+            event_data=ApplicationAliveEventData(
+                app_id=ApplicationTypeEnum.LINSIGHT.value,
+                app_name=ApplicationTypeEnum.LINSIGHT.value,
+                app_type=ApplicationTypeEnum.LINSIGHT,
+                chat_id=session_version.session_id,
+                start_time=int(start_time),
+                end_time=int(end_time),
+            ),
+        )
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+            trace_id=trace_id_var.get(),
+            event_data=ApplicationProcessEventData(
+                app_id=ApplicationTypeEnum.LINSIGHT.value,
+                app_name=ApplicationTypeEnum.LINSIGHT.value,
+                app_type=ApplicationTypeEnum.LINSIGHT,
+                chat_id=session_version.session_id,
+                start_time=int(start_time),
+                end_time=int(end_time),
+                process_time=int((end_time - start_time) * 1000),
+            ),
+        )
 
 
 # workbench Changesop
@@ -320,7 +344,8 @@ async def generate_sop(
 async def modify_sop(
     sop_content: str = Body(..., description="SOPContents"),
     linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     Modify InspirationSOP
     :param sop_content:
@@ -330,7 +355,8 @@ async def modify_sop(
     """
 
     session_version_model = await LinsightSessionVersionDao.get_by_id(
-        linsight_session_version_id=linsight_session_version_id)
+        linsight_session_version_id=linsight_session_version_id
+    )
 
     if not session_version_model:
         return NotFoundError.return_resp()
@@ -340,8 +366,9 @@ async def modify_sop(
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
     try:
-        modify_res = await LinsightWorkbenchImpl.modify_sop(linsight_session_version_id=linsight_session_version_id,
-                                                            sop_content=sop_content)
+        modify_res = await LinsightWorkbenchImpl.modify_sop(
+            linsight_session_version_id=linsight_session_version_id, sop_content=sop_content
+        )
     except Exception as e:
         return LinsightModifySopError.return_resp(data=str(e))
     return resp_200(modify_res)
@@ -352,7 +379,8 @@ async def modify_sop(
 async def start_execute_sop(
     background_tasks: BackgroundTasks,
     linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     Start Executing ReimsSOP
     :param linsight_session_version_id:
@@ -361,43 +389,112 @@ async def start_execute_sop(
     """
 
     session_version_model = await LinsightSessionVersionDao.get_by_id(
-        linsight_session_version_id=linsight_session_version_id)
+        linsight_session_version_id=linsight_session_version_id
+    )
     if not session_version_model:
         return NotFoundError.return_resp()
 
     if login_user.user_id != session_version_model.user_id:
         return UnAuthorizedError.return_resp()
 
-    if session_version_model.status in [SessionVersionStatusEnum.COMPLETED, SessionVersionStatusEnum.TERMINATED,
-                                        SessionVersionStatusEnum.IN_PROGRESS]:
+    if session_version_model.status in [
+        SessionVersionStatusEnum.COMPLETED,
+        SessionVersionStatusEnum.TERMINATED,
+        SessionVersionStatusEnum.IN_PROGRESS,
+    ]:
         # The Inspiration session version has been completed or is being executed and cannot be executed again
         return LinsightSessionVersionRunningError.return_resp()
 
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
     from bisheng.linsight.worker import LinsightQueue
+
     try:
         redis_client = await get_redis_client()
-        queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
+        queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
 
         await queue.put(data=linsight_session_version_id)
-        # will besopWrite to record table
-        background_tasks.add_task(SOPManageService.add_sop_record, LinsightSOPRecord(
-            name=session_version_model.title,
-            description=None,
-            user_id=login_user.user_id,
-            content=session_version_model.sop,
-            linsight_version_id=session_version_model.id,
-            create_time=session_version_model.create_time,
-        ))
+        # Persist a SOP record only when the session actually carries SOP content.
+        # Post-de-SOP (F035), session_version_model.sop can be None; writing it
+        # would violate the linsight_sop_record.content NOT NULL constraint and
+        # is meaningless without the removed "做同款" reuse flow.
+        if session_version_model.sop:
+            background_tasks.add_task(
+                SOPManageService.add_sop_record,
+                LinsightSOPRecord(
+                    name=session_version_model.title,
+                    description=None,
+                    user_id=login_user.user_id,
+                    content=session_version_model.sop,
+                    linsight_version_id=session_version_model.id,
+                    create_time=session_version_model.create_time,
+                ),
+            )
 
     except Exception as e:
-        logger.error(f"Failed to start the Ideas task: {str(e)}")
+        logger.error(f"Failed to start the Ideas task: {e!s}")
         await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         return LinsightStartTaskError.return_resp(data=str(e))
 
-    return resp_200(data=True,
-                    message="Ideas execution task has started, execution results will be returned via message flow")
+    return resp_200(
+        data=True, message="Ideas execution task has started, execution results will be returned via message flow"
+    )
+
+
+@router.post("/workbench/continue", summary="Continue a task-mode conversation with a new turn")
+async def continue_conversation(
+    session_version_id: str = Body(..., description="Existing session version id to continue", embed=True),
+    question: str = Body(..., description="Follow-up user message", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
+    """Continue an already-finished task-mode conversation (F035 multi-turn).
+
+    A follow-up turn does NOT create a new session version: it re-enters the same
+    session_version + same LangGraph thread so the agent keeps prior context. We
+    flip the (terminal) session back to IN_PROGRESS — otherwise the worker's
+    non-terminal guard would discard the queue item — then enqueue a
+    continue-typed item. Answering a parked ask_user interrupt is a different
+    flow (/workbench/user-input, resume); this endpoint is for new turns after a
+    round has fully completed.
+    """
+    session_version_model = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id=session_version_id)
+    if not session_version_model:
+        return NotFoundError.return_resp()
+
+    if login_user.user_id != session_version_model.user_id:
+        return UnAuthorizedError.return_resp()
+
+    if session_version_model.status not in [
+        SessionVersionStatusEnum.COMPLETED,
+        SessionVersionStatusEnum.FAILED,
+    ]:
+        # A running / parked session cannot take a new top-level turn; parked
+        # tasks are continued via /workbench/user-input instead.
+        return LinsightSessionVersionRunningError.return_resp()
+
+    await MessageSessionDao.touch_session(session_version_model.session_id)
+
+    # Flip back to IN_PROGRESS BEFORE enqueue so the worker's pre-flight
+    # non-terminal guard accepts the continue item.
+    await LinsightSessionVersionDao.batch_update_session_versions_status(
+        [session_version_id], SessionVersionStatusEnum.IN_PROGRESS
+    )
+
+    try:
+        from bisheng.linsight.worker import LinsightQueue, encode_queue_item
+
+        redis_client = await get_redis_client()
+        queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
+        await queue.put(data=encode_queue_item(session_version_id, continue_question=question))
+    except Exception as e:
+        logger.error(f"Failed to continue the Ideas conversation: {e!s}")
+        # Roll back the status flip so the conversation isn't stuck IN_PROGRESS.
+        await LinsightSessionVersionDao.batch_update_session_versions_status(
+            [session_version_id], SessionVersionStatusEnum.COMPLETED
+        )
+        return LinsightStartTaskError.return_resp(data=str(e))
+
+    return resp_200(data=True, message="Follow-up turn accepted; results stream via the message flow")
 
 
 # workbench User input
@@ -406,8 +503,9 @@ async def user_input(
     session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
     linsight_execute_task_id: str = Body(..., description="Inspiration Task ExecutionID"),
     input_content: str = Body(..., description="User input"),
-    files: Optional[List[SubmitFileSchema]] = Body(None, description="User-uploaded files"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    files: list[SubmitFileSchema] | None = Body(None, description="User-uploaded files"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     User input
     :param files:
@@ -418,8 +516,7 @@ async def user_input(
     :return:
     """
 
-    session_version_model = await LinsightSessionVersionDao.get_by_id(
-        linsight_session_version_id=session_version_id)
+    session_version_model = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id=session_version_id)
     if not session_version_model:
         return NotFoundError.return_resp()
 
@@ -433,15 +530,48 @@ async def user_input(
     # If there are documents Process files first
     processed_files = await LinsightWorkbenchImpl.human_participate_add_file(session_version_model, files=files)
 
-    await state_message_manager.set_user_input(task_id=linsight_execute_task_id, user_input=input_content,
-                                               files=processed_files)
+    # Session-level clarify (ask_user fired before any todo exists): the interrupt
+    # routes to the session pseudo task (task_id == session_version_id), which has
+    # NO LinsightExecuteTask row, so set_user_input would 500. The resume only
+    # needs the user_input VALUE (the worker reads it from the queue item, not the
+    # task); persistence here is just for display/idempotency. So for the
+    # session-level case we skip set_user_input and enqueue the resume directly.
+    session_level = linsight_execute_task_id == session_version_id
+
+    if session_level:
+        already_completed = False
+    else:
+        # Idempotency guard: if the task is already USER_INPUT_COMPLETED, a resume
+        # payload was already enqueued by the first submit; skip re-enqueue so a
+        # double-submit cannot spawn two resume pick-ups for the same thread.
+        existing_task = await state_message_manager.get_execution_task(linsight_execute_task_id)
+        already_completed = (
+            existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
+        )
+
+        await state_message_manager.set_user_input(
+            task_id=linsight_execute_task_id, user_input=input_content, files=processed_files
+        )
+
+    # park-and-release (design §4.6): re-enqueue the parked task at the HEAD of
+    # the queue so it resumes ahead of newly-queued tasks (PRD §4.4.4). A parked
+    # task holds no worker slot; this lpush is what wakes it up. set_user_input
+    # raises on failure, so reaching here means the input was persisted and the
+    # task is now USER_INPUT_COMPLETED.
+    if not already_completed:
+        from bisheng.linsight.worker import LinsightQueue, encode_queue_item
+
+        redis_client = await get_redis_client()
+        queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
+        await queue.put_head(encode_queue_item(session_version_id, resume=True, user_input=input_content))
 
     return resp_200(data=True, message="User input submitted")
 
 
 # workbench Submitting Execution Result Feedback
-@router.post("/workbench/submit-feedback", summary="Submitting Execution Result Feedback",
-             response_model=UnifiedResponseModel)
+@router.post(
+    "/workbench/submit-feedback", summary="Submitting Execution Result Feedback", response_model=UnifiedResponseModel
+)
 async def submit_feedback(
     background_tasks: BackgroundTasks,
     linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID"),
@@ -449,7 +579,8 @@ async def submit_feedback(
     score: int = Body(0, ge=0, le=5, description="Users rating1-5cent"),
     is_reexecute: bool = Body(False, description="Whether to re-execute"),
     cancel_feedback: bool = Body(False, description="Cancel feedback"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     Submitting Execution Result Feedback
     :param background_tasks:
@@ -463,7 +594,8 @@ async def submit_feedback(
     """
 
     session_version_model = await LinsightSessionVersionDao.get_by_id(
-        linsight_session_version_id=linsight_session_version_id)
+        linsight_session_version_id=linsight_session_version_id
+    )
 
     if not session_version_model:
         return NotFoundError.return_resp()
@@ -510,14 +642,14 @@ async def submit_feedback(
             org_knowledge_enabled=session_version_model.org_knowledge_enabled,
             personal_knowledge_enabled=session_version_model.personal_knowledge_enabled,
             files=session_version_model.files,
-            title=session_version_model.title
+            title=session_version_model.title,
         )
         linsight_session_version_model = await LinsightSessionVersionDao.insert_one(linsight_session_version_model)
 
-        return resp_200(data=linsight_session_version_model.model_dump(),
-                        message="The submission successfully succeeded.")
+        return resp_200(
+            data=linsight_session_version_model.model_dump(), message="The submission successfully succeeded."
+        )
     else:
-
         if feedback is not None and feedback.strip() != "":
             await SOPManageService.update_sop_record_feedback(session_version_model.id, feedback)
 
@@ -525,11 +657,13 @@ async def submit_feedback(
 
 
 # workbench Termination
-@router.post("/workbench/terminate-execute", summary="Termination of execution of Ideas",
-             response_model=UnifiedResponseModel)
+@router.post(
+    "/workbench/terminate-execute", summary="Termination of execution of Ideas", response_model=UnifiedResponseModel
+)
 async def terminate_execute(
     linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     Termination of execution of Ideas
     :param linsight_session_version_id:
@@ -538,7 +672,8 @@ async def terminate_execute(
     """
     # The logic of executing Spirituality is now terminated
     session_version_model = await LinsightSessionVersionDao.get_by_id(
-        linsight_session_version_id=linsight_session_version_id)
+        linsight_session_version_id=linsight_session_version_id
+    )
 
     if not session_version_model:
         return NotFoundError.return_resp()
@@ -556,14 +691,15 @@ async def terminate_execute(
     await MessageSessionDao.touch_session(session_version_model.session_id)
 
     from bisheng.linsight.worker import LinsightQueue
+
     redis_client = await get_redis_client()
-    queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
+    queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
 
     try:
         # Remove task from queue
         await queue.remove(linsight_session_version_id)
     except Exception as e:
-        logger.error(f"Failed to delete queue task: {str(e)}")
+        logger.error(f"Failed to delete queue task: {e!s}")
 
     # Update status is terminated
     session_version_model.status = SessionVersionStatusEnum.TERMINATED
@@ -580,8 +716,8 @@ async def terminate_execute(
             data={
                 "message": "Task has been actively stopped by the user",
                 "session_id": session_version_model.id,
-                "terminated_at": datetime.now().isoformat()
-            }
+                "terminated_at": datetime.now().isoformat(),
+            },
         )
     )
 
@@ -589,12 +725,15 @@ async def terminate_execute(
 
 
 # Get all the Inspiration information for the current session
-@router.get("/workbench/session-version-list", summary="Get all the Inspiration information for the current session",
-            response_model=UnifiedResponseModel)
+@router.get(
+    "/workbench/session-version-list",
+    summary="Get all the Inspiration information for the current session",
+    response_model=UnifiedResponseModel,
+)
 async def get_linsight_session_version_list(
     session_id: str = Query(..., description="SessionsID"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)
+    share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
 ) -> UnifiedResponseModel:
     """
     Get all the Inspiration information for the current session
@@ -611,9 +750,11 @@ async def get_linsight_session_version_list(
         session_version_ids = [model.id for model in linsight_session_version_models]
 
         # Access by sharing a link
-        if (share_link is None or
-            share_link.meta_data is None or
-            share_link.meta_data.get("versionId") not in session_version_ids):
+        if (
+            share_link is None
+            or share_link.meta_data is None
+            or share_link.meta_data.get("versionId") not in session_version_ids
+        ):
             return UnAuthorizedError.return_resp()
 
         # Only return to the shared version of the Inspiration session
@@ -629,7 +770,8 @@ async def get_linsight_session_version_list(
 async def get_execute_task_detail(
     session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    share_link: Union['ShareLink', None] = Depends(header_share_token_parser)) -> UnifiedResponseModel:
+    share_link: Union["ShareLink", None] = Depends(header_share_token_parser),
+) -> UnifiedResponseModel:
     """
     Get task execution details
     :param share_link:
@@ -647,9 +789,11 @@ async def get_execute_task_detail(
 
     if login_user.user_id != linsight_session_version_model.user_id:
         # Access by sharing a link
-        if (share_link is None or
-            share_link.meta_data is None or
-            share_link.meta_data.get("versionId") != session_version_id):
+        if (
+            share_link is None
+            or share_link.meta_data is None
+            or share_link.meta_data.get("versionId") != session_version_id
+        ):
             return UnAuthorizedError.return_resp()
 
     return resp_200(execute_task_models)
@@ -660,7 +804,8 @@ async def get_execute_task_detail(
 async def task_message_stream(
     websocket: WebSocket,
     session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws)):
+    login_user: UserPayload = Depends(UserPayload.get_login_user_from_ws),
+):
     """
     Creating an Idea Task Message Flow websocket
     :param Authorize:
@@ -681,38 +826,42 @@ async def task_message_stream(
         end_time = time.time()
         session_version_info = await LinsightSessionVersionDao.get_by_id(session_version_id)
 
-        await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
-                                          trace_id=trace_id_var.get(),
-                                          event_data=ApplicationAliveEventData(
-                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
-                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
-                                              app_type=ApplicationTypeEnum.LINSIGHT,
-                                              chat_id=session_version_info.session_id if session_version_info else "",
-                                              start_time=int(start_time),
-                                              end_time=int(end_time)
-                                          ))
-        await telemetry_service.log_event(user_id=login_user.user_id,
-                                          event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
-                                          trace_id=trace_id_var.get(),
-                                          event_data=ApplicationProcessEventData(
-                                              app_id=ApplicationTypeEnum.LINSIGHT.value,
-                                              app_name=ApplicationTypeEnum.LINSIGHT.value,
-                                              app_type=ApplicationTypeEnum.LINSIGHT,
-                                              chat_id=session_version_info.session_id if session_version_info else "",
-
-                                              start_time=int(start_time),
-                                              end_time=int(end_time),
-                                              process_time=int((end_time - start_time) * 1000)
-                                          ))
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.APPLICATION_ALIVE,
+            trace_id=trace_id_var.get(),
+            event_data=ApplicationAliveEventData(
+                app_id=ApplicationTypeEnum.LINSIGHT.value,
+                app_name=ApplicationTypeEnum.LINSIGHT.value,
+                app_type=ApplicationTypeEnum.LINSIGHT,
+                chat_id=session_version_info.session_id if session_version_info else "",
+                start_time=int(start_time),
+                end_time=int(end_time),
+            ),
+        )
+        await telemetry_service.log_event(
+            user_id=login_user.user_id,
+            event_type=BaseTelemetryTypeEnum.APPLICATION_PROCESS,
+            trace_id=trace_id_var.get(),
+            event_data=ApplicationProcessEventData(
+                app_id=ApplicationTypeEnum.LINSIGHT.value,
+                app_name=ApplicationTypeEnum.LINSIGHT.value,
+                app_type=ApplicationTypeEnum.LINSIGHT,
+                chat_id=session_version_info.session_id if session_version_info else "",
+                start_time=int(start_time),
+                end_time=int(end_time),
+                process_time=int((end_time - start_time) * 1000),
+            ),
+        )
 
 
 # Batch Download Task Files
 @router.post("/workbench/batch-download-files", summary="Batch Download Task Files")
 async def batch_download_files(
     zip_name: str = Body(..., description="Package name"),
-    file_info_list: List[DownloadFilesSchema] = Body(..., description="File Information List"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    file_info_list: list[DownloadFilesSchema] = Body(..., description="File Information List"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     Batch Download Task Files
     :param zip_name:
@@ -731,12 +880,10 @@ async def batch_download_files(
         return StreamingResponse(
             iter([zip_bytes]),
             media_type="application/zip",
-            headers={
-                "Content-Disposition": f"attachment; filename={zip_name}"
-            }
+            headers={"Content-Disposition": f"attachment; filename={zip_name}"},
         )
     except Exception as e:
-        logger.error(f"Failed to download file in bulk: {str(e)}")
+        logger.error(f"Failed to download file in bulk: {e!s}")
         return ResourceDownloadError.return_resp(data=str(e))
 
 
@@ -744,7 +891,8 @@ async def batch_download_files(
 @router.get("/workbench/queue-status", summary="Get Ideas Queue Queue Status", response_model=UnifiedResponseModel)
 async def get_queue_status(
     session_version_id: str = Query(..., description="Inspiration Conversation VersionID"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     Get Ideas Queue Queue Status
     :param session_version_id:
@@ -752,13 +900,14 @@ async def get_queue_status(
     :return:
     """
     from bisheng.linsight.worker import LinsightQueue
+
     redis_client = await get_redis_client()
-    queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
+    queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
     try:
         index = await queue.index(session_version_id)
         return resp_200(data={"index": index}, message="Get Ideas queue queue status successfully")
     except Exception as e:
-        logger.error(f"Failed to get Ideas queue queue status: {str(e)}")
+        logger.error(f"Failed to get Ideas queue queue status: {e!s}")
         return LinsightQueueStatusError.return_resp(data=str(e))
 
 
@@ -767,7 +916,8 @@ async def get_queue_status(
 async def download_md_to_pdf_or_docx(
     file_info: DownloadFilesSchema = Body(..., description="File information"),
     to_type: Literal["pdf", "docx"] = Body(..., description="the target file type of the conversion,pdfORdocx"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
     """
     InspirationmdTransferpdf or docx Mengunduh
     :param file_info:
@@ -779,18 +929,20 @@ async def download_md_to_pdf_or_docx(
         # Call the implementation class to process the file download
         file_name, file_bytes = await LinsightWorkbenchImpl.download_file(file_info)
 
-        md_str = file_bytes.decode('utf-8')
+        md_str = file_bytes.decode("utf-8")
 
         # Filename Removal Extension
         file_name = os.path.splitext(file_name)[0]
 
         if to_type == "pdf":
             from bisheng.common.utils.markdown_cmpnt.md_to_pdf import md_to_pdf_bytes
+
             converted_bytes = await util.sync_func_to_async(md_to_pdf_bytes)(md_str)
             file_name = f"{file_name}.pdf"
             content_type = "application/pdf"
         else:
             from bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx import MarkDocx
+
             mark_docx = MarkDocx()
             converted_bytes, _ = await util.sync_func_to_async(mark_docx)(md_str)
             file_name = f"{file_name}.docx"
@@ -800,19 +952,18 @@ async def download_md_to_pdf_or_docx(
         return StreamingResponse(
             iter([converted_bytes]),
             media_type=content_type,
-            headers={
-                "Content-Disposition": f"attachment; filename={file_name}"
-            }
+            headers={"Content-Disposition": f"attachment; filename={file_name}"},
         )
     except Exception as e:
-        logger.error(f"This content failed to load: {str(e)}")
+        logger.error(f"This content failed to load: {e!s}")
         return ResourceDownloadError.return_resp(data=str(e))
 
 
 @router.post("/sop/add", summary="Add InspirationSOP", response_model=UnifiedResponseModel)
 async def add_sop(
     sop_obj: SOPManagementSchema = Body(..., description="SOPObjects"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
     """
     Add InspirationSOP
     :return:
@@ -824,7 +975,8 @@ async def add_sop(
 @router.post("/sop/update", summary="Update IdeasSOP", response_model=UnifiedResponseModel)
 async def update_sop(
     sop_obj: SOPManagementUpdateSchema = Body(..., description="SOPObjects"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
     """
     Update IdeasSOP
     :return:
@@ -841,25 +993,28 @@ async def get_sop_list(
     page: int = Query(1, ge=1, description="Page"),
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
     sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
     """
     Get IdeasSOPVertical
     :return:
     """
 
     with strict_tenant_filter():
-        sop_pages = await SOPManageService.get_sop_list(keywords=keywords, showcase=showcase, page=page,
-                                                        page_size=page_size,
-                                                        sort=sort)
+        sop_pages = await SOPManageService.get_sop_list(
+            keywords=keywords, showcase=showcase, page=page, page_size=page_size, sort=sort
+        )
     return resp_200(data=sop_pages)
 
 
 @router.get("/sop/record", summary="Get IdeasSOPRecord", response_model=UnifiedResponseModel)
-async def get_sop_record(login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-                         keyword: str = Query(None, description="Search keyword ..."),
-                         sort: str = Query(default='desc', description="Sort ByascORdesc"),
-                         page: int = Query(1, ge=1, description="Page"),
-                         page_size: int = Query(10, ge=1, le=100, description="Items per page")):
+async def get_sop_record(
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+    keyword: str = Query(None, description="Search keyword ..."),
+    sort: str = Query(default="desc", description="Sort ByascORdesc"),
+    page: int = Query(1, ge=1, description="Page"),
+    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
+):
     with strict_tenant_filter():
         res, count = await SOPManageService.get_sop_record(keyword, sort, page, page_size)
     return resp_200(PageList(total=count, list=res))
@@ -869,28 +1024,30 @@ async def get_sop_record(login_user: UserPayload = Depends(UserPayload.get_tenan
 async def sync_sop_record(
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
     record_ids: list[int] = Body(..., description="sopThe only one in the record sheetid"),
-    override: Optional[bool] = Body(default=False,
-                                    description="Force override or not"),
-    save_new: Optional[bool] = Body(default=False,
-                                    description="Do you want to save as newsop")) -> UnifiedResponseModel:
+    override: bool | None = Body(default=False, description="Force override or not"),
+    save_new: bool | None = Body(default=False, description="Do you want to save as newsop"),
+) -> UnifiedResponseModel:
     """
     SynchronousSOP"Log to"SOPGallery
     """
     with strict_tenant_filter():
         repeat_name = await SOPManageService.sync_sop_record(record_ids, override, save_new)
-    return resp_200(data={
-        "repeat_name": repeat_name,
-    }, message="success")
+    return resp_200(
+        data={
+            "repeat_name": repeat_name,
+        },
+        message="success",
+    )
 
 
 @router.post("/sop/upload", summary="Batch importSOPWarehousing", response_model=UnifiedResponseModel)
 async def upload_sop_file(
     file: UploadFile = File(..., description="Uploaded bySOPDoc."),
-    override: Optional[bool] = Body(default=False, description="Force override or not"),
-    save_new: Optional[bool] = Body(default=False, description="Do you want to save as newsop"),
-    ignore_error: Optional[bool] = Body(default=False,
-                                        description="Whether to ignore the file and find the wrong record"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
+    override: bool | None = Body(default=False, description="Force override or not"),
+    save_new: bool | None = Body(default=False, description="Do you want to save as newsop"),
+    ignore_error: bool | None = Body(default=False, description="Whether to ignore the file and find the wrong record"),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
     """
     Batch importSOPWarehousing
     """
@@ -898,14 +1055,20 @@ async def upload_sop_file(
     try:
         with strict_tenant_filter():
             success_rows, error_rows, repeat_rows = await SOPManageService.upload_sop_file(
-                login_user, file, ignore_error, override, save_new,
+                login_user,
+                file,
+                ignore_error,
+                override,
+                save_new,
             )
 
-        return resp_200(data={
-            "success_rows": success_rows,
-            "error_rows": error_rows,
-            "repeat_rows": repeat_rows,
-        })
+        return resp_200(
+            data={
+                "success_rows": success_rows,
+                "error_rows": error_rows,
+                "repeat_rows": repeat_rows,
+            }
+        )
     except Exception as e:
         raise e
     finally:
@@ -914,8 +1077,9 @@ async def upload_sop_file(
 
 @router.delete("/sop/remove", summary="Delete IdeasSOP", response_model=UnifiedResponseModel)
 async def remove_sop(
-    sop_ids: List[int] = Body(..., description="SOPUniqueness quantificationIDVertical", embed=True),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
+    sop_ids: list[int] = Body(..., description="SOPUniqueness quantificationIDVertical", embed=True),
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
     """
     Delete IdeasSOP
     :return:
@@ -930,7 +1094,8 @@ async def get_sop_banner(
     page: int = Query(1, ge=1, description="Page"),
     page_size: int = Query(10, ge=1, le=100, description="Items per page"),
     sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     """
     Set or cancel IdeasSOPLibrary's Featured Cases
     :return:
@@ -939,12 +1104,14 @@ async def get_sop_banner(
     return resp_200(data=sop_pages)
 
 
-@router.post("/sop/showcase", summary="Set or unset a featured case for Inspirations",
-             response_model=UnifiedResponseModel)
+@router.post(
+    "/sop/showcase", summary="Set or unset a featured case for Inspirations", response_model=UnifiedResponseModel
+)
 async def set_sop_banner(
     sop_id: int = Body(..., description="SOPUniqueness quantificationID"),
     showcase: bool = Body(..., description="Set as featured case or not"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user)) -> UnifiedResponseModel:
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
     """
     Set or cancel IdeasSOPLibrary's Featured Cases
     :return:
@@ -967,13 +1134,16 @@ async def set_sop_banner(
     return resp_200()
 
 
-@router.get("/sop/showcase/result", summary="Obtain the results of the execution of the selected cases of Lingsi",
-            response_model=UnifiedResponseModel)
+@router.get(
+    "/sop/showcase/result",
+    summary="Obtain the results of the execution of the selected cases of Lingsi",
+    response_model=UnifiedResponseModel,
+)
 async def get_sop_showcase_result(
     sop_id: int = Query(None, description="SOPUniqueness quantificationID"),
-    linsight_version_id: str = Query(None,
-                                     description="Inspiration Conversation VersionID, use this parameter first"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)) -> UnifiedResponseModel:
+    linsight_version_id: str = Query(None, description="Inspiration Conversation VersionID, use this parameter first"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> UnifiedResponseModel:
     if not linsight_version_id:
         # CorrectionSOPpresence or does it
         existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
@@ -985,21 +1155,15 @@ async def get_sop_showcase_result(
     version_info = await LinsightSessionVersionDao.get_by_id(linsight_version_id)
     # Outstanding sessions do not return execution results
     if not version_info or version_info.status != SessionVersionStatusEnum.COMPLETED:
-        return resp_200(data={
-            "version_info": None,
-            "execute_tasks": []
-        })
+        return resp_200(data={"version_info": None, "execute_tasks": []})
     execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(linsight_version_id)
-    return resp_200(data={
-        "version_info": version_info,
-        "execute_tasks": execute_task_models
-    })
+    return resp_200(data={"version_info": version_info, "execute_tasks": execute_task_models})
 
 
 class IntegratedExecuteRequestBody(BaseModel):
-    query: Optional[str] = Body(None, description="User Submitted Questions")
-    sop_content: Optional[str] = Body(None, description="User SubmittedSOPContents")
-    tool_ids: List[int] = Body(None, description="Selected ToolsIDVertical")
+    query: str | None = Body(None, description="User Submitted Questions")
+    sop_content: str | None = Body(None, description="User SubmittedSOPContents")
+    tool_ids: list[int] = Body(None, description="Selected ToolsIDVertical")
     org_knowledge_enabled: bool = Body(False, description="Whether to enable organization knowledge base")
     personal_knowledge_enabled: bool = Body(False, description="Whether or not to enable Personal Knowledge Base")
     # Generate Inspiration OnlySOPNo
@@ -1010,10 +1174,13 @@ class IntegratedExecuteRequestBody(BaseModel):
 @router.post("/integrated-execute", summary="Lingsi Integrated Execution Interface")
 async def integrated_execute(
     request: Request,
-    body_param: str = Form(..., description="Request Body Parameters,JSONString",
-                           example='{"query": "Please write one for mePythonfunction that calculates the sum of two numbers.", "tool_ids": [1, 2], "org_knowledge_enabled": true, "personal_knowledge_enabled": false}'),
-    files: List[UploadFile] = File(None, description="Uploaded files list:"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user)
+    body_param: str = Form(
+        ...,
+        description="Request Body Parameters,JSONString",
+        example='{"query": "Please write one for mePythonfunction that calculates the sum of two numbers.", "tool_ids": [1, 2], "org_knowledge_enabled": true, "personal_knowledge_enabled": false}',
+    ),
+    files: list[UploadFile] = File(None, description="Uploaded files list:"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> EventSourceResponse:
     """
     Lingsi Integrated Execution Interface
@@ -1030,36 +1197,57 @@ async def integrated_execute(
 
         if not body_param.query and not body_param.sop_content:
             logger.error(
-                f"Users {login_user.user_id} Bad request body parameters: queryAndsop_contentCannot be empty at the same time")
-            return EventSourceResponse(iter([{
-                "event": "error",
-                "data": json.dumps({
-                    "error": "Bad request body parameters",
-                    "message": "queryAndsop_contentCannot be empty at the same time",
-                    "code": "PARAM_ERROR"
-                })
-            }]))
+                f"Users {login_user.user_id} Bad request body parameters: queryAndsop_contentCannot be empty at the same time"
+            )
+            return EventSourceResponse(
+                iter(
+                    [
+                        {
+                            "event": "error",
+                            "data": json.dumps(
+                                {
+                                    "error": "Bad request body parameters",
+                                    "message": "queryAndsop_contentCannot be empty at the same time",
+                                    "code": "PARAM_ERROR",
+                                }
+                            ),
+                        }
+                    ]
+                )
+            )
 
     except ValidationError as e:
-        logger.error(f"Users {login_user.user_id} Request body parameter parsing failed: {str(e)}")
-        return EventSourceResponse(iter([{
-            "event": "error",
-            "data": json.dumps({
-                "error": "Request body parameter parsing failed",
-                "message": str(e),
-                "code": "PARAM_VALIDATION_ERROR"
-            })
-        }]))
+        logger.error(f"Users {login_user.user_id} Request body parameter parsing failed: {e!s}")
+        return EventSourceResponse(
+            iter(
+                [
+                    {
+                        "event": "error",
+                        "data": json.dumps(
+                            {
+                                "error": "Request body parameter parsing failed",
+                                "message": str(e),
+                                "code": "PARAM_VALIDATION_ERROR",
+                            }
+                        ),
+                    }
+                ]
+            )
+        )
     except Exception as e:
-        logger.error(f"Users {login_user.user_id} Parameter parsing exception: {str(e)}")
-        return EventSourceResponse(iter([{
-            "event": "error",
-            "data": json.dumps({
-                "error": "Parameter parsing exception",
-                "message": str(e),
-                "code": "PARAM_PARSE_ERROR"
-            })
-        }]))
+        logger.error(f"Users {login_user.user_id} Parameter parsing exception: {e!s}")
+        return EventSourceResponse(
+            iter(
+                [
+                    {
+                        "event": "error",
+                        "data": json.dumps(
+                            {"error": "Parameter parsing exception", "message": str(e), "code": "PARAM_PARSE_ERROR"}
+                        ),
+                    }
+                ]
+            )
+        )
 
     logger.info(f"Users {login_user.user_id} Submit an Idea Question: {body_param.query}")
 
@@ -1086,7 +1274,7 @@ async def integrated_execute(
                 # Parse files asynchronously to increase timeout control
                 parse_result = await asyncio.wait_for(
                     LinsightWorkbenchImpl.parse_file(upload_result, login_user.user_id),
-                    timeout=300  # 5Minute Timeout
+                    timeout=300,  # 5Minute Timeout
                 )
 
                 if not parse_result:
@@ -1095,30 +1283,41 @@ async def integrated_execute(
                 upload_file_results.append(parse_result)
                 logger.debug(f"Doc. {file.filename} Upload parsing complete")
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 error_msg = f"Doc. {file.filename} Resolve Timeout"
                 logger.error(f"Users {login_user.user_id} {error_msg}")
-                return EventSourceResponse(iter([{
-                    "event": "error",
-                    "data": json.dumps({
-                        "error": "File parsing timeout",
-                        "message": error_msg,
-                        "code": "FILE_PARSE_TIMEOUT"
-                    })
-                }]))
-
+                return EventSourceResponse(
+                    iter(
+                        [
+                            {
+                                "event": "error",
+                                "data": json.dumps(
+                                    {
+                                        "error": "File parsing timeout",
+                                        "message": error_msg,
+                                        "code": "FILE_PARSE_TIMEOUT",
+                                    }
+                                ),
+                            }
+                        ]
+                    )
+                )
 
             except Exception as e:
-                error_msg = f"Doc. {getattr(file, 'filename', f'{idx + 1} No filename')} Upload parsing error: {str(e)}"
+                error_msg = f"Doc. {getattr(file, 'filename', f'{idx + 1} No filename')} Upload parsing error: {e!s}"
                 logger.error(f"Users {login_user.user_id} {error_msg}")
-                return EventSourceResponse(iter([{
-                    "event": "error",
-                    "data": json.dumps({
-                        "error": "Upload Failed",
-                        "message": error_msg,
-                        "code": "FILE_UPLOAD_ERROR"
-                    })
-                }]))
+                return EventSourceResponse(
+                    iter(
+                        [
+                            {
+                                "event": "error",
+                                "data": json.dumps(
+                                    {"error": "Upload Failed", "message": error_msg, "code": "FILE_UPLOAD_ERROR"}
+                                ),
+                            }
+                        ]
+                    )
+                )
 
         # Check file parsing results
         if upload_file_results:
@@ -1131,15 +1330,23 @@ async def integrated_execute(
             if failed_files:
                 error_msg = f"The following files failed to be parsed: {', '.join(failed_files)}"
                 logger.error(f"Users {login_user.user_id} {error_msg}")
-                return EventSourceResponse(iter([{
-                    "event": "error",
-                    "data": json.dumps({
-                        "error": "File parsing failed",
-                        "message": error_msg,
-                        "code": "FILE_PARSE_FAILED",
-                        "failed_files": failed_files
-                    })
-                }]))
+                return EventSourceResponse(
+                    iter(
+                        [
+                            {
+                                "event": "error",
+                                "data": json.dumps(
+                                    {
+                                        "error": "File parsing failed",
+                                        "message": error_msg,
+                                        "code": "FILE_PARSE_FAILED",
+                                        "failed_files": failed_files,
+                                    }
+                                ),
+                            }
+                        ]
+                    )
+                )
 
     async def event_generator():
         """
@@ -1149,7 +1356,6 @@ async def integrated_execute(
         state_message_manager = None
 
         try:
-
             # ======================== Submit an Idea Question ========================
             try:
                 submit_files = []
@@ -1158,32 +1364,35 @@ async def integrated_execute(
                         if not f.get("file_id"):
                             logger.warning(f"Doc. {f.get('original_filename', 'Unknown')} missing? file_id")
                             continue
-                        submit_files.append(SubmitFileSchema(
-                            file_id=f.get("file_id"),
-                            file_name=f.get("original_filename"),
-                            parsing_status=f.get("parsing_status")
-                        ))
+                        submit_files.append(
+                            SubmitFileSchema(
+                                file_id=f.get("file_id"),
+                                file_name=f.get("original_filename"),
+                                parsing_status=f.get("parsing_status"),
+                            )
+                        )
 
                 submit_tools = None
                 if body_param.tool_ids:
                     try:
-                        submit_tools = [LinsightToolSchema(
-                            id="1",
-                            is_preset=1,
-                            children=[
-                                ToolChildrenSchema(id=int(tool_id))
-                                for tool_id in body_param.tool_ids
-                            ]
-                        )]
+                        submit_tools = [
+                            LinsightToolSchema(
+                                id="1",
+                                is_preset=1,
+                                children=[ToolChildrenSchema(id=int(tool_id)) for tool_id in body_param.tool_ids],
+                            )
+                        ]
                     except (ValueError, TypeError) as e:
-                        logger.error(f"Users {login_user.user_id} ToolsIDfailed to transform: {str(e)}")
+                        logger.error(f"Users {login_user.user_id} ToolsIDfailed to transform: {e!s}")
                         yield {
                             "event": "error",
-                            "data": json.dumps({
-                                "error": "ToolsIDFormat salah.",
-                                "message": f"ToolsIDMust be numeric: {str(e)}",
-                                "code": "INVALID_TOOL_ID"
-                            })
+                            "data": json.dumps(
+                                {
+                                    "error": "ToolsIDFormat salah.",
+                                    "message": f"ToolsIDMust be numeric: {e!s}",
+                                    "code": "INVALID_TOOL_ID",
+                                }
+                            ),
                         }
                         return
 
@@ -1192,7 +1401,7 @@ async def integrated_execute(
                     org_knowledge_enabled=body_param.org_knowledge_enabled,
                     personal_knowledge_enabled=body_param.personal_knowledge_enabled,
                     files=submit_files,
-                    tools=submit_tools
+                    tools=submit_tools,
                 )
 
                 _, linsight_session_version_model = await LinsightWorkbenchImpl.submit_user_question(
@@ -1202,21 +1411,16 @@ async def integrated_execute(
                 if not linsight_session_version_model:
                     raise ValueError("Failed to submit the idea question, the return result is empty")
 
-                yield {
-                    "event": "linsight_workbench_submit",
-                    "data": linsight_session_version_model.model_dump_json()
-                }
+                yield {"event": "linsight_workbench_submit", "data": linsight_session_version_model.model_dump_json()}
 
             except Exception as e:
-                error_msg = f"Failed to submit Idea Question: {str(e)}"
+                error_msg = f"Failed to submit Idea Question: {e!s}"
                 logger.error(f"Users {login_user.user_id} {error_msg}")
                 yield {
                     "event": "error",
-                    "data": json.dumps({
-                        "error": "Failed to submit question",
-                        "message": error_msg,
-                        "code": "SUBMIT_QUESTION_ERROR"
-                    })
+                    "data": json.dumps(
+                        {"error": "Failed to submit question", "message": error_msg, "code": "SUBMIT_QUESTION_ERROR"}
+                    ),
                 }
                 return
 
@@ -1224,8 +1428,7 @@ async def integrated_execute(
             if body_param.sop_content:
                 # User Submitted DirectlySOPcontent, skipping generationSOPStep
                 await LinsightSessionVersionDao.modify_sop_content(
-                    linsight_session_version_id=linsight_session_version_model.id,
-                    sop_content=body_param.sop_content
+                    linsight_session_version_id=linsight_session_version_model.id, sop_content=body_param.sop_content
                 )
             else:
                 try:
@@ -1233,12 +1436,17 @@ async def integrated_execute(
                     linsight_conf = settings.get_linsight_conf()
 
                     # Get the organization's knowledge base
-                    if (linsight_session_version_model.org_knowledge_enabled and
-                        linsight_conf and linsight_conf.max_knowledge_num > 0):
+                    if (
+                        linsight_session_version_model.org_knowledge_enabled
+                        and linsight_conf
+                        and linsight_conf.max_knowledge_num > 0
+                    ):
                         try:
                             # F027: get_knowledge returns PageInfiniteCursorData; pull `.data`.
                             org_knowledge_page = await KnowledgeService.get_knowledge(
-                                request, login_user, KnowledgeTypeEnum.NORMAL,
+                                request,
+                                login_user,
+                                KnowledgeTypeEnum.NORMAL,
                                 page_size=linsight_conf.max_knowledge_num,
                             )
                             org_knowledge = list(org_knowledge_page.data)
@@ -1247,7 +1455,8 @@ async def integrated_execute(
                                 logger.debug(f"Get {len(org_knowledge)} organization knowledge")
                         except Exception as e:
                             logger.warning(
-                                f"Users {login_user.user_id} Failed to get organization knowledge base: {str(e)}")
+                                f"Users {login_user.user_id} Failed to get organization knowledge base: {e!s}"
+                            )
                             # Proceed without interrupting the process
 
                     # Get your own knowledge base
@@ -1260,8 +1469,7 @@ async def integrated_execute(
                                 knowledge_res.extend(personal_knowledge)
                                 logger.debug(f"Get {len(personal_knowledge)} personal knowledge")
                         except Exception as e:
-                            logger.warning(
-                                f"Users {login_user.user_id} Failed to get personal knowledge base: {str(e)}")
+                            logger.warning(f"Users {login_user.user_id} Failed to get personal knowledge base: {e!s}")
                             # Proceed without interrupting the process
 
                     # BuatSOP
@@ -1271,7 +1479,7 @@ async def integrated_execute(
                         feedback_content=None,
                         reexecute=False,
                         login_user=login_user,
-                        knowledge_list=knowledge_res
+                        knowledge_list=knowledge_res,
                     )
 
                     async for event in sop_generate:
@@ -1280,21 +1488,16 @@ async def integrated_execute(
                             return
                         yield event
 
-                    yield {
-                        "event": "sop_generate_complete",
-                        "data": json.dumps({"message": "SOPBuild Complete"})
-                    }
+                    yield {"event": "sop_generate_complete", "data": json.dumps({"message": "SOPBuild Complete"})}
 
                 except Exception as e:
-                    error_msg = f"SOPGeneration Failed: {str(e)}"
+                    error_msg = f"SOPGeneration Failed: {e!s}"
                     logger.error(f"Users {login_user.user_id} {error_msg}")
                     yield {
                         "event": "error",
-                        "data": json.dumps({
-                            "error": "SOPGeneration Failed",
-                            "message": error_msg,
-                            "code": "SOP_GENERATE_ERROR"
-                        })
+                        "data": json.dumps(
+                            {"error": "SOPGeneration Failed", "message": error_msg, "code": "SOP_GENERATE_ERROR"}
+                        ),
                     }
                     return
 
@@ -1304,25 +1507,24 @@ async def integrated_execute(
             # ======================== to process ========================
             try:
                 from bisheng.linsight.worker import LinsightQueue
+
                 redis_client = await get_redis_client()
-                queue = LinsightQueue('queue', namespace="linsight", redis=redis_client)
+                queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
                 await queue.put(data=linsight_session_version_model.id)
 
                 yield {
                     "event": "linsight_execute_submitted",
-                    "data": json.dumps({"message": "Idea Execution Task Submitted"})
+                    "data": json.dumps({"message": "Idea Execution Task Submitted"}),
                 }
 
             except Exception as e:
-                error_msg = f"Failed to submit execution task: {str(e)}"
+                error_msg = f"Failed to submit execution task: {e!s}"
                 logger.error(f"Users {login_user.user_id} {error_msg}")
                 yield {
                     "event": "error",
-                    "data": json.dumps({
-                        "error": "Failed to submit execution task",
-                        "message": error_msg,
-                        "code": "SUBMIT_TASK_ERROR"
-                    })
+                    "data": json.dumps(
+                        {"error": "Failed to submit execution task", "message": error_msg, "code": "SUBMIT_TASK_ERROR"}
+                    ),
                 }
                 return
 
@@ -1343,39 +1545,39 @@ async def integrated_execute(
                         logger.warning(f"Users {login_user.user_id} Message consumption timed out")
                         yield {
                             "event": "warning",
-                            "data": json.dumps({
-                                "message": "The execution time is longer and may take more time to complete",
-                                "code": "EXECUTION_TIMEOUT_WARNING"
-                            })
+                            "data": json.dumps(
+                                {
+                                    "message": "The execution time is longer and may take more time to complete",
+                                    "code": "EXECUTION_TIMEOUT_WARNING",
+                                }
+                            ),
                         }
                         break
 
                     try:
                         message = await asyncio.wait_for(
                             state_message_manager.pop_message(),
-                            timeout=10.0  # 10seconds timeout
+                            timeout=10.0,  # 10seconds timeout
                         )
-                    except asyncio.TimeoutError:
-
+                    except TimeoutError:
                         linsight_session_version_model = await state_message_manager.get_session_version_info()
 
                         if linsight_session_version_model.status in [
                             SessionVersionStatusEnum.COMPLETED,
                             SessionVersionStatusEnum.TERMINATED,
-                            SessionVersionStatusEnum.FAILED
+                            SessionVersionStatusEnum.FAILED,
                         ]:
                             message = MessageData(
-                                event_type=MessageEventType.FINAL_RESULT if linsight_session_version_model.status == SessionVersionStatusEnum.COMPLETED else MessageEventType.TASK_TERMINATED,
-                                data=linsight_session_version_model.model_dump()
+                                event_type=MessageEventType.FINAL_RESULT
+                                if linsight_session_version_model.status == SessionVersionStatusEnum.COMPLETED
+                                else MessageEventType.TASK_TERMINATED,
+                                data=linsight_session_version_model.model_dump(),
                             )
 
                             if message.event_type == MessageEventType.FINAL_RESULT:
                                 final_result_message = message
 
-                            yield {
-                                "event": "linsight_execute_message",
-                                "data": message.model_dump_json()
-                            }
+                            yield {"event": "linsight_execute_message", "data": message.model_dump_json()}
 
                             logger.info(f"Users {login_user.user_id} Idea execution has ended, stop getting messages")
                             break
@@ -1383,15 +1585,12 @@ async def integrated_execute(
                         # Timeout to continue waiting
                         continue
                     except Exception as e:
-                        logger.error(f"Users {login_user.user_id} Failed to fetch messages: {str(e)}")
+                        logger.error(f"Users {login_user.user_id} Failed to fetch messages: {e!s}")
                         break
 
                     if message:
                         message_count += 1
-                        yield {
-                            "event": "linsight_execute_message",
-                            "data": message.model_dump_json()
-                        }
+                        yield {"event": "linsight_execute_message", "data": message.model_dump_json()}
 
                         # Save final result message
                         if message.event_type == MessageEventType.FINAL_RESULT:
@@ -1401,7 +1600,7 @@ async def integrated_execute(
                         if message.event_type in [
                             MessageEventType.ERROR_MESSAGE,
                             MessageEventType.TASK_TERMINATED,
-                            MessageEventType.FINAL_RESULT
+                            MessageEventType.FINAL_RESULT,
                         ]:
                             break
                     else:
@@ -1417,8 +1616,9 @@ async def integrated_execute(
 
                         if session_version_model.output_result:
                             final_files = session_version_model.output_result.get("final_files", [])
-                            all_from_session_files = session_version_model.output_result.get("all_from_session_files",
-                                                                                             [])
+                            all_from_session_files = session_version_model.output_result.get(
+                                "all_from_session_files", []
+                            )
 
                             minio_client = await get_minio_storage()
 
@@ -1426,54 +1626,47 @@ async def integrated_execute(
                             for final_file in final_files:
                                 if final_file.get("url"):
                                     try:
-                                        final_file["url"] = await minio_client.get_share_link(final_file["url"],
-                                                                                              clear_host=False)
+                                        final_file["url"] = await minio_client.get_share_link(
+                                            final_file["url"], clear_host=False
+                                        )
                                     except Exception as e:
-                                        logger.warning(f"Failed to generate final file share link: {str(e)}")
+                                        logger.warning(f"Failed to generate final file share link: {e!s}")
 
                             for session_file in all_from_session_files:
                                 if session_file.get("url"):
                                     try:
-                                        session_file["url"] = await minio_client.get_share_link(session_file["url"],
-                                                                                                clear_host=False)
+                                        session_file["url"] = await minio_client.get_share_link(
+                                            session_file["url"], clear_host=False
+                                        )
                                     except Exception as e:
-                                        logger.warning(f"Failed to generate session file share link: {str(e)}")
+                                        logger.warning(f"Failed to generate session file share link: {e!s}")
 
                     except Exception as e:
-                        logger.error(f"Users {login_user.user_id} Failed to process final result: {str(e)}")
+                        logger.error(f"Users {login_user.user_id} Failed to process final result: {e!s}")
 
                 yield {
                     "event": "final_result_files",
-                    "data": json.dumps({
-                        "final_files": final_files,
-                        "all_from_session_files": all_from_session_files
-                    })
+                    "data": json.dumps({"final_files": final_files, "all_from_session_files": all_from_session_files}),
                 }
 
             except Exception as e:
-                error_msg = f"Message consumption failed: {str(e)}"
+                error_msg = f"Message consumption failed: {e!s}"
                 logger.error(f"Users {login_user.user_id} {error_msg}")
                 yield {
                     "event": "error",
-                    "data": json.dumps({
-                        "error": "Message consumption failed",
-                        "message": error_msg,
-                        "code": "MESSAGE_CONSUME_ERROR"
-                    })
+                    "data": json.dumps(
+                        {"error": "Message consumption failed", "message": error_msg, "code": "MESSAGE_CONSUME_ERROR"}
+                    ),
                 }
                 return
 
         except Exception as e:
             # Catch all unhandled exceptions
-            error_msg = f"Interface Execution Exception: {str(e)}"
+            error_msg = f"Interface Execution Exception: {e!s}"
             logger.error(f"Users {login_user.user_id} {error_msg}", exc_info=True)
             yield {
                 "event": "error",
-                "data": json.dumps({
-                    "error": "System Exception",
-                    "message": error_msg,
-                    "code": "SYSTEM_ERROR"
-                })
+                "data": json.dumps({"error": "System Exception", "message": error_msg, "code": "SYSTEM_ERROR"}),
             }
 
         finally:

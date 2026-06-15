@@ -1,14 +1,6 @@
 import {LinsightInfo} from "~/store/linsight";
 import request from "./request";
 
-// 保存修改sop
-export function saveSop(data: {
-    sop_content: string,
-    linsight_session_version_id: string,
-}): Promise<any> {
-    return request.post('/api/v1/linsight/workbench/sop-modify', data);
-}
-
 // 获取灵思会话信息
 export function getLinsightSessionVersionList(ConversationId: string, shareToken: string): Promise<any> {
     const headers = shareToken ? {'share-token': shareToken} : {}
@@ -21,7 +13,7 @@ export function getLinsightSessionVersionList(ConversationId: string, shareToken
         return res.data.map(item => {
                 return {
                     ...item,
-                    sop: item.sop?.replace(/^---/, '')?.replace(/\`\`\`markdown/g, '```') ?? '' // 去除markdown标记，否则vditor编辑器会显示为代码块
+                    sop: item.sop?.replace(/^---/, '')?.replace(/\`\`\`markdown/g, '```') ?? '' // strip markdown fences from legacy SOP text for plain rendering
                 }
             }
         )
@@ -56,6 +48,14 @@ export function startLinsight(versionId: string): Promise<any> {
     });
 }
 
+// F035 多轮对话：在已完成的同一会话里追加新一轮（复用同一 session_version + agent thread，保留上下文）
+export function continueLinsight(session_version_id: string, question: string): Promise<any> {
+    return request.post('/api/v1/linsight/workbench/continue', {
+        session_version_id,
+        question
+    });
+}
+
 // 用户任务中输入事件
 export function userInputLinsightEvent(session_version_id: string, linsight_execute_task_id: string, input_content: string, files: any[]): Promise<any> {
     return request.post('/api/v1/linsight/workbench/user-input', {
@@ -73,23 +73,40 @@ export function userStopLinsightEvent(linsight_session_version_id: string): Prom
     });
 }
 
-// 反馈
-export function submitLinsightFeedback(versionid, data: {
-    feedback: string,
-    score: number,
-    is_reexecute: boolean,
-    cancel_feedback: boolean
-}): Promise<any> {
-    return request.post('/api/v1/linsight/workbench/submit-feedback',
-        {linsight_session_version_id: versionid, ...data},
-        {showError: true}
-    )
-}
-
-
 // 获取灵思工具
 export function getLinsightTools(): Promise<any> {
     return request.get('/api/v1/tool/linsight/preset');
+}
+
+/** F035 Track H: enabled skills for the end-user picker (plain login auth). */
+export interface SelectableSkill {
+    name: string;
+    display_name: string;
+    description: string;
+}
+
+export function getSelectableSkills(): Promise<SelectableSkill[]> {
+    return request.get('/api/v1/linsight/skill/selectable').then((res: any) => res?.data || []);
+}
+
+/**
+ * F035 Track H: workbench model config for the task-mode model selector.
+ * Returns the daily-chat model list plus `linsight_default_model_id`
+ * (admin-marked default execution model for Linsight).
+ */
+export interface LinsightModelConfig {
+    models?: { id: string | number; name?: string; displayName?: string }[];
+    linsight_default_model_id?: string | null;
+}
+
+export function getLinsightModelConfig(): Promise<LinsightModelConfig> {
+    return request.get('/api/v1/llm/workbench').then((res: any) => {
+        const body = res?.data ?? {};
+        // F022 wraps the config as {data, inherited_from_root, fallback_blocked};
+        // unwrap defensively so both shapes keep working.
+        const cfg = body && typeof body.data === 'object' && body.data !== null ? body.data : body;
+        return cfg || {};
+    });
 }
 
 
@@ -161,17 +178,8 @@ export function checkSopQueueStatus(id: string) {
     })
 }
 
-// Selected Cases
-export function getFeaturedCases(page: number): Promise<any> {
-    return request.get('/api/v1/linsight/sop/showcase', {
-        params: {
-            page,
-            page_size: 12
-        }
-    });
-}
-
 // Get case details based on SOP ID
+// LEGACY (F035): kept only for the /linsight/case share page (read-only).
 export function getCaseDetail(sop_id: string): Promise<any> {
     return request.get('/api/v1/linsight/sop/showcase/result', {
         params: {

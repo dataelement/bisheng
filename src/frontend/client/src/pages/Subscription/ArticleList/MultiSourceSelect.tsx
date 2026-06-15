@@ -1,4 +1,6 @@
 import { useLocalize } from "~/hooks";
+import { useToastContext } from "~/Providers";
+import { NotificationSeverity } from "~/common";
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -23,6 +25,11 @@ interface MultiSourceSelectProps {
     onChange: (value: string[]) => void; // 变更回调
     placeholder?: string;
     className?: string;
+    /** Controlled open state — when provided, takes precedence over internal state. */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    /** Visually hide the trigger button (still mounted so the popover can anchor). */
+    hideTrigger?: boolean;
 }
 
 export function MultiSourceSelect({
@@ -31,9 +38,45 @@ export function MultiSourceSelect({
     onChange,
     placeholder,
     className,
+    open: openProp,
+    onOpenChange,
+    hideTrigger,
 }: MultiSourceSelectProps) {
     const localize = useLocalize();
-    const [open, setOpen] = React.useState(false);
+    const { showToast } = useToastContext();
+    const [internalOpen, setInternalOpen] = React.useState(false);
+    const [hasEmptyError, setHasEmptyError] = React.useState(false);
+    const open = openProp ?? internalOpen;
+    // At least one source must stay selected. While the selection is empty a transparent
+    // overlay (rendered below) blocks clicks from reaching other controls and routes them
+    // through `setOpen` for the toast + red-error feedback. We don't toggle Radix's `modal`
+    // dynamically because that re-mounts RemoveScroll/FocusScope and causes a visible flash.
+    const requireSelection = options.length > 0 && value.length === 0;
+    const lastBlockedAtRef = React.useRef(0);
+    const setOpen = (next: boolean) => {
+        // Closing with nothing selected is not allowed — warn the user and keep the popover open.
+        if (!next && requireSelection) {
+            setHasEmptyError(true);
+            // Throttle: the overlay and Radix's dismissable layer can both fire on the same click.
+            const now = performance.now();
+            if (now - lastBlockedAtRef.current > 300) {
+                showToast?.({
+                    message: localize("com_subscription.select_at_least_one_source"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                lastBlockedAtRef.current = now;
+            }
+            return;
+        }
+        setHasEmptyError(false);
+        onOpenChange?.(next);
+        if (openProp === undefined) setInternalOpen(next);
+    };
+
+    // Clear the error styling once the user picks at least one source.
+    React.useEffect(() => {
+        if (value.length > 0) setHasEmptyError(false);
+    }, [value.length]);
     const [isMenuScrolling, setIsMenuScrolling] = React.useState(false);
     const menuScrollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -45,34 +88,23 @@ export function MultiSourceSelect({
         onChange(newValue);
     };
 
-    // 处理“全部信息源”的点击
+    // Standard select-all: "全部" reflects and controls the individual source checkboxes.
+    const allSelected = options.length > 0 && options.every((opt) => value.includes(opt.id));
+    const someSelected = value.length > 0 && !allSelected;
+    const selectAllState: boolean | "indeterminate" = allSelected ? true : someSelected ? "indeterminate" : false;
+
+    // 处理“全部信息源”的点击：已全选则取消全选，否则全选
     const handleSelectAll = () => {
-        // 逻辑：点击“全部”时，清空具体的选中数组
-        onChange([]);
+        onChange(allSelected ? [] : options.map((opt) => opt.id));
     };
 
     // 渲染触发器内部的显示内容
     const renderValue = () => {
-        // 如果数组为空，回显“全部信息源”
-        if (value.length === 0) {
+        // 无选中（无筛选）或已全选，回显“全部信息源”；部分选中回显“部分信息源”
+        if (value.length === 0 || allSelected) {
             return <span className="text-gray-500">{placeholder ?? localize("com_subscription.all_sources")}</span>;
         }
-
-        // 找到第一个选中项的 Label
-        const firstSelected = options.find((opt) => opt.id === value[0]);
-
-        return (
-            <div className="flex items-center gap-1.5 overflow-hidden">
-                <span className="inline-flex items-center bg-gray-100 px-2 py-0.5 rounded text-sm text-gray-800 whitespace-nowrap">
-                    {firstSelected?.label}
-                </span>
-                {value.length > 1 && (
-                    <span className="inline-flex items-center bg-gray-100 px-2 py-0.5 rounded text-sm text-gray-800">
-                        +{value.length - 1}...
-                    </span>
-                )}
-            </div>
-        );
+        return <span className="text-gray-800">{localize("com_subscription.partial_sources")}</span>;
     };
 
     const handleMenuScroll = () => {
@@ -82,34 +114,40 @@ export function MultiSourceSelect({
     };
 
     return (
+        <>
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
                 <Button
                     variant="outline"
                     className={cn(
                         "w-auto min-w-[160px] h-9 justify-between px-3 font-normal",
+                        hasEmptyError && "border-[#F53F3F] bg-[#F53F3F]/10",
+                        hideTrigger && "pointer-events-none inline-block size-0 min-w-0 overflow-hidden border-0 p-0 opacity-0",
                         className
                     )}
+                    aria-hidden={hideTrigger || undefined}
+                    tabIndex={hideTrigger ? -1 : undefined}
                 >
                     {renderValue()}
                     <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
             </PopoverTrigger>
             <PopoverContent
-                className="w-[180px] max-h-80 overflow-y-auto scroll-on-scroll p-0 bg-white rounded-lg"
+                className="w-[180px] max-h-80 overflow-y-auto scroll-on-scroll p-0 bg-white rounded-[8px] border-none shadow-[0px_2px_8px_rgba(0,23,66,0.1)]"
                 align="start"
                 onScroll={handleMenuScroll}
                 data-scrolling={isMenuScrolling ? "true" : "false"}
             >
-                <div className="p-3">
+                <div className="p-2">
                     {/* 全部信息源 选项 */}
                     <div
-                        className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-sm py-[5px] transition-colors fine-pointer:hover:bg-slate-100"
+                        className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-[6px] px-2 py-[5px] transition-colors fine-pointer:hover:bg-[#F2F3F5]"
                         onClick={handleSelectAll}
                     >
                         <Checkbox
                             id="source-all"
-                            checked={value.length === 0}
+                            className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                            checked={selectAllState}
                             onCheckedChange={handleSelectAll}
                             onClick={(e) => e.stopPropagation()}
                         />
@@ -125,11 +163,12 @@ export function MultiSourceSelect({
                         {options.map((option) => (
                             <div
                                 key={option.id}
-                                className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-sm py-[5px] transition-colors fine-pointer:hover:bg-slate-100"
+                                className="flex w-full min-w-0 cursor-pointer items-center space-x-2 rounded-[6px] px-2 py-[5px] transition-colors fine-pointer:hover:bg-[#F2F3F5]"
                                 onClick={() => handleToggleItem(option.id)}
                             >
                                 <Checkbox
                                     id={`source-${option.id}`}
+                                    className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                                     checked={value.includes(option.id)}
                                     onCheckedChange={() => handleToggleItem(option.id)}
                                     onClick={(e) => e.stopPropagation()}
@@ -143,5 +182,16 @@ export function MultiSourceSelect({
                 </div>
             </PopoverContent>
         </Popover>
+        {/* Empty-selection block: a transparent overlay below the popover content (z-40)
+            and above the rest of the UI. Outside clicks land here, are consumed, and routed
+            through setOpen → the (blocked) close path that surfaces the warning toast. */}
+        {open && requireSelection ? (
+            <div
+                className="fixed inset-0 z-40"
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(false); }}
+                aria-hidden
+            />
+        ) : null}
+        </>
     );
 }

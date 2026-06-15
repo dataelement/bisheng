@@ -2,9 +2,10 @@ import asyncio
 import json
 import os
 import uuid
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Dict, List, Optional, AsyncGenerator, Tuple, Any
+from typing import Any
 from urllib.parse import unquote
 
 from e2b.sandbox.filesystem.filesystem import WriteEntry
@@ -13,29 +14,36 @@ from langchain_core.tools import BaseTool
 from loguru import logger
 
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.linsight import LinsightToolInitError, LinsightBishengLLMError, LinsightGenerateSopError
+from bisheng.common.errcode.linsight import LinsightBishengLLMError, LinsightGenerateSopError, LinsightToolInitError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.cache.utils import save_file_to_folder, CACHE_DIR
+from bisheng.core.cache.utils import CACHE_DIR, save_file_to_folder
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.flow import FlowType
-from bisheng.database.models.session import MessageSessionDao, MessageSession
+from bisheng.database.models.session import MessageSession, MessageSessionDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
+from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
-from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao, SessionVersionStatusEnum, \
-    LinsightSessionVersion
+from bisheng.linsight.domain.models.linsight_session_version import (
+    LinsightSessionVersion,
+    LinsightSessionVersionDao,
+    SessionVersionStatusEnum,
+)
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOPRecord
-from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema, DownloadFilesSchema, \
-    SubmitFileSchema
+from bisheng.linsight.domain.schemas.linsight_schema import (
+    DownloadFilesSchema,
+    LinsightQuestionSubmitSchema,
+    SubmitFileSchema,
+)
 from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
@@ -50,17 +58,18 @@ from bisheng_langchain.linsight.const import ExecConfig
 @dataclass
 class TaskNode:
     """Task node to build the task tree"""
+
     task: Any  # LinsightExecuteTask Objects
-    children: List['TaskNode'] = None
+    children: list["TaskNode"] = None
 
     def __post_init__(self):
         if self.children is None:
             self.children = []
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert task nodes to dictionary format"""
         task_dict = self.task.model_dump()
-        task_dict['children'] = [child.to_dict() for child in self.children]
+        task_dict["children"] = [child.to_dict() for child in self.children]
         return task_dict
 
 
@@ -74,6 +83,7 @@ class LinsightWorkbenchImpl:
 
     class LinsightError(Exception):
         """LinsightRelated Errors"""
+
         pass
 
     class SearchSOPError(Exception):
@@ -96,14 +106,17 @@ class LinsightWorkbenchImpl:
 
         # BuatLLMInstances
         linsight_conf = settings.get_linsight_conf()
-        llm = await LLMService.get_bisheng_linsight_llm(invoke_user_id=invoke_user_id,
-                                                        model_id=workbench_conf.task_model.id,
-                                                        temperature=linsight_conf.default_temperature)
+        llm = await LLMService.get_bisheng_linsight_llm(
+            invoke_user_id=invoke_user_id,
+            model_id=workbench_conf.linsight_default_model_id,
+            temperature=linsight_conf.default_temperature,
+        )
         return llm, workbench_conf
 
     @classmethod
-    async def human_participate_add_file(cls, linsight_session_version: LinsightSessionVersion,
-                                         files: List[SubmitFileSchema]) -> Optional[List]:
+    async def human_participate_add_file(
+        cls, linsight_session_version: LinsightSessionVersion, files: list[SubmitFileSchema]
+    ) -> list | None:
         """
         Adding Files When Manually Involved
         :param linsight_session_version:
@@ -113,7 +126,9 @@ class LinsightWorkbenchImpl:
         if not files:
             return None
 
-        processed_files = await cls._process_submitted_files(files, linsight_session_version.session_id)
+        processed_files = await cls._process_submitted_files(
+            files, linsight_session_version.session_id, linsight_session_version.user_id
+        )
 
         if linsight_session_version.files:
             linsight_session_version.files.extend(processed_files)
@@ -125,8 +140,9 @@ class LinsightWorkbenchImpl:
         return processed_files
 
     @classmethod
-    async def submit_user_question(cls, submit_obj: LinsightQuestionSubmitSchema,
-                                   login_user: UserPayload) -> tuple[MessageSession, LinsightSessionVersion]:
+    async def submit_user_question(
+        cls, submit_obj: LinsightQuestionSubmitSchema, login_user: UserPayload
+    ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
 
@@ -141,36 +157,52 @@ class LinsightWorkbenchImpl:
             LinsightError: When creating a session fails
         """
         try:
-            # Generate Unique SessionsID
-            chat_id = uuid.uuid4().hex
+            # Continue an existing session when session_id is supplied, else
+            # start a fresh one. Continuing reuses the MessageSession and only
+            # appends a new version, so follow-up rounds stay in one 会话 (F035).
+            continuing = bool(submit_obj.session_id)
+            chat_id = submit_obj.session_id or uuid.uuid4().hex
 
-            # Process files (if present)
-            processed_files = await cls._process_submitted_files(submit_obj.files, chat_id)
+            message_session = None
+            if continuing:
+                message_session = await MessageSessionDao.async_get_one(chat_id)
+                if message_session is None or message_session.user_id != login_user.user_id:
+                    # Stale / invalid / foreign session_id -> fall back to new.
+                    continuing = False
+                    chat_id = uuid.uuid4().hex
 
-            # Create a message session
-            message_session = MessageSession(
-                chat_id=chat_id,
-                flow_id=ApplicationTypeEnum.LINSIGHT.value,
-                name='New Chat',
-                flow_name='New Chat',
-                flow_type=FlowType.LINSIGHT.value,
-                user_id=login_user.user_id
-            )
+            # Process files (if present) — after chat_id is finalized
+            processed_files = await cls._process_submitted_files(submit_obj.files, chat_id, login_user.user_id)
 
-            message_session = await MessageSessionDao.async_insert_one(message_session)
+            if not continuing:
+                # F035 Track J (unified conversation model): a task turn is not a
+                # standalone session — when no session_id is supplied (first turn,
+                # no daily conversation yet) the session is created as a daily
+                # workstation conversation (flow_type=15), mirroring
+                # workstation/chat_service. Task mode is a per-turn flag, never a
+                # session type, so flow_type=LINSIGHT(20) is no longer minted here.
+                message_session = MessageSession(
+                    chat_id=chat_id,
+                    name="New Chat",
+                    flow_type=FlowType.WORKSTATION.value,
+                    user_id=login_user.user_id,
+                )
 
-            # RecordTelemetryJournal
-            await telemetry_service.log_event(user_id=login_user.user_id,
-                                              event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
-                                              trace_id=trace_id_var.get(),
-                                              event_data=NewMessageSessionEventData(
-                                                  session_id=message_session.chat_id,
-                                                  app_id=ApplicationTypeEnum.LINSIGHT.value,
-                                                  source="platform",
-                                                  app_name=ApplicationTypeEnum.LINSIGHT.value,
-                                                  app_type=ApplicationTypeEnum.LINSIGHT
-                                              )
-                                              )
+                message_session = await MessageSessionDao.async_insert_one(message_session)
+
+                # RecordTelemetryJournal
+                await telemetry_service.log_event(
+                    user_id=login_user.user_id,
+                    event_type=BaseTelemetryTypeEnum.NEW_MESSAGE_SESSION,
+                    trace_id=trace_id_var.get(),
+                    event_data=NewMessageSessionEventData(
+                        session_id=message_session.chat_id,
+                        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+                        source="platform",
+                        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+                        app_type=ApplicationTypeEnum.DAILY_CHAT,
+                    ),
+                )
 
             # Create Ideas Conversation Version
             linsight_session_version = LinsightSessionVersion(
@@ -180,75 +212,254 @@ class LinsightWorkbenchImpl:
                 tools=submit_obj.tools,
                 org_knowledge_enabled=submit_obj.org_knowledge_enabled,
                 personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
-                files=processed_files
+                files=processed_files,
+                model=submit_obj.model,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
+
+            # F035 Track J: land the user question in the unified conversation
+            # stream so the round reads as one Q→A pair regardless of task mode.
+            # (The bot answer turn is written at completion in task_exec.)
+            await linsight_execute_utils.persist_task_user_turn(
+                chat_id=chat_id, user_id=login_user.user_id, question=submit_obj.question
+            )
 
             return message_session, linsight_session_version
 
         except Exception as e:
-            logger.error(f"Failed to submit user question: {str(e)}")
-            raise cls.LinsightError(f"Failed to submit user question: {str(e)}")
+            logger.error(f"Failed to submit user question: {e!s}")
+            raise cls.LinsightError(f"Failed to submit user question: {e!s}")
 
     @classmethod
-    async def _process_submitted_files(cls, files: Optional[List[SubmitFileSchema]], chat_id: str) -> Optional[List]:
-        """
-        Process Submitted Files
+    async def _get_redis(cls):
+        """Return the redis client (indirection so tests can patch it)."""
+        return await get_redis_client()
+
+    @classmethod
+    async def _process_submitted_files(
+        cls, files: list[SubmitFileSchema] | None, chat_id: str, user_id: int = 0
+    ) -> list | None:
+        """Process submitted files (F035: offload-first ingestion).
+
+        For each submitted file:
+          1. Resolve parsed-markdown metadata. Prefer the formal-bucket product
+             already produced in this session (idempotent re-entry, TC-5); fall
+             back to the temp metadata in Redis (``linsight_file:{file_id}``).
+          2. Copy temp -> formal bucket only on first processing (skipped when a
+             formal product already exists).
+          3. Write the parsed markdown into the session **workspace**
+             (``workspace/{chat_id}/uploads/<name>/index.md``) so deepagents file
+             tools and E2B copy-in/out read it as the single truth (design §9.3.2).
+          4. Attach pointer-block metadata (``workspace_path`` / ``line_count`` /
+             ``image_count``) for ``prepare_file_list`` (zero body in prompt).
+
+        If a file's temp metadata has expired (Redis miss) and no formal product
+        exists, it is flagged invalid (``valid=False``, ``parsing_status="expired"``)
+        rather than silently dropped, so the frontend can prompt a re-upload
+        (design §9.3.8 key boundary).
 
         Args:
-            files: List of files
-            chat_id: SessionsID
+            files: List of submitted file references.
+            chat_id: Session id; scopes the workspace prefix.
 
         Returns:
-            List of processed files
+            List of processed file metadata dicts (one per submitted file).
         """
         if not files:
             return None
 
-        file_ids = []
-
         for file in files:
             if file.parsing_status != "completed":
                 raise cls.LinsightError(f"file {file.file_name} status is error: {file.parsing_status}")
-            file_ids.append(file.file_id)
 
-        redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}" for file_id in file_ids]
-        redis_client = await get_redis_client()
-        processed_files = await redis_client.amget(redis_keys)
+        # Daily-bucket files (unified-resource) are parsed on-the-fly; only the
+        # linsight-pipeline files need a Redis temp_info lookup.
+        linsight_files = [f for f in files if not f.file_url]
+        redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{f.file_id}" for f in linsight_files]
+        redis_client = await cls._get_redis()
+        temp_list = await redis_client.amget(redis_keys) if redis_keys else []
+        temp_by_id = {f.file_id: t for f, t in zip(linsight_files, temp_list)}
 
-        for file_info in processed_files:
-            if file_info:
-                await cls._copy_file_to_session_storage(file_info, chat_id)
+        minio_client = await get_minio_storage()
+
+        processed_files: list[dict] = []
+        for submit_file in files:
+            if submit_file.file_url:
+                entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id)
+            else:
+                entry = await cls._ingest_one_file(
+                    submit_file, temp_by_id.get(submit_file.file_id), chat_id, minio_client
+                )
+            processed_files.append(entry)
 
         return processed_files
 
     @classmethod
-    async def _copy_file_to_session_storage(cls, file_info: Dict, chat_id: str) -> None:
-        """
-        Copy file to session store
+    async def _ingest_daily_file(cls, submit_file: SubmitFileSchema, chat_id: str, minio_client, user_id: int) -> dict:
+        """Ingest a DAILY-bucket file into the linsight workspace (unified-resource).
 
-        Args:
-            file_info: File information
-            chat_id: SessionsID
+        The daily upload only stores the raw file (no parse). We reuse the same
+        parser the daily chat uses (``TempFilePipeline``): download the raw file,
+        extract its text/markdown, write that to the formal bucket, then drop it
+        into the workspace as ``uploads/<name>/index.md`` so the offload-first
+        file tools (read_file) + ``prepare_file_list`` pointer block see it like
+        any linsight-uploaded attachment.
         """
-        source_object_name = file_info.get("markdown_file_path")
-        if source_object_name:
-            original_filename = file_info.get("original_filename")
-            markdown_filename = f"{original_filename.rsplit('.', 1)[0]}.md"
-            new_object_name = f"linsight/{chat_id}/{source_object_name}"
-            minio_client = await get_minio_storage()
-            await minio_client.copy_object(
-                source_object=source_object_name,
-                dest_object=new_object_name,
-                source_bucket=minio_client.tmp_bucket,
-                dest_bucket=minio_client.bucket
+        from bisheng.api.v1.schemas import FileProcessBase
+        from bisheng.core.cache.utils import async_file_download
+        from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
+
+        try:
+            local_path, dl_name = await async_file_download(submit_file.file_url)
+            file_name = submit_file.file_name or dl_name
+            file_rule = FileProcessBase(
+                knowledge_id=0,
+                separator=["\n\n", "\n"],
+                separator_rule=["after", "after"],
+                chunk_size=1000,
+                chunk_overlap=0,
             )
-            file_info["markdown_file_path"] = new_object_name
-            file_info["markdown_filename"] = markdown_filename
+            pipeline = TempFilePipeline(
+                invoke_user_id=user_id,
+                local_file_path=local_path,
+                file_name=file_name,
+                file_rule=file_rule,
+            )
+            result = await pipeline.arun()
+            markdown = "\n\n".join(doc.page_content for doc in (result.documents or []) if doc.page_content)
+        except Exception as e:
+            logger.warning(f"daily file ingest failed ({submit_file.file_name}): {e}")
+            return {
+                "file_id": submit_file.file_id,
+                "original_filename": submit_file.file_name,
+                "parsing_status": "expired",
+                "valid": False,
+                "error_message": "file parse failed, please re-upload",
+            }
+
+        formal_object = cls._formal_markdown_object(submit_file.file_id, chat_id)
+        await minio_client.put_object(
+            bucket_name=minio_client.bucket, object_name=formal_object, file=markdown.encode("utf-8")
+        )
+
+        entry: dict = {
+            "file_id": submit_file.file_id,
+            "original_filename": submit_file.file_name,
+            "parsing_status": "completed",
+            "valid": True,
+            "markdown_file_path": formal_object,
+            "markdown_filename": f"{cls._sanitize_name(submit_file.file_name)}.md",
+        }
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client)
+        return entry
 
     @classmethod
-    async def task_title_generate(cls, question: str, chat_id: str,
-                                  login_user: UserPayload) -> Dict:
+    async def _ingest_one_file(
+        cls, submit_file: SubmitFileSchema, temp_info: dict | None, chat_id: str, minio_client
+    ) -> dict:
+        """Ingest a single submitted file into the session workspace.
+
+        Idempotent on re-entry: a formal-bucket product produced earlier in this
+        session is reused; the temp->formal copy is performed only once.
+        """
+        # Idempotency: reuse a formal-bucket product produced earlier this session.
+        formal_object = cls._formal_markdown_object(submit_file.file_id, chat_id)
+        formal_exists = await minio_client.object_exists(bucket_name=minio_client.bucket, object_name=formal_object)
+
+        if not formal_exists:
+            if not temp_info or not temp_info.get("markdown_file_path"):
+                # Temp metadata expired and no formal product: do not silently drop.
+                logger.warning(
+                    "linsight attachment %s (%s) has no formal product and expired temp metadata",
+                    submit_file.file_id,
+                    submit_file.file_name,
+                )
+                return {
+                    "file_id": submit_file.file_id,
+                    "original_filename": submit_file.file_name,
+                    "parsing_status": "expired",
+                    "valid": False,
+                    "error_message": "file metadata expired, please re-upload",
+                }
+            # First processing: copy temp -> formal bucket.
+            await minio_client.copy_object(
+                source_object=temp_info["markdown_file_path"],
+                dest_object=formal_object,
+                source_bucket=minio_client.tmp_bucket,
+                dest_bucket=minio_client.bucket,
+            )
+
+        # Build the metadata entry (carry forward temp metadata when available).
+        entry: dict = dict(temp_info) if temp_info else {}
+        entry["file_id"] = submit_file.file_id
+        entry.setdefault("original_filename", submit_file.file_name)
+        entry["parsing_status"] = "completed"
+        entry["valid"] = True
+        entry["markdown_file_path"] = formal_object
+        entry["markdown_filename"] = f"{cls._sanitize_name(entry['original_filename'])}.md"
+
+        # Write parsed markdown into the workspace (uploads/<name>/index.md).
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client)
+        return entry
+
+    @staticmethod
+    def _formal_markdown_object(file_id: str, chat_id: str) -> str:
+        """Stable formal-bucket object key for a file's parsed markdown.
+
+        Stable per (chat_id, file_id) so a resubmission of the same file_id maps
+        to the same object and ``object_exists`` makes the copy idempotent.
+        """
+        return f"linsight/{chat_id}/{file_id}.md"
+
+    @staticmethod
+    def _sanitize_name(original_filename: str) -> str:
+        """Normalize an original filename to a safe workspace ``<name>``.
+
+        Lowercased, illegal characters normalized to '-', traversal-safe.
+        (Same naming discipline as Skill names, design §9.3.2.)
+        """
+        import re
+
+        stem = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
+        stem = stem.strip().lower()
+        stem = re.sub(r"[^a-z0-9._-]+", "-", stem).strip("-._")
+        return stem or "file"
+
+    @classmethod
+    async def _write_attachment_to_workspace(cls, entry: dict, chat_id: str, minio_client) -> None:
+        """Write parsed markdown into the session workspace and set pointer metadata.
+
+        Workspace layout (design §9.3.2):
+            workspace/{chat_id}/uploads/<name>/index.md
+        Sets ``workspace_path`` / ``line_count`` / ``image_count`` on ``entry``
+        for the zero-body pointer block (``prepare_file_list``).
+        """
+        from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
+
+        name = cls._sanitize_name(entry["original_filename"])
+        rel_path = f"uploads/{name}/index.md"
+        object_key = f"{WORKSPACE_PREFIX}/{chat_id}/{rel_path}"
+
+        # Read the parsed markdown (formal bucket) and write it into the workspace.
+        markdown_bytes = await minio_client.get_object(
+            bucket_name=minio_client.bucket, object_name=entry["markdown_file_path"]
+        )
+        if markdown_bytes is None:
+            markdown_bytes = b""
+        await minio_client.put_object(
+            bucket_name=minio_client.bucket,
+            object_name=object_key,
+            file=markdown_bytes,
+            content_type="text/markdown",
+        )
+
+        text = markdown_bytes.decode("utf-8", errors="replace")
+        entry["workspace_path"] = f"/{rel_path}"
+        entry["line_count"] = entry.get("line_count") or (text.count("\n") + 1 if text else 0)
+        entry["image_count"] = entry.get("image_count", 0)
+
+    @classmethod
+    async def task_title_generate(cls, question: str, chat_id: str, login_user: UserPayload) -> dict:
         """
         Generate task title
 
@@ -275,42 +486,28 @@ class LinsightWorkbenchImpl:
             # Update session title
             await cls._update_session_title(chat_id, task_title.content)
 
-            return {
-                "task_title": task_title.content,
-                "chat_id": chat_id,
-                "error_message": None
-            }
+            return {"task_title": task_title.content, "chat_id": chat_id, "error_message": None}
 
         except Exception as e:
-            logger.error(f"Failed to generate task title: {str(e)}")
-            return {
-                "task_title": "New Chat",
-                "chat_id": chat_id,
-                "error_message": str(e)
-            }
+            logger.error(f"Failed to generate task title: {e!s}")
+            return {"task_title": "New Chat", "chat_id": chat_id, "error_message": str(e)}
 
     @classmethod
     async def _get_workbench_config(cls):
         """Get and validate the workbench configuration"""
         workbench_conf = await LLMService.get_workbench_llm()
-        if not workbench_conf or not workbench_conf.task_model:
+        if not workbench_conf or not workbench_conf.linsight_default_model_id:
             raise cls.BishengLLMError(
-                "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model")
+                "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model"
+            )
         return workbench_conf
 
     @classmethod
-    async def _generate_title_prompt(cls, question: str) -> List[Tuple[str, str]]:
+    async def _generate_title_prompt(cls, question: str) -> list[tuple[str, str]]:
         """Generate Title Generateprompt"""
         prompt_service = await get_prompt_manager()
-        prompt_obj = prompt_service.render_prompt(
-            namespace="gen_title",
-            prompt_name="linsight",
-            USER_GOAL=question
-        )
-        return [
-            ("system", prompt_obj.prompt.system),
-            ("user", prompt_obj.prompt.user)
-        ]
+        prompt_obj = prompt_service.render_prompt(namespace="gen_title", prompt_name="linsight", USER_GOAL=question)
+        return [("system", prompt_obj.prompt.system), ("user", prompt_obj.prompt.user)]
 
     @classmethod
     async def _update_session_title(cls, chat_id: str, title: str) -> None:
@@ -320,7 +517,7 @@ class LinsightWorkbenchImpl:
             await MessageSessionDao.update_session_name(chat_id, title)
 
     @classmethod
-    async def get_linsight_session_version_list(cls, session_id: str) -> List[LinsightSessionVersion]:
+    async def get_linsight_session_version_list(cls, session_id: str) -> list[LinsightSessionVersion]:
         """
         Get a list of Invisible Conversation Versions
 
@@ -333,7 +530,7 @@ class LinsightWorkbenchImpl:
         return await LinsightSessionVersionDao.get_session_versions_by_session_id(session_id)
 
     @classmethod
-    async def modify_sop(cls, linsight_session_version_id: str, sop_content: str) -> Dict:
+    async def modify_sop(cls, linsight_session_version_id: str, sop_content: str) -> dict:
         """
         Modify Inspiration Conversation Version ofSOPContents
 
@@ -346,22 +543,24 @@ class LinsightWorkbenchImpl:
         """
         try:
             await LinsightSessionVersionDao.modify_sop_content(
-                linsight_session_version_id=linsight_session_version_id,
-                sop_content=sop_content
+                linsight_session_version_id=linsight_session_version_id, sop_content=sop_content
             )
             return {"success": True, "message": "modify sop content successfully"}
         except Exception as e:
-            logger.error(f"ChangeSOPContent failed: {str(e)}")
+            logger.error(f"ChangeSOPContent failed: {e!s}")
             raise cls.LinsightError(str(e))
 
     @classmethod
-    async def generate_sop(cls, linsight_session_version_id: str,
-                           previous_session_version_id: Optional[str] = None,
-                           feedback_content: Optional[str] = None,
-                           reexecute: bool = False,
-                           login_user: Optional[UserPayload] = None,
-                           knowledge_list: List[KnowledgeRead] = None,
-                           example_sop: Optional[str] = None) -> AsyncGenerator[Dict, None]:
+    async def generate_sop(
+        cls,
+        linsight_session_version_id: str,
+        previous_session_version_id: str | None = None,
+        feedback_content: str | None = None,
+        reexecute: bool = False,
+        login_user: UserPayload | None = None,
+        knowledge_list: list[KnowledgeRead] = None,
+        example_sop: str | None = None,
+    ) -> AsyncGenerator[dict, None]:
         """
         BuatSOPContents
 
@@ -389,14 +588,12 @@ class LinsightWorkbenchImpl:
                 # BuatLLMand tools
                 llm, workbench_conf = await cls._get_llm(session_version.user_id)
             except Exception as e:
-                logger.error(f"BuatSOPContent failed: session_version_id={linsight_session_version_id}, error={str(e)}")
+                logger.error(f"BuatSOPContent failed: session_version_id={linsight_session_version_id}, error={e!s}")
                 raise cls.BishengLLMError(str(e))
             tools = await cls._prepare_tools(session_version, llm)
 
             # Preparation History Summary
-            history_summary = await cls._prepare_history_summary(
-                reexecute, previous_session_version_id
-            )
+            history_summary = await cls._prepare_history_summary(reexecute, previous_session_version_id)
 
             # Create proxy and generateSOP
             agent = await cls._create_linsight_agent(session_version, llm, tools, workbench_conf)
@@ -406,44 +603,45 @@ class LinsightWorkbenchImpl:
 
             content = ""
             async for res in cls._generate_sop_content(
-                    agent, session_version, feedback_content, history_summary, knowledge_list, example_sop=example_sop,
-                    login_user=login_user
+                agent,
+                session_version,
+                feedback_content,
+                history_summary,
+                knowledge_list,
+                example_sop=example_sop,
+                login_user=login_user,
             ):
                 if isinstance(res, cls.SearchSOPError):
                     yield res.error_class.to_sse_event(event="search_sop_error")
                     continue
 
                 content += res.content
-                yield {
-                    "event": "generate_sop_content",
-                    "data": res.model_dump_json()
-                }
+                yield {"event": "generate_sop_content", "data": res.model_dump_json()}
 
             # Update session version status and sop content
             await LinsightSessionVersionDao.modify_sop_content(
-                linsight_session_version_id=linsight_session_version_id,
-                sop_content=content
+                linsight_session_version_id=linsight_session_version_id, sop_content=content
             )
 
             logger.info(f"BuatSOPContent Success: session_version_id={linsight_session_version_id}")
 
-
         except cls.ToolsInitializationError as e:
             logger.exception(
-                f"Failed to initialize the Inspiration Workbench tool: session_version_id={linsight_session_version_id}, error={str(e)}")
+                f"Failed to initialize the Inspiration Workbench tool: session_version_id={linsight_session_version_id}, error={e!s}"
+            )
             error_message = LinsightToolInitError(exception=e)
         except cls.BishengLLMError as e:
-            logger.exception(f"Bisheng LLMError-free: session_version_id={linsight_session_version_id}, error={str(e)}")
+            logger.exception(f"Bisheng LLMError-free: session_version_id={linsight_session_version_id}, error={e!s}")
             error_message = LinsightBishengLLMError(exception=e)
         except Exception as e:
-            logger.exception(f"BuatSOPContent failed: session_version_id={linsight_session_version_id}, error={str(e)}")
+            logger.exception(f"BuatSOPContent failed: session_version_id={linsight_session_version_id}, error={e!s}")
             error_message = LinsightGenerateSopError(exception=e)
 
         finally:
             if error_message:
                 session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
                 if session_version:
-                    session_version.sop = f"{error_message.Msg}: {str(error_message.exception)}"
+                    session_version.sop = f"{error_message.Msg}: {error_message.exception!s}"
                     session_version.status = SessionVersionStatusEnum.SOP_GENERATION_FAILED
                     await LinsightSessionVersionDao.insert_one(session_version)
                 yield error_message.to_sse_event_instance()
@@ -457,8 +655,7 @@ class LinsightWorkbenchImpl:
         return session_version
 
     @classmethod
-    async def _prepare_tools(cls, session_version: LinsightSessionVersion,
-                             llm: BishengLLM) -> List[BaseTool]:
+    async def _prepare_tools(cls, session_version: LinsightSessionVersion, llm: BishengLLM) -> list[BaseTool]:
         """Preparation Tools List"""
         try:
             tools = await cls.init_linsight_config_tools(session_version, llm)
@@ -474,25 +671,52 @@ class LinsightWorkbenchImpl:
             raise cls.ToolsInitializationError(str(e))
 
     @classmethod
-    async def prepare_file_list(cls, session_version: LinsightSessionVersion) -> List[str]:
-        """Prepare File List"""
-        file_list = []
-        template_str = """@{filename}File Storage Information:{{'Files stored in a semantic repositoryid':'{file_id}','File storage address':'{markdown}'}}@"""
+    async def prepare_file_list(cls, session_version: LinsightSessionVersion) -> list[str]:
+        """Prepare the zero-body ``<uploaded_files>`` pointer block (design §9.3.3).
+
+        Each valid attachment becomes a pointer item (path + name + lines +
+        images) — **no file body or preview** is injected, preserving the
+        offload-first contract (the model reads bodies on demand via
+        ``read_file``). Invalid attachments (expired metadata) are skipped here;
+        the frontend surfaces them via the ``valid=False`` flag.
+
+        Returns:
+            A single-element list holding the ``<uploaded_files>`` block, or an
+            empty list when there are no valid attachments. (A list is returned
+            for parity with ``parse_file_list_str`` which joins on newlines.)
+        """
         if not session_version.files:
-            return file_list
+            return []
+
+        items: list[str] = []
         for file in session_version.files:
-            file_list.append(template_str.format(filename=file['original_filename'],
-                                                 file_id=file['file_id'],
-                                                 markdown=f"./{file['markdown_filename']}"))
-        return file_list
+            if file.get("valid") is False:
+                continue
+            path = file.get("workspace_path") or f"/uploads/{file.get('file_id')}/index.md"
+            items.append(
+                "- path: {path}\n  name: {name}\n  lines: {lines}\n  images: {images}".format(
+                    path=path,
+                    name=file.get("original_filename", ""),
+                    lines=file.get("line_count", 0),
+                    images=file.get("image_count", 0),
+                )
+            )
+
+        if not items:
+            return []
+
+        block = "<uploaded_files>\n" + "\n".join(items) + "\n</uploaded_files>"
+        return [block]
 
     @classmethod
-    async def prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> List[str]:
+    async def prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> list[str]:
         res = []
         if not knowledge_list:
             return res
         # Check if there is a personal knowledge base
-        template_str = """@{name}Stored information for:{{'The knowledge base is stored in a semantic repositoryid':'{id}'}}@"""
+        template_str = (
+            """@{name}Stored information for:{{'The knowledge base is stored in a semantic repositoryid':'{id}'}}@"""
+        )
         for one in knowledge_list:
             if one.type == KnowledgeTypeEnum.PRIVATE.value:
                 res.append(template_str.format(name="Personal Knowledge Base", id=one.id))
@@ -504,8 +728,7 @@ class LinsightWorkbenchImpl:
         return res
 
     @classmethod
-    async def _prepare_history_summary(cls, reexecute: bool,
-                                       previous_session_version_id: str) -> List[str]:
+    async def _prepare_history_summary(cls, reexecute: bool, previous_session_version_id: str) -> list[str]:
         """Preparation History Summary"""
         history_summary = []
 
@@ -521,9 +744,9 @@ class LinsightWorkbenchImpl:
         return history_summary
 
     @classmethod
-    async def _create_linsight_agent(cls, session_version: LinsightSessionVersion,
-                                     llm: BishengLLM, tools: List[BaseTool],
-                                     workbench_conf):
+    async def _create_linsight_agent(
+        cls, session_version: LinsightSessionVersion, llm: BishengLLM, tools: list[BaseTool], workbench_conf
+    ):
         """BuatLinsightAgent"""
         from bisheng_langchain.linsight.agent import LinsightAgent
 
@@ -535,18 +758,20 @@ class LinsightWorkbenchImpl:
             query=session_version.question,
             llm=llm,
             tools=tools,
-            task_mode=workbench_conf.linsight_executor_mode,
             exec_config=exec_config,
         )
 
     @classmethod
-    async def _generate_sop_content(cls, agent, session_version: LinsightSessionVersion,
-                                    feedback_content: Optional[str],
-                                    history_summary: List[str],
-                                    knowledge_list: List[KnowledgeRead] = None,
-                                    example_sop: str = None,
-                                    login_user: Optional[UserPayload] = None
-                                    ) -> AsyncGenerator:
+    async def _generate_sop_content(
+        cls,
+        agent,
+        session_version: LinsightSessionVersion,
+        feedback_content: str | None,
+        history_summary: list[str],
+        knowledge_list: list[KnowledgeRead] = None,
+        example_sop: str = None,
+        login_user: UserPayload | None = None,
+    ) -> AsyncGenerator:
         """BuatSOPContents"""
         file_list = await cls.prepare_file_list(session_version)
         knowledge_list = await cls.prepare_knowledge_list(knowledge_list)
@@ -556,8 +781,7 @@ class LinsightWorkbenchImpl:
         elif feedback_content is None:
             # RetrieveSOPTemplates
             sop_template, search_sop_error = await SOPManageService.search_sop(
-                invoke_user_id=login_user.user_id,
-                query=session_version.question, k=3
+                invoke_user_id=login_user.user_id, query=session_version.question, k=3
             )
 
             if search_sop_error:
@@ -565,29 +789,24 @@ class LinsightWorkbenchImpl:
                 logger.error(f"RetrieveSOPTemplate failed: {search_sop_error.Msg}")
                 yield cls.SearchSOPError(error_class=search_sop_error)
 
-            sop_template = "\n\n".join([
-                f"Examples:\n\n{sop.page_content}"
-                for sop in sop_template if sop.page_content
-            ])
+            sop_template = "\n\n".join([f"Examples:\n\n{sop.page_content}" for sop in sop_template if sop.page_content])
 
             async for res in agent.generate_sop(sop=sop_template, file_list=file_list, knowledge_list=knowledge_list):
                 yield res
         else:
-
             sop_template = session_version.sop if session_version.sop else ""
 
             async for res in agent.feedback_sop(
-                    sop=sop_template,
-                    feedback=feedback_content,
-                    history_summary=history_summary if history_summary else None,
-                    file_list=file_list,
-                    knowledge_list=knowledge_list
+                sop=sop_template,
+                feedback=feedback_content,
+                history_summary=history_summary if history_summary else None,
+                file_list=file_list,
+                knowledge_list=knowledge_list,
             ):
                 yield res
 
     @classmethod
-    async def get_execute_task_detail(cls, session_version_id: str,
-                                      login_user: Optional[UserPayload] = None):
+    async def get_execute_task_detail(cls, session_version_id: str, login_user: UserPayload | None = None):
         """
         Get task execution details
 
@@ -607,7 +826,7 @@ class LinsightWorkbenchImpl:
         root_tasks = [task for task in execute_tasks if task.parent_task_id is None]
 
         # 2. accordingprevious_task_idAND:next_task_idSort first level tasks
-        def sort_tasks_by_chain(tasks: List[Any]) -> List[Any]:
+        def sort_tasks_by_chain(tasks: list[Any]) -> list[Any]:
             """
             Sort task list by task chain
             previous_task_idYes Noneis the first task,next_task_idYes Noneis the last task.
@@ -647,7 +866,7 @@ class LinsightWorkbenchImpl:
         sorted_root_tasks = sort_tasks_by_chain(root_tasks)
 
         # 3. Build task tree Use parent_task_id Associate subtasks with parent tasks
-        def build_task_tree(parent_tasks: List[Any], all_tasks: List[Any]) -> List[TaskNode]:
+        def build_task_tree(parent_tasks: list[Any], all_tasks: list[Any]) -> list[TaskNode]:
             """
             Build task tree
             """
@@ -696,7 +915,7 @@ class LinsightWorkbenchImpl:
         return result
 
     @classmethod
-    async def upload_file(cls, file: UploadFile) -> Dict:
+    async def upload_file(cls, file: UploadFile) -> dict:
         """
         Upload files to the Inspiration Workbench
 
@@ -710,11 +929,11 @@ class LinsightWorkbenchImpl:
         file_id = uuid.uuid4().hex[:8]  # Buat8Bit Unique FileID
         # url <g id="Bold">Code</g> decode The file name
         original_filename = unquote(file.filename)
-        file_extension = original_filename.split('.')[-1] if '.' in original_filename else ''
+        file_extension = original_filename.split(".")[-1] if "." in original_filename else ""
         unique_filename = f"{file_id}.{file_extension}"
 
         # Save file
-        file_path = await save_file_to_folder(file, 'linsight', unique_filename)
+        file_path = await save_file_to_folder(file, "linsight", unique_filename)
 
         upload_result = {
             "file_id": file_id,
@@ -730,7 +949,7 @@ class LinsightWorkbenchImpl:
         return upload_result
 
     @classmethod
-    async def parse_file(cls, upload_result: Dict, invoke_user_id: int) -> Dict:
+    async def parse_file(cls, upload_result: dict, invoke_user_id: int) -> dict:
         """
         Parsing uploaded files
 
@@ -752,28 +971,36 @@ class LinsightWorkbenchImpl:
             collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
 
             # Asynchronous execution of file parsing
-            parse_result = await cls._parse_file(invoke_user_id, file_id, file_path, original_filename,
-                                                 collection_name, workbench_conf)
+            parse_result = await cls._parse_file(
+                invoke_user_id, file_id, file_path, original_filename, collection_name, workbench_conf
+            )
 
             # Cache Result
             await cls._cache_parse_result(file_id, parse_result)
 
             logger.info(f"File analysis complete: {parse_result}")
         except Exception as e:
-            logger.error(f"File parsing failed: file_id={file_id}, error={str(e)}")
+            logger.error(f"File parsing failed: file_id={file_id}, error={e!s}")
             parse_result = {
                 "file_id": file_id,
                 "original_filename": original_filename,
                 "parsing_status": "failed",
-                "error_message": str(e)
+                "error_message": str(e),
             }
             await cls._cache_parse_result(file_id, parse_result)
 
         return parse_result
 
     @classmethod
-    async def _parse_file(cls, invoke_user_id: int, file_id: str, file_path: str, original_filename: str,
-                          collection_name: str, workbench_conf) -> Dict:
+    async def _parse_file(
+        cls,
+        invoke_user_id: int,
+        file_id: str,
+        file_path: str,
+        original_filename: str,
+        collection_name: str,
+        workbench_conf,
+    ) -> dict:
         """
         Synchronize parsed files
 
@@ -789,13 +1016,13 @@ class LinsightWorkbenchImpl:
         """
         # Read file contents
         try:
-            from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
             from bisheng.api.v1.schemas import FileProcessBase
+            from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
 
             file_rule = FileProcessBase(
                 knowledge_id=0,
-                separator=['\n\n', '\n'],
-                separator_rule=['after', 'after'],
+                separator=["\n\n", "\n"],
+                separator_rule=["after", "after"],
                 chunk_size=1000,
                 chunk_overlap=100,
             )
@@ -811,7 +1038,7 @@ class LinsightWorkbenchImpl:
 
             # BuatmarkdownContents
             markdown_content = "\n".join(texts)
-            markdown_bytes = markdown_content.encode('utf-8')
+            markdown_bytes = markdown_content.encode("utf-8")
 
             # SAVINGmarkdownDoc.
             markdown_filename = f"{file_id}.md"
@@ -831,24 +1058,26 @@ class LinsightWorkbenchImpl:
                 "markdown_file_path": markdown_filename,
                 "markdown_file_md5": markdown_md5,
                 "embedding_model_id": workbench_conf.embedding_model.id,
-                "collection_name": collection_name
+                "collection_name": collection_name,
             }
         except Exception as e:
-            logger.error(f"File parsing failed: file_id={file_id}, error={str(e)}")
+            logger.error(f"File parsing failed: file_id={file_id}, error={e!s}")
             return {
                 "file_id": file_id,
                 "original_filename": original_filename,
                 "parsing_status": "failed",
-                "error_message": str(e)
+                "error_message": str(e),
             }
 
     @classmethod
-    async def _process_vector_storage(cls, invoke_user_id: int, texts: List[str], file_id: str,
-                                      collection_name: str, workbench_conf) -> None:
+    async def _process_vector_storage(
+        cls, invoke_user_id: int, texts: list[str], file_id: str, collection_name: str, workbench_conf
+    ) -> None:
         """Process vector storage"""
         # Buatembeddings
-        embeddings = await LLMService.get_bisheng_linsight_embedding(model_id=workbench_conf.embedding_model.id,
-                                                                     invoke_user_id=invoke_user_id)
+        embeddings = await LLMService.get_bisheng_linsight_embedding(
+            model_id=workbench_conf.embedding_model.id, invoke_user_id=invoke_user_id
+        )
 
         # Create Vector Store
         vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
@@ -860,23 +1089,19 @@ class LinsightWorkbenchImpl:
         await es_client.aadd_texts(texts, metadatas=metadatas)
 
     @classmethod
-    async def _cache_parse_result(cls, file_id: str, parse_result: Dict) -> None:
+    async def _cache_parse_result(cls, file_id: str, parse_result: dict) -> None:
         """Cache Result"""
         redis_client = await get_redis_client()
         key = f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}"
-        await redis_client.aset(
-            key=key,
-            value=parse_result,
-            expiration=60 * 60 * cls.CACHE_EXPIRATION_HOURS
-        )
+        await redis_client.aset(key=key, value=parse_result, expiration=60 * 60 * cls.CACHE_EXPIRATION_HOURS)
 
     @classmethod
-    async def _init_bisheng_code_tool(cls, config_tool_ids: List[int], file_dir: str, user_id: int) -> List[BaseTool]:
+    async def _init_bisheng_code_tool(cls, config_tool_ids: list[int], file_dir: str, user_id: int) -> list[BaseTool]:
         """
         Code interpreter tool for special handling initialization Bi Lift
         """
         tools = []
-        bisheng_code_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key='bisheng_code_interpreter')
+        bisheng_code_tool = await GptsToolsDao.aget_tool_by_tool_key(tool_key="bisheng_code_interpreter")
         if not bisheng_code_tool or bisheng_code_tool.id not in config_tool_ids:
             return tools
         # Individual initialization code interpreter tool
@@ -902,16 +1127,19 @@ class LinsightWorkbenchImpl:
 
         bisheng_code_tool.extra = code_config
 
-        tools = await ToolExecutor.init_by_tool_id(tool=bisheng_code_tool, app_id=ApplicationTypeEnum.LINSIGHT.value,
-                                                   app_name=ApplicationTypeEnum.LINSIGHT.value,
-                                                   app_type=ApplicationTypeEnum.LINSIGHT,
-                                                   user_id=user_id)
+        tools = await ToolExecutor.init_by_tool_id(
+            tool=bisheng_code_tool,
+            app_id=ApplicationTypeEnum.LINSIGHT.value,
+            app_name=ApplicationTypeEnum.LINSIGHT.value,
+            app_type=ApplicationTypeEnum.LINSIGHT,
+            user_id=user_id,
+        )
         return [tools]
 
     @classmethod
-    async def init_linsight_config_tools(cls, session_version: LinsightSessionVersion,
-                                         llm: BishengLLM, need_upload: bool = False, file_dir: str = None) -> List[
-        BaseTool]:
+    async def init_linsight_config_tools(
+        cls, session_version: LinsightSessionVersion, llm: BishengLLM, need_upload: bool = False, file_dir: str = None
+    ) -> list[BaseTool]:
         """
         Tools for initializing Invis configurations
 
@@ -939,27 +1167,38 @@ class LinsightWorkbenchImpl:
         # todo Better tool initialization scheme
         if need_upload and file_dir:
             try:
-                bisheng_code_tool = await cls._init_bisheng_code_tool(config_tool_ids, file_dir,
-                                                                      user_id=session_version.user_id)
+                bisheng_code_tool = await cls._init_bisheng_code_tool(
+                    config_tool_ids, file_dir, user_id=session_version.user_id
+                )
                 tools.extend(bisheng_code_tool)
             except Exception as e:
                 logger.error(
-                    f"Failed to initialize BiSheng code interpreter tool: session_version_id={session_version.id}, error={str(e)}")
+                    f"Failed to initialize BiSheng code interpreter tool: session_version_id={session_version.id}, error={e!s}"
+                )
 
-        # Filter Effective ToolsID
-        valid_tool_ids = [tid for tid in tool_ids if tid in config_tool_ids]
+        # Unified-resource direction (2026-06-16): task mode reuses the daily
+        # tool selection directly. The legacy per-app linsight whitelist
+        # (config_tool_ids) is no longer applied — every selected tool id (a real
+        # GptsTools id the user already has access to) binds. config_tool_ids is
+        # still computed above for the code-interpreter branch only.
+        valid_tool_ids = list(dict.fromkeys(tool_ids))  # de-dup, preserve order
 
         # Initialization Tools
         if valid_tool_ids:
-            tools.extend(await ToolExecutor.init_by_tool_ids(valid_tool_ids, app_id=ApplicationTypeEnum.LINSIGHT.value,
-                                                             app_name=ApplicationTypeEnum.LINSIGHT.value,
-                                                             app_type=ApplicationTypeEnum.LINSIGHT,
-                                                             user_id=session_version.user_id))
+            tools.extend(
+                await ToolExecutor.init_by_tool_ids(
+                    valid_tool_ids,
+                    app_id=ApplicationTypeEnum.LINSIGHT.value,
+                    app_name=ApplicationTypeEnum.LINSIGHT.value,
+                    app_type=ApplicationTypeEnum.LINSIGHT,
+                    user_id=session_version.user_id,
+                )
+            )
 
         return tools
 
     @classmethod
-    def _extract_tool_ids(cls, tools: List[Dict]) -> List[int]:
+    def _extract_tool_ids(cls, tools: list[dict]) -> list[int]:
         """
         Extract Tools from Tool ConfigurationID
 
@@ -976,8 +1215,7 @@ class LinsightWorkbenchImpl:
         return tool_ids
 
     @classmethod
-    async def feedback_regenerate_sop_task(cls, session_version_model: LinsightSessionVersion,
-                                           feedback: str) -> None:
+    async def feedback_regenerate_sop_task(cls, session_version_model: LinsightSessionVersion, feedback: str) -> None:
         """
         Regenerate from feedbackSOPTask
 
@@ -999,33 +1237,37 @@ class LinsightWorkbenchImpl:
             agent = await cls._create_linsight_agent(session_version_model, llm, tools, workbench_conf)
 
             sop_content = ""
-            sop_template = session_version_model.sop or ''
+            sop_template = session_version_model.sop or ""
 
             async for res in agent.feedback_sop(
-                    sop=sop_template,
-                    feedback=feedback,
-                    history_summary=history_summary if history_summary else None,
-                    file_list=file_list
+                sop=sop_template,
+                feedback=feedback,
+                history_summary=history_summary if history_summary else None,
+                file_list=file_list,
             ):
                 sop_content += res.content
 
             # sopWrite it down on the record sheet, thissopThere is no need to associate sessions because there is no need to update scores
-            await SOPManageService.add_sop_record(LinsightSOPRecord(
-                name=session_version_model.title,
-                description=None,
-                user_id=session_version_model.user_id,
-                content=sop_content,
-            ))
+            await SOPManageService.add_sop_record(
+                LinsightSOPRecord(
+                    name=session_version_model.title,
+                    description=None,
+                    user_id=session_version_model.user_id,
+                    content=sop_content,
+                )
+            )
         except cls.ToolsInitializationError as e:
             logger.exception(
-                f"Failed to initialize the Inspiration Workbench tool: session_version_id={session_version_model.id}, error={str(e)}")
+                f"Failed to initialize the Inspiration Workbench tool: session_version_id={session_version_model.id}, error={e!s}"
+            )
 
         except Exception as e:
             logger.exception(
-                f"Feedback regenerationSOPMisi Gagal: session_version_id={session_version_model.id}, error={str(e)}")
+                f"Feedback regenerationSOPMisi Gagal: session_version_id={session_version_model.id}, error={e!s}"
+            )
 
     @classmethod
-    async def _get_history_summary(cls, session_version_id: str) -> List[str]:
+    async def _get_history_summary(cls, session_version_id: str) -> list[str]:
         """Get a summary of your history"""
         history_summary = []
         execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id)
@@ -1039,7 +1281,7 @@ class LinsightWorkbenchImpl:
         return history_summary
 
     @classmethod
-    async def download_file(cls, file_info: DownloadFilesSchema) -> Tuple[str, bytes]:
+    async def download_file(cls, file_info: DownloadFilesSchema) -> tuple[str, bytes]:
         """Download individual files"""
 
         minio_client = await get_minio_storage()
@@ -1047,11 +1289,9 @@ class LinsightWorkbenchImpl:
         object_name = file_info.file_url
         object_name = object_name.replace(f"/{minio_client.bucket}/", "")
         try:
-
             bytes_io = BytesIO()
 
-            file_byte = await minio_client.get_object(bucket_name=minio_client.bucket,
-                                                      object_name=object_name)
+            file_byte = await minio_client.get_object(bucket_name=minio_client.bucket, object_name=object_name)
             bytes_io.write(file_byte)
 
             bytes_io.seek(0)
@@ -1060,10 +1300,10 @@ class LinsightWorkbenchImpl:
 
         except Exception as e:
             logger.error(f"Download failed {object_name}: {e}")
-            return object_name, b''
+            return object_name, b""
 
     @classmethod
-    async def batch_download_files(cls, file_info_list: List[DownloadFilesSchema]) -> bytes:
+    async def batch_download_files(cls, file_info_list: list[DownloadFilesSchema]) -> bytes:
         """
         Batch Download Files
 

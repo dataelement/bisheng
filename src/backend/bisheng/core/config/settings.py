@@ -400,6 +400,12 @@ class LinsightConf(BaseModel):
     max_file_content_num: int = Field(
         default=3, description="Number of files to read when subtasking, in reverse order by modification time"
     )
+    skills_root: str = Field(
+        default="data/linsight_skills",
+        description="Root directory of Linsight skills on disk (F035). Layout: built-in/<name>/SKILL.md for "
+        "kernel built-in skills; data/skills/{tenant_id}/<name>/ for tenant custom skill bundles. "
+        "Multi-node deployments must mount this path on a shared volume (design §7.1).",
+    )
 
 
 class DailyChatConf(BaseModel):

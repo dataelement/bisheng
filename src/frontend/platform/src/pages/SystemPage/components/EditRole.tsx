@@ -65,6 +65,7 @@ const enum MenuType {
 
   SUBSCRIPTION = 'subscription',  // 订阅
   KNOWLEDGE_SPACE = 'knowledge_space',  // 知识空间
+  LINSIGHT_TASK_MODE = 'linsight_task_mode',  // 任务模式
 }
 
 
@@ -78,6 +79,7 @@ const MENU_LIST = [
 const WORKBENCH_MENU_LIST = [
   { id: MenuType.SUBSCRIPTION, name: 'menu.workbench1', user_name: '-' },
   { id: MenuType.KNOWLEDGE_SPACE, name: 'menu.workbench2', user_name: '-' },
+  { id: MenuType.LINSIGHT_TASK_MODE, name: 'menu.linsightTaskMode', user_name: '-' },
 ];
 const SearchPanne = ({
   groupId,
@@ -295,7 +297,7 @@ const usePermissionSwitchLogic = (form, setForm) => {
   };
 };
 
-const WORKBENCH_MENU_IDS = [MenuType.SUBSCRIPTION, MenuType.KNOWLEDGE_SPACE];
+const WORKBENCH_MENU_IDS = [MenuType.SUBSCRIPTION, MenuType.KNOWLEDGE_SPACE, MenuType.LINSIGHT_TASK_MODE];
 
 const initPermissionData = (resData) => {
   const initData = {
@@ -403,8 +405,8 @@ export default function EditRole({ id, name, groupId, knowledgeSpaceFileLimit, o
   const [form, setForm] = useState({
     name,
     useSkills: [], useLibs: [], useAssistant: [], useFlows: [], useTools: [], useMenu: [MenuType.BUILD, MenuType.KNOWLEDGE],
-    // 工作台子菜单：订阅与知识空间默认与 Roles 页新建角色一致（均开启）
-    useWorkbenchMenu: [MenuType.SUBSCRIPTION, MenuType.KNOWLEDGE_SPACE],
+    // 工作台子菜单：订阅 / 知识空间 / 任务模式默认与 Roles 页新建角色一致（均开启）
+    useWorkbenchMenu: [MenuType.SUBSCRIPTION, MenuType.KNOWLEDGE_SPACE, MenuType.LINSIGHT_TASK_MODE],
     manageLibs: [], manageAssistants: [], manageSkills: [], manageFlows: [], manageTools: [], useBoards: [], manageBoards: [],
     allowCreateBoard: false,
     knowledgeSpaceFileLimit,

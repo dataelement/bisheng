@@ -1,4 +1,4 @@
-import type { MouseEventHandler } from "react";
+import type { MouseEventHandler, ReactNode } from "react";
 import type { ButtonProps } from "~/components/ui/Button";
 import { Button } from "~/components/ui/Button";
 import { ShareOutlineIcon } from "~/components/icons";
@@ -20,6 +20,10 @@ interface CopyShareLinkButtonProps extends Omit<ButtonProps, "onClick"> {
     successMessage?: string;
     errorMessage?: string;
     iconClassName?: string;
+    /** Optional custom leading icon; defaults to the legacy ShareOutlineIcon when omitted. */
+    icon?: ReactNode;
+    /** Render as a square icon-only button (32x32 bordered box) without the text label. */
+    iconOnly?: boolean;
     onClick?: MouseEventHandler<HTMLButtonElement>;
 }
 
@@ -29,6 +33,8 @@ export function CopyShareLinkButton({
     successMessage,
     errorMessage,
     iconClassName,
+    icon,
+    iconOnly,
     className,
     children,
     disabled,
@@ -66,12 +72,14 @@ export function CopyShareLinkButton({
             disabled={disabled || !shareLink}
             onClick={handleClick}
             className={cn(
-                "h-8 gap-1 px-4 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white touch-mobile:px-4 touch-mobile:text-[#212121]",
+                iconOnly
+                    ? "h-8 w-8 shrink-0 justify-center rounded-[6px] border border-[#EBECF0] bg-white p-0 transition-colors hover:bg-[#F7F8FA]"
+                    : "h-8 gap-1 px-4 font-normal transition-colors hover:bg-[#F7F8FA] touch-mobile:rounded-[6px] touch-mobile:border touch-mobile:border-[#EBECF0] touch-mobile:bg-white touch-mobile:px-4 touch-mobile:text-[#212121]",
                 className,
             )}
         >
-            <ShareOutlineIcon className={cn("size-4 shrink-0 text-gray-800", iconClassName)} />
-            {children || label || localize("com_knowledge.share")}
+            {icon ?? <ShareOutlineIcon className={cn("size-4 shrink-0 text-gray-800", iconClassName)} />}
+            {!iconOnly && (children || label || localize("com_knowledge.share"))}
         </Button>
     );
 }

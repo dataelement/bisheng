@@ -1,10 +1,10 @@
 import { FileStatus, FileType, type KnowledgeFile } from "~/api/knowledge";
 import i18next from "i18next";
 
-/** 列表/卡片：可点击文件夹、解析成功文件，或查看违规详情。 */
+/** List/card: only folders and successfully parsed files are clickable; violation files stay grayed out. */
 export function isKnowledgeItemPreviewable(file: KnowledgeFile): boolean {
     if (file.type === FileType.FOLDER) return true;
-    return file.status === FileStatus.SUCCESS || file.status === FileStatus.VIOLATION;
+    return file.status === FileStatus.SUCCESS;
 }
 
 export function getKnowledgeApprovalStatusLabel(file: KnowledgeFile): string | null {

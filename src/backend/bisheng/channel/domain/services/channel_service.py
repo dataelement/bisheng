@@ -1,11 +1,19 @@
 import asyncio
 import logging
-from datetime import timedelta, datetime
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
+from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
+from bisheng.approval.domain.services.approval_gate import ApprovalGate
+from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.channel_subscribe_scenario_handler import ChannelSubscribeScenarioHandler
 from bisheng.channel.domain.models.article_read_record import ArticleReadRecord
 from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.channel.domain.models.channel_info_source import ChannelInfoSource
+from bisheng.channel.domain.models.channel_knowledge_sync import (
+    ChannelKnowledgeSync,
+    ChannelKnowledgeSyncDao,
+)
 from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
 from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
@@ -20,85 +28,77 @@ from bisheng.channel.domain.schemas.article_schema import (
 )
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     AddArticlesToKnowledgeSpaceRequest,
-    CreateChannelRequest,
-    UpdateChannelRequest,
-    MyChannelQueryRequest,
-    SetPinRequest,
-    ChannelItemResponse,
     ChannelDetailResponse,
-    ChannelMemberResponse,
+    ChannelItemResponse,
     ChannelMemberPageResponse,
-    UpdateMemberRoleRequest,
-    RemoveMemberRequest,
-    QueryTypeEnum,
-    SortByEnum,
-    SubscriptionStatusEnum,
+    ChannelMemberResponse,
     ChannelSquareItemResponse,
     ChannelSquarePageResponse,
-    SubscribeChannelRequest,
+    CreateChannelRequest,
     KnowledgeSyncConfig,
     KnowledgeSyncMainConfig,
-    KnowledgeSyncSubConfig,
     KnowledgeSyncSpaceItem,
-)
-from bisheng.channel.domain.models.channel_knowledge_sync import (
-    ChannelKnowledgeSync,
-    ChannelKnowledgeSyncDao,
+    KnowledgeSyncSubConfig,
+    MyChannelQueryRequest,
+    QueryTypeEnum,
+    RemoveMemberRequest,
+    SetPinRequest,
+    SortByEnum,
+    SubscribeChannelRequest,
+    SubscriptionStatusEnum,
+    UpdateChannelRequest,
+    UpdateMemberRoleRequest,
 )
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import (
-    ChannelNotFoundError,
-    ChannelAccessDeniedError,
-    ChannelPermissionDeniedError,
-    ChannelCreateLimitExceededError,
-    ChannelAdminLimitExceededError,
     ArticleSensitiveViolationError,
+    ChannelAccessDeniedError,
+    ChannelAdminLimitExceededError,
+    ChannelCreateLimitExceededError,
+    ChannelNotFoundError,
     ChannelOrganizationGrantUnsubscribeDeniedError,
+    ChannelPermissionDeniedError,
 )
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError, SpaceFileNameDuplicateError
+from bisheng.common.errcode.knowledge_space import SpaceFileNameDuplicateError, SpacePermissionDeniedError
 from bisheng.common.models.space_channel_member import (
-    BusinessTypeEnum,
     CHANNEL_ROLE_TO_RELATION,
-    ChannelRelationEnum,
-    UserRoleEnum,
-    SpaceChannelMemberDao,
-    MembershipStatusEnum,
     REJECTED_STATUS_DISPLAY_WINDOW,
+    BusinessTypeEnum,
+    ChannelRelationEnum,
+    MembershipStatusEnum,
+    SpaceChannelMemberDao,
+    UserRoleEnum,
     legacy_role_for_channel_relation,
     resolve_channel_relation,
 )
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
-from bisheng.message.domain.services.notification_content import build_notify_content
-from bisheng.permission.domain.channel_permission_template import (
-    default_permission_ids_for_relation as default_channel_permission_ids_for_relation,
-    relation_from_channel_permission_ids,
-)
-from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
-from bisheng.permission.domain.services.owner_service import OwnerService
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
-from bisheng.permission.domain.services.permission_service import PermissionService
-from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
+from bisheng.message.domain.services.notification_content import build_notify_content
+from bisheng.permission.domain.channel_permission_template import (
+    default_permission_ids_for_relation as default_channel_permission_ids_for_relation,
+)
+from bisheng.permission.domain.channel_permission_template import (
+    relation_from_channel_permission_ids,
+)
+from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
+from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.owner_service import OwnerService
+from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
 from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import SensitiveWordPolicyService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
-from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
-from bisheng.approval.domain.services.approval_gate import ApprovalGate
-from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
-from bisheng.approval.domain.services.channel_subscribe_scenario_handler import ChannelSubscribeScenarioHandler
 
 if TYPE_CHECKING:
     from starlette.requests import Request
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of channels a user can create
-MAX_USER_CHANNEL_COUNT = 10
 # Maximum number of administrators per channel
 MAX_ADMIN_COUNT = 5
 CHANNEL_ADMIN_ASSIGNMENT_MESSAGE = "assigned_channel_admin"
@@ -113,7 +113,7 @@ def _self_channel_binding_key(channel_id: str, user_id: int, relation: ChannelRe
     return f"channel:{channel_id}:self:{user_id}:{relation.value}:-"
 
 
-def _member_relation_value(member) -> Optional[str]:
+def _member_relation_value(member) -> str | None:
     relation = resolve_channel_relation(member) if member else None
     return relation.value if relation else None
 
@@ -179,8 +179,8 @@ class ChannelService:
         channel_info_source_repository: "ChannelInfoSourceRepository",
         article_es_service: "ArticleEsService" = None,
         article_read_repository: "ArticleReadRepository" = None,
-        message_service: Optional[MessageService] = None,
-        approval_gate: Optional[ApprovalGate] = None,
+        message_service: MessageService | None = None,
+        approval_gate: ApprovalGate | None = None,
     ):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
@@ -224,8 +224,8 @@ class ChannelService:
 
     @staticmethod
     def _resolve_subscription_status(
-        membership_status: Optional[MembershipStatusEnum],
-        update_time: Optional[datetime] = None,
+        membership_status: MembershipStatusEnum | None,
+        update_time: datetime | None = None,
     ) -> SubscriptionStatusEnum:
         if membership_status is None:
             return SubscriptionStatusEnum.NOT_SUBSCRIBED
@@ -276,8 +276,8 @@ class ChannelService:
         cls,
         *,
         enabled: bool,
-        hits: List[Any],
-        auto_reply: Optional[str],
+        hits: list[Any],
+        auto_reply: str | None,
         can_view_sensitive: bool,
     ) -> ArticleSensitiveReview:
         violated = bool(hits)
@@ -292,7 +292,7 @@ class ChannelService:
     @classmethod
     async def apply_article_sensitive_reviews(
         cls,
-        articles: List[ArticleSearchResultItem | ArticleFullDocument],
+        articles: list[ArticleSearchResultItem | ArticleFullDocument],
         login_user: UserPayload,
     ) -> None:
         if not articles:
@@ -415,12 +415,18 @@ class ChannelService:
 
     async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload, request=None):
         """Create a new channel based on the provided data and the logged-in user."""
-        # Check if the user has reached the maximum limit for creating channels
-        existing_channels = await self.space_channel_member_repository.find_channel_memberships(
-            user_id=login_user.user_id, roles=[UserRoleEnum.CREATOR], statuses=[MembershipStatusEnum.ACTIVE]
+        # Check if the user has reached the role-configurable channel creation quota
+        # (F005 quota: `channel`, default 10; admins/-1 = unlimited). effective already
+        # folds in the tenant-chain cap, so this enforces both role and tenant limits.
+        effective = await QuotaService.get_effective_quota(
+            login_user.user_id, QuotaResourceType.CHANNEL, login_user.tenant_id, login_user=login_user
         )
-        if len(existing_channels) >= MAX_USER_CHANNEL_COUNT:
-            raise ChannelCreateLimitExceededError()
+        if effective != -1:
+            existing_channels = await self.space_channel_member_repository.find_channel_memberships(
+                user_id=login_user.user_id, roles=[UserRoleEnum.CREATOR], statuses=[MembershipStatusEnum.ACTIVE]
+            )
+            if len(existing_channels) >= effective:
+                raise ChannelCreateLimitExceededError(quota=effective)
 
         bisheng_information_client = await get_bisheng_information_client()
         if channel_data.source_list:
@@ -507,7 +513,7 @@ class ChannelService:
 
     async def get_my_channels(
         self, query_data: MyChannelQueryRequest, login_user: UserPayload
-    ) -> List[ChannelItemResponse]:
+    ) -> list[ChannelItemResponse]:
         """
         Get the list of channels associated with the logged-in user based on the query type (created or followed) and sorting preference.
         """
@@ -577,7 +583,7 @@ class ChannelService:
         }
 
         # Construct the result list, filtering out non-authorized private channels for "followed" query type
-        result: List[ChannelItemResponse] = []
+        result: list[ChannelItemResponse] = []
         channels_to_process = []
         for channel_id in channel_ids:
             channel = channel_map.get(channel_id)
@@ -631,7 +637,7 @@ class ChannelService:
 
         return result
 
-    async def _calculate_unread_count(self, channel: Channel, all_read_ids: List[str]) -> int:
+    async def _calculate_unread_count(self, channel: Channel, all_read_ids: list[str]) -> int:
         """Calculate the exact number of unread articles for a given channel."""
         main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
 
@@ -671,8 +677,51 @@ class ChannelService:
         # Ensure no negative count just in case
         return max(0, total_count - matching_read_count)
 
+    async def _calculate_sub_channel_unread_counts(self, channel: Channel, all_read_ids: list[str]) -> dict[str, int]:
+        """Unread count per sub-channel: total − read for (main rules AND that sub's rules).
+
+        Mirrors _calculate_unread_count but combines the main filter rules with each
+        sub-channel's rules (same AND semantics the article search uses)."""
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
+
+        # Distinct sub-channel names defined on this channel.
+        sub_names: list[str] = []
+        for fr in channel.filter_rules or []:
+            if isinstance(fr, dict) and fr.get("channel_type") == "sub":
+                name = fr.get("name")
+                if name and name not in sub_names:
+                    sub_names.append(name)
+
+        async def unread_for(name: str) -> int:
+            sub_rule_groups = self._extract_filter_rule_groups(channel, channel_type="sub", sub_channel_name=name)
+            effective_rule_groups = [*main_rule_groups, *sub_rule_groups]
+            total_count = await self.article_es_service.count_articles(
+                source_ids=channel.source_list,
+                filter_rules=effective_rule_groups if effective_rule_groups else None,
+            )
+            if total_count == 0:
+                return 0
+            if not all_read_ids:
+                return total_count
+            chunk_size = 1000
+            tasks = [
+                self.article_es_service.count_articles(
+                    source_ids=channel.source_list,
+                    filter_rules=effective_rule_groups if effective_rule_groups else None,
+                    include_article_ids=all_read_ids[i : i + chunk_size],
+                )
+                for i in range(0, len(all_read_ids), chunk_size)
+            ]
+            matching_read_count = sum(await asyncio.gather(*tasks)) if tasks else 0
+            return max(0, total_count - matching_read_count)
+
+        if not sub_names:
+            return {}
+        counts = await asyncio.gather(*[unread_for(n) for n in sub_names])
+        return {name: count for name, count in zip(sub_names, counts)}
+
     @staticmethod
-    def _sort_channels(items: List[ChannelItemResponse], sort_by: SortByEnum) -> List[ChannelItemResponse]:
+    def _sort_channels(items: list[ChannelItemResponse], sort_by: SortByEnum) -> list[ChannelItemResponse]:
         """
         Sort channels with pinned channels always on top, then sort by the selected criteria:
         """
@@ -720,7 +769,7 @@ class ChannelService:
         return True
 
     async def list_channel_members(
-        self, channel_id: str, page: int, page_size: int, keyword: Optional[str], login_user: UserPayload
+        self, channel_id: str, page: int, page_size: int, keyword: str | None, login_user: UserPayload
     ) -> ChannelMemberPageResponse:
         from bisheng.user.domain.services.user import UserService
 
@@ -765,7 +814,7 @@ class ChannelService:
         user_map = {u.user_id: u for u in users}
 
         # 6. Batch query user group information
-        result_list: List[ChannelMemberResponse] = []
+        result_list: list[ChannelMemberResponse] = []
         for member in members:
             user = user_map.get(member.user_id)
             user_name = user.user_name if user else f"User {member.user_id}"
@@ -919,7 +968,7 @@ class ChannelService:
         *,
         action_code: str,
         operator_user_id: int,
-        receiver_user_ids: List[int],
+        receiver_user_ids: list[int],
         channel_id: str,
         operator_user_name: str | None = None,
         channel_name: str | None = None,
@@ -1043,7 +1092,7 @@ class ChannelService:
         return True
 
     async def get_channel_square(
-        self, keyword: Optional[str], page: int, page_size: int, login_user: UserPayload
+        self, keyword: str | None, page: int, page_size: int, login_user: UserPayload
     ) -> ChannelSquarePageResponse:
         """
         Get the channel square: paginated list of all released channels with subscription status
@@ -1092,7 +1141,7 @@ class ChannelService:
             sources = await self.channel_info_source_repository.find_by_ids(list(all_needed_source_ids))
             source_map = {s.id: s for s in sources}
 
-        result_list: List[ChannelSquareItemResponse] = []
+        result_list: list[ChannelSquareItemResponse] = []
         for i, row in enumerate(rows):
             channel = row[0]  # Channel object
             user_subscription_status = row[1]
@@ -1598,6 +1647,12 @@ class ChannelService:
             filter_rules=main_rule_groups if main_rule_groups else None,
         )
 
+        # 5b. Per-sub-channel unread counts (sub-channel name → unread) for this user.
+        all_read_ids = []
+        if self.article_read_repository:
+            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
+        sub_channel_unread_counts = await self._calculate_sub_channel_unread_counts(channel, all_read_ids)
+
         # Complete info source list
         source_infos = []
         if channel.source_list:
@@ -1625,7 +1680,7 @@ class ChannelService:
 
         # Knowledge-sync config — only returned for the channel creator since
         # the feature is creator-only (Module D). Members don't need to see it.
-        knowledge_sync_cfg: Optional[KnowledgeSyncConfig] = None
+        knowledge_sync_cfg: KnowledgeSyncConfig | None = None
         is_creator = (
             current_membership is not None and resolve_channel_relation(current_membership) == ChannelRelationEnum.OWNER
         )
@@ -1647,6 +1702,7 @@ class ChannelService:
             creator_name=creator_name,
             subscriber_count=subscriber_count,
             article_count=article_count,
+            sub_channel_unread_counts=sub_channel_unread_counts,
             subscription_status=subscription_status,
             relation=relation,
             permission_ids=_sorted_channel_permission_ids(permission_ids),
@@ -1686,7 +1742,7 @@ class ChannelService:
             if not referenced_ids.issubset(owned_ids):
                 raise SpacePermissionDeniedError()
 
-        rows: List[ChannelKnowledgeSync] = []
+        rows: list[ChannelKnowledgeSync] = []
 
         # main-channel scope
         for space in cfg.main.spaces:
@@ -1732,14 +1788,15 @@ class ChannelService:
         rows.sort(key=lambda r: r.create_time)
 
         # Resolve knowledge-space display names for the UI.
-        space_name_by_id: Dict[str, str] = {}
+        space_name_by_id: dict[str, str] = {}
         numeric_ids = [
             int(r.knowledge_space_id) for r in rows if r.knowledge_space_id and str(r.knowledge_space_id).isdigit()
         ]
         if numeric_ids:
-            from bisheng.knowledge.domain.models.knowledge import Knowledge
-            from bisheng.core.database import get_async_db_session
             from sqlmodel import select as _select
+
+            from bisheng.core.database import get_async_db_session
+            from bisheng.knowledge.domain.models.knowledge import Knowledge
 
             async with get_async_db_session() as session:
                 q = _select(Knowledge).where(Knowledge.id.in_(numeric_ids))
@@ -1759,9 +1816,10 @@ class ChannelService:
         ]
         folder_ids_to_check = {int(r.folder_id) for r in rows if r.folder_id is not None and str(r.folder_id).isdigit()}
         if folder_ids_to_check:
-            from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-            from bisheng.core.database import get_async_db_session
             from sqlmodel import select as _select
+
+            from bisheng.core.database import get_async_db_session
+            from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
             existing_folder_ids: set = set()
             async with get_async_db_session() as session:
@@ -1780,7 +1838,7 @@ class ChannelService:
             )
 
         main_rows = [r for r in rows if not r.sub_channel_name]
-        sub_rows_by_name: Dict[str, List[ChannelKnowledgeSync]] = {}
+        sub_rows_by_name: dict[str, list[ChannelKnowledgeSync]] = {}
         for r in rows:
             if r.sub_channel_name:
                 sub_rows_by_name.setdefault(r.sub_channel_name, []).append(r)
@@ -1789,7 +1847,7 @@ class ChannelService:
             enabled=bool(main_rows) and all(r.is_enabled for r in main_rows),
             spaces=[_to_item(r) for r in main_rows],
         )
-        subs: List[KnowledgeSyncSubConfig] = []
+        subs: list[KnowledgeSyncSubConfig] = []
         for name, rlist in sub_rows_by_name.items():
             subs.append(
                 KnowledgeSyncSubConfig(
@@ -1979,7 +2037,7 @@ class ChannelService:
         cls,
         channel_id: str,
         user_id: int,
-        user_role: Optional[UserRoleEnum],
+        user_role: UserRoleEnum | None,
         *,
         is_active: bool,
     ) -> None:
@@ -1995,7 +2053,7 @@ class ChannelService:
             _save_bindings,
         )
 
-        desired_relation: Optional[str] = None
+        desired_relation: str | None = None
         if is_active and user_role is not None:
             relation_enum = CHANNEL_ROLE_TO_RELATION.get(UserRoleEnum(user_role))
             desired_relation = relation_enum.value if relation_enum else None
@@ -2092,9 +2150,9 @@ class ChannelService:
     async def search_channel_articles(
         self,
         channel_id: str,
-        keyword: Optional[str] = None,
-        source_ids: Optional[List[str]] = None,
-        sub_channel_name: Optional[str] = None,
+        keyword: str | None = None,
+        source_ids: list[str] | None = None,
+        sub_channel_name: str | None = None,
         page: int = 1,
         page_size: int = 20,
         login_user: UserPayload = None,
@@ -2267,12 +2325,12 @@ class ChannelService:
     def _extract_filter_rule_groups(
         channel: Channel,
         channel_type: str = "main",
-        sub_channel_name: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        sub_channel_name: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Extract filter rule groups while preserving top-level grouping semantics."""
         filter_rules_raw = channel.filter_rules or []
-        matched_groups: List[Dict[str, Any]] = []
-        legacy_main_rules: List[Dict[str, Any]] = []
+        matched_groups: list[dict[str, Any]] = []
+        legacy_main_rules: list[dict[str, Any]] = []
 
         for filter_rule in filter_rules_raw:
             if filter_rule.get("type") in {"single", "multi"}:
@@ -2302,7 +2360,7 @@ class ChannelService:
         return matched_groups
 
     @staticmethod
-    def _normalize_datetime(value: Optional[datetime]) -> Optional[datetime]:
+    def _normalize_datetime(value: datetime | None) -> datetime | None:
         """Normalize datetime values before comparison and persistence."""
         if value is None:
             return None
@@ -2310,7 +2368,7 @@ class ChannelService:
             return value.replace(tzinfo=None)
         return value
 
-    async def _get_channel_latest_article_create_time(self, channel: Channel) -> Optional[datetime]:
+    async def _get_channel_latest_article_create_time(self, channel: Channel) -> datetime | None:
         """Get the latest article create_time for a channel under main filter rules (async version)."""
         from bisheng.channel.domain.es.article_index import ARTICLE_INDEX_NAME
         from bisheng.core.search.elasticsearch.manager import get_es_connection
@@ -2341,7 +2399,7 @@ class ChannelService:
 
         return self._normalize_datetime(datetime.fromisoformat(latest_time))
 
-    async def update_channels_latest_article_time(self, channels: List[Channel]) -> int:
+    async def update_channels_latest_article_time(self, channels: list[Channel]) -> int:
         """
         Update latest_article_update_time for the given channels (async version).
 
@@ -2369,7 +2427,7 @@ class ChannelService:
         return updated_count
 
     @staticmethod
-    def update_channels_latest_article_time_sync(channels: List[Channel]) -> int:
+    def update_channels_latest_article_time_sync(channels: list[Channel]) -> int:
         """
         Update latest_article_update_time for the given channels (sync version).
 
@@ -2463,7 +2521,7 @@ class ChannelService:
         req: AddArticlesToKnowledgeSpaceRequest,
         login_user: UserPayload,
         request: "Request",
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Add channel articles to a knowledge space.
 
         1. Validate articles exist in ES.
@@ -2528,8 +2586,7 @@ class ChannelService:
         )
 
         # 5. Update preview_file_object_name for successful files
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
 
         result = []
         failed = False

@@ -2,7 +2,7 @@ import { useMemo, memo } from 'react';
 import { parseISO, isToday } from 'date-fns';
 import { TConversation } from '~/types/chat';
 import { useLocalize, TranslationKeys } from '~/hooks';
-import { groupConversationsByDate } from '~/utils';
+import { cn, groupConversationsByDate } from '~/utils';
 import Convo from './Convo';
 
 const Conversations = ({
@@ -27,14 +27,17 @@ const Conversations = ({
   );
 
   return (
-    <div className="text-token-text-primary flex flex-col gap-2 px-2 pb-2 text-sm">
+    <div className="text-token-text-primary flex flex-col gap-2 pb-2 text-sm">
       <div>
-        {groupedConversations.map(([groupName, convos]) => (
+        {groupedConversations.map(([groupName, convos], groupIdx) => (
           <div key={groupName}>
             <div
-              className="text-black opacity-60 pt-4 text-[12px] mb-1"
+              className={cn(
+                'text-black opacity-60 text-[12px] mb-1',
+                groupIdx === 0 ? 'pt-0' : 'pt-4',
+              )}
             >
-              {/* time */}
+              {/* Date group label */}
               {localize(groupName as TranslationKeys) || groupName}
             </div>
             {convos.map((convo, i) => (

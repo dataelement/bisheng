@@ -2,69 +2,121 @@ import asyncio
 import functools
 import json
 import logging
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from functools import cached_property
-from typing import List, Dict, Any, Optional, Tuple, Iterable
+from typing import Any, Self
 
 import jwt
-from fastapi import Request, Response, Depends
+from fastapi import Depends, Request, Response
 from pydantic import BaseModel, Field
 from starlette.websockets import WebSocket
-from typing_extensions import Self
 
+from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.common.services.config_service import settings
-from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
+from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.database.constants import AdminRole
-from bisheng.database.models.role import RoleDao
-from bisheng.database.models.group import GroupDao
 from bisheng.database.models.department import DepartmentDao
+from bisheng.database.models.group import GroupDao
+from bisheng.database.models.role import RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao, WebMenuResource
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+
 from ..models.user import User, UserDao
 from ..models.user_role import UserRoleDao
 
 logger = logging.getLogger(__name__)
 
 # 部门管理员：工作台 + 管理后台全量菜单（含路由用的 sys、仅 UI 的 log/system_config）
-_DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset({
-    'workstation', 'admin',
-    'build', 'create_app', 'knowledge', 'create_knowledge',
-    'knowledge_space', 'model', 'tool', 'mcp', 'channel',
-    'evaluation', 'dataset', 'mark_task', 'board', 'subscription',
-    'home', 'apps',
-    'frontend', 'backend', 'create_dashboard',
-    'log', 'system_config', 'sys',
-})
+_DEPARTMENT_ADMIN_WEB_MENU_FULL = frozenset(
+    {
+        "workstation",
+        "admin",
+        "build",
+        "create_app",
+        "knowledge",
+        "create_knowledge",
+        "knowledge_space",
+        "model",
+        "tool",
+        "mcp",
+        "channel",
+        "evaluation",
+        "dataset",
+        "mark_task",
+        "board",
+        "subscription",
+        "home",
+        "linsight_task_mode",
+        "apps",
+        "frontend",
+        "backend",
+        "create_dashboard",
+        "log",
+        "system_config",
+        "sys",
+    }
+)
 
 # 角色管理 UI：一级「工作台 / 管理后台」关闭时，二级项仍存库但不应对用户生效（与 Roles.tsx 一致）
-_WORKBENCH_ENTRY_KEYS = frozenset({'workstation', 'frontend'})
-_ADMIN_ENTRY_KEYS = frozenset({'admin', 'backend'})
-_ROLE_UI_WORKBENCH_CHILDREN = frozenset({
-    'home', 'apps', 'subscription', 'knowledge_space',
-})
-_ROLE_UI_ADMIN_CHILDREN = frozenset({
-    'board', 'model', 'log', 'knowledge', 'create_knowledge',
-    'build', 'create_app', 'evaluation', 'mark_task',
-})
+_WORKBENCH_ENTRY_KEYS = frozenset({"workstation", "frontend"})
+_ADMIN_ENTRY_KEYS = frozenset({"admin", "backend"})
+_ROLE_UI_WORKBENCH_CHILDREN = frozenset(
+    {
+        "home",
+        "linsight_task_mode",
+        "apps",
+        "subscription",
+        "knowledge_space",
+    }
+)
+_ROLE_UI_ADMIN_CHILDREN = frozenset(
+    {
+        "board",
+        "model",
+        "log",
+        "knowledge",
+        "create_knowledge",
+        "build",
+        "create_app",
+        "evaluation",
+        "mark_task",
+    }
+)
 
 # 登录校验：任一侧有「可生效」菜单即允许（含仅一级 workstation/admin，供需审批模式）
-_WEB_MENU_WORKBENCH_ALL = frozenset({
-    'workstation',
-    'frontend',
-    'home',
-    'apps',
-    'subscription',
-    'knowledge_space',
-})
-_WEB_MENU_ADMIN_ALL = frozenset({
-    'admin', 'backend',
-    'build', 'create_app', 'knowledge', 'create_knowledge',
-    'model', 'tool', 'mcp', 'channel',
-    'evaluation', 'dataset', 'mark_task', 'board', 'create_dashboard',
-})
+_WEB_MENU_WORKBENCH_ALL = frozenset(
+    {
+        "workstation",
+        "frontend",
+        "home",
+        "linsight_task_mode",
+        "apps",
+        "subscription",
+        "knowledge_space",
+    }
+)
+_WEB_MENU_ADMIN_ALL = frozenset(
+    {
+        "admin",
+        "backend",
+        "build",
+        "create_app",
+        "knowledge",
+        "create_knowledge",
+        "model",
+        "tool",
+        "mcp",
+        "channel",
+        "evaluation",
+        "dataset",
+        "mark_task",
+        "board",
+        "create_dashboard",
+    }
+)
 
 
 def _effective_web_menu_strip_orphans(web_menu: list[str]) -> list[str]:
@@ -76,28 +128,29 @@ def _effective_web_menu_strip_orphans(web_menu: list[str]) -> list[str]:
         s -= _ROLE_UI_ADMIN_CHILDREN
     return list(s)
 
+
 # ── AccessType → ReBAC mapping (F008, AD-02) ────────────────
 # Maps old RBAC AccessType to one-or-more (relation, object_type) pairs for
 # ReBAC delegation. Knowledge libraries are migrating from the historical
 # knowledge_space object type to the dedicated knowledge_library type, so the
 # adapter must temporarily accept both.
-_ACCESS_TYPE_TO_REBAC: Dict[int, Tuple[Tuple[str, str], ...]] = {
+_ACCESS_TYPE_TO_REBAC: dict[int, tuple[tuple[str, str], ...]] = {
     AccessType.KNOWLEDGE: (
-        ('can_read', 'knowledge_library'),
-        ('can_read', 'knowledge_space'),
+        ("can_read", "knowledge_library"),
+        ("can_read", "knowledge_space"),
     ),
     AccessType.KNOWLEDGE_WRITE: (
-        ('can_edit', 'knowledge_library'),
-        ('can_edit', 'knowledge_space'),
+        ("can_edit", "knowledge_library"),
+        ("can_edit", "knowledge_space"),
     ),
-    AccessType.WORKFLOW: (('can_read', 'workflow'),),
-    AccessType.WORKFLOW_WRITE: (('can_edit', 'workflow'),),
-    AccessType.ASSISTANT_READ: (('can_read', 'assistant'),),
-    AccessType.ASSISTANT_WRITE: (('can_edit', 'assistant'),),
-    AccessType.GPTS_TOOL_READ: (('can_read', 'tool'),),
-    AccessType.GPTS_TOOL_WRITE: (('can_edit', 'tool'),),
-    AccessType.DASHBOARD: (('can_read', 'dashboard'),),
-    AccessType.DASHBOARD_WRITE: (('can_edit', 'dashboard'),),
+    AccessType.WORKFLOW: (("can_read", "workflow"),),
+    AccessType.WORKFLOW_WRITE: (("can_edit", "workflow"),),
+    AccessType.ASSISTANT_READ: (("can_read", "assistant"),),
+    AccessType.ASSISTANT_WRITE: (("can_edit", "assistant"),),
+    AccessType.GPTS_TOOL_READ: (("can_read", "tool"),),
+    AccessType.GPTS_TOOL_WRITE: (("can_edit", "tool"),),
+    AccessType.DASHBOARD: (("can_read", "dashboard"),),
+    AccessType.DASHBOARD_WRITE: (("can_edit", "dashboard"),),
 }
 
 
@@ -112,19 +165,19 @@ class AuthJwt:
         self._decode_algorithms = [self._encode_algorithm]
 
     def create_access_token(self, subject: dict) -> str:
-        """ create jwt token """
+        """create jwt token"""
         if isinstance(subject, dict):
             subject = json.dumps(subject)
         payload = {
-            'sub': subject,
-            'exp': int(datetime.now(timezone.utc).timestamp()) + self.cookie_conf.jwt_token_expire_time,
-            'iss': self.cookie_conf.jwt_iss
+            "sub": subject,
+            "exp": int(datetime.now(UTC).timestamp()) + self.cookie_conf.jwt_token_expire_time,
+            "iss": self.cookie_conf.jwt_iss,
         }
         token = jwt.encode(payload, self.jwt_secret, algorithm=self._encode_algorithm)
         return token
 
     def set_access_token(self, token: str, response: Response = None, max_age: int = None) -> None:
-        """ set jwt token to cookie """
+        """set jwt token to cookie"""
         response = response or self.res
         response.set_cookie(
             self._access_cookie_key,
@@ -134,21 +187,16 @@ class AuthJwt:
             domain=self.cookie_conf.domain,
             secure=self.cookie_conf.secure,
             httponly=self.cookie_conf.httponly,
-            samesite=self.cookie_conf.samesite
+            samesite=self.cookie_conf.samesite,
         )
 
     def unset_access_token(self) -> None:
-        self.res.delete_cookie(
-            self._access_cookie_key,
-            path=self.cookie_conf.path,
-            domain=self.cookie_conf.domain
-        )
+        self.res.delete_cookie(self._access_cookie_key, path=self.cookie_conf.path, domain=self.cookie_conf.domain)
 
-    def get_subject(self,
-                    auth_from: str = "request",
-                    token: Optional[str] = None,
-                    websocket: Optional[WebSocket] = None) -> Dict:
-        """ decode jwt token """
+    def get_subject(
+        self, auth_from: str = "request", token: str | None = None, websocket: WebSocket | None = None
+    ) -> dict:
+        """decode jwt token"""
         if auth_from == "request":
             if not token:
                 token = self.req.cookies.get(self._access_cookie_key)
@@ -162,12 +210,13 @@ class AuthJwt:
             raise ValueError("unsupported auth_from value")
         return self.decode_jwt_token(token)
 
-    def decode_jwt_token(self, token: str) -> Dict:
-        """ decode jwt token """
+    def decode_jwt_token(self, token: str) -> dict:
+        """decode jwt token"""
         try:
-            payload = jwt.decode(token, self.jwt_secret, issuer=self.cookie_conf.jwt_iss,
-                                 algorithms=self._decode_algorithms)
-            return json.loads(payload.get('sub'))
+            payload = jwt.decode(
+                token, self.jwt_secret, issuer=self.cookie_conf.jwt_iss, algorithms=self._decode_algorithms
+            )
+            return json.loads(payload.get("sub"))
         except Exception as e:
             raise JWTDecodeError(status_code=422, message=str(e))
 
@@ -175,14 +224,15 @@ class AuthJwt:
 class LoginUser(BaseModel):
     user_id: int
     user_name: str = Field(default="")
-    user_role: List[int] = Field(default_factory=list, description="Users GroupsIDVertical")
-    group_cache: Dict[int, Any] = Field(default_factory=dict, description="User Group Cache")
+    user_role: list[int] = Field(default_factory=list, description="Users GroupsIDVertical")
+    group_cache: dict[int, Any] = Field(default_factory=dict, description="User Group Cache")
     tenant_id: int = Field(default=1, description="Current tenant ID")
     # v2.5.1 F012: JWT invalidation counter carried from JWT payload.
     # Middleware compares this against user.token_version and rejects
     # stale tokens (AC-09). Defaults to 0 so v2.5.0 JWTs still decode.
     token_version: int = Field(
-        default=0, description='JWT invalidation counter (F012)',
+        default=0,
+        description="JWT invalidation counter (F012)",
     )
     # Pre-resolved global-super flag, populated by ``init_login_user`` from
     # ``_check_is_global_super`` (FGA tuple + RBAC AdminRole fallback). Kept
@@ -190,17 +240,18 @@ class LoginUser(BaseModel):
     # serialisation share a single source of truth, and so test fixtures
     # can set it directly without mocking helpers.
     is_global_super: bool = Field(
-        default=False, description='True iff system:global#super_admin',
+        default=False,
+        description="True iff system:global#super_admin",
     )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.user_id = kwargs.get('user_id')
-        self.user_name = kwargs.get('user_name')
-        self.user_role = kwargs.get('user_role')
-        self.group_cache = kwargs.get('group_cache', {})
-        self.tenant_id = kwargs.get('tenant_id', DEFAULT_TENANT_ID)
-        self.is_global_super = bool(kwargs.get('is_global_super', False))
+        self.user_id = kwargs.get("user_id")
+        self.user_name = kwargs.get("user_name")
+        self.user_role = kwargs.get("user_role")
+        self.group_cache = kwargs.get("group_cache", {})
+        self.tenant_id = kwargs.get("tenant_id", DEFAULT_TENANT_ID)
+        self.is_global_super = bool(kwargs.get("is_global_super", False))
         # token_version is validated by Pydantic Field(default=0) above.
 
         if not self.user_role:
@@ -259,6 +310,7 @@ class LoginUser(BaseModel):
         rebac_targets = self._rebac_targets_for_access_type(access_type)
         if rebac_targets:
             from bisheng.permission.domain.services.owner_service import _run_async_safe
+
             return any(
                 _run_async_safe(self.rebac_check(relation, object_type, str(target_id)))
                 for relation, object_type in rebac_targets
@@ -276,10 +328,9 @@ class LoginUser(BaseModel):
         """Async permission check — delegates to ReBAC for mapped types."""
         rebac_targets = self._rebac_targets_for_access_type(access_type)
         if rebac_targets:
-            results = await asyncio.gather(*[
-                self.rebac_check(relation, object_type, str(target_id))
-                for relation, object_type in rebac_targets
-            ])
+            results = await asyncio.gather(
+                *[self.rebac_check(relation, object_type, str(target_id)) for relation, object_type in rebac_targets]
+            )
             return any(results)
 
         # Legacy fallback for unmapped AccessType
@@ -291,7 +342,7 @@ class LoginUser(BaseModel):
     @wrapper_access_check
     def copiable_check(self, owner_user_id: int) -> bool:
         """
-            Check if the user has permission to copy a resource
+        Check if the user has permission to copy a resource
         """
         # Determine if it belongs to my resource
         if self.user_id == owner_user_id:
@@ -301,7 +352,7 @@ class LoginUser(BaseModel):
     @wrapper_access_check
     def check_group_admin(self, group_id: int) -> bool:
         """
-            Check if the user is an administrator of a group
+        Check if the user is an administrator of a group
         """
         # Determine if you are an administrator of a user group
         user_group = UserGroupDao.get_user_admin_group(self.user_id)
@@ -315,7 +366,7 @@ class LoginUser(BaseModel):
     @async_wrapper_access_check
     async def async_check_group_admin(self, group_id: int) -> bool:
         """
-            Asynchronously check if the user is an administrator of a group
+        Asynchronously check if the user is an administrator of a group
         """
         # Determine if you are an administrator of a user group
         user_group = await UserGroupDao.aget_user_admin_group(self.user_id, group_id)
@@ -327,7 +378,7 @@ class LoginUser(BaseModel):
         return False
 
     @wrapper_access_check
-    def check_groups_admin(self, group_ids: List[int]) -> bool:
+    def check_groups_admin(self, group_ids: list[int]) -> bool:
         """
         Check if the user is an administrator in the user group list, one of which istrue
         """
@@ -337,10 +388,10 @@ class LoginUser(BaseModel):
                 return True
         return False
 
-    async def get_user_groups(self, user_id: int) -> List[Dict]:
-        """ Query a list of roles for a user """
+    async def get_user_groups(self, user_id: int) -> list[dict]:
+        """Query a list of roles for a user"""
         user_groups = await UserGroupDao.aget_user_group(user_id)
-        user_group_ids: List[int] = [one_group.group_id for one_group in user_groups]
+        user_group_ids: list[int] = [one_group.group_id for one_group in user_groups]
         res = []
         for i in range(len(user_group_ids) - 1, -1, -1):
             if self.group_cache.get(user_group_ids[i]):
@@ -350,7 +401,7 @@ class LoginUser(BaseModel):
         if user_group_ids:
             group_list = await GroupDao.aget_group_by_ids(user_group_ids)
             for group_info in group_list:
-                self.group_cache[group_info.id] = {'id': group_info.id, 'name': group_info.group_name}
+                self.group_cache[group_info.id] = {"id": group_info.id, "name": group_info.group_name}
                 res.append(self.group_cache.get(group_info.id))
         return res
 
@@ -360,7 +411,7 @@ class LoginUser(BaseModel):
         user_groups = await UserGroupDao.aget_user_group(user_id)
         return [one_group.group_id for one_group in user_groups]
 
-    def get_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
+    def get_user_access_resource_ids(self, access_types: list[AccessType]) -> list[str]:
         """Query accessible resource IDs.
 
         F008 adapter: delegates to ReBAC list_accessible for mapped AccessType.
@@ -370,7 +421,7 @@ class LoginUser(BaseModel):
         if rebac_targets:
             from bisheng.permission.domain.services.owner_service import _run_async_safe
 
-            merged: Dict[str, None] = {}
+            merged: dict[str, None] = {}
             for relation, object_type in rebac_targets:
                 ids = _run_async_safe(self.rebac_list_accessible(relation, object_type)) or []
                 for rid in ids:
@@ -381,15 +432,14 @@ class LoginUser(BaseModel):
         role_access = RoleAccessDao.get_role_access_batch(self.user_role, access_types)
         return list(set([one.third_id for one in role_access]))
 
-    async def aget_user_access_resource_ids(self, access_types: List[AccessType]) -> List[str]:
+    async def aget_user_access_resource_ids(self, access_types: list[AccessType]) -> list[str]:
         """Async version — delegates to ReBAC for mapped types."""
         rebac_targets = self._rebac_targets_for_access_types(access_types)
         if rebac_targets:
-            merged: Dict[str, None] = {}
-            results = await asyncio.gather(*[
-                self.rebac_list_accessible(relation, object_type)
-                for relation, object_type in rebac_targets
-            ])
+            merged: dict[str, None] = {}
+            results = await asyncio.gather(
+                *[self.rebac_list_accessible(relation, object_type) for relation, object_type in rebac_targets]
+            )
             for ids in results:
                 for rid in ids or []:
                     merged[str(rid)] = None
@@ -399,7 +449,7 @@ class LoginUser(BaseModel):
         role_access = await RoleAccessDao.aget_role_access_batch(self.user_role, access_types)
         return list(set([one.third_id for one in role_access]))
 
-    def get_merged_rebac_app_resource_ids(self, *, for_write: bool = False) -> List[str]:
+    def get_merged_rebac_app_resource_ids(self, *, for_write: bool = False) -> list[str]:
         """合并 workflow + assistant 的 ReBAC 可见 ID（构建/工作台应用列表）。
 
         ⚠️ 仅供 async 调用方使用 sync 适配器时兜底。新代码请用
@@ -409,20 +459,22 @@ class LoginUser(BaseModel):
         """
         from bisheng.permission.domain.services.owner_service import _run_async_safe
 
-        relation = 'can_edit' if for_write else 'can_read'
-        wf_ids = _run_async_safe(self.rebac_list_accessible(relation, 'workflow'))
-        asst_ids = _run_async_safe(self.rebac_list_accessible(relation, 'assistant'))
+        relation = "can_edit" if for_write else "can_read"
+        wf_ids = _run_async_safe(self.rebac_list_accessible(relation, "workflow"))
+        asst_ids = _run_async_safe(self.rebac_list_accessible(relation, "assistant"))
         wf_ids = wf_ids or []
         asst_ids = asst_ids or []
         return list(set(wf_ids) | set(asst_ids))
 
     async def aget_merged_rebac_app_resource_ids(
-        self, *, for_write: bool = False,
-    ) -> List[str]:
+        self,
+        *,
+        for_write: bool = False,
+    ) -> list[str]:
         """async 版本：合并 workflow + assistant 的 ReBAC 可见 ID。"""
-        relation = 'can_edit' if for_write else 'can_read'
-        wf_ids = await self.rebac_list_accessible(relation, 'workflow')
-        asst_ids = await self.rebac_list_accessible(relation, 'assistant')
+        relation = "can_edit" if for_write else "can_read"
+        wf_ids = await self.rebac_list_accessible(relation, "workflow")
+        asst_ids = await self.rebac_list_accessible(relation, "assistant")
         return list(set(wf_ids or []) | set(asst_ids or []))
 
     # ── ReBAC permission methods (F004, INV-3) ─────────────────
@@ -434,6 +486,7 @@ class LoginUser(BaseModel):
         L1 admin → L2 cache → L3 OpenFGA → L4 owner fallback → L5 fail-closed.
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
+
         return await PermissionService.check(
             user_id=self.user_id,
             relation=relation,
@@ -442,13 +495,14 @@ class LoginUser(BaseModel):
             login_user=self,
         )
 
-    async def rebac_list_accessible(self, relation: str, object_type: str) -> Optional[List[str]]:
+    async def rebac_list_accessible(self, relation: str, object_type: str) -> list[str] | None:
         """List accessible resource IDs via ReBAC.
 
         Returns None for admin (caller should not filter).
         Returns list of ID strings for normal users.
         """
         from bisheng.permission.domain.services.permission_service import PermissionService
+
         return await PermissionService.list_accessible_ids(
             user_id=self.user_id,
             relation=relation,
@@ -457,14 +511,15 @@ class LoginUser(BaseModel):
         )
 
     @staticmethod
-    def _rebac_targets_for_access_type(access_type: AccessType) -> Tuple[Tuple[str, str], ...]:
+    def _rebac_targets_for_access_type(access_type: AccessType) -> tuple[tuple[str, str], ...]:
         return _ACCESS_TYPE_TO_REBAC.get(access_type, ())
 
     @classmethod
     def _rebac_targets_for_access_types(
-        cls, access_types: Iterable[AccessType],
-    ) -> List[Tuple[str, str]]:
-        merged: Dict[Tuple[str, str], None] = {}
+        cls,
+        access_types: Iterable[AccessType],
+    ) -> list[tuple[str, str]]:
+        merged: dict[tuple[str, str], None] = {}
         for access_type in access_types:
             for pair in cls._rebac_targets_for_access_type(access_type):
                 merged[pair] = None
@@ -487,19 +542,19 @@ class LoginUser(BaseModel):
         the JWT so the middleware can invalidate stale tokens.
         """
         if token_version is None:
-            token_version = int(getattr(user, 'token_version', 0) or 0)
+            token_version = int(getattr(user, "token_version", 0) or 0)
         payload = {
-            'user_id': user.user_id,
-            'user_name': user.user_name,
-            'tenant_id': tenant_id or DEFAULT_TENANT_ID,
-            'token_version': token_version,
+            "user_id": user.user_id,
+            "user_name": user.user_name,
+            "tenant_id": tenant_id or DEFAULT_TENANT_ID,
+            "token_version": token_version,
         }
         token = auth_jwt.create_access_token(subject=payload)
         return token
 
     @classmethod
     def set_access_cookies(cls, token: str, auth_jwt: AuthJwt, **kwargs) -> None:
-        """ set access token into cookie """
+        """set access token into cookie"""
         auth_jwt.set_access_token(token, **kwargs)
 
     @classmethod
@@ -524,6 +579,7 @@ class LoginUser(BaseModel):
         # NoTenantContextError before tenant resolution finishes.
         from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.utils.http_middleware import _check_is_global_super
+
         with bypass_tenant_filter():
             user_roles, is_global_super = await asyncio.gather(
                 UserRoleDao.aget_user_roles(user_id),
@@ -531,7 +587,9 @@ class LoginUser(BaseModel):
             )
         role_ids = [user_role.role_id for user_role in user_roles]
         login_user = cls(
-            user_id=user_id, user_name=user_name, user_role=role_ids,
+            user_id=user_id,
+            user_name=user_name,
+            user_role=role_ids,
             tenant_id=tenant_id or DEFAULT_TENANT_ID,
             token_version=token_version,
             is_global_super=is_global_super,
@@ -549,11 +607,14 @@ class LoginUser(BaseModel):
         # See ``init_login_user`` — bypass is required because UserRole is
         # tenant-aware and login-time has no tenant context yet.
         from bisheng.core.context.tenant import bypass_tenant_filter
+
         with bypass_tenant_filter():
             user_roles = UserRoleDao.get_user_roles(user_id)
         role_ids = [user_role.role_id for user_role in user_roles]
         login_user = cls(
-            user_id=user_id, user_name=user_name, user_role=role_ids,
+            user_id=user_id,
+            user_name=user_name,
+            user_role=role_ids,
             tenant_id=tenant_id or DEFAULT_TENANT_ID,
             token_version=token_version,
         )
@@ -563,10 +624,10 @@ class LoginUser(BaseModel):
     async def get_login_user(cls, auth_jwt: AuthJwt = Depends()) -> Self:
         subject = auth_jwt.get_subject()
         return await cls.init_login_user(
-            user_id=subject['user_id'],
-            user_name=subject['user_name'],
-            tenant_id=subject.get('tenant_id', DEFAULT_TENANT_ID),
-            token_version=int(subject.get('token_version', 0) or 0),
+            user_id=subject["user_id"],
+            user_name=subject["user_name"],
+            tenant_id=subject.get("tenant_id", DEFAULT_TENANT_ID),
+            token_version=int(subject.get("token_version", 0) or 0),
         )
 
     @classmethod
@@ -582,17 +643,17 @@ class LoginUser(BaseModel):
         login_user = await cls.get_login_user(auth_jwt)
         if login_user.is_admin():
             return login_user
-        await cls.assert_effective_web_menu_contains(login_user.user_id, 'model')
+        await cls.assert_effective_web_menu_contains(login_user.user_id, "model")
         return login_user
 
     @classmethod
     async def get_login_user_from_ws(cls, websocket: WebSocket, auth_jwt: AuthJwt = Depends(), t: str = None) -> Self:
         subject = auth_jwt.get_subject(auth_from="websocket", websocket=websocket, token=t)
         return await cls.init_login_user(
-            user_id=subject['user_id'],
-            user_name=subject['user_name'],
-            tenant_id=subject.get('tenant_id', DEFAULT_TENANT_ID),
-            token_version=int(subject.get('token_version', 0) or 0),
+            user_id=subject["user_id"],
+            user_name=subject["user_name"],
+            tenant_id=subject.get("tenant_id", DEFAULT_TENANT_ID),
+            token_version=int(subject.get("token_version", 0) or 0),
         )
 
     @classmethod
@@ -608,7 +669,7 @@ class LoginUser(BaseModel):
         user: User,
         *,
         is_department_admin: bool = False,
-    ) -> (List[int] | str, List[str]):
+    ) -> (list[int] | str, list[str]):
         """Resolve role key(s) and web_menu.
 
         - AC-13: multi-role web_menu is the **union** of each role's WEB_MENU entries.
@@ -617,14 +678,14 @@ class LoginUser(BaseModel):
           stripped for other users even if legacy role_access rows exist.
         """
         db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
-        role = ''
+        role = ""
         role_ids = []
         for user_role in db_user_role:
             if user_role.role_id == AdminRole:
-                role = 'admin'
+                role = "admin"
             else:
                 role_ids.append(user_role.role_id)
-        if role != 'admin':
+        if role != "admin":
             role = role_ids
             # AC-13: union of all roles' menu permissions
             web_menu = await RoleAccessDao.aget_role_access(role_ids, AccessType.WEB_MENU)
@@ -637,7 +698,7 @@ class LoginUser(BaseModel):
             if is_department_admin:
                 web_menu = list(set(web_menu) | set(_DEPARTMENT_ADMIN_WEB_MENU_FULL))
             else:
-                web_menu = [m for m in web_menu if m not in ('system_config', 'sys')]
+                web_menu = [m for m in web_menu if m not in ("system_config", "sys")]
             web_menu = _effective_web_menu_strip_orphans(web_menu)
         else:
             # AC-14: admin returns all WebMenuResource values (including deprecated for compat)
@@ -645,7 +706,7 @@ class LoginUser(BaseModel):
         return role, web_menu
 
     @classmethod
-    async def effective_workbench_admin_flags(cls, user: User) -> Tuple[bool, bool]:
+    async def effective_workbench_admin_flags(cls, user: User) -> tuple[bool, bool]:
         """Effective (has_workbench, has_admin_console) after orphan strip and dept-admin merge."""
         db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
         if any(ur.role_id == AdminRole for ur in db_user_role):
@@ -667,18 +728,18 @@ class LoginUser(BaseModel):
     def default_web_entry(cls, has_workbench: bool, has_admin_console: bool) -> str:
         """First app after login: ``platform`` (管理后台) or ``workspace`` (工作台). Both open → platform."""
         if has_admin_console:
-            return 'platform'
+            return "platform"
         if has_workbench:
-            return 'workspace'
-        return 'platform'
+            return "workspace"
+        return "platform"
 
     @classmethod
     async def user_entry_payload_for_read(cls, user: User) -> dict:
         hw, ha = await cls.effective_workbench_admin_flags(user)
         return {
-            'has_workbench': hw,
-            'has_admin_console': ha,
-            'default_entry': cls.default_web_entry(hw, ha),
+            "has_workbench": hw,
+            "has_admin_console": ha,
+            "default_entry": cls.default_web_entry(hw, ha),
         }
 
     @classmethod
@@ -691,8 +752,8 @@ class LoginUser(BaseModel):
         roles = await RoleDao.aget_role_by_ids(role_ids)
         for r in roles or []:
             qc = r.quota_config or {}
-            v = qc.get('menu_approval_mode')
-            if v is True or v == 1 or str(v).lower() in ('true', '1'):
+            v = qc.get("menu_approval_mode")
+            if v is True or v == 1 or str(v).lower() in ("true", "1"):
                 return True
         return False
 

@@ -17,6 +17,8 @@ autogen_coding/
 .claude/settings.local.json
 # Personal notes (lilu's local reference docs, not for sharing)
 .claude/docs/
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock
 
 
 
@@ -137,6 +139,8 @@ build/
 develop-eggs/
 config.dev.yaml
 src/backend/bisheng/config.yaml
+# Local per-environment configs (contain connection strings / encrypted creds)
+src/backend/bisheng/config.*.yaml
 src/backend/data/
 downloads/
 eggs/

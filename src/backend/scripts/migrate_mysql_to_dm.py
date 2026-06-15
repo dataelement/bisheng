@@ -3,15 +3,20 @@
 
 Scope
 -----
-This script ONLY copies row data from MySQL to DM. It does NOT create tables.
-The target DM schema (tables / triggers / indexes / migration-version tables)
-must already exist, created by each application's own authoritative path:
+By default this script ONLY copies row data from MySQL to DM; the target DM
+schema must already exist, created by each application's own authoritative path:
 
   * bisheng         : start the backend once against DM
                       (SQLModel.metadata.create_all + startup triggers), or run
                       `alembic upgrade head` against the DM URL.
   * bisheng_gateway : execute docker/db/init_dm.sql on the DM schema.
   * openfga         : run `openfga migrate --datastore-engine dm --datastore-uri ...`.
+
+Pass --create-schema to instead create the DM tables generically from the MySQL
+schema (reflect + create_all, idempotent). This is uniform across all three
+databases and needs no app-specific tooling, but it does NOT create bisheng's
+update_time/computed-column triggers (added by the bisheng app at first startup)
+nor the DM user/schema itself (a DBA step).
 
 For each logical database the script:
   1. reflects the TARGET DM tables (authoritative table list);
@@ -29,6 +34,7 @@ Run it inside the bisheng backend venv so the DM dialect monkey-patches in
 Config file (YAML) example -> see scripts/migrate_dm.example.yaml
 Every connection value may also be supplied / overridden via env vars.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,10 +42,12 @@ import datetime as _dt
 import json
 import logging
 import os
+import re
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Iterable
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy import MetaData, Table, inspect, text
@@ -67,9 +75,9 @@ log = logging.getLogger("mysql2dm")
 @dataclass
 class DbJob:
     name: str
-    source_url: str                       # mysql+pymysql://user:pass@host:port/db
-    target_url: str                       # dm+dmPython://user:pass@host:port/SCHEMA
-    include: list[str] = field(default_factory=list)   # empty = all reflected tables
+    source_url: str  # mysql+pymysql://user:pass@host:port/db
+    target_url: str  # dm+dmPython://user:pass@host:port/SCHEMA
+    include: list[str] = field(default_factory=list)  # empty = all reflected tables
     exclude: list[str] = field(default_factory=list)
 
 
@@ -81,7 +89,7 @@ def _expand_env(value: str) -> str:
 def load_jobs(config_path: str) -> list[DbJob]:
     import yaml  # local import: only needed when a config file is used
 
-    with open(config_path, "r", encoding="utf-8") as fh:
+    with open(config_path, encoding="utf-8") as fh:
         raw = yaml.safe_load(fh) or {}
 
     jobs: list[DbJob] = []
@@ -110,9 +118,7 @@ def load_jobs(config_path: str) -> list[DbJob]:
 # map from SYS.ALL_TABLES once per job.
 # ---------------------------------------------------------------------------
 def dm_actual_table_map(conn) -> dict[str, str]:
-    rows = conn.execute(
-        text("SELECT TABLE_NAME FROM SYS.ALL_TABLES WHERE OWNER = USER")
-    )
+    rows = conn.execute(text("SELECT TABLE_NAME FROM SYS.ALL_TABLES WHERE OWNER = USER"))
     return {r[0].lower(): r[0] for r in rows}
 
 
@@ -123,10 +129,7 @@ def dm_quote(actual_name: str) -> str:
 
 def dm_triggers_for(conn, actual_table: str) -> list[str]:
     rows = conn.execute(
-        text(
-            "SELECT TRIGGER_NAME FROM USER_TRIGGERS "
-            "WHERE TABLE_NAME = :t"
-        ),
+        text("SELECT TRIGGER_NAME FROM USER_TRIGGERS WHERE TABLE_NAME = :t"),
         {"t": actual_table},
     )
     return [r[0] for r in rows]
@@ -134,22 +137,14 @@ def dm_triggers_for(conn, actual_table: str) -> list[str]:
 
 def dm_fk_constraints(conn) -> list[tuple[str, str]]:
     """Return (table_name, constraint_name) for every foreign key in the schema."""
-    rows = conn.execute(
-        text(
-            "SELECT TABLE_NAME, CONSTRAINT_NAME FROM USER_CONSTRAINTS "
-            "WHERE CONSTRAINT_TYPE = 'R'"
-        )
-    )
+    rows = conn.execute(text("SELECT TABLE_NAME, CONSTRAINT_NAME FROM USER_CONSTRAINTS WHERE CONSTRAINT_TYPE = 'R'"))
     return [(r[0], r[1]) for r in rows]
 
 
 def dm_identity_column(conn, actual_table: str) -> str | None:
     """Return the IDENTITY column name of a DM table, or None."""
     rows = conn.execute(
-        text(
-            "SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS "
-            "WHERE TABLE_NAME = :t AND OWNER = USER AND IDENTITY = 'YES'"
-        ),
+        text("SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = :t AND OWNER = USER AND IDENTITY = 'YES'"),
         {"t": actual_table},
     )
     row = rows.fetchone()
@@ -218,9 +213,7 @@ def copy_table(
     quoted = dm_quote(actual_name)
 
     with src_engine.connect() as s_conn:
-        row_count = s_conn.execute(
-            sa.select(sa.func.count()).select_from(src_tbl)
-        ).scalar_one()
+        row_count = s_conn.execute(sa.select(sa.func.count()).select_from(src_tbl)).scalar_one()
         if row_count == 0:
             log.info("  %-32s 0 rows (empty)", table_name)
             return 0
@@ -244,10 +237,7 @@ def copy_table(
             batch: list[dict] = []
             for row in result:
                 mapping = dict(row._mapping)
-                converted = {
-                    col: convert_value(mapping[col], dst_col_types[col])
-                    for col in common_cols
-                }
+                converted = {col: convert_value(mapping[col], dst_col_types[col]) for col in common_cols}
                 batch.append(converted)
                 if len(batch) >= batch_size:
                     d_conn.execute(insert_stmt, batch)
@@ -277,22 +267,111 @@ def reseed_identity(dst_engine: Engine, quoted_table: str, id_col: str) -> None:
     """
     try:
         with dst_engine.begin() as conn:
-            max_id = conn.execute(
-                text(f"SELECT COALESCE(MAX({id_col}), 0) FROM {quoted_table}")
-            ).scalar_one()
+            max_id = conn.execute(text(f"SELECT COALESCE(MAX({id_col}), 0) FROM {quoted_table}")).scalar_one()
             next_id = int(max_id) + 1
-            conn.execute(
-                text(
-                    f"ALTER TABLE {quoted_table} "
-                    f"MODIFY {id_col} IDENTITY({next_id}, 1)"
-                )
-            )
+            conn.execute(text(f"ALTER TABLE {quoted_table} MODIFY {id_col} IDENTITY({next_id}, 1)"))
         log.info("  reseed identity %s.%s -> %d", quoted_table, id_col, next_id)
     except Exception as exc:
         log.warning(
-            "  could not reseed identity for %s.%s (%s); "
-            "reseed manually if next insert collides", quoted_table, id_col, exc
+            "  could not reseed identity for %s.%s (%s); reseed manually if next insert collides",
+            quoted_table,
+            id_col,
+            exc,
         )
+
+
+# ---------------------------------------------------------------------------
+# Schema auto-creation (optional, --create-schema)
+#
+# One uniform mechanism for all three databases: reflect each MySQL source
+# table and let create_all() emit the CREATE TABLE on DM. The dialect_helpers
+# patches map most types (BOOLEAN->SMALLINT, LONGTEXT/JSON->CLOB, CHAR->VARCHAR,
+# autoincrement->IDENTITY); _normalize_reflected_for_dm handles the remaining
+# MySQL-only types/defaults that those patches do not cover.
+# ---------------------------------------------------------------------------
+def _normalize_reflected_for_dm(md: MetaData) -> None:
+    """Adjust reflected MySQL types/defaults so create_all emits valid DM DDL."""
+    from sqlalchemy import CLOB, Integer, String
+    from sqlalchemy.dialects import mysql
+
+    big_text = (mysql.LONGTEXT, mysql.MEDIUMTEXT, mysql.TINYTEXT, mysql.TEXT, mysql.JSON)
+    small_int = (mysql.MEDIUMINT, mysql.YEAR)
+
+    for tbl in md.tables.values():
+        for col in tbl.columns:
+            t = col.type
+            # DM has no UNSIGNED / ZEROFILL.
+            if getattr(t, "unsigned", False):
+                t.unsigned = False
+            if getattr(t, "zerofill", False):
+                t.zerofill = False
+            # MySQL collation/charset names are not valid on DM.
+            if getattr(t, "collation", None):
+                t.collation = None
+            if hasattr(t, "charset"):
+                t.charset = None
+
+            # MySQL-only large text / JSON -> CLOB.
+            if isinstance(t, big_text):
+                col.type = CLOB()
+            # ENUM / SET have no DM equivalent -> VARCHAR sized to the values.
+            elif isinstance(t, (mysql.ENUM, mysql.SET)):
+                values = list(getattr(t, "enums", []) or [])
+                if isinstance(t, mysql.SET):
+                    width = sum(len(v) + 1 for v in values) or 255
+                else:
+                    width = max((len(v) for v in values), default=64)
+                col.type = String(width)
+            # MEDIUMINT / YEAR -> INTEGER.
+            elif isinstance(t, small_int):
+                col.type = Integer()
+
+            # Strip "ON UPDATE CURRENT_TIMESTAMP" from server defaults: invalid in
+            # a DM column default. On DM the bisheng app maintains update_time via
+            # a startup trigger instead.
+            sd = col.server_default
+            if sd is not None and getattr(sd, "arg", None) is not None:
+                txt = str(sd.arg)
+                if "ON UPDATE" in txt.upper():
+                    head = re.split(r"(?i)\bON UPDATE\b", txt)[0].strip()
+                    col.server_default = sa.DefaultClause(sa.text(head)) if head else None
+
+
+def create_schema(src_engine: Engine, dst_engine: Engine, job: DbJob) -> None:
+    """Reflect the MySQL source schema and create matching tables on DM.
+
+    Idempotent: existing DM tables are left untouched (checkfirst=True).
+
+    Not created here: bisheng's update_time / computed-column triggers — the
+    bisheng app installs those at first startup against DM. The target DM
+    user/schema itself must already exist (a DBA step); this only creates tables,
+    indexes and constraints inside it.
+    """
+    insp = inspect(src_engine)
+    names = insp.get_table_names()
+    skip = set(job.exclude) | {"alembic_version", "goose_db_version"}
+    if job.include:
+        names = [t for t in names if t in job.include]
+    names = sorted(t for t in names if t not in skip)
+    if not names:
+        log.warning("  schema: no source tables to create")
+        return
+
+    md = MetaData()
+    md.reflect(bind=src_engine, only=names)
+    _normalize_reflected_for_dm(md)
+
+    existing = set(inspect(dst_engine).get_table_names())
+    to_create = [t for t in names if t not in existing]
+    log.info(
+        "  schema: %d source table(s), %d already on DM, creating %d",
+        len(names),
+        len(names) - len(to_create),
+        len(to_create),
+    )
+    # create_all sorts by FK dependency and skips existing tables (checkfirst).
+    md.create_all(bind=dst_engine, checkfirst=True)
+    log.info("  schema: creation done")
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +400,7 @@ def run_job(
     truncate: bool,
     dry_run: bool,
     resume_from: str | None = None,
+    create_schema_first: bool = False,
 ) -> None:
     log.info("=" * 70)
     log.info("DATABASE: %s", job.name)
@@ -331,6 +411,13 @@ def run_job(
     # DM sync engine: strip the schema path (dmPython.connect has no `database` kwarg)
     target_url = _dm_strip_path(job.target_url)
     dst_engine = sa.create_engine(target_url, pool_pre_ping=True)
+
+    # Optionally create the DM tables from the MySQL schema before loading data.
+    if create_schema_first:
+        if dry_run:
+            log.info("  (dry-run) would create schema from MySQL reflection")
+        else:
+            create_schema(src_engine, dst_engine, job)
 
     tables = resolve_tables(dst_engine, job)
     # Resume support: skip every table before `resume_from` (use after a failure).
@@ -353,9 +440,7 @@ def run_job(
     if not dry_run:
         with dst_engine.begin() as conn:
             for tname, cname in dm_fk_constraints(conn):
-                conn.execute(
-                    text(f"ALTER TABLE {dm_quote(tname)} DISABLE CONSTRAINT {cname}")
-                )
+                conn.execute(text(f"ALTER TABLE {dm_quote(tname)} DISABLE CONSTRAINT {cname}"))
                 disabled_fks.append((tname, cname))
             for t in tables:
                 actual = actual_map.get(t, t.upper())
@@ -368,9 +453,7 @@ def run_job(
     try:
         for t in tables:
             actual = actual_map.get(t, t.upper())
-            grand_total += copy_table(
-                src_engine, dst_engine, t, actual, batch_size, truncate, dry_run
-            )
+            grand_total += copy_table(src_engine, dst_engine, t, actual, batch_size, truncate, dry_run)
     finally:
         if not dry_run:
             with dst_engine.begin() as conn:
@@ -413,8 +496,7 @@ def verify_job(job: DbJob) -> bool:
             if src_n == dst_n:
                 log.info("  %-32s OK     mysql=%d dm=%d", t, src_n, dst_n)
             else:
-                log.error("  %-32s MISMATCH mysql=%d dm=%d (diff=%d)",
-                          t, src_n, dst_n, src_n - dst_n)
+                log.error("  %-32s MISMATCH mysql=%d dm=%d (diff=%d)", t, src_n, dst_n, src_n - dst_n)
                 ok = False
 
     log.info("VERIFY %s: %s", job.name, "PASS" if ok else "FAIL")
@@ -435,7 +517,7 @@ def _dm_strip_path(url: str) -> str:
     at = url.find("@")
     if at == -1:
         return url
-    after = url[at + 1:]
+    after = url[at + 1 :]
     slash = after.find("/")
     if slash == -1:
         return url
@@ -444,7 +526,6 @@ def _dm_strip_path(url: str) -> str:
 
 def _mask(url: str) -> str:
     """Hide the password when logging a DSN."""
-    import re
 
     return re.sub(r"(://[^:/@]+:)[^@]+(@)", r"\1***\2", url)
 
@@ -455,19 +536,33 @@ def _mask(url: str) -> str:
 def main(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="MySQL -> DaMeng data migration")
     parser.add_argument("--config", required=True, help="YAML config path")
-    parser.add_argument("--db", action="append", default=[],
-                        help="Only migrate these database names (repeatable). Default: all.")
+    parser.add_argument(
+        "--db", action="append", default=[], help="Only migrate these database names (repeatable). Default: all."
+    )
     parser.add_argument("--batch-size", type=int, default=1000)
-    parser.add_argument("--truncate", action="store_true",
-                        help="DELETE FROM each target table before loading (idempotent re-runs).")
-    parser.add_argument("--resume-from", metavar="TABLE", default=None,
-                        help="Skip tables before TABLE in the sorted list (use after a mid-run failure). "
-                             "Only valid with a single --db.")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Connect, reflect and count rows but write nothing.")
-    parser.add_argument("--verify", action="store_true",
-                        help="Verification only: compare per-table row counts "
-                             "between MySQL and DM, copy nothing.")
+    parser.add_argument(
+        "--truncate", action="store_true", help="DELETE FROM each target table before loading (idempotent re-runs)."
+    )
+    parser.add_argument(
+        "--resume-from",
+        metavar="TABLE",
+        default=None,
+        help="Skip tables before TABLE in the sorted list (use after a mid-run failure). "
+        "Only valid with a single --db.",
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Connect, reflect and count rows but write nothing.")
+    parser.add_argument(
+        "--create-schema",
+        action="store_true",
+        help="Create the DM tables from the MySQL schema (reflect + create_all, idempotent) "
+        "before loading data. Does not create bisheng's update_time/computed triggers "
+        "(the bisheng app adds those at first startup) or the DM user/schema itself.",
+    )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="Verification only: compare per-table row counts between MySQL and DM, copy nothing.",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     jobs = load_jobs(args.config)
@@ -494,7 +589,14 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     for job in jobs:
         try:
-            run_job(job, args.batch_size, args.truncate, args.dry_run, args.resume_from)
+            run_job(
+                job,
+                args.batch_size,
+                args.truncate,
+                args.dry_run,
+                args.resume_from,
+                args.create_schema,
+            )
         except Exception:
             log.exception("Migration FAILED for database %s", job.name)
             return 1

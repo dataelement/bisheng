@@ -1,6 +1,4 @@
 import { Check, X } from "lucide-react";
-import LingsiIcon from '~/components/ui/icon/Lingsi';
-import TodayItemIcon from '~/components/ui/icon/TodayItem';
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -182,8 +180,8 @@ export default function Conversation({
     <div
       className={cn(
         "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors",
-        isActiveConvo ? "bg-[#e6edfc]" : "hover:bg-[#f7f7f7]",
-        renaming ? "bg-[#e6edfc]" : "",
+        isActiveConvo ? "bg-[#EEE]" : "hover:bg-[#f7f7f7]",
+        renaming ? "bg-[#EEE]" : "",
         isSmallScreen ? "py-[8px]" : ""
       )}
     >
@@ -192,7 +190,7 @@ export default function Conversation({
           <input
             ref={inputRef}
             type="text"
-            className="w-full rounded bg-white px-1 text-[14px] leading-tight focus-visible:outline-none text-[#212121]"
+            className="w-full rounded bg-white px-1 text-[14px] leading-tight focus-visible:outline-none text-[#1A1A1A]"
             value={titleInput ?? ""}
             onChange={(e) => setTitleInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -228,7 +226,7 @@ export default function Conversation({
         </div>
       ) : (
         <a
-          // 切换会话
+          // Toggle conversation
           // href={`/c/${conversationId}`}
           data-testid="convo-item"
           onClick={clickHandler}
@@ -253,12 +251,9 @@ export default function Conversation({
             }}
             alt={conversation?.flowType}
           >
-            {conversation?.flowType === 20 ? (
-              <LingsiIcon className="size-[24px] shrink-0" />
-            ) : (
-              <TodayItemIcon className="size-[24px] shrink-0 text-[#6B778D]" />
-            )}
-            <span className="text-[#212121] text-[14px] leading-[20px] font-['PingFang_SC:Regular',sans-serif] truncate">
+            {/* F035: conversation list no longer distinguishes daily vs task
+                mode — the leading icon is removed for both (unified list). */}
+            <span className="text-[#1A1A1A] text-[14px] leading-[20px] font-normal truncate">
               {title}
             </span>
           </div>

@@ -3,19 +3,13 @@ import { useSearchParams } from "react-router-dom";
 import { useLocalize } from '~/hooks';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
-import { useInterruptAudio } from '../Voice/textToSpeechStore';
 import ConvoStarter from './ConvoStarter';
-import SegmentSelector from './SegmentSelector';
 
-export default function Landing({ Header, isNew, lingsi, lingsiEntry, setLingsi }: {
+export default function Landing({ Header, isNew }: {
   Header?: ReactNode;
   isNew?: boolean;
-  lingsi: boolean;
-  lingsiEntry?: boolean;
-  setLingsi: (val: boolean) => void;
 }) {
   const { data: bsConfig } = useGetBsConfig();
-  const interruptAudio = useInterruptAudio();
   const localize = useLocalize();
   const [searchParams] = useSearchParams();
   const defaultCategory = searchParams.get('category') || 'favorites';
@@ -46,24 +40,10 @@ export default function Landing({ Header, isNew, lingsi, lingsiEntry, setLingsi 
           {bsConfig?.functionDescription}
         </div>
 
-        {/* Mode switch — above starters to match 576 设计稿 */}
-        {lingsiEntry && (
-          <div className="w-full max-w-md touch-mobile:max-w-full mx-auto mt-5 touch-mobile:mt-5 px-0">
-            <SegmentSelector
-              lingsi={lingsi}
-              bsConfig={bsConfig}
-              onChange={(bl) => {
-                setLingsi(bl);
-                interruptAudio();
-              }}
-            />
-          </div>
-        )}
-
         {/* Conversation starters */}
-        <div className="mt-6 touch-mobile:mt-5 w-full max-w-2xl flex flex-wrap justify-center gap-2 touch-mobile:gap-2 touch-mobile:px-0">
-          {conversation_starters.length > 0 &&
-            conversation_starters
+        {conversation_starters.length > 0 && (
+          <div className="mt-6 touch-mobile:mt-5 w-full max-w-2xl flex flex-wrap justify-center gap-2 touch-mobile:gap-2 touch-mobile:px-0">
+            {conversation_starters
               .slice(0, Constants.MAX_CONVO_STARTERS)
               .map((text: string, index: number) => (
                 <ConvoStarter
@@ -75,7 +55,8 @@ export default function Landing({ Header, isNew, lingsi, lingsiEntry, setLingsi 
                   }}
                 />
               ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

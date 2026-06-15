@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useState } from "react"
 
-import { AlertCircle, X } from "lucide-react"
+import { AlertCircle, Trash2 } from "lucide-react"
 import {
     AlertDialog,
     AlertDialogAction,
@@ -13,6 +13,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "~/components/ui"
+import { useLocalize } from "~/hooks"
 
 interface ConfirmOptions {
     title?: string
@@ -20,6 +21,8 @@ interface ConfirmOptions {
     cancelText?: string
     confirmText?: string
     variant?: "default" | "destructive"
+    /** Override the title icon in the destructive variant (defaults to Trash2). */
+    icon?: React.ReactNode
 }
 
 interface ConfirmContextType {
@@ -29,6 +32,7 @@ interface ConfirmContextType {
 export const ConfirmContext = createContext<ConfirmContextType | undefined>(undefined)
 
 export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => {
+    const localize = useLocalize()
     const [open, setOpen] = useState(false)
     const [options, setOptions] = useState<ConfirmOptions>({})
     const [resolvePromise, setResolvePromise] = useState<(value: boolean) => void>()
@@ -51,42 +55,63 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
         resolvePromise?.(true)
     }
 
+    const isDestructive = options.variant === "destructive"
+
+    // One shared dialog chrome for every confirm in the app — only the accent
+    // (icon / title colour / confirm-button colour) and the default labels change
+    // per variant. Changing this single component restyles all confirm() callers.
+    //  • destructive → red trash icon + red title + red confirm ("暂不 / 确认删除")
+    //  • default     → amber warning icon + neutral title + primary confirm ("取消 / 确认")
+    const titleColor = isDestructive ? "text-[#f53f3f]" : "text-[#1d2129]"
+    const confirmColor = isDestructive
+        ? "bg-[#f53f3f] hover:bg-[#f53f3f]/90"
+        : "bg-primary hover:bg-primary/90"
+    const accentIcon = options.icon ?? (isDestructive
+        ? <Trash2 className="size-5 shrink-0 text-[#f53f3f]" />
+        : <AlertCircle className="size-5 shrink-0 text-[#ff7d00]" />)
+    const defaultTitle = isDestructive
+        ? localize("com_knowledge.confirm_delete_title")
+        : localize("com_knowledge.prompt")
+    const defaultCancel = isDestructive
+        ? localize("com_knowledge.defer")
+        : localize("com_knowledge.cancel")
+    const defaultConfirm = isDestructive
+        ? localize("com_knowledge.confirm_delete_action")
+        : localize("com_knowledge.confirm")
+
     return (
         <ConfirmContext.Provider value={{ confirm }}>
             {children}
             <AlertDialog open={open} onOpenChange={setOpen}>
-                <AlertDialogContent className="sm:max-w-[400px] p-6">
-                    <button
-                        onClick={handleCancel}
-                        className="absolute right-4 top-4 opacity-70 hover:opacity-100 transition-opacity"
-                    >
-                        <X className="h-4 w-4 text-muted-foreground" />
-                    </button>
-
-                    <AlertDialogHeader className="relative pt-2">
-                        <div className="absolute left-0 -top-3">
-                            <AlertCircle className="h-6 w-6 text-red-500" />
-                        </div>
-                        <AlertDialogTitle className="text-center text-xl font-medium pt-2">
-                            {options.title || "提示"}
+                {/* Screen-centered card (not a mobile bottom-sheet). Mobile: full-width
+                    equal buttons. PC: left-aligned title + right-aligned hug buttons. */}
+                <AlertDialogContent
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    className="inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] flex-col items-center gap-4 rounded-[20px] border border-[#ebebeb] p-6 shadow-[0_0_16px_0_rgba(3,7,117,0.05)] sm:max-w-[400px] sm:rounded-[20px]"
+                >
+                    <AlertDialogHeader className="w-full flex-row items-center justify-center gap-2 space-y-0 text-center sm:justify-start sm:text-left">
+                        {accentIcon}
+                        <AlertDialogTitle className={`text-base font-medium leading-6 ${titleColor}`}>
+                            {options.title || defaultTitle}
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-center py-4 text-base text-slate-600 whitespace-pre-line">
-                            {options.description}
-                        </AlertDialogDescription>
                     </AlertDialogHeader>
 
-                    <AlertDialogFooter className="flex flex-row justify-center gap-4 sm:justify-center">
+                    <AlertDialogDescription className="w-full text-left text-sm leading-[22px] text-[#212121] whitespace-pre-line">
+                        {options.description}
+                    </AlertDialogDescription>
+
+                    <AlertDialogFooter className="w-full flex-row gap-2 sm:space-x-0">
                         <AlertDialogCancel
                             onClick={handleCancel}
-                            className="min-w-28 mt-0 whitespace-nowrap px-4 border-slate-200 text-slate-600"
+                            className="mt-0 h-auto flex-1 rounded-[6px] border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] hover:bg-white/70 sm:mt-0 sm:flex-none"
                         >
-                            {options.cancelText || "取消"}
+                            {options.cancelText || defaultCancel}
                         </AlertDialogCancel>
                         <AlertDialogAction
                             onClick={handleConfirm}
-                            className={`min-w-28 whitespace-nowrap px-4 bg-red-600 hover:bg-red-700`}
+                            className={`h-auto flex-1 rounded-[6px] px-4 py-[5px] text-sm font-normal text-white sm:flex-none ${confirmColor}`}
                         >
-                            {options.confirmText || "确认"}
+                            {options.confirmText || defaultConfirm}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

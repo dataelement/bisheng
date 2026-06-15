@@ -14,6 +14,7 @@ import {
     SheetTitle
 } from "~/components/ui/Sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
+import { Switch } from "~/components/ui/Switch";
 import { Textarea } from "~/components/ui/Textarea";
 import { useLocalize } from "~/hooks";
 import {
@@ -27,7 +28,7 @@ import {
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
 import { ChannelSuccessIcon } from "~/components/icons/channels";
 
-const MAX_SPACE_NAME = 30;
+const MAX_SPACE_NAME = 50;
 const MAX_SPACE_DESC = 200;
 const MAX_AUTO_TAG_CUSTOM_TAGS = 200;
 const AUTO_TAG_PREVIEW_LIMIT = 20;
@@ -341,7 +342,7 @@ export function CreateKnowledgeSpaceDrawer({
                     "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                 )}
             >
-                <SheetHeader className="sticky top-0 z-10 mx-6 bg-white pb-4 pt-6 touch-mobile:mx-0">
+                <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white pb-4 pt-6 touch-mobile:mx-0">
                     <div className="flex items-center justify-between gap-3">
                         <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
                             {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || localize("com_knowledge.edit_space") : localize("com_subscription.create_konwledge_space")}
@@ -389,10 +390,10 @@ export function CreateKnowledgeSpaceDrawer({
                     </div>
                 ) : (
                     <div className="scroll-on-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-                        <div className="mx-auto w-full max-w-[800px] space-y-7 overflow-visible px-6 py-5 touch-mobile:max-w-none touch-mobile:px-0">
+                        <div className="space-y-6 overflow-visible px-6 py-5 touch-mobile:px-0">
                             {/* 知识空间名称 */}
                             <div className="space-y-2">
-                                <Label className="text-sm text-[#1D2129] font-medium">
+                                <Label className="text-[14px] text-[#1D2129]">
                                     <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_subscription.knowledge_space_name")}
                                 </Label>
@@ -440,7 +441,7 @@ export function CreateKnowledgeSpaceDrawer({
 
                             {/* 简介 */}
                             <div className="space-y-2">
-                                <Label className="text-sm text-[#1D2129] font-medium">
+                                <Label className="text-[14px] text-[#1D2129]">
                                     {localize("com_subscription.description")}
                                 </Label>
                                 <div>
@@ -484,8 +485,8 @@ export function CreateKnowledgeSpaceDrawer({
 
                             {/* 权限设置 */}
                             <div className="space-y-3">
-                                <Label className="text-sm text-[#1D2129] font-medium">
-                                    <span className="text-[#F53F3F]">*</span>
+                                <Label className="text-[14px] text-[#1D2129]">
+                                    <span className="text-[#F53F3F] mr-1">*</span>
                                     {localize("com_subscription.premission_settings")}
                                 </Label>
                                 <RadioGroup.Root
@@ -548,36 +549,23 @@ export function CreateKnowledgeSpaceDrawer({
 
                             {/* 是否发布到知识广场 */}
                             {needPublishOption && (
-                                <div className="space-y-3">
-                                    <Label className="text-[14px] text-[#1D2129]">
-                                        <span className="text-[#F53F3F]">*</span>
-                                        {localize("com_knowledge.publish_to_square")}<span className={cn("ml-2", FORM_HINT_TEXT_CLASS)}>
-                                            {localize("com_knowledge.publish_desc")}</span>
-                                    </Label>
-                                    <RadioGroup.Root
-                                        value={publishToSquare}
-                                        onValueChange={(v) => setPublishToSquare(v as PublishToSquare)}
-                                        className="flex gap-6"
-                                    >
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroup.Item
-                                                value="yes"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.yes")}</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                            <RadioGroup.Item
-                                                value="no"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
-                                            >
-                                                <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
-                                            </RadioGroup.Item>
-                                            <span className="text-[14px] text-[#1D2129]">{localize("com_knowledge.no")}</span>
-                                        </label>
-                                    </RadioGroup.Root>
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="min-w-0 pr-2">
+                                        <Label className="flex flex-wrap items-baseline gap-x-2 text-[14px] text-[#1D2129]">
+                                            <span>{localize("com_knowledge.publish_to_square")}</span>
+                                            <span className={FORM_HINT_TEXT_CLASS}>
+                                                {localize("com_knowledge.publish_desc")}
+                                            </span>
+                                        </Label>
+                                    </div>
+                                    <Switch
+                                        checked={publishToSquare === "yes"}
+                                        onCheckedChange={(checked) => setPublishToSquare(checked ? "yes" : "no")}
+                                        className={cn(
+                                            "data-[state=checked]:bg-[#165DFF]",
+                                            "data-[state=unchecked]:bg-[#E5E6EB]"
+                                        )}
+                                    />
                                 </div>
                             )}
 
@@ -761,24 +749,23 @@ export function CreateKnowledgeSpaceDrawer({
                 )}
 
                 {!showSuccess && (
-                    <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
-                        <div className="mx-auto flex w-full max-w-[800px] justify-end gap-3 touch-mobile:max-w-none">
-                            <Button
-                                variant="secondary"
-                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
-                                onClick={() => onOpenChange(false)}
-                            >
-                                {localize("com_knowledge.cancel")}</Button>
-                            <Button
-                                disabled={submitting}
-                                className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
-                                onClick={handleConfirm}
-                            >
-                                {submitting
-                                    ? (mode === "edit" ? localize("com_subscription.saving") : localize("com_subscription.creating"))
-                                    : (mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create"))}
-                            </Button>
-                        </div>
+                    <div className="sticky bottom-0 z-10 mt-auto mx-6 flex justify-end gap-3 border-t border-[#E5E6EB] bg-white px-0 pb-5 pt-10 touch-mobile:mx-0 touch-mobile:gap-2 touch-mobile:px-0 touch-mobile:pt-4">
+                        <Button
+                            variant="secondary"
+                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#F2F3F5] px-4 text-[14px] leading-none !font-normal text-[#4E5969] hover:bg-[#E5E6EB] touch-mobile:flex-1"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            {localize("com_knowledge.cancel")}
+                        </Button>
+                        <Button
+                            disabled={submitting}
+                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
+                            onClick={handleConfirm}
+                        >
+                            {submitting
+                                ? (mode === "edit" ? localize("com_subscription.saving") : localize("com_subscription.creating"))
+                                : (mode === "edit" ? localize("com_knowledge.save") : localize("com_knowledge.confirm_create"))}
+                        </Button>
                     </div>
                 )}
             </SheetContent>

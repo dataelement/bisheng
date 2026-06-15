@@ -6,7 +6,8 @@ import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { generateUUID } from "@/components/bs-ui/utils";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
-import { getDailyConfigApi, setDailyConfigApi } from "@/controllers/API";
+import { SkillManagement } from "@/components/LinSight/skill/SkillManagement";
+import { getDailyConfigApi, getLinsiConfigApi, setDailyConfigApi, setLinsiConfigApi } from "@/controllers/API";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { t } from "i18next";
@@ -28,6 +29,7 @@ export interface FormErrors {
     welcomeMessage: string;
     functionDescription: string;
     tabDisplayName: string;
+    taskModeName: string;
     inputPlaceholder: string;
     modelNames: string[] | string[][];
     systemPrompt: string;
@@ -75,17 +77,24 @@ export interface ChatConfigForm {
     // v2.5 Agent-mode additions
     tools: ToolConfigType[];
     orgKbs: OrgKbConfigType[];
+    /** F035 (PRD §4.8): legacy 灵思 tab merged into 日常. Only display name and
+     * input placeholder stay user-editable; linsight_entry / tools are kept
+     * untouched on save so the workstation/config/linsight payload round-trips. */
+    linsightConfig: {
+        linsight_entry: boolean;
+        input_placeholder: string;
+        tools: unknown[];
+        tab_display_name: string;
+    };
 }
 export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
-    const tabDisplayNameRef = useRef<HTMLDivElement>(null);
+    const taskModeNameRef = useRef<HTMLDivElement>(null);
     const knowledgeBaseRef = useRef<HTMLDivElement>(null);
     const modelRefs = useRef<(HTMLDivElement | null)[]>([]);
     const systemPromptRef = useRef<HTMLDivElement>(null);
-    const appCenterWelcomeRef = useRef<HTMLDivElement>(null);
-    const appCenterDescriptionRef = useRef<HTMLDivElement>(null);
     // New: ref for model management container
     const modelManagementContainerRef = useRef<HTMLDivElement>(null);
 
@@ -96,18 +105,17 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
         configMeta,
         setFormData,
         handleInputChange,
+        handleLinsightChange,
         toggleFeature,
         handleSave
     } = useChatConfig({
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
-        tabDisplayNameRef,
+        taskModeNameRef,
         knowledgeBaseRef,
         modelRefs,
         systemPromptRef,
-        appCenterWelcomeRef,
-        appCenterDescriptionRef,
         modelManagementContainerRef, // Pass in the new ref
     }, scopeVersion);
 
@@ -204,16 +212,6 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
                                 onChange={(v) => handleInputChange('functionDescription', v, 1000)}
                             />
                         </div>
-                        <div ref={tabDisplayNameRef}>
-                            <FormInput
-                                label={t('chatConfig.dailyModeName')}
-                                value={formData.tabDisplayName}
-                                error={errors.tabDisplayName}
-                                placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
-                                maxLength={20}
-                                onChange={(v) => handleInputChange('tabDisplayName', v, 20)}
-                            />
-                        </div>
                         <div ref={inputPlaceholderRef}>
                             <FormInput
                                 label={t('chatConfig.inputPlaceholder')}
@@ -224,27 +222,27 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
                                 onChange={(v) => handleInputChange('inputPlaceholder', v, 1000)}
                             />
                         </div>
-                        <div ref={appCenterWelcomeRef}>
+                        {/* F035 (PRD §4.8): task-mode fields merged from the legacy 灵思 tab */}
+                        <div ref={taskModeNameRef}>
                             <FormInput
-                                label={t('chatConfig.appCenterWelcome')}
-                                value={formData.applicationCenterWelcomeMessage}
-                                error={errors.applicationCenterWelcomeMessage}
-                                placeholder={t('chatConfig.appCenterWelcomePlaceholder')}
-                                onChange={(v) => handleInputChange('applicationCenterWelcomeMessage', v, 1000)}
+                                label={t('chatConfig.taskModeName')}
+                                value={formData.linsightConfig.tab_display_name}
+                                error={errors.taskModeName}
+                                placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
+                                maxLength={20}
+                                onChange={(v) => handleLinsightChange('tab_display_name', v)}
                             />
                         </div>
-
-                        {/* New application center description input */}
-                        <div ref={appCenterDescriptionRef}>
-                            <FormInput
-                                label={t('chatConfig.appCenterDescription')}
-                                value={formData.applicationCenterDescription}
-                                error={errors.applicationCenterDescription}
-                                placeholder={t('chatConfig.appCenterDescriptionPlaceholder')}
-                                onChange={(v) => handleInputChange('applicationCenterDescription', v, 1000)}
-                            />
-                        </div>
-
+                        <FormInput
+                            label={t('chatConfig.taskModeInputPlaceholder')}
+                            value={formData.linsightConfig.input_placeholder}
+                            error={''}
+                            placeholder={t('chatConfig.inputPlaceholderPlaceholder')}
+                            maxLength={100}
+                            onChange={(v) => handleLinsightChange('input_placeholder', v)}
+                        />
+                        {/* F035: 应用中心欢迎语/描述 moved to the 应用 tab (AppCenter.tsx);
+                            their values still round-trip through dataToSave below. */}
                         <div className="mb-6" ref={modelManagementContainerRef}>
                             <FormInput
                                 label={<Label className="bisheng-label block pt-2">{t('chatConfig.maxTokens')}</Label>}
@@ -314,6 +312,9 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
                             {null}
                         </ToggleSection>
 
+                        {/* F035 (PRD §4.5): skill management replaces the legacy SOP manual library */}
+                        <SkillManagement scopeVersion={scopeVersion} />
+
                         {/* Recommended Apps */}
                         <RecommendedAppsConfig
                             selectedAppIds={formData.recommendedApps || []}
@@ -338,12 +339,10 @@ interface UseChatConfigProps {
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
-    tabDisplayNameRef: React.RefObject<HTMLDivElement>;
+    taskModeNameRef: React.RefObject<HTMLDivElement>;
     knowledgeBaseRef: React.RefObject<HTMLDivElement>;
     modelRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
     systemPromptRef: React.RefObject<HTMLDivElement>;
-    appCenterWelcomeRef: React.RefObject<HTMLDivElement>;
-    appCenterDescriptionRef: React.RefObject<HTMLDivElement>;
     modelManagementContainerRef: React.RefObject<HTMLDivElement>; // New
 }
 
@@ -378,6 +377,12 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         tools: [],
         orgKbs: [],
         recommendedApps: [],
+        linsightConfig: {
+            linsight_entry: true,
+            input_placeholder: '',
+            tools: [],
+            tab_display_name: t('chatConfig.taskModeFullName'),
+        },
     });
 
     // Simple deep comparison to avoid circular refresh caused by parent-child mutual setting
@@ -400,9 +405,23 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         Promise.all([
             getDailyConfigApi(),
             getToolsApi('default').catch(() => []),
-        ]).then(([res, toolsRes]) => {
+            // F035: 灵思 tab merged here — load its config alongside the daily one.
+            getLinsiConfigApi().catch(() => null),
+        ]).then(([res, toolsRes, linsightRes]) => {
             const { data: cfg, meta } = resolveConfigEnvelope<any>(res);
             setConfigMeta(meta);
+            const linsightCfg = linsightRes ? (resolveConfigEnvelope<any>(linsightRes).data || {}) : {};
+            setFormData(prev => ({
+                ...prev,
+                linsightConfig: {
+                    linsight_entry: linsightCfg.linsight_entry ?? prev.linsightConfig.linsight_entry,
+                    input_placeholder: linsightCfg.input_placeholder ?? prev.linsightConfig.input_placeholder,
+                    tools: Array.isArray(linsightCfg.tools) ? linsightCfg.tools : prev.linsightConfig.tools,
+                    tab_display_name: (typeof linsightCfg.tab_display_name === 'string' && linsightCfg.tab_display_name.trim())
+                        ? linsightCfg.tab_display_name.trim()
+                        : prev.linsightConfig.tab_display_name,
+                },
+            }));
             const presetTools: any[] = Array.isArray(toolsRes) ? toolsRes : [];
 
             const buildDefaultTools = (): ToolConfigType[] => {
@@ -494,6 +513,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         welcomeMessage: '',
         functionDescription: '',
         tabDisplayName: '',
+        taskModeName: '',
         inputPlaceholder: '',
         kownledgeBase: '',
         model: '',
@@ -511,6 +531,17 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             setErrors(prev => ({ ...prev, [field]: t('chatConfig.errors.maxCharacters', { count: maxLength }) }));
         } else {
             setErrors(prev => ({ ...prev, [field]: '' }));
+        }
+    };
+
+    // F035: edits to the merged task-mode fields (legacy linsight config).
+    const handleLinsightChange = (field: 'tab_display_name' | 'input_placeholder', value: string) => {
+        setFormData(prev => ({
+            ...prev,
+            linsightConfig: { ...prev.linsightConfig, [field]: value },
+        }));
+        if (field === 'tab_display_name') {
+            setErrors(prev => ({ ...prev, taskModeName: '' }));
         }
     };
 
@@ -533,6 +564,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             welcomeMessage: '',
             functionDescription: '',
             tabDisplayName: '',
+            taskModeName: '',
             inputPlaceholder: '',
             kownledgeBase: '',
             model: '',
@@ -542,14 +574,18 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             systemPrompt: '',
         };
 
-        const tabName = (formData.tabDisplayName || '').trim();
-        if (!tabName) {
-            newErrors.tabDisplayName = t('chatConfig.errors.dailyModeNameRequired');
-            if (!firstErrorRef) firstErrorRef = refs.tabDisplayNameRef;
+        // F035: 日常模式展示名称 was removed from the UI (the value still
+        // round-trips through dataToSave) — no validation for it anymore.
+
+        // F035: task-mode display name (merged from the legacy 灵思 tab) is required.
+        const taskModeName = (formData.linsightConfig.tab_display_name || '').trim();
+        if (!taskModeName) {
+            newErrors.taskModeName = t('chatConfig.errors.taskModeNameRequired');
+            if (!firstErrorRef) firstErrorRef = refs.taskModeNameRef;
             isValid = false;
-        } else if (tabName.length > 20) {
-            newErrors.tabDisplayName = t('chatConfig.errors.maxCharacters', { count: 20 });
-            if (!firstErrorRef) firstErrorRef = refs.tabDisplayNameRef;
+        } else if (taskModeName.length > 20) {
+            newErrors.taskModeName = t('chatConfig.errors.maxCharacters', { count: 20 });
+            if (!firstErrorRef) firstErrorRef = refs.taskModeNameRef;
             isValid = false;
         }
 
@@ -585,18 +621,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             if (!firstErrorRef) firstErrorRef = refs.systemPromptRef;
             isValid = false;
         }
-        if (formData.applicationCenterWelcomeMessage.length > 1000) {
-            newErrors.applicationCenterWelcomeMessage = t('chatConfig.errors.maxCharacters', { count: 1000 });
-            if (!firstErrorRef) firstErrorRef = refs.appCenterWelcomeRef;
-            isValid = false;
-        }
-
-        // Validate application center description
-        if (formData.applicationCenterDescription.length > 1000) {
-            newErrors.applicationCenterDescription = t('chatConfig.errors.maxCharacters', { count: 1000 });
-            if (!firstErrorRef) firstErrorRef = refs.appCenterDescriptionRef;
-            isValid = false;
-        }
+        // F035: app-center copy moved to the 应用 tab (AppCenter.tsx) — validated there.
         newErrors.modelNames = [];
         setErrors(newErrors);
 
@@ -612,13 +637,6 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
     const handleSave = async () => {
         const { isValid, firstErrorRef, modelErrorMessages } = validateForm();
         if (!isValid) {
-            const tabName = (formData.tabDisplayName || '').trim();
-            if (!tabName) {
-                toast({
-                    variant: 'error',
-                    description: '日常模式展示名称不能为空',
-                });
-            }
             if (modelErrorMessages.length > 0) {
                 toast({
                     variant: 'error',
@@ -659,9 +677,19 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             recommendedApps: formData.recommendedApps || [],
         };
 
-        console.log('Saving data:', dataToSave);
+        // F035: the merged task-mode fields persist to the legacy linsight
+        // config endpoint; linsight_entry / tools round-trip untouched (the
+        // entry toggle moved to role menus, tools share the daily pool).
+        const linsightToSave = {
+            linsight_entry: formData.linsightConfig.linsight_entry ?? true,
+            input_placeholder: formData.linsightConfig.input_placeholder?.trim() || '',
+            tools: formData.linsightConfig.tools || [],
+            tab_display_name: (formData.linsightConfig.tab_display_name || '').trim(),
+        };
 
-        captureAndAlertRequestErrorHoc(setDailyConfigApi(dataToSave)).then((res) => {
+        captureAndAlertRequestErrorHoc(
+            Promise.all([setDailyConfigApi(dataToSave), setLinsiConfigApi(linsightToSave)])
+        ).then((res) => {
             if (res) {
                 setConfigMeta({
                     inherited_from_root: false,
@@ -685,6 +713,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         setErrors,
         configMeta,
         handleInputChange,
+        handleLinsightChange,
         toggleFeature,
         handleSave
     };

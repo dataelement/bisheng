@@ -228,7 +228,7 @@ async def test_enrich_with_version_info_sets_fields(async_db_session):
     # Load KnowledgeSpaceService via importlib (its import chain requires stubs from test_knowledge_space_service.py
     # helpers; here we rely on the premock_import_chain already run by conftest.py).
     # We bypass __init__ using object.__new__ after loading the real class.
-    from test.test_knowledge_space_service import _load_service_class
+    from test.knowledge.test_knowledge_space_service import _load_service_class
     KnowledgeSpaceService = _load_service_class()
     svc = object.__new__(KnowledgeSpaceService)
     svc.version_repo = repo
