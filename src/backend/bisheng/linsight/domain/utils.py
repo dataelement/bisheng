@@ -349,19 +349,39 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
 
 
 async def persist_task_turn_message(session_model: LinsightSessionVersion) -> ChatMessage:
-    """F035 Track J (TJ-3): write a finished task turn into the unified conversation.
+    """F035 Track J (TJ-3): upsert the task turn into the unified conversation.
 
     A task turn is a plain bot ``ChatMessage`` in the same daily conversation
     (``chat_id == session_id``), marked ``category=\047task\047`` and carrying a
     pointer to the execution detail in ``extra.linsight_session_version_id`` so
-    the frontend can lazy-load tasks/sop/files. Only the final answer text +
-    pointer land here; the heavy detail stays in linsight_session_version.
+    the frontend can lazy-load tasks/sop/files.
+
+    Called twice in a turn's lifecycle: once at execution START (output_result
+    empty -> a placeholder row with empty text, so a refresh mid-task/HITL still
+    sees the in-flight turn in the stream and can re-hydrate its state by SV) and
+    again at COMPLETION (success -> answer; failure -> error_message). Both find
+    the existing row for this SV and UPDATE it in place; only the first call
+    inserts. This keeps one bot row per task turn and avoids dangling questions.
     """
-    # On success output_result carries "answer"; on failure it carries
-    # "error_message". Either way the turn must appear in the stream so the
-    # conversation isn't left with a dangling unanswered question.
     output = session_model.output_result or {}
     answer = output.get("answer") or output.get("error_message") or ""
+    svid = session_model.id
+
+    # Find an existing bot task row for this SV (placeholder written at start).
+    existing_rows = await ChatMessageDao.aget_messages_by_chat_id(
+        chat_id=session_model.session_id, category_list=["task"], limit=1000
+    )
+    for row in existing_rows:
+        if not row.is_bot:
+            continue
+        try:
+            row_svid = json.loads(row.extra or "{}").get("linsight_session_version_id")
+        except (json.JSONDecodeError, TypeError):
+            row_svid = None
+        if row_svid == svid:
+            row.message = answer
+            return await ChatMessageDao.aupdate_message_model(row)
+
     return await ChatMessageDao.ainsert_one(
         ChatMessage(
             user_id=session_model.user_id,
@@ -372,7 +392,7 @@ async def persist_task_turn_message(session_model: LinsightSessionVersion) -> Ch
             sender="AI",
             category="task",
             message=answer,
-            extra=json.dumps({"linsight_session_version_id": session_model.id}),
+            extra=json.dumps({"linsight_session_version_id": svid}),
             source=0,
         )
     )

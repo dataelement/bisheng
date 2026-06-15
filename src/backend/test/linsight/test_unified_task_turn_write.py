@@ -25,13 +25,24 @@ from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
 
 @pytest.fixture
 def capture_message(monkeypatch: pytest.MonkeyPatch):
-    captured: dict = {}
+    captured: dict = {"existing": []}
 
     async def _fake_ainsert_one(_cls, message: ChatMessage):
         captured["message"] = message
+        captured["inserted"] = True
         return message
 
+    async def _fake_aupdate(_cls, message: ChatMessage):
+        captured["message"] = message
+        captured["updated"] = True
+        return message
+
+    async def _fake_get(_cls, chat_id, category_list=None, limit=10):
+        return list(captured["existing"])
+
     monkeypatch.setattr(ChatMessageDao, "ainsert_one", classmethod(_fake_ainsert_one))
+    monkeypatch.setattr(ChatMessageDao, "aupdate_message_model", classmethod(_fake_aupdate))
+    monkeypatch.setattr(ChatMessageDao, "aget_messages_by_chat_id", classmethod(_fake_get))
     return captured
 
 
@@ -74,9 +85,7 @@ async def test_direct_answer_completion_writes_task_turn(capture_message):
 
 async def test_user_turn_written_as_question(capture_message):
     """The task user turn lands as a ChatMessage(category='question', is_bot=False)."""
-    await linsight_execute_utils.persist_task_user_turn(
-        chat_id="chat-5", user_id=1, question="帮我写周报", files=None
-    )
+    await linsight_execute_utils.persist_task_user_turn(chat_id="chat-5", user_id=1, question="帮我写周报", files=None)
 
     msg = capture_message["message"]
     assert msg.is_bot is False
@@ -88,8 +97,12 @@ async def test_user_turn_written_as_question(capture_message):
 async def test_failed_task_turn_falls_back_to_error_message(capture_message):
     """A failed task (no answer) still writes a task turn, using the error message."""
     session = LinsightSessionVersion(
-        id="SV-8", session_id="chat-8", user_id=1, question="q",
-        output_result={"error_message": "执行失败"}, tenant_id=1,
+        id="SV-8",
+        session_id="chat-8",
+        user_id=1,
+        question="q",
+        output_result={"error_message": "执行失败"},
+        tenant_id=1,
     )
 
     await linsight_execute_utils.persist_task_turn_message(session)
@@ -98,3 +111,20 @@ async def test_failed_task_turn_falls_back_to_error_message(capture_message):
     assert msg.category == "task"
     assert "执行失败" in msg.message
     assert json.loads(msg.extra)["linsight_session_version_id"] == "SV-8"
+
+
+async def test_persist_upserts_existing_placeholder_row(capture_message):
+    """If a task-turn row for this SV already exists (placeholder written at start),
+    completion UPDATES it in place rather than inserting a duplicate."""
+    placeholder = ChatMessage(
+        id=42, is_bot=True, chat_id="chat-7", user_id=1, flow_id="", type="over",
+        category="task", message="", extra=json.dumps({"linsight_session_version_id": "SV-9"}),
+        tenant_id=1,
+    )
+    capture_message["existing"] = [placeholder]
+
+    await linsight_execute_utils.persist_task_turn_message(_session(svid="SV-9", chat_id="chat-7"))
+
+    assert capture_message.get("updated") is True
+    assert capture_message.get("inserted") is None
+    assert capture_message["message"].message == "最终答案"

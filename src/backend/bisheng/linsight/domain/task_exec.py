@@ -380,6 +380,13 @@ class LinsightWorkflowTask:
         # Update session status to in progress
         await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
+        # F035 Track J: write a placeholder task turn at start so a refresh
+        # mid-execution (incl. parked HITL) still sees the in-flight turn in the
+        # unified conversation stream; completion upserts the same row with the
+        # final answer. The live state (running / waiting_for_user_input) is read
+        # by SV from the linsight detail endpoints on reload.
+        await linsight_execute_utils.persist_task_turn_message(session_model)
+
         # Initialization Execution Component
         self.llm = await self._get_llm(
             invoke_user_id=session_model.user_id,
