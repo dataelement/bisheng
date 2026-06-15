@@ -17,6 +17,7 @@ import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
+import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -497,6 +498,31 @@ function AssistantBubble({
     const showCheckbox =
         !!message.conversationId &&
         isActiveForChat(message.conversationId);
+
+    // F035 Track J (TJ-7): task turn — render the embedded linsight execution
+    // panel by SV instead of the agent/legacy text rendering. The user question
+    // bubble is the preceding (daily) user row; this row owns the rich panel.
+    if (message.category === "task") {
+        console.log("[TJ][Bubble] rendering task bubble. svid:", message.linsightSessionVersionId, "msgId:", message.messageId);
+        return (
+            <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
+                {showCheckbox && message.conversationId && (
+                    <MessageCheckbox
+                        chatId={message.conversationId}
+                        messageId={message.messageId}
+                        className="mt-2 shrink-0"
+                    />
+                )}
+                <div className={cn("min-w-0", knowledgeChatLayout ? "w-full max-w-none" : "max-w-[80%]")}>
+                    <TaskTurnPanel
+                        versionId={message.linsightSessionVersionId || ""}
+                        conversationId={message.conversationId}
+                        answer={message.text}
+                    />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>

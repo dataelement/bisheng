@@ -134,8 +134,14 @@ export interface ChatMessage {
     citations?: ChatCitation[] | null;
     files?: any[];
     // --- v2.5 Agent-mode native fields ---
-    /** One of question / agent_answer / agent_thinking / agent_tool_call / legacy answer. */
+    /** One of question / agent_answer / agent_thinking / agent_tool_call / task / legacy answer. */
     category?: string;
+    /**
+     * F035 Track J: for `category==='task'` bot rows, points at the linsight
+     * session_version holding the execution detail (tasks/sop/steps/files). The
+     * inline task bubble lazy-loads the rich panel by this id.
+     */
+    linsightSessionVersionId?: string;
     /**
      * Ordered log of thinking segments + tool calls, in arrival order.
      * This is the primary source for agent-native rendering. Historical
@@ -248,6 +254,24 @@ function mapAgentResponseItem(row: any): ChatMessage {
         // Backend always normalises agent_answer rows to {msg, events}, even
         // for older DB shapes (`chat_helpers._normalise_agent_message_content`).
         base.events = Array.isArray(raw.events) ? (raw.events as AgentEvent[]) : [];
+        return base;
+    }
+
+    // F035 Track J: task turn — bot row carrying the final answer text plus a
+    // pointer to the linsight execution detail. The inline task bubble renders
+    // a rich panel lazy-loaded by linsightSessionVersionId; `text` is the
+    // answer fallback shown if the panel can't hydrate.
+    if (category === "task") {
+        base.text = typeof raw === "string" ? raw : (raw?.msg ?? raw?.answer ?? "");
+        let extra: any = row.extra;
+        if (typeof extra === "string") {
+            try { extra = JSON.parse(extra); } catch { extra = null; }
+        }
+        base.linsightSessionVersionId =
+            row.linsightSessionVersionId
+            ?? row.linsight_session_version_id
+            ?? extra?.linsight_session_version_id
+            ?? "";
         return base;
     }
 

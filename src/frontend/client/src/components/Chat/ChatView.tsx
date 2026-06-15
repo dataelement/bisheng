@@ -13,9 +13,6 @@ import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import useAiChat from '~/hooks/useAiChat';
 import useChatModelMemo from '~/hooks/useChatModelMemo';
 import useLocalize from '~/hooks/useLocalize';
-import { useLinsightSessionManager } from '~/hooks/useLinsightManager';
-import { taskModeSkillsState } from '~/store/linsight';
-import { useRecoilValue } from 'recoil';
 import store from '~/store';
 import { addConversation, cn, generateUUID } from '~/utils';
 import { Card, CardContent } from '../ui/Card';
@@ -59,12 +56,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [taskMode, setTaskMode] = useState<boolean>(
     !!(location.state as any)?.taskMode,
   );
-
-  // F035 task-submit pipeline (reused intact from TaskModeChatInput): the
-  // welcome page builds the linsight submission under the 'new' key and the
-  // existing Sop + useLinsightSubmit picks it up to run execution.
-  const { setLinsightSubmission } = useLinsightSessionManager('new');
-  const taskModeSkills = useRecoilValue(taskModeSkillsState('new'));
 
   const { data: bsConfig } = useGetBsConfig();
   const { user } = useAuthContext();
@@ -270,83 +261,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const handleSend = useCallback((text: string, files?: any[] | null) => {
-    // Daily path — UNCHANGED.
-    if (!taskMode) {
-      sendMessage(text, files);
+    // F035 Track J (TJ-6): both modes go through the SAME unified entry now.
+    // Task mode is just a per-turn flag — no /linsight navigation, no separate
+    // submission pipeline. The turn stays in this daily conversation; the
+    // backend hands off the linsight SV and the inline task bubble renders it.
+    //
+    // NOTE (TJ-6, tools/files/skills temporarily degraded): the unified entry
+    // does not yet thread linsight-native tool/file/skill selection (backend
+    // _to_linsight_submit leaves them empty). Task turns currently carry only
+    // question + knowledge-base selection. Restore once the backend threads them.
+    if (taskMode) {
+      const trimmed = text.trim();
+      if (!trimmed && !(files || []).length) return;
+      sendMessage(trimmed, files, { taskMode: true });
       setInputText('');
       return;
     }
 
-    // Task path — build the linsight submission EXACTLY like
-    // TaskModeChatInput.handleSend, then hand off to the existing Sop +
-    // useLinsightSubmit pipeline via setLinsightSubmission('new', ...).
-    const trimmed = text.trim();
-    const fileList = files || [];
-    if (!trimmed && !fileList.length) return;
-
-    // Tools come from the user's actual daily-picker selection
-    // (selectedAgentTools), mapped into the convertTools `tool.data` shape.
-    // `is_preset` is recovered from bsConfig.tools by id.
-    const availableTools: any[] = Array.isArray((bsConfig as any)?.tools)
-      ? (bsConfig as any).tools
-      : [];
-    const presetById = new Map(availableTools.map((tool: any) => [tool.id, tool.is_preset]));
-    const mappedSelectedTools = selectedAgentTools.map((group) => ({
-      id: group.id,
-      checked: true,
-      data: {
-        id: group.id,
-        name: group.name,
-        is_preset: presetById.get(group.id),
-        description: group.description,
-        children: (group.children || []).map((c) => ({
-          id: c.id,
-          name: c.name,
-          tool_key: c.tool_key,
-          desc: c.desc,
-        })),
-      },
-    }));
-    // org knowledge → pseudo 'pro_knowledge' entry (convertTools reads it).
-    const orgKnowledgeSelected = selectedOrgKbs.some((k) => k.type === 'org');
-    const submissionTools = [
-      {
-        id: 'pro_knowledge',
-        name: t('com_tools_org_knowledge'),
-        checked: orgKnowledgeSelected,
-      },
-      ...mappedSelectedTools,
-    ];
-
-    setLinsightSubmission('new', {
-      isNew: true,
-      files: fileList.map((item: any) => ({
-        file_id: item.file_id,
-        file_name: item.filename || item.file_name || item.name,
-        parsing_status: item.parsing_status || 'completed',
-      })),
-      question: trimmed,
-      tools: submissionTools as any,
-      model: chatModel.id ? String(chatModel.id) : '',
-      skills: taskModeSkills.map((s) => s.name),
-      enableWebSearch: false,
-      useKnowledgeBase: selectedOrgKbs.length > 0,
-      sessionId: undefined,
-    });
+    sendMessage(text, files);
     setInputText('');
-    navigate('/linsight/new');
-  }, [
-    taskMode,
-    sendMessage,
-    bsConfig,
-    selectedAgentTools,
-    selectedOrgKbs,
-    chatModel,
-    taskModeSkills,
-    t,
-    setLinsightSubmission,
-    navigate,
-  ]);
+  }, [taskMode, sendMessage]);
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
@@ -417,7 +351,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             isStreaming={isStreaming}
-                            features={{ taskModeEntry: true }}
+                            features={{ taskModeEntry: true, taskMode }}
+                            onToggleTaskMode={() => setTaskMode((v) => !v)}
+                            placeholder={taskMode
+                              ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
+                              : undefined}
                             onScrollToBottom={() => { }}
                             modelOptions={bsConfig?.models}
                             modelValue={chatModel.id}

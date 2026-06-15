@@ -677,9 +677,7 @@ class ChannelService:
         # Ensure no negative count just in case
         return max(0, total_count - matching_read_count)
 
-    async def _calculate_sub_channel_unread_counts(
-        self, channel: Channel, all_read_ids: List[str]
-    ) -> Dict[str, int]:
+    async def _calculate_sub_channel_unread_counts(self, channel: Channel, all_read_ids: list[str]) -> dict[str, int]:
         """Unread count per sub-channel: total − read for (main rules AND that sub's rules).
 
         Mirrors _calculate_unread_count but combines the main filter rules with each
@@ -687,17 +685,15 @@ class ChannelService:
         main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
 
         # Distinct sub-channel names defined on this channel.
-        sub_names: List[str] = []
-        for fr in (channel.filter_rules or []):
+        sub_names: list[str] = []
+        for fr in channel.filter_rules or []:
             if isinstance(fr, dict) and fr.get("channel_type") == "sub":
                 name = fr.get("name")
                 if name and name not in sub_names:
                     sub_names.append(name)
 
         async def unread_for(name: str) -> int:
-            sub_rule_groups = self._extract_filter_rule_groups(
-                channel, channel_type="sub", sub_channel_name=name
-            )
+            sub_rule_groups = self._extract_filter_rule_groups(channel, channel_type="sub", sub_channel_name=name)
             effective_rule_groups = [*main_rule_groups, *sub_rule_groups]
             total_count = await self.article_es_service.count_articles(
                 source_ids=channel.source_list,
@@ -712,7 +708,7 @@ class ChannelService:
                 self.article_es_service.count_articles(
                     source_ids=channel.source_list,
                     filter_rules=effective_rule_groups if effective_rule_groups else None,
-                    include_article_ids=all_read_ids[i:i + chunk_size],
+                    include_article_ids=all_read_ids[i : i + chunk_size],
                 )
                 for i in range(0, len(all_read_ids), chunk_size)
             ]

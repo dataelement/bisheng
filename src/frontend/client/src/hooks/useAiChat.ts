@@ -15,6 +15,9 @@ import type { ChatMessage } from "~/api/chatApi";
 import { getAgentMessages } from "~/api/chatApi";
 import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
+import { useLinsightManager } from "~/hooks/useLinsightManager";
+import { startLinsight } from "~/api/linsight";
+import { SopStatus } from "~/store/linsight";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
@@ -49,8 +52,22 @@ export default function useAiChat(initialConversationId: string = "new", isLings
 
     const queryClient = useQueryClient();
 
+    // F035 Track J (TJ-6): task-mode turns reuse the linsight execution machinery
+    // (createLinsight seeds the per-SV store, startLinsight kicks off the run, the
+    // inline task bubble hosts the WS). The turn stays in THIS daily conversation.
+    const { createLinsight, updateLinsight } = useLinsightManager();
+
     // --- SSE hook ---
     const { abort: abortSSE } = useAiChatSSE(sseSubmission);
+
+    // F035 Track J (TJ-6): after a task handoff we bind the conversation to the
+    // freshly-minted chat_id, which would normally trigger a history refetch.
+    // But the bot task row isn't persisted yet (the worker writes it at execution
+    // start), so a refetch here returns ONLY the user question and CLOBBERS the
+    // optimistic task turn — the panel vanishes ("jumps back to empty daily").
+    // This ref tells the load effect to skip exactly that one refetch; the live
+    // optimistic message + linsightMapState are authoritative for this turn.
+    const skipLoadConvoRef = useRef<string | null>(null);
 
     // Track previous external ID to distinguish sidebar navigation from self-navigate
     const prevExternalIdRef = useRef(initialConversationId);
@@ -97,6 +114,15 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         if (!conversationId || conversationId === "new") {
             return;
         }
+        // F035 Track J: skip the one post-handoff refetch that would clobber the
+        // optimistic task turn (see skipLoadConvoRef). Consume the guard so a
+        // genuine later navigation back to this convo still reloads normally.
+        if (conversationId === skipLoadConvoRef.current) {
+            console.log("[TJ][useAiChat] skipping post-handoff refetch for", conversationId);
+            skipLoadConvoRef.current = null;
+            setIsLoading(false);
+            return;
+        }
         setIsLoading(true);
         // v2.5: use the native Agent-mode history endpoint.
         // Returns ChatMessage[] with category + structured fields (reasoning,
@@ -123,8 +149,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
 
     // --- Send a message ---
     const sendMessage = useCallback(
-        (text: string, files?: any[] | null) => {
+        (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if (!text.trim() || isStreaming) return;
+            const taskMode = !!opts?.taskMode;
 
             const parentMsg = messagesRef.current[messagesRef.current.length - 1];
             const parentMessageId = parentMsg?.messageId ?? NO_PARENT;
@@ -201,6 +228,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     })),
                 ),
                 linsight: isLingsi,
+                // F035 Track J (TJ-6): route this turn to the linsight task kernel
+                // via the SAME unified entry. Backend replies with a handoff event.
+                task_mode: taskMode,
             };
 
             // Correlation key for the user (question) message. Starts as the
@@ -267,6 +297,113 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 : m
                         )
                     );
+                },
+                // F035 Track J (TJ-6): task-mode handoff. Promote the placeholder
+                // assistant turn into a `task` row pointing at the linsight SV,
+                // seed the per-SV store, and kick off execution. The inline task
+                // bubble (TJ-7) hosts the WS and renders the live run from there.
+                onTaskHandoff: ({ session_version_id: svid, chat_id }) => {
+                    console.log("[TJ][useAiChat] onTaskHandoff fired:", { svid, chat_id, responseMessageId, wasNewConvo });
+                    if (!svid) {
+                        console.warn("[TJ][useAiChat] empty svid — aborting handoff");
+                        return;
+                    }
+
+                    // Bind this conversation (new convo: chat_id was just minted
+                    // server-side as a flow_type=15 daily session). Guard the load
+                    // effect from refetching (and clobbering) the optimistic task
+                    // turn before the worker has persisted the bot task row.
+                    if (chat_id) {
+                        skipLoadConvoRef.current = chat_id;
+                        setConversationId(chat_id);
+                        if (wasNewConvo) {
+                            const placeholderConvo = {
+                                conversationId: chat_id,
+                                title: localize('com_ui_new_chat'),
+                                createdAt: new Date().toISOString(),
+                                updatedAt: new Date().toISOString(),
+                                model: chatModel.name || '',
+                                endpoint: '',
+                                endpointType: 'custom',
+                                isArchived: false,
+                                tags: [],
+                            } as unknown as TConversation;
+                            queryClient.setQueryData<ConversationData>(
+                                [QueryKeys.allConversations],
+                                (convoData) =>
+                                    convoData ? addConversation(convoData, placeholderConvo) : convoData,
+                            );
+                        }
+                    }
+
+                    // Seed the linsight execution store for this SV, then start it.
+                    createLinsight(svid, {
+                        status: SopStatus.SopGenerating,
+                        question: text.trim(),
+                        tasks: [],
+                        sessionSteps: [],
+                        history: [],
+                        output_result: null,
+                        file_list: [],
+                        files: [],
+                        tools: [],
+                        session_id: chat_id,
+                        version: svid,
+                        queueCount: 0,
+                        taskError: '',
+                        sopError: '',
+                        inputSop: false,
+                    } as any);
+
+                    console.log("[TJ][useAiChat] createLinsight done, calling start-execute for", svid);
+                    startLinsight(svid)
+                        .then(() => {
+                            console.log("[TJ][useAiChat] start-execute OK → status Running", svid);
+                            updateLinsight(svid, { status: SopStatus.Running });
+                        })
+                        .catch((err) => {
+                            console.error('[TJ][useAiChat] task start-execute failed:', err);
+                            updateLinsight(svid, { taskError: String(err), status: SopStatus.Stoped });
+                        });
+
+                    // Promote the placeholder assistant row to a task turn so the
+                    // bubble renders the embedded execution panel by SV.
+                    setMessages((prev) => {
+                        const found = prev.some((m) => m.messageId === responseMessageId);
+                        console.log("[TJ][useAiChat] upgrading msg to task. matchFound:", found, "ids:", prev.map((m) => m.messageId));
+                        return prev.map((m) =>
+                            m.messageId === responseMessageId
+                                ? {
+                                      ...m,
+                                      category: 'task',
+                                      linsightSessionVersionId: svid,
+                                      conversationId: chat_id || m.conversationId,
+                                      unfinished: true,
+                                  }
+                                : m,
+                        );
+                    });
+
+                    // New task conversations have no daily `final` event to drive
+                    // title generation — request it explicitly.
+                    if (wasNewConvo && chat_id) {
+                        dataService.genTitle({ conversationId: chat_id })
+                            .then((res: { title?: string }) => {
+                                if (!res?.title) return;
+                                setTitle(res.title);
+                                queryClient.setQueryData<ConversationData>(
+                                    [QueryKeys.allConversations],
+                                    (convoData) =>
+                                        convoData
+                                            ? updateConvoFields(convoData, {
+                                                  conversationId: chat_id,
+                                                  title: res.title,
+                                              } as TConversation)
+                                            : convoData,
+                                );
+                            })
+                            .catch(() => { /* non-critical */ });
+                    }
                 },
                 onMessage: (text, messageId) => {
                     console.log('[AiChat] message:', { text: text?.slice(0, 50), messageId });
@@ -403,7 +540,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, isLingsi]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, isLingsi, createLinsight, updateLinsight, localize, queryClient]
     );
 
     // --- Stop generating ---

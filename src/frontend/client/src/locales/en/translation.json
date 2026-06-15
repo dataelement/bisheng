@@ -405,6 +405,8 @@
   "com_linsight_task_panel": "Tasks",
   "com_linsight_task_panel_done": "Tasks completed",
   "com_linsight_task_terminated": "Task terminated",
+  "com_linsight_loading": "Loading…",
+  "com_linsight_detail_load_failed": "Failed to load task detail",
   "com_linsight_waiting_your_input": "Waiting for your input",
   "com_linsight_queue_waiting": "High traffic right now — your task is queued…",
   "com_linsight_queue_position": "Position {{0}}",
