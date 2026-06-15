@@ -5,7 +5,11 @@ import { useContext } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 
-export default function DropZone({ onDrop }) {
+interface DropZoneProps {
+    onDrop: (files: File[]) => void;
+}
+
+export default function DropZone({ onDrop }: DropZoneProps) {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
     const xinChuangFormats = ['.WPS', '.ET', '.DPS'];

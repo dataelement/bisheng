@@ -259,6 +259,8 @@ _PORTAL_VISIBLE_SPACE_CACHE_LOCK = asyncio.Lock()
 
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
 _VIDEO_FILE_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
+_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]
+_WEB_LINK_SEPARATOR_RULES = ["after" for _ in _WEB_LINK_SEPARATORS]
 
 
 @dataclass
@@ -6318,6 +6320,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFileSizeLimitError()
 
         split_rule_dict = FileProcessBase(knowledge_id=knowledge_id).model_dump()
+        split_rule_dict["separator"] = _WEB_LINK_SEPARATORS
+        split_rule_dict["separator_rule"] = _WEB_LINK_SEPARATOR_RULES
+        split_rule_dict["chunk_overlap"] = 0
         normalized_file_category_code = self.normalize_file_category_code(file_category_code)
         if normalized_file_category_code:
             split_rule_dict[self.file_category_code_key] = normalized_file_category_code

@@ -46,6 +46,14 @@ class FileSource(Enum):
     VIDEO_TRANSCRIPT = 'video_transcript'
     WEB_LINK = 'web_link'
 
+
+# Portal "my uploads" list: space uploads plus media reclassified at ingest time.
+PORTAL_USER_UPLOAD_FILE_SOURCES = (
+    FileSource.SPACE_UPLOAD.value,
+    FileSource.AUDIO_TRANSCRIPT.value,
+    FileSource.VIDEO_TRANSCRIPT.value,
+)
+
 class FileType(int, Enum):
     DIR = 0
     FILE = 1
@@ -588,16 +596,17 @@ class KnowledgeFileDao(KnowledgeFileBase):
             space_id: Optional[int] = None,
             status: Optional[int] = None,
             keyword: Optional[str] = None,
-            file_source: str = FileSource.SPACE_UPLOAD.value,
+            file_sources: Optional[tuple[str, ...]] = None,
     ) -> tuple[List[KnowledgeFile], int]:
         safe_page = max(int(page or 1), 1)
         safe_page_size = min(max(int(page_size or 20), 1), 100)
+        sources = file_sources or PORTAL_USER_UPLOAD_FILE_SOURCES
         filters = [
             KnowledgeFile.user_id == user_id,
             KnowledgeFile.file_type == FileType.FILE.value,
         ]
-        if file_source:
-            filters.append(KnowledgeFile.file_source == file_source)
+        if sources:
+            filters.append(KnowledgeFile.file_source.in_(sources))
         if space_id is not None:
             filters.append(KnowledgeFile.knowledge_id == space_id)
         if status is not None:

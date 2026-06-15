@@ -43,7 +43,7 @@ import { usePrefersMobileLayout } from "~/hooks";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
-import { triggerUrlDownload } from "../knowledgeUtils";
+import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, triggerUrlDownload } from "../knowledgeUtils";
 import { submitKnowledgeSpaceCreate } from "../createKnowledgeSpaceApproval";
 import { TREE_PAGE_SIZE } from "./constants";
 import type {
@@ -124,6 +124,7 @@ export default function PortalKnowledgeWorkbench() {
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [pendingCreateLevel, setPendingCreateLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [uploadedFilesOpen, setUploadedFilesOpen] = useState(false);
+    const [uploadRecordsRefreshKey, setUploadRecordsRefreshKey] = useState(0);
     const [webLinkDialogOpen, setWebLinkDialogOpen] = useState(false);
     const [webLinkUrl, setWebLinkUrl] = useState("");
     const [webLinkTitle, setWebLinkTitle] = useState("");
@@ -560,6 +561,62 @@ export default function PortalKnowledgeWorkbench() {
         () => currentFolderNode ? currentFolderNode.children.map((node) => node.file) : treeNodes.map((node) => node.file),
         [currentFolderNode, treeNodes],
     );
+    const currentFolderFilesRef = useRef(currentFolderFiles);
+    currentFolderFilesRef.current = currentFolderFiles;
+
+    const refreshLoadedStatuses = useCallback(async () => {
+        if (!activeSpace?.id || searchMode) return;
+        const currentFiles = currentFolderFilesRef.current;
+        if (currentFiles.length === 0) return;
+
+        try {
+            const fetchSize = Math.min(currentFiles.length, 100);
+            const res = await getSpaceChildrenApi({
+                space_id: activeSpace.id,
+                parent_id: currentFolderId,
+                page: 1,
+                page_size: fetchSize,
+                order_field: sortBy,
+                order_sort: sortDirection,
+                file_status: statusFilterNumbers,
+            });
+            if (activeSpaceIdRef.current !== activeSpace.id) return;
+
+            const updatesById = new Map(res.data.map((file) => [String(file.id), file]));
+            setCurrentFolderFiles((prev) => {
+                const knownIds = new Set(prev.map((file) => String(file.id)));
+                const merged = prev.map((file) => updatesById.get(String(file.id)) ?? file);
+                const newRows = res.data.filter((file) => !knownIds.has(String(file.id)));
+                return newRows.length > 0 ? [...newRows, ...merged] : merged;
+            });
+        } catch {
+            // Silent — polling failure must not toast.
+        }
+    }, [
+        activeSpace?.id,
+        currentFolderId,
+        searchMode,
+        setCurrentFolderFiles,
+        sortBy,
+        sortDirection,
+        statusFilterNumbers,
+    ]);
+
+    const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
+    refreshLoadedStatusesRef.current = refreshLoadedStatuses;
+
+    useEffect(() => {
+        if (!activeSpace?.id || searchMode) return;
+        const hasPending = currentFolderFiles.some((file) => isKnowledgeItemPending(file));
+        if (!hasPending) return;
+
+        const timer = setInterval(() => {
+            void refreshLoadedStatusesRef.current();
+        }, 5000);
+
+        return () => clearInterval(timer);
+    }, [activeSpace?.id, currentFolderFiles, searchMode]);
+
     const currentFileListPage = currentFolderNode?.page ?? treeRootPage;
     const currentFileListTotal = currentFolderNode?.total ?? treeRootTotal;
     const currentFileListHasMore = searchMode
@@ -586,6 +643,8 @@ export default function PortalKnowledgeWorkbench() {
         () => normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types),
         [bsConfig],
     );
+    const portalMaxFileSizeMB = (bsConfig as any)?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
+    const portalEnableEtl4lm = (bsConfig as any)?.enable_etl4lm ?? true;
     const fileEncodingPrefix = useMemo(() => {
         const prefix = (bsConfig as any)?.shougang?.prefix;
         return typeof prefix === "string" && prefix.trim() ? prefix.trim() : "SGGF";
@@ -625,6 +684,9 @@ export default function PortalKnowledgeWorkbench() {
         uploadTagOptions,
         selectedUploadTagValues,
         uploadTagLoading,
+        fileInputAccept,
+        supportedFormatsLabel,
+        maxFileSizeMB,
         setUploadDialogOpen,
         setUploadStep,
         setUploadReviewRows,
@@ -654,8 +716,13 @@ export default function PortalKnowledgeWorkbench() {
         currentPath,
         statusFilterNumbers,
         fileCategoryOptions,
+        enableEtl4lm: portalEnableEtl4lm,
+        maxFileSizeMB: portalMaxFileSizeMB,
         reloadFiles,
-        onUploaded: () => setUploadedFilesOpen(true),
+        onUploaded: () => {
+            setUploadRecordsRefreshKey((key) => key + 1);
+            setUploadedFilesOpen(true);
+        },
         showToast,
     });
 
@@ -1769,6 +1836,9 @@ export default function PortalKnowledgeWorkbench() {
                     uploadTagOptions,
                     selectedUploadTagValues,
                     uploadTagLoading,
+                    fileInputAccept,
+                    supportedFormatsLabel,
+                    maxFileSizeMB,
                     onOpen: () => setUploadDialogOpen(true),
                     onClose: resetUploadDialog,
                     onAddUploadFiles: handleAddUploadFiles,
@@ -1792,6 +1862,7 @@ export default function PortalKnowledgeWorkbench() {
             />
             <PortalUploadedFilesDrawer
                 open={uploadedFilesOpen}
+                refreshKey={uploadRecordsRefreshKey}
                 onOpenChange={setUploadedFilesOpen}
                 onRecordsChanged={() => reloadFiles()}
                 showToast={showToast}

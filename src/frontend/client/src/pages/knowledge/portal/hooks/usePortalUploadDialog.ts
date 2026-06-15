@@ -18,10 +18,11 @@ import {
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import {
-    ALLOWED_EXTENSIONS,
     DEFAULT_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
     filterFolderUploadFiles,
+    getAllowedExtensions,
+    getFileInputAccept,
     getRootFolderName,
     isHiddenName,
 } from "../../knowledgeUtils";
@@ -62,6 +63,8 @@ interface UsePortalUploadDialogParams {
     currentPath: Array<{ id?: string; name: string }>;
     statusFilterNumbers: number[];
     fileCategoryOptions?: PortalFileCategoryOption[];
+    enableEtl4lm?: boolean;
+    maxFileSizeMB?: number;
     reloadFiles: () => Promise<void>;
     onUploaded?: () => void;
     showToast: (toast: { message: string; severity: NotificationSeverity }) => void;
@@ -74,6 +77,8 @@ export function usePortalUploadDialog({
     canUploadInPortal,
     statusFilterNumbers,
     fileCategoryOptions = DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS,
+    enableEtl4lm = true,
+    maxFileSizeMB = DEFAULT_MAX_FILE_SIZE_MB,
     reloadFiles,
     onUploaded,
     showToast,
@@ -100,6 +105,10 @@ export function usePortalUploadDialog({
     const [selectedUploadTagValues, setSelectedUploadTagValues] = useState<string[]>([]);
     const [uploadTagOptions, setUploadTagOptions] = useState<PortalUploadTagOption[]>([]);
     const [uploadTagLoading, setUploadTagLoading] = useState(false);
+    const allowedExtensions = useMemo(() => getAllowedExtensions(enableEtl4lm), [enableEtl4lm]);
+    const fileInputAccept = useMemo(() => getFileInputAccept(enableEtl4lm), [enableEtl4lm]);
+    const supportedFormatsLabel = useMemo(() => allowedExtensions.join("、"), [allowedExtensions]);
+    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
 
     const uploadFolderOptions = useMemo(
         () => {
@@ -212,13 +221,46 @@ export function usePortalUploadDialog({
         };
     }, [activeSpace, showToast, statusFilterNumbers, uploadDialogOpen]);
 
+    const validateUploadFiles = useCallback((files: File[]) => {
+        const unsupportedFiles: string[] = [];
+        const oversizedFiles: string[] = [];
+        const validFiles = files.filter((file) => {
+            if (file.size > maxFileSizeBytes) {
+                oversizedFiles.push(file.name);
+                return false;
+            }
+            const ext = file.name.split(".").pop()?.toLowerCase();
+            if (!ext || !allowedExtensions.includes(ext)) {
+                unsupportedFiles.push(file.name);
+                return false;
+            }
+            return true;
+        });
+
+        if (unsupportedFiles.length) {
+            showToast({
+                message: `不支持的文件格式：${unsupportedFiles.join("、")}`,
+                severity: NotificationSeverity.WARNING,
+            });
+        }
+        if (oversizedFiles.length) {
+            showToast({
+                message: `文件大小超过 ${maxFileSizeMB}MB：${oversizedFiles.join("、")}`,
+                severity: NotificationSeverity.WARNING,
+            });
+        }
+        return validFiles;
+    }, [allowedExtensions, maxFileSizeBytes, maxFileSizeMB, showToast]);
+
     const handleAddUploadFiles = useCallback((files?: FileList | File[]) => {
         const nextFiles = Array.from(files ?? []);
         if (!nextFiles.length) return;
+        const validFiles = validateUploadFiles(nextFiles);
+        if (!validFiles.length) return;
         setUploadLocalFolderName(null);
         setUploadFiles((prev) => [
             ...prev.filter((item) => item.source === "file"),
-            ...nextFiles.map((file) => ({
+            ...validFiles.map((file) => ({
                 id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
                 file,
                 source: "file" as const,
@@ -226,7 +268,7 @@ export function usePortalUploadDialog({
         ]);
         setUploadStep("select");
         setUploadReviewRows([]);
-    }, []);
+    }, [validateUploadFiles]);
 
     const handleAddUploadFolder = useCallback((files?: FileList | File[]) => {
         const allFiles = Array.from(files ?? []);
@@ -259,8 +301,8 @@ export function usePortalUploadDialog({
 
         const filesInRoot = allFiles.filter((file) => getRootFolderName(file.webkitRelativePath || "") === rootName);
         const validFiles = filterFolderUploadFiles(filesInRoot, {
-            allowedExtensions: ALLOWED_EXTENSIONS,
-            maxSizeMB: DEFAULT_MAX_FILE_SIZE_MB,
+            allowedExtensions,
+            maxSizeMB: maxFileSizeMB,
         });
         if (!validFiles.length) {
             showToast({ message: "文件夹根目录下没有可上传的支持文件", severity: NotificationSeverity.WARNING });
@@ -275,7 +317,7 @@ export function usePortalUploadDialog({
         })));
         setUploadStep("select");
         setUploadReviewRows([]);
-    }, [showToast]);
+    }, [allowedExtensions, maxFileSizeMB, showToast]);
 
     const handleRemoveUploadFile = useCallback((fileId: string) => {
         setUploadFiles((prev) => {
@@ -692,6 +734,9 @@ export function usePortalUploadDialog({
         uploadTagOptions,
         selectedUploadTagValues,
         uploadTagLoading,
+        fileInputAccept,
+        supportedFormatsLabel,
+        maxFileSizeMB,
         setUploadDialogOpen,
         setUploadStep,
         setUploadReviewRows,
