@@ -2527,8 +2527,7 @@
   },
   "skillManage": {
     "title": "スキル管理",
-    "subtitle": "タスクモード「+ → スキル追加」でエンドユーザーが選択できるテナント独自スキル。作成/有効化は即時反映",
-    "searchPlaceholder": "表示名 / 説明で検索",
+    "searchPlaceholder": "名前 / 説明で検索",
     "statusAll": "すべて",
     "statusEnabled": "有効",
     "statusDisabled": "無効",
@@ -2538,7 +2537,7 @@
     "columns": {
       "displayName": "表示名",
       "description": "説明",
-      "status": "有効",
+      "status": "状態",
       "createTime": "作成日時",
       "actions": "操作"
     },

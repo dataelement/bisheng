@@ -2582,8 +2582,7 @@
   "success": "Success",
   "skillManage": {
     "title": "Skill Management",
-    "subtitle": "Tenant custom skills selectable by end users via Task Mode \"+ → Add Skill\"; create/toggle takes effect immediately",
-    "searchPlaceholder": "Search display name / description",
+    "searchPlaceholder": "Search name / description",
     "statusAll": "All",
     "statusEnabled": "Enabled",
     "statusDisabled": "Disabled",
@@ -2593,7 +2592,7 @@
     "columns": {
       "displayName": "Display Name",
       "description": "Description",
-      "status": "Enabled",
+      "status": "Status",
       "createTime": "Created",
       "actions": "Actions"
     },
