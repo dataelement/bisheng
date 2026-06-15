@@ -25,6 +25,11 @@ class SubmitFileSchema(BaseModel):
     file_id: str = Field(..., description="File UniqueID")
     file_name: str = Field(..., description="File Name")
     parsing_status: str = Field(..., description="File parsing status")
+    # F035 unified-resource: when set, the file came from the DAILY upload bucket
+    # (workstation), not the linsight pipeline. Carries the raw MinIO path;
+    # linsight parses it on-the-fly via TempFilePipeline at ingestion instead of
+    # resolving a linsight Redis temp_info / pre-parsed markdown.
+    file_url: str | None = Field(None, description="Daily-bucket raw file path (workstation upload)")
 
 
 # Submit a problemSchema

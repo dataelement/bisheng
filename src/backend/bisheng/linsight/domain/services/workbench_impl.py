@@ -126,7 +126,9 @@ class LinsightWorkbenchImpl:
         if not files:
             return None
 
-        processed_files = await cls._process_submitted_files(files, linsight_session_version.session_id)
+        processed_files = await cls._process_submitted_files(
+            files, linsight_session_version.session_id, linsight_session_version.user_id
+        )
 
         if linsight_session_version.files:
             linsight_session_version.files.extend(processed_files)
@@ -170,7 +172,7 @@ class LinsightWorkbenchImpl:
                     chat_id = uuid.uuid4().hex
 
             # Process files (if present) — after chat_id is finalized
-            processed_files = await cls._process_submitted_files(submit_obj.files, chat_id)
+            processed_files = await cls._process_submitted_files(submit_obj.files, chat_id, login_user.user_id)
 
             if not continuing:
                 # F035 Track J (unified conversation model): a task turn is not a
@@ -234,7 +236,9 @@ class LinsightWorkbenchImpl:
         return await get_redis_client()
 
     @classmethod
-    async def _process_submitted_files(cls, files: list[SubmitFileSchema] | None, chat_id: str) -> list | None:
+    async def _process_submitted_files(
+        cls, files: list[SubmitFileSchema] | None, chat_id: str, user_id: int = 0
+    ) -> list | None:
         """Process submitted files (F035: offload-first ingestion).
 
         For each submitted file:
@@ -268,19 +272,86 @@ class LinsightWorkbenchImpl:
             if file.parsing_status != "completed":
                 raise cls.LinsightError(f"file {file.file_name} status is error: {file.parsing_status}")
 
-        file_ids = [file.file_id for file in files]
-        redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{file_id}" for file_id in file_ids]
+        # Daily-bucket files (unified-resource) are parsed on-the-fly; only the
+        # linsight-pipeline files need a Redis temp_info lookup.
+        linsight_files = [f for f in files if not f.file_url]
+        redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{f.file_id}" for f in linsight_files]
         redis_client = await cls._get_redis()
-        temp_infos = await redis_client.amget(redis_keys)
+        temp_list = await redis_client.amget(redis_keys) if redis_keys else []
+        temp_by_id = {f.file_id: t for f, t in zip(linsight_files, temp_list)}
 
         minio_client = await get_minio_storage()
 
         processed_files: list[dict] = []
-        for submit_file, temp_info in zip(files, temp_infos):
-            entry = await cls._ingest_one_file(submit_file, temp_info, chat_id, minio_client)
+        for submit_file in files:
+            if submit_file.file_url:
+                entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id)
+            else:
+                entry = await cls._ingest_one_file(
+                    submit_file, temp_by_id.get(submit_file.file_id), chat_id, minio_client
+                )
             processed_files.append(entry)
 
         return processed_files
+
+    @classmethod
+    async def _ingest_daily_file(cls, submit_file: SubmitFileSchema, chat_id: str, minio_client, user_id: int) -> dict:
+        """Ingest a DAILY-bucket file into the linsight workspace (unified-resource).
+
+        The daily upload only stores the raw file (no parse). We reuse the same
+        parser the daily chat uses (``TempFilePipeline``): download the raw file,
+        extract its text/markdown, write that to the formal bucket, then drop it
+        into the workspace as ``uploads/<name>/index.md`` so the offload-first
+        file tools (read_file) + ``prepare_file_list`` pointer block see it like
+        any linsight-uploaded attachment.
+        """
+        from bisheng.api.v1.schemas import FileProcessBase
+        from bisheng.core.cache.utils import async_file_download
+        from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
+
+        try:
+            local_path, dl_name = await async_file_download(submit_file.file_url)
+            file_name = submit_file.file_name or dl_name
+            file_rule = FileProcessBase(
+                knowledge_id=0,
+                separator=["\n\n", "\n"],
+                separator_rule=["after", "after"],
+                chunk_size=1000,
+                chunk_overlap=0,
+            )
+            pipeline = TempFilePipeline(
+                invoke_user_id=user_id,
+                local_file_path=local_path,
+                file_name=file_name,
+                file_rule=file_rule,
+            )
+            result = await pipeline.arun()
+            markdown = "\n\n".join(doc.page_content for doc in (result.documents or []) if doc.page_content)
+        except Exception as e:
+            logger.warning(f"daily file ingest failed ({submit_file.file_name}): {e}")
+            return {
+                "file_id": submit_file.file_id,
+                "original_filename": submit_file.file_name,
+                "parsing_status": "expired",
+                "valid": False,
+                "error_message": "file parse failed, please re-upload",
+            }
+
+        formal_object = cls._formal_markdown_object(submit_file.file_id, chat_id)
+        await minio_client.put_object(
+            bucket_name=minio_client.bucket, object_name=formal_object, file=markdown.encode("utf-8")
+        )
+
+        entry: dict = {
+            "file_id": submit_file.file_id,
+            "original_filename": submit_file.file_name,
+            "parsing_status": "completed",
+            "valid": True,
+            "markdown_file_path": formal_object,
+            "markdown_filename": f"{cls._sanitize_name(submit_file.file_name)}.md",
+        }
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client)
+        return entry
 
     @classmethod
     async def _ingest_one_file(

@@ -115,6 +115,22 @@ async def create_linsight_agent(
 
         checkpointer = InMemorySaver()
 
+    # F035 Track D: attach the tenant skills middleware so the agent can load +
+    # use governance-enabled skills (built-ins + tenant custom). We do NOT pass
+    # create_deep_agent's `skills=` param (that would add a second, duplicate
+    # SkillsMiddleware). Coarse for now: all enabled skills are available; a
+    # per-run whitelist (config.configurable.active_skills) would constrain to the
+    # user's picked subset once that selection is threaded + persisted.
+    middlewares: list = []
+    try:
+        from bisheng.linsight.domain.services.skill_middleware import make_skills_middleware
+
+        middlewares.append(await make_skills_middleware(session_model.tenant_id))
+    except Exception as e:
+        from loguru import logger
+
+        logger.warning(f"skills middleware unavailable, running without skills: {e}")
+
     # No custom history-compression middleware: deepagents already ships a
     # built-in summarization middleware (deepagents.middleware.summarization),
     # so injecting our own duplicated it and tripped langchain's "duplicate
@@ -127,6 +143,7 @@ async def create_linsight_agent(
         model=model,
         tools=[*tools, ask_user],
         system_prompt=LINSIGHT_SYSTEM_PROMPT_ZH,
+        middleware=middlewares,
         backend=backend,
         checkpointer=checkpointer,
         store=None,

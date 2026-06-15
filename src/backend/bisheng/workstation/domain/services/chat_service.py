@@ -1820,11 +1820,10 @@ def _to_linsight_submit(data: APIChatCompletion):
         if children:
             submit_tools = [LinsightToolSchema(id=0, name="daily", is_preset=0, children=children)]
 
-    # Files ARE threaded for task mode: the frontend uploads via the linsight
-    # pipeline (uploadMode='linsight') when the task toggle is on, so each item
-    # already carries a linsight-resolvable file_id + parsing_status. Map the
-    # daily-shaped dicts onto the linsight SubmitFileSchema (tolerant of the
-    # filename/file_name/name variants the uploader emits).
+    # Files (unified-resource): task mode reuses the DAILY upload bucket. Each
+    # daily file dict carries `filepath` (raw MinIO path) — pass it as `file_url`
+    # so linsight parses it on-the-fly via TempFilePipeline at ingestion. Files
+    # uploaded via the linsight pipeline (no filepath) keep the legacy path.
     submit_files = None
     if data.files:
         submit_files = []
@@ -1837,6 +1836,7 @@ def _to_linsight_submit(data: APIChatCompletion):
                     file_id=str(file_id),
                     file_name=item.get("file_name") or item.get("filename") or item.get("name") or "",
                     parsing_status=item.get("parsing_status") or "completed",
+                    file_url=item.get("filepath") or item.get("file_url"),
                 )
             )
         submit_files = submit_files or None
