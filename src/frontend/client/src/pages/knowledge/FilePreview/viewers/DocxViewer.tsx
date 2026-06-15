@@ -54,7 +54,7 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
     const scale = zoomLevel / 100;
 
     return (
-        <div className="min-w-0 flex-1 overflow-auto bg-[#fbfbfb]">
+        <div className="scrollbar-os min-w-0 flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="box-border flex w-full justify-center py-6 px-3 sm:px-4">
                 <div
                     ref={containerRef}
@@ -71,11 +71,9 @@ export function DocxViewer({ fileUrl, zoomLevel }: DocxViewerProps) {
                             padding: 40px 60px;
                             font-size: 14px;
                             color: #1d2129;
-                            /* Word documents commonly contain long unbroken strings
-                               (URLs, ID-like tokens, CJK without spaces). Without
-                               these the content can overflow the 800px frame and
-                               force a horizontal scrollbar on the outer container. */
-                            overflow-wrap: break-word;
+                            /* Break long unbreakable tokens (URLs, ASCII art, no-space CJK runs)
+                               so they wrap inside the page width instead of overflowing right. */
+                            overflow-wrap: anywhere;
                             word-break: break-word;
                         }
                         /* Mobile: shrink the side padding so narrow screens

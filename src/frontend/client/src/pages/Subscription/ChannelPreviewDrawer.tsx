@@ -340,7 +340,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                         </SheetHeader>
 
                         {/* Article List / Pending Message */}
-                        <div ref={previewListScrollRevealRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-on-scroll pt-2">
+                        <div ref={previewListScrollRevealRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-on-scroll px-4 pt-2">
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
                                     <img
@@ -358,31 +358,36 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                     emptyText={localize("com_subscription.all_messages_are_here")}
                                     className=""
                                 >
-                                    {articles.map(article => (
-                                        <ArticleCard
+                                    {articles.map((article, i) => (
+                                        <div
                                             key={article.id}
-                                            article={article}
-                                            showArticleActions={false}
-                                            onSelect={(a) => {
-                                                if (a?.sensitiveReview?.can_view === false) {
-                                                    showToast({
-                                                        message: a.sensitiveReview.auto_reply || localize("com_subscription.sensitive_review_blocked"),
-                                                        severity: NotificationSeverity.WARNING
-                                                    });
-                                                    return;
-                                                }
-                                                const url = (a?.url || "").trim();
-                                                if (!url) {
-                                                    showToast({
-                                                        message: localize("com_subscription.no_original_link"),
-                                                        severity: NotificationSeverity.WARNING
-                                                    });
-                                                    return;
-                                                }
-                                                window.open(url, "_blank", "noopener,noreferrer");
-                                            }}
-                                            isSelected={false}
-                                        />
+                                            className={i > 0 ? "border-t border-dashed border-[#EBECF0]" : undefined}
+                                        >
+                                            <ArticleCard
+                                                article={article}
+                                                showArticleActions={false}
+                                                variant="grid"
+                                                onSelect={(a) => {
+                                                    if (a?.sensitiveReview?.can_view === false) {
+                                                        showToast({
+                                                            message: a.sensitiveReview.auto_reply || localize("com_subscription.sensitive_review_blocked"),
+                                                            severity: NotificationSeverity.WARNING
+                                                        });
+                                                        return;
+                                                    }
+                                                    const url = (a?.url || "").trim();
+                                                    if (!url) {
+                                                        showToast({
+                                                            message: localize("com_subscription.no_original_link"),
+                                                            severity: NotificationSeverity.WARNING
+                                                        });
+                                                        return;
+                                                    }
+                                                    window.open(url, "_blank", "noopener,noreferrer");
+                                                }}
+                                                isSelected={false}
+                                            />
+                                        </div>
                                     ))}
                                 </InfiniteScroll>
                             ) : (

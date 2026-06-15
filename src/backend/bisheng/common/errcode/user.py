@@ -72,6 +72,11 @@ class UserPasswordMaxTryError(BaseErrorCode):
     Msg: str = 'The account has been automatically disabled due to too many failed login attempts, please contact your administrator'
 
 
+class UserPasswordStrengthError(BaseErrorCode):
+    Code: int = 10622
+    Msg: str = 'Password must be at least 8 characters and include uppercase, lowercase, number, and symbol'
+
+
 class UserGroupEmptyError(BaseErrorCode):
     Code: int = 10630
     Msg: str = 'User group cannot be empty'

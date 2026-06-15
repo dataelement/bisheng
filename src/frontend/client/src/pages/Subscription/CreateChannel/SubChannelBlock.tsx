@@ -5,7 +5,7 @@ import { FilterConditionEditor, type FilterGroup, type FilterRelation } from "./
 import { ChannelEditIcon } from "~/components/icons/channels";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
 
-const MAX_CHANNEL_NAME = 30;
+const MAX_CHANNEL_NAME = 50;
 export interface SubChannelData {
     id: string;
     name: string;
@@ -50,10 +50,16 @@ export function SubChannelBlock({
     const [editVal, setEditVal] = useState(data.name);
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Focus + select whenever we enter edit mode (covers both auto-open and manual edit click)
     useEffect(() => {
-        if (openInEditMode && inputRef.current) {
-            inputRef.current.focus();
-            inputRef.current.select();
+        if (isEditing) {
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        }
+    }, [isEditing]);
+
+    useEffect(() => {
+        if (openInEditMode) {
             onEditModeOpened?.();
         }
     }, [openInEditMode, onEditModeOpened]);
@@ -100,7 +106,7 @@ export function SubChannelBlock({
                         onChange={(e) => handleNameChange(e.target.value)}
                         onBlur={handleSave}
                         onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                        className="h-[26px] flex-1 min-w-0 px-2 text-[14px] text-[#212121] placeholder:text-[#999999] border border-[#E5E6EB] rounded focus:outline-none focus:ring-1 focus:ring-[#165DFF]"
+                        className="h-[26px] flex-1 min-w-0 px-2 text-[14px] text-[#212121] placeholder:text-[#999999] border border-[#E5E6EB] rounded focus:outline-none focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
                         placeholder={localize("com_subscription.sub_channel_name")}
                     />
                 ) : (

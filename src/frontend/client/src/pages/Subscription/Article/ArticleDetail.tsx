@@ -17,6 +17,7 @@ import { useToastContext } from "~/Providers";
 import { formatTime } from "~/utils";
 import { useArticleShare } from "../hooks/useArticleShare";
 import { AddToKnowledgeModal } from "./AddToKnowledgeModal";
+import { ArticleAiDock } from "../AiChat/ArticleAiDock";
 import { useAuthContext } from "~/hooks/AuthContext";
 
 interface ArticleDetailProps {
@@ -51,8 +52,11 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
       <head>
         <style>
           html{scrollbar-width: none; background: #fff !important;}
-          body { font-family: sans-serif; line-height: 1.6; color: #333; padding: 20px; scroll-behavior: smooth; background: #fff !important; }
+          body { font-family: sans-serif; line-height: 1.6; color: #333; padding: 20px 0 0; scroll-behavior: smooth; background: #fff !important; }
+          /* Source HTML (e.g. WeChat) wraps content with its own padding; zero it so only the body's 20px remains. */
+          #js_content, .rich_media_area_primary, .rich_media_content { padding: 0 !important; }
           img { max-width: 100%; cursor: zoom-in; }
+          ${screenFull ? '/* Fullscreen: drop the source content wrapper\'s card shadow. */\n          body > * { box-shadow: none !important; }' : ''}
         </style>
       </head>
       <body>
@@ -205,29 +209,25 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
         ? ((user as any).plugins as string[]).includes('knowledge_space')
         : true;
     return (
-        <div className={`flex px-4 py-5 flex-col h-full  ${screenFull ? '' : 'border-l border-gray-100'}`}>
+        <div className="flex px-4 pt-5 flex-col h-full">
             {/* Top Toolbar */}
             <div className="border-b border-black pb-4">
-                <div className="flex items-start justify-between">
-                    <div className="flex min-w-0 flex-1 items-start gap-2">
-                        {isNarrowShell && onBack ? (
-                            <button
-                                type="button"
-                                onClick={onBack}
-                                aria-label={localize("com_ui_go_back")}
-                                className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] text-[#4E5969] hover:bg-[#F7F8FA]"
-                            >
-                                <ArrowLeft className="size-4" />
-                            </button>
-                        ) : null}
-                        <h2 className={`font-semibold leading-relaxed flex-1 ${aiAssistantOpen ? 'pl-10' : ''}`}
-                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}>
-                            {article.title}
-                        </h2>
+                {/* Mobile-only back button; the article title is intentionally hidden here
+                    (it already appears inside the article content). */}
+                {isNarrowShell && onBack ? (
+                    <div className="flex items-start">
+                        <button
+                            type="button"
+                            onClick={onBack}
+                            aria-label={localize("com_ui_go_back")}
+                            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-[#EBECF0] text-[#4E5969] hover:bg-[#F7F8FA]"
+                        >
+                            <ArrowLeft className="size-4" />
+                        </button>
                     </div>
-                </div>
+                ) : null}
 
-                <div className="flex items-center justify-between pt-2">
+                <div className="flex items-center justify-between">
                     <div className="w-full h-6 flex items-center gap-4">
                         <button
                             onClick={() => window.open(article.url)}
@@ -267,7 +267,9 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                 <span className="text-[#e5e6eb] mx-2">|</span>
                                 <span className="text-[#999]">{formatTime(article.publishedAt || '', true)}</span>
                             </div>}
-                            {!aiAssistantOpen && <button
+                            {/* Mobile keeps the toolbar AI button (opens the full-screen overlay);
+                                PC uses the bottom AI dock instead. */}
+                            {isNarrowShell && !aiAssistantOpen && <button
                                 className="ai-btn-border-draw flex items-center gap-1 text-xs transition-colors px-1.5 h-6 rounded-[6px]"
                                 onClick={() => onAiAssistant?.()}
                             >
@@ -298,11 +300,15 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                 {showBackTop && (
                     <button
                         onClick={handleBackToTop}
-                        className="absolute bottom-8 right-8 size-10 bg-white shadow-lg border border-[#e5e6eb] rounded-full flex items-center justify-center text-[#4e5969] hover:text-primary transition-all animate-in fade-in slide-in-from-bottom-4"
+                        className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-[#e5e6eb] rounded-full flex items-center justify-center text-[#4e5969] hover:text-primary transition-all animate-in fade-in slide-in-from-bottom-4"
                     >
                         <ArrowUp className="size-5" />
                     </button>
                 )}
+
+                {/* PC-only AI dock (self-contained component): collapsed input bar that slides
+                    up into the chat panel. Mobile keeps the toolbar button + full-screen overlay. */}
+                {!isNarrowShell && <ArticleAiDock articleDocId={article.id} />}
             </div>
 
             {/* 3. Image Preview Overlay */}

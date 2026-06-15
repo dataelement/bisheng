@@ -324,7 +324,7 @@ export function KnowledgeSpaceMemberDialog({
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                                 placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
-                                className="h-8 w-full rounded-[6px] border border-[#E5E6EB] pl-9 pr-3 text-[14px] text-[#1D2129] placeholder:text-[#999] focus:border-[#165DFF] focus:outline-none"
+                                className="h-8 w-full rounded-[6px] border border-[#E5E6EB] pl-9 pr-3 text-[14px] text-[#1D2129] placeholder:text-[#999] focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
                             />
                         </div>
 

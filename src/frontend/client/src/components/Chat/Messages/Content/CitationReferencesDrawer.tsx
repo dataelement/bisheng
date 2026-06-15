@@ -237,7 +237,6 @@ export default function CitationReferencesDrawer({
   const [documentPreview, setDocumentPreview] = useState<CitationDocumentPreviewState | null>(null);
   const [desktopView, setDesktopView] = useState<CitationDesktopView>('list');
   const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
-  const drawerRef = useRef<HTMLElement>(null);
   const detailCacheRef = useRef<Record<string, ChatCitation>>({});
   const requestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const batchRequestKeyRef = useRef<string>('');
@@ -424,25 +423,6 @@ export default function CitationReferencesDrawer({
     if (!isDesktopInlinePanel) return;
     onDesktopViewChange?.(desktopView);
   }, [desktopView, isDesktopInlinePanel, onDesktopViewChange]);
-
-  useEffect(() => {
-    if (!isOpen || panelOnly || isFullBleedMobile || isDesktopInlinePanel) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target || drawerRef.current?.contains(target)) return;
-      if (target.closest('[data-citation-references-trigger="true"]')) return;
-      if (target.closest('[data-citation-trigger="true"]')) return;
-      setDesktopView('list');
-      setDocumentPreview(null);
-      setInternalOpen(false);
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-    };
-  }, [isDesktopInlinePanel, isFullBleedMobile, isOpen, panelOnly]);
 
   useEffect(() => {
     if (!isDesktopInlinePanel || !isOpen) {
@@ -779,7 +759,6 @@ export default function CitationReferencesDrawer({
             </aside>
           ) : (
             <aside
-              ref={drawerRef}
               className={cn(
                 'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
                 'rounded-tl-xl',

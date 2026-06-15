@@ -1,23 +1,6 @@
-import {
-    LayoutGrid,
-    List,
-    Upload,
-    FolderPlus,
-    FolderUp,
-    ChevronDown,
-    ChevronLeft,
-    CircleQuestionMark,
-    Info,
-    FunnelIcon,
-    Download,
-    Tag,
-    RotateCcw,
-    Trash2,
-    FolderInput,
-    FileSearch
-} from "lucide-react";
+import { FolderPlus } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
-import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import {
@@ -29,17 +12,11 @@ import {
     DropdownMenuCheckboxItem
 } from "~/components/ui/DropdownMenu";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { AiChatIcon } from "~/components/icons";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
-import { SingleIconButtonSortGlyph } from "~/components/icons/channels";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
-import { Fragment, useLayoutEffect, useRef, useState } from "react";
-import { ChannelBlocksArrowsIcon } from "~/components/icons/channels";
-
-/** 工具栏实际宽度小于此值时：搜索独占一行，第二行为视图/筛选（左）与新增/批量（右）。阈值偏大以免中等宽度仍挤在一行。 */
-const TOOLBAR_COMPACT_MAX_WIDTH = 1040;
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -57,7 +34,6 @@ interface KnowledgeSpaceHeaderProps {
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
-    onTriggerUploadFolder: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
     /** Localized comma-joined list of supported upload formats for the upload-button tooltip. */
@@ -72,21 +48,11 @@ interface KnowledgeSpaceHeaderProps {
     canBatchDownload?: boolean;
     onBatchTag: () => void;
     onBatchRetry: () => void;
-    onBatchMove?: () => void;
-    canBatchMove?: boolean;
     onBatchDelete: () => void;
     canBatchDelete?: boolean;
     onGoKnowledgeSquare?: () => void;
-    onToggleAiAssistant?: () => void;
-    isAiAssistantOpen?: boolean;
     enableCardMode?: boolean;
     canShareSpace?: boolean;
-    // Version management
-    versionManagementEnabled?: boolean;
-    pendingSimilarCount?: number;
-    onProcessSimilar?: () => void;
-    /** Mirrors member-management gating: creators + members with manage_space_relation. */
-    canManageMembers?: boolean;
 }
 
 export function KnowledgeSpaceHeader({
@@ -105,7 +71,6 @@ export function KnowledgeSpaceHeader({
     onSort,
     onCreateFolder,
     onTriggerUpload,
-    onTriggerUploadFolder,
     canCreateFolder = false,
     canUploadFile = false,
     supportedFormatsLabel,
@@ -117,86 +82,40 @@ export function KnowledgeSpaceHeader({
     canBatchDownload = false,
     onBatchTag,
     onBatchRetry,
-    onBatchMove,
-    canBatchMove = false,
     onBatchDelete,
     canBatchDelete = false,
     onGoKnowledgeSquare,
-    onToggleAiAssistant,
-    isAiAssistantOpen,
     enableCardMode = true,
     canShareSpace = false,
-    versionManagementEnabled = false,
-    pendingSimilarCount = 0,
-    onProcessSimilar,
-    canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const isNarrow576 = useMediaQuery("(max-width: 576px)");
-    const toolbarMeasureRef = useRef<HTMLDivElement>(null);
-    const [toolbarCompact, setToolbarCompact] = useState(false);
 
-    useLayoutEffect(() => {
-        const el = toolbarMeasureRef.current;
-        if (!el) return;
-        const update = () => {
-            const w = el.getBoundingClientRect().width;
-            setToolbarCompact(w > 0 && w < TOOLBAR_COMPACT_MAX_WIDTH);
-        };
-        update();
-        const ro = new ResizeObserver(() => update());
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, []);
-
-    // System super-admin joins a space as a plain MEMBER, so space.role hides
-    // member-gated UI. The status-filter is read-only, so surface it for
-    // super-admins regardless of their in-space role. (Does NOT widen
-    // create/delete which still keys off `isAdmin` below.)
-    // Bisheng super-admin = /api/v1/user/info role === 'admin' (lowercase),
-    // same check platformAccess.ts uses. NOT SystemRoles.ADMIN ('ADMIN').
-    const { user } = useAuthContext();
-    const isSystemAdmin = user?.role === 'admin';
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
     const showAddMenu = canCreateFolder || canUploadFile;
-    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
     const showViewModeTabs = enableCardMode && !isNarrow576;
+    // Include the view-mode toggle here so the trailing button group still renders for
+    // viewers (no add menu, not admin, no selection) who only have the toggle to show.
+    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold || showViewModeTabs;
+
+    const viewModeToggleButton = showViewModeTabs ? (
+        <Button
+            variant="outline"
+            onClick={() => setViewMode(viewMode === "list" ? "card" : "list")}
+            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-[#818181] hover:bg-[#f7f8fa]"
+        >
+            {viewMode === "list"
+                ? <Outlined.ViewGridCard className="size-4 shrink-0" />
+                : <Outlined.List className="size-4 shrink-0" />}
+        </Button>
+    ) : null;
 
     const viewFilterSortCluster = (
         <div className="flex min-w-0 shrink-0 items-center gap-3">
-            {showViewModeTabs && (
-                <div className="inline-flex h-8 shrink-0 items-stretch rounded-md border border-[#e5e6eb] bg-white p-[3px] text-sm">
-                    <button
-                        type="button"
-                        onClick={() => setViewMode("list")}
-                        className={cn(
-                            "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
-                            viewMode === "list"
-                                ? "bg-[#E6EDFC] text-[#165DFF]"
-                                : "text-[#4e5969] hover:bg-[#f2f3f5]"
-                        )}
-                    >
-                        <List className="size-4 shrink-0" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setViewMode("card")}
-                        className={cn(
-                            "flex min-w-[36px] flex-1 items-center justify-center rounded-[4px] px-2 transition-colors",
-                            viewMode === "card"
-                                ? "bg-[#E6EDFC] text-[#165DFF]"
-                                : "text-[#4e5969] hover:bg-[#f2f3f5]"
-                        )}
-                    >
-                        <LayoutGrid className="size-4 shrink-0" />
-                    </button>
-                </div>
-            )}
-
-            {(space.role !== SpaceRole.MEMBER || isSystemAdmin) && (
+            {space.role !== SpaceRole.MEMBER && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button
@@ -205,10 +124,10 @@ export function KnowledgeSpaceHeader({
                                 "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-[#e5e6eb]",
                                 statusFilter.length > 0
                                     ? "border-[#024DE3] bg-[#E6EDFC] text-[#024DE3] hover:bg-[#E6EDFC]"
-                                    : "bg-white text-gray-700 hover:bg-[#f7f8fa]"
+                                    : "bg-white text-[#818181] hover:bg-[#f7f8fa]"
                             )}
                         >
-                            <FunnelIcon className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-gray-700")} />
+                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-[#024DE3]" : "text-[#818181]")} />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -278,9 +197,9 @@ export function KnowledgeSpaceHeader({
                     <DropdownMenuTrigger asChild>
                         <Button
                             variant="outline"
-                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-gray-700"
+                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-[#818181] hover:bg-[#f7f8fa]"
                         >
-                            <SingleIconButtonSortGlyph className="size-4 shrink-0" aria-hidden />
+                            <Outlined.Sort className="size-4 shrink-0" aria-hidden />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
@@ -305,211 +224,123 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
-            {versionManagementEnabled && canManageMembers && pendingSimilarCount > 0 && onProcessSimilar && (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-md border border-[#F76F44] bg-[#FFF3E8] px-3 font-normal text-[#F76F44] hover:bg-[#FFE6D2] hover:text-[#F76F44]"
-                    onClick={onProcessSimilar}
-                >
-                    <FileSearch className="size-4" />
-                    {localize("com_knowledge.version.header_process_similar_label")}
-                    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded bg-white px-1 text-xs text-[#F76F44]">
-                        {pendingSimilarCount}
-                    </span>
-                </Button>
-            )}
+            {viewModeToggleButton}
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="h-8 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
+                        <Button size="sm" variant="outline" className="h-8 gap-0.5 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
                             {localize("com_knowledge.batch_operation")}
-                            <ChevronDown className="ml-1 size-4" />
+                            <Outlined.Down className="size-4" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                    <ActionMenuContent align="end">
                         {canBatchDownload && (
-                            <DropdownMenuItem onClick={onBatchDownload} className="cursor-pointer">
-                                <Download className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_download")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                onClick={onBatchDownload}
+                                icon={<Outlined.Download />}
+                                label={localize("com_knowledge.batch_download")}
+                            />
                         )}
                         {isAdmin && !hasFoldersSelected && (
-                            <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
-                                <Tag className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_add_tags")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                onClick={onBatchTag}
+                                icon={<Outlined.Tag />}
+                                label={localize("com_knowledge.batch_add_tags")}
+                            />
                         )}
                         {isAdmin && hasFailedFiles && (
-                            <DropdownMenuItem onClick={onBatchRetry} className="cursor-pointer">
-                                <RotateCcw className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_retry")}
-                            </DropdownMenuItem>
-                        )}
-                        {onBatchMove && (
-                            <DropdownMenuItem onClick={onBatchMove} className="cursor-pointer">
-                                <FolderInput className="mr-2 size-4" />
-                                {localize("com_knowledge.move")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                onClick={onBatchRetry}
+                                icon={<Outlined.Refresh />}
+                                label={localize("com_knowledge.batch_retry")}
+                            />
                         )}
                         {canBatchDelete && (
-                            <DropdownMenuItem onClick={onBatchDelete} className="cursor-pointer text-[#f53f3f] focus:text-[#f53f3f]">
-                                <Trash2 className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_delete")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                danger
+                                onClick={onBatchDelete}
+                                icon={<Outlined.Delete />}
+                                label={localize("com_knowledge.batch_delete")}
+                            />
                         )}
-                    </DropdownMenuContent>
+                    </ActionMenuContent>
                 </DropdownMenu>
             )}
             {showAddMenu && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button size="sm" className="h-8 rounded-md px-4 font-normal" disabled={isSearching}>
+                canUploadFile ? (
+                    // Split button per design 11495:14337: left half = direct upload, right half = dropdown
+                    // (only "新建文件夹"). When canCreateFolder is false the chevron half is omitted and the
+                    // shell becomes a single-action button.
+                    <div className="inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-md border border-[#ebebeb] bg-white">
+                        <button
+                            type="button"
+                            disabled={isSearching}
+                            onClick={onTriggerUpload}
+                            className={cn(
+                                "inline-flex items-center justify-center px-4 text-sm text-[#212121] transition-colors",
+                                "hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent",
+                                canCreateFolder && "border-r border-[#ebebeb]"
+                            )}
+                        >
                             {localize("com_knowledge.add_new")}
-                            <ChevronDown className="ml-1 size-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
+                        </button>
                         {canCreateFolder && (
-                            <DropdownMenuItem onClick={onCreateFolder} className="cursor-pointer">
-                                <FolderPlus className="mr-2 size-4" />
-                                {localize("com_knowledge.new_folder")}
-                            </DropdownMenuItem>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        type="button"
+                                        disabled={isSearching}
+                                        aria-label={localize("com_knowledge.add_new")}
+                                        className="inline-flex items-center justify-center px-2 text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
+                                    >
+                                        <Outlined.Down className="size-4" />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <ActionMenuContent align="end">
+                                    <ActionMenuItem
+                                        onClick={onCreateFolder}
+                                        icon={<FolderPlus />}
+                                        label={localize("com_knowledge.new_folder")}
+                                    />
+                                </ActionMenuContent>
+                            </DropdownMenu>
                         )}
-                        {canUploadFile && (
-                            <DropdownMenuItem onClick={onTriggerUpload} className="cursor-pointer">
-                                <Upload className="mr-2 size-4" />
-                                <span className="flex-1">{localize("com_knowledge.upload_file")}</span>
-                                {supportedFormatsLabel && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <span
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                                                onPointerDown={(e) => e.stopPropagation()}
-                                                className="ml-2 inline-flex items-center text-[#86909C] hover:text-[#4E5969]"
-                                                aria-label={localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
-                                            >
-                                                <CircleQuestionMark className="size-3.5" />
-                                            </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[320px] z-[260] bg-[rgba(23,23,23,0.85)]">
-                                            {localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
-                            </DropdownMenuItem>
-                        )}
-                        {canUploadFile && (
-                            <DropdownMenuItem onClick={onTriggerUploadFolder} className="cursor-pointer">
-                                <FolderUp className="mr-2 size-4" />
-                                <span className="flex-1">{localize("com_knowledge.upload_folder")}</span>
-                                {supportedFormatsLabel && (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <span
-                                                role="button"
-                                                tabIndex={0}
-                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                                                onPointerDown={(e) => e.stopPropagation()}
-                                                className="ml-2 inline-flex items-center text-[#86909C] hover:text-[#4E5969]"
-                                                aria-label={localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
-                                            >
-                                                <CircleQuestionMark className="size-3.5" />
-                                            </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent side="top" className="max-w-[320px] z-[260] bg-[rgba(23,23,23,0.85)]">
-                                            {localize("com_knowledge.supported_formats_tip", { formats: supportedFormatsLabel })}
-                                        </TooltipContent>
-                                    </Tooltip>
-                                )}
-                            </DropdownMenuItem>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    </div>
+                ) : (
+                    // Fallback when the user can only create folders: keep the original dropdown shape
+                    // so the single available action is still discoverable.
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                disabled={isSearching}
+                                className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
+                            >
+                                {localize("com_knowledge.add_new")}
+                                <Outlined.Down className="size-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <ActionMenuContent align="end">
+                            <ActionMenuItem
+                                onClick={onCreateFolder}
+                                icon={<FolderPlus />}
+                                label={localize("com_knowledge.new_folder")}
+                            />
+                        </ActionMenuContent>
+                    </DropdownMenu>
+                )
             )}
         </div>
     );
 
-    const searchFieldClassName = toolbarCompact
-        ? "relative min-w-0 w-full"
-        : cn(
-            "relative min-w-0 w-full transition-[width,max-width,flex-grow] duration-200 ease-out",
-            "sm:flex-none sm:w-[450px] sm:max-w-[450px] sm:shrink-0",
-            // Driven by CompoundSearchInput's data-expanded attribute (input focus
-            // OR scope DropdownMenu open) — survives Radix portal moving focus
-            // outside the search field.
-            "sm:has-[[data-expanded=true]]:flex-1 sm:has-[[data-expanded=true]]:w-auto sm:has-[[data-expanded=true]]:max-w-none sm:has-[[data-expanded=true]]:min-w-0"
-        );
-
     return (
-        <>
-        <div className="space-y-4 pt-5 pb-4 max-[767px]:space-y-3 max-[767px]:pt-4 max-[767px]:pb-3">
-            <div className="hidden max-[767px]:flex items-end gap-3 min-h-8">
-                {currentPath.length === 0 ? (
-                    <>
-                        <h1 className="text-[24px] font-semibold leading-8 text-[#335CFF]">
-                            {localize("com_knowledge.knowledge_space")}
-                        </h1>
-                        {onGoKnowledgeSquare ? (
-                            <button
-                                type="button"
-                                onClick={onGoKnowledgeSquare}
-                                className="inline-flex items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[#212121] hover:bg-[#F7F8FA]"
-                            >
-                                <ChannelBlocksArrowsIcon className="size-4 text-[#86909C]" />
-                                <span className="text-[12px] leading-5 font-normal text-[#212121]">
-                                    前往知识广场
-                                </span>
-                            </button>
-                        ) : null}
-                    </>
-                ) : (
-                    // Keep header block height stable between root and folder levels on mobile.
-                    <div aria-hidden className="h-8" />
-                )}
-            </div>
+        <div className="flex min-h-8 items-center justify-between gap-3 pt-5 pb-4 max-[767px]:gap-2 max-[767px]:pt-4 max-[767px]:pb-3">
 
-            {/* 面包屑 / 当前空间标题 */}
-            <div className="flex min-h-8 items-center justify-between gap-3">
-                <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
-                    {currentPath.length === 0 ? (
-                        <div className="flex min-w-0 flex-1 items-center gap-1">
-                            <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
-                                {space.name}
-                            </h1>
-                            {space.spaceKind === "department" && (
-                                <span className="inline-flex shrink-0 items-center rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-600">
-                                    {localize("com_knowledge.department_badge")}
-                                </span>
-                            )}
-                            <Tooltip>
-                                <TooltipTrigger className="shrink-0 cursor-pointer">
-                                    <Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
-                                </TooltipTrigger>
-                                <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
-                                    <div className="space-y-1.5 text-gray-800 text-sm">
-                                        <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
-                                            <p>{space.description || "-"}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_knowledge.creator_label")}</span>
-                                            <p>{space.creator}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_knowledge.joined_count_label")}</span>
-                                            <p>{space.memberCount || 0}</p>
-                                        </div>
-                                        <div><span className="text-gray-400">{localize("com_knowledge.total_files_label")}</span>
-                                            <p>{space.totalFileCount || 0}</p>
-                                        </div>
-                                    </div>
-                                </TooltipContent>
-                            </Tooltip>
-                        </div>
-                    ) : (
-                        <>
-                            {/* 移动端（<768px）：返回上一级 + 当前文件夹名 */}
-                            <div className="flex min-w-0 items-center gap-2 text-[#1d2129] md:hidden">
+                    {/* 左侧：根目录显示空间标题 + 信息 + 分享；进入文件夹后显示返回按钮 + 分隔线 + 当前文件夹名（设计稿 11772:70584） */}
+                    <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+                        {currentPath.length > 0 ? (
+                            <>
+                                {/* 返回按钮 + 分隔线先隐藏，后续可能恢复（设计稿 11772:70584）
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -517,107 +348,68 @@ export function KnowledgeSpaceHeader({
                                         onNavigateFolder(parent?.id);
                                     }}
                                     aria-label={localize("com_ui_go_back")}
-                                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA]"
+                                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-[#4e5969] transition-colors hover:bg-[#f7f8fa]"
                                 >
-                                    <ChevronLeft className="size-4" />
+                                    <Outlined.ArrowLeft className="size-4" />
                                 </button>
-                                <span className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                <div className="mx-1 h-4 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
+                                */}
+                                <h1 className="min-w-0 truncate text-base font-medium text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {currentPath[currentPath.length - 1]?.name || space.name}
-                                </span>
-                            </div>
-                            {/* PC 端：完整文件路径（空间名 / 文件夹…）。「返回上一级」按钮已移除——面包屑本身可点击导航 */}
-                            <div className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm text-[#1d2129] md:flex">
-                                <button
-                                    type="button"
-                                    onClick={() => onNavigateFolder(undefined)}
-                                    className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
-                                >
+                                </h1>
+                            </>
+                        ) : (
+                            <div className="flex min-w-0 flex-1 items-center gap-1">
+                                <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {space.name}
-                                </button>
-                                {currentPath.map((seg, idx) => (
-                                    <Fragment key={seg.id ?? `path-${idx}`}>
-                                        <span className="shrink-0 text-[#86909c]" aria-hidden>
-                                            /
-                                        </span>
-                                        {idx === currentPath.length - 1 ? (
-                                            <span className="min-w-0 truncate text-base font-medium text-[#1d2129]">
-                                                {seg.name}
-                                            </span>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => onNavigateFolder(seg.id)}
-                                                className="max-w-[min(40%,12rem)] shrink-0 truncate text-left text-base text-[#1d2129] hover:text-[#165dff] hover:underline"
-                                            >
-                                                {seg.name}
-                                            </button>
-                                        )}
-                                    </Fragment>
-                                ))}
+                                </h1>
+                                <Tooltip>
+                                    <TooltipTrigger className="shrink-0 cursor-pointer">
+                                        <Outlined.Info className="size-4 text-[#86909c] outline-none hover:text-[#165dff]" />
+                                    </TooltipTrigger>
+                                    <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
+                                        <div className="space-y-1.5 text-gray-800 text-sm">
+                                            <div><span className="text-gray-400">{localize("com_knowledge.space_desc_label")}</span>
+                                                <p>{space.description || "-"}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_knowledge.creator_label")}</span>
+                                                <p>{space.creator}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_knowledge.joined_count_label")}</span>
+                                                <p>{space.memberCount || 0}</p>
+                                            </div>
+                                            <div><span className="text-gray-400">{localize("com_knowledge.total_files_label")}</span>
+                                                <p>{space.totalFileCount || 0}</p>
+                                            </div>
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
+                                {showShare && (
+                                    <CopyShareLinkButton
+                                        iconOnly
+                                        sharePath={`/knowledge/share/${space.id}`}
+                                        successMessage={localize("com_knowledge.share_link_copied")}
+                                        errorMessage={localize("com_knowledge.copy_failed_retry")}
+                                        className="ml-1 size-7 border-0"
+                                        icon={<Outlined.Share className="size-4 text-[#4e5969]" />}
+                                        aria-label={localize("com_knowledge.share")}
+                                    />
+                                )}
                             </div>
-                        </>
-                    )}
-                </div>
-
-                {/* 右侧：AI助手和分享 */}
-                <div className="flex shrink-0 items-center gap-3">
-                    <Button
-                        variant="ghost"
-                        className="ai-btn-border-draw h-8 gap-1 rounded-[6px] px-3 font-normal hover:bg-transparent"
-                        disabled={isSearching}
-                        onClick={onToggleAiAssistant}
-                    >
-                        <span className="ai-btn-shimmer-overlay" />
-                        <AiChatIcon className="size-4" stroke={isSearching ? "#c9cdd4" : "#335cff"} />
-                        <span className={isSearching ? '' : 'text-[#000D4D]'}>{localize("com_knowledge.ai_assistant")}</span>
-                    </Button>
-
-                    {showShare && (
-                        <CopyShareLinkButton
-                            sharePath={`/knowledge/share/${space.id}`}
-                            label={localize("com_knowledge.share")}
-                            successMessage={localize("com_knowledge.share_link_copied")}
-                            errorMessage={localize("com_knowledge.copy_failed_retry")}
-                        />
-                    )}
-                </div>
-            </div>
-
-            {/* Toolbar：宽屏一行（搜索 + 视图/筛选 + 右侧操作）；窄内容区（宽度小于 TOOLBAR_COMPACT_MAX_WIDTH）两行：仅搜索，其次为视图/筛选与新增/批量 */}
-            <div ref={toolbarMeasureRef} className="w-full min-w-0">
-                {toolbarCompact ? (
-                    <div className="flex flex-col gap-3">
-                        <div className={searchFieldClassName}>
-                            <CompoundSearchInput
-                                spaceId={space.id}
-                                isRoot={currentPath.length === 0}
-                                onSearch={onSearch}
-                            />
-                        </div>
-                        <div className="max-[767px]:-mx-4 max-[767px]:sticky max-[767px]:top-0 max-[767px]:z-20 max-[767px]:bg-white max-[767px]:px-4 max-[767px]:py-2">
-                            <div className="flex min-w-0 items-center justify-between gap-2">
-                                {viewFilterSortCluster}
-                                {batchAndAddActions}
-                            </div>
-                        </div>
+                        )}
                     </div>
-                ) : (
-                    <div className="flex min-w-0 items-center justify-between gap-3">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                            <div className={searchFieldClassName}>
-                                <CompoundSearchInput
-                                    spaceId={space.id}
-                                    isRoot={currentPath.length === 0}
-                                    onSearch={onSearch}
-                                />
-                            </div>
-                            {viewFilterSortCluster}
-                        </div>
+
+                    {/* 右侧：搜索（收起为图标，点击展开）+ 视图/筛选/排序 + 批量/新增，单行排列 */}
+                    <div className="flex shrink-0 items-center gap-3">
+                        <CompoundSearchInput
+                            collapsible
+                            spaceId={space.id}
+                            isRoot={currentPath.length === 0}
+                            onSearch={onSearch}
+                        />
+                        {viewFilterSortCluster}
                         {batchAndAddActions}
                     </div>
-                )}
-            </div>
         </div>
-        </>
     );
 }

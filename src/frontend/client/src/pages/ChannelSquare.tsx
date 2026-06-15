@@ -285,7 +285,7 @@ function ChannelSquare({
                 // 回车触发，当前为实时搜索，保留该交互语义
               }
             }}
-            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#165DFF]"
+            className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
           />
         </div>
         <div className="max-w-[1032px] mx-auto px-4 pb-4 pt-0">

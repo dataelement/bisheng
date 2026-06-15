@@ -413,7 +413,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             />
                           </div>
                         ) : (
-                        <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-3">
+                        <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             isStreaming={isStreaming}
@@ -452,7 +452,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                      block stays in roughly the same screen position whether
                      apps are absent or fill multiple rows. Apps follow
                      directly after the input with only their own mt-4 gap. */
-                  <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[20vh]">
+                  <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[8vh]">
                     <div className="shrink-0">
                       {/* F035 Track H (P5): daily/task mode switch removed —
                           task mode is reached via the sidebar "new task" entry
@@ -462,7 +462,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                     {/* Input area for landing page */}
                     {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:mt-10 touch-mobile:max-w-full shrink-0 py-3">
+                      <div className="w-full max-w-[800px] mx-auto px-3 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full shrink-0 pb-3">
                         <AiChatInput
                           disabled={!bsConfig?.models?.length || !!shareToken}
                           isStreaming={isStreaming}

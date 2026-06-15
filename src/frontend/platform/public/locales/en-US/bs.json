@@ -1818,6 +1818,7 @@
     "10611": "You have no page access. Please contact your administrator.",
     "10620": "This account cannot be used. Please contact your administrator.",
     "10621": "Account disabled due to too many failed login attempts",
+    "10622": "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
     "10630": "User group cannot be empty",
     "10640": "Cannot modify admin account",
     "10700": "Tag already exists",

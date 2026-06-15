@@ -179,9 +179,9 @@ export default function Conversation({
   return (
     <div
       className={cn(
-        "group relative w-full content-stretch flex gap-[8px] items-center mb-[4px] px-3 py-[8px] rounded-lg shrink-0 transition-colors select-none",
-        isActiveConvo ? "bg-[#E6EDFC]" : "hover:bg-[#F5F5F5]",
-        renaming ? "bg-[#E6EDFC]" : "",
+        "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors",
+        isActiveConvo ? "bg-[#EEE]" : "hover:bg-[#f7f7f7]",
+        renaming ? "bg-[#EEE]" : "",
         isSmallScreen ? "py-[8px]" : ""
       )}
     >

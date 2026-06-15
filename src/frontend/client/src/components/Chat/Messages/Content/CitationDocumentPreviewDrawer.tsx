@@ -1,5 +1,5 @@
 import { Download, FileText, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSetRecoilState } from 'recoil';
 import type { ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -146,7 +146,6 @@ export default function CitationDocumentPreviewDrawer({
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
   const isFullBleedMobile = isPhoneViewport;
   const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
-  const drawerRef = useRef<HTMLElement>(null);
   const detail = preview?.detail ?? null;
   const fileName = getCitationDocumentName(detail);
   const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(() => getCitationDocumentUrl(detail));
@@ -241,12 +240,11 @@ export default function CitationDocumentPreviewDrawer({
 
   const drawer = (
     <aside
-      ref={drawerRef}
       className={cn(
         'fixed flex flex-col bg-white',
         isFullBleedMobile && 'z-[120] inset-0 overflow-hidden overscroll-contain touch-pan-y',
         !isFullBleedMobile &&
-        'z-[121] inset-y-0 right-0 w-[min(640px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
+        'z-[121] inset-y-0 right-0 w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]',
       )}
       aria-label="文档预览"
       onClick={(event) => event.stopPropagation()}

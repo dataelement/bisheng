@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import NavToggle from "~/components/Nav/NavToggle";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
@@ -11,6 +12,11 @@ import { cn } from "~/utils";
 interface ChannelLayoutProps {
     channel: Channel;
     onFullScreen?: (article: Article, aiAssistant?: boolean) => void;
+    /** PC：顶部标题下拉切换频道 */
+    onChannelSelect?: (channel: Channel | null) => void;
+    /** PC：下拉内频道项管理操作 */
+    onManageMembers?: (channel: Channel) => void;
+    onChannelSettings?: (channel: Channel) => void;
     /** H5：打开左侧「我的频道」抽屉（由订阅页挂载） */
     onOpenChannelNav?: () => void;
     onGoChannelSquare?: () => void;
@@ -23,12 +29,16 @@ const MIN_RIGHT_WIDTH = 480;
 export function ChannelLayout({
     channel,
     onFullScreen,
+    onChannelSelect,
+    onManageMembers,
+    onChannelSettings,
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
 }: ChannelLayoutProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
+    const navigate = useNavigate();
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
     /** H5：AI 助手全屏叠在文章详情上，返回时回到正文（不与正文左右分屏） */
@@ -49,6 +59,14 @@ export function ChannelLayout({
         if (!article) {
             setSelectedArticle(null);
             setH5AiAssistantOpen(false);
+            return;
+        }
+
+        // H5: navigate to the standalone article page in the SAME tab so the user can use the
+        // browser back button to return to the channel; ArticlePage takes care of setting
+        // document.title to the article title and restoring it on unmount.
+        if (isH5) {
+            navigate(`/channel/${article.channelId}/article/${article.id}`);
             return;
         }
 
@@ -104,6 +122,9 @@ export function ChannelLayout({
                     channel={channel}
                     onArticleSelect={handleArticleSelect}
                     selectedArticleId={selectedArticle?.id}
+                    onChannelSelect={onChannelSelect}
+                    onManageMembers={onManageMembers}
+                    onChannelSettings={onChannelSettings}
                     onOpenChannelNav={onOpenChannelNav}
                     onGoChannelSquare={onGoChannelSquare}
                     onCreateChannel={onCreateChannel}
@@ -117,7 +138,7 @@ export function ChannelLayout({
                         onMouseDown={startResizing}
                         className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
                     >
-                        <div className="pointer-events-none w-px self-stretch bg-[#f2f3f5] transition-[width,background-color] duration-150 group-hover:w-1 group-hover:bg-primary group-active:w-1 group-active:bg-primary" />
+                        <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-[2px] group-hover:bg-[#999999] group-active:w-[2px] group-active:bg-[#999999]" />
                     </div>
                 </div>
             )}

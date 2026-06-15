@@ -1,7 +1,6 @@
 import type { AppItem } from '~/@types/app';
 import { Button } from '~/components';
 import AppAvator from '~/components/Avator';
-import { ChannelPinGrayIcon, ChannelPinIcon, ChannelUnpinGrayIcon } from '~/components/icons/channels';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +10,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize, useMediaQuery } from '~/hooks';
 import { cn } from '~/utils';
+import { Outlined } from 'bisheng-icons';
 import { MoreVertical } from 'lucide-react';
 
 interface AgentCardProps {
@@ -63,10 +63,10 @@ export function AgentCard({
           >
             {isPinned ? (
               <span
-                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#86909C]"
+                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#5773B4]"
                 aria-label={localize('com_app_unpin_tooltip')}
               >
-                <ChannelPinIcon className="size-[16px] shrink-0" />
+                <Outlined.Pin size={16} className="shrink-0" />
               </span>
             ) : null}
             <DropdownMenu>
@@ -127,11 +127,17 @@ export function AgentCard({
                 >
                   {isPinned ? (
                     <span className="relative inline-flex size-[18px] items-center justify-center">
-                      <ChannelPinIcon className="absolute size-[18px] shrink-0 transition-opacity fine-pointer:group-hover/pin:opacity-0" />
-                      <ChannelUnpinGrayIcon className="pointer-events-none absolute size-[18px] opacity-0 transition-opacity fine-pointer:group-hover/pin:opacity-100" />
+                      <Outlined.Pin
+                        size={18}
+                        className="absolute shrink-0 text-[#5773B4] transition-opacity fine-pointer:group-hover/pin:opacity-0"
+                      />
+                      <Outlined.PinOff
+                        size={18}
+                        className="pointer-events-none absolute text-[#4E5969] opacity-0 transition-opacity fine-pointer:group-hover/pin:opacity-100"
+                      />
                     </span>
                   ) : (
-                    <ChannelPinGrayIcon className="size-[18px] shrink-0" />
+                    <Outlined.Pin size={18} className="shrink-0 text-[#4E5969]" />
                   )}
                 </button>
               </TooltipTrigger>

@@ -128,11 +128,12 @@ export function SideNav() {
                 <button
                     type="button"
                     onClick={handleGoBack}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#ebecf0] bg-white text-[#212121] transition-colors fine-pointer:hover:bg-[#f7f8fa]"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-[#212121] transition-colors fine-pointer:hover:bg-[#f7f8fa]"
                     aria-label={localize('com_ui_go_back')}
                 >
                     <ChevronLeft size={16} className="shrink-0" />
                 </button>
+                <span aria-hidden="true" className="h-4 w-px shrink-0 bg-[#ebecf0]" />
                 <span className="min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#212121]">
                     {localize('com_app_chat_sidebar_title')}
                 </span>

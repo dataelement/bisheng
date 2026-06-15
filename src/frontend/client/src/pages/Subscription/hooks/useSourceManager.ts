@@ -106,9 +106,9 @@ export function useSourceManager(
     const isSearchMode = searchKeyword.trim().length > 0;
     const workingSources = expanded ? pendingSources : sources;
     const selectedIds = new Set(workingSources.map((s) => s.id));
-    // Source count is no longer hard-capped on the front end. 50 stays as a default
-    // reference shown in the UI, but the real ceiling is the backend / external
-    // API-key quota, which rejects over-quota subscriptions (errcode 19007) on save.
+    // Source count is no longer hard-capped on the front end. The real ceiling is
+    // the backend / external API-key quota, which rejects over-quota subscriptions
+    // (errcode 19007) on save; the number shown in the UI is just a default reference.
     const canSelectMore = true;
     const isAtLimit = false;
 
@@ -140,7 +140,7 @@ export function useSourceManager(
     // Load source list from API
     useEffect(() => {
         if (!expanded) return;
-        if (searchKeyword.trim()) return; 
+        if (searchKeyword.trim()) return;
         const load = async (business_type: ChannelBusinessType) => {
             setLoadingSources(true);
             try {

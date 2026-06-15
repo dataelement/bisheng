@@ -677,6 +677,53 @@ class ChannelService:
         # Ensure no negative count just in case
         return max(0, total_count - matching_read_count)
 
+    async def _calculate_sub_channel_unread_counts(
+        self, channel: Channel, all_read_ids: List[str]
+    ) -> Dict[str, int]:
+        """Unread count per sub-channel: total − read for (main rules AND that sub's rules).
+
+        Mirrors _calculate_unread_count but combines the main filter rules with each
+        sub-channel's rules (same AND semantics the article search uses)."""
+        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
+
+        # Distinct sub-channel names defined on this channel.
+        sub_names: List[str] = []
+        for fr in (channel.filter_rules or []):
+            if isinstance(fr, dict) and fr.get("channel_type") == "sub":
+                name = fr.get("name")
+                if name and name not in sub_names:
+                    sub_names.append(name)
+
+        async def unread_for(name: str) -> int:
+            sub_rule_groups = self._extract_filter_rule_groups(
+                channel, channel_type="sub", sub_channel_name=name
+            )
+            effective_rule_groups = [*main_rule_groups, *sub_rule_groups]
+            total_count = await self.article_es_service.count_articles(
+                source_ids=channel.source_list,
+                filter_rules=effective_rule_groups if effective_rule_groups else None,
+            )
+            if total_count == 0:
+                return 0
+            if not all_read_ids:
+                return total_count
+            chunk_size = 1000
+            tasks = [
+                self.article_es_service.count_articles(
+                    source_ids=channel.source_list,
+                    filter_rules=effective_rule_groups if effective_rule_groups else None,
+                    include_article_ids=all_read_ids[i:i + chunk_size],
+                )
+                for i in range(0, len(all_read_ids), chunk_size)
+            ]
+            matching_read_count = sum(await asyncio.gather(*tasks)) if tasks else 0
+            return max(0, total_count - matching_read_count)
+
+        if not sub_names:
+            return {}
+        counts = await asyncio.gather(*[unread_for(n) for n in sub_names])
+        return {name: count for name, count in zip(sub_names, counts)}
+
     @staticmethod
     def _sort_channels(items: list[ChannelItemResponse], sort_by: SortByEnum) -> list[ChannelItemResponse]:
         """
@@ -1604,6 +1651,12 @@ class ChannelService:
             filter_rules=main_rule_groups if main_rule_groups else None,
         )
 
+        # 5b. Per-sub-channel unread counts (sub-channel name → unread) for this user.
+        all_read_ids = []
+        if self.article_read_repository:
+            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
+        sub_channel_unread_counts = await self._calculate_sub_channel_unread_counts(channel, all_read_ids)
+
         # Complete info source list
         source_infos = []
         if channel.source_list:
@@ -1653,6 +1706,7 @@ class ChannelService:
             creator_name=creator_name,
             subscriber_count=subscriber_count,
             article_count=article_count,
+            sub_channel_unread_counts=sub_channel_unread_counts,
             subscription_status=subscription_status,
             relation=relation,
             permission_ids=_sorted_channel_permission_ids(permission_ids),

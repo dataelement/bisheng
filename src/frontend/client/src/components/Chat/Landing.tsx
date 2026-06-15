@@ -41,9 +41,9 @@ export default function Landing({ Header, isNew }: {
         </div>
 
         {/* Conversation starters */}
-        <div className="mt-6 touch-mobile:mt-5 w-full max-w-2xl flex flex-wrap justify-center gap-2 touch-mobile:gap-2 touch-mobile:px-0">
-          {conversation_starters.length > 0 &&
-            conversation_starters
+        {conversation_starters.length > 0 && (
+          <div className="mt-6 touch-mobile:mt-5 w-full max-w-2xl flex flex-wrap justify-center gap-2 touch-mobile:gap-2 touch-mobile:px-0">
+            {conversation_starters
               .slice(0, Constants.MAX_CONVO_STARTERS)
               .map((text: string, index: number) => (
                 <ConvoStarter
@@ -55,7 +55,8 @@ export default function Landing({ Header, isNew }: {
                   }}
                 />
               ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

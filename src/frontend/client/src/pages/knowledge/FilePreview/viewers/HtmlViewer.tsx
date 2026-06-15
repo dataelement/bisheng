@@ -51,7 +51,7 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
     const scale = zoomLevel / 100;
 
     return (
-        <div className="flex-1 overflow-auto bg-[#fbfbfb]">
+        <div className="scrollbar-os flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="w-full h-full">
                 <iframe
                     srcDoc={htmlContent || ""}

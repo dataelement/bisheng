@@ -92,8 +92,8 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
     <div
       className={cn(
         'group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors cursor-pointer',
-        isActive ? 'bg-[#e6edfc]' : 'hover:bg-[#f7f7f7]',
-        renaming ? 'bg-[#e6edfc]' : '',
+        isActive ? 'bg-[#EEE]' : 'hover:bg-[#f7f7f7]',
+        renaming ? 'bg-[#EEE]' : '',
       )}
       onClick={(e) => {
         if (renaming || isPopoverActive || showDeleteDialog) return;

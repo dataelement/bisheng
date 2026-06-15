@@ -5,7 +5,7 @@
  * "正在深度思考（已用 N 秒）..." while still open. Collapsing the wrapper
  * hides everything inside, including any inner ThinkingContent state.
  */
-import { ChevronDown } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import {
     memo,
     useCallback,
@@ -21,8 +21,8 @@ import ThinkingContent from "./ThinkingContent";
 import ToolCallDisplay from "./ToolCallDisplay";
 
 const BUTTON_STYLES = {
-    base: "group flex w-fit items-center justify-center py-2 text-sm leading-[18px] font-medium",
-    icon: "icon-sm ml-1.5 transform-gpu text-text-primary transition-transform duration-200",
+    base: "group flex w-fit items-center gap-1 text-sm font-medium leading-[22px] text-[#212121]",
+    icon: "shrink-0 transform-gpu text-[#999999] transition-transform duration-200",
 } as const;
 
 export interface DeepThinkingGroupProps {
@@ -144,14 +144,15 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
         );
 
         return (
-            <div className="flex w-full min-w-0 flex-col gap-2">
+            <div className="flex w-full min-w-0 flex-col gap-3">
                 <button
                     type="button"
                     onClick={handleClick}
                     className={cn(BUTTON_STYLES.base, isStreaming && "animate-pulse")}
                 >
                     <span>{label}</span>
-                    <ChevronDown
+                    <Outlined.Down
+                        size={16}
                         className={cn(BUTTON_STYLES.icon, isExpanded && "rotate-180")}
                     />
                 </button>

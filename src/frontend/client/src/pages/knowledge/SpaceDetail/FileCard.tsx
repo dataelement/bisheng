@@ -1,23 +1,37 @@
-import { Download, Edit, FolderInput, GitBranch, History, MoreVertical, RefreshCw, Shield, Tag, Trash2, X, FileSearch } from "lucide-react";
+import { Download, MoreVertical } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
+import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
 import { Card, CardContent } from "~/components/ui/Card";
 import {
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { Badge } from "~/components/ui/Badge";
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Highlight case-insensitive matches of `keyword` inside `text` (Figma 11814:70449). */
+const renderHighlightedName = (text: string, keyword?: string) => {
+    const kw = keyword?.trim();
+    if (!kw) return text;
+    const parts = text.split(new RegExp(`(${escapeRegExp(kw)})`, "gi"));
+    const lowerKw = kw.toLowerCase();
+    return parts.map((part, i) =>
+        part.toLowerCase() === lowerKw
+            ? <span key={i} className="text-[#3a74e9]">{part}</span>
+            : part
+    );
+};
 
 interface FileCardProps {
     file: KnowledgeFile;
@@ -26,9 +40,6 @@ interface FileCardProps {
     onSelect: (selected: boolean) => void;
     onDownload: () => void;
     onRename: (newName: string) => void;
-    onMove?: () => void;
-    /** Space-level move permission; when false the card's move item shows greyed. */
-    canMove?: boolean;
     onDelete: () => void;
     onEditTags: () => void;
     onRetry?: () => void;
@@ -46,18 +57,10 @@ interface FileCardProps {
     mobileListMode?: boolean;
     /** Hide per-file download UI (icon + menu item), e.g. in read-only preview drawers. */
     hideDownloadActions?: boolean;
-    versionManagementEnabled?: boolean;
-    onOpenVersionManagement?: (file: KnowledgeFile) => void;
-    onOpenVersionHistory?: (file: KnowledgeFile) => void;
-    /** Mirrors member-management gating: creators + manage_space_relation holders. */
-    canManageMembers?: boolean;
-    // F034 drag-move: card is a drag source; folder cards are drop targets.
-    cardDraggable?: boolean;
-    onCardDragStart?: (e: React.DragEvent) => void;
-    isFolderDragOver?: boolean;
-    onFolderDragOver?: (e: React.DragEvent) => void;
-    onFolderDragLeave?: () => void;
-    onFolderDrop?: (e: React.DragEvent) => void;
+    /** Tag IDs hit by the active search; matching tags are highlighted in TagGroup. */
+    highlightedTagIds?: number[];
+    /** Keyword hit by the active search; matching substring in the file name is highlighted. */
+    highlightKeyword?: string;
 }
 
 export function FileCard({
@@ -67,8 +70,6 @@ export function FileCard({
     onSelect,
     onDownload,
     onRename,
-    onMove,
-    canMove = false,
     onDelete,
     onEditTags,
     onRetry,
@@ -84,16 +85,8 @@ export function FileCard({
     hideSelectionCheckbox = false,
     mobileListMode = false,
     hideDownloadActions = false,
-    versionManagementEnabled = false,
-    onOpenVersionManagement,
-    onOpenVersionHistory,
-    canManageMembers = false,
-    cardDraggable = false,
-    onCardDragStart,
-    isFolderDragOver = false,
-    onFolderDragOver,
-    onFolderDragLeave,
-    onFolderDrop,
+    highlightedTagIds,
+    highlightKeyword,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -101,8 +94,6 @@ export function FileCard({
         "(hover: hover) and (pointer: fine)",
     );
     const isCreating = !!file.isCreating;
-    // Uploading placeholder cards have no backend identity yet — not movable.
-    const isUploading = isKnowledgeItemUploading(file);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const failureMessage = (
@@ -117,6 +108,15 @@ export function FileCard({
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
+    /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
+    const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
+    /** Subset of isNotParsed that should show the "In progress" overlay tag. */
+    const isInProgress = !isFolder && (
+        file.status === FileStatus.UPLOADING ||
+        file.status === FileStatus.PROCESSING ||
+        file.status === FileStatus.WAITING ||
+        file.status === FileStatus.REBUILDING
+    );
 
     const {
         isRenaming,
@@ -141,66 +141,67 @@ export function FileCard({
         ? "text-[#212121]"
         : "text-[#999]";
 
-    const renderStatusBadge = () => {
+    /**
+     * Status pill overlaid on the bottom-left of the preview area (Figma 11671:34497).
+     * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
+     */
+    const renderStatusOverlayTag = (inline = false) => {
         if (!isAdmin || isFolder) return null;
+        if (file.status === FileStatus.SUCCESS) return null;
 
         const approvalLabel = approvalStatusLabel;
         const statusReason = failureMessage || approvalReason;
 
-        let badge: React.ReactNode = null;
+        type Tone = { bg: string; text: string; dot: string };
+        const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
+        const errorTone: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
+        const infoTone: Tone = { bg: "bg-[#e8f3ff]", text: "text-[#165dff]", dot: "bg-[#165dff]" };
+
+        let label: string | null = null;
+        let tone: Tone = neutralTone;
+
         if (approvalLabel) {
-            const rejected = isKnowledgeApprovalRejected(file);
-            badge = (
-                <span
-                    className={cn(
-                        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
-                        rejected ? "bg-[#fff2f0] text-[#f53f3f]" : "bg-[#e8f3ff] text-[#165dff]",
-                    )}
-                >
-                    <span className={cn("size-1.5 shrink-0 rounded-full", rejected ? "bg-[#f53f3f]" : "bg-[#165dff]")} />
-                    {approvalLabel}
-                </span>
-            );
+            label = approvalLabel;
+            tone = isKnowledgeApprovalRejected(file) ? errorTone : infoTone;
         } else {
-            const config: Record<string, { label: string; color: string; bg: string; dot: string }> = {
-                [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-                [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-                [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-                [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), color: "text-[#165dff]", bg: "bg-[#e8f3ff]", dot: "bg-[#165dff]" },
-                [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-                [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
-                [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
+            const config: Record<string, { label: string; tone: Tone }> = {
+                [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: neutralTone },
+                [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: neutralTone },
+                [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: neutralTone },
+                [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: neutralTone },
+                [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: errorTone },
+                [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: errorTone },
+                [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: errorTone },
             };
-            const item = config[file.status];
+            const item = file.status ? config[file.status] : undefined;
             if (!item) return null;
-            badge = (
-                <span
-                    className={cn(
-                        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
-                        item.bg,
-                        item.color,
-                    )}
-                >
-                    <span className={cn("size-1.5 shrink-0 rounded-full", item.dot)} />
-                    {item.label}
-                </span>
-            );
+            label = item.label;
+            tone = item.tone;
         }
 
-        if (!badge) return null;
-        if (!statusReason) return badge;
+        if (!label) return null;
 
-        return (
+        const pill = (
+            <div className={cn("inline-flex items-center justify-center gap-1 rounded-[4px] px-2", tone.bg)}>
+                <span className={cn("size-1 shrink-0 rounded-full", tone.dot)} />
+                <span className={cn("whitespace-nowrap text-xs leading-5", tone.text)}>{label}</span>
+            </div>
+        );
+
+        const wrapped = statusReason ? (
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <span className="inline-flex">
-                        {badge}
-                    </span>
+                    <span className="inline-flex">{pill}</span>
                 </TooltipTrigger>
                 <TooltipContent noArrow side="top" className="max-w-[320px] rounded-md bg-[#1D2129] px-3 py-2 text-left text-xs leading-5 text-white">
                     {statusReason}
                 </TooltipContent>
             </Tooltip>
+        ) : pill;
+
+        // Inline (H5 row meta line) returns the bare pill; desktop card overlays it on the icon.
+        return inline ? wrapped : (
+            <div className="absolute bottom-1 left-1 z-10">{wrapped}</div>
         );
     };
 
@@ -216,47 +217,21 @@ export function FileCard({
                         onBlur={handleRenameSubmit}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full h-6 px-1.5 text-sm border border-[#165dff] rounded outline-none shadow-[0_0_0_2px_rgba(22,93,255,0.2)] bg-white font-normal"
+                        className="w-full h-6 px-1.5 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal"
                     />
                 </div>
             );
         }
 
-        const versionBadge = versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
-            <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
-                {`V${file.version_no}`}
-            </span>
-        );
-        const similarIndicator = versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenVersionManagement?.(file);
-                }}
-                className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
-            >
-                <FileSearch className="size-3" />
-                {localize("com_knowledge.version.pill_similar")}
-            </button>
-        );
-
-        if ((!isAdmin && !approvalStatusLabel) || isFolder) {
-            return (
-                <div className="flex min-w-0 items-center gap-2">
-                    {versionBadge}
-                    {similarIndicator}
-                    <span className={cn("truncate", nameToneClass)}>{file.name}</span>
-                </div>
-            );
-        }
         return (
-            <div className="flex min-w-0 items-center gap-2">
-                {versionBadge}
-                {similarIndicator}
-                <span className={cn("min-w-0 flex-1 truncate", nameToneClass)}>{file.name}</span>
-                {renderStatusBadge()}
-            </div>
+            <span
+                className={cn(
+                    "line-clamp-2 min-h-[40px] break-all leading-5",
+                    nameToneClass,
+                )}
+            >
+                {renderHighlightedName(file.name, highlightKeyword)}
+            </span>
         );
     };
 
@@ -294,27 +269,120 @@ export function FileCard({
         !isRenaming &&
         (isFolder || isKnowledgeItemPreviewable(file));
 
+    // H5 mobile list row: flat row (no border / shadow / card background) with
+    // icon + title + date + tags, and a circular checkbox on the far right.
+    // Rendered independently from the desktop card so the desktop path is untouched.
+    if (mobileListMode) {
+        const mobileStatusPill = renderStatusOverlayTag(true);
+        return (
+            <div
+                className={cn(
+                    // Full-bleed row: the list container has no horizontal padding on mobile,
+                    // so the row's own px-4 gives the 16px content gutter while the selected
+                    // background spans the full width.
+                    "flex items-center gap-2 px-4 py-3",
+                    cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
+                )}
+                style={
+                    isSelected
+                        ? { background: "linear-gradient(0deg, rgba(230, 237, 252, 0.30) 0%, rgba(230, 237, 252, 0.30) 100%), #FFF" }
+                        : undefined
+                }
+                onClick={handleCardClick}
+            >
+                {/* File icon 48x48 — colored icons render without backdrop on H5 */}
+                <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[6px]">
+                    <FileIconRenderer file={file} isFolder={isFolder} iconClassName="size-12 shrink-0" thumbBordered transparentBg />
+                </div>
+
+                {/* Text block: title (+ status) / (date + tags) */}
+                <div className="flex min-w-0 flex-1 flex-col">
+                    {isRenaming ? (
+                        <input
+                            ref={inputRef}
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={handleRenameSubmit}
+                            onKeyDown={handleKeyDown}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-6 w-full rounded border border-[#DDDDDD] bg-white px-1.5 text-sm font-normal shadow-[0_0_0_2px_#F1F5F9] outline-none"
+                        />
+                    ) : (
+                        <div className="flex min-w-0 items-center gap-1.5">
+                            <span className={cn("min-w-0 truncate text-sm leading-5", nameToneClass)}>
+                                {renderHighlightedName(file.name, highlightKeyword)}
+                            </span>
+                            {mobileStatusPill && (
+                                <span className="inline-flex shrink-0 items-center self-center leading-5">
+                                    {mobileStatusPill}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Date + tags on a single line */}
+                    <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
+                        <span className="shrink-0 text-xs leading-5 text-[#818181] tabular-nums">
+                            {formatTimeCard(file.updatedAt)}
+                        </span>
+                        {isFolder ? (
+                            (isAdmin || file.successFileNum != null) && file.fileNum != null && (
+                                <span className="shrink-0 whitespace-nowrap text-xs leading-5 text-[#999999] tabular-nums">
+                                    {localize("com_knowledge_items_count", {
+                                        count: isAdmin ? (file.fileNum ?? 0) : (file.successFileNum ?? 0),
+                                    })}
+                                </span>
+                            )
+                        ) : (
+                            file.tags && file.tags.length > 0 && (
+                                <TagGroup
+                                    tags={file.tags}
+                                    variant="text-h5"
+                                    highlightedTagIds={highlightedTagIds}
+                                />
+                            )
+                        )}
+                    </div>
+                </div>
+
+                {/* Circular selection checkbox on the far right */}
+                {!hideSelectionCheckbox && (
+                    <RoundCheckbox
+                        className="shrink-0"
+                        checked={isSelected}
+                        onCheckedChange={(checked) => onSelect(checked)}
+                    />
+                )}
+            </div>
+        );
+    }
+
     return (
         <Card
-            draggable={cardDraggable && !isCreating && !isUploading}
-            onDragStart={cardDraggable ? onCardDragStart : undefined}
-            onDragOver={isFolder ? onFolderDragOver : undefined}
-            onDragLeave={isFolder ? onFolderDragLeave : undefined}
-            onDrop={isFolder ? onFolderDrop : undefined}
             className={cn(
-                "group rounded-md overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
+                "group rounded-[6px] overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
+                !mobileListMode && "h-[160px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
-                    ? "border-primary shadow-sm"
+                    ? "bg-[rgba(230,237,252,0.3)]"
+                    : isNotParsed
+                        ? "bg-[#fbfbfb]"
+                        : "bg-white",
+                isSelected
+                    ? "border-[#ECECEC] shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
                     : "border-[#ECECEC] hover:border-[#c9cdd4]",
-                hovered && "shadow-md",
-                // F034: highlight a folder card as the drop target — card border only
-                isFolderDragOver && "border-primary"
+                hovered && "shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
             )}
             style={{
-                transitionProperty: 'background-color',
+                transitionProperty: 'background-color, box-shadow, border-color',
                 transitionDuration: '350ms',
-                transitionTimingFunction: 'ease-in-out'
+                transitionTimingFunction: 'ease-in-out',
+                ...(isSelected
+                    ? { backgroundColor: 'rgba(230,237,252,0.3)' }
+                    : isNotParsed
+                        ? { backgroundColor: '#fbfbfb' }
+                        : {}),
             }}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
@@ -322,6 +390,7 @@ export function FileCard({
         >
             <CardContent className={cn(
                 "flex flex-col p-0",
+                !mobileListMode && "h-full",
                 mobileListMode && "max-[767px]:flex-row max-[767px]:items-center max-[767px]:gap-2 max-[767px]:p-1"
             )}>
                 {!hideSelectionCheckbox && mobileListMode && (
@@ -336,13 +405,24 @@ export function FileCard({
                         />
                     </div>
                 )}
-                {/* 缩略图或图标区域 */}
+                {/* Thumbnail / icon area — flexes to fill the remaining space under
+                    the 160px fixed-height card, leaving the bottom info row at its natural height. */}
                 <div className={cn(
-                    "relative flex h-[106px] shrink-0 items-center justify-center",
-                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:rounded-[4px]",
-                    isFolder ? "bg-[#FAFCFF]" : "bg-gray-50"
+                    "relative flex min-h-0 flex-1 p-1.5",
+                    mobileListMode && "max-[767px]:h-12 max-[767px]:w-12 max-[767px]:flex-none max-[767px]:p-0 max-[767px]:rounded-[4px]",
                 )}>
-                    <FileIconRenderer file={file} isFolder={isFolder} />
+                    <div className={cn(
+                        "relative flex flex-1 items-center justify-center overflow-hidden rounded-[4px]",
+                        isSelected
+                            ? "bg-transparent"
+                            : isNotParsed
+                                ? "bg-[#fbfbfb]"
+                                : "bg-white",
+                        mobileListMode && "max-[767px]:rounded-[4px]",
+                    )}>
+                        <FileIconRenderer file={file} isFolder={isFolder} />
+                        {renderStatusOverlayTag()}
+                    </div>
 
                     {!hideSelectionCheckbox && (
                         <div
@@ -352,8 +432,8 @@ export function FileCard({
                                 !revealCardActionsOnHoverOnly
                                     ? "opacity-100"
                                     : isSelected
-                                        ? "opacity-100"
-                                        : "opacity-0 group-hover:opacity-100"
+                                    ? "opacity-100"
+                                    : "opacity-0 group-hover:opacity-100"
                             )}
                         >
                             <Checkbox
@@ -374,8 +454,8 @@ export function FileCard({
                                 !revealCardActionsOnHoverOnly
                                     ? "pointer-events-auto opacity-100"
                                     : showCardActions
-                                        ? "pointer-events-auto opacity-100"
-                                        : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+                                    ? "pointer-events-auto opacity-100"
+                                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                             )}
                         >
                             {showInlineDownloadButton && (
@@ -402,133 +482,91 @@ export function FileCard({
                                         </Button>
                                     </DropdownMenuTrigger>
 
-                                    <DropdownMenuContent
+                                    <ActionMenuContent
                                         align="end"
-                                        className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         {showMenuDownloadItem && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Download className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.download")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Download />}
+                                                label={localize("com_knowledge.download")}
+                                            />
                                         )}
-
                                         {onManagePermission && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Shield className="mr-2 size-4 shrink-0" />
-                                                {localize("com_permission.manage_permission")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.PeopleSafe />}
+                                                label={localize("com_permission.manage_permission")}
+                                            />
                                         )}
-
                                         {isAdmin && !isFolder && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                                className="flex items-center"
-                                            >
-                                                <Tag className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.edit_tags")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Tag />}
+                                                label={localize("com_knowledge.edit_tags")}
+                                            />
                                         )}
                                         {canRename && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     startRenaming();
                                                 }}
-                                                className="flex items-center"
-                                            >
-                                                <Edit className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.rename")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        {onMove && (
-                                            <DropdownMenuItem
-                                                disabled={!canMove || isUploading}
-                                                onClick={(e) => { e.stopPropagation(); onMove(); }}
-                                                className="flex items-center"
-                                            >
-                                                <FolderInput className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.move")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Edit />}
+                                                label={localize("com_knowledge.rename")}
+                                            />
                                         )}
                                         {isAdmin && hasRetryOption && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
                                                 onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                                className="flex items-center"
-                                            >
-                                                <RefreshCw className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.retry")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                                                className="flex items-center"
-                                            >
-                                                <GitBranch className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.version.menu_version_management")}
-                                            </DropdownMenuItem>
-                                        )}
-                                        {versionManagementEnabled && !isFolder && file.is_multi_version && (
-                                            <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                                                className="flex items-center"
-                                            >
-                                                <History className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.version.menu_version_history")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Refresh />}
+                                                label={localize("com_knowledge.retry")}
+                                            />
                                         )}
                                         {canDelete && (
-                                            <DropdownMenuItem
+                                            <ActionMenuItem
+                                                danger
                                                 onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                                className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
-                                            >
-                                                <Trash2 className="mr-2 size-4 shrink-0" />
-                                                {localize("com_knowledge.delete")}
-                                            </DropdownMenuItem>
+                                                icon={<Outlined.Delete />}
+                                                label={localize("com_knowledge.delete")}
+                                            />
                                         )}
-                                    </DropdownMenuContent>
+                                    </ActionMenuContent>
                                 </DropdownMenu>
                             )}
                         </div>
                     )}
                 </div>
 
-                {/* 底部内容区域 */}
+                {/* Bottom info area */}
                 <div className={cn(
-                    "p-1",
-                    mobileListMode && "max-[767px]:min-w-0 max-[767px]:flex-1 max-[767px]:pr-1"
+                    "flex flex-col gap-1 px-2 py-1.5",
+                    mobileListMode && "max-[767px]:min-w-0 max-[767px]:flex-1 max-[767px]:gap-0 max-[767px]:p-0 max-[767px]:pr-1",
                 )}>
-                    {/* 文件名和状态 */}
-                    <div className="flex items-center text-sm font-medium min-w-0">
+                    {/* File name + status */}
+                    <div className="flex min-w-0 text-xs font-medium">
                         {getStatusText()}
                     </div>
 
-                    {/* 底部信息 (标签、数量和时间) */}
-                    <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
-                        <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
-                            {/* {isAdmin && isFolder && file.fileNum != null && (
-                                <span className="text-xs text-[#86909c] whitespace-nowrap">
+                    {/* Footer (tags / count + time) */}
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                        <div className="flex min-h-[20px] min-w-0 flex-1 items-center">
+                            {isAdmin && isFolder && file.fileNum != null && (
+                                <span className="whitespace-nowrap text-[10px] leading-5 text-[#999] tabular-nums">
                                     {localize("com_knowledge_items_count", { count: file.fileNum ?? 0 })}
                                 </span>
                             )}
                             {!isAdmin && isFolder && file.fileNum != null && (
-                                <span className="text-xs text-[#86909c] whitespace-nowrap">
+                                <span className="whitespace-nowrap text-[10px] leading-5 text-[#999] tabular-nums">
                                     {localize("com_knowledge_items_count", { count: file.successFileNum ?? 0 })}
                                 </span>
-                            )} */}
+                            )}
                             {(!isFolder && file.tags && file.tags.length > 0) && (
-                                <TagGroup tags={file.tags} />
+                                <TagGroup tags={file.tags} variant="text" highlightedTagIds={highlightedTagIds} />
                             )}
                         </div>
-                        <span className="text-[#999] text-xs shrink-0 ">{formatTimeCard(file.updatedAt)}</span>
+                        <span className="shrink-0 text-[10px] leading-5 text-[#999] tabular-nums">{formatTimeCard(file.updatedAt)}</span>
                     </div>
                 </div>
 
@@ -539,118 +577,86 @@ export function FileCard({
                             !revealCardActionsOnHoverOnly
                                 ? "pointer-events-auto opacity-100"
                                 : showCardActions
-                                    ? "pointer-events-auto opacity-100"
-                                    : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
+                                  ? "pointer-events-auto opacity-100"
+                                  : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100",
                         )}
                     >
-                        {showMenuDownloadItem && (
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
-                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                title={localize("com_knowledge.download")}
-                            >
-                                <Download className="size-3.5 text-[#4e5969]" />
-                            </Button>
-                        )}
-                        {showMoreMenu && (
-                            <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
-                                <DropdownMenuTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-5 w-5 shrink-0 rounded-md"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        <MoreVertical className="size-4 text-[#4e5969]" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent
-                                    align="end"
-                                    className={cn("min-w-[120px]", knowledgeSpaceDropdownSurfaceClassName)}
+                    {showMenuDownloadItem && (
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-5 w-5 shrink-0 rounded-md hover:bg-gray-100"
+                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                            title={localize("com_knowledge.download")}
+                        >
+                            <Download className="size-3.5 text-[#4e5969]" />
+                        </Button>
+                    )}
+                    {showMoreMenu && (
+                        <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-5 w-5 shrink-0 rounded-md"
                                     onClick={(e) => e.stopPropagation()}
                                 >
-                                    {showMenuDownloadItem && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                            className="flex items-center"
-                                        >
-                                            <Download className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.download")}
-                                        </DropdownMenuItem>
-                                    )}
-
-                                    {onManagePermission && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
-                                            className="flex items-center"
-                                        >
-                                            <Shield className="mr-2 size-4 shrink-0" />
-                                            {localize("com_permission.manage_permission")}
-                                        </DropdownMenuItem>
-                                    )}
-
-                                    {isAdmin && !isFolder && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onEditTags(); }}
-                                            className="flex items-center"
-                                        >
-                                            <Tag className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.edit_tags")}
-                                        </DropdownMenuItem>
-                                    )}
-                                    {canRename && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                startRenaming();
-                                            }}
-                                            className="flex items-center"
-                                        >
-                                            <Edit className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.rename")}
-                                        </DropdownMenuItem>
-                                    )}
-                                    {isAdmin && hasRetryOption && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
-                                            className="flex items-center"
-                                        >
-                                            <RefreshCw className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.retry")}
-                                        </DropdownMenuItem>
-                                    )}
-                                    {versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onOpenVersionManagement?.(file); }}
-                                            className="flex items-center"
-                                        >
-                                            <GitBranch className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.version.menu_version_management")}
-                                        </DropdownMenuItem>
-                                    )}
-                                    {versionManagementEnabled && !isFolder && file.is_multi_version && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onOpenVersionHistory?.(file); }}
-                                            className="flex items-center"
-                                        >
-                                            <History className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.version.menu_version_history")}
-                                        </DropdownMenuItem>
-                                    )}
-                                    {canDelete && (
-                                        <DropdownMenuItem
-                                            onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                            className="flex items-center text-[#f53f3f] focus:text-[#f53f3f]"
-                                        >
-                                            <Trash2 className="mr-2 size-4 shrink-0" />
-                                            {localize("com_knowledge.delete")}
-                                        </DropdownMenuItem>
-                                    )}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
+                                    <MoreVertical className="size-4 text-[#4e5969]" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <ActionMenuContent
+                                align="end"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                {showMenuDownloadItem && (
+                                    <ActionMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                                        icon={<Outlined.Download />}
+                                        label={localize("com_knowledge.download")}
+                                    />
+                                )}
+                                {onManagePermission && (
+                                    <ActionMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onManagePermission(); }}
+                                        icon={<Outlined.PeopleSafe />}
+                                        label={localize("com_permission.manage_permission")}
+                                    />
+                                )}
+                                {isAdmin && !isFolder && (
+                                    <ActionMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onEditTags(); }}
+                                        icon={<Outlined.Tag />}
+                                        label={localize("com_knowledge.edit_tags")}
+                                    />
+                                )}
+                                {canRename && (
+                                    <ActionMenuItem
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            startRenaming();
+                                        }}
+                                        icon={<Outlined.Edit />}
+                                        label={localize("com_knowledge.rename")}
+                                    />
+                                )}
+                                {isAdmin && hasRetryOption && (
+                                    <ActionMenuItem
+                                        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+                                        icon={<Outlined.Refresh />}
+                                        label={localize("com_knowledge.retry")}
+                                    />
+                                )}
+                                {canDelete && (
+                                    <ActionMenuItem
+                                        danger
+                                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                        icon={<Outlined.Delete />}
+                                        label={localize("com_knowledge.delete")}
+                                    />
+                                )}
+                            </ActionMenuContent>
+                        </DropdownMenu>
+                    )}
                     </div>
                 )}
             </CardContent>

@@ -10,7 +10,8 @@
  *   - "web"         → 「已联网搜索 (N 个结果)」, site-style chips (title + source)
  *   - "tool" (any)  → 「已调用 {display_name} 工具」, brief chips / result preview
  */
-import { AlertCircle, BookOpen, ChevronDown, Globe, Hammer, Loader2 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { AlertCircle } from "lucide-react";
 import { memo, useEffect, useState, type FC } from "react";
 import type { AgentToolCall } from "~/api/chatApi";
 import { useLocalize } from "~/hooks";
@@ -113,20 +114,22 @@ const WebResultChip: FC<{ item: any; chip: string }> = ({ item, chip }) => {
 
     const content = (
         <span
-            className="inline-flex items-center justify-center gap-1.5 rounded-[4px] bg-[#F7F8FA] px-2 py-[2px] text-[13px] text-[#4E5969]"
+            className="inline-flex items-center gap-1 rounded-[4px] bg-[#F7F7F7] px-2 py-[2px] text-xs leading-5 text-[#1D2129]"
             title={chip}
         >
             {showFavicon ? (
-                <img
-                    src={`https://${host}/favicon.ico`}
-                    alt=""
-                    className="size-[14px] rounded-[2px]"
-                    onError={() => setFaviconFailed(true)}
-                />
+                <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border-[0.5px] border-[#ECECEC] bg-white">
+                    <img
+                        src={`https://${host}/favicon.ico`}
+                        alt=""
+                        className="size-[14px]"
+                        onError={() => setFaviconFailed(true)}
+                    />
+                </span>
             ) : (
-                <Globe className="size-[14px] text-[#86909C]" />
+                <Outlined.Earth size={16} className="shrink-0 text-[#6B7785]" />
             )}
-            <span className="truncate max-w-[14rem]">{chip}</span>
+            <span className="max-w-[120px] truncate">{chip}</span>
         </span>
     );
 
@@ -222,16 +225,13 @@ function normaliseKnowledgeResults(
 
 const variantStyles = {
     knowledge: {
-        pill: "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-950/40 dark:text-blue-300",
-        icon: <BookOpen className="size-3.5" />,
+        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#C9CDD4]" />,
     },
     web: {
-        pill: "bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-950/40 dark:text-purple-300",
-        icon: <Globe className="size-3.5" />,
+        icon: <Outlined.Earth size={16} className="shrink-0 text-[#C9CDD4]" />,
     },
     tool: {
-        pill: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/60 dark:text-slate-200",
-        icon: <Hammer className="size-3.5" />,
+        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#C9CDD4]" />,
     },
 } as const;
 
@@ -298,59 +298,59 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
         }
     }, [toolCall.inflight, toolCall.error, variant, hasKnowledgeErrors]);
 
-    const leadingIcon = toolCall.inflight ? (
-        <Loader2 className="mr-1.5 size-3.5 animate-spin text-primary" />
+    const railIcon = toolCall.inflight ? (
+        <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
     ) : toolCall.error ? (
-        <AlertCircle className="mr-1.5 size-3.5 text-red-500" />
+        <AlertCircle size={16} className="shrink-0 text-red-500" />
     ) : (
-        <span className="mr-1.5 text-gray-400">{style.icon}</span>
-    );
-
-    const pill = (
-        <button
-            type="button"
-            onClick={hasDetails && !toolCall.inflight ? () => setExpanded((v) => !v) : undefined}
-            disabled={!hasDetails || toolCall.inflight}
-            className={cn(
-                "group flex w-fit items-center justify-center py-2 text-sm leading-[18px]",
-                toolCall.inflight && "animate-pulse",
-            )}
-        >
-            {leadingIcon}
-            <span>{label}</span>
-            {!toolCall.inflight &&
-                !toolCall.error &&
-                variant !== "tool" &&
-                resultCount > 0 && (
-                    <span className="ml-1 text-text-secondary">
-                        ({localize("com_tools_result_count", { count: resultCount })})
-                    </span>
-                )}
-            {hasDetails && !toolCall.inflight && (
-                <ChevronDown
-                    className={cn(
-                        "icon-sm ml-1.5 transform-gpu text-text-primary transition-transform duration-200",
-                        expanded && "rotate-180",
-                    )}
-                />
-            )}
-        </button>
+        style.icon
     );
 
     return (
-        <>
-            {pill}
-            <div
-                className={cn(
-                    "grid transition-all duration-300 ease-out",
-                    expanded && "mb-4",
+        <div className="flex w-full min-w-0 gap-1.5">
+            <div className="flex shrink-0 flex-col items-center gap-0.5 self-stretch pt-[3px]">
+                {railIcon}
+                {/* Rail line: keep the timeline continuous to the next node, and
+                    always flank this node's own expanded content. */}
+                {(showConnector || expanded) && (
+                    <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />
                 )}
-                style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
-            >
-                <div className="overflow-hidden min-h-0">
-                    <div className="relative pt-3 pl-3 text-xs text-text-secondary">
-                        <div className="absolute left-1.5 h-full border-l border-border-medium dark:border-border-heavy" />
-
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col pb-3">
+                <button
+                    type="button"
+                    onClick={hasDetails && !toolCall.inflight ? () => setExpanded((v) => !v) : undefined}
+                    disabled={!hasDetails || toolCall.inflight}
+                    className={cn(
+                        "group flex w-fit max-w-full items-center gap-1 text-sm leading-[22px] text-[#999999]",
+                        hasDetails && !toolCall.inflight && "transition-colors hover:text-[#212121]",
+                        toolCall.inflight && "animate-pulse",
+                    )}
+                >
+                    <span>{label}</span>
+                    {!toolCall.inflight &&
+                        !toolCall.error &&
+                        variant !== "tool" &&
+                        resultCount > 0 && (
+                            <span>
+                                （{localize("com_tools_result_count", { count: resultCount })}）
+                            </span>
+                        )}
+                    {hasDetails && !toolCall.inflight && (
+                        <Outlined.Down
+                            size={16}
+                            className={cn(
+                                "shrink-0 transform-gpu transition-transform duration-200",
+                                expanded && "rotate-180",
+                            )}
+                        />
+                    )}
+                </button>
+                <div
+                    className={cn("grid transition-all duration-300 ease-out", expanded && "mt-2")}
+                    style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
+                >
+                    <div className="overflow-hidden min-h-0 text-xs text-text-secondary">
                         {toolCall.error && (
                             <div className="leading-[22px]">{toolCall.error}</div>
                         )}
@@ -361,19 +361,19 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                                     <span
                                         key={kb.id || `${kb.name}-${i}`}
                                         className={cn(
-                                            "inline-flex items-center justify-center gap-1.5 rounded-[4px] px-2 py-[4px] text-[13px]",
+                                            "inline-flex items-center gap-1 rounded-[4px] px-2 py-[2px] text-xs leading-5",
                                             kb.error
                                                 ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-300"
-                                                : "bg-[#F7F8FA] text-[#4E5969]",
+                                                : "bg-[#F7F7F7] text-[#1D2129]",
                                         )}
                                         title={kb.error ? `${kb.name} 检索失败：${kb.error}` : kb.name}
                                     >
                                         {kb.error ? (
-                                            <AlertCircle className="size-[14px] text-red-500" />
+                                            <AlertCircle className="size-[14px] shrink-0 text-red-500" />
                                         ) : (
-                                            <BookOpen className="size-[14px] text-[#86909C]" />
+                                            <Outlined.BookOpenText size={14} className="shrink-0 text-[#6B7785]" />
                                         )}
-                                        <span className="truncate max-w-[14rem]">{kb.name}</span>
+                                        <span className="max-w-[120px] truncate">{kb.name}</span>
                                     </span>
                                 ))}
                             </div>
@@ -393,12 +393,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                     </div>
                 </div>
             </div>
-            {showConnector && !expanded && (
-                <div className="relative h-3 pl-3" aria-hidden="true">
-                    <div className="absolute left-1.5 h-full border-r border-border-medium dark:border-border-heavy" />
-                </div>
-            )}
-        </>
+        </div>
     );
 });
 

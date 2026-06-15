@@ -209,7 +209,7 @@ export function PdfViewer({
     return (
         <div
             ref={scrollContainerRef}
-            className="flex-1 overflow-auto bg-[#fbfbfb]"
+            className="scrollbar-os flex-1 overflow-auto bg-[#fbfbfb]"
         >
             <div className="flex flex-col items-center py-4 gap-3">
                 {Array.from({ length: pdfDoc.numPages }, (_, i) => (

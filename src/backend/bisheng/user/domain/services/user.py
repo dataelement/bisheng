@@ -1,3 +1,4 @@
+import re
 from base64 import b64decode
 from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING
@@ -17,6 +18,7 @@ from bisheng.common.errcode.user import (
     UserNameTooLongError,
     UserNoRoleForLoginError,
     UserNoWebMenuForLoginError,
+    UserPasswordStrengthError,
 )
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.common.schemas.telemetry.event_data_schema import UserLoginEventData
@@ -56,6 +58,10 @@ ALLOWED_AVATAR_TYPES = {
 }
 MAX_AVATAR_SIZE = 10 * 1024 * 1024  # 10MB
 AVATAR_OBJECT_PREFIX = 'avatar/'
+
+# Password strength rule, kept in sync with the frontend PWD_RULE:
+# at least 8 chars, with a lowercase, an uppercase, a digit and a symbol.
+PASSWORD_STRENGTH_PATTERN = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,128}$')
 
 
 class UserService:
@@ -145,13 +151,36 @@ class UserService:
         return md5_hash(plain)
 
     @classmethod
+    def password_meets_policy(cls, plain: str) -> bool:
+        """Same rule as the frontend: >=8 chars with lowercase, uppercase,
+        digit and symbol."""
+        return bool(PASSWORD_STRENGTH_PATTERN.match(plain or ''))
+
+    @classmethod
+    def validate_password_strength(cls, plain: str) -> None:
+        if not cls.password_meets_policy(plain):
+            raise UserPasswordStrengthError()
+
+    @classmethod
+    def decrypt_md5_password_strict(cls, password: str) -> str:
+        """Decrypt to plaintext, enforce the strength policy, then MD5.
+
+        Use at every point that *sets* a new password (register, admin
+        create / reset, change password). Login and old-password checks must
+        keep using decrypt_md5_password so existing weak passwords still work.
+        """
+        plain = cls.decrypt_password_plain(password)
+        cls.validate_password_strength(plain)
+        return md5_hash(plain)
+
+    @classmethod
     def create_user(cls, request: Request, login_user: LoginUser, req_data: 'CreateUserReq'):
         """
         Create User
         """
         user = User(
             user_name=req_data.user_name,
-            password=cls.decrypt_md5_password(req_data.password),
+            password=cls.decrypt_md5_password_strict(req_data.password),
             source='local',
             # Default external_id to user_name so password login (which queries
             # external_id only since 94323e3ec) works out of the box. SSO-synced
@@ -230,7 +259,7 @@ class UserService:
         # 允许用户名重复；人员唯一性由 external_id / user_id 等保证
         if len(db_user.user_name) > 30:
             raise UserNameTooLongError()
-        db_user.password = cls.decrypt_md5_password(user.password)
+        db_user.password = cls.decrypt_md5_password_strict(user.password)
         # Under JudgmentadminDoes the user exist
         assigned_tenant_id = await cls._resolve_registration_tenant_id()
 

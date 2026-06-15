@@ -186,6 +186,15 @@ export function AccountInfoDialog({
                 return;
             }
 
+            // 10622：密码强度不达标（后端校验），按当前语言本地化提示
+            if (code === 10622) {
+                showToast({
+                    message: localize("api_errors.10622"),
+                    severity: NotificationSeverity.ERROR
+                });
+                return;
+            }
+
             const errorMessage =
                 error?.response?.data?.status_message ||
                 error?.response?.data?.message ||
@@ -304,7 +313,7 @@ export function AccountInfoDialog({
     };
 
     const inputClassName =
-        "h-9 rounded-md border border-[#ECECEC] bg-white pr-10 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] focus-visible:border-[#165dff] focus-visible:ring-1 focus-visible:ring-[#165dff]";
+        "h-9 rounded-md border border-[#ECECEC] bg-white pr-10 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] focus-visible:border-[#DDDDDD] focus-visible:ring-2 focus-visible:ring-[#F1F5F9]";
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>

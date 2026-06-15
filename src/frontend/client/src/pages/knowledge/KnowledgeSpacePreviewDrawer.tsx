@@ -49,6 +49,11 @@ export function KnowledgeSpacePreviewDrawer({
     const [status, setStatus] = useState<"none" | "joined" | "pending" | "rejected">("none");
     const [subscribing, setSubscribing] = useState(false);
     const [filesPreview, setFilesPreview] = useState<KnowledgeFile[]>([]);
+    // Bumped on every drawer open. The file-list effect below keys on values derived from
+    // `space`/`status`; reopening the SAME space leaves those primitives unchanged, so the
+    // effect would not re-run and the cleared list would never reload. This token forces a
+    // fresh fetch on each open.
+    const [filesReloadKey, setFilesReloadKey] = useState(0);
     const [childrenPage, setChildrenPage] = useState(1);
     const [childrenTotal, setChildrenTotal] = useState(0);
     const [loadingChildrenMore, setLoadingChildrenMore] = useState(false);
@@ -150,6 +155,7 @@ export function KnowledgeSpacePreviewDrawer({
         setParentStack([]);
         setParentNameStack([]);
         setLoadingChildrenMore(false);
+        setFilesReloadKey(k => k + 1);
         lastSyncedSquareStatusRef.current = null;
 
         if (fallbackSpace) {
@@ -225,7 +231,9 @@ export function KnowledgeSpacePreviewDrawer({
                 setChildrenTotal(0);
             });
         // Include join/subscription signals so file list loads when async info maps to joined without subscription_status.
-    }, [space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status]);
+        // canViewApprovalContent is resolved asynchronously (checkPermission) for APPROVAL spaces; without it as a
+        // dependency the effect would have already bailed (canViewFiles=false) and never refetch once access is granted.
+    }, [space?.id, space?.role, space?.visibility, space?.subscriptionStatus, space?.isFollowed, currentParentId, status, filesReloadKey, canViewApprovalContent]);
 
     const loadMoreChildren = async () => {
         if (!space || !canViewFiles) return;

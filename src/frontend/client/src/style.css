@@ -1236,7 +1236,7 @@ code[class*='language-'],
 pre[class*='language-'] {
   word-wrap: normal;
   background: none;
-  color: #fff;
+  color: #24292e;
   -webkit-hyphens: none;
   hyphens: none;
   font-size: 0.85rem;
@@ -1261,23 +1261,23 @@ pre[class*='language-'] {
 }
 
 .hljs-comment {
-  color: hsla(0, 0%, 100%, 0.5);
+  color: #6a737d;
 }
 
 .hljs-meta {
-  color: hsla(0, 0%, 100%, 0.6);
+  color: #6a737d;
 }
 
 .hljs-built_in,
 .hljs-class .hljs-title {
-  color: #e9950c;
+  color: #6f42c1;
 }
 
 .hljs-doctag,
 .hljs-formula,
 .hljs-keyword,
 .hljs-literal {
-  color: #2e95d3;
+  color: #d73a49;
 }
 
 .hljs-addition,
@@ -1285,7 +1285,7 @@ pre[class*='language-'] {
 .hljs-meta-string,
 .hljs-regexp,
 .hljs-string {
-  color: #00a67d;
+  color: #032f62;
 }
 
 .hljs-attr,
@@ -1296,7 +1296,7 @@ pre[class*='language-'] {
 .hljs-template-variable,
 .hljs-type,
 .hljs-variable {
-  color: #df3079;
+  color: #005cc5;
 }
 
 .hljs-bullet,
@@ -1304,7 +1304,7 @@ pre[class*='language-'] {
 .hljs-selector-id,
 .hljs-symbol,
 .hljs-title {
-  color: #f22c3d;
+  color: #6f42c1;
 }
 
 [role='button'],
@@ -1457,22 +1457,23 @@ button {
   --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
 }
 
-/* Webkit scrollbar */
-::-webkit-scrollbar {
+/* Webkit scrollbar — `.scrollbar-os` opts out so the OS scrollbar setting
+   (auto-hide vs always-on) is respected instead of a forced custom scrollbar. */
+:not(.scrollbar-os)::-webkit-scrollbar {
   height: 0.1em;
   width: 0.5rem;
 }
 
-::-webkit-scrollbar-thumb {
+:not(.scrollbar-os)::-webkit-scrollbar-thumb {
   background-color: rgba(0, 0, 0, 0.1);
   border-radius: 9999px;
 }
 
-.dark ::-webkit-scrollbar-thumb {
+.dark :not(.scrollbar-os)::-webkit-scrollbar-thumb {
   background-color: hsla(0, 0%, 100%, 0.1);
 }
 
-::-webkit-scrollbar-track {
+:not(.scrollbar-os)::-webkit-scrollbar-track {
   background-color: transparent;
   border-radius: 9999px;
 }
@@ -1489,6 +1490,17 @@ button {
 
 .dark .scrollbar-transparent::-webkit-scrollbar-thumb {
   background-color: transparent;
+}
+
+/* Hide scrollbar entirely (used by horizontal tab strips) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* Show scrollbar only while actively scrolling (used by NotificationsDialog) */
@@ -1831,19 +1843,14 @@ body,
 html {
   height: 100%;
   font-family:
+    -apple-system,
+    BlinkMacSystemFont,
     "AlibabaPuHuiTi-3-55-Regular",
-    "PingFang SC",
-    /* 苹果设备优先使用苹方 */
     "Hiragino Sans GB",
-    /* 旧版 macOS 备选 */
     "Microsoft YaHei",
-    /* Windows 备选（微软雅黑） */
     "Helvetica Neue",
-    /* 通用西文字体 */
     Arial,
-    /* 最终回退字体 */
     sans-serif;
-  /* 无衬线字体族兜底 */
 }
 
 .dark body,

@@ -66,7 +66,7 @@ export default function ChannelItem({
         const newName = e.target.value.trim();
         setIsEditing(false);
         if (!newName) return
-        if (getFullWidthLength(newName) > 30) {
+        if (getFullWidthLength(newName) > 50) {
             return showToast({
                 message: localize("com_subscription.max_10_characters"),
                 severity: NotificationSeverity.ERROR

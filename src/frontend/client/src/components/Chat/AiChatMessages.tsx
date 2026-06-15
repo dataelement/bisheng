@@ -324,7 +324,7 @@ export default function AiChatMessages({
             >
                 <div
                     className={cn(
-                        "flex min-h-full w-full flex-col py-2",
+                        "flex min-h-full w-full flex-col pt-2 pb-10",
                         contentWidthClassName ?? (knowledgeChatLayout ? "max-w-none" : "max-w-[768px] mx-auto")
                     )}
                 >
