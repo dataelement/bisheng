@@ -27,8 +27,7 @@ import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 import { Menu, Plus } from "lucide-react";
 import { cn } from "~/utils";
 import { ChannelShareDialog } from "./ChannelShareDialog";
-
-const MAX_USER_CHANNELS = 10;
+import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
 const extractShareChannelIdFromPath = (pathname: string): string | undefined => {
     const matched = pathname.match(/\/channel\/share\/([^/?#]+)/);
@@ -342,6 +341,7 @@ export default function Subscription() {
 
     // Channel count is reported by ChannelSidebar via callback; ref avoids unnecessary re-renders
     const createdChannelCountRef = useRef(0);
+    const { isOverQuota } = useEffectiveQuota();
 
     useEffect(() => {
         if (!isH5) setChannelListDrawerOpen(false);
@@ -356,7 +356,7 @@ export default function Subscription() {
     // Create channel - opens drawer (with limit check)
     const handleCreateChannel = () => {
         setEditingChannel(null);
-        if (createdChannelCountRef.current >= MAX_USER_CHANNELS) {
+        if (isOverQuota("channel", createdChannelCountRef.current)) {
             showToast({
                 message: localize("com_subscription.channel_limit_reached"),
                 severity: NotificationSeverity.WARNING

@@ -4134,7 +4134,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if effective != -1:
                 count = await SpaceChannelMemberDao.async_count_user_space_subscriptions(self.login_user.user_id)
                 if count >= effective:
-                    raise SpaceSubscribeLimitError()
+                    raise SpaceSubscribeLimitError(quota=effective)
 
         previous_status = existing.status if existing else None
         if existing:

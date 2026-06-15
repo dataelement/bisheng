@@ -34,6 +34,7 @@ import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
 import { useAiSplitPane } from "./hooks/useAiSplitPane";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
@@ -41,7 +42,7 @@ import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDial
 export default function Knowledge() {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
-    const MAX_USER_SPACES = 30;
+    const { isOverQuota } = useEffectiveQuota();
     const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
     const [showCreateDrawer, setShowCreateDrawer] = useState(false);
@@ -397,7 +398,7 @@ export default function Knowledge() {
                 const mineSpaces = await getMineSpacesApi();
                 const effectiveCount = Math.max(mineSpaces.length, cachedCountMax);
 
-                if (effectiveCount >= MAX_USER_SPACES) {
+                if (isOverQuota("knowledge_space", effectiveCount)) {
                     showToast({
                         message: localize("com_knowledge.create_space_limit_reached"),
                         severity: NotificationSeverity.WARNING,
@@ -414,7 +415,7 @@ export default function Knowledge() {
                 const cachedName = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.NAME]);
                 const cachedCountMax = Math.max(cachedUpdate?.length ?? 0, cachedName?.length ?? 0);
 
-                if (cachedCountMax >= MAX_USER_SPACES) {
+                if (isOverQuota("knowledge_space", cachedCountMax)) {
                     showToast({
                         message: localize("com_knowledge.create_space_limit_reached"),
                         severity: NotificationSeverity.WARNING,

@@ -5,7 +5,8 @@ import { checkSopQueueStatus, getCaseDetail, getLinsightSessionVersionList, getL
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
 import { useLinsightManager, useLinsightSubmit } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
-import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
+import { TaskModeChatInput } from '~/components/Linsight/Input/TaskModeChatInput';
+import Landing from '~/components/Chat/Landing';
 import { ExecutionFlow } from '~/components/Linsight/Execution/ExecutionFlow';
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { LoadingIcon } from '../ui/icon/Loading';
@@ -26,7 +27,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     const artifactsPanel = useArtifactsPanel();
 
     return (
-        <div className='relative h-full bg-gradient-to-b from-[#F4F8FF] to-white'>
+        <div className='relative h-full bg-white'>
             {
                 loading && <div className='absolute z-10 size-full flex justify-center items-center bg-white/50'>
                     <LoadingIcon />
@@ -43,11 +44,17 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
             />
 
             {versionId === 'new' && !sopId ? (
-                /* F035 Track H (P2): fresh-task landing — the new unified
-                   task-mode input replaces the legacy LinsightChatInput entry. */
-                <div className='w-full h-[calc(100vh-68px)] flex flex-col justify-center'>
-                    <div className='w-full max-w-[800px] mx-auto px-4 pb-24'>
-                        <TaskModeInput conversationId={conversationId || 'new'} />
+                /* F035 Track H: fresh-task landing — unified with the daily
+                   landing. Same slogan (Landing) + the daily AiChatInput in
+                   task mode (extra "添加技能" entry), no blue gradient. */
+                <div className='w-full h-[calc(100vh-68px)] overflow-y-auto'>
+                    <div className='flex flex-col min-h-full pt-[20vh] pb-12'>
+                        <div className='shrink-0'>
+                            <Landing isNew />
+                        </div>
+                        <div className='w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 py-3'>
+                            <TaskModeChatInput conversationId={conversationId || 'new'} />
+                        </div>
                     </div>
                 </div>
             ) : (

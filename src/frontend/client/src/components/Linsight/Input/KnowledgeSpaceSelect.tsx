@@ -16,7 +16,6 @@ import {
     DropdownMenuTrigger,
     Input,
 } from '~/components/ui';
-import BookOpen from '~/components/ui/icon/BookOpen';
 import { useGetBsConfig, useGetOrgToolList } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useToastContext } from '~/Providers';
@@ -132,7 +131,11 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: Know
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >
-                    <BookOpen className="size-4" />
+                    <img
+                        src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg`}
+                        className="size-4 shrink-0"
+                        alt=""
+                    />
                     <span className="truncate max-w-[min(30vw,120px)]">{localize('com_ui_knowledge_space')}</span>
                     <ChevronDown size={14} className="text-slate-400" />
                 </button>

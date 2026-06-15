@@ -1,6 +1,4 @@
-import { Check, Loader2, X } from "lucide-react";
-import LingsiIcon from '~/components/ui/icon/Lingsi';
-import TodayItemIcon from '~/components/ui/icon/TodayItem';
+import { Check, X } from "lucide-react";
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -15,7 +13,6 @@ import { Constants } from "~/types/chat";
 import { useLocalize, usePrefersMobileLayout, useNavigateToConvo } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import store from "~/store";
-import { linsightMapState, SopStatus } from "~/store/linsight";
 import { cn } from "~/utils";
 import { ConvoOptions } from "./ConvoOptions";
 
@@ -169,25 +166,6 @@ export default function Conversation({
     [title]
   );
 
-  // F035 Track H (P5): task-mode conversations (flowType 20) show a spinner
-  // while a linsight session of this conversation is executing. Status comes
-  // from the in-memory linsight store (live WS-driven sessions only); the
-  // conversation list API carries no execution status, so after a refresh the
-  // spinner appears once the session is opened and its state is restored.
-  const linsightMap = useRecoilValue(linsightMapState);
-  // flowType comes from the conversation-list mapping but is missing on the
-  // legacy TConversation type (pre-existing gap), hence the narrow cast.
-  const convoFlowType = (conversation as { flowType?: number } | undefined)?.flowType;
-  const isTaskRunning: boolean = useMemo(() => {
-    if (convoFlowType !== 20) return false;
-    for (const linsight of linsightMap.values()) {
-      if (linsight?.session_id === conversationId && linsight.status === SopStatus.Running) {
-        return true;
-      }
-    }
-    return false;
-  }, [linsightMap, convoFlowType, conversationId]);
-
   const isActiveConvo: boolean = useMemo(
     () =>
       currentConvoId === conversationId ||
@@ -201,9 +179,9 @@ export default function Conversation({
   return (
     <div
       className={cn(
-        "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors",
-        isActiveConvo ? "bg-[#e6edfc]" : "hover:bg-[#f7f7f7]",
-        renaming ? "bg-[#e6edfc]" : "",
+        "group relative w-full content-stretch flex gap-[8px] items-center mb-[4px] px-3 py-[8px] rounded-lg shrink-0 transition-colors select-none",
+        isActiveConvo ? "bg-[#E6EDFC]" : "hover:bg-[#F5F5F5]",
+        renaming ? "bg-[#E6EDFC]" : "",
         isSmallScreen ? "py-[8px]" : ""
       )}
     >
@@ -212,7 +190,7 @@ export default function Conversation({
           <input
             ref={inputRef}
             type="text"
-            className="w-full rounded bg-white px-1 text-[14px] leading-tight focus-visible:outline-none text-[#212121]"
+            className="w-full rounded bg-white px-1 text-[14px] leading-tight focus-visible:outline-none text-[#1A1A1A]"
             value={titleInput ?? ""}
             onChange={(e) => setTitleInput(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -248,7 +226,7 @@ export default function Conversation({
         </div>
       ) : (
         <a
-          // 切换会话
+          // Toggle conversation
           // href={`/c/${conversationId}`}
           data-testid="convo-item"
           onClick={clickHandler}
@@ -273,16 +251,9 @@ export default function Conversation({
             }}
             alt={conversation?.flowType}
           >
-            {conversation?.flowType === 20 ? (
-              isTaskRunning ? (
-                <Loader2 className="size-[24px] shrink-0 animate-spin text-[#335CFF]" />
-              ) : (
-                <LingsiIcon className="size-[24px] shrink-0" />
-              )
-            ) : (
-              <TodayItemIcon className="size-[24px] shrink-0 text-[#6B778D]" />
-            )}
-            <span className="text-[#212121] text-[14px] leading-[20px] font-['PingFang_SC:Regular',sans-serif] truncate">
+            {/* F035: conversation list no longer distinguishes daily vs task
+                mode — the leading icon is removed for both (unified list). */}
+            <span className="text-[#1A1A1A] text-[14px] leading-[20px] font-normal truncate">
               {title}
             </span>
           </div>

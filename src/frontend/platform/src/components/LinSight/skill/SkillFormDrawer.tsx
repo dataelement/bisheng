@@ -9,7 +9,7 @@ import { Label } from "@/components/bs-ui/label";
 import { Sheet, SheetContent } from "@/components/bs-ui/sheet";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { SkillDetail, skillApi } from "@/controllers/API/linsight";
-import { Info, Pencil, Plus, RefreshCw } from "lucide-react";
+import { Pencil, Plus, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getSkillErrorMessage } from "./skillErrors";
@@ -203,19 +203,10 @@ export function SkillFormDrawer({ open, editing, onOpenChange, onSaved }: SkillF
                     </div>
                 </div>
 
-                {/* footer — edit mode echoes the immutable ID for reassurance */}
-                <div className="shrink-0 flex items-center justify-between gap-3 px-6 py-3.5 border-t bg-background/90 backdrop-blur">
-                    {editing ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
-                            <Info className="size-3.5" />ID: {name}
-                        </span>
-                    ) : (
-                        <span />
-                    )}
-                    <div className="flex gap-3">
-                        <Button variant="outline" onClick={() => onOpenChange(false)}>{t('skillManage.form.cancel')}</Button>
-                        <Button onClick={handleSave} disabled={saving}>{t('skillManage.form.save')}</Button>
-                    </div>
+                {/* footer — actions only */}
+                <div className="shrink-0 flex items-center justify-end gap-3 px-6 py-3.5 border-t bg-background/90 backdrop-blur">
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>{t('skillManage.form.cancel')}</Button>
+                    <Button onClick={handleSave} disabled={saving}>{t('skillManage.form.save')}</Button>
                 </div>
             </SheetContent>
         </Sheet>
