@@ -102,7 +102,6 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     const tasks: ExecTask[] = (linsight?.tasks as any) || [];
     const sessionSteps: ExecStepEventData[] = (linsight as any)?.sessionSteps || [];
     const status = linsight?.status;
-    console.log("[TJ][Panel] render. svid:", versionId, "hasLinsight:", !!linsight, "status:", status, "tasks:", tasks.length, "sessionSteps:", sessionSteps.length);
     const running = status === SopStatus.Running;
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
     const stopped = status === SopStatus.Stoped;
@@ -120,13 +119,6 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     );
 
     const planning = running && !tasks.length && !pendingInput;
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => {
-        console.log("[TJ][Panel] STATE CHANGED → status:", status, "running:", running,
-            "tasks:", tasks.length, "sessionSteps:", sessionSteps.length,
-            "pendingInput:", !!pendingInput, "planning:", planning, "completed:", completed);
-    }, [status, tasks.length, sessionSteps.length, pendingInput, running, planning, completed]);
 
     const handleClarifySubmit = (taskId: string, ans: string) => {
         sendInput({ task_id: taskId || versionId, user_input: ans, files: [] });

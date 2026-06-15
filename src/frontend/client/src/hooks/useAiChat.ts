@@ -118,7 +118,6 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // optimistic task turn (see skipLoadConvoRef). Consume the guard so a
         // genuine later navigation back to this convo still reloads normally.
         if (conversationId === skipLoadConvoRef.current) {
-            console.log("[TJ][useAiChat] skipping post-handoff refetch for", conversationId);
             skipLoadConvoRef.current = null;
             setIsLoading(false);
             return;
@@ -303,11 +302,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 // seed the per-SV store, and kick off execution. The inline task
                 // bubble (TJ-7) hosts the WS and renders the live run from there.
                 onTaskHandoff: ({ session_version_id: svid, chat_id }) => {
-                    console.log("[TJ][useAiChat] onTaskHandoff fired:", { svid, chat_id, responseMessageId, wasNewConvo });
-                    if (!svid) {
-                        console.warn("[TJ][useAiChat] empty svid — aborting handoff");
-                        return;
-                    }
+                    if (!svid) return;
 
                     // Bind this conversation (new convo: chat_id was just minted
                     // server-side as a flow_type=15 daily session). Guard the load
@@ -355,22 +350,16 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         inputSop: false,
                     } as any);
 
-                    console.log("[TJ][useAiChat] createLinsight done, calling start-execute for", svid);
                     startLinsight(svid)
-                        .then(() => {
-                            console.log("[TJ][useAiChat] start-execute OK → status Running", svid);
-                            updateLinsight(svid, { status: SopStatus.Running });
-                        })
+                        .then(() => updateLinsight(svid, { status: SopStatus.Running }))
                         .catch((err) => {
-                            console.error('[TJ][useAiChat] task start-execute failed:', err);
+                            console.error('[AiChat] task start-execute failed:', err);
                             updateLinsight(svid, { taskError: String(err), status: SopStatus.Stoped });
                         });
 
                     // Promote the placeholder assistant row to a task turn so the
                     // bubble renders the embedded execution panel by SV.
                     setMessages((prev) => {
-                        const found = prev.some((m) => m.messageId === responseMessageId);
-                        console.log("[TJ][useAiChat] upgrading msg to task. matchFound:", found, "ids:", prev.map((m) => m.messageId));
                         return prev.map((m) =>
                             m.messageId === responseMessageId
                                 ? {

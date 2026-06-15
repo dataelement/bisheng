@@ -503,7 +503,6 @@ function AssistantBubble({
     // panel by SV instead of the agent/legacy text rendering. The user question
     // bubble is the preceding (daily) user row; this row owns the rich panel.
     if (message.category === "task") {
-        console.log("[TJ][Bubble] rendering task bubble. svid:", message.linsightSessionVersionId, "msgId:", message.messageId);
         return (
             <div className={cn("flex justify-start py-3 items-start gap-2", knowledgeChatLayout ? "w-full px-0" : "px-4")}>
                 {showCheckbox && message.conversationId && (

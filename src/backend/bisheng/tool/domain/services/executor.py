@@ -1,28 +1,28 @@
 import functools
 import json
 from inspect import signature
-from typing import Any, Annotated, Optional, Dict, List
+from typing import Annotated, Any
 
 from langchain_core.callbacks import CallbackManagerForToolRun, Callbacks
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool, ArgsSchema
+from langchain_core.tools import ArgsSchema, BaseTool
 from pydantic import Field, SkipValidation
 
-from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, StatusEnum, ApplicationTypeEnum
+from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum, StatusEnum
+from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.telemetry.event_data_schema import ToolInvocationEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, Knowledge
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao
 from bisheng.mcp_manage.langchain.tool import McpTool
 from bisheng.mcp_manage.manager import ClientManager
-from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.permission.domain.services.owner_service import _run_async_safe
 from bisheng.permission.domain.services.tool_permission_service import ToolPermissionService
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRagTool
-from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsTools, GptsToolsType
+from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
 from bisheng.tool.domain.services.openapi import OpenApiSchema
 from bisheng_langchain.gpts.load_tools import load_tools
 from bisheng_langchain.gpts.tools.api_tools.openapi import OpenApiTools
@@ -78,14 +78,12 @@ class ToolExecutor(BaseTool):
     # langchain tool fields
     name: str = Field(..., description="Tool Name for llm")
     description: str = Field(..., description="Tool Description for llm")
-    args_schema: Annotated[Optional[ArgsSchema], SkipValidation()] = Field(
-        default=None, description="The tool schema."
-    )
+    args_schema: Annotated[ArgsSchema | None, SkipValidation()] = Field(default=None, description="The tool schema.")
     tool_instance: BaseTool = Field(..., description="Langchain Tool Instance")
 
     @staticmethod
     def _build_permission_user(user_id: int) -> UserPayload:
-        return UserPayload(user_id=user_id, user_name='', user_role=[])
+        return UserPayload(user_id=user_id, user_name="", user_role=[])
 
     @classmethod
     async def _ensure_use_permission_async(cls, tool_type: GptsToolsType, user_id: int) -> None:
@@ -95,7 +93,7 @@ class ToolExecutor(BaseTool):
         allowed = await ToolPermissionService.has_any_permission_async(
             login_user,
             str(tool_type.id),
-            ['use_tool'],
+            ["use_tool"],
         )
         if not allowed:
             raise PermissionError("Permission denied: use_tool")
@@ -107,16 +105,33 @@ class ToolExecutor(BaseTool):
         _run_async_safe(cls._ensure_use_permission_async(tool_type, user_id))
 
     @classmethod
-    def init_by_tool_instance(cls, base_tool: BaseTool, tool: GptsTools, *, app_id: str, app_name: str,
-                              app_type: ApplicationTypeEnum, user_id: int) -> BaseTool:
-        return cls(name=base_tool.name, description=base_tool.description, args_schema=base_tool.args_schema,
-                   tool_instance=base_tool,
-                   app_id=app_id, app_name=app_name, app_type=app_type, user_id=user_id,
-                   tool_id=tool.id, tool_is_preset=tool.is_preset, tool_name=tool.name)
+    def init_by_tool_instance(
+        cls,
+        base_tool: BaseTool,
+        tool: GptsTools,
+        *,
+        app_id: str,
+        app_name: str,
+        app_type: ApplicationTypeEnum,
+        user_id: int,
+    ) -> BaseTool:
+        return cls(
+            name=base_tool.name,
+            description=base_tool.description,
+            args_schema=base_tool.args_schema,
+            tool_instance=base_tool,
+            app_id=app_id,
+            app_name=app_name,
+            app_type=app_type,
+            user_id=user_id,
+            tool_id=tool.id,
+            tool_is_preset=tool.is_preset,
+            tool_name=tool.name,
+        )
 
     @staticmethod
-    def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> Dict:
-        """ parse tool init params """
+    def parse_preset_tool_params(tool: GptsTools, tool_type: GptsToolsType) -> dict:
+        """parse tool init params"""
         # get tool config from tool.extra first
         params = {}
         if tool.extra:
@@ -131,20 +146,24 @@ class ToolExecutor(BaseTool):
                 params = tool_type.extra
 
         # special handling for bisheng_code_interpreter, because it needs minio config
-        if tool.tool_key == 'bisheng_code_interpreter':
-            return {'minio': settings.get_minio_conf().model_dump(), **params}
+        if tool.tool_key == "bisheng_code_interpreter":
+            return {"minio": settings.get_minio_conf().model_dump(), **params}
         return params
 
     @staticmethod
-    def parse_api_tool_params(tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> Dict:
-        """ parse tool init params """
+    def parse_api_tool_params(tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> dict:
+        """parse tool init params"""
         extra_json = json.loads(tool.extra) if tool.extra else {}
         extra_json.update(json.loads(tool_type.extra) if tool_type.extra else {})
-        params = OpenApiSchema.parse_openapi_tool_params(tool.name, tool.desc, extra_json,
-                                                         tool_type.server_host,
-                                                         tool_type.auth_method,
-                                                         tool_type.auth_type,
-                                                         tool_type.api_key)
+        params = OpenApiSchema.parse_openapi_tool_params(
+            tool.name,
+            tool.desc,
+            extra_json,
+            tool_type.server_host,
+            tool_type.auth_method,
+            tool_type.auth_type,
+            tool_type.api_key,
+        )
         if "llm" in kwargs:
             kwargs.pop("llm")
         params.update(kwargs)
@@ -152,17 +171,16 @@ class ToolExecutor(BaseTool):
 
     @classmethod
     def _init_preset_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
-        tool_name_param = {
-            tool.tool_key: cls.parse_preset_tool_params(tool, tool_type)
-        }
+        tool_name_param = {tool.tool_key: cls.parse_preset_tool_params(tool, tool_type)}
         tool_langchain = load_tools(tool_params=tool_name_param, **kwargs)
         if not tool_langchain:
             raise ValueError(f"Failed to load preset tool: {tool.tool_key}")
         return tool_langchain[0]
 
     @classmethod
-    def _init_api_tool(cls, tool: GptsTools, tool_type: GptsToolsType, callbacks: Callbacks = None,
-                       **kwargs) -> BaseTool:
+    def _init_api_tool(
+        cls, tool: GptsTools, tool_type: GptsToolsType, callbacks: Callbacks = None, **kwargs
+    ) -> BaseTool:
         tool_params = cls.parse_api_tool_params(tool, tool_type, **kwargs)
         tool = OpenApiTools.get_api_tool(tool.tool_key, **tool_params)
         tool.callbacks = callbacks
@@ -172,13 +190,27 @@ class ToolExecutor(BaseTool):
     def _init_mcp_tool(cls, tool: GptsTools, tool_type: GptsToolsType, **kwargs) -> BaseTool:
         mcp_client = ClientManager.sync_connect_mcp_from_json(tool_type.openapi_schema)
         input_schema = json.loads(tool.extra)
-        return McpTool.get_mcp_tool(name=tool.tool_key, description=tool.desc, mcp_client=mcp_client,
-                                    mcp_tool_name=tool.name, arg_schema=input_schema['inputSchema'],
-                                    **kwargs)
+        return McpTool.get_mcp_tool(
+            name=tool.tool_key,
+            description=tool.desc,
+            mcp_client=mcp_client,
+            mcp_tool_name=tool.name,
+            arg_schema=input_schema["inputSchema"],
+            **kwargs,
+        )
 
     @classmethod
-    def _init_by_tool_and_type(cls, tool: GptsTools, tool_type: GptsToolsType, *, app_id: str, app_name: str,
-                               app_type: ApplicationTypeEnum, user_id: int, **kwargs) -> BaseTool:
+    def _init_by_tool_and_type(
+        cls,
+        tool: GptsTools,
+        tool_type: GptsToolsType,
+        *,
+        app_id: str,
+        app_name: str,
+        app_type: ApplicationTypeEnum,
+        user_id: int,
+        **kwargs,
+    ) -> BaseTool:
         if tool.is_preset == ToolPresetType.PRESET.value:
             tool_instance = cls._init_preset_tool(tool, tool_type, **kwargs)
         elif tool.is_preset == ToolPresetType.API.value:
@@ -187,12 +219,22 @@ class ToolExecutor(BaseTool):
             tool_instance = cls._init_mcp_tool(tool, tool_type, **kwargs)
         else:
             raise ValueError(f"Unsupported tool preset type: {tool.is_preset}")
-        return cls.init_by_tool_instance(base_tool=tool_instance, tool=tool, app_id=app_id,
-                                         app_name=app_name, app_type=app_type, user_id=user_id)
+        return cls.init_by_tool_instance(
+            base_tool=tool_instance, tool=tool, app_id=app_id, app_name=app_name, app_type=app_type, user_id=user_id
+        )
 
     @classmethod
-    async def init_by_tool_id(cls, tool_id: int = None, tool: GptsTools = None, *, app_id: str, app_name: str,
-                              app_type: ApplicationTypeEnum, user_id: int, **kwargs) -> BaseTool:
+    async def init_by_tool_id(
+        cls,
+        tool_id: int = None,
+        tool: GptsTools = None,
+        *,
+        app_id: str,
+        app_name: str,
+        app_type: ApplicationTypeEnum,
+        user_id: int,
+        **kwargs,
+    ) -> BaseTool:
         if not tool_id and not tool:
             raise ValueError("Either tool_id or tool must be provided.")
         if not tool:
@@ -203,13 +245,29 @@ class ToolExecutor(BaseTool):
         if not tool_type:
             raise ValueError(f"Tool type with id {tool.type} not found.")
         await cls._ensure_use_permission_async(tool_type, user_id)
-        return cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id, app_name=app_name,
-                                          app_type=app_type, user_id=user_id, **kwargs)
+        return cls._init_by_tool_and_type(
+            tool=tool,
+            tool_type=tool_type,
+            app_id=app_id,
+            app_name=app_name,
+            app_type=app_type,
+            user_id=user_id,
+            **kwargs,
+        )
 
     @classmethod
-    def _init_tools(cls, tools: List[GptsTools], tool_types_map: Dict[int, GptsToolsType], *,
-                    app_id: str, app_name: str, app_type: ApplicationTypeEnum,
-                    user_id: int, enforce_permission: bool = True, **kwargs) -> List[BaseTool]:
+    def _init_tools(
+        cls,
+        tools: list[GptsTools],
+        tool_types_map: dict[int, GptsToolsType],
+        *,
+        app_id: str,
+        app_name: str,
+        app_type: ApplicationTypeEnum,
+        user_id: int,
+        enforce_permission: bool = True,
+        **kwargs,
+    ) -> list[BaseTool]:
         result = []
         for tool in tools:
             tool_type = tool_types_map.get(tool.type)
@@ -218,14 +276,30 @@ class ToolExecutor(BaseTool):
             if enforce_permission:
                 cls._ensure_use_permission_sync(tool_type, user_id)
             result.append(
-                cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id,
-                                           app_name=app_name, app_type=app_type, user_id=user_id, **kwargs)
+                cls._init_by_tool_and_type(
+                    tool=tool,
+                    tool_type=tool_type,
+                    app_id=app_id,
+                    app_name=app_name,
+                    app_type=app_type,
+                    user_id=user_id,
+                    **kwargs,
+                )
             )
         return result
 
     @classmethod
-    async def init_by_tool_ids(cls, tool_ids: list[int], *, app_id: str, app_name: str, app_type: ApplicationTypeEnum,
-                               user_id: int, skip_unauthorized: bool = False, **kwargs) -> List[BaseTool]:
+    async def init_by_tool_ids(
+        cls,
+        tool_ids: list[int],
+        *,
+        app_id: str,
+        app_name: str,
+        app_type: ApplicationTypeEnum,
+        user_id: int,
+        skip_unauthorized: bool = False,
+        **kwargs,
+    ) -> list[BaseTool]:
         tools = await GptsToolsDao.aget_list_by_ids(tool_ids)
         tool_type_ids = [tool.type for tool in tools]
         tool_types = await GptsToolsDao.aget_all_tool_type(list(set(tool_type_ids)))
@@ -243,23 +317,34 @@ class ToolExecutor(BaseTool):
                 raise
             allowed_tools.append(tool)
 
-        return cls._init_tools(allowed_tools, tool_type_map, app_id=app_id, app_name=app_name, app_type=app_type,
-                               user_id=user_id, enforce_permission=False, **kwargs)
+        return cls._init_tools(
+            allowed_tools,
+            tool_type_map,
+            app_id=app_id,
+            app_name=app_name,
+            app_type=app_type,
+            user_id=user_id,
+            enforce_permission=False,
+            **kwargs,
+        )
 
     @classmethod
-    def init_by_tool_ids_sync(cls, tool_ids: list[int], app_id: str, app_name: str, app_type: ApplicationTypeEnum,
-                              user_id: int, **kwargs) -> List[BaseTool]:
+    def init_by_tool_ids_sync(
+        cls, tool_ids: list[int], app_id: str, app_name: str, app_type: ApplicationTypeEnum, user_id: int, **kwargs
+    ) -> list[BaseTool]:
         tools = GptsToolsDao.get_list_by_ids(tool_ids)
         tool_type_ids = [tool.type for tool in tools]
         tool_types = GptsToolsDao.get_all_tool_type(list(set(tool_type_ids)))
         tool_type_map = {tool_type.id: tool_type for tool_type in tool_types}
 
-        return cls._init_tools(tools, tool_type_map, app_id=app_id, app_name=app_name, app_type=app_type,
-                               user_id=user_id, **kwargs)
+        return cls._init_tools(
+            tools, tool_type_map, app_id=app_id, app_name=app_name, app_type=app_type, user_id=user_id, **kwargs
+        )
 
     @classmethod
-    def init_by_tool_id_sync(cls, tool_id: int, *, app_id: str, app_name: str, app_type: ApplicationTypeEnum,
-                             user_id: int, **kwargs) -> BaseTool:
+    def init_by_tool_id_sync(
+        cls, tool_id: int, *, app_id: str, app_name: str, app_type: ApplicationTypeEnum, user_id: int, **kwargs
+    ) -> BaseTool:
         tool = GptsToolsDao.get_one_tool(tool_id=tool_id)
         if not tool:
             raise ValueError(f"Tool with id {tool_id} not found.")
@@ -268,14 +353,21 @@ class ToolExecutor(BaseTool):
             raise ValueError(f"Tool type with id {tool.type} not found.")
         cls._ensure_use_permission_sync(tool_type, user_id)
 
-        return cls._init_by_tool_and_type(tool=tool, tool_type=tool_type, app_id=app_id, app_name=app_name,
-                                          app_type=app_type, user_id=user_id, **kwargs)
+        return cls._init_by_tool_and_type(
+            tool=tool,
+            tool_type=tool_type,
+            app_id=app_id,
+            app_name=app_name,
+            app_type=app_type,
+            user_id=user_id,
+            **kwargs,
+        )
 
     @classmethod
     def _init_knowledge_rag_tool(cls, knowledge: Knowledge, **kwargs) -> BaseTool:
-        return KnowledgeRagTool.init_knowledge_rag_tool(name=f'knowledge_{knowledge.id}',
-                                                        description=f'{knowledge.name}:{knowledge.description}',
-                                                        **kwargs)
+        return KnowledgeRagTool.init_knowledge_rag_tool(
+            name=f"knowledge_{knowledge.id}", description=f"{knowledge.name}:{knowledge.description}", **kwargs
+        )
 
     @classmethod
     async def init_knowledge_tool(cls, invoke_user_id: int, knowledge_id: int, **kwargs) -> BaseTool:
@@ -284,8 +376,12 @@ class ToolExecutor(BaseTool):
             raise ValueError(f"Knowledge with id {knowledge_id} not found.")
         vector_client = await KnowledgeRag.init_knowledge_milvus_vectorstore(invoke_user_id, knowledge)
         es_client = await KnowledgeRag.init_knowledge_es_vectorstore(knowledge)
-        return cls._init_knowledge_rag_tool(knowledge=knowledge, vector_retriever=vector_client.as_retriever(),
-                                            elastic_retriever=es_client.as_retriever(), **kwargs)
+        return cls._init_knowledge_rag_tool(
+            knowledge=knowledge,
+            vector_retriever=vector_client.as_retriever(),
+            elastic_retriever=es_client.as_retriever(),
+            **kwargs,
+        )
 
     @classmethod
     def init_knowledge_tool_sync(cls, invoke_user_id: int, knowledge_id: int, **kwargs) -> BaseTool:
@@ -294,19 +390,21 @@ class ToolExecutor(BaseTool):
             raise ValueError(f"Knowledge with id {knowledge_id} not found.")
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(invoke_user_id, knowledge)
         es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge)
-        return cls._init_knowledge_rag_tool(knowledge, vector_retriever=vector_client.as_retriever(),
-                                            elastic_retriever=es_client.as_retriever(), **kwargs)
+        return cls._init_knowledge_rag_tool(
+            knowledge,
+            vector_retriever=vector_client.as_retriever(),
+            elastic_retriever=es_client.as_retriever(),
+            **kwargs,
+        )
 
     @classmethod
     def init_tmp_knowledge_tool_sync(cls, **kwargs) -> BaseTool:
         return KnowledgeRagTool.init_knowledge_rag_tool(**kwargs)
 
     @wrapper_tool_sync
-    def _run(self,
-             *args: Any,
-             config: RunnableConfig,
-             run_manager: Optional[CallbackManagerForToolRun] = None,
-             **kwargs) -> Any:
+    def _run(
+        self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
+    ) -> Any:
 
         if signature(self.tool_instance._run).parameters.get("config"):
             kwargs["config"] = config
@@ -315,15 +413,29 @@ class ToolExecutor(BaseTool):
         return self.tool_instance._run(*args, **kwargs)
 
     @wrapper_tool
-    async def _arun(self,
-                    *args: Any,
-                    config: RunnableConfig,
-                    run_manager: Optional[CallbackManagerForToolRun] = None,
-                    **kwargs) -> Any:
+    async def _arun(
+        self, *args: Any, config: RunnableConfig, run_manager: CallbackManagerForToolRun | None = None, **kwargs
+    ) -> Any:
         if signature(self.tool_instance._run).parameters.get("config"):
             kwargs["config"] = config
         if signature(self.tool_instance._run).parameters.get("run_manager"):
             kwargs["run_manager"] = run_manager
+        # Linsight resilience (F035): a single tool failure must NOT crash the
+        # whole task. The deepagents ToolNode re-raises non-ToolException errors,
+        # which kills the run. For LINSIGHT only (daily/workflow behaviour is
+        # unchanged) we convert any tool exception into a soft error string so the
+        # agent sees "tool failed", can react, and the task keeps going.
+        if self.app_type == ApplicationTypeEnum.LINSIGHT:
+            try:
+                return await self.tool_instance._arun(*args, **kwargs)
+            except Exception as e:
+                from loguru import logger as _logger
+
+                _logger.warning(f"linsight tool '{self.tool_name}' failed: {e}")
+                return json.dumps(
+                    {"状态": "失败", "错误信息": f"工具 {self.tool_name} 调用失败: {e}"},
+                    ensure_ascii=False,
+                )
         return await self.tool_instance._arun(*args, **kwargs)
 
     def __getattr__(self, item):
@@ -342,5 +454,6 @@ class ToolExecutor(BaseTool):
                 tool_id=self.tool_id,
                 tool_name=self.tool_name,
                 tool_type=self.tool_is_preset,
-                status=status
-            )}
+                status=status,
+            ),
+        }
