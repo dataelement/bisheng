@@ -1779,24 +1779,87 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
 def _to_linsight_submit(data: APIChatCompletion):
     """Map the unified chat request to a linsight submit schema (F035 Track J).
 
-    Sound mappings only — question, conversation (session_id), the per-task
-    execution model (``data.model``, same workstation model-id the daily path
-    uses) and knowledge booleans. The model MUST be forwarded: dropping it makes
-    every task-mode turn fall back to the tenant ``linsight_default_model_id``,
-    which fails outright when that is unconfigured.
-    Tools/files are NOT mapped from the daily-shaped fields: daily and
-    task use different subsystems (flat ToolPayload vs grouped linsight tools;
-    separate upload buckets), so a daily selection is not a valid linsight one.
-    Task-mode tools/files come from linsight-native selection forwarded by the
-    frontend (TJ-6) — to be threaded through here when that lands.
+    Sound mappings only — question, conversation (session_id), the per-turn
+    execution model, and the knowledge booleans.
+
+    Model IS threaded: the daily ``model`` is an id from the same LLM registry
+    linsight resolves against (agent_factory._resolve_model), so the user's
+    picked model takes effect on the task turn (falling back to the tenant
+    linsight default only when absent).
+
+    Unified-resource direction (2026-06-16, user decision): task mode reuses the
+    DAILY resources; linsight's own resource subsystems are deprecated. Tools and
+    files are now threaded from the daily fields:
+
+    - **Tools**: daily ``ToolPayload`` ids live in the SAME ``GptsTools`` table as
+      linsight (both resolve via ``ToolExecutor``); the linsight per-app config
+      whitelist is dropped (see ``init_linsight_config_tools``), so the user's
+      daily tool selection binds directly. We wrap the flat ids into the grouped
+      linsight tool shape (``_extract_tool_ids`` reads ``children[].id``).
+    - **Files**: threaded as linsight-resolvable refs (see below).
     """
-    from bisheng.linsight.domain.schemas.linsight_schema import LinsightQuestionSubmitSchema
+    from bisheng.linsight.domain.schemas.linsight_schema import (
+        LinsightQuestionSubmitSchema,
+        LinsightToolSchema,
+        SubmitFileSchema,
+        ToolChildrenSchema,
+    )
 
     ukb = data.use_knowledge_base
+
+    # Tools: wrap the daily flat selection into one grouped linsight tool whose
+    # children carry the real GptsTools ids. The whitelist is dropped downstream,
+    # so every selected tool the user has access to binds in the task agent.
+    submit_tools = None
+    if data.tools:
+        children = [
+            ToolChildrenSchema(id=int(tp.id), tool_key=tp.tool_key)
+            for tp in data.tools
+            # web_search needs daily's dedicated _build_web_search_tool wiring
+            # (auth/headers); it is NOT a plain init_by_tool_id tool, so binding
+            # it into the linsight agent both mis-wires it and trips its header
+            # build. Exclude it from task-mode tools until wired natively.
+            if (tp.type or "tool") == "tool" and tp.id and tp.tool_key != "web_search"
+        ]
+        if children:
+            submit_tools = [LinsightToolSchema(id=0, name="daily", is_preset=0, children=children)]
+
+    # Files ARE threaded for task mode: the frontend uploads via the linsight
+    # pipeline (uploadMode='linsight') when the task toggle is on, so each item
+    # already carries a linsight-resolvable file_id + parsing_status. Map the
+    # daily-shaped dicts onto the linsight SubmitFileSchema (tolerant of the
+    # filename/file_name/name variants the uploader emits).
+    submit_files = None
+    if data.files:
+        submit_files = []
+        for item in data.files:
+            file_id = item.get("file_id") or item.get("id")
+            if not file_id:
+                continue
+            submit_files.append(
+                SubmitFileSchema(
+                    file_id=str(file_id),
+                    file_name=item.get("file_name") or item.get("filename") or item.get("name") or "",
+                    parsing_status=item.get("parsing_status") or "completed",
+                )
+            )
+        submit_files = submit_files or None
+
+    # Knowledge (coarse, unified-resource): the daily picker selects specific KB
+    # ids (org) + knowledge-space ids; linsight's model is two coarse booleans.
+    # Map org-KB selection -> org (NORMAL) enabled, knowledge-space selection ->
+    # personal (PRIVATE) enabled. The task agent then gets ALL the user's KBs of
+    # the enabled type injected at execution (coarse: not filtered to the exact
+    # ids — honoring the specific selection would need a per-SV id column).
+    personal_enabled = bool(ukb and (ukb.knowledge_space_ids or ukb.personal_knowledge_enabled))
+    org_enabled = bool(ukb and ukb.organization_knowledge_ids)
+
     return LinsightQuestionSubmitSchema(
         question=data.text or "",
         session_id=data.conversationId,
-        personal_knowledge_enabled=bool(ukb.personal_knowledge_enabled) if ukb else False,
-        org_knowledge_enabled=bool(ukb.organization_knowledge_ids) if ukb else False,
-        model=data.model,
+        personal_knowledge_enabled=personal_enabled,
+        org_knowledge_enabled=org_enabled,
+        model=data.model or None,
+        files=submit_files,
+        tools=submit_tools,
     )

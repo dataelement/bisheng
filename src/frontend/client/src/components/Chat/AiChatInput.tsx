@@ -410,7 +410,7 @@ const AiChatInput = memo(
                             disabled={filesDisabled}
                             hideTrigger
                             hideList
-                            uploadMode={isLingsi ? 'linsight' : 'workstation'}
+                            uploadMode={(isLingsi || taskMode) ? 'linsight' : 'workstation'}
                             size={envConfig?.uploaded_files_maximum_size || 50}
                             onFilesStateChange={(currentFiles: any[] = []) => {
                                 const pending = currentFiles

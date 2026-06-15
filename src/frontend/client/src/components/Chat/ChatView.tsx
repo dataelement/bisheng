@@ -239,9 +239,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       setTaskMode(false);
       return;
     }
-    if ((location.state as any)?.taskMode) {
-      setTaskMode(true);
-    }
+    // On /c/new the mode is driven solely by the nav state: "新建任务" carries
+    // state.taskMode=true, "新建对话" carries none. Set explicitly both ways so
+    // switching from task → chat (or chat → task) actually flips the toggle
+    // instead of leaving a stale mode behind.
+    setTaskMode(!!(location.state as any)?.taskMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key, conversationId]);
 
