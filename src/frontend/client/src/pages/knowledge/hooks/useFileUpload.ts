@@ -174,23 +174,30 @@ export function useFileUpload({
             // Upload each file to server
             const uploadedPaths: string[] = [];
 
+            const COLLAPSIBLE_CODES = new Set([18024, 19403]);
             const failures: { name: string; reason: string; statusCode?: number }[] = [];
-            for (const file of fileArray) {
+            // When a quota/permission error is hit, remaining files would all fail
+            // for the same reason — record the count and break early.
+            let earlyStop: { reason: string; statusCode: number; skippedCount: number } | null = null;
+            for (let i = 0; i < fileArray.length; i++) {
+                const file = fileArray[i];
                 try {
                     const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file);
                     uploadedPaths.push(res.file_path);
                 } catch (err) {
-                    failures.push({
-                        name: file.name,
-                        reason: resolveUploadErrorReason(err),
-                        statusCode: (err as any)?.statusCode,
-                    });
+                    const statusCode: number | undefined = (err as any)?.statusCode;
+                    const reason = resolveUploadErrorReason(err);
+                    failures.push({ name: file.name, reason, statusCode });
+                    if (statusCode && COLLAPSIBLE_CODES.has(statusCode)) {
+                        earlyStop = { reason, statusCode, skippedCount: fileArray.length - i - 1 };
+                        break;
+                    }
                 }
             }
-            if (failures.length > 0) {
+            if (failures.length > 0 || earlyStop) {
                 // When multiple files fail with the same quota/permission error code,
                 // collapse them into one summary line instead of N identical lines.
-                const COLLAPSIBLE_CODES = new Set([18024, 19403]);
+                // earlyStop.skippedCount adds files that were never attempted.
                 const collapsed: { reason: string; count: number }[] = [];
                 const individual: { name: string; reason: string }[] = [];
                 const seenCode = new Map<number, { reason: string; count: number }>();
@@ -206,6 +213,12 @@ export function useFileUpload({
                         }
                     } else {
                         individual.push(f);
+                    }
+                }
+                if (earlyStop && earlyStop.skippedCount > 0) {
+                    const existing = seenCode.get(earlyStop.statusCode);
+                    if (existing) {
+                        existing.count += earlyStop.skippedCount;
                     }
                 }
                 const lines: string[] = [
