@@ -10,7 +10,7 @@ import { RunningSpinner, StepRow } from './StepRow';
 import { StepList } from './StepList';
 import { IntentRow } from './IntentRow';
 import type { ExecStepEventData } from './stepUtils';
-import { isTaskDone, isTaskRunning, TASK_ERROR_STATUSES } from './stepUtils';
+import { isTaskDone, isTaskRunning, isTaskStarted, TASK_ERROR_STATUSES } from './stepUtils';
 
 export interface ExecTask {
     id: string;
@@ -23,10 +23,10 @@ export interface ExecTask {
 }
 
 function statusIcon(status: string) {
-    if (isTaskDone(status)) return <Outlined.DoubleCheck size={14} className="text-[#333]" />;
+    if (isTaskDone(status)) return <Outlined.DoubleCheck size={16} className="text-[#333]" />;
     if (isTaskRunning(status)) return <RunningSpinner />;
-    if (TASK_ERROR_STATUSES.includes(status)) return <XCircle size={14} className="text-red-400" />;
-    return <Circle size={10} className="text-[#333]" />;
+    if (TASK_ERROR_STATUSES.includes(status)) return <XCircle size={16} className="text-red-400" />;
+    return <Circle size={16} className="text-[#333]" />;
 }
 
 export function TaskStepRow({ task }: { task: ExecTask }) {
@@ -54,8 +54,9 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
                         <IntentRow key={`input_${i}`} data={entry} />
                     ))}
                     <StepList history={task.history} />
-                    {/* legacy two-level tasks: render children as nested task rows */}
-                    {(task.children || []).map((child) => (
+                    {/* legacy two-level tasks: render children as nested task rows —
+                        same rule, only show children execution has reached */}
+                    {(task.children || []).filter((child) => isTaskStarted(child.status)).map((child) => (
                         <TaskStepRow key={child.id} task={child} />
                     ))}
                     {task.errorMsg && TASK_ERROR_STATUSES.includes(task.status) && (

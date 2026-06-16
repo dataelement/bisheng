@@ -59,9 +59,9 @@ interface KnowledgeSpaceHeaderProps {
     canShareSpace?: boolean;
     /** Version management: gates the "process similar documents" entry + per-row version actions. */
     versionManagementEnabled?: boolean;
-    /** Count of pending similar-document files; drives the header entry badge. */
-    pendingSimilarCount?: number;
-    /** Opens the similar-document processing dialog. */
+    /** True when the current selection contains at least one pending similar document. */
+    hasSimilarSelected?: boolean;
+    /** Opens the similar-document processing dialog (restricted to the current selection). */
     onProcessSimilar?: () => void;
     /** Whether the current user can manage members (gates the process-similar entry). */
     canManageMembers?: boolean;
@@ -102,7 +102,7 @@ export function KnowledgeSpaceHeader({
     enableCardMode = true,
     canShareSpace = false,
     versionManagementEnabled = false,
-    pendingSimilarCount = 0,
+    hasSimilarSelected = false,
     onProcessSimilar,
     canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
@@ -242,20 +242,6 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
-            {versionManagementEnabled && canManageMembers && pendingSimilarCount > 0 && onProcessSimilar && (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-md border border-[#F76F44] bg-[#FFF3E8] px-3 font-normal text-[#F76F44] hover:bg-[#FFE6D2] hover:text-[#F76F44]"
-                    onClick={onProcessSimilar}
-                >
-                    <FileSearch className="size-4" />
-                    {localize("com_knowledge.version.header_process_similar_label")}
-                    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded bg-white px-1 text-xs text-[#F76F44]">
-                        {pendingSimilarCount}
-                    </span>
-                </Button>
-            )}
             {viewModeToggleButton}
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
@@ -266,6 +252,13 @@ export function KnowledgeSpaceHeader({
                         </Button>
                     </DropdownMenuTrigger>
                     <ActionMenuContent align="end">
+                        {versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar && (
+                            <ActionMenuItem
+                                onClick={onProcessSimilar}
+                                icon={<FileSearch />}
+                                label={localize("com_knowledge.version.header_process_similar_label")}
+                            />
+                        )}
                         {canBatchDownload && (
                             <ActionMenuItem
                                 onClick={onBatchDownload}

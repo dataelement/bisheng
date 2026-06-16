@@ -13,6 +13,7 @@ import { IntentRow } from './IntentRow';
 import { StepList } from './StepList';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
+import { isTaskStarted } from './stepUtils';
 
 interface ConversationRoundProps {
     round: LinsightRoundSnapshot;
@@ -45,7 +46,7 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
 
             <StepList history={sessionSteps} />
 
-            {tasks.map((task) => (
+            {tasks.filter((task) => isTaskStarted(task.status)).map((task) => (
                 <TaskStepRow key={task.id} task={task} />
             ))}
 

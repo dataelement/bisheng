@@ -186,7 +186,7 @@ export default function Conversation({
       )}
     >
       {renaming ? (
-        <div className="flex h-6 grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all">
+        <div className="flex h-5 grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all">
           <input
             ref={inputRef}
             type="text"

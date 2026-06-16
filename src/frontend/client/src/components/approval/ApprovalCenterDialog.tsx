@@ -1,3 +1,4 @@
+import { FileCheck2, SendToBack } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   decideApprovalTaskApi,
@@ -383,44 +384,32 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     ["approved", "executed"].includes(String(taskDetail?.instance_status ?? "").toLowerCase()) &&
     !taskDetail?.grant_revoked;
 
-  const dialogTitle = activeTab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests");
-  const dialogSubtitle = activeTab === "my_tasks" ? localize("com_approval_my_approval_desc") : localize("com_approval_my_requests_desc");
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[80vh] max-h-[820px] w-[calc(100vw-64px)] max-w-[1080px] rounded-2xl p-0">
         <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-white">
           {/* Header */}
           <div className="border-b border-[#f2f3f5] px-6 py-4">
-            <h2 className="text-[18px] font-semibold text-[#1d2129]">{dialogTitle}</h2>
-            <p className="mt-0.5 text-[13px] text-[#86909c]">{dialogSubtitle}</p>
+            <h2 className="text-[18px] font-semibold text-[#1d2129]">{localize("com_approval_center_title")}</h2>
           </div>
 
-          {/* Top tabs */}
-          <div className="flex items-center justify-between border-b border-[#f2f3f5] px-6 py-2">
-            <div className="flex gap-1">
-              {(["my_tasks", "my_requests"] as ApprovalCenterTab[]).map((tab) => (
-                <button key={tab} type="button"
-                  className={cn("rounded-lg px-4 py-2 text-[14px] transition-colors",
-                    activeTab === tab ? "bg-[#e8f3ff] text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
-                  onClick={() => { setActiveTab(tab); setSearchQuery(""); }}>
-                  {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
-                </button>
-              ))}
+          <div className="grid min-h-0 flex-1 grid-cols-[84px_300px_minmax(0,1fr)]">
+            {/* Vertical icon tabs (my_tasks / my_requests) */}
+            <div className="flex flex-col gap-2 border-r border-[#f2f3f5] bg-[#fafbfc] p-2 pt-3">
+              {(["my_tasks", "my_requests"] as ApprovalCenterTab[]).map((tab) => {
+                const TabIcon = tab === "my_tasks" ? FileCheck2 : SendToBack;
+                return (
+                  <button key={tab} type="button"
+                    className={cn("flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-[12px] leading-none transition-colors",
+                      activeTab === tab ? "bg-[#e8f3ff] text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
+                    onClick={() => { setActiveTab(tab); setSearchQuery(""); }}>
+                    <TabIcon className="size-[22px]" />
+                    {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
+                  </button>
+                );
+              })}
             </div>
-            <div className="flex items-center gap-1.5 rounded-lg border border-[#e5e6eb] px-3 py-1.5 text-[13px] text-[#c9cdd4] focus-within:border-[#165dff]">
-              <span>⌕</span>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={localize("com_approval_search_placeholder")}
-                className="w-40 bg-transparent text-[#1d2129] placeholder:text-[#c9cdd4] outline-none"
-              />
-            </div>
-          </div>
 
-          <div className="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)]">
             {/* Left list */}
             <div className="flex min-h-0 flex-col border-r border-[#f2f3f5] bg-[#fafbfc]">
               <div className="flex gap-1 px-3 pt-3 pb-1">
@@ -441,6 +430,20 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                         {f === "in_progress" ? localize("com_approval_status_pending") : localize("com_approval_tab_completed")}
                       </button>
                     ))}
+              </div>
+
+              {/* Search box (moved from the old top bar into the list column) */}
+              <div className="px-3 pb-2 pt-1">
+                <div className="flex items-center gap-1.5 rounded-lg border border-[#e5e6eb] px-3 py-1.5 text-[13px] text-[#c9cdd4] focus-within:border-[#165dff]">
+                  <span>⌕</span>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={localize("com_approval_search_placeholder")}
+                    className="w-full bg-transparent text-[#1d2129] placeholder:text-[#c9cdd4] outline-none"
+                  />
+                </div>
               </div>
 
               {loadingList ? (
