@@ -1,4 +1,4 @@
-import { FolderPlus, FolderInput, FileSearch } from "lucide-react";
+import { FolderPlus, FolderUp, FolderInput, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -34,6 +34,7 @@ interface KnowledgeSpaceHeaderProps {
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
+    onTriggerUploadFolder: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
     /** Localized comma-joined list of supported upload formats for the upload-button tooltip. */
@@ -83,6 +84,7 @@ export function KnowledgeSpaceHeader({
     onSort,
     onCreateFolder,
     onTriggerUpload,
+    onTriggerUploadFolder,
     canCreateFolder = false,
     canUploadFile = false,
     supportedFormatsLabel,
@@ -312,32 +314,37 @@ export function KnowledgeSpaceHeader({
                             className={cn(
                                 "inline-flex items-center justify-center px-4 text-sm text-[#212121] transition-colors",
                                 "hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent",
-                                canCreateFolder && "border-r border-[#ebebeb]"
+                                "border-r border-[#ebebeb]"
                             )}
                         >
                             {localize("com_knowledge.add_new")}
                         </button>
-                        {canCreateFolder && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button
-                                        type="button"
-                                        disabled={isSearching}
-                                        aria-label={localize("com_knowledge.add_new")}
-                                        className="inline-flex items-center justify-center px-2 text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
-                                    >
-                                        <Outlined.Down className="size-4" />
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <ActionMenuContent align="end">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button
+                                    type="button"
+                                    disabled={isSearching}
+                                    aria-label={localize("com_knowledge.add_new")}
+                                    className="inline-flex items-center justify-center px-2 text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
+                                >
+                                    <Outlined.Down className="size-4" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <ActionMenuContent align="end">
+                                <ActionMenuItem
+                                    onClick={onTriggerUploadFolder}
+                                    icon={<FolderUp />}
+                                    label={localize("com_knowledge.upload_folder")}
+                                />
+                                {canCreateFolder && (
                                     <ActionMenuItem
                                         onClick={onCreateFolder}
                                         icon={<FolderPlus />}
                                         label={localize("com_knowledge.new_folder")}
                                     />
-                                </ActionMenuContent>
-                            </DropdownMenu>
-                        )}
+                                )}
+                            </ActionMenuContent>
+                        </DropdownMenu>
                     </div>
                 ) : (
                     // Fallback when the user can only create folders: keep the original dropdown shape

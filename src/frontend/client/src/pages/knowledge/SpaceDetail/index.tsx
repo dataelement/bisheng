@@ -68,6 +68,10 @@ interface KnowledgeSpaceContentProps {
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
     onNavigateFolder: (folderId?: string) => void;
     onUploadFile: (files?: FileList | File[]) => void;
+    onUploadFolder: (
+        fileList: FileList | File[],
+        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+    ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
     onRenameFile: (fileId: string, newName: string) => void;
@@ -109,6 +113,7 @@ export function KnowledgeSpaceContent({
     onSort,
     onNavigateFolder,
     onUploadFile,
+    onUploadFolder,
     onCreateFolder,
     onDownloadFile,
     onRenameFile,
@@ -583,10 +588,16 @@ export function KnowledgeSpaceContent({
 
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const folderInputRef = useRef<HTMLInputElement>(null);
 
     const triggerUpload = () => {
         if (!canUploadFile) return;
         fileInputRef.current?.click();
+    };
+
+    const triggerUploadFolder = () => {
+        if (!canUploadFile) return;
+        folderInputRef.current?.click();
     };
 
     useEffect(() => {
@@ -634,6 +645,17 @@ export function KnowledgeSpaceContent({
             }
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
+    };
+
+    // Folder upload: hand the full FileList to the hook, which handles
+    // hidden-folder rejection, dup-name check, count cap, and silent filtering
+    // (oversize / unsupported / hidden) — see useFileUpload.handleUploadFolder.
+    const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const filesList = e.target.files;
+        if (filesList && filesList.length > 0 && canUploadFile) {
+            onUploadFolder(filesList, { allowedExtensions, maxSizeMB: maxFileSizeMB });
+        }
+        if (folderInputRef.current) folderInputRef.current.value = "";
     };
 
     // ─── Drag and drop ──────────────────────────────────────────────────
@@ -1030,6 +1052,20 @@ export function KnowledgeSpaceContent({
                 onChange={handleFileChange}
                 accept={fileInputAccept}
             />
+            {/* Hidden Folder Input — `webkitdirectory` makes the picker select a
+                directory; each File carries its `webkitRelativePath`. No `accept`:
+                extension filtering is done silently in the hook per spec. */}
+            <input
+                type="file"
+                multiple
+                className="hidden"
+                ref={folderInputRef}
+                onChange={handleFolderChange}
+                // `webkitdirectory`/`directory` are non-standard but accepted by
+                // every browser we ship to; React typings don't list them.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                {...({ webkitdirectory: "", directory: "" } as any)}
+            />
             {/* Mobile full-page search header: inline search box (scope + keyword + tags) + 取消.
                 Per design (Figma 11495:16476): the search-box+cancel row is 64px tall, no top padding;
                 tags flow immediately below. The 64px row is owned by CompoundSearchInput pageMode. */}
@@ -1200,6 +1236,7 @@ export function KnowledgeSpaceContent({
                 onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
+                onTriggerUploadFolder={triggerUploadFolder}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
                 supportedFormatsLabel={localize(
