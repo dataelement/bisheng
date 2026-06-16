@@ -6,8 +6,8 @@ import { Input } from "@/components/bs-ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/bs-ui/tabs";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { skillApi } from "@/controllers/API/linsight";
-import { FileUp, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Check, FileArchive, FileText, FileUp, Loader2, X } from "lucide-react";
+import { MouseEvent, useCallback, useEffect, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { getSkillErrorMessage } from "./skillErrors";
@@ -15,6 +15,18 @@ import { getSkillErrorMessage } from "./skillErrors";
 const ACCEPTED_SUFFIXES = ['.md', '.zip', '.skill'];
 const MAX_BUNDLE_SIZE = 10 * 1024 * 1024;
 const GITHUB_URL_PREFIX = 'https://github.com/';
+
+// Human-readable size so a 10MB bundle doesn't render as an unwieldy "10240.0 KB".
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    const kb = bytes / 1024;
+    return kb < 1024 ? `${kb.toFixed(1)} KB` : `${(kb / 1024).toFixed(2)} MB`;
+}
+
+// Hint the picked file's kind: a document glyph for .md, an archive glyph for bundles.
+function fileIcon(name: string) {
+    return name.toLowerCase().endsWith('.md') ? FileText : FileArchive;
+}
 
 type ImportMode = 'file' | 'github';
 
@@ -56,6 +68,13 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
     }, [t]);
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop: handleDrop, multiple: false });
+
+    const handleRemoveFile = (e: MouseEvent) => {
+        e.stopPropagation();
+        setFile(null);
+    };
+
+    const SelectedFileIcon = file ? fileIcon(file.name) : FileText;
 
     const handleUpload = async () => {
         if (!file || uploading) return;
@@ -106,12 +125,51 @@ export function SkillUploadDialog({ open, onOpenChange, onUploaded }: SkillUploa
                     <TabsContent value="file" className="space-y-3">
                         <div
                             {...getRootProps()}
-                            className={`border-2 border-dashed rounded-lg px-6 py-10 text-center cursor-pointer transition-colors ${isDragActive ? 'border-primary bg-primary/5' : 'border-border'}`}
+                            className={`cursor-pointer rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors ${file
+                                ? 'border-status-green/60 bg-success-background'
+                                : isDragActive
+                                    ? 'border-primary bg-primary/5'
+                                    : 'border-border hover:border-primary/50 hover:bg-muted/40'}`}
                         >
                             <input {...getInputProps()} />
-                            <FileUp className="size-8 mx-auto text-muted-foreground" />
-                            <p className="mt-2 text-sm">{file ? `${file.name} (${(file.size / 1024).toFixed(1)} KB)` : t('skillManage.uploadDialog.dropHint')}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{t('skillManage.uploadDialog.dropSub')}</p>
+                            {file ? (
+                                <div className="animate-in fade-in zoom-in-95 duration-200">
+                                    <div className="flex items-center gap-3 text-left">
+                                        <div className="relative shrink-0">
+                                            <div className="flex size-11 items-center justify-center rounded-lg bg-status-green/15 text-status-green">
+                                                <SelectedFileIcon className="size-6" />
+                                            </div>
+                                            <span className="absolute -bottom-1 -right-1 flex size-5 items-center justify-center rounded-full bg-status-green text-white ring-2 ring-success-background">
+                                                <Check className="size-3" strokeWidth={3} />
+                                            </span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
+                                            <p className="mt-0.5 flex items-center gap-1.5 text-xs">
+                                                <span className="font-medium text-success-foreground">{t('skillManage.uploadDialog.selected')}</span>
+                                                <span className="text-muted-foreground">·</span>
+                                                <span className="text-muted-foreground">{formatBytes(file.size)}</span>
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleRemoveFile}
+                                            aria-label={t('skillManage.uploadDialog.removeFile')}
+                                            title={t('skillManage.uploadDialog.removeFile')}
+                                            className="shrink-0 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+                                        >
+                                            <X className="size-4" />
+                                        </button>
+                                    </div>
+                                    <p className="mt-3 text-xs text-muted-foreground">{t('skillManage.uploadDialog.reselectHint')}</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <FileUp className={`mx-auto size-8 ${isDragActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                                    <p className="mt-2 text-sm">{t('skillManage.uploadDialog.dropHint')}</p>
+                                    <p className="mt-1 text-xs text-muted-foreground">{t('skillManage.uploadDialog.dropSub')}</p>
+                                </>
+                            )}
                         </div>
                         <div className="text-xs text-muted-foreground space-y-1">
                             <p className="font-medium text-foreground">{t('skillManage.uploadDialog.requirementsTitle')}</p>
