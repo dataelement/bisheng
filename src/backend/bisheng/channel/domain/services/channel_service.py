@@ -107,6 +107,10 @@ CHANNEL_MEMBER_REMOVED_MESSAGE = "removed_channel_member"
 CHANNEL_MADE_PRIVATE_MESSAGE = "channel_made_private"
 CHANNEL_DISMISSED_MESSAGE = "channel_dismissed"
 CHANNEL_MEMBER_RELATIONS = {"owner", "manager", "editor", "viewer"}
+# F037-B: a single ES `terms` clause holds up to index.max_terms_count ids
+# (default 65536). Beyond that, the batched unread query falls back to the
+# per-channel total-minus-read path to avoid a query error.
+_MAX_UNREAD_EXCLUDE_TERMS = 65536
 
 
 def _self_channel_binding_key(channel_id: str, user_id: int, relation: ChannelRelationEnum) -> str:
@@ -643,12 +647,11 @@ class ChannelService:
 
             channels_to_process.append((channel, membership, permission_ids))
 
-        # Concurrently calculate unread counts for all applicable channels
-        unread_counts = []
-        if channels_to_process:
-            unread_counts = await asyncio.gather(
-                *[self._calculate_unread_count(channel, all_read_ids) for channel, _, _ in channels_to_process]
-            )
+        # F037-B: unread counts for the whole page in a single ES msearch round-trip
+        # (was N channels x (1 total + read-id chunks) sequential count queries).
+        unread_counts = await self._calculate_unread_counts_batch(
+            [channel for channel, _, _ in channels_to_process], all_read_ids
+        )
 
         for (channel, membership, permission_ids), unread_count in zip(channels_to_process, unread_counts):
             relation = _effective_relation_value(permission_ids, membership)
@@ -673,6 +676,36 @@ class ChannelService:
         result = self._sort_channels(result, query_data.sort_by)
 
         return result
+
+    async def _calculate_unread_counts_batch(self, channels: list[Channel], all_read_ids: list[str]) -> list[int]:
+        """F037-B: unread counts for many channels in one ES msearch round-trip.
+
+        unread = articles matching the channel's main filter AND not in the user's
+        read set, expressed as a single count per channel (must_not terms on _id)
+        and batched via ``count_articles_batch``. Equivalent to the per-channel
+        ``_calculate_unread_count`` oracle (total-minus-read is the same set as
+        filter AND NOT read), but collapses N x (1 + read-chunk) sequential ES
+        queries into a single round-trip. Order matches the input ``channels``.
+        """
+        if not channels:
+            return []
+        # Defensive fallback: a read set larger than a single terms clause can hold
+        # would error; preserve correctness via the original per-channel path.
+        if all_read_ids and len(all_read_ids) > _MAX_UNREAD_EXCLUDE_TERMS:
+            return await asyncio.gather(*[self._calculate_unread_count(channel, all_read_ids) for channel in channels])
+
+        exclude = all_read_ids or None
+        requests = []
+        for channel in channels:
+            main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
+            requests.append(
+                {
+                    "source_ids": channel.source_list,
+                    "filter_rules": main_rule_groups if main_rule_groups else None,
+                    "exclude_article_ids": exclude,
+                }
+            )
+        return await self.article_es_service.count_articles_batch(requests)
 
     async def _calculate_unread_count(self, channel: Channel, all_read_ids: list[str]) -> int:
         """Calculate the exact number of unread articles for a given channel."""
