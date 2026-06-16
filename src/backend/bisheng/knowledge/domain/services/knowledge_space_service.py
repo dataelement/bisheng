@@ -541,10 +541,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await self._require_file_relation(resource_id, relation, space_id=space_id)
 
     async def _get_active_space_membership(self, space_id: int) -> SpaceChannelMember | None:
+        # F036: request-scoped memo. A single /children request resolves membership for the same
+        # space multiple times (read-permission check, view_space check, context build); the
+        # service instance is per-request (FastAPI Depends), so caching here dedups those DB hits
+        # without any cross-request state.
+        cache = self.__dict__.setdefault("_active_membership_cache", {})
+        if space_id in cache:
+            return cache[space_id]
         member = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
-        if member and member.is_active:
-            return member
-        return None
+        cache[space_id] = member if (member and member.is_active) else None
+        return cache[space_id]
 
     async def _membership_satisfies_relation(self, space_id: int, relation: str) -> bool:
         required_level = _SPACE_RELATION_LEVEL.get(relation)
@@ -1019,6 +1025,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         space_id: int | None = None,
     ) -> set[str]:
+        # F036: request-scoped memo. The /children entry does the same `view_space` evaluation
+        # twice (read-permission + view_space checks) and the no-parent branch repeats it; this
+        # full evaluation includes an OpenFGA read + membership/public-space lookups. Caching by
+        # (object_type, object_id, space_id) on the per-request service instance collapses those
+        # duplicates to one. Returned sets are read-only at all call sites; a copy is returned to
+        # be defensive against accidental mutation.
+        cache = self.__dict__.setdefault("_effective_permission_ids_cache", {})
+        cache_key = (object_type, str(object_id), space_id)
+        if cache_key in cache:
+            return set(cache[cache_key])
         # Evaluate permissions across the resource lineage from child -> parent.
         # For a tuple backed by a custom relation model, permissions[] controls
         # runtime actions. Relation-only defaults are kept only as a legacy
@@ -1050,6 +1066,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
                 break
         effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
+        cache[cache_key] = set(effective_permissions)
         return effective_permissions
 
     async def _build_child_permission_context(self, space_id: int) -> dict:
@@ -1162,6 +1179,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         if space_id is None:
             return set()
+        # F036: request-scoped memo (see _get_active_space_membership). Called once per
+        # _get_effective_permission_ids invocation; dedups the repeated space lookup per request.
+        cache = self.__dict__.setdefault("_public_space_viewer_cache", {})
+        if int(space_id) in cache:
+            return set(cache[int(space_id)])
         space = await KnowledgeDao.aquery_by_id(int(space_id))
         if (
             space
@@ -1169,8 +1191,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             and space.is_released
             and space.auth_type == AuthTypeEnum.PUBLIC
         ):
-            return default_permission_ids_for_relation("viewer")
-        return set()
+            result = default_permission_ids_for_relation("viewer")
+        else:
+            result = set()
+        cache[int(space_id)] = set(result)
+        return result
 
     async def _require_permission_id(
         self,
