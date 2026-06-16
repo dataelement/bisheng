@@ -6,7 +6,7 @@ import re
 import socket
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup, Comment
@@ -38,6 +38,7 @@ class _MarkdownExtraction:
     body: str
     markdown: str
     needs_rendered_fallback: bool
+    low_value_reason: str = ""
 
 
 class KnowledgeWebLinkImportService:
@@ -51,6 +52,31 @@ class KnowledgeWebLinkImportService:
         "you need to enable javascript to run this app",
         "please enable javascript",
         "enable javascript to continue",
+    )
+    LOW_VALUE_PAGE_MARKERS = (
+        "don't have an account? register",
+        "do not have an account? register",
+        "forgot password",
+        "remember me",
+        "sign in",
+        "sign up",
+        "login",
+        "register",
+        "请输入用户名",
+        "请输入密码",
+        "忘记密码",
+        "立即登录",
+        "注册账号",
+    )
+    DECORATIVE_IMAGE_MARKERS = (
+        "logo",
+        "icon",
+        "avatar",
+        "qrcode",
+        "qr_code",
+        "二维码",
+        "头像",
+        "图标",
     )
     CONTENT_SELECTORS = (
         {"id": "js_content"},
@@ -306,7 +332,7 @@ class KnowledgeWebLinkImportService:
             soup = cls._make_soup(content)
             title = cls._extract_title(soup, source_url)
             fallback_body = cls._extract_fallback_body(cls._make_soup(content))
-            cls._clean_soup(soup)
+            cls._clean_soup(soup, source_url)
             container = cls._select_content_container(soup)
             body = cls._html_to_markdown(str(container)) if container else ""
             if not body:
@@ -314,9 +340,12 @@ class KnowledgeWebLinkImportService:
 
         body = cls._normalize_markdown_body(body)
         is_placeholder = cls._is_placeholder_body(body)
-        needs_rendered_fallback = is_placeholder or cls._is_low_quality_body(body)
+        low_value_reason = cls._get_low_value_reason(title, body)
+        needs_rendered_fallback = is_placeholder or bool(low_value_reason) or cls._is_low_quality_body(body)
         if is_placeholder:
             body = ""
+        elif low_value_reason:
+            body = low_value_reason
         if not body:
             body = "该网页可能为动态渲染页面，未能提取到静态正文内容。"
 
@@ -337,6 +366,7 @@ class KnowledgeWebLinkImportService:
             body=body,
             markdown=markdown,
             needs_rendered_fallback=needs_rendered_fallback,
+            low_value_reason=low_value_reason,
         )
 
     @classmethod
@@ -347,7 +377,7 @@ class KnowledgeWebLinkImportService:
             return BeautifulSoup(content, "html.parser")
 
     @classmethod
-    def _clean_soup(cls, soup: BeautifulSoup) -> None:
+    def _clean_soup(cls, soup: BeautifulSoup, source_url: str = "") -> None:
         for comment in soup.find_all(string=lambda value: isinstance(value, Comment)):
             comment.extract()
 
@@ -356,6 +386,10 @@ class KnowledgeWebLinkImportService:
             for tag in soup.find_all(tag_name):
                 tag.decompose()
 
+        if source_url:
+            cls._absolutize_links(soup, source_url)
+        cls._remove_decorative_images(soup)
+
         for tag in soup.find_all(True):
             if tag.name in {"html", "body"}:
                 continue
@@ -363,6 +397,41 @@ class KnowledgeWebLinkImportService:
             for attr in list(tag.attrs.keys()):
                 if attr not in safe_attrs:
                     del tag[attr]
+
+    @classmethod
+    def _absolutize_links(cls, soup: BeautifulSoup, source_url: str) -> None:
+        for tag in soup.find_all(["a", "img", "source"]):
+            attr = "href" if tag.name == "a" else "src"
+            value = (tag.get(attr) or "").strip()
+            if not value:
+                if tag.name == "img":
+                    tag.decompose()
+                continue
+            if value.startswith(("data:", "mailto:", "tel:", "javascript:")):
+                if tag.name == "img" and value.startswith("data:image/svg"):
+                    tag.decompose()
+                continue
+            tag[attr] = urljoin(source_url, value)
+
+    @classmethod
+    def _remove_decorative_images(cls, soup: BeautifulSoup) -> None:
+        seen_srcs = set()
+        for image in list(soup.find_all("img")):
+            src = (image.get("src") or "").strip()
+            if not src:
+                image.decompose()
+                continue
+            alt_title = " ".join(
+                str(image.get(attr, ""))
+                for attr in ("alt", "title", "class", "id")
+            ).lower()
+            if src in seen_srcs and any(marker in alt_title for marker in cls.DECORATIVE_IMAGE_MARKERS):
+                image.decompose()
+                continue
+            if any(marker in alt_title for marker in cls.DECORATIVE_IMAGE_MARKERS):
+                image.decompose()
+                continue
+            seen_srcs.add(src)
 
     @classmethod
     def _remove_hidden_elements(cls, soup: BeautifulSoup) -> None:
@@ -544,12 +613,55 @@ class KnowledgeWebLinkImportService:
         return False
 
     @classmethod
+    def _get_low_value_reason(cls, title: str, body: str) -> str:
+        visible_text = cls._visible_markdown_text(body)
+        normalized = re.sub(r"\s+", " ", f"{title} {visible_text}".strip()).lower()
+        if not normalized:
+            return ""
+
+        matched_markers = sum(1 for marker in cls.LOW_VALUE_PAGE_MARKERS if marker in normalized)
+        if matched_markers >= 2:
+            return "该网页可能是登录、注册或权限入口页面，未能提取到适合入库的正文内容。"
+
+        words_for_navigation = (
+            "首页",
+            "注册",
+            "登录",
+            "管理",
+            "应用",
+            "工具",
+            "工作台",
+            "don't have an account",
+            "register",
+        )
+        nav_hits = sum(1 for word in words_for_navigation if word.lower() in normalized)
+        meaningful = re.sub(r"https?://\S+", "", normalized)
+        meaningful = re.sub(r"!\[[^\]]*]\([^)]+\)|\[[^\]]+]\([^)]+\)", "", meaningful)
+        meaningful = re.sub(r"[#*_`>\-\s|:：,，.。/\\{}()[\]\"'=;；]+", "", meaningful)
+        if nav_hits >= 4 and len(meaningful) < 220:
+            return "该网页主要是导航或门户入口页面，正文信息不足，不建议作为知识库网页正文导入。"
+
+        return ""
+
+    @staticmethod
+    def _visible_markdown_text(markdown: str) -> str:
+        text = re.sub(r"!\[([^\]]*)]\([^)]+\)", r"\1", markdown or "")
+        text = re.sub(r"\[([^\]]+)]\([^)]+\)", r"\1", text)
+        return re.sub(r"https?://\S+", "", text)
+
+    @classmethod
     def _should_use_rendered_extraction(
         cls,
         static_extraction: _MarkdownExtraction,
         rendered_extraction: _MarkdownExtraction,
     ) -> bool:
         if static_extraction.needs_rendered_fallback and not rendered_extraction.needs_rendered_fallback:
+            return True
+        if (
+            static_extraction.needs_rendered_fallback
+            and rendered_extraction.low_value_reason
+            and rendered_extraction.body != static_extraction.body
+        ):
             return True
         if cls._is_placeholder_body(static_extraction.body) and rendered_extraction.body:
             return True
