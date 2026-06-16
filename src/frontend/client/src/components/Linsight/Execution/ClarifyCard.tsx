@@ -150,11 +150,15 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <span className="text-[14px] font-bold text-[#1A1A1A]">{q.question}</span>
-                            <span className="text-[14px] text-[#8C8C8C] select-none">
-                                {q.multiple
-                                    ? localize('com_linsight_clarify_multi')
-                                    : localize('com_linsight_clarify_single')}
-                            </span>
+                            {/* Single/multi badge only makes sense when there are
+                                options; a free-text-only question is neither. */}
+                            {q.options.length > 0 && (
+                                <span className="text-[14px] text-[#8C8C8C] select-none">
+                                    {q.multiple
+                                        ? localize('com_linsight_clarify_multi')
+                                        : localize('com_linsight_clarify_single')}
+                                </span>
+                            )}
                         </div>
                         {questions.length > 1 && (
                             <div className="flex items-center gap-2 text-sm text-[#8C8C8C] select-none">
