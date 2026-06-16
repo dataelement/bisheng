@@ -23,8 +23,8 @@ from bisheng.llm.domain.services.llm import LLMService
 @dataclass
 class TranscriptSegment:
     text: str
-    begin_time: int | None = None
-    end_time: int | None = None
+    begin_time: float | None = None
+    end_time: float | None = None
 
 
 @dataclass
@@ -56,12 +56,14 @@ class KnowledgeMediaTranscriptionService:
 
         model_info, server_info = cls._resolve_asr_model(tenant_id)
         api_key = cls._resolve_api_key(server_info, model_info)
+        duration_ms = cls._probe_media_duration_ms(media_path)
         wav_path = cls._convert_to_wav(media_path)
         try:
             segments = cls._call_aliyun_asr(
                 wav_path,
                 api_key=api_key,
                 model_name=model_info.model_name,
+                media_duration_ms=duration_ms,
             )
         finally:
             if os.path.exists(wav_path):
@@ -145,7 +147,14 @@ class KnowledgeMediaTranscriptionService:
         return wav_path
 
     @classmethod
-    def _call_aliyun_asr(cls, wav_path: str, *, api_key: str, model_name: str) -> list[TranscriptSegment]:
+    def _call_aliyun_asr(
+        cls,
+        wav_path: str,
+        *,
+        api_key: str,
+        model_name: str,
+        media_duration_ms: int | None = None,
+    ) -> list[TranscriptSegment]:
         recognition = Recognition(
             model=model_name,
             format="wav",
@@ -169,18 +178,18 @@ class KnowledgeMediaTranscriptionService:
             segments.append(
                 TranscriptSegment(
                     text=text,
-                    begin_time=cls._coerce_time_ms(sentence.get("begin_time")),
-                    end_time=cls._coerce_time_ms(sentence.get("end_time")),
+                    begin_time=cls._coerce_time_value(sentence.get("begin_time")),
+                    end_time=cls._coerce_time_value(sentence.get("end_time")),
                 )
             )
         if segments:
-            return segments
+            return cls._normalize_segments(segments, media_duration_ms=media_duration_ms)
 
         text = str(getattr(result, "output", {}) or result).strip()
         return [TranscriptSegment(text=text)] if text else []
 
     @staticmethod
-    def _coerce_time_ms(value: Any) -> int | None:
+    def _coerce_time_value(value: Any) -> float | None:
         if value is None:
             return None
         try:
@@ -189,9 +198,125 @@ class KnowledgeMediaTranscriptionService:
             return None
         if number <= 0:
             return 0
-        if number < 10_000:
-            return int(number * 1000)
-        return int(number)
+        return number
+
+    @classmethod
+    def _normalize_segments(
+        cls,
+        segments: list[TranscriptSegment],
+        *,
+        media_duration_ms: int | None = None,
+    ) -> list[TranscriptSegment]:
+        raw_times = [
+            time_value
+            for segment in segments
+            for time_value in (segment.begin_time, segment.end_time)
+            if time_value is not None
+        ]
+        multiplier = cls._resolve_timestamp_multiplier(
+            raw_times,
+            media_duration_ms=media_duration_ms,
+        )
+
+        normalized_segments: list[tuple[int, TranscriptSegment]] = []
+        for index, segment in enumerate(segments):
+            begin_time = cls._scale_timestamp(segment.begin_time, multiplier)
+            end_time = cls._scale_timestamp(segment.end_time, multiplier)
+            if begin_time is not None and end_time is not None and end_time < begin_time:
+                logger.warning(
+                    "ASR segment end_time precedes begin_time; clamping end_time. "
+                    "begin_time={} end_time={} text={}",
+                    begin_time,
+                    end_time,
+                    segment.text[:80],
+                )
+                end_time = begin_time
+            normalized_segments.append(
+                (
+                    index,
+                    TranscriptSegment(
+                        text=segment.text,
+                        begin_time=begin_time,
+                        end_time=end_time,
+                    ),
+                )
+            )
+
+        normalized_segments.sort(
+            key=lambda item: (
+                item[1].begin_time is None,
+                item[1].begin_time if item[1].begin_time is not None else 0,
+                item[0],
+            )
+        )
+        return [segment for _, segment in normalized_segments]
+
+    @staticmethod
+    def _resolve_timestamp_multiplier(
+        raw_times: list[float],
+        *,
+        media_duration_ms: int | None = None,
+    ) -> int:
+        positive_times = [time_value for time_value in raw_times if time_value > 0]
+        if not positive_times:
+            return 1
+
+        max_time = max(positive_times)
+        if media_duration_ms and media_duration_ms > 0:
+            tolerance_ms = max(5000, int(media_duration_ms * 0.2))
+            candidates = (1, 10, 1000)
+            valid_candidates = []
+            for multiplier in candidates:
+                scaled_max = max_time * multiplier
+                overflow = max(0, scaled_max - media_duration_ms - tolerance_ms)
+                distance = abs(media_duration_ms - scaled_max)
+                valid_candidates.append((overflow, distance, multiplier))
+            valid_candidates.sort()
+            return valid_candidates[0][2]
+
+        if max_time >= 1000:
+            return 1
+        return 1000
+
+    @staticmethod
+    def _scale_timestamp(value: float | None, multiplier: int) -> int | None:
+        if value is None:
+            return None
+        return max(0, int(round(value * multiplier)))
+
+    @staticmethod
+    def _probe_media_duration_ms(media_path: str) -> int | None:
+        command = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            media_path,
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, check=True)
+        except FileNotFoundError:
+            logger.warning(
+                "ffprobe is not installed; ASR timestamp normalization will not use media duration"
+            )
+            return None
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else ""
+            logger.warning("ffprobe media duration probe failed: {}", stderr[-1000:])
+            return None
+
+        duration_text = result.stdout.decode("utf-8", errors="ignore").strip()
+        try:
+            duration_seconds = float(duration_text)
+        except ValueError:
+            logger.warning("ffprobe returned invalid media duration: {}", duration_text[:120])
+            return None
+        if duration_seconds <= 0:
+            return None
+        return int(duration_seconds * 1000)
 
     @classmethod
     def _build_markdown(
