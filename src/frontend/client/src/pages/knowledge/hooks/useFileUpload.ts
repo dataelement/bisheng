@@ -41,7 +41,7 @@ import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
  * append the generic browser-upload hint as a last-resort fallback.
  */
 function resolveUploadErrorReason(err: any): string {
-    const statusCode = err?.statusCode;
+    const statusCode = err?.statusCode ?? err?.response?.data?.status_code;
     if (statusCode != null) {
         const codeKey = `api_errors.${statusCode}`;
         if (i18next.exists(codeKey)) {
@@ -52,6 +52,107 @@ function resolveUploadErrorReason(err: any): string {
         return err.message;
     }
     return "";
+}
+
+/**
+ * Quota / permission error codes that fail every remaining file identically:
+ * 18024 = role file-size cap, 19402 = role quota, 19403 = tenant storage cap.
+ * When one is hit mid-batch we stop early and collapse the repeats into one
+ * toast line instead of N identical rows.
+ */
+const COLLAPSIBLE_CODES = new Set([18024, 19402, 19403]);
+
+interface UploadFailure { name: string; reason: string; statusCode?: number }
+interface EarlyStop { reason: string; statusCode: number; skippedCount: number }
+
+/**
+ * Upload files sequentially, stopping early when a COLLAPSIBLE_CODES quota /
+ * permission error is hit — the rest of the batch would fail the same way, so
+ * there is no point making the user wait through them. `onSuccess` is invoked
+ * per uploaded file; `filenameOf` overrides the multipart filename (folder
+ * upload passes `file.name` to strip the Chromium directory prefix).
+ */
+async function uploadFilesSequential(
+    spaceId: string,
+    files: File[],
+    onSuccess: (res: UploadFileResponse, file: File) => void,
+    filenameOf?: (file: File) => string | undefined,
+): Promise<{ failures: UploadFailure[]; earlyStop: EarlyStop | null }> {
+    const failures: UploadFailure[] = [];
+    let earlyStop: EarlyStop | null = null;
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+            const res = await uploadFileToServerApi(spaceId, file, filenameOf?.(file));
+            onSuccess(res, file);
+        } catch (err) {
+            // statusCode is set by uploadFileToServerApi on a manual throw
+            // (HTTP 200 + body.status_code != 200). Fall back to the axios error
+            // body in case a non-2xx ever rejects before that check.
+            const statusCode: number | undefined =
+                (err as any)?.statusCode ?? (err as any)?.response?.data?.status_code;
+            const reason = resolveUploadErrorReason(err);
+            failures.push({ name: file.name, reason, statusCode });
+            if (statusCode && COLLAPSIBLE_CODES.has(statusCode)) {
+                earlyStop = { reason, statusCode, skippedCount: files.length - i - 1 };
+                break;
+            }
+        }
+    }
+    return { failures, earlyStop };
+}
+
+/**
+ * Build the failure toast message. Files that failed with the same quota /
+ * permission code merge into one summary line carrying a count (including the
+ * files skipped by early-stop); all other failures list per file. Returns ""
+ * when there is nothing to report.
+ */
+function buildUploadFailureMessage(
+    failures: UploadFailure[],
+    earlyStop: EarlyStop | null,
+    localize: (key: string, options?: Record<string, unknown>) => string,
+): string {
+    if (failures.length === 0 && !earlyStop) return "";
+    const collapsed: { reason: string; count: number }[] = [];
+    const individual: { name: string; reason: string }[] = [];
+    const seenCode = new Map<number, { reason: string; count: number }>();
+    for (const f of failures) {
+        if (f.statusCode && COLLAPSIBLE_CODES.has(f.statusCode)) {
+            const existing = seenCode.get(f.statusCode);
+            if (existing) {
+                existing.count++;
+            } else {
+                const entry = { reason: f.reason, count: 1 };
+                seenCode.set(f.statusCode, entry);
+                collapsed.push(entry);
+            }
+        } else {
+            individual.push(f);
+        }
+    }
+    if (earlyStop && earlyStop.skippedCount > 0) {
+        const existing = seenCode.get(earlyStop.statusCode);
+        if (existing) {
+            existing.count += earlyStop.skippedCount;
+        }
+    }
+    const lines: string[] = [
+        ...collapsed.map(({ reason, count }) =>
+            count > 1
+                ? localize("com_knowledge.file_upload_quota_batch", { 0: count, 1: reason })
+                : reason
+        ),
+        ...individual.map(({ name, reason }) =>
+            reason
+                ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
+                : localize("com_knowledge.file_upload_failed", { 0: name })
+        ),
+    ];
+    const everyReasonMissing = failures.every((f) => !f.reason);
+    return everyReasonMissing
+        ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")
+        : lines.join("\n");
 }
 
 /** A duplicate file entry detected from addFiles response (status === 3) */
@@ -171,76 +272,16 @@ export function useFileUpload({
             setUploadingFiles(prev => [...placeholders, ...prev]);
 
 
-            // Upload each file to server
+            // Upload each file to server (sequential, with quota early-stop).
             const uploadedPaths: string[] = [];
-
-            const COLLAPSIBLE_CODES = new Set([18024, 19403]);
-            const failures: { name: string; reason: string; statusCode?: number }[] = [];
-            // When a quota/permission error is hit, remaining files would all fail
-            // for the same reason — record the count and break early.
-            let earlyStop: { reason: string; statusCode: number; skippedCount: number } | null = null;
-            for (let i = 0; i < fileArray.length; i++) {
-                const file = fileArray[i];
-                try {
-                    const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file);
-                    uploadedPaths.push(res.file_path);
-                } catch (err) {
-                    const statusCode: number | undefined = (err as any)?.statusCode;
-                    const reason = resolveUploadErrorReason(err);
-                    failures.push({ name: file.name, reason, statusCode });
-                    if (statusCode && COLLAPSIBLE_CODES.has(statusCode)) {
-                        earlyStop = { reason, statusCode, skippedCount: fileArray.length - i - 1 };
-                        break;
-                    }
-                }
-            }
-            if (failures.length > 0 || earlyStop) {
-                // When multiple files fail with the same quota/permission error code,
-                // collapse them into one summary line instead of N identical lines.
-                // earlyStop.skippedCount adds files that were never attempted.
-                const collapsed: { reason: string; count: number }[] = [];
-                const individual: { name: string; reason: string }[] = [];
-                const seenCode = new Map<number, { reason: string; count: number }>();
-                for (const f of failures) {
-                    if (f.statusCode && COLLAPSIBLE_CODES.has(f.statusCode)) {
-                        const existing = seenCode.get(f.statusCode);
-                        if (existing) {
-                            existing.count++;
-                        } else {
-                            const entry = { reason: f.reason, count: 1 };
-                            seenCode.set(f.statusCode, entry);
-                            collapsed.push(entry);
-                        }
-                    } else {
-                        individual.push(f);
-                    }
-                }
-                if (earlyStop && earlyStop.skippedCount > 0) {
-                    const existing = seenCode.get(earlyStop.statusCode);
-                    if (existing) {
-                        existing.count += earlyStop.skippedCount;
-                    }
-                }
-                const lines: string[] = [
-                    ...collapsed.map(({ reason, count }) =>
-                        count > 1
-                            ? localize("com_knowledge.file_upload_quota_batch", { 0: count, 1: reason })
-                            : reason
-                    ),
-                    ...individual.map(({ name, reason }) =>
-                        reason
-                            ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
-                            : localize("com_knowledge.file_upload_failed", { 0: name })
-                    ),
-                ];
-                const everyReasonMissing = failures.every((f) => !f.reason);
-                const message = everyReasonMissing
-                    ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")
-                    : lines.join("\n");
-                showToast({
-                    message,
-                    severity: NotificationSeverity.ERROR,
-                });
+            const { failures, earlyStop } = await uploadFilesSequential(
+                activeSpace.id,
+                fileArray,
+                (res) => uploadedPaths.push(res.file_path),
+            );
+            const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
+            if (failureMessage) {
+                showToast({ message: failureMessage, severity: NotificationSeverity.ERROR });
             }
 
             // If all uploads failed, clear placeholders and bail out
@@ -402,38 +443,25 @@ export function useFileUpload({
             }
 
             // Upload each file body to object storage (sequential, mirrors the
-            // existing single-file upload — keeps load predictable for 1k
-            // batches), keeping its relative path + size for the tree rebuild.
+            // single-file upload — keeps load predictable for 1k batches and
+            // stops early on a quota error instead of grinding through every
+            // file), keeping its relative path + size for the tree rebuild.
+            // `file.name` strips the folder prefix Chromium would otherwise put
+            // in the multipart filename.
             const uploadedItems: FolderUploadItemPayload[] = [];
-            const failures: { name: string; reason: string }[] = [];
-            for (const file of validFiles) {
-                try {
-                    // Pass `file.name` explicitly to strip the folder prefix
-                    // Chromium would otherwise put in the multipart filename.
-                    const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file, file.name);
-                    uploadedItems.push({
-                        file_path: res.file_path,
-                        relative_path: file.webkitRelativePath || file.name,
-                        size: file.size,
-                    });
-                } catch (err) {
-                    failures.push({
-                        name: file.name,
-                        reason: resolveUploadErrorReason(err),
-                    });
-                }
-            }
-            if (failures.length > 0) {
-                const lines = failures.map(({ name, reason }) =>
-                    reason
-                        ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
-                        : localize("com_knowledge.file_upload_failed", { 0: name })
-                );
-                const everyReasonMissing = failures.every((f) => !f.reason);
-                const message = everyReasonMissing
-                    ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")
-                    : lines.join("\n");
-                showToast({ message, severity: NotificationSeverity.ERROR });
+            const { failures, earlyStop } = await uploadFilesSequential(
+                activeSpace.id,
+                validFiles,
+                (res, file) => uploadedItems.push({
+                    file_path: res.file_path,
+                    relative_path: file.webkitRelativePath || file.name,
+                    size: file.size,
+                }),
+                (file) => file.name,
+            );
+            const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
+            if (failureMessage) {
+                showToast({ message: failureMessage, severity: NotificationSeverity.ERROR });
             }
 
             if (uploadedItems.length === 0) return;

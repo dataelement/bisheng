@@ -876,6 +876,7 @@ export function KnowledgeSpaceContent({
             });
             setSelectedFiles(new Set());
             showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
+            dispatchKnowledgeSpaceFilesRefresh(space.id);
             // Notify parent to refresh the list
             onDeleteFile("");
         } catch {
