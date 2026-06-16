@@ -8,6 +8,9 @@ const SKILL_ERROR_KEYS: Record<number, string> = {
     11053: 'skillManage.errors.notFound',
     11054: 'skillManage.errors.noPermission',
     11055: 'skillManage.errors.duplicate',
+    11056: 'skillManage.errors.githubUrlInvalid',
+    11057: 'skillManage.errors.githubFetch',
+    11058: 'skillManage.errors.githubRateLimit',
 };
 
 export function getSkillErrorMessage(err: unknown, t: (key: string) => string): string {

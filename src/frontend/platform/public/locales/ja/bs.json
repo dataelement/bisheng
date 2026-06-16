@@ -2577,12 +2577,18 @@
     },
     "uploadDialog": {
       "title": "スキルをインポート",
+      "tabFile": "ローカルファイル",
+      "tabGithub": "GitHub URL",
       "dropHint": "ドラッグ＆ドロップまたはクリック",
       "dropSub": ".md ファイル、.zip / .skill アーカイブに対応（ルートに SKILL.md 必須）",
       "requirementsTitle": "ファイル要件",
       "reqMd": ".md ファイルは YAML frontmatter（name と description 必須）を含むこと",
       "reqZip": ".zip / .skill はルートに SKILL.md を含むこと。付属ファイル可",
       "reqSize": "全体サイズ ≤ 10MB",
+      "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
+      "githubHint": "スキルディレクトリを指す GitHub URL を貼り付け（SKILL.md を含むこと）",
+      "githubReqHost": "公開 github.com リポジトリのみ対応",
+      "githubReqDir": "URL は SKILL.md を含むディレクトリを指すこと。スラッシュを含むブランチ名は非対応",
       "unsupported": "未対応のファイル形式です（.md / .zip / .skill）",
       "confirm": "インポート"
     },
@@ -2598,6 +2604,9 @@
       "notFound": "スキルが見つかりません",
       "noPermission": "この操作の権限がありません",
       "duplicate": "同じ表示名またはスキル ID が既に存在します",
+      "githubUrlInvalid": "GitHub URL の形式が不正です（例: https://github.com/{owner}/{repo}/tree/{branch}/{path}）",
+      "githubFetch": "GitHub からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
+      "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
     }
   }

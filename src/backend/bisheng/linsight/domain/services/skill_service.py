@@ -33,6 +33,7 @@ from bisheng.linsight.domain.schemas.skill_schema import (
     SkillFileEntry,
     SkillSelectable,
 )
+from bisheng.linsight.domain.services.github_skill_fetcher import fetch_skill_files, parse_github_url
 from bisheng.linsight.domain.services.skill_store import (
     DISPLAY_NAME_META_KEY,
     MAX_BUNDLE_SIZE,
@@ -120,6 +121,17 @@ class SkillService:
         name, display_name, description, files = self._parse_upload(filename, data)
         return await self._create(tenant_id, user_id, name, display_name, description, files)
 
+    async def create_from_github(self, tenant_id: int, user_id: int, url: str) -> SkillDetail:
+        """Import a skill from a public GitHub directory URL.
+
+        The downloaded bundle joins the exact same create chain as the upload path,
+        so frontmatter/size/duplicate checks and the owner tuple are all reused.
+        """
+        target = parse_github_url(url)
+        files = await fetch_skill_files(target)
+        name, display_name, description = self._extract_meta(files)
+        return await self._create(tenant_id, user_id, name, display_name, description, files)
+
     async def update_from_form(self, tenant_id: int, name: str, form: SkillCreateForm) -> SkillDetail:
         skill = await self._get_or_404(name)
         if form.name != name:
@@ -182,6 +194,16 @@ class SkillService:
             files = {SKILL_MD: data}
         else:
             raise SkillValidationError(msg="unsupported file type: expecting .md, .zip or .skill")
+        name, display_name, description = self._extract_meta(files)
+        return name, display_name, description, files
+
+    def _extract_meta(self, files: dict[str, bytes]) -> tuple[str, str, str]:
+        """Parse SKILL.md frontmatter from a bundle into (name, display_name, description).
+
+        Shared by the upload and GitHub-import paths so both validate identically.
+        """
+        if SKILL_MD not in files:
+            raise SkillValidationError(msg="SKILL.md not found")
         try:
             meta, _ = parse_skill_md(files[SKILL_MD].decode("utf-8", errors="replace"))
         except ValueError as exc:
@@ -193,7 +215,7 @@ class SkillService:
         if not description:
             raise SkillValidationError(msg="frontmatter 'description' is required")
         self._validate_fields(name, display_name, description)
-        return name, display_name, description, files
+        return name, display_name, description
 
     def _validate_fields(self, name: str, display_name: str, description: str) -> None:
         if err := validate_skill_name(name):

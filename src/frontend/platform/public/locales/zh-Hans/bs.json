@@ -2577,12 +2577,18 @@
     },
     "uploadDialog": {
       "title": "导入技能",
+      "tabFile": "本地文件",
+      "tabGithub": "GitHub 链接",
       "dropHint": "拖拽或点击导入",
       "dropSub": "支持 .md 文件、.zip / .skill 压缩包（根目录须含 SKILL.md）",
       "requirementsTitle": "文件要求",
       "reqMd": ".md 文件须包含 YAML frontmatter（name 与 description 必填）",
       "reqZip": ".zip / .skill 压缩包须在根目录包含 SKILL.md，可携带附属文件",
       "reqSize": "整包大小 ≤ 10MB",
+      "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
+      "githubHint": "粘贴指向技能目录的 GitHub 链接（目录须包含 SKILL.md）",
+      "githubReqHost": "仅支持 github.com 公共仓库",
+      "githubReqDir": "链接须指向含 SKILL.md 的技能目录；分支名暂不支持包含斜杠",
       "unsupported": "不支持的文件类型，请导入 .md / .zip / .skill",
       "confirm": "确认导入"
     },
@@ -2598,6 +2604,9 @@
       "notFound": "技能不存在",
       "noPermission": "无权限执行该操作",
       "duplicate": "已存在同名技能（显示名称或技能 ID 重复），请换一个",
+      "githubUrlInvalid": "GitHub 链接格式不正确，应形如 https://github.com/{owner}/{repo}/tree/{分支}/{路径}",
+      "githubFetch": "从 GitHub 拉取失败：仓库 / 分支 / 路径不存在或网络异常，请检查链接后重试",
+      "githubRateLimit": "GitHub 访问已达速率限制，请稍后再试",
       "unknown": "操作失败，请重试"
     }
   }
