@@ -231,22 +231,21 @@ def dm_fk_constraints(conn, schema: str | None = None) -> list[tuple[str, str]]:
     return [(r[0], r[1]) for r in rows]
 
 
-def dm_identity_column(conn, actual_table: str, schema: str | None = None) -> str | None:
-    """Return the IDENTITY column name of a DM table, or None."""
-    if schema is None:
-        rows = conn.execute(
-            text("SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = :t AND OWNER = USER AND IDENTITY = 'YES'"),
-            {"t": actual_table},
-        )
-    else:
-        rows = conn.execute(
-            text(
-                "SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = :t AND OWNER = :owner AND IDENTITY = 'YES'"
-            ),
-            {"t": actual_table, "owner": schema},
-        )
-    row = rows.fetchone()
-    return row[0] if row else None
+def reflected_identity_col(dst_tbl: Table) -> str | None:
+    """Return the IDENTITY/autoincrement column of an already-reflected DM table.
+
+    Read from the reflection we already did rather than a hand-written catalog
+    query: dmSQLAlchemy marks identity columns during reflection (autoincrement /
+    Identity), whereas DM's ALL_TAB_COLUMNS exposes no portable IDENTITY flag
+    column on this build (neither IDENTITY nor IDENTITY_COLUMN exists). Returns
+    the first identity column name, or None.
+    """
+    for c in dst_tbl.columns:
+        # autoincrement defaults to 'auto' for unflagged columns, so only an
+        # explicit True (set by the dialect for a real identity column) counts.
+        if c.identity is not None or c.autoincrement is True:
+            return c.name
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -315,17 +314,26 @@ def copy_table(
 
     with src_engine.connect() as s_conn:
         row_count = s_conn.execute(sa.select(sa.func.count()).select_from(src_tbl)).scalar_one()
-        if row_count == 0:
-            log.info("  %-32s 0 rows (empty)", table_name)
-            return 0
 
         if dry_run:
             log.info("  %-32s %d rows (dry-run, not written)", table_name, row_count)
             return row_count
 
-        identity_col = None
+        if row_count == 0:
+            # Even with an empty source, --truncate must still clear the target so a
+            # table emptied upstream (or pre-seeded by an init script) ends up
+            # matching the source — otherwise stale rows survive and break the
+            # idempotency that --truncate promises.
+            if truncate:
+                with dst_engine.begin() as d_conn:
+                    d_conn.execute(text(f"DELETE FROM {quoted}"))
+                log.info("  %-32s 0 rows (source empty; target truncated)", table_name)
+            else:
+                log.info("  %-32s 0 rows (empty)", table_name)
+            return 0
+
+        identity_col = reflected_identity_col(dst_tbl)
         with dst_engine.begin() as d_conn:
-            identity_col = dm_identity_column(d_conn, actual_name, schema)
             if truncate:
                 d_conn.execute(text(f"DELETE FROM {quoted}"))
             if identity_col:
@@ -363,22 +371,42 @@ def reseed_identity(dst_engine: Engine, quoted_table: str, id_col: str) -> None:
     """Advance the IDENTITY high-water mark past the largest copied id.
 
     After IDENTITY_INSERT the generator is not advanced automatically, so the
-    next auto-generated id would collide. DM lets us reset the seed via
-    ALTER TABLE ... MODIFY <col> IDENTITY(next, 1).
+    next auto-generated id would collide. DM rejects re-declaring IDENTITY on an
+    already-identity column (`MODIFY <col> IDENTITY(n,1)` -> "already contains
+    identity column"), and the correct reset clause varies across DM builds, so
+    we try the known forms in order and keep the first that the server accepts.
+    Each attempt runs in its own transaction so a rejected one does not poison the
+    next. A total failure is non-fatal (data is already copied) — it only means
+    the next app insert may need a manual reseed.
     """
     try:
-        with dst_engine.begin() as conn:
+        with dst_engine.connect() as conn:
             max_id = conn.execute(text(f"SELECT COALESCE(MAX({id_col}), 0) FROM {quoted_table}")).scalar_one()
-            next_id = int(max_id) + 1
-            conn.execute(text(f"ALTER TABLE {quoted_table} MODIFY {id_col} IDENTITY({next_id}, 1)"))
-        log.info("  reseed identity %s.%s -> %d", quoted_table, id_col, next_id)
+        next_id = int(max_id) + 1
     except Exception as exc:
-        log.warning(
-            "  could not reseed identity for %s.%s (%s); reseed manually if next insert collides",
-            quoted_table,
-            id_col,
-            exc,
-        )
+        log.warning("  could not read MAX(%s) on %s for reseed (%s)", id_col, quoted_table, exc)
+        return
+
+    candidates = (
+        f"ALTER TABLE {quoted_table} ALTER COLUMN {id_col} RESTART WITH {next_id}",
+        f"ALTER TABLE {quoted_table} MODIFY {id_col} GENERATED BY DEFAULT AS IDENTITY (START WITH {next_id})",
+        f"ALTER TABLE {quoted_table} MODIFY {id_col} IDENTITY({next_id}, 1)",
+    )
+    last_exc: Exception | None = None
+    for stmt in candidates:
+        try:
+            with dst_engine.begin() as conn:
+                conn.execute(text(stmt))
+            log.info("  reseed identity %s.%s -> %d", quoted_table, id_col, next_id)
+            return
+        except Exception as exc:
+            last_exc = exc
+    log.warning(
+        "  could not reseed identity for %s.%s (%s); reseed manually if next insert collides",
+        quoted_table,
+        id_col,
+        last_exc,
+    )
 
 
 # ---------------------------------------------------------------------------
