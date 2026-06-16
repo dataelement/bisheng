@@ -674,9 +674,10 @@ export function KnowledgeSpaceContent({
     };
 
     const handleStatusFilter = (status: FileStatus, checked: boolean) => {
+        const coupled = [status];
         const newFilter = checked
-            ? [...statusFilter, status]
-            : statusFilter.filter(s => s !== status);
+            ? [...statusFilter, ...coupled.filter(s => !statusFilter.includes(s))]
+            : statusFilter.filter(s => !coupled.includes(s));
         setStatusFilter(newFilter);
         onFilterStatus(newFilter);
     };
