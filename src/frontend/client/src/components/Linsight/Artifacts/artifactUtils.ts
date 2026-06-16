@@ -13,6 +13,13 @@ export interface ArtifactFile {
     file_url: string;
     file_md5?: string;
     file_path?: string;
+    /**
+     * F035: 'upload' = a user-uploaded source file, 'output' (default) = an agent
+     * deliverable. Uploaded sources are persisted as their parsed-markdown
+     * workspace copy, so the preview renders markdown regardless of the original
+     * extension (see getArtifactPreviewKind).
+     */
+    source?: 'upload' | 'output';
 }
 
 export type PreviewKind = 'markdown' | 'text' | 'image' | 'unsupported';
@@ -31,6 +38,34 @@ export function getPreviewKind(fileName: string): PreviewKind {
     if (ext === 'txt') return 'text';
     if (IMAGE_EXTS.includes(ext)) return 'image';
     return 'unsupported';
+}
+
+/**
+ * Preview kind for a workspace artifact. Uploaded sources are stored as parsed
+ * markdown (their `uploads/<name>/index.md`), so they always preview as markdown
+ * even though the display name keeps the original extension (e.g. `report.pdf`).
+ */
+export function getArtifactPreviewKind(file: ArtifactFile): PreviewKind {
+    if (file.source === 'upload') return 'markdown';
+    return getPreviewKind(file.file_name);
+}
+
+/**
+ * Map a session's uploaded-file entries (store `LinsightInfo.files`, enriched by
+ * useLinsightManager with `file_name` + the backend entry fields) into drawer
+ * artifacts. The previewable url is the parsed-markdown object (`markdown_file_path`);
+ * invalid/expired entries (failed parse, no formal product) are dropped.
+ */
+export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
+    return (files || [])
+        .filter((f) => f && f.valid !== false && f.markdown_file_path)
+        .map((f) => ({
+            file_id: f.file_id,
+            file_name: f.file_name || f.original_filename || '',
+            file_url: f.markdown_file_path,
+            file_md5: f.file_md5,
+            source: 'upload' as const,
+        }));
 }
 
 /** Resolve a MinIO share url into a same-origin fetchable path. */

@@ -17,8 +17,8 @@ import { useToastContext } from '~/Providers';
 import {
     type ArtifactFile,
     downloadArtifactFile,
+    getArtifactPreviewKind,
     getFileExtension,
-    getPreviewKind,
     resolveArtifactUrl,
 } from './artifactUtils';
 import { SaveAsButton } from './SaveAsButton';
@@ -44,7 +44,7 @@ function usePreviewSource(file: ArtifactFile | null, versionId: string) {
         setImageUrl('');
         setError(false);
         if (!file) return undefined;
-        const kind = getPreviewKind(file.file_name);
+        const kind = getArtifactPreviewKind(file);
         if (kind === 'unsupported') return undefined;
 
         let cancelled = false;
@@ -82,7 +82,7 @@ export function FilePreviewPanel({ open, onOpenChange, file, versionId, onBack }
     const { loading, error, text, imageUrl } = usePreviewSource(open ? file : null, versionId);
 
     if (!file) return null;
-    const kind = getPreviewKind(file.file_name);
+    const kind = getArtifactPreviewKind(file);
 
     const handleDownloadToView = async () => {
         try {

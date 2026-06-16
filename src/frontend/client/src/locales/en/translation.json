@@ -417,6 +417,8 @@
   "com_linsight_preview": "Preview",
   "com_linsight_workspace": "Workspace",
   "com_linsight_workspace_empty": "No output files yet",
+  "com_linsight_workspace_uploaded": "Uploaded files",
+  "com_linsight_workspace_generated": "Generated files",
   "com_linsight_back_to_workspace": "Back to workspace",
   "com_linsight_download_to_view": "Download to view",
   "com_linsight_preview_unsupported": "This file type cannot be previewed online",

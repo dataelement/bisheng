@@ -14,7 +14,7 @@ import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPan
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
-import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
+import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
@@ -72,6 +72,12 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
 
     // P4 artifacts: output files + the shared right-side panel (workspace/preview)
     const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
+    // Workspace drawer shows both zones: user-uploaded sources + agent deliverables.
+    const uploadedFiles = useMemo(
+        () => toUploadedArtifacts(linsight?.files as any[]),
+        [linsight?.files],
+    );
+    const workspaceFiles = useMemo(() => [...uploadedFiles, ...fileList], [uploadedFiles, fileList]);
 
     // clarify requests: the newest unanswered one is the active card;
     // session-level answered ones become flow-level intent rows
@@ -221,7 +227,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
             <WorkspaceDrawer
                 open={artifactsPanel.workspaceOpen}
                 onOpenChange={artifactsPanel.setWorkspaceOpen}
-                files={fileList}
+                files={workspaceFiles}
                 onPreview={(file) => artifactsPanel.openPreview(file, true)}
             />
             <FilePreviewPanel
