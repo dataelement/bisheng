@@ -16,7 +16,7 @@ import { getAgentMessages } from "~/api/chatApi";
 import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
-import { startLinsight } from "~/api/linsight";
+import { startLinsight, getLinsightSessionVersionList } from "~/api/linsight";
 import { SopStatus } from "~/store/linsight";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
@@ -356,6 +356,28 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             console.error('[AiChat] task start-execute failed:', err);
                             updateLinsight(svid, { taskError: String(err), status: SopStatus.Stoped });
                         });
+
+                    // The handoff event carries no files; the backend has already
+                    // processed the uploaded sources for this SV. Pull them so the
+                    // workspace drawer (uploaded-files group + header button) shows
+                    // live instead of only after a page refresh.
+                    if (chat_id) {
+                        getLinsightSessionVersionList(chat_id, '')
+                            .then((versions: any[]) => {
+                                const item = (versions || []).find((v: any) => v.id === svid);
+                                if (item?.files?.length) {
+                                    updateLinsight(svid, {
+                                        files: item.files.map((f: any) => ({
+                                            ...f,
+                                            file_name: decodeURIComponent(f.original_filename),
+                                        })),
+                                    } as any);
+                                }
+                            })
+                            .catch(() => {
+                                /* best-effort: drawer still works after refresh */
+                            });
+                    }
 
                     // Promote the placeholder assistant row to a task turn so the
                     // bubble renders the embedded execution panel by SV.

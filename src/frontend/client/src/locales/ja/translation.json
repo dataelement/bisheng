@@ -1472,6 +1472,7 @@
     "file_size": "ファイルサイズ",
     "file_upload_failed": "ファイル {{0}} のアップロードに失敗しました",
     "file_upload_failed_with_reason": "ファイル {{0}} のアップロードに失敗しました：{{1}}",
+    "file_upload_quota_batch": "{{0}} 個のファイルのアップロードに失敗しました：{{1}}",
     "folder": "フォルダ",
     "folder_already_exists": "「{{0}}」という名前のフォルダーが既に存在します。",
     "folder_name_empty": "フォルダー名を入力してください",

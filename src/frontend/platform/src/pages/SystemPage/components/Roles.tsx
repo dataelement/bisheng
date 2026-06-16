@@ -40,7 +40,7 @@ import { TreeDepartmentSelect, getDepartmentDisplayPath } from "@/components/bs-
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { DepartmentTreeNode } from "@/types/api/department"
 import { ROLE } from "@/types/api/user"
-import { useContext, useEffect, useMemo, useState } from "react"
+import { Fragment, useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 const WORKBENCH_PARENT_ID = "workstation"
@@ -58,12 +58,26 @@ const ADMIN_CHILD_MENUS = [
   "mark_task",
 ] as const
 /**
+ * 工作台「首页」下挂的子能力：任务模式。它本身就是客户端早已消费的菜单键
+ * `linsight_task_mode`（user.plugins）——开启后工作台首页展示技能与任务模式
+ * 选择、左上角「新建任务」入口；关闭则全部隐藏。归属首页，作为其依赖项。
+ */
+const TASK_MODE_MENU_ID = "linsight_task_mode"
+const WORKBENCH_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
+  home: [TASK_MODE_MENU_ID],
+}
+/**
  * 某些子菜单依赖另一个子菜单（父项关闭则隐藏、且会级联移除）。
  * `create_app` 依赖 `build`；"新建知识库"依赖 `knowledge`（PRD 3.3.3）。
  */
 const ADMIN_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
   build: ["create_app"],
   knowledge: ["create_knowledge"],
+}
+/** 工作台 + 管理后台父子依赖合并表，供加载 / 保存 / 级联删除统一引用。 */
+const CHILD_DEPENDENTS: Record<string, readonly string[]> = {
+  ...WORKBENCH_CHILD_DEPENDENTS,
+  ...ADMIN_CHILD_DEPENDENTS,
 }
 
 /** Knowledge-space total upload quota (GB); one decimal, inclusive bounds. */
@@ -100,6 +114,7 @@ function clampKnowledgeQuotaGbDisplay(raw: string): string {
 const DEFAULT_ENABLED_MENU_IDS = [
   WORKBENCH_PARENT_ID,
   "home",
+  TASK_MODE_MENU_ID,
   "apps",
   "subscription",
   "knowledge_space",
@@ -269,8 +284,8 @@ export default function Roles() {
       return
     }
     let ids = [...menuRes].filter((id) => id !== "system_config")
-    // 依赖约束：若父项未启用则剔除依赖项（例如 create_app 依赖 build）。
-    Object.entries(ADMIN_CHILD_DEPENDENTS).forEach(([parent, deps]) => {
+    // 依赖约束：若父项未启用则剔除依赖项（例如 create_app 依赖 build、任务模式依赖首页）。
+    Object.entries(CHILD_DEPENDENTS).forEach(([parent, deps]) => {
       if (!ids.includes(parent)) ids = ids.filter((id) => !deps.includes(id))
     })
     setMenuIds(ids)
@@ -340,7 +355,7 @@ export default function Roles() {
     const quota_config = buildQuotaConfig()
     // 保存前清理依赖：父项未开则不应持久化依赖项（例如 build 关闭时移除 create_app）。
     const sanitizedMenuIds = menuIds.filter((id) => {
-      const parent = Object.entries(ADMIN_CHILD_DEPENDENTS).find(([, deps]) =>
+      const parent = Object.entries(CHILD_DEPENDENTS).find(([, deps]) =>
         (deps as readonly string[]).includes(id),
       )?.[0]
       return !parent || menuIds.includes(parent)
@@ -423,7 +438,7 @@ export default function Roles() {
         next.add(id)
       } else {
         next.delete(id)
-        const dependents = ADMIN_CHILD_DEPENDENTS[id] || []
+        const dependents = CHILD_DEPENDENTS[id] || []
         dependents.forEach((dep) => next.delete(dep))
       }
       return Array.from(next)
@@ -856,35 +871,76 @@ export default function Roles() {
                     />
                     <span>{t("menu.workspace")}</span>
                   </label>
-                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+                  {/* Workbench children render top-to-bottom in order; the 任务模式
+                      sub-toggle is injected right under 首页 (indented + left border
+                      to show the 首页 → 任务模式 hierarchy), the rest follow in order. */}
+                  <div className="mt-3 flex flex-col gap-2">
                     {WORKBENCH_MENU_OPTIONS.map((m) => (
-                      <label
-                        key={m.id}
-                        className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
-                          !isMenuEnabled(WORKBENCH_PARENT_ID)
-                            ? "cursor-not-allowed opacity-50"
-                            : "cursor-pointer"
-                        }`}
-                        onClick={() =>
-                          isMenuEnabled(WORKBENCH_PARENT_ID) &&
-                          toggleMenuItem(
-                            WORKBENCH_PARENT_ID,
-                            WORKBENCH_CHILD_MENUS,
-                            m.id,
-                            !isMenuEnabled(m.id)
-                          )
-                        }
-                      >
-                        <Switch
-                          checked={isMenuEnabled(m.id)}
-                          disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
-                          onCheckedChange={(checked) =>
-                            toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, checked)
+                      <Fragment key={m.id}>
+                        <label
+                          className={`inline-flex w-fit items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                            !isMenuEnabled(WORKBENCH_PARENT_ID)
+                              ? "cursor-not-allowed opacity-50"
+                              : "cursor-pointer"
+                          }`}
+                          onClick={() =>
+                            isMenuEnabled(WORKBENCH_PARENT_ID) &&
+                            toggleMenuItem(
+                              WORKBENCH_PARENT_ID,
+                              WORKBENCH_CHILD_MENUS,
+                              m.id,
+                              !isMenuEnabled(m.id)
+                            )
                           }
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <span>{m.label}</span>
-                      </label>
+                        >
+                          <Switch
+                            checked={isMenuEnabled(m.id)}
+                            disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
+                            onCheckedChange={(checked) =>
+                              toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, checked)
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span>{m.label}</span>
+                        </label>
+
+                        {/* 「首页」子能力：任务模式 —— 紧跟首页下方。依赖首页，首页（或
+                            工作台）关闭时置灰不可用并级联移除。 */}
+                        {m.id === "home" && (
+                          <div className="ml-6 border-l border-border pl-3">
+                            <label
+                              className={`inline-flex w-fit items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                                !isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")
+                                  ? "cursor-not-allowed opacity-50"
+                                  : "cursor-pointer"
+                              }`}
+                              onClick={() =>
+                                isMenuEnabled(WORKBENCH_PARENT_ID) &&
+                                isMenuEnabled("home") &&
+                                toggleMenuItem(
+                                  WORKBENCH_PARENT_ID,
+                                  WORKBENCH_CHILD_MENUS,
+                                  TASK_MODE_MENU_ID,
+                                  !isMenuEnabled(TASK_MODE_MENU_ID)
+                                )
+                              }
+                            >
+                              <Switch
+                                checked={isMenuEnabled(TASK_MODE_MENU_ID)}
+                                disabled={!isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")}
+                                onCheckedChange={(checked) =>
+                                  toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, TASK_MODE_MENU_ID, checked)
+                                }
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <span>{t("menu.linsightTaskMode")}</span>
+                            </label>
+                            <p className="mt-1 pl-2 text-xs text-muted-foreground">
+                              {t("system.workbenchTaskModeHint")}
+                            </p>
+                          </div>
+                        )}
+                      </Fragment>
                     ))}
                   </div>
                 </div>

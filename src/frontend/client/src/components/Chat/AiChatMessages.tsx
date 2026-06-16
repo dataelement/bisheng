@@ -45,6 +45,10 @@ interface AiChatMessagesProps {
     onRegenerate?: (parentMessageId: string) => void;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
+    /** F035: open the task-mode workspace drawer (entry rendered in HeaderTitle) */
+    onOpenWorkspace?: () => void;
+    /** F035: whether the latest task turn has any uploaded/generated files */
+    hasWorkspaceFiles?: boolean;
 }
 
 /**
@@ -149,6 +153,8 @@ export default function AiChatMessages({
     onRegenerate,
     onOpenCitationPanel,
     activeCitationMessageId,
+    onOpenWorkspace,
+    hasWorkspaceFiles = false,
 }: AiChatMessagesProps) {
     const localize = useLocalize();
     const isNarrowViewport = usePrefersMobileLayout();
@@ -305,6 +311,8 @@ export default function AiChatMessages({
                     readOnly={!!shareToken}
                     hideShare={hideShare}
                     conversation={{ title: headerTitleText, flowId: "", conversationId, flowType: 15 }}
+                    onOpenWorkspace={onOpenWorkspace}
+                    hasWorkspaceFiles={hasWorkspaceFiles}
                 />
             )}
             <div

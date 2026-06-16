@@ -1475,6 +1475,7 @@
     "file_size": "文件大小",
     "file_upload_failed": "文件 {{0}} 上传失败",
     "file_upload_failed_with_reason": "文件 {{0}} 上传失败：{{1}}",
+    "file_upload_quota_batch": "{{0}} 个文件上传失败：{{1}}",
     "folder": "文件夹",
     "folder_already_exists": "该位置已存在同名文件夹「{{0}}」",
     "folder_name_empty": "文件夹名称不能为空",

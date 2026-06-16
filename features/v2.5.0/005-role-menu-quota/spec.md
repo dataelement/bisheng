@@ -83,7 +83,8 @@
 |----|------|------|---------|
 | AC-15 | 普通用户 | 查询有效配额：GET /quota/effective | 返回每种资源类型的 role_quota + tenant_quota + tenant_used + effective 值 |
 | AC-16 | — | 用户绑定多个角色，各角色 quota_config.workflow 分别为 10、20、-1 | get_effective_quota 返回 -1（任一角色不限制则不限制） |
-| AC-17 | — | 用户绑定多个角色，各角色 quota_config.channel 分别为 5、10 | get_effective_quota 取角色最大值 10，再与租户剩余取 min |
+| AC-17 | — | 用户绑定多个角色，各角色 quota_config.channel 分别为 5、10 | get_effective_quota 取角色最大值 10，再与租户剩余取 min（注：knowledge_space_file 取最小值，见 AC-17b） |
+| AC-17b | — | 用户绑定多个角色，各角色 quota_config.knowledge_space_file 分别为 0.1、1 | knowledge_space_file 取最小值 0.1 GB；有限值存在时 -1（无限）被忽略；全部为 -1 才返回 -1 |
 | AC-18 | — | 用户角色 quota_config 未设置某资源类型（key 缺失） | 使用系统默认配额（DEFAULT_ROLE_QUOTA 常量） |
 | AC-19 | 系统管理员 | 查询有效配额 | 所有资源类型返回 -1（管理员不限制） |
 
@@ -289,7 +290,7 @@ class RoleListResponse(BaseModel):
 
 class EffectiveQuotaItem(BaseModel):
     resource_type: str
-    role_quota: int          # 角色级配额（多角色取 max）,-1=不限制
+    role_quota: int          # 角色级配额（多角色一般取 max；knowledge_space_file 例外取 min）,-1=不限制
     tenant_quota: int        # 租户级配额, -1=不限制
     tenant_used: int         # 租户已使用量
     user_used: int           # 用户已使用量

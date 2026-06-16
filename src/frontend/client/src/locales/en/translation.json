@@ -1548,6 +1548,7 @@
     "file_size": "File size",
     "file_upload_failed": "File {{0}} upload failed",
     "file_upload_failed_with_reason": "File {{0}} upload failed: {{1}}",
+    "file_upload_quota_batch": "{{0}} files failed to upload: {{1}}",
     "folder": "Folder",
     "folder_already_exists": "A folder named \"{{0}}\" already exists here.",
     "folder_name_empty": "Folder name cannot be empty",

@@ -174,29 +174,65 @@ export function useFileUpload({
             // Upload each file to server
             const uploadedPaths: string[] = [];
 
-            const failures: { name: string; reason: string }[] = [];
-            for (const file of fileArray) {
+            const COLLAPSIBLE_CODES = new Set([18024, 19403]);
+            const failures: { name: string; reason: string; statusCode?: number }[] = [];
+            // When a quota/permission error is hit, remaining files would all fail
+            // for the same reason — record the count and break early.
+            let earlyStop: { reason: string; statusCode: number; skippedCount: number } | null = null;
+            for (let i = 0; i < fileArray.length; i++) {
+                const file = fileArray[i];
                 try {
                     const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file);
                     uploadedPaths.push(res.file_path);
                 } catch (err) {
-                    failures.push({
-                        name: file.name,
-                        reason: resolveUploadErrorReason(err),
-                    });
+                    const statusCode: number | undefined = (err as any)?.statusCode;
+                    const reason = resolveUploadErrorReason(err);
+                    failures.push({ name: file.name, reason, statusCode });
+                    if (statusCode && COLLAPSIBLE_CODES.has(statusCode)) {
+                        earlyStop = { reason, statusCode, skippedCount: fileArray.length - i - 1 };
+                        break;
+                    }
                 }
             }
-            if (failures.length > 0) {
-                // Render each failure with the backend reason inline (quota / dup /
-                // permission etc). The browser-upload hint is now strictly a
-                // last-resort fallback — only appended when *every* failure has
-                // no actionable reason (i.e. likely a client-wide network /
-                // timeout case, the scenario the hint was originally written for).
-                const lines = failures.map(({ name, reason }) =>
-                    reason
-                        ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
-                        : localize("com_knowledge.file_upload_failed", { 0: name })
-                );
+            if (failures.length > 0 || earlyStop) {
+                // When multiple files fail with the same quota/permission error code,
+                // collapse them into one summary line instead of N identical lines.
+                // earlyStop.skippedCount adds files that were never attempted.
+                const collapsed: { reason: string; count: number }[] = [];
+                const individual: { name: string; reason: string }[] = [];
+                const seenCode = new Map<number, { reason: string; count: number }>();
+                for (const f of failures) {
+                    if (f.statusCode && COLLAPSIBLE_CODES.has(f.statusCode)) {
+                        const existing = seenCode.get(f.statusCode);
+                        if (existing) {
+                            existing.count++;
+                        } else {
+                            const entry = { reason: f.reason, count: 1 };
+                            seenCode.set(f.statusCode, entry);
+                            collapsed.push(entry);
+                        }
+                    } else {
+                        individual.push(f);
+                    }
+                }
+                if (earlyStop && earlyStop.skippedCount > 0) {
+                    const existing = seenCode.get(earlyStop.statusCode);
+                    if (existing) {
+                        existing.count += earlyStop.skippedCount;
+                    }
+                }
+                const lines: string[] = [
+                    ...collapsed.map(({ reason, count }) =>
+                        count > 1
+                            ? localize("com_knowledge.file_upload_quota_batch", { 0: count, 1: reason })
+                            : reason
+                    ),
+                    ...individual.map(({ name, reason }) =>
+                        reason
+                            ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
+                            : localize("com_knowledge.file_upload_failed", { 0: name })
+                    ),
+                ];
                 const everyReasonMissing = failures.every((f) => !f.reason);
                 const message = everyReasonMissing
                     ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")

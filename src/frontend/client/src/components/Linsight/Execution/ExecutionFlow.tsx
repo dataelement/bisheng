@@ -8,7 +8,7 @@
  * after the old TaskFlow stops rendering.
  */
 import { CircleAlert, OctagonX } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { SopStatus } from '~/store/linsight';
 import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
@@ -37,6 +37,11 @@ interface ExecutionFlowProps {
     /** conversation id for the input's per-session memory */
     conversationId?: string;
     isSharePage?: boolean;
+    /** Historical linsight session opened from the home list (flowType 20 →
+        /linsight/:id). The follow-up / continuation flow now lives in the daily
+        /c chat, so the standalone viewer is read-only: render the flow but hide
+        the bottom input (display-only, cannot be used). */
+    readOnly?: boolean;
     /** workspace/preview panel state — lifted to Sop/index so the Header's
         workspace button drives the same drawer */
     artifactsPanel: ReturnType<typeof useArtifactsPanel>;
@@ -55,7 +60,7 @@ function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[])
     return entries;
 }
 
-export function ExecutionFlow({ versionId, conversationId, isSharePage = false, artifactsPanel }: ExecutionFlowProps) {
+export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
     const { getLinsight, continueConversation } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
@@ -78,24 +83,6 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
         [linsight?.files],
     );
     const workspaceFiles = useMemo(() => [...uploadedFiles, ...fileList], [uploadedFiles, fileList]);
-
-    // Auto-open the workspace drawer once when a freshly-submitted task carries
-    // uploaded files, so the user immediately sees what they attached. Gated on a
-    // non-terminal status so revisiting a COMPLETED history session (which also
-    // has files) does NOT pop the drawer; the ref keeps it to one open per session.
-    const autoOpenedRef = useRef<string | null>(null);
-    useEffect(() => {
-        if (
-            versionId &&
-            autoOpenedRef.current !== versionId &&
-            uploadedFiles.length > 0 &&
-            !completed &&
-            !stopped
-        ) {
-            autoOpenedRef.current = versionId;
-            artifactsPanel.openWorkspace();
-        }
-    }, [versionId, uploadedFiles.length, completed, stopped, artifactsPanel]);
 
     // clarify requests: the newest unanswered one is the active card;
     // session-level answered ones become flow-level intent rows
@@ -219,9 +206,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 <div className="px-6 pb-3">
                     <TaskPanel tasks={tasks} completed={completed} />
                 </div>
-                {/* Share pages are read-only — no input, no footer controls
-                    ("make same style" removed per product decision, F035). */}
-                {!isSharePage && (
+                {/* Share pages AND historical sessions are read-only — no input.
+                    Continuation now happens in the daily /c chat; the standalone
+                    linsight viewer only displays ("make same style" removed, F035). */}
+                {!isSharePage && !readOnly && (
                     <TaskModeInput
                         // The landing route URL is rewritten via history.replaceState after the
                         // first submit, so react-router's `conversationId` stays 'new'. Treat

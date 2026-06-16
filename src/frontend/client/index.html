@@ -96,7 +96,13 @@
 
       if (!absoluteUrlPattern.test(loadingIcon)) {
         var baseUrl = (brandBaseUrl || "").replace(/\/$/, "");
-        resolvedIcon = baseUrl + (loadingIcon.charAt(0) === "/" ? loadingIcon : "/" + loadingIcon);
+        // brand-runtime.js may have already prefixed the icon with baseUrl.
+        // Re-prefixing here produces /workspace/workspace/... (404). Stay
+        // idempotent: only prepend baseUrl when it is not already present.
+        var alreadyPrefixed = baseUrl && (loadingIcon === baseUrl || loadingIcon.indexOf(baseUrl + "/") === 0);
+        if (!alreadyPrefixed) {
+          resolvedIcon = baseUrl + (loadingIcon.charAt(0) === "/" ? loadingIcon : "/" + loadingIcon);
+        }
       }
 
       iconElement.setAttribute("src", resolvedIcon);
