@@ -205,6 +205,8 @@ export default function Knowledge() {
         setTotal: fileManager.setTotal,
         loadFiles: fileManager.loadFiles,
         currentPage: fileManager.currentPage,
+        markPendingDeletion: fileManager.markPendingDeletion,
+        clearPendingDeletion: fileManager.clearPendingDeletion,
     });
 
     // Share route: close drawer when leaving /knowledge/share/:spaceId
@@ -772,6 +774,7 @@ export default function Knowledge() {
                                 navigate(folderId ? `${base}/folder/${folderId}` : base);
                             }}
                             onUploadFile={fileUpload.handleUploadFile}
+                            onUploadFolder={fileUpload.handleUploadFolder}
                             onCreateFolder={fileUpload.handleCreateFolder}
                             onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
                             onRenameFile={fileUpload.handleRenameFile}

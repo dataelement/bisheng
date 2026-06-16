@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Loader2, Link2, Search } from "lucide-react";
+import { Loader2, Link2, Search, Check } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "~/components/ui/Tooltip2";
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
@@ -12,6 +12,7 @@ import {
     getVersionRecommendationsApi,
     searchVersionSourcesApi,
     mergeIntoCurrentApi,
+    dismissSimilarApi,
     type SimilarCandidateEntry,
     type SearchableDocumentEntry,
     type LinkAsNewVersionResponse,
@@ -26,6 +27,8 @@ interface RelateDocumentPanelProps {
     fileId: number;
     file: KnowledgeFile;
     onLinked: (response: LinkAsNewVersionResponse) => void;
+    /** Called after the file is dismissed (marked "don't link to any document"). */
+    onDismissed?: () => void;
     className?: string;
 }
 
@@ -132,6 +135,7 @@ export function RelateDocumentPanel({
     fileId,
     file,
     onLinked,
+    onDismissed,
     className,
 }: RelateDocumentPanelProps): JSX.Element {
     const localize = useLocalize();
@@ -174,6 +178,22 @@ export function RelateDocumentPanel({
         onError: () => undefined,
     });
 
+    // Dismiss the similar-document flag — user chose not to link this file to any
+    // document. Mirrors the batch "处理相似文档" dialog's "不关联" action.
+    const dismissMutation = useMutation({
+        mutationFn: () => dismissSimilarApi(fileId),
+        onSuccess: () => {
+            showToast({
+                message: localize("com_knowledge.version.toast_dismiss_success"),
+                status: "success",
+            });
+            onDismissed?.();
+        },
+        // The unified request interceptor already toasts api_errors.<code> when
+        // skip403Redirect is set, so onError is a no-op to avoid a duplicate toast.
+        onError: () => undefined,
+    });
+
     const handleLink = async (targetDoc: { document_id: number; title: string }) => {
         const ok = await confirm({
             title: localize("com_knowledge.version.confirm_link_title"),
@@ -188,6 +208,7 @@ export function RelateDocumentPanel({
     };
 
     const isLinking = linkMutation.isPending;
+    const isDismissing = dismissMutation.isPending;
     const hasSearched = debouncedKeyword.length >= 1;
 
     return (
@@ -249,7 +270,7 @@ export function RelateDocumentPanel({
                                 <RecommendationCard
                                     key={entry.target_document_id}
                                     entry={entry}
-                                    disabled={isLinking}
+                                    disabled={isLinking || isDismissing}
                                     onLink={handleLink}
                                 />
                             ))}
@@ -309,7 +330,7 @@ export function RelateDocumentPanel({
                                         <SearchResultRow
                                             key={entry.document_id}
                                             entry={entry}
-                                            disabled={isLinking}
+                                            disabled={isLinking || isDismissing}
                                             onLink={handleLink}
                                         />
                                     ))}
@@ -319,6 +340,29 @@ export function RelateDocumentPanel({
                     )}
                 </section>
             </div>
+
+            {/* ── Section 4: Skip linking (不关联) ─────────────────────── */}
+            <section className="mt-auto shrink-0 rounded-[8px] border border-dashed border-[#EBECF0] bg-white px-4 py-3 flex items-center justify-between">
+                <div>
+                    <h3 className="mb-1 text-[14px] font-medium text-[#1d2129]">
+                        {localize("com_knowledge.version.section_dismiss")}
+                    </h3>
+                    <p className="text-[12px] text-[#86909c]">
+                        {localize("com_knowledge.version.section_dismiss_subtitle")}
+                    </p>
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isDismissing || isLinking}
+                    onClick={() => dismissMutation.mutate()}
+                    className="h-8 shrink-0 rounded-[6px] px-4 text-[12px] text-[#4e5969]"
+                >
+                    <Check className="mr-1.5 size-4" />
+                    {localize("com_knowledge.version.btn_dismiss")}
+                </Button>
+            </section>
         </div>
     );
 }

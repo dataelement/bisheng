@@ -1,8 +1,8 @@
 import { Fragment, useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderPlus, FolderInput, Loader2 } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
+import { FolderPlus, FolderInput, Loader2, FileSearch } from "lucide-react";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
@@ -68,6 +68,10 @@ interface KnowledgeSpaceContentProps {
     onSort: (sortBy: SortType | undefined, direction: SortDirection | undefined) => void;
     onNavigateFolder: (folderId?: string) => void;
     onUploadFile: (files?: FileList | File[]) => void;
+    onUploadFolder: (
+        fileList: FileList | File[],
+        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+    ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
     onRenameFile: (fileId: string, newName: string) => void;
@@ -109,6 +113,7 @@ export function KnowledgeSpaceContent({
     onSort,
     onNavigateFolder,
     onUploadFile,
+    onUploadFolder,
     onCreateFolder,
     onDownloadFile,
     onRenameFile,
@@ -265,27 +270,15 @@ export function KnowledgeSpaceContent({
     const [versionMgmtFile, setVersionMgmtFile] = useState<KnowledgeFile | null>(null);
     const [versionHistoryFile, setVersionHistoryFile] = useState<KnowledgeFile | null>(null);
     const [similarDialogOpen, setSimilarDialogOpen] = useState(false);
+    // File ids (KnowledgeFile.id) the similar-document dialog is scoped to — snapshotted
+    // from the current selection when the batch "处理相似文档" entry is triggered.
+    const [similarRestrictIds, setSimilarRestrictIds] = useState<string[]>([]);
 
-    const { data: pendingSimilarList = [] } = useQuery({
-        queryKey: ["pending-similar", spaceIdNum],
-        queryFn: () => getPendingSimilarFilesApi(spaceIdNum),
-        enabled: versionManagementEnabled && spaceIdNum > 0 && canManageMembers,
-    });
-    const pendingSimilarCount = pendingSimilarList.length;
-
-    // SimHash scan runs asynchronously on the backend after a file's parse finishes,
-    // so files can transition has_similar=false → true outside the pending-similar polling
-    // cadence. Watch the has_similar id set on the visible file list AND the total file
-    // count (the latter catches cross-folder deletions of similar-marked children).
-    const similarFileIdsKey = displayFiles
-        .filter((f) => f.has_similar && !f.is_multi_version)
-        .map((f) => f.id)
-        .sort()
-        .join(",");
-    useEffect(() => {
-        if (!versionManagementEnabled || spaceIdNum <= 0) return;
-        queryClient.invalidateQueries({ queryKey: ["pending-similar", spaceIdNum] });
-    }, [similarFileIdsKey, total, versionManagementEnabled, spaceIdNum, queryClient]);
+    // Open the similar-document dialog scoped to the currently selected files.
+    const handleProcessSimilar = () => {
+        setSimilarRestrictIds(Array.from(selectedFiles));
+        setSimilarDialogOpen(true);
+    };
 
     // Invalidate pending-similar and trigger file list refresh after any version action.
     const handleVersionAction = () => {
@@ -595,10 +588,16 @@ export function KnowledgeSpaceContent({
 
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const folderInputRef = useRef<HTMLInputElement>(null);
 
     const triggerUpload = () => {
         if (!canUploadFile) return;
         fileInputRef.current?.click();
+    };
+
+    const triggerUploadFolder = () => {
+        if (!canUploadFile) return;
+        folderInputRef.current?.click();
     };
 
     useEffect(() => {
@@ -646,6 +645,17 @@ export function KnowledgeSpaceContent({
             }
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
+    };
+
+    // Folder upload: hand the full FileList to the hook, which handles
+    // hidden-folder rejection, dup-name check, count cap, and silent filtering
+    // (oversize / unsupported / hidden) — see useFileUpload.handleUploadFolder.
+    const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const filesList = e.target.files;
+        if (filesList && filesList.length > 0 && canUploadFile) {
+            onUploadFolder(filesList, { allowedExtensions, maxSizeMB: maxFileSizeMB });
+        }
+        if (folderInputRef.current) folderInputRef.current.value = "";
     };
 
     // ─── Drag and drop ──────────────────────────────────────────────────
@@ -972,6 +982,10 @@ export function KnowledgeSpaceContent({
     const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
         downloadEntryIds.has(file.id)
     );
+    // "处理相似文档" uses union semantics (like batch retry's hasFailedFiles): the entry
+    // appears whenever ANY selected file is a pending similar document. The dialog is then
+    // scoped to exactly the selected files (see handleProcessSimilar).
+    const hasSimilarSelected = selectedList.some((f) => f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS);
 
     // Mobile only ever shows the list form — never the multi-column card grid.
     const effectiveViewMode: "card" | "list" = isH5 ? "list" : viewMode;
@@ -1003,6 +1017,7 @@ export function KnowledgeSpaceContent({
         },
         (isAdmin && !hasFoldersSelected) && { key: "tag", label: localize("com_knowledge.batch_add_tags"), Icon: Outlined.Tag, onClick: handleBatchTag },
         (isAdmin && hasFailedFiles) && { key: "retry", label: localize("com_knowledge.retry"), Icon: Outlined.Refresh, onClick: handleBatchRetry },
+        (versionManagementEnabled && canManageMembers && hasSimilarSelected) && { key: "similar", label: localize("com_knowledge.version.header_process_similar_label"), Icon: FileSearch, onClick: handleProcessSimilar },
         canBatchMove && { key: "move", label: localize("com_knowledge.move"), Icon: FolderInput, onClick: handleBatchMove },
         canManageSinglePermission && { key: "permission", label: localize("com_permission.manage_permission"), Icon: Outlined.PeopleSafe, onClick: () => handleManagePermission(singleSelectedId!) },
         canBatchDelete && { key: "delete", label: localize("com_knowledge.delete"), Icon: Outlined.Delete, onClick: handleBatchDelete, danger: true },
@@ -1036,6 +1051,20 @@ export function KnowledgeSpaceContent({
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 accept={fileInputAccept}
+            />
+            {/* Hidden Folder Input — `webkitdirectory` makes the picker select a
+                directory; each File carries its `webkitRelativePath`. No `accept`:
+                extension filtering is done silently in the hook per spec. */}
+            <input
+                type="file"
+                multiple
+                className="hidden"
+                ref={folderInputRef}
+                onChange={handleFolderChange}
+                // `webkitdirectory`/`directory` are non-standard but accepted by
+                // every browser we ship to; React typings don't list them.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                {...({ webkitdirectory: "", directory: "" } as any)}
             />
             {/* Mobile full-page search header: inline search box (scope + keyword + tags) + 取消.
                 Per design (Figma 11495:16476): the search-box+cancel row is 64px tall, no top padding;
@@ -1207,6 +1236,7 @@ export function KnowledgeSpaceContent({
                 onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
+                onTriggerUploadFolder={triggerUploadFolder}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
                 supportedFormatsLabel={localize(
@@ -1229,8 +1259,8 @@ export function KnowledgeSpaceContent({
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
                 canShareSpace={canShareSpace}
                 versionManagementEnabled={versionManagementEnabled}
-                pendingSimilarCount={pendingSimilarCount}
-                onProcessSimilar={() => setSimilarDialogOpen(true)}
+                hasSimilarSelected={hasSimilarSelected}
+                onProcessSimilar={handleProcessSimilar}
                 canManageMembers={canManageMembers}
             />
             </div>
@@ -1552,8 +1582,9 @@ export function KnowledgeSpaceContent({
                     />
                     <SimilarDocumentDialog
                         open={similarDialogOpen}
-                        onOpenChange={setSimilarDialogOpen}
+                        onOpenChange={(o) => { setSimilarDialogOpen(o); if (!o) setSimilarRestrictIds([]); }}
                         spaceId={spaceIdNum}
+                        restrictToFileIds={similarRestrictIds}
                         onProcessed={handleVersionAction}
                     />
                 </>

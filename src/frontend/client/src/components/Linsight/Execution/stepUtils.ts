@@ -226,3 +226,13 @@ export function isTaskDone(status?: string): boolean {
 export function isTaskRunning(status?: string): boolean {
     return TASK_RUNNING_STATUSES.includes(status || '');
 }
+
+/**
+ * A task is "started" once execution has actually reached it — running, finished,
+ * or errored. Not-yet-reached tasks (e.g. `not_started`) must NOT appear in the
+ * conversation step flow; they only show up in the TaskPanel checklist. The flow
+ * reveals steps progressively as they are reached.
+ */
+export function isTaskStarted(status?: string): boolean {
+    return isTaskRunning(status) || isTaskDone(status) || TASK_ERROR_STATUSES.includes(status || '');
+}

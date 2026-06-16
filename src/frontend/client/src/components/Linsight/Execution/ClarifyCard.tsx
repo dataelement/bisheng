@@ -7,7 +7,7 @@
  * text and submitted through the existing user-input API in a single shot.
  * Unparseable payloads degrade to a plain textarea (legacy UserInput shape).
  */
-import { ArrowRight, Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, ChevronRight, CornerDownLeft, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button, Textarea } from '~/components/ui';
 import { useLocalize } from '~/hooks';
@@ -229,13 +229,29 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         setCustomText((prev) => ({ ...prev, [q.id]: e.target.value }));
                                         if (!customSelected) handleSelect(q, CUSTOM_KEY);
                                     }}
+                                    onKeyDown={(e) => {
+                                        // Enter confirms the custom answer and advances
+                                        // (single-select only; multi-select uses the footer button).
+                                        if (e.key === 'Enter' && !q.multiple && customText[q.id]?.trim()) {
+                                            e.preventDefault();
+                                            handleConfirm();
+                                        }
+                                    }}
                                     className={cn(
                                         'flex-1 bg-transparent text-sm outline-none placeholder:text-[#8C8C8C]',
-                                        customSelected ? 'text-[#335CFF] font-medium' : 'text-[#1A1A1A]',
+                                        customSelected ? 'text-[#1A1A1A] font-medium' : 'text-[#1A1A1A]',
                                     )}
                                 />
-                                {customSelected && customText[q.id]?.trim() && (
-                                    <Check size={16} className="shrink-0 text-[#335CFF]" />
+                                {!q.multiple && customSelected && customText[q.id]?.trim() && (
+                                    <button
+                                        type="button"
+                                        disabled={disabled || submitted}
+                                        onClick={handleConfirm}
+                                        className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
+                                    >
+                                        {localize('com_linsight_clarify_submit')}
+                                        <CornerDownLeft size={14} className="shrink-0" />
+                                    </button>
                                 )}
                             </div>
                         </li>
@@ -256,7 +272,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
 
             {/* Footer: Confirm (when answered) + Skip */}
             <div className="mt-6 flex items-center justify-end gap-4">
-                {hasAnswer && (q?.multiple || customSelected || !q) && (
+                {hasAnswer && (q?.multiple || !q) && (
                     <Button
                         size="sm"
                         disabled={disabled || submitted}

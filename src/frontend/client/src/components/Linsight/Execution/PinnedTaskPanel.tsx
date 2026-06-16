@@ -1,0 +1,34 @@
+/**
+ * F035: the task checklist pinned directly above the input box (Figma
+ * 12221-39902 expanded / 12221-40080 collapsed). Unlike the in-stream bubble,
+ * this stays put above the input for the conversation's latest task turn — both
+ * while it runs and after it completes.
+ *
+ * It only reads from the linsight store; hydration is owned by the in-stream
+ * TaskTurnPanel (live WS pump for the active turn, lazy-load for history), so
+ * this component re-renders reactively as that store entry fills in.
+ */
+import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { SopStatus } from '~/store/linsight';
+import { TaskPanel } from './TaskPanel';
+import type { ExecTask } from './TaskStepRow';
+
+export function PinnedTaskPanel({ versionId }: { versionId: string }) {
+    const { getLinsight } = useLinsightManager();
+    const linsight = getLinsight(versionId);
+
+    const tasks: ExecTask[] = (linsight?.tasks as any) || [];
+    if (!tasks.length) return null;
+
+    const status = linsight?.status;
+    const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
+
+    // Design (Figma 12221-40080/40081): the card is inset 24px each side relative
+    // to the input box, with a 12px gap above it. Spacing lives here (not in the
+    // reusable TaskPanel) so the empty/no-task state leaves no gap above the input.
+    return (
+        <div className="px-6 pb-3">
+            <TaskPanel tasks={tasks} completed={completed} />
+        </div>
+    );
+}

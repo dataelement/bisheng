@@ -1054,13 +1054,12 @@ function FileRow({
                                     {`V${file.version_no}`}
                                 </span>
                             )}
-                            {/* Name + similar-document tag share one flex-1 group so the name
-                                stays left-aligned across rows and the tag sits right after it
-                                (before the status badge). The group keeps the full-width click area. */}
-                            <div
+                            <span
                                 className={cn(
-                                    "flex min-w-0 flex-1 items-center gap-2",
-                                    namePreviewable ? "cursor-pointer" : "cursor-default"
+                                    "text-sm truncate flex-1",
+                                    namePreviewable
+                                        ? "cursor-pointer text-[#212121] hover:text-[#4080FF]"
+                                        : "cursor-default text-[#999]"
                                 )}
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -1072,35 +1071,29 @@ function FileRow({
                                     onPreview?.();
                                 }}
                             >
-                                <span
-                                    className={cn(
-                                        "min-w-0 truncate text-sm",
-                                        namePreviewable
-                                            ? "text-[#212121] hover:text-[#4080FF]"
-                                            : "text-[#999]"
-                                    )}
-                                >
-                                    <span className="block truncate">{renderHighlightedName(file.name, highlightKeyword)}</span>
-                                </span>
-                                {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onOpenVersionManagement?.(file);
-                                        }}
-                                        className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
-                                    >
-                                        <FileSearch className="size-3" />
-                                        {localize("com_knowledge.version.pill_similar")}
-                                    </button>
-                                )}
-                            </div>
+                                <span className="block truncate">{renderHighlightedName(file.name, highlightKeyword)}</span>
+                            </span>
                         </>
                     )}
                     {/* Inline status tag — non-folder files in any non-success state. */}
                     {!isFolder && file.status && file.status !== FileStatus.SUCCESS && (
                         <StatusBadge status={file.status} file={file} />
+                    )}
+                    {/* Similar-document tag — occupies the same slot as the status tag
+                        (mutually exclusive: it only shows on SUCCESS files, the status tag
+                        only on non-success). */}
+                    {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && file.status === FileStatus.SUCCESS && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenVersionManagement?.(file);
+                            }}
+                            className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+                        >
+                            <FileSearch className="size-3" />
+                            {localize("com_knowledge.version.pill_similar")}
+                        </button>
                     )}
                 </div>
                 {/* 固定列右侧阴影 */}

@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
 import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
+import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -288,6 +289,20 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const hasMessages = messages.length > 0;
   const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
 
+  // F035: the task checklist is pinned above the input (Figma 12221-39902 /
+  // 12221-40080) for the conversation's latest task turn — it tracks that turn's
+  // execution detail from the linsight store rather than scrolling away in the
+  // message stream.
+  const latestTaskVersionId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i] as any;
+      if (m?.category === 'task' && m?.linsightSessionVersionId) {
+        return m.linsightSessionVersionId as string;
+      }
+    }
+    return '';
+  }, [messages]);
+
   return (
     <Presentation isLingsi={false}>
       <div className={cn('h-full')}>
@@ -318,7 +333,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Left: Chat Main (Messages + Input) */}
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
-                      <div className="flex min-h-0 flex-1 overflow-hidden">
+                      <div className="relative flex min-h-0 flex-1 overflow-hidden">
                         <AiChatMessages
                           messages={messages}
                           conversationId={activeConvoId}
@@ -332,6 +347,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
                           flatMode
+                        />
+                        {/* Soft translucent fade so the scrolling step flow
+                            dissolves into the pinned task panel / input instead of
+                            ending on a hard cut. */}
+                        <div
+                          aria-hidden
+                          className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-12 bg-gradient-to-t from-white to-white/0"
                         />
                       </div>
 
@@ -350,6 +372,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           </div>
                         ) : (
                         <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
+                          {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             isStreaming={isStreaming}

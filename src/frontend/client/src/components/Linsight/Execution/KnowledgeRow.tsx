@@ -32,7 +32,7 @@ export function KnowledgeRow({ step }: { step: MergedStep }) {
     const hits = knowledgeHits(step);
     return (
         <StepRow
-            icon={step.running ? <RunningSpinner /> : <Outlined.BookOpenText size={14} className="text-[#333]" />}
+            icon={step.running ? <RunningSpinner /> : <Outlined.BookOpenText size={16} className="text-[#333]" />}
             title={step.name}
             running={step.running}
         >

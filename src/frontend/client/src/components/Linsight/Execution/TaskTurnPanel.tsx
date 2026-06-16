@@ -37,9 +37,9 @@ import { ClarifyCard } from './ClarifyCard';
 import { IntentRow } from './IntentRow';
 import { PlanningRow } from './PlanningRow';
 import { StepList } from './StepList';
-import { TaskPanel } from './TaskPanel';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
+import { isTaskStarted } from './stepUtils';
 
 interface TaskTurnPanelProps {
     /** linsight session_version id holding this turn's execution detail */
@@ -153,8 +153,9 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
             {/* planning breathing row */}
             {planning && <PlanningRow />}
 
-            {/* task rows with nested sub-step flows */}
-            {tasks.map((task) => (
+            {/* task rows with nested sub-step flows — only show tasks execution has
+                actually reached; not-started ones live in the pinned TaskPanel only. */}
+            {tasks.filter((task) => isTaskStarted(task.status)).map((task) => (
                 <TaskStepRow key={task.id} task={task} />
             ))}
 
@@ -179,14 +180,14 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
 
             {/* waiting-for-input hint */}
             {pendingInput && (
-                <div className="mb-2 mt-2 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-600">
-                    <span className="size-1.5 animate-pulse rounded-full bg-blue-500" />
+                <div className="mb-2 mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-800">
+                    <span className="size-1.5 animate-pulse-scale rounded-full bg-gray-700" />
                     {localize('com_linsight_waiting_your_input')}
                 </div>
             )}
 
-            {/* task checklist progress */}
-            <TaskPanel tasks={tasks} completed={completed} />
+            {/* task checklist progress is rendered by <PinnedTaskPanel> pinned
+                above the input (ChatView) — not inline in the message stream. */}
 
             {/* artifacts: report link / answer markdown / file card */}
             {completed && (

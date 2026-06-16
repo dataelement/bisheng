@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Link2, Loader2, Search, FileSearch } from "lucide-react";
 import {
@@ -32,6 +32,13 @@ interface SimilarDocumentDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     spaceId: number;
+    /**
+     * When provided (non-empty), the pending list is restricted to these file ids
+     * (string ids matching KnowledgeFile.id). Used by the batch entry so the dialog
+     * only shows the similar documents the user actually selected. When omitted/empty,
+     * every pending similar file in the space is shown.
+     */
+    restrictToFileIds?: string[];
     /** Called after a file is linked or dismissed so parent can refetch file list */
     onProcessed?: () => void;
 }
@@ -442,6 +449,7 @@ export function SimilarDocumentDialog({
     open,
     onOpenChange,
     spaceId,
+    restrictToFileIds,
     onProcessed,
 }: SimilarDocumentDialogProps): JSX.Element | null {
     const localize = useLocalize();
@@ -457,20 +465,28 @@ export function SimilarDocumentDialog({
         enabled: open && spaceId > 0,
     });
 
+    // Restrict the pending list to the caller-selected files (batch entry). When no
+    // restriction is given, show every pending similar file in the space.
+    const visiblePending = useMemo(() => {
+        if (!restrictToFileIds || restrictToFileIds.length === 0) return pending;
+        const allow = new Set(restrictToFileIds);
+        return pending.filter((e) => allow.has(String(e.knowledge_file_id)));
+    }, [pending, restrictToFileIds]);
+
     // Auto-select the first item whenever data loads or changes
     useEffect(() => {
-        if (pending.length > 0) {
+        if (visiblePending.length > 0) {
             setSelectedFileId((prev) => {
                 // Keep current selection if it still exists in the list
-                if (prev !== null && pending.some((e) => e.knowledge_file_id === prev)) {
+                if (prev !== null && visiblePending.some((e) => e.knowledge_file_id === prev)) {
                     return prev;
                 }
-                return pending[0].knowledge_file_id;
+                return visiblePending[0].knowledge_file_id;
             });
         } else {
             setSelectedFileId(null);
         }
-    }, [pending]);
+    }, [visiblePending]);
 
     // Reset selection when dialog closes
     useEffect(() => {
@@ -507,7 +523,7 @@ export function SimilarDocumentDialog({
     };
 
     // Derive the currently selected entry
-    const selectedFile = pending.find((e) => e.knowledge_file_id === selectedFileId) ?? null;
+    const selectedFile = visiblePending.find((e) => e.knowledge_file_id === selectedFileId) ?? null;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -527,7 +543,7 @@ export function SimilarDocumentDialog({
                     <div className="flex flex-1 items-center justify-center py-16">
                         <Loader2 className="size-6 animate-spin text-[#86909c]" />
                     </div>
-                ) : pending.length === 0 ? (
+                ) : visiblePending.length === 0 ? (
                     // Empty state — all files processed
                     <div className="flex flex-1 items-center justify-center py-16 text-sm text-[#86909c]">
                         {localize("com_knowledge.version.similar_dialog_empty")}
@@ -538,11 +554,11 @@ export function SimilarDocumentDialog({
                         {/* Left column — pending file list (~30%) */}
                         <div className="flex w-[260px] shrink-0 flex-col border-r border-[#e5e6eb] bg-[#FAFAFA]">
                             <div className="px-5 py-4 text-[12px] text-[#86909c] border-b border-[#e5e6eb]">
-                                {localize("com_knowledge.version.similar_dialog_subtitle", { count: pending.length })}
+                                {localize("com_knowledge.version.similar_dialog_subtitle", { count: visiblePending.length })}
                             </div>
                             {/* Scrollable file list */}
                             <div className="flex-1 overflow-y-auto scrollbar-on-scroll px-3 py-3">
-                                {pending.map((entry) => (
+                                {visiblePending.map((entry) => (
                                     <PendingFileRow
                                         key={entry.knowledge_file_id}
                                         entry={entry}

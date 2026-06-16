@@ -186,6 +186,51 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
     return final_result_files
 
 
+# Filename of the synthesized fallback report (design §9.3.2 output/ zone).
+FALLBACK_REPORT_NAME = "报告.md"
+
+
+async def build_fallback_report_file(session_model: LinsightSessionVersion, answer: str, file_dir: str) -> list[dict]:
+    """Backstop deliverable when the agent produced no ``output/`` file (F035).
+
+    Weak models sometimes loop on planning (``write_todos``) and finish without
+    ever calling ``write_file``, so :func:`get_final_result_file` finds nothing
+    and the task ends with no report. To guarantee a deliverable, materialise the
+    final answer as a markdown report under ``output/`` and upload it as a final
+    result file (same MinIO scheme as real deliverables).
+
+    Best-effort: returns ``[]`` on empty answer or any failure so the empty-handed
+    completion still proceeds.
+    """
+    answer = (answer or "").strip()
+    if not answer:
+        return []
+    try:
+        output_dir = os.path.join(file_dir, "output")
+        os.makedirs(output_dir, exist_ok=True)
+        local_path = os.path.join(output_dir, FALLBACK_REPORT_NAME)
+        with open(local_path, "w", encoding="utf-8") as f:
+            f.write(answer)
+        file_md5 = await util.async_calculate_md5(local_path)
+
+        object_name = f"linsight/final_result/{session_model.id}/{FALLBACK_REPORT_NAME}"
+        minio_client = await get_minio_storage()
+        await minio_client.put_object(bucket_name=minio_client.bucket, object_name=object_name, file=local_path)
+        logger.info("Fallback report synthesized from answer (no output/ deliverable was produced)")
+        return [
+            {
+                "file_name": FALLBACK_REPORT_NAME,
+                "file_path": local_path,
+                "file_md5": file_md5,
+                "file_id": uuid.uuid4().hex[:8],
+                "file_url": object_name,
+            }
+        ]
+    except Exception as e:
+        logger.warning(f"fallback report generation failed: {e}")
+        return []
+
+
 # Additional Handling of Step Events
 async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
     """

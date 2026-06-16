@@ -405,6 +405,8 @@
   "com_linsight_preview": "预览",
   "com_linsight_workspace": "工作区",
   "com_linsight_workspace_empty": "暂无产物文件",
+  "com_linsight_workspace_uploaded": "上传的文件",
+  "com_linsight_workspace_generated": "生成的文件",
   "com_linsight_back_to_workspace": "返回工作区",
   "com_linsight_download_to_view": "下载查看",
   "com_linsight_preview_unsupported": "该文件类型暂不支持在线预览",

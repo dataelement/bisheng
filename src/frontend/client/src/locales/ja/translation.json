@@ -402,6 +402,8 @@
   "com_linsight_preview": "プレビュー",
   "com_linsight_workspace": "ワークスペース",
   "com_linsight_workspace_empty": "出力ファイルはまだありません",
+  "com_linsight_workspace_uploaded": "アップロードしたファイル",
+  "com_linsight_workspace_generated": "生成されたファイル",
   "com_linsight_back_to_workspace": "ワークスペースに戻る",
   "com_linsight_download_to_view": "ダウンロードして表示",
   "com_linsight_preview_unsupported": "このファイル形式はオンラインプレビューに対応していません",
