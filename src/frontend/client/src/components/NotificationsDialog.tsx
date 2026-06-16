@@ -681,7 +681,23 @@ export function NotificationsDialog({
             : null;
         const textPrefix = targetSplitMatch ? targetSplitMatch[1] : text;
         const textSuffix = targetSplitMatch ? targetSplitMatch[3] : "";
-        const canNavigateTarget = Boolean(target && target.targetId && targetName);
+        const approvalCenterTarget = isApprovalMessageType(notification.message_type, notification.action_code)
+            ? resolveApprovalCenterTarget(notification)
+            : null;
+        const canOpenApprovalCenter = Boolean(
+            onOpenApprovalCenter &&
+            approvalCenterTarget &&
+            !APPROVAL_NO_BUTTON_ACTION_CODES.has(getSystemTextCode(notification))
+        );
+        const handleOpenApprovalCenter = () => {
+            if (!approvalCenterTarget) return;
+            if (!notification.is_read) markOneAsRead(id);
+            onOpenApprovalCenter?.(approvalCenterTarget);
+            onOpenChange?.(false);
+        };
+        // Approval rows jump to the approval center as a whole; suppress the inline
+        // channel/space name navigation so the message has a single click target.
+        const canNavigateTarget = Boolean(target && target.targetId && targetName) && !canOpenApprovalCenter;
         const targetLabel = targetName;
 
         const isApproved = isApprovedStatus(approvalStatus) || isRejectedStatus(approvalStatus);
@@ -722,14 +738,6 @@ export function NotificationsDialog({
         };
 
         const showRightSlotDelete = dateSlotHoverId === id && canShowDeleteInDateSlot;
-        const approvalCenterTarget = isApprovalMessageType(notification.message_type, notification.action_code)
-            ? resolveApprovalCenterTarget(notification)
-            : null;
-        const canOpenApprovalCenter = Boolean(
-            onOpenApprovalCenter &&
-            approvalCenterTarget &&
-            !APPROVAL_NO_BUTTON_ACTION_CODES.has(getSystemTextCode(notification))
-        );
 
         return (
             <div
@@ -741,12 +749,14 @@ export function NotificationsDialog({
                     isTouchMobile
                         ? "py-3 hover:bg-transparent"
                         : "py-6 hover:bg-[#f7f8fa]",
+                    canOpenApprovalCenter && "group cursor-pointer",
                 )}
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
                     transitionTimingFunction: 'ease-in-out'
                 }}
+                onClick={canOpenApprovalCenter ? handleOpenApprovalCenter : undefined}
                 onMouseEnter={onRowMouseEnter}
                 onMouseLeave={onRowMouseLeave}
                 ref={(node) => {
@@ -812,7 +822,7 @@ export function NotificationsDialog({
                     </TooltipAnchor>
 
                     {/* Message text */}
-                    <div className={cn("flex min-w-0 flex-1 gap-1 text-[14px]", isTouchMobile ? "flex-col" : "flex-row flex-wrap items-center gap-1", textColor)}>
+                    <div className={cn("flex min-w-0 flex-1 gap-1 text-[14px]", isTouchMobile ? "flex-col" : "flex-row flex-wrap items-center gap-1", textColor, canOpenApprovalCenter && "transition-colors group-hover:text-[#165dff]")}>
                         <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
                         <span className="min-w-0">
                             {!targetSplitMatch && canNavigateTarget && (
@@ -942,7 +952,7 @@ export function NotificationsDialog({
                         {showRightSlotDelete && (
                             <button
                                 type="button"
-                                onClick={() => handleDelete(id)}
+                                onClick={(e) => { e.stopPropagation(); handleDelete(id); }}
                                 className="absolute right-0 top-1/2 h-7 -translate-y-1/2 appearance-none px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
                                 title={localize("com_notifications_delete")}
                             >
@@ -953,21 +963,7 @@ export function NotificationsDialog({
                     </div>
                 </div>
 
-                {canOpenApprovalCenter ? (
-                    <div className="flex items-center justify-end gap-3">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                if (!notification.is_read) markOneAsRead(id);
-                                onOpenApprovalCenter?.(approvalCenterTarget);
-                                onOpenChange?.(false);
-                            }}
-                            className="inline-flex h-7 items-center rounded-[6px] border border-[#165dff] px-3 py-0 text-[14px] text-[#165dff] hover:bg-[#f2f7ff]"
-                        >
-                            {localize("com_notifications_view_approval")}
-                        </button>
-                    </div>
-                ) : isCompletedApprovalItem && !isSelfApplicationDecision && !isNotifyMessage ? (
+                {!canOpenApprovalCenter && isCompletedApprovalItem && !isSelfApplicationDecision && !isNotifyMessage ? (
                     <div className="flex justify-end">
                         <button
                             type="button"

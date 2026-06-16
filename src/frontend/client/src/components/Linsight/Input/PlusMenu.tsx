@@ -3,7 +3,7 @@
  * Items (spec §1): Upload file / Task mode toggle / Add Skill (submenu with
  * the multi-select skill list).
  */
-import { Check, Plus } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 import {
     DropdownMenu,
@@ -53,7 +53,7 @@ export function PlusMenu({
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                 >
-                    <Plus size={18} strokeWidth={1.5} />
+                    <Outlined.Plus size={18} />
                 </button>
             </DropdownMenuTrigger>
 

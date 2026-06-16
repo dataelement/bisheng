@@ -263,6 +263,15 @@ export function FileCard({
                         {`V${file.version_no}`}
                     </span>
                 )}
+                <span
+                    className={cn(
+                        "line-clamp-2 min-h-[40px] min-w-0 break-all leading-5",
+                        nameToneClass,
+                    )}
+                >
+                    {renderHighlightedName(file.name, highlightKeyword)}
+                </span>
+                {/* Similar-document tag — sits right after the file name */}
                 {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
                     <button
                         type="button"
@@ -276,14 +285,6 @@ export function FileCard({
                         {localize("com_knowledge.version.pill_similar")}
                     </button>
                 )}
-                <span
-                    className={cn(
-                        "line-clamp-2 min-h-[40px] min-w-0 break-all leading-5",
-                        nameToneClass,
-                    )}
-                >
-                    {renderHighlightedName(file.name, highlightKeyword)}
-                </span>
             </div>
         );
     };

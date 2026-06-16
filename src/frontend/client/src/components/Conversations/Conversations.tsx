@@ -33,7 +33,7 @@ const Conversations = ({
           <div key={groupName}>
             <div
               className={cn(
-                'text-black opacity-60 text-[12px] mb-1',
+                'text-[#999] text-[12px] mb-1',
                 groupIdx === 0 ? 'pt-0' : 'pt-4',
               )}
             >

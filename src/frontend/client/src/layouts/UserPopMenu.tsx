@@ -1,4 +1,4 @@
-import { Bell, Check, ChevronRight, FileCheck2, Globe, LogOut, SendToBack } from "lucide-react";
+import { Bell, Check, ChevronRight, FileCheck2, Globe, LogOut } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
 import { AccountInfoDialog } from "~/components/AccountInfoDialog";
@@ -175,18 +175,7 @@ function UserPopMenuDrawer() {
                     >
                         <div className="flex items-center gap-3">
                             <FileCheck2 className="size-[18px] text-gray-600" />
-                            <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_approval_my_tasks")}</span>
-                        </div>
-                    </button>
-
-                    <button
-                        type="button"
-                        className="group flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left outline-none hover:bg-gray-50"
-                        onClick={() => openApprovalCenter({ tab: "my_requests" })}
-                    >
-                        <div className="flex items-center gap-3">
-                            <SendToBack className="size-[18px] text-gray-600" />
-                            <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_approval_my_requests")}</span>
+                            <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_approval_center_title")}</span>
                         </div>
                     </button>
 
@@ -449,21 +438,13 @@ function UserPopMenuRail() {
                     <div className="h-px w-full shrink-0 bg-[#e5e6eb]" />
 
                     <div className="flex flex-col gap-1 p-2 pt-1.5">
-                        {/* 3. 消息提醒 (保留逻辑) */}
+                        {/* 审批中心：合并原「我的待办 / 我的申请」入口，默认进「我的审批」子 tab */}
                         <DropdownMenuItem
                             className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
                             onSelect={runMenuItemSelect(() => openApprovalCenter({ tab: "my_tasks" }))}
                         >
                             <FileCheck2 className="size-[18px] text-gray-600" />
-                            <span className="text-[14px] font-normal text-gray-700">{localize("com_approval_my_tasks")}</span>
-                        </DropdownMenuItem>
-
-                        <DropdownMenuItem
-                            className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
-                            onSelect={runMenuItemSelect(() => openApprovalCenter({ tab: "my_requests" }))}
-                        >
-                            <SendToBack className="size-[18px] text-gray-600" />
-                            <span className="text-[14px] font-normal text-gray-700">{localize("com_approval_my_requests")}</span>
+                            <span className="text-[14px] font-normal text-gray-700">{localize("com_approval_center_title")}</span>
                         </DropdownMenuItem>
 
                         <DropdownMenuItem
