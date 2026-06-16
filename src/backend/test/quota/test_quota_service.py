@@ -578,3 +578,45 @@ class TestTenantStorageBytesHelpers:
         assert exc_info.value.kwargs.get('used_gb') == 1.0
         assert exc_info.value.kwargs.get('quota_gb') == 1.0
         assert exc_info.value.kwargs.get('reason') == 'tenant_limit'
+
+
+class TestKnowledgeSpaceFileMultiRoleMin:
+    """Knowledge-space file quota uses the STRICTEST (min) finite cap across
+    roles; ``-1`` (unlimited) is treated as +inf and only wins when every role
+    that sets this quota is unlimited."""
+
+    def test_two_finite_takes_min(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        roles = [
+            _make_role(1, {'knowledge_space_file': 0.1}),
+            _make_role(2, {'knowledge_space_file': 1}),
+        ]
+        assert QuotaService._aggregate_knowledge_space_file_limit_gb(roles) == 0.1
+
+    def test_finite_and_unlimited_takes_finite(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        roles = [
+            _make_role(1, {'knowledge_space_file': 0.1}),
+            _make_role(2, {'knowledge_space_file': -1}),
+        ]
+        assert QuotaService._aggregate_knowledge_space_file_limit_gb(roles) == 0.1
+
+    def test_all_unlimited_returns_unlimited(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+
+        roles = [
+            _make_role(1, {'knowledge_space_file': -1}),
+            _make_role(2, {'knowledge_space_file': -1}),
+        ]
+        assert QuotaService._aggregate_knowledge_space_file_limit_gb(roles) == -1.0
+
+    def test_none_set_falls_back_to_default(self):
+        from bisheng.role.domain.services.quota_service import QuotaService
+        from bisheng.role.domain.services.quota_service import DEFAULT_ROLE_QUOTA
+
+        roles = [_make_role(1, {}), _make_role(2, None)]
+        assert QuotaService._aggregate_knowledge_space_file_limit_gb(roles) == float(
+            DEFAULT_ROLE_QUOTA["knowledge_space_file"]
+        )
