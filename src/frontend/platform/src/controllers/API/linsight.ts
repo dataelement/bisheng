@@ -147,6 +147,11 @@ export const skillApi = {
     return axios.post(SKILL_BASE, form, { silent: true } as any);
   },
 
+  // Import a skill from a public GitHub directory URL (must contain SKILL.md at root).
+  importSkillFromGithub: (url: string): Promise<SkillDetail> => {
+    return axios.post(`${SKILL_BASE}/import-github`, { url }, { silent: true } as any);
+  },
+
   updateSkillForm: (name: string, data: SkillFormPayload): Promise<SkillDetail> => {
     const form = new FormData();
     Object.entries(data).forEach(([k, v]) => form.append(k, v));

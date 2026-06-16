@@ -259,93 +259,100 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
     Check for incomplete tasks and terminate
     """
 
+    from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.linsight.worker import NodeManager
 
     redis_client = await get_redis_client()  # Get Redis Client
     node_manager = NodeManager(redis_client, node_id)  # Get Node Manager Instance
 
-    try:
-        # Get all incomplete tasks from the database
-        incomplete_tasks = await LinsightSessionVersionDao.get_session_versions_by_status(
-            status=SessionVersionStatusEnum.IN_PROGRESS
-        )
+    # Worker-startup cleanup runs in the standalone Linsight worker without an
+    # HTTP request, so no tenant ContextVar is set. Under multi_tenant.enabled the
+    # first DAO query would otherwise raise NoTenantContextError (20004). This is a
+    # deliberate cross-tenant sweep — it terminates every tenant's orphaned
+    # IN_PROGRESS tasks — so bypass the tenant filter for the whole DB body.
+    with bypass_tenant_filter():
+        try:
+            # Get all incomplete tasks from the database
+            incomplete_tasks = await LinsightSessionVersionDao.get_session_versions_by_status(
+                status=SessionVersionStatusEnum.IN_PROGRESS
+            )
 
-        if not incomplete_tasks:
-            return
+            if not incomplete_tasks:
+                return
 
-        tasks_to_terminate = []
-        user_ids_to_rollback = set()
+            tasks_to_terminate = []
+            user_ids_to_rollback = set()
 
-        for session in incomplete_tasks:
-            session_id = session.id
+            for session in incomplete_tasks:
+                session_id = session.id
 
-            # Check task ownership in Redis
-            owner_key = f"linsight:task:owner:{session_id}"
-            owner_node_id = await redis_client.aget(owner_key)
+                # Check task ownership in Redis
+                owner_key = f"linsight:task:owner:{session_id}"
+                owner_node_id = await redis_client.aget(owner_key)
 
-            should_terminate = False
+                should_terminate = False
 
-            if not owner_node_id:
-                # No owned node, task needs to be cleaned up.
-                should_terminate = True
-                logger.warning(f"Task {session_id} has no owner in Redis. Marking as failed.")
-            else:
-                # There is an owned node, check if the node is alive
-                is_alive = await node_manager.is_node_alive(owner_node_id)
-                if not is_alive:
-                    # Node is dead, task needs to be cleaned up.
+                if not owner_node_id:
+                    # No owned node, task needs to be cleaned up.
                     should_terminate = True
-                    logger.warning(f"Task {session_id} owner {owner_node_id} is dead. Marking as failed.")
+                    logger.warning(f"Task {session_id} has no owner in Redis. Marking as failed.")
                 else:
-                    # Node is alive, skip cleanup
-                    logger.info(f"Task {session_id} is running on active node {owner_node_id}. Skipping.")
+                    # There is an owned node, check if the node is alive
+                    is_alive = await node_manager.is_node_alive(owner_node_id)
+                    if not is_alive:
+                        # Node is dead, task needs to be cleaned up.
+                        should_terminate = True
+                        logger.warning(f"Task {session_id} owner {owner_node_id} is dead. Marking as failed.")
+                    else:
+                        # Node is alive, skip cleanup
+                        logger.info(f"Task {session_id} is running on active node {owner_node_id}. Skipping.")
 
-            if should_terminate:
-                tasks_to_terminate.append(session_id)
-                user_ids_to_rollback.add(session.user_id)
+                if should_terminate:
+                    tasks_to_terminate.append(session_id)
+                    user_ids_to_rollback.add(session.user_id)
 
-        # 3. 批量执行终止操作（只针对筛选出的任务）
-        if tasks_to_terminate:
-            await LinsightSessionVersionDao.batch_update_session_versions_status(
-                session_version_ids=tasks_to_terminate,
-                status=SessionVersionStatusEnum.FAILED,
-                output_result={"error_message": "Worker node crash detected"},
-            )
+            # 3. Batch-terminate only the sessions selected above.
+            if tasks_to_terminate:
+                await LinsightSessionVersionDao.batch_update_session_versions_status(
+                    session_version_ids=tasks_to_terminate,
+                    status=SessionVersionStatusEnum.FAILED,
+                    output_result={"error_message": "Worker node crash detected"},
+                )
 
-            # 更新 execution task 状态
-            await LinsightExecuteTaskDao.batch_update_status_by_session_version_id(
-                session_version_ids=tasks_to_terminate,
-                status=ExecuteTaskStatusEnum.FAILED,
-                where=(
-                    LinsightExecuteTask.status != ExecuteTaskStatusEnum.SUCCESS,
-                    LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED,
-                ),
-            )
+                # Update the execution-task status for the terminated sessions.
+                await LinsightExecuteTaskDao.batch_update_status_by_session_version_id(
+                    session_version_ids=tasks_to_terminate,
+                    status=ExecuteTaskStatusEnum.FAILED,
+                    where=(
+                        LinsightExecuteTask.status != ExecuteTaskStatusEnum.SUCCESS,
+                        LinsightExecuteTask.status != ExecuteTaskStatusEnum.FAILED,
+                    ),
+                )
 
-        logger.warning(f"Terminated {len(tasks_to_terminate)} incomplete tasks due to worker node crash.")
+            logger.warning(f"Terminated {len(tasks_to_terminate)} incomplete tasks due to worker node crash.")
 
-        system_config = await settings.aget_all_config()
-        # DapatkanLinsight_invitation_code
-        linsight_invitation_code = system_config.get("linsight_invitation_code", False)
+            system_config = await settings.aget_all_config()
+            # DapatkanLinsight_invitation_code
+            linsight_invitation_code = system_config.get("linsight_invitation_code", False)
 
-        # Rollback invite code
-        if linsight_invitation_code:
-            for user_id in user_ids_to_rollback:
-                try:
-                    await InviteCodeService.revoke_invite_code(user_id=user_id)
-                    logger.info(f"User Rolled Back {user_id} Invitation code for")
-                except Exception as e:
-                    logger.error(f"Rollback user {user_id} Invitation code failed for: {e}")
+            # Rollback invite code
+            if linsight_invitation_code:
+                for user_id in user_ids_to_rollback:
+                    try:
+                        await InviteCodeService.revoke_invite_code(user_id=user_id)
+                        logger.info(f"User Rolled Back {user_id} Invitation code for")
+                    except Exception as e:
+                        logger.error(f"Rollback user {user_id} Invitation code failed for: {e}")
 
-        else:
-            logger.warning(
-                "Not enabled in system configuration Linsight Invitation code function, skip rollback operation"
-            )
+            else:
+                logger.warning(
+                    "Not enabled in system configuration Linsight Invitation code function, skip rollback operation"
+                )
 
-        logger.info("Check and terminate incomplete task action completed")
-    except Exception as e:
-        logger.error(f"Exception occurred while checking and terminating incomplete tasks: {e}")
-        return
+            logger.info("Check and terminate incomplete task action completed")
+        except Exception as e:
+            logger.error(f"Exception occurred while checking and terminating incomplete tasks: {e}")
+            return
 
 
 async def persist_task_turn_message(session_model: LinsightSessionVersion) -> ChatMessage:
