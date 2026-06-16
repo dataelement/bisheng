@@ -849,9 +849,17 @@ class LinsightWorkflowTask:
             ExecuteTaskStatusEnum.SUCCESS if event.status == TaskStatus.SUCCESS.value else ExecuteTaskStatusEnum.FAILED
         )
 
-        task_data = await self._state_manager.update_execution_task_status(
-            task_id=event.task_id, status=status, result={"answer": event.answer}, task_data=event.data
-        )
+        # F035 fix: TaskEnd.data is frequently empty for deepagents tasks; passing
+        # it as task_data would OVERWRITE the task_data stored at write_todos time
+        # (which holds the task name), leaving completed tasks with an empty
+        # task_data — so the history view rebuilt from the DB shows blank task
+        # rows. Only overwrite task_data when the event actually carries it;
+        # otherwise preserve the write_todos task_data (and its name).
+        logger.info(f"[TASKEND-DEBUG] task_id={event.task_id} event.data={event.data!r:.200} status={status}")
+        update_kwargs = {"status": status, "result": {"answer": event.answer}}
+        if event.data:
+            update_kwargs["task_data"] = event.data
+        task_data = await self._state_manager.update_execution_task_status(task_id=event.task_id, **update_kwargs)
 
         await self._state_manager.push_message(MessageData(event_type=MessageEventType.TASK_END, data=task_data))
 
