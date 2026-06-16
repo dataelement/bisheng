@@ -1,4 +1,4 @@
-import { FolderPlus, FolderUp, FolderInput, FileSearch } from "lucide-react";
+import { FolderPlus, FolderUp } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -257,7 +257,7 @@ export function KnowledgeSpaceHeader({
                         {versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar && (
                             <ActionMenuItem
                                 onClick={onProcessSimilar}
-                                icon={<FileSearch />}
+                                icon={<Outlined.FileSearch />}
                                 label={localize("com_knowledge.version.header_process_similar_label")}
                             />
                         )}
@@ -286,7 +286,7 @@ export function KnowledgeSpaceHeader({
                             <ActionMenuItem
                                 disabled={!canBatchMove}
                                 onClick={onBatchMove}
-                                icon={<FolderInput />}
+                                icon={<Outlined.MoveToFolder />}
                                 label={localize("com_knowledge.move")}
                             />
                         )}

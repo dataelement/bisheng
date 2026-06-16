@@ -4,7 +4,6 @@
  * completes: report link row → answer markdown → output files card.
  */
 import { Outlined } from 'bisheng-icons';
-import { FileText } from 'lucide-react';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
@@ -33,10 +32,10 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                     <span className="shrink-0">{localize('com_linsight_report_ready')}</span>
                     <button
                         type="button"
-                        className="flex min-w-0 items-center gap-1 text-blue-600 hover:underline"
+                        className="flex min-w-0 items-center gap-1 text-blue-600 transition-colors hover:text-blue-700"
                         onClick={() => onPreview(primaryFile)}
                     >
-                        <FileText size={14} className="shrink-0" />
+                        <Outlined.File size={14} className="shrink-0" />
                         <span className="truncate">{primaryFile.file_name}</span>
                     </button>
                 </div>
@@ -72,13 +71,15 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         </span>
                     </div>
 
-                    {/* file list — pl-7 (icon 20 + gap 8) so file names align
-                        under the title TEXT, not the title icon. */}
-                    <div className="space-y-2 pl-7">
+                    {/* file list — the indent lives on each row's pl-7 (icon 16 +
+                        gap 8 + header px-1 4) so names align under the title TEXT
+                        while the hover background still spans the full row width.
+                        Hover bg #f7f7f7 per design (node 12221-40681). */}
+                    <div className="space-y-2">
                         {files.map((file) => (
                             <div
                                 key={file.file_id || file.file_url}
-                                className="flex items-center justify-between rounded-lg px-1 py-1 transition-colors hover:bg-gray-100"
+                                className="flex items-center justify-between rounded-lg py-1 pl-7 pr-1 transition-colors hover:bg-[#f7f7f7]"
                             >
                                 <button
                                     type="button"

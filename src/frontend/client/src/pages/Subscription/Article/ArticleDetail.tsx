@@ -12,7 +12,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Article } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
-import { AddSpaceIcon, AiChatIcon, FullScreenIcon, OriginalWebIcon, ShareOutlineIcon } from "~/components/icons";
+import { AiChatIcon } from "~/components/icons";
+import { Outlined } from "bisheng-icons";
 import { useToastContext } from "~/Providers";
 import { formatTime } from "~/utils";
 import { useArticleShare } from "../hooks/useArticleShare";
@@ -233,19 +234,19 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                             onClick={() => window.open(article.url)}
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
                         >
-                            <OriginalWebIcon className="size-3.5" />{localize("com_subscription.original_webpage")}</button>
+                            <Outlined.ViewOnNewTab className="size-3.5 text-[#999]" />{localize("com_subscription.original_webpage")}</button>
 
                         <button
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
                             onClick={() => handleShare(article)}
                         >
-                            <ShareOutlineIcon className="size-3.5 text-[#94BFFF]" />{localize("com_subscription.share")}</button>
+                            <Outlined.Share className="size-3.5 text-[#999]" />{localize("com_subscription.share")}</button>
 
                         {hasKnowledge && <button
                             className="flex items-center gap-1 text-xs transition-colors text-gray-900"
                             onClick={() => setShowKnowledgeModal(true)}
                         >
-                            <AddSpaceIcon className="size-3.5" />{localize("com_subscription.add_to_knowledge_space")}</button>}
+                            <Outlined.AddToKnowledgeBase className="size-3.5 text-[#999]" />{localize("com_subscription.add_to_knowledge_space")}</button>}
 
                         {!isNarrowShell && (!screenFull || (showFullScreenBtn && aiAssistantOpen)) ? (
                             <button
@@ -256,7 +257,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                                         onFullScreen?.();
                                 }}
                             >
-                                <FullScreenIcon className="size-3.5" />{localize("com_subscription.fullscreen")}
+                                <Outlined.FullScreen className="size-3.5 text-[#999]" />{localize("com_subscription.fullscreen")}
                             </button>
                         ) : null}
 

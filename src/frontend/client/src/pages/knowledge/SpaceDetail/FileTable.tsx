@@ -6,7 +6,7 @@ import {
     TableRow,
 } from "@/components/ui/Table";
 import { Outlined } from "bisheng-icons";
-import { FolderInput, GitBranch, History, FileSearch } from "lucide-react";
+import { GitBranch, History, FileSearch } from "lucide-react";
 import {
     Checkbox,
     DropdownMenu,
@@ -921,7 +921,7 @@ function FileRow({
                                     e.stopPropagation();
                                     onMove?.();
                                 }}
-                                icon={<FolderInput />}
+                                icon={<Outlined.MoveToFolder />}
                                 label={localize("com_knowledge.move")}
                             />
                         )}

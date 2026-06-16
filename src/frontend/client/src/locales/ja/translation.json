@@ -1711,6 +1711,8 @@
     "root_dir": "ルート",
     "move_empty_folder": "このフォルダは空です",
     "move_here": "ここに移動",
+    "move_search_placeholder": "ナレッジスペース名で検索",
+    "move_no_spaces": "移動先のナレッジスペースがありません",
     "move": "移動",
     "move_success": "{{0}} 件を移動しました",
     "move_cross_success": "{{0}} 件を移動しました。検索データをバックグラウンドで処理中です",

@@ -4,6 +4,7 @@
  * / save-as / close. Body: md → markdown render, txt → plain text, images →
  * inline image, everything else → file icon + "download to view".
  */
+import { Outlined } from 'bisheng-icons';
 import { ChevronLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NotificationSeverity } from '~/common';
@@ -141,9 +142,11 @@ export function FilePreviewPanel({ open, onOpenChange, file, versionId, onBack }
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[800px] sm:max-w-[800px]">
-                {/* toolbar (pr-12 keeps clear of the built-in close button) */}
-                <div className="flex items-center gap-2 border-b border-gray-100 py-3 pl-5 pr-12">
+            {/* hideClose: the built-in lucide X is replaced by a bisheng-icon close
+                in the toolbar so it matches the download button's icon/size/color. */}
+            <SheetContent hideClose className="w-[800px] sm:max-w-[800px]">
+                {/* toolbar */}
+                <div className="flex items-center gap-2 border-b border-gray-100 py-3 pl-5 pr-5">
                     {onBack && (
                         <button
                             type="button"
@@ -160,9 +163,19 @@ export function FilePreviewPanel({ open, onOpenChange, file, versionId, onBack }
                         {file.file_name}
                     </span>
                     <SaveAsButton file={file} versionId={versionId} iconOnly />
+                    <button
+                        type="button"
+                        aria-label={localize('com_ui_close')}
+                        className="rounded-md p-1 text-[#8C8C8C] transition-colors hover:text-[#335CFF]"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        <Outlined.Close className="size-[18px]" />
+                    </button>
                 </div>
                 {/* content */}
-                <div className="min-h-0 flex-1 overflow-y-auto">{renderBody()}</div>
+                {/* scrollbar-os: opt out of the forced custom webkit scrollbar so the
+                    OS setting (auto-hide vs always-on) is respected (see style.css). */}
+                <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os">{renderBody()}</div>
             </SheetContent>
         </Sheet>
     );
