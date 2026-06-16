@@ -81,9 +81,33 @@ class DbJob:
     exclude: list[str] = field(default_factory=list)
 
 
+_ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
 def _expand_env(value: str) -> str:
-    """Allow ${VAR} / ${VAR:-default} placeholders inside config strings."""
-    return os.path.expandvars(value) if value else value
+    """Expand ${VAR}, $VAR and ${VAR:-default} placeholders inside config strings.
+
+    Unlike os.path.expandvars (which silently leaves ${VAR:-default} literal and
+    has no default support at all), this honors the bash-style ":-default"
+    fallback so the documented defaults in migrate_dm.example.yaml work whether
+    or not the shell wrapper exported the variable.
+    """
+    if not value:
+        return value
+
+    def _sub(m: re.Match[str]) -> str:
+        braced_name, default, bare_name = m.group(1), m.group(2), m.group(3)
+        name = braced_name or bare_name
+        env_val = os.environ.get(name)
+        if env_val is not None and env_val != "":
+            return env_val
+        if default is not None:
+            return default
+        # Unset and no default: leave the original placeholder so the failure is
+        # visible (e.g. an invalid DSN) rather than silently blank.
+        return m.group(0)
+
+    return _ENV_PLACEHOLDER.sub(_sub, value)
 
 
 def load_jobs(config_path: str) -> list[DbJob]:
