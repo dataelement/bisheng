@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { useConversationsInfiniteQuery } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import ShareChat from '../Share/ShareChat';
 import { Skeleton } from '../ui';
 
@@ -15,6 +16,14 @@ export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId
     }, [getLinsight, versionId])
 
     const title = useCurrentTitle()
+
+    // Show the workspace entry when EITHER uploaded sources or generated
+    // deliverables exist — same content the drawer renders. Previously gated on
+    // generated file_list only, so tasks that produced no output had no entry.
+    const hasWorkspaceFiles = useMemo(
+        () => !!(linsight?.file_list?.length || toUploadedArtifacts(linsight?.files as any[]).length),
+        [linsight?.file_list, linsight?.files],
+    );
 
     return (
         <div className="flex items-center justify-between p-4">
@@ -32,7 +41,7 @@ export const Header = ({ isLoading, chatId, isSharePage, setVersionId, versionId
                 {!isSharePage && linsight?.session_id && (
                     <ShareChat type="linsight_session" chatId={linsight.session_id} versionId={versionId} labeled={false} />
                 )}
-                {!!linsight?.file_list?.length && (
+                {hasWorkspaceFiles && (
                     <button
                         type="button"
                         onClick={onOpenWorkspace}

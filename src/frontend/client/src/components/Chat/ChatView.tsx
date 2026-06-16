@@ -7,6 +7,11 @@ import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appCha
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
+import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
+import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
+import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
+import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
+import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -303,6 +308,20 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     return '';
   }, [messages]);
 
+  // F035: workspace drawer for the chat-embedded task mode. Lifted to ChatView
+  // (the task turn renders inline per message, but the entry button lives in the
+  // shared header) and bound to the LATEST task turn. Shows uploaded sources +
+  // generated deliverables. The drawer only opens on the header button — no
+  // auto-expand (the entry icon appearing is enough).
+  const { getLinsight } = useLinsightManager();
+  const taskArtifacts = useArtifactsPanel();
+  const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
+  const taskWorkspaceFiles = useMemo(() => {
+    const uploaded = toUploadedArtifacts(taskLinsight?.files as any[]);
+    const generated = (taskLinsight?.file_list as ArtifactFile[]) || [];
+    return [...uploaded, ...generated];
+  }, [taskLinsight?.files, taskLinsight?.file_list]);
+
   return (
     <Presentation isLingsi={false}>
       <div className={cn('h-full')}>
@@ -346,6 +365,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onRegenerate={regenerate}
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
+                          onOpenWorkspace={taskArtifacts.openWorkspace}
+                          hasWorkspaceFiles={taskWorkspaceFiles.length > 0}
                           flatMode
                         />
                         {/* Soft translucent fade so the scrolling step flow
@@ -479,6 +500,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               mode="channel_sync"
               dataSourceApi={listUploadableSpacesApi}
               onSyncSelect={handleImportSelect}
+            />
+          </>
+        )}
+
+        {/* F035: task-mode workspace drawer / file preview for the latest task turn,
+            opened from the header button (HeaderTitle -> onOpenWorkspace). */}
+        {latestTaskVersionId && (
+          <>
+            <WorkspaceDrawer
+              open={taskArtifacts.workspaceOpen}
+              onOpenChange={taskArtifacts.setWorkspaceOpen}
+              files={taskWorkspaceFiles}
+              onPreview={(file) => taskArtifacts.openPreview(file, true)}
+            />
+            <FilePreviewPanel
+              open={!!taskArtifacts.previewFile}
+              onOpenChange={(open) => !open && taskArtifacts.closePreview()}
+              file={taskArtifacts.previewFile}
+              versionId={latestTaskVersionId}
+              onBack={taskArtifacts.fromWorkspace ? taskArtifacts.backToWorkspace : undefined}
             />
           </>
         )}
