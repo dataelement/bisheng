@@ -231,17 +231,31 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const navigate = useNavigate();
 
+  // F035: distinguishes the post-submit URL self-rewrite (same conversation
+  // just got its real id — keep the composing mode) from a genuine navigation
+  // to a different existing conversation (drop task mode). Set right before the
+  // self-rewrite navigate below, consumed by the reset effect it triggers.
+  const keepTaskModeOnRewriteRef = useRef(false);
+
   // F035: sync the local task-mode toggle to navigation. ChatView is NOT
   // remounted across `/c/:id` param changes (same route element), so the
   // useState initializer above only runs on first mount. This effect picks up
   // subsequent navigations:
   //  - sidebar "新建任务" lands on /c/new with state.taskMode=true → enter task mode.
-  //  - any navigation to an existing conversation (id !== 'new') leaves task
-  //    mode (you are viewing a daily chat, not composing a task).
+  //  - the first submit on /c/new self-rewrites the URL to the real id; that is
+  //    the SAME conversation, so the user's chosen mode is preserved (they can
+  //    keep composing task turns, or toggle off manually).
+  //  - any OTHER navigation to an existing conversation (id !== 'new') leaves
+  //    task mode (you switched to viewing a daily chat, not composing a task).
   // location.key changes on every navigation so re-entering /c/new with the
   // same state still re-triggers.
   useEffect(() => {
     if (conversationId !== 'new') {
+      // Post-submit self-rewrite: keep whatever mode the user is composing in.
+      if (keepTaskModeOnRewriteRef.current) {
+        keepTaskModeOnRewriteRef.current = false;
+        return;
+      }
       setTaskMode(false);
       return;
     }
@@ -262,11 +276,25 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       activeConvoId &&
       activeConvoId !== 'new'
     ) {
+      // Flag the rewrite so the reset effect above preserves the current mode.
+      keepTaskModeOnRewriteRef.current = true;
       navigate(`/c/${activeConvoId}`, { replace: true });
     }
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // F035: task mode is a ROLE permission. The backend folds each role's
+  // menu_ids into web_menu → client `user.plugins`; `linsight_task_mode` is the
+  // workbench-home sub-capability toggled per role in the admin console. When
+  // the current user's role lacks it, hide the input's task-mode entry + skill
+  // submenu (the sidebar "新建任务" button gates on the same key in Nav/NewChat).
+  // plugins absent / non-array → allow (matches the NewChat default, and keeps
+  // super-admin/dept-admin — who always carry the key — unaffected).
+  const canUseTaskMode = useMemo(() => {
+    const plugins = (user as any)?.plugins;
+    return Array.isArray(plugins) ? plugins.includes('linsight_task_mode') : true;
+  }, [user]);
 
   const handleSend = useCallback((text: string, files?: any[] | null) => {
     // F035 Track J (TJ-6): both modes go through the SAME unified entry now.
@@ -278,7 +306,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     // does not yet thread linsight-native tool/file/skill selection (backend
     // _to_linsight_submit leaves them empty). Task turns currently carry only
     // question + knowledge-base selection. Restore once the backend threads them.
-    if (taskMode) {
+    if (taskMode && canUseTaskMode) {
       const trimmed = text.trim();
       if (!trimmed && !(files || []).length) return;
       sendMessage(trimmed, files, { taskMode: true });
@@ -288,7 +316,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
     sendMessage(text, files);
     setInputText('');
-  }, [taskMode, sendMessage]);
+  }, [taskMode, canUseTaskMode, sendMessage]);
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
@@ -397,7 +425,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             isStreaming={isStreaming}
-                            features={{ taskModeEntry: true, taskMode }}
+                            features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
                             onToggleTaskMode={() => setTaskMode((v) => !v)}
                             placeholder={taskMode
                               ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
@@ -450,7 +478,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         <AiChatInput
                           disabled={!bsConfig?.models?.length || !!shareToken}
                           isStreaming={isStreaming}
-                          features={{ taskModeEntry: true, taskMode }}
+                          features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
                           onToggleTaskMode={() => setTaskMode((v) => !v)}
                           placeholder={taskMode
                             ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
