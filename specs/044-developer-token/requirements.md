@@ -192,8 +192,10 @@ As an `authorized admin`, I want a Developer Token tab in the Platform System Pa
 - `AC-REQ-007-05`: WHEN creating or editing a token THEN the UI SHALL use existing Platform UI components, validate required fields, support organization-tree single-user selection, support multiline whitelist input, and support null/0 rate-limit meaning no limit.
 - `AC-REQ-007-08`: WHEN creating or editing a token THEN the dialog SHALL NOT display manually editable `tenant_id` or `user_id` inputs; it SHALL display the selected user's name and organization path from the tree selector.
 - `AC-REQ-007-09`: WHEN saving a token from the UI THEN the frontend SHALL submit selected `user_id` plus selected department context and SHALL NOT submit a manually entered `tenant_id`.
-- `AC-REQ-007-06`: WHEN viewing plaintext token THEN the UI SHALL use a separate action and confirmation flow before displaying the token.
-- `AC-REQ-007-07`: WHEN IP whitelist input is invalid THEN the UI SHALL display a clear error returned by the backend or equivalent form validation.
+- `AC-REQ-007-06`: WHEN viewing plaintext token THEN the UI SHALL use a separate action that directly requests the token secret and displays the plaintext token dialog after the existing backend permission and audit checks succeed, without an additional frontend confirmation prompt.
+- `AC-REQ-007-07`: WHEN global or token-level IP whitelist input contains an invalid IP or CIDR rule THEN the UI SHALL display a clear local form error before saving, and backend `19809 developer_token_invalid_ip_rule` responses SHALL resolve to a clear localized error.
+- `AC-REQ-007-10`: WHEN editing global or token-level per-minute rate limits THEN the UI SHALL only accept integer input; empty or `0` SHALL keep the existing no-limit semantics, and non-integer input SHALL be blocked or shown as a clear validation error before calling the API.
+- `AC-REQ-007-11`: WHEN any Developer Token text input is rendered THEN it SHALL display a localized placeholder that matches the field purpose, including list search, token name, global rate limit, token rate limit, IP whitelist, and organization-tree user selection/search inputs.
 
 #### Verification Methods
 | Acceptance ID | Method | Evidence Target |
@@ -203,10 +205,12 @@ As an `authorized admin`, I want a Developer Token tab in the Platform System Pa
 | AC-REQ-007-03 | manual + API test | Log in as tenant admin and verify panel is not editable; backend rejects update. |
 | AC-REQ-007-04 | manual | Create test data and inspect Developer Token table columns. |
 | AC-REQ-007-05 | manual | Create/edit token using dialog, multiline whitelist, and no-limit rate setting. |
-| AC-REQ-007-06 | manual | Click view secret and verify confirmation + token secret dialog. |
-| AC-REQ-007-07 | manual + backend test | Enter invalid IP/CIDR and verify clear error. |
+| AC-REQ-007-06 | manual + code review | Click view secret and verify no confirmation prompt appears before the token secret dialog; backend permission and audit behavior remains unchanged. |
+| AC-REQ-007-07 | automated frontend test + manual + backend test | Enter invalid IP/CIDR in global config and token dialog; verify clear local error and localized backend `19809` fallback. |
 | AC-REQ-007-08 | manual + code review | Open create/edit dialog and verify manual ID inputs are absent. |
 | AC-REQ-007-09 | code review + build | Review Platform API payload typing and network payload construction. |
+| AC-REQ-007-10 | code review + build + manual | Enter or paste decimal/negative/scientific-notation rate limits in global config and token dialog; verify integer-only behavior and clear local error before API call. |
+| AC-REQ-007-11 | code review + build + manual | Review Developer Token inputs and verify each text input has a localized placeholder. |
 
 ### REQ-008: Auditability and operational safety
 As a `security auditor`, I want sensitive developer token actions to be auditable and reversible where possible, so that token usage can be investigated and safely disabled.
@@ -240,6 +244,12 @@ As a `security auditor`, I want sensitive developer token actions to be auditabl
 - Q: Should the spec use the project `features/v2.6.0/...` convention or the `/sdd-spec` directory convention? -> A: Use `/sdd-spec` directory convention: `specs/044-developer-token/requirements.md`, `design.md`, and `tasks.md`.
 - Q: Should token create/edit manually input `user_id` and `tenant_id`? -> A: No. New/edit dialogs should use a tree user picker. The frontend submits selected `user_id` plus selected department context; the backend resolves the tenant from that selected position.
 - Q: If one user belongs to multiple tenants, which tenant should the token bind to? -> A: Bind to the tenant resolved from the organization-tree position selected by the admin.
+
+### Session 2026-06-16
+- Q: Developer Token global and token-level rate-limit inputs currently allow decimals and then hit HTTP 422 without a clear page-level explanation. What should the behavior be? -> A: Rate-limit inputs should accept integers only for both global config and token create/edit. Invalid non-integer input should be blocked or clearly reported before an API call; empty and `0` retain no-limit semantics.
+- Q: Developer Token IP whitelist can accept invalid text and saving does not provide a clear page-level explanation. What should the behavior be? -> A: Global config and token create/edit whitelist inputs should validate single IP and CIDR rules using the documented separators before saving, show a clear error for the first invalid rule, keep empty whitelist as allow-all, and localize backend `19809` as a fallback.
+- Q: Should clicking "View secret" keep the frontend confirmation prompt before showing plaintext token? -> A: No. The button should directly request the secret and open the plaintext token dialog; backend permission checks and audit logging remain unchanged.
+- Q: Should all Developer Token text inputs include placeholder text? -> A: Yes. Add localized placeholders for every text input, including search, token name, global/token rate limit, IP whitelist, and existing user picker placeholders.
 
 ## Assumptions
 - Global super admin detection will use existing project semantics (`user.role == admin` in Platform and backend global-super checks), but implementation must verify the exact backend helper before coding.

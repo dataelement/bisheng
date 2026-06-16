@@ -83,7 +83,7 @@
 | REQ-004 | AC-REQ-004-01..09 | `get_developer_token_user` dependency and `DeveloperTokenService.authenticate` flow | Backend dependency tests + regression review |
 | REQ-005 | AC-REQ-005-01..06 | `ipaddress` whitelist evaluation; Redis minute counter | Backend dependency/service tests |
 | REQ-006 | AC-REQ-006-01..06 | Migration, ORM/domain model, repository boundary, API contract, error code module `198` | Migration/code review + backend tests |
-| REQ-007 | AC-REQ-007-01..09 | Platform API module, System Page tab, DeveloperToken component, tree user picker, dialogs, i18n | Manual UI verification + backend API tests |
+| REQ-007 | AC-REQ-007-01..11 | Platform API module, System Page tab, DeveloperToken component, tree user picker, dialogs, i18n | Manual UI verification + backend API tests |
 | REQ-008 | AC-REQ-008-01..04 | Audit actions and no-secret logging policy; emergency disable behavior | Backend tests + code/log review |
 
 ## Architecture
@@ -180,13 +180,16 @@
 - Requirements: REQ-003.
 
 ### Platform DeveloperToken component
-- Responsibility: Render Developer Token tab with global config panel, token table, create/edit dialog, delete confirmation, secret view confirmation/dialog.
+- Responsibility: Render Developer Token tab with global config panel, token table, create/edit dialog, delete confirmation, and secret view dialog.
 - Inputs: Current user context, API responses, form state.
 - Outputs: User-visible table/dialog state and API mutations.
 - Dependencies: `@/controllers/API/developerToken`, `bs-ui`, `useTranslation`, existing toast/confirm utilities.
 - Error behavior: Uses existing request error handling and toast/confirm patterns. Does not add custom 403 branches.
 - Requirements: REQ-007.
 - Binding UI: Uses the existing organization-tree user selector in single-select mode. The dialog does not render editable `tenant_id` or `user_id` fields. The selected option must preserve the selected department id/business id so the backend can resolve the trusted tenant.
+- Rate-limit UI: Global and token-level per-minute limit fields are integer-only text inputs. Empty and `0` normalize to no limit; decimal, negative, exponent, or other non-digit input is rejected locally with a clear toast before any API mutation.
+- IP whitelist UI: Global and token-level whitelist textareas share a small validation helper. Empty value is valid. Non-empty values are split with the backend-compatible separators (`whitespace`, comma, semicolon); each rule must be a valid single IP or CIDR prefix before save. The first invalid rule is shown in a localized toast, and backend `19809` is also localized as a fallback.
+- Input placeholders: All Developer Token text inputs use localized placeholders matching the field purpose, including list search, token name, global/token rate limits, IP whitelist, and organization-tree user selection/search inputs.
 
 ## Data / State Changes
 - Entities:
@@ -235,7 +238,7 @@
 | AC-REQ-004-01..09 | integration/regression | `test_developer_token_dependency.py` | Include opt-in-only regression review |
 | AC-REQ-005-01..06 | unit/integration | dependency/service limiter tests | Use fake Redis or mock Redis client |
 | AC-REQ-006-01..06 | migration/code review/integration | migration file, repository tests, API tests | DM8 validation through CI/Linux if available |
-| AC-REQ-007-01..07 | manual/API regression | Platform System Page | Manual verification checklist required |
+| AC-REQ-007-01..10 | manual/API regression | Platform System Page | Manual verification checklist required |
 | AC-REQ-008-01..04 | integration/code review | API audit tests, log review, dependency disabled-token test | Ensure no plaintext token in audit/logs |
 
 ## Decisions
@@ -306,7 +309,7 @@
 ## Risks / Trade-Offs
 | Risk | Impact | Mitigation | Owner / Phase |
 |---|---|---|---|
-| Secret view leaks token to authorized operator | External APIs can be called by copied token | Encrypt at rest, audit secret view, show prefix in lists, confirm before viewing | Backend + Frontend |
+| Secret view leaks token to authorized operator | External APIs can be called by copied token | Encrypt at rest, audit secret view, show prefix in lists, and keep plaintext display in a dedicated dialog | Backend + Frontend |
 | Redis outage blocks opt-in API calls | Availability impact for external callers | Document fail-closed policy; operators can monitor Redis and disable/adjust token usage | Backend + Ops |
 | Tenant ContextVar leakage | Requests could execute under wrong tenant | Use request-scoped dependency carefully, tests assert context, reset behavior where needed | Backend |
 | DM8 incompatibility | CI/customer DB failure | Use compatible field types/defaults and CI/Linux DM8 validation | Backend |
@@ -364,10 +367,12 @@
 | AC-REQ-007-03 | Global config hidden/read-only for tenant admin | Manual UI check + API test |
 | AC-REQ-007-04 | Token table columns | Manual UI check |
 | AC-REQ-007-05 | Create/edit dialog and field validation with tree user selection | Manual UI check |
-| AC-REQ-007-06 | Secret view confirmation and dialog | Manual UI check |
-| AC-REQ-007-07 | Invalid whitelist UI error | Manual UI check + API test |
+| AC-REQ-007-06 | Direct secret view action and dialog without frontend confirmation prompt | Manual UI check + code review |
+| AC-REQ-007-07 | Invalid whitelist UI error for global and token-level inputs | Frontend unit test + manual UI check + API test |
 | AC-REQ-007-08 | Manual `tenant_id`/`user_id` inputs removed | Manual UI check + code review |
 | AC-REQ-007-09 | Frontend payload carries user and department context, not manual tenant id | Code review + build |
+| AC-REQ-007-10 | Global and token rate-limit inputs accept integers only and reject non-integers before API calls | Code review + build + manual UI check |
+| AC-REQ-007-11 | Developer Token text inputs have localized placeholders | Code review + build + manual UI check |
 | AC-REQ-008-01 | Audit for token create/update/delete/secret view | Backend API test |
 | AC-REQ-008-02 | Audit for global config update | Backend API test |
 | AC-REQ-008-03 | No plaintext token in denial logs/audit | Code/log review |
