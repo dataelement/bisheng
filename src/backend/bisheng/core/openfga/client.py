@@ -10,17 +10,18 @@ import asyncio
 import contextvars
 import logging
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional
+from typing import Any
 
 import httpx
 
-from .exceptions import FGAClientError, FGAConnectionError, FGAWriteError, FGAModelError
+from .exceptions import FGAClientError, FGAConnectionError, FGAModelError, FGAWriteError
 
 logger = logging.getLogger(__name__)
 httpx_request_loggers = (
-    logging.getLogger('httpx'),
-    logging.getLogger('httpx._client'),
+    logging.getLogger("httpx"),
+    logging.getLogger("httpx._client"),
 )
 
 
@@ -31,8 +32,8 @@ class FGAReadStats:
     singleflight_wait_count: int = 0
 
 
-_fga_read_stats_var: contextvars.ContextVar[Optional[FGAReadStats]] = contextvars.ContextVar(
-    'fga_read_stats',
+_fga_read_stats_var: contextvars.ContextVar[FGAReadStats | None] = contextvars.ContextVar(
+    "fga_read_stats",
     default=None,
 )
 
@@ -66,7 +67,7 @@ class _OpenFGAHttpxLogFilter(logging.Filter):
         self._base_url = base_url
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if not str(record.msg).startswith('HTTP Request:'):
+        if not str(record.msg).startswith("HTTP Request:"):
             return True
         if not isinstance(record.args, tuple) or len(record.args) < 2:
             return True
@@ -76,10 +77,16 @@ class _OpenFGAHttpxLogFilter(logging.Filter):
 class FGAClient:
     """Async HTTP client for OpenFGA REST API."""
 
-    def __init__(self, api_url: str, store_id: str, model_id: str,
-                 timeout: int = 5, legacy_model_id: Optional[str] = None,
-                 read_tuple_cache_ttl: float = 5.0):
-        self._api_url = api_url.rstrip('/')
+    def __init__(
+        self,
+        api_url: str,
+        store_id: str,
+        model_id: str,
+        timeout: int = 5,
+        legacy_model_id: str | None = None,
+        read_tuple_cache_ttl: float = 5.0,
+    ):
+        self._api_url = api_url.rstrip("/")
         self._store_id = store_id
         self._model_id = model_id
         self._legacy_model_id = legacy_model_id  # F013: dual-model gray release
@@ -97,7 +104,7 @@ class FGAClient:
             base_url=self._api_url,
             timeout=httpx.Timeout(timeout),
             trust_env=False,
-            event_hooks={'response': [self._log_response]},
+            event_hooks={"response": [self._log_response]},
         )
 
     @property
@@ -109,7 +116,7 @@ class FGAClient:
         return self._model_id
 
     @property
-    def legacy_model_id(self) -> Optional[str]:
+    def legacy_model_id(self) -> str | None:
         """Legacy model id for shadow writes during gray period; None when disabled."""
         return self._legacy_model_id
 
@@ -121,11 +128,11 @@ class FGAClient:
         Returns True/False. Raises FGAConnectionError on network failure.
         """
         body = {
-            'tuple_key': {'user': user, 'relation': relation, 'object': object},
-            'authorization_model_id': self._model_id,
+            "tuple_key": {"user": user, "relation": relation, "object": object},
+            "authorization_model_id": self._model_id,
         }
-        data = await self._post(f'/stores/{self._store_id}/check', body)
-        return data.get('allowed', False)
+        data = await self._post(f"/stores/{self._store_id}/check", body)
+        return data.get("allowed", False)
 
     async def batch_check(self, checks: list[dict]) -> list[bool]:
         """Batch check multiple tuples in one request.
@@ -134,24 +141,20 @@ class FGAClient:
         Returns list of booleans in same order.
         """
         body = {
-            'authorization_model_id': self._model_id,
-            'checks': [
+            "authorization_model_id": self._model_id,
+            "checks": [
                 {
-                    'tuple_key': {'user': c['user'], 'relation': c['relation'], 'object': c['object']},
-                    'correlation_id': str(i),
+                    "tuple_key": {"user": c["user"], "relation": c["relation"], "object": c["object"]},
+                    "correlation_id": str(i),
                 }
                 for i, c in enumerate(checks)
             ],
         }
-        data = await self._post(f'/stores/{self._store_id}/batch-check', body)
-        results = data.get('result', {})
-        resolved = [
-            results.get(str(i), {}).get('allowed', False)
-            for i in range(len(checks))
-        ]
+        data = await self._post(f"/stores/{self._store_id}/batch-check", body)
+        results = data.get("result", {})
+        resolved = [results.get(str(i), {}).get("allowed", False) for i in range(len(checks))]
         logger.info(
-            '[openfga-debug] batch_check store_id=%s model_id=%s '
-            'checks=%s raw_result=%s resolved=%s',
+            "[openfga-debug] batch_check store_id=%s model_id=%s checks=%s raw_result=%s resolved=%s",
             self._store_id,
             self._model_id,
             checks,
@@ -166,18 +169,17 @@ class FGAClient:
         Returns list like ["workflow:abc", "workflow:def"].
         """
         body = {
-            'user': user,
-            'relation': relation,
-            'type': type,
-            'authorization_model_id': self._model_id,
+            "user": user,
+            "relation": relation,
+            "type": type,
+            "authorization_model_id": self._model_id,
         }
-        data = await self._post(f'/stores/{self._store_id}/list-objects', body)
-        return data.get('objects', [])
+        data = await self._post(f"/stores/{self._store_id}/list-objects", body)
+        return data.get("objects", [])
 
     # ── Tuple CRUD ───────────────────────────────────────────────
 
-    async def write_tuples(self, writes: list[dict] = None,
-                           deletes: list[dict] = None) -> None:
+    async def write_tuples(self, writes: list[dict] = None, deletes: list[dict] = None) -> None:
         """Batch write and/or delete tuples.
 
         Each tuple: {"user": "user:7", "relation": "owner", "object": "workflow:abc"}
@@ -193,9 +195,9 @@ class FGAClient:
             return
 
         # Primary write (current authorization model)
-        primary_body = {**body, 'authorization_model_id': self._model_id}
+        primary_body = {**body, "authorization_model_id": self._model_id}
         try:
-            await self._post(f'/stores/{self._store_id}/write', primary_body)
+            await self._post(f"/stores/{self._store_id}/write", primary_body)
         except FGAConnectionError:
             raise
         except FGAClientError as e:
@@ -204,25 +206,25 @@ class FGAClient:
 
         # Shadow write (legacy model during gray period; failures swallowed)
         if self._legacy_model_id:
-            shadow_body = {**body, 'authorization_model_id': self._legacy_model_id}
+            shadow_body = {**body, "authorization_model_id": self._legacy_model_id}
             try:
-                await self._post(f'/stores/{self._store_id}/write', shadow_body)
-            except Exception as e:  # noqa: BLE001 — gray period tolerance
+                await self._post(f"/stores/{self._store_id}/write", shadow_body)
+            except Exception as e:
                 logger.warning(
-                    'Shadow write to legacy model %s failed (ignored): %s',
-                    self._legacy_model_id, e,
+                    "Shadow write to legacy model %s failed (ignored): %s",
+                    self._legacy_model_id,
+                    e,
                 )
 
-    def write_tuples_sync(self, writes: list[dict] = None,
-                          deletes: list[dict] = None) -> None:
+    def write_tuples_sync(self, writes: list[dict] = None, deletes: list[dict] = None) -> None:
         """Synchronous tuple write for Celery tasks without an asyncio loop."""
         body = self._build_write_body(writes, deletes)
         if body is None:
             return
 
-        primary_body = {**body, 'authorization_model_id': self._model_id}
+        primary_body = {**body, "authorization_model_id": self._model_id}
         try:
-            self._post_sync(f'/stores/{self._store_id}/write', primary_body)
+            self._post_sync(f"/stores/{self._store_id}/write", primary_body)
         except FGAConnectionError:
             raise
         except FGAClientError as e:
@@ -230,58 +232,52 @@ class FGAClient:
         self.clear_read_tuples_cache()
 
         if self._legacy_model_id:
-            shadow_body = {**body, 'authorization_model_id': self._legacy_model_id}
+            shadow_body = {**body, "authorization_model_id": self._legacy_model_id}
             try:
-                self._post_sync(f'/stores/{self._store_id}/write', shadow_body)
-            except Exception as e:  # noqa: BLE001 — gray period tolerance
+                self._post_sync(f"/stores/{self._store_id}/write", shadow_body)
+            except Exception as e:
                 logger.warning(
-                    'Shadow write to legacy model %s failed (ignored): %s',
-                    self._legacy_model_id, e,
+                    "Shadow write to legacy model %s failed (ignored): %s",
+                    self._legacy_model_id,
+                    e,
                 )
 
-    def _build_write_body(self, writes: list[dict] = None,
-                          deletes: list[dict] = None) -> Optional[dict]:
+    def _build_write_body(self, writes: list[dict] = None, deletes: list[dict] = None) -> dict | None:
         """Assemble the OpenFGA write request body, or None when nothing to do."""
         body: dict[str, Any] = {}
         if writes:
-            body['writes'] = {
-                'tuple_keys': [
-                    {'user': t['user'], 'relation': t['relation'], 'object': t['object']}
-                    for t in writes
-                ]
+            body["writes"] = {
+                "tuple_keys": [{"user": t["user"], "relation": t["relation"], "object": t["object"]} for t in writes]
             }
         if deletes:
-            body['deletes'] = {
-                'tuple_keys': [
-                    {'user': t['user'], 'relation': t['relation'], 'object': t['object']}
-                    for t in deletes
-                ]
+            body["deletes"] = {
+                "tuple_keys": [{"user": t["user"], "relation": t["relation"], "object": t["object"]} for t in deletes]
             }
         return body if body else None
 
-    async def read_tuples(self, user: Optional[str] = None,
-                          relation: Optional[str] = None,
-                          object: Optional[str] = None) -> list[dict]:
+    async def read_tuples(
+        self, user: str | None = None, relation: str | None = None, object: str | None = None
+    ) -> list[dict]:
         """Read tuples matching the given filter.
 
         Returns list of {"key": {"user": ..., "relation": ..., "object": ...}, "timestamp": ...}.
         """
         tuple_key: dict[str, str] = {}
         if user:
-            tuple_key['user'] = user
+            tuple_key["user"] = user
         if relation:
-            tuple_key['relation'] = relation
+            tuple_key["relation"] = relation
         if object:
-            tuple_key['object'] = object
+            tuple_key["object"] = object
         cache_key = self._read_tuple_cache_key(user, relation, object)
         cached = self._get_cached_read_tuples(cache_key)
         if cached is not None:
-            _increment_fga_read_stat('cache_hit_count')
+            _increment_fga_read_stat("cache_hit_count")
             return cached
 
         task, _is_owner, generation = await self._get_or_create_read_tuple_task(cache_key, tuple_key)
         if not _is_owner:
-            _increment_fga_read_stat('singleflight_wait_count')
+            _increment_fga_read_stat("singleflight_wait_count")
 
         try:
             tuples = await task
@@ -294,20 +290,20 @@ class FGAClient:
 
     async def _read_tuples_uncached(self, tuple_key: dict[str, str]) -> list[dict]:
         tuples: list[dict] = []
-        continuation_token: Optional[str] = None
+        continuation_token: str | None = None
         while True:
-            body: dict[str, Any] = {'tuple_key': tuple_key, 'page_size': 100}
+            body: dict[str, Any] = {"tuple_key": tuple_key, "page_size": 100}
             if continuation_token:
-                body['continuation_token'] = continuation_token
-            _increment_fga_read_stat('read_count')
-            data = await self._post(f'/stores/{self._store_id}/read', body)
-            tuples.extend(t['key'] for t in data.get('tuples', []))
-            continuation_token = data.get('continuation_token') or data.get('continuationToken')
+                body["continuation_token"] = continuation_token
+            _increment_fga_read_stat("read_count")
+            data = await self._post(f"/stores/{self._store_id}/read", body)
+            tuples.extend(t["key"] for t in data.get("tuples", []))
+            continuation_token = data.get("continuation_token") or data.get("continuationToken")
             if not continuation_token:
                 break
         return tuples
 
-    def clear_read_tuples_cache(self, objects: Optional[Iterable[str]] = None) -> None:
+    def clear_read_tuples_cache(self, objects: Iterable[str] | None = None) -> None:
         self._read_tuple_cache_generation += 1
         if objects is None:
             self._read_tuple_cache.clear()
@@ -322,22 +318,22 @@ class FGAClient:
 
     def _read_tuple_cache_key(
         self,
-        user: Optional[str],
-        relation: Optional[str],
-        object: Optional[str],
+        user: str | None,
+        relation: str | None,
+        object: str | None,
     ) -> tuple[str, str, str, str, str]:
         return (
             self._store_id,
             self._model_id,
-            user or '',
-            relation or '',
-            object or '',
+            user or "",
+            relation or "",
+            object or "",
         )
 
     def _get_cached_read_tuples(
         self,
         cache_key: tuple[str, str, str, str, str],
-    ) -> Optional[list[dict]]:
+    ) -> list[dict] | None:
         if self._read_tuple_cache_ttl <= 0:
             return None
         cached = self._read_tuple_cache.get(cache_key)
@@ -357,7 +353,7 @@ class FGAClient:
         async with self._read_tuple_lock:
             cached = self._get_cached_read_tuples(cache_key)
             if cached is not None:
-                _increment_fga_read_stat('cache_hit_count')
+                _increment_fga_read_stat("cache_hit_count")
                 task = asyncio.create_task(self._return_read_tuples(cached))
                 return task, False, self._read_tuple_cache_generation
 
@@ -415,25 +411,23 @@ class FGAClient:
 
     async def create_store(self, name: str) -> str:
         """Create a new store. Returns store_id."""
-        data = await self._post('/stores', {'name': name})
-        store_id = data.get('id', '')
+        data = await self._post("/stores", {"name": name})
+        store_id = data.get("id", "")
         if not store_id:
-            raise FGAModelError('create_store returned empty id')
+            raise FGAModelError("create_store returned empty id")
         return store_id
 
     async def list_stores(self) -> list[dict]:
         """List all stores."""
-        data = await self._get('/stores')
-        return data.get('stores', [])
+        data = await self._get("/stores")
+        return data.get("stores", [])
 
     async def write_authorization_model(self, model: dict) -> str:
         """Write a new authorization model. Returns model_id."""
-        data = await self._post(
-            f'/stores/{self._store_id}/authorization-models', model
-        )
-        model_id = data.get('authorization_model_id', '')
+        data = await self._post(f"/stores/{self._store_id}/authorization-models", model)
+        model_id = data.get("authorization_model_id", "")
         if not model_id:
-            raise FGAModelError('write_authorization_model returned empty model_id')
+            raise FGAModelError("write_authorization_model returned empty model_id")
         return model_id
 
     # ── Health ───────────────────────────────────────────────────
@@ -441,7 +435,7 @@ class FGAClient:
     async def health(self) -> bool:
         """Check OpenFGA server health."""
         try:
-            resp = await self._http.get('/healthz')
+            resp = await self._http.get("/healthz")
             return resp.status_code == 200
         except (httpx.ConnectError, httpx.TimeoutException):
             return False
@@ -459,8 +453,13 @@ class FGAClient:
 
     @staticmethod
     async def _log_response(resp: httpx.Response) -> None:
-        """Log httpx request completion under this module logger."""
-        logger.info(
+        """Log httpx request completion under this module logger.
+
+        Debug level on purpose: this fires for *every* OpenFGA call (read/check),
+        and permission evaluation issues many per request. At INFO it dominated
+        hot-path CPU (std-logging -> loguru InterceptHandler stack-walk) under load.
+        """
+        logger.debug(
             'HTTP Request: %s %s "%s %s %s"',
             resp.request.method,
             resp.request.url,
@@ -471,8 +470,12 @@ class FGAClient:
 
     @staticmethod
     def _log_response_sync(resp: httpx.Response) -> None:
-        """Log sync httpx request completion under this module logger."""
-        logger.info(
+        """Log sync httpx request completion under this module logger.
+
+        Debug level on purpose (see _log_response): per-request INFO logging of
+        every OpenFGA call dominated hot-path CPU under load.
+        """
+        logger.debug(
             'HTTP Request: %s %s "%s %s %s"',
             resp.request.method,
             resp.request.url,
@@ -486,12 +489,12 @@ class FGAClient:
         try:
             resp = await self._http.post(path, json=body)
         except (httpx.ConnectError, httpx.TimeoutException) as e:
-            raise FGAConnectionError(f'OpenFGA unreachable: {e}') from e
+            raise FGAConnectionError(f"OpenFGA unreachable: {e}") from e
         except httpx.HTTPError as e:
-            raise FGAClientError(f'HTTP error: {e}') from e
+            raise FGAClientError(f"HTTP error: {e}") from e
         if resp.status_code >= 400:
             detail = resp.text[:500]
-            raise FGAClientError(f'OpenFGA {resp.status_code}: {detail}')
+            raise FGAClientError(f"OpenFGA {resp.status_code}: {detail}")
         return resp.json()
 
     def _post_sync(self, path: str, body: dict) -> dict:
@@ -501,16 +504,16 @@ class FGAClient:
                 base_url=self._api_url,
                 timeout=httpx.Timeout(self._timeout),
                 trust_env=False,
-                event_hooks={'response': [self._log_response_sync]},
+                event_hooks={"response": [self._log_response_sync]},
             ) as client:
                 resp = client.post(path, json=body)
         except (httpx.ConnectError, httpx.TimeoutException) as e:
-            raise FGAConnectionError(f'OpenFGA unreachable: {e}') from e
+            raise FGAConnectionError(f"OpenFGA unreachable: {e}") from e
         except httpx.HTTPError as e:
-            raise FGAClientError(f'HTTP error: {e}') from e
+            raise FGAClientError(f"HTTP error: {e}") from e
         if resp.status_code >= 400:
             detail = resp.text[:500]
-            raise FGAClientError(f'OpenFGA {resp.status_code}: {detail}')
+            raise FGAClientError(f"OpenFGA {resp.status_code}: {detail}")
         return resp.json()
 
     async def _get(self, path: str) -> dict:
@@ -518,10 +521,10 @@ class FGAClient:
         try:
             resp = await self._http.get(path)
         except (httpx.ConnectError, httpx.TimeoutException) as e:
-            raise FGAConnectionError(f'OpenFGA unreachable: {e}') from e
+            raise FGAConnectionError(f"OpenFGA unreachable: {e}") from e
         except httpx.HTTPError as e:
-            raise FGAClientError(f'HTTP error: {e}') from e
+            raise FGAClientError(f"HTTP error: {e}") from e
         if resp.status_code >= 400:
             detail = resp.text[:500]
-            raise FGAClientError(f'OpenFGA {resp.status_code}: {detail}')
+            raise FGAClientError(f"OpenFGA {resp.status_code}: {detail}")
         return resp.json()

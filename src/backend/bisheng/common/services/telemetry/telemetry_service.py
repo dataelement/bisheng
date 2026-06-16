@@ -1,16 +1,24 @@
 import asyncio
 import contextvars
 import logging
+import threading
+import time
 from asyncio import Semaphore
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional
 
-from elasticsearch import AsyncElasticsearch, Elasticsearch, exceptions as es_exceptions
+from elasticsearch import AsyncElasticsearch, Elasticsearch
+from elasticsearch import exceptions as es_exceptions
 
-from bisheng.common.errcode.tenant import NoTenantContextError
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
-from bisheng.common.schemas.telemetry.base_telemetry_schema import T_EventData, BaseTelemetryEvent, UserContext, \
-    UserGroupInfo, UserRoleInfo, UserDepartmentInfo
+from bisheng.common.errcode.tenant import NoTenantContextError
+from bisheng.common.schemas.telemetry.base_telemetry_schema import (
+    BaseTelemetryEvent,
+    T_EventData,
+    UserContext,
+    UserDepartmentInfo,
+    UserGroupInfo,
+    UserRoleInfo,
+)
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.search.elasticsearch.manager import get_statistics_es_connection, get_statistics_es_connection_sync
@@ -32,10 +40,7 @@ INDEX_MAPPING = {
                     "user_name": {"type": "keyword"},
                     "user_group_infos": {
                         "type": "object",
-                        "properties": {
-                            "user_group_id": {"type": "integer"},
-                            "user_group_name": {"type": "keyword"}
-                        }
+                        "properties": {"user_group_id": {"type": "integer"}, "user_group_name": {"type": "keyword"}},
                     },
                     "user_role_infos": {
                         "type": "object",
@@ -43,34 +48,59 @@ INDEX_MAPPING = {
                             "role_id": {"type": "integer"},
                             "role_name": {"type": "keyword"},
                             "group_id": {"type": "integer"},
-                        }
+                        },
                     },
                     "user_department_infos": {
                         "type": "object",
-                        "properties": {
-                            "department_id": {"type": "integer"},
-                            "department_name": {"type": "keyword"}
-                        }
-                    }
-                }
+                        "properties": {"department_id": {"type": "integer"}, "department_name": {"type": "keyword"}},
+                    },
+                },
             },
-            "event_data": {
-                "type": "object",
-                "dynamic": True
-            }
+            "event_data": {"type": "object", "dynamic": True},
         }
     }
 }
 
 
-class BaseTelemetryService(object):
+class BaseTelemetryService:
     """Telemetry Service for logging events to Elasticsearch"""
+
     _index_name: str = "base_telemetry_events"
     _index_initialized: bool = False
 
+    # Telemetry is fire-and-forget stats; the per-event user context (user +
+    # groups + roles + departments, a 4-query selectin join) is identical for a
+    # given user and was previously re-fetched on every model invoke. Under load
+    # this dominated CPU/GIL (sync join runs in the thread pool, contending with
+    # the event loop). Cache it per user_id with a short TTL so a burst of same-user
+    # events shares one fetch; staleness up to the TTL is acceptable for stats.
+    _USER_CONTEXT_TTL_SECONDS: float = 60.0
+    _user_context_cache: dict[int, tuple[float, UserContext]] = {}
+    _user_context_cache_lock = threading.Lock()
+
+    @classmethod
+    def _get_cached_user_context(cls, user_id: int) -> UserContext | None:
+        with cls._user_context_cache_lock:
+            entry = cls._user_context_cache.get(user_id)
+            if entry is None:
+                return None
+            expires_at, user_context = entry
+            if expires_at < time.monotonic():
+                cls._user_context_cache.pop(user_id, None)
+                return None
+            return user_context
+
+    @classmethod
+    def _store_cached_user_context(cls, user_id: int, user_context: UserContext) -> None:
+        with cls._user_context_cache_lock:
+            cls._user_context_cache[user_id] = (
+                time.monotonic() + cls._USER_CONTEXT_TTL_SECONDS,
+                user_context,
+            )
+
     def __init__(self):
-        self._es_client: Optional[AsyncElasticsearch] = None
-        self._es_client_sync: Optional[Elasticsearch] = None
+        self._es_client: AsyncElasticsearch | None = None
+        self._es_client_sync: Elasticsearch | None = None
 
         # Thread pool for synchronizing methods
         self.thread_pool = ThreadPoolExecutor(max_workers=10)
@@ -119,8 +149,11 @@ class BaseTelemetryService(object):
 
         self._index_initialized = True
 
-    @staticmethod
-    async def _init_user_context(user_id: int) -> UserContext:
+    @classmethod
+    async def _init_user_context(cls, user_id: int) -> UserContext:
+        cached = cls._get_cached_user_context(user_id)
+        if cached is not None:
+            return cached
         try:
             async with get_async_db_session() as session:
                 user_repository = UserRepositoryImpl(session)
@@ -135,13 +168,15 @@ class BaseTelemetryService(object):
                     user = await user_repository.get_user_with_groups_and_roles_by_user_id(user_id)
 
         if not user:
-            return UserContext(
+            anonymous = UserContext(
                 user_id=user_id,
                 user_name=str(user_id),
                 user_group_infos=[],
                 user_role_infos=[],
-                user_department_infos=[]
+                user_department_infos=[],
             )
+            cls._store_cached_user_context(user_id, anonymous)
+            return anonymous
 
         if user.groups is None:
             user.groups = []
@@ -152,29 +187,29 @@ class BaseTelemetryService(object):
             user_id=user.user_id,
             user_name=user.user_name,
             user_group_infos=[
-                UserGroupInfo(
-                    user_group_id=group.id,
-                    user_group_name=group.group_name
-                ) for group in user.groups
+                UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups
             ],
             user_role_infos=[
                 UserRoleInfo(
                     role_id=role.id,
                     role_name=role.role_name,
                     group_id=role.group_id,
-                ) for role in user.roles
+                )
+                for role in user.roles
             ],
             user_department_infos=[
-                UserDepartmentInfo(
-                    department_id=dept.id,
-                    department_name=dept.name
-                ) for dept in getattr(user, 'departments', []) or []
-            ]
+                UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                for dept in getattr(user, "departments", []) or []
+            ],
         )
+        cls._store_cached_user_context(user_id, user_context)
         return user_context
 
-    @staticmethod
-    def _init_user_context_sync(user_id: int) -> UserContext:
+    @classmethod
+    def _init_user_context_sync(cls, user_id: int) -> UserContext:
+        cached = cls._get_cached_user_context(user_id)
+        if cached is not None:
+            return cached
         try:
             with get_sync_db_session() as session:
                 user_repository = UserRepositoryImpl(session)
@@ -186,13 +221,15 @@ class BaseTelemetryService(object):
                     user = user_repository.get_user_with_groups_and_roles_by_user_id_sync(user_id)
 
         if not user:
-            return UserContext(
+            anonymous = UserContext(
                 user_id=user_id,
                 user_name=str(user_id),
                 user_group_infos=[],
                 user_role_infos=[],
-                user_department_infos=[]
+                user_department_infos=[],
             )
+            cls._store_cached_user_context(user_id, anonymous)
+            return anonymous
 
         if user.groups is None:
             user.groups = []
@@ -203,25 +240,22 @@ class BaseTelemetryService(object):
             user_id=user.user_id,
             user_name=user.user_name,
             user_group_infos=[
-                UserGroupInfo(
-                    user_group_id=group.id,
-                    user_group_name=group.group_name
-                ) for group in user.groups
+                UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups
             ],
             user_role_infos=[
                 UserRoleInfo(
                     role_id=role.id,
                     role_name=role.role_name,
                     group_id=role.group_id,
-                ) for role in user.roles
+                )
+                for role in user.roles
             ],
             user_department_infos=[
-                UserDepartmentInfo(
-                    department_id=dept.id,
-                    department_name=dept.name
-                ) for dept in getattr(user, 'departments', []) or []
-            ]
+                UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                for dept in getattr(user, "departments", []) or []
+            ],
         )
+        cls._store_cached_user_context(user_id, user_context)
         return user_context
 
     @property
@@ -229,8 +263,9 @@ class BaseTelemetryService(object):
         return self._index_name
 
     # record event task
-    async def _record_event_task(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                                 event_data: T_EventData = None):
+    async def _record_event_task(
+        self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str, event_data: T_EventData = None
+    ):
 
         # Get semaphore
         async with self._semaphore:
@@ -248,7 +283,7 @@ class BaseTelemetryService(object):
                     event_type=event_type,
                     user_context=user_context,  # Allow for None May need to be adjusted Schema Allow Optional
                     trace_id=trace_id,
-                    event_data=event_data
+                    event_data=event_data,
                 )
 
                 # Send (Fire and Forget)
@@ -257,8 +292,9 @@ class BaseTelemetryService(object):
             except Exception as e:
                 logger.error(f"Error in record_event_task: {e}", exc_info=True)
 
-    async def log_event(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                        event_data: T_EventData = None):
+    async def log_event(
+        self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str, event_data: T_EventData = None
+    ):
         """Log events asynchronously to Elasticsearch (Safe Version)"""
         try:
             # Ensuring ES CONNECT
@@ -272,10 +308,7 @@ class BaseTelemetryService(object):
             # Log events asynchronously
             asyncio.create_task(
                 self._record_event_task(
-                    user_id=user_id,
-                    event_type=event_type,
-                    trace_id=trace_id,
-                    event_data=event_data
+                    user_id=user_id, event_type=event_type, trace_id=trace_id, event_data=event_data
                 )
             )
 
@@ -284,24 +317,23 @@ class BaseTelemetryService(object):
             logger.error(f"Failed to log telemetry event: {e}", exc_info=True)
 
     # record event task thread sync
-    def _record_event_task_sync(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                                event_data: T_EventData = None):
+    def _record_event_task_sync(
+        self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str, event_data: T_EventData = None
+    ):
         try:
             logger.debug(f"Recording telemetry event sync for user_id {user_id}, event_type {event_type}")
             user_context = self._init_user_context_sync(user_id)
 
             event_info = BaseTelemetryEvent(
-                event_type=event_type,
-                user_context=user_context,
-                trace_id=trace_id,
-                event_data=event_data
+                event_type=event_type, user_context=user_context, trace_id=trace_id, event_data=event_data
             )
             self._es_client_sync.index(index=self.index_name, document=event_info.model_dump())
         except Exception as e:
             logger.error(f"Failed to log telemetry event sync in thread: {e}", exc_info=True)
 
-    def log_event_sync(self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str,
-                       event_data: T_EventData = None):
+    def log_event_sync(
+        self, user_id: int, event_type: BaseTelemetryTypeEnum, trace_id: str, event_data: T_EventData = None
+    ):
         """Synchronize logging events to Elasticsearch (Safe Version)"""
         try:
             if not self._es_client_sync:
@@ -316,14 +348,7 @@ class BaseTelemetryService(object):
             # worker thread loses tenant context and the ORM tenant filter
             # raises NoTenantContextError under multi_tenant.enabled=True.
             ctx = contextvars.copy_context()
-            self.thread_pool.submit(
-                ctx.run,
-                self._record_event_task_sync,
-                user_id,
-                event_type,
-                trace_id,
-                event_data
-            )
+            self.thread_pool.submit(ctx.run, self._record_event_task_sync, user_id, event_type, trace_id, event_data)
         except Exception as e:
             logger.error(f"Failed to log telemetry event sync: {e}", exc_info=True)
 
