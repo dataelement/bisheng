@@ -1160,9 +1160,14 @@ class LinsightWorkbenchImpl:
         # &Extraction toolID
         tool_ids = cls._extract_tool_ids(session_version.tools)
 
-        # Tools to get workbench configurationsID
-        linsight_config = await WorkStationService.get_linsight_config()
-        config_tool_ids = cls._extract_tool_ids(linsight_config.tools or [])
+        # Code-interpreter whitelist source. Unified-resource direction
+        # (2026-06-16): task mode reuses the DAILY chat config tool selection,
+        # not the legacy per-app linsight config. get_daily_chat_config falls
+        # back to defaults (never None in practice), but guard defensively so a
+        # missing config degrades to an empty whitelist instead of crashing the
+        # task with 'NoneType' object has no attribute 'tools'.
+        daily_config = await WorkStationService.get_daily_chat_config()
+        config_tool_ids = cls._extract_tool_ids(daily_config.tools or []) if daily_config else []
 
         # todo Better tool initialization scheme
         if need_upload and file_dir:
@@ -1177,10 +1182,9 @@ class LinsightWorkbenchImpl:
                 )
 
         # Unified-resource direction (2026-06-16): task mode reuses the daily
-        # tool selection directly. The legacy per-app linsight whitelist
-        # (config_tool_ids) is no longer applied — every selected tool id (a real
-        # GptsTools id the user already has access to) binds. config_tool_ids is
-        # still computed above for the code-interpreter branch only.
+        # tool selection directly. Every selected tool id (a real GptsTools id
+        # the user already has access to) binds. config_tool_ids (from the daily
+        # chat config) is used only by the code-interpreter branch above.
         valid_tool_ids = list(dict.fromkeys(tool_ids))  # de-dup, preserve order
 
         # Initialization Tools
@@ -1210,8 +1214,14 @@ class LinsightWorkbenchImpl:
         """
         tool_ids = []
         for tool in tools:
-            if tool.get("children"):
-                tool_ids.extend(int(child.get("id")) for child in tool["children"] if child.get("id"))
+            # Tolerate both raw dicts (linsight config / session_version.tools)
+            # and pydantic ToolConfig models (daily config re-validates tools on
+            # assignment, so its parent rows come back as models, not dicts).
+            if hasattr(tool, "model_dump"):
+                tool = tool.model_dump()
+            children = tool.get("children")
+            if children:
+                tool_ids.extend(int(child.get("id")) for child in children if child.get("id"))
         return tool_ids
 
     @classmethod
