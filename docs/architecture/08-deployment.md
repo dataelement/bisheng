@@ -85,6 +85,19 @@ bisheng-milvus-standalone
 - `database_url`：正则匹配 `:password@` 中的密码部分，调用 `decrypt_token()` 解密
 - `redis_url`：支持字符串 URL 和字典两种格式，字典格式使用 `encrypt(...)` 包装标记加密值
 
+### 达梦（DM）数据库 schema 配置
+
+达梦连接串格式为 `dm+dmPython://用户:密码@host:port`。达梦的 **schema 默认等于登录用户名**，因此用「拥有目标 schema 的用户」登录即可，无需额外配置。
+
+如需显式指定 schema，**必须用查询串 `?schema=XXX`**，不能写成 path 形式 `/XXX`：
+
+```text
+✅ dm+dmPython://BISHENG:<enc>@192.168.107.9:5236/?schema=BISHENG
+❌ dm+dmPython://BISHENG:<enc>@192.168.107.9:5236/BISHENG
+```
+
+原因：SQLAlchemy 会把 URL 的 path 段映射成 `connect()` 的 `database` 关键字参数，而 `dmPython.connect()` 不接受 `database`（报 `'database' is an invalid keyword argument`）；它接受的是 `schema`，由查询串透传。`DatabaseConnectionManager`（`src/backend/bisheng/core/database/connection.py`）在构造时通过 `_normalize_dm_url()` 统一把 path/query 里的 schema 归一化为 `?schema=`，确保同步（dmPython）与异步（dmAsync）引擎行为一致；若 path 与 query 同时存在，`?schema=` 优先。
+
 ### Settings 类主要字段
 
 `Settings` 类定义在 `src/backend/bisheng/core/config/settings.py`，主要配置分组：

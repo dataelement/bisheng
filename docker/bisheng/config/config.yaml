@@ -2,6 +2,7 @@
 # 密码加密参考 https://dataelem.feishu.cn/wiki/BSCcwKd4Yiot3IkOEC8cxGW7nPc#Gxitd1xEeof1TzxdhINcGS6JnXd
 database_url:
   "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@mysql:3306/bisheng?charset=utf8mb4"
+  # "dm+dmPython://BISHENG:<enc>@192.168.107.9:5236/?schema=BISHENG"
 # 数据库连接池配置（可选，省略则用下方默认值）。
 # 注意：连接池是“每进程每引擎”一套，总连接数 ≈ 进程数 ×（pool_size + max_overflow）。
 # 调优时务必让该总数小于数据库服务端的最大会话数（如达梦 MAX_SESSIONS）。
