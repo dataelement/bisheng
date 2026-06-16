@@ -75,30 +75,7 @@ def ask_user(reason: str, questions: list[dict] | None = None) -> str:
         }
         for i, q in enumerate(questions or [])
     ]
-    # HITL-DEBUG (temporary): confirm whether interrupt() PARKS (raises a
-    # GraphInterrupt/GraphBubbleUp that suspends the run) or RETURNS a value
-    # (no park → ask_user behaves like a normal tool → task runs to completion).
-    # Also surfaces the execution namespace so we can tell if ask_user was called
-    # inside a deepagents subagent (the `task` tool) where interrupts may not
-    # bubble up to the parent graph. Remove once the HITL park issue is resolved.
-    from loguru import logger as _hitl_logger
-
-    try:
-        from langgraph.config import get_config as _get_config
-
-        _ns = (_get_config() or {}).get("configurable", {}).get("checkpoint_ns", "<none>")
-    except Exception:
-        _ns = "<config-unavailable>"
-    _hitl_logger.info(f"[HITL-DEBUG] ask_user ENTER ns={_ns!r} q={len(tool_calls)} reason={reason!r:.80}")
-    try:
-        _ret = interrupt({"reason": reason, "params": {"tool_calls": tool_calls}})
-        _hitl_logger.warning(f"[HITL-DEBUG] interrupt RETURNED (NOT parked!) ns={_ns!r} ret={_ret!r:.200}")
-        return _ret
-    except BaseException as _e:
-        _hitl_logger.info(
-            f"[HITL-DEBUG] interrupt raised {type(_e).__module__}.{type(_e).__name__} (parking) ns={_ns!r}"
-        )
-        raise
+    return interrupt({"reason": reason, "params": {"tool_calls": tool_calls}})
 
 
 async def create_linsight_agent(

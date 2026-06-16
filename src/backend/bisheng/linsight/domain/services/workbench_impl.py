@@ -126,8 +126,9 @@ class LinsightWorkbenchImpl:
         if not files:
             return None
 
+        # Workspace is keyed by session_version id (svid), matching WorkspaceBackend.
         processed_files = await cls._process_submitted_files(
-            files, linsight_session_version.session_id, linsight_session_version.user_id
+            files, linsight_session_version.id, linsight_session_version.user_id
         )
 
         if linsight_session_version.files:
@@ -171,8 +172,15 @@ class LinsightWorkbenchImpl:
                     continuing = False
                     chat_id = uuid.uuid4().hex
 
+            # F035 fix: workspace attachments MUST be keyed by the session_version
+            # id (svid), because the execution agent's WorkspaceBackend reads from
+            # ``workspace/{svid}/``. In the unified model chat_id != svid, so
+            # writing under chat_id left the uploaded file unreadable by the agent
+            # (read_file -> MinIO NoSuchKey -> whole task failed). Generate the
+            # svid up-front and use it both for ingestion and the version row id.
+            svid = uuid.uuid4().hex
             # Process files (if present) — after chat_id is finalized
-            processed_files = await cls._process_submitted_files(submit_obj.files, chat_id, login_user.user_id)
+            processed_files = await cls._process_submitted_files(submit_obj.files, svid, login_user.user_id)
 
             if not continuing:
                 # F035 Track J (unified conversation model): a task turn is not a
@@ -204,8 +212,9 @@ class LinsightWorkbenchImpl:
                     ),
                 )
 
-            # Create Ideas Conversation Version
+            # Create Ideas Conversation Version (id == svid used for the workspace)
             linsight_session_version = LinsightSessionVersion(
+                id=svid,
                 session_id=chat_id,
                 user_id=login_user.user_id,
                 question=submit_obj.question,

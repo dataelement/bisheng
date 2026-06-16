@@ -855,7 +855,6 @@ class LinsightWorkflowTask:
         # task_data — so the history view rebuilt from the DB shows blank task
         # rows. Only overwrite task_data when the event actually carries it;
         # otherwise preserve the write_todos task_data (and its name).
-        logger.info(f"[TASKEND-DEBUG] task_id={event.task_id} event.data={event.data!r:.200} status={status}")
         update_kwargs = {"status": status, "result": {"answer": event.answer}}
         if event.data:
             update_kwargs["task_data"] = event.data

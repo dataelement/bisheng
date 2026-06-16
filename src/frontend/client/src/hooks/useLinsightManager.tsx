@@ -428,18 +428,6 @@ const convertTools = (tools) => {
 
 
 function buildTaskTree(tasks) {
-    // [BTT] temporary diagnostic: dump what history rebuild resolves per task.
-    try {
-        console.log('[BTT] buildTaskTree input', (tasks || []).map((t) => ({
-            id: t?.id,
-            resolvedName: t?.name || t?.task_data?.name || t?.task_data?.display_target || '',
-            hasTaskData: !!t?.task_data,
-            tdKeys: t?.task_data ? Object.keys(t.task_data) : null,
-            histLen: (t?.history || []).length,
-            childLen: (t?.children || []).length,
-            status: t?.status,
-        })));
-    } catch (e) { console.warn('[BTT] log failed', e); }
     let hasTerminated = false
     const newTasks = tasks.map(task => {
         const taskTree = {
