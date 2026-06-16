@@ -37,6 +37,11 @@ interface ExecutionFlowProps {
     /** conversation id for the input's per-session memory */
     conversationId?: string;
     isSharePage?: boolean;
+    /** Historical linsight session opened from the home list (flowType 20 →
+        /linsight/:id). The follow-up / continuation flow now lives in the daily
+        /c chat, so the standalone viewer is read-only: render the flow but hide
+        the bottom input (display-only, cannot be used). */
+    readOnly?: boolean;
     /** workspace/preview panel state — lifted to Sop/index so the Header's
         workspace button drives the same drawer */
     artifactsPanel: ReturnType<typeof useArtifactsPanel>;
@@ -55,7 +60,7 @@ function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[])
     return entries;
 }
 
-export function ExecutionFlow({ versionId, conversationId, isSharePage = false, artifactsPanel }: ExecutionFlowProps) {
+export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
     const localize = useLocalize();
     const { getLinsight, continueConversation } = useLinsightManager();
     // Mount the WS pump here (the legacy TaskFlow used to own it).
@@ -201,9 +206,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 <div className="px-6 pb-3">
                     <TaskPanel tasks={tasks} completed={completed} />
                 </div>
-                {/* Share pages are read-only — no input, no footer controls
-                    ("make same style" removed per product decision, F035). */}
-                {!isSharePage && (
+                {/* Share pages AND historical sessions are read-only — no input.
+                    Continuation now happens in the daily /c chat; the standalone
+                    linsight viewer only displays ("make same style" removed, F035). */}
+                {!isSharePage && !readOnly && (
                     <TaskModeInput
                         // The landing route URL is rewritten via history.replaceState after the
                         // first submit, so react-router's `conversationId` stays 'new'. Treat
