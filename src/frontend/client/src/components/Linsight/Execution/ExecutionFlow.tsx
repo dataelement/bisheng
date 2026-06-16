@@ -8,7 +8,7 @@
  * after the old TaskFlow stops rendering.
  */
 import { CircleAlert, OctagonX } from 'lucide-react';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { SopStatus } from '~/store/linsight';
 import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
@@ -78,6 +78,24 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
         [linsight?.files],
     );
     const workspaceFiles = useMemo(() => [...uploadedFiles, ...fileList], [uploadedFiles, fileList]);
+
+    // Auto-open the workspace drawer once when a freshly-submitted task carries
+    // uploaded files, so the user immediately sees what they attached. Gated on a
+    // non-terminal status so revisiting a COMPLETED history session (which also
+    // has files) does NOT pop the drawer; the ref keeps it to one open per session.
+    const autoOpenedRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (
+            versionId &&
+            autoOpenedRef.current !== versionId &&
+            uploadedFiles.length > 0 &&
+            !completed &&
+            !stopped
+        ) {
+            autoOpenedRef.current = versionId;
+            artifactsPanel.openWorkspace();
+        }
+    }, [versionId, uploadedFiles.length, completed, stopped, artifactsPanel]);
 
     // clarify requests: the newest unanswered one is the active card;
     // session-level answered ones become flow-level intent rows
