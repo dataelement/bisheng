@@ -19,6 +19,34 @@ interface WorkspaceDrawerProps {
 export function WorkspaceDrawer({ open, onOpenChange, files, onPreview }: WorkspaceDrawerProps) {
     const localize = useLocalize();
 
+    // Split into the two product zones: user-uploaded sources vs agent deliverables.
+    const uploaded = files.filter((f) => f.source === 'upload');
+    const generated = files.filter((f) => f.source !== 'upload');
+
+    const renderRow = (file: ArtifactFile) => (
+        <div
+            key={file.file_id || file.file_url}
+            role="button"
+            tabIndex={0}
+            className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2.5 hover:bg-gray-50"
+            onClick={() => onPreview(file)}
+            onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
+        >
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
+            <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" />
+            <span className="min-w-0 flex-1 truncate text-sm text-gray-800">{file.file_name}</span>
+            <Eye size={15} className="invisible shrink-0 text-gray-400 group-hover:visible" />
+        </div>
+    );
+
+    const renderGroup = (titleKey: string, group: ArtifactFile[]) =>
+        group.length > 0 && (
+            <div className="pt-2">
+                <div className="px-2 py-1.5 text-xs font-medium text-gray-400">{localize(titleKey)}</div>
+                {group.map(renderRow)}
+            </div>
+        );
+
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent className="w-[480px] sm:max-w-[480px]">
@@ -26,23 +54,8 @@ export function WorkspaceDrawer({ open, onOpenChange, files, onPreview }: Worksp
                     <SheetTitle className="text-base">{localize('com_linsight_workspace')}</SheetTitle>
                 </SheetHeader>
                 <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pb-6">
-                    {files.map((file) => (
-                        <div
-                            key={file.file_id || file.file_url}
-                            role="button"
-                            tabIndex={0}
-                            className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2.5 hover:bg-gray-50"
-                            onClick={() => onPreview(file)}
-                            onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
-                        >
-                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
-                            <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" />
-                            <span className="min-w-0 flex-1 truncate text-sm text-gray-800">
-                                {file.file_name}
-                            </span>
-                            <Eye size={15} className="invisible shrink-0 text-gray-400 group-hover:visible" />
-                        </div>
-                    ))}
+                    {renderGroup('com_linsight_workspace_uploaded', uploaded)}
+                    {renderGroup('com_linsight_workspace_generated', generated)}
                     {!files.length && (
                         <div className="py-10 text-center text-sm text-gray-400">
                             {localize('com_linsight_workspace_empty')}

@@ -174,7 +174,7 @@ export function useFileUpload({
             // Upload each file to server
             const uploadedPaths: string[] = [];
 
-            const failures: { name: string; reason: string }[] = [];
+            const failures: { name: string; reason: string; statusCode?: number }[] = [];
             for (const file of fileArray) {
                 try {
                     const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file);
@@ -183,20 +183,43 @@ export function useFileUpload({
                     failures.push({
                         name: file.name,
                         reason: resolveUploadErrorReason(err),
+                        statusCode: (err as any)?.statusCode,
                     });
                 }
             }
             if (failures.length > 0) {
-                // Render each failure with the backend reason inline (quota / dup /
-                // permission etc). The browser-upload hint is now strictly a
-                // last-resort fallback — only appended when *every* failure has
-                // no actionable reason (i.e. likely a client-wide network /
-                // timeout case, the scenario the hint was originally written for).
-                const lines = failures.map(({ name, reason }) =>
-                    reason
-                        ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
-                        : localize("com_knowledge.file_upload_failed", { 0: name })
-                );
+                // When multiple files fail with the same quota/permission error code,
+                // collapse them into one summary line instead of N identical lines.
+                const COLLAPSIBLE_CODES = new Set([18024, 19403]);
+                const collapsed: { reason: string; count: number }[] = [];
+                const individual: { name: string; reason: string }[] = [];
+                const seenCode = new Map<number, { reason: string; count: number }>();
+                for (const f of failures) {
+                    if (f.statusCode && COLLAPSIBLE_CODES.has(f.statusCode)) {
+                        const existing = seenCode.get(f.statusCode);
+                        if (existing) {
+                            existing.count++;
+                        } else {
+                            const entry = { reason: f.reason, count: 1 };
+                            seenCode.set(f.statusCode, entry);
+                            collapsed.push(entry);
+                        }
+                    } else {
+                        individual.push(f);
+                    }
+                }
+                const lines: string[] = [
+                    ...collapsed.map(({ reason, count }) =>
+                        count > 1
+                            ? localize("com_knowledge.file_upload_quota_batch", { 0: count, 1: reason })
+                            : reason
+                    ),
+                    ...individual.map(({ name, reason }) =>
+                        reason
+                            ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
+                            : localize("com_knowledge.file_upload_failed", { 0: name })
+                    ),
+                ];
                 const everyReasonMissing = failures.every((f) => !f.reason);
                 const message = everyReasonMissing
                     ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")
@@ -340,7 +363,21 @@ export function useFileUpload({
                 // via createFolderApi if it really collides.
             }
 
-            const validFiles = filterFolderUploadFiles(allFiles, options);
+            const { valid: validFiles, oversizeCount, unsupportedCount } =
+                filterFolderUploadFiles(allFiles, options);
+            // ⑦: tell the user which files were dropped (oversize / unsupported
+            // format) instead of silently skipping them; hidden files stay
+            // silent. Shown even when some valid files still upload.
+            if (oversizeCount > 0 || unsupportedCount > 0) {
+                const parts: string[] = [];
+                if (oversizeCount > 0) {
+                    parts.push(localize("com_knowledge.folder_upload_skipped_oversize", { 0: oversizeCount }));
+                }
+                if (unsupportedCount > 0) {
+                    parts.push(localize("com_knowledge.folder_upload_skipped_unsupported", { 0: unsupportedCount }));
+                }
+                showToast({ message: parts.join("\n"), severity: NotificationSeverity.WARNING });
+            }
             if (validFiles.length === 0) {
                 // Every file was silently filtered (format / hidden / oversize):
                 // nothing to upload, and no empty tree is created (AC-27 edge).

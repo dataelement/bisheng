@@ -13,7 +13,11 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.linsight import SkillFileTooLargeError, SkillValidationError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
-from bisheng.linsight.domain.schemas.skill_schema import SkillCreateForm, SkillStatusUpdate
+from bisheng.linsight.domain.schemas.skill_schema import (
+    SkillCreateForm,
+    SkillGitHubImportRequest,
+    SkillStatusUpdate,
+)
 from bisheng.linsight.domain.services.skill_service import SkillService
 from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, slugify_pinyin
 
@@ -111,6 +115,15 @@ async def create_skill(
     else:
         form = _require_form(display_name, name, description, content)
         detail = await service.create_from_form(tenant_id, login_user.user_id, form)
+    return resp_200(detail)
+
+
+@router.post("/import-github", summary="Import a skill from a public GitHub directory URL")
+async def import_skill_from_github(
+    payload: SkillGitHubImportRequest,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
+    detail = await SkillService().create_from_github(_current_tenant_id(), login_user.user_id, payload.url)
     return resp_200(detail)
 
 

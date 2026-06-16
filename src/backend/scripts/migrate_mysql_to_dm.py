@@ -61,6 +61,37 @@ try:
 except Exception:  # pragma: no cover - script may run outside bisheng venv
     pass
 
+
+def _patch_dm_skip_index_reflection() -> None:
+    """Skip DM index reflection during this migration (data-copy only).
+
+    dmSQLAlchemy's ``_get_indexes_rows`` mutates ``BaseRow._data`` in place
+    (``col_dict._data = col_dict._data + (...)``). That attribute is read-only
+    when SQLAlchemy's C extension is installed, so reflecting any DM table that
+    has indexes raises::
+
+        AttributeError: attribute '_data' of '...BaseRow' objects is not writable
+
+    The migration only reflects the target table's column names/types to build
+    the INSERT — it never needs index metadata. Stub ``_get_indexes_rows`` to an
+    empty result so ``Table(..., autoload_with=dm_engine)`` skips the broken code
+    path. Scoped to this script on purpose: doing it globally in dialect_helpers
+    would make alembic's ``index_exists`` guards always report "no index" and
+    wrongly re-create indexes.
+    """
+    try:
+        from dmSQLAlchemy.base import DMDialect  # type: ignore[import]
+    except ImportError:
+        return  # not on a DaMeng-capable platform
+
+    def _no_index_rows(self, *args, **kwargs):
+        return []
+
+    DMDialect._get_indexes_rows = _no_index_rows
+
+
+_patch_dm_skip_index_reflection()
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)-7s %(message)s",
@@ -76,14 +107,38 @@ log = logging.getLogger("mysql2dm")
 class DbJob:
     name: str
     source_url: str  # mysql+pymysql://user:pass@host:port/db
-    target_url: str  # dm+dmPython://user:pass@host:port/SCHEMA
+    target_url: str  # dm+dmPython://user:pass@host:port/?schema=SCHEMA
     include: list[str] = field(default_factory=list)  # empty = all reflected tables
     exclude: list[str] = field(default_factory=list)
 
 
+_ENV_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
 def _expand_env(value: str) -> str:
-    """Allow ${VAR} / ${VAR:-default} placeholders inside config strings."""
-    return os.path.expandvars(value) if value else value
+    """Expand ${VAR}, $VAR and ${VAR:-default} placeholders inside config strings.
+
+    Unlike os.path.expandvars (which silently leaves ${VAR:-default} literal and
+    has no default support at all), this honors the bash-style ":-default"
+    fallback so the documented defaults in migrate_dm.example.yaml work whether
+    or not the shell wrapper exported the variable.
+    """
+    if not value:
+        return value
+
+    def _sub(m: re.Match[str]) -> str:
+        braced_name, default, bare_name = m.group(1), m.group(2), m.group(3)
+        name = braced_name or bare_name
+        env_val = os.environ.get(name)
+        if env_val is not None and env_val != "":
+            return env_val
+        if default is not None:
+            return default
+        # Unset and no default: leave the original placeholder so the failure is
+        # visible (e.g. an invalid DSN) rather than silently blank.
+        return m.group(0)
+
+    return _ENV_PLACEHOLDER.sub(_sub, value)
 
 
 def load_jobs(config_path: str) -> list[DbJob]:
@@ -117,8 +172,17 @@ def load_jobs(config_path: str) -> list[DbJob]:
 # ... CONSTRAINT) must use the *actual* catalog name. We build a lower->actual
 # map from SYS.ALL_TABLES once per job.
 # ---------------------------------------------------------------------------
-def dm_actual_table_map(conn) -> dict[str, str]:
-    rows = conn.execute(text("SELECT TABLE_NAME FROM SYS.ALL_TABLES WHERE OWNER = USER"))
+def dm_actual_table_map(conn, schema: str | None = None) -> dict[str, str]:
+    """Map lowercase -> actual catalog table name for the target schema.
+
+    schema=None keeps the original behavior (the login user's own schema, via
+    OWNER = USER). When a schema is given (one-account / multiple-schema DM
+    deployment), scope to OWNER = :owner so each job sees only its schema's tables.
+    """
+    if schema is None:
+        rows = conn.execute(text("SELECT TABLE_NAME FROM SYS.ALL_TABLES WHERE OWNER = USER"))
+    else:
+        rows = conn.execute(text("SELECT TABLE_NAME FROM SYS.ALL_TABLES WHERE OWNER = :owner"), {"owner": schema})
     return {r[0].lower(): r[0] for r in rows}
 
 
@@ -127,26 +191,60 @@ def dm_quote(actual_name: str) -> str:
     return actual_name if actual_name == actual_name.upper() else f'"{actual_name}"'
 
 
-def dm_triggers_for(conn, actual_table: str) -> list[str]:
-    rows = conn.execute(
-        text("SELECT TRIGGER_NAME FROM USER_TRIGGERS WHERE TABLE_NAME = :t"),
-        {"t": actual_table},
-    )
+def dm_qualify(schema: str | None, actual_name: str) -> str:
+    """Return a (optionally schema-qualified) quoted DM identifier.
+
+    schema=None -> "TABLE"; schema set -> "SCHEMA"."TABLE", so raw DDL/DML lands
+    in the right schema even though the connection logs in as a different user.
+    """
+    quoted = dm_quote(actual_name)
+    return quoted if schema is None else f"{dm_quote(schema)}.{quoted}"
+
+
+def dm_triggers_for(conn, actual_table: str, schema: str | None = None) -> list[str]:
+    if schema is None:
+        rows = conn.execute(
+            text("SELECT TRIGGER_NAME FROM USER_TRIGGERS WHERE TABLE_NAME = :t"),
+            {"t": actual_table},
+        )
+    else:
+        rows = conn.execute(
+            text("SELECT TRIGGER_NAME FROM SYS.ALL_TRIGGERS WHERE TABLE_OWNER = :owner AND TABLE_NAME = :t"),
+            {"owner": schema, "t": actual_table},
+        )
     return [r[0] for r in rows]
 
 
-def dm_fk_constraints(conn) -> list[tuple[str, str]]:
+def dm_fk_constraints(conn, schema: str | None = None) -> list[tuple[str, str]]:
     """Return (table_name, constraint_name) for every foreign key in the schema."""
-    rows = conn.execute(text("SELECT TABLE_NAME, CONSTRAINT_NAME FROM USER_CONSTRAINTS WHERE CONSTRAINT_TYPE = 'R'"))
+    if schema is None:
+        rows = conn.execute(
+            text("SELECT TABLE_NAME, CONSTRAINT_NAME FROM USER_CONSTRAINTS WHERE CONSTRAINT_TYPE = 'R'")
+        )
+    else:
+        rows = conn.execute(
+            text(
+                "SELECT TABLE_NAME, CONSTRAINT_NAME FROM SYS.ALL_CONSTRAINTS WHERE OWNER = :owner AND CONSTRAINT_TYPE = 'R'"
+            ),
+            {"owner": schema},
+        )
     return [(r[0], r[1]) for r in rows]
 
 
-def dm_identity_column(conn, actual_table: str) -> str | None:
+def dm_identity_column(conn, actual_table: str, schema: str | None = None) -> str | None:
     """Return the IDENTITY column name of a DM table, or None."""
-    rows = conn.execute(
-        text("SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = :t AND OWNER = USER AND IDENTITY = 'YES'"),
-        {"t": actual_table},
-    )
+    if schema is None:
+        rows = conn.execute(
+            text("SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = :t AND OWNER = USER AND IDENTITY = 'YES'"),
+            {"t": actual_table},
+        )
+    else:
+        rows = conn.execute(
+            text(
+                "SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS WHERE TABLE_NAME = :t AND OWNER = :owner AND IDENTITY = 'YES'"
+            ),
+            {"t": actual_table, "owner": schema},
+        )
     row = rows.fetchone()
     return row[0] if row else None
 
@@ -194,8 +292,11 @@ def copy_table(
     batch_size: int,
     truncate: bool,
     dry_run: bool,
+    schema: str | None = None,
 ) -> int:
-    # Reflect both sides for the same table name.
+    # Reflect both sides for the same table name. The DM side is reflected within
+    # `schema` (None = the login user's own schema) so a one-account/multi-schema
+    # deployment targets the right schema instead of the login user's default.
     src_md = MetaData()
     dst_md = MetaData()
     try:
@@ -203,14 +304,14 @@ def copy_table(
     except Exception as exc:
         log.warning("  [skip] source table %s not found: %s", table_name, exc)
         return 0
-    dst_tbl = Table(table_name, dst_md, autoload_with=dst_engine)
+    dst_tbl = Table(table_name, dst_md, schema=schema, autoload_with=dst_engine)
 
     # Only copy columns present on BOTH sides (defensive against drift).
     common_cols = [c.name for c in dst_tbl.columns if c.name in src_tbl.columns]
     dst_col_types = {c.name: c.type for c in dst_tbl.columns}
 
     total = 0
-    quoted = dm_quote(actual_name)
+    quoted = dm_qualify(schema, actual_name)
 
     with src_engine.connect() as s_conn:
         row_count = s_conn.execute(sa.select(sa.func.count()).select_from(src_tbl)).scalar_one()
@@ -224,7 +325,7 @@ def copy_table(
 
         identity_col = None
         with dst_engine.begin() as d_conn:
-            identity_col = dm_identity_column(d_conn, actual_name)
+            identity_col = dm_identity_column(d_conn, actual_name, schema)
             if truncate:
                 d_conn.execute(text(f"DELETE FROM {quoted}"))
             if identity_col:
@@ -377,8 +478,17 @@ def create_schema(src_engine: Engine, dst_engine: Engine, job: DbJob) -> None:
 # ---------------------------------------------------------------------------
 # Per-database job
 # ---------------------------------------------------------------------------
-def resolve_tables(dst_engine: Engine, job: DbJob) -> list[str]:
-    names = inspect(dst_engine).get_table_names()
+def resolve_tables(src_engine: Engine, dst_engine: Engine, job: DbJob, schema: str | None = None) -> list[str]:
+    names = inspect(dst_engine).get_table_names(schema=schema)
+    # Source MySQL connection is scoped to this job's database (the URL's /dbname),
+    # so its table list is exactly this logical database's tables. Used below to
+    # keep each job to its own tables even when several logical databases were
+    # consolidated into a SINGLE DM account/schema — in that case reflecting the
+    # DM target returns the UNION of every database's tables, and without this
+    # scoping the bisheng_gateway job would also try to copy bisheng/openfga
+    # tables (and could overwrite same-named DM tables with the wrong source).
+    src_names = {t.lower() for t in inspect(src_engine).get_table_names()}
+
     if job.include:
         wanted = [t for t in job.include if t in names]
         missing = set(job.include) - set(names)
@@ -389,9 +499,22 @@ def resolve_tables(dst_engine: Engine, job: DbJob) -> list[str]:
     # Migration-version bookkeeping tables are owned by each app's own migration
     # tool on the DM side (alembic upgrade / openfga migrate), never copied.
     skip = set(job.exclude) | {"alembic_version", "goose_db_version"}
+
+    candidates = [t for t in wanted if t not in skip]
+    resolved = [t for t in candidates if t.lower() in src_names]
+    # Tables present on the DM target but absent from this job's source DB belong
+    # to another logical database sharing the same DM schema — drop them quietly
+    # (info, not warning) so the log isn't flooded with per-table "[skip]" lines.
+    foreign = [t for t in candidates if t.lower() not in src_names]
+    if foreign:
+        log.info(
+            "  %d DM table(s) not in source '%s' (other DB in a shared schema) — skipped",
+            len(foreign),
+            job.name,
+        )
     # Sort for a stable, reproducible order (required by --resume-from). FK
     # constraints are disabled during load, so insertion order is irrelevant.
-    return sorted(t for t in wanted if t not in skip)
+    return sorted(resolved)
 
 
 def run_job(
@@ -408,18 +531,36 @@ def run_job(
     log.info("  target: %s", _mask(job.target_url))
 
     src_engine = sa.create_engine(job.source_url, pool_pre_ping=True)
-    # DM sync engine: strip the schema path (dmPython.connect has no `database` kwarg)
-    target_url = _dm_strip_path(job.target_url)
+    # DM engine: carry the schema via ?schema= (dmPython.connect has no `database`
+    # kwarg). The schema is ALSO applied explicitly (OWNER=:schema / "SCHEMA"."T")
+    # so a one-account/multi-schema DM deployment targets the right schema even
+    # when the login user differs from the schema.
+    target_url = _dm_connect_url(job.target_url)
     dst_engine = sa.create_engine(target_url, pool_pre_ping=True)
+
+    schema = _dm_schema_from_url(job.target_url)
+    if schema is not None:
+        with dst_engine.connect() as conn:
+            schema = resolve_dm_schema(conn, schema)
+        log.info("  schema: %s (qualifying all reflection/DML to this DM schema)", schema)
 
     # Optionally create the DM tables from the MySQL schema before loading data.
     if create_schema_first:
+        if schema is not None:
+            # create_schema reflects/creates in the login user's own schema, not a
+            # named one. With a ?schema= target that would build tables in the wrong
+            # place — refuse and let the app's own tooling create the schema.
+            raise SystemExit(
+                f"--create-schema is not supported with a ?schema= target ('{schema}'). "
+                "Pre-create the schema via the app's own path (alembic / init_dm.sql / "
+                "openfga migrate), then re-run without --create-schema."
+            )
         if dry_run:
             log.info("  (dry-run) would create schema from MySQL reflection")
         else:
             create_schema(src_engine, dst_engine, job)
 
-    tables = resolve_tables(dst_engine, job)
+    tables = resolve_tables(src_engine, dst_engine, job, schema)
     # Resume support: skip every table before `resume_from` (use after a failure).
     if resume_from:
         if resume_from in tables:
@@ -435,17 +576,17 @@ def run_job(
     disabled_fks: list[tuple[str, str]] = []
     disabled_triggers: list[str] = []
     with dst_engine.connect() as conn:
-        actual_map = dm_actual_table_map(conn)
+        actual_map = dm_actual_table_map(conn, schema)
 
     if not dry_run:
         with dst_engine.begin() as conn:
-            for tname, cname in dm_fk_constraints(conn):
-                conn.execute(text(f"ALTER TABLE {dm_quote(tname)} DISABLE CONSTRAINT {cname}"))
+            for tname, cname in dm_fk_constraints(conn, schema):
+                conn.execute(text(f"ALTER TABLE {dm_qualify(schema, tname)} DISABLE CONSTRAINT {cname}"))
                 disabled_fks.append((tname, cname))
             for t in tables:
                 actual = actual_map.get(t, t.upper())
-                for trg in dm_triggers_for(conn, actual):
-                    conn.execute(text(f"ALTER TRIGGER {trg} DISABLE"))
+                for trg in dm_triggers_for(conn, actual, schema):
+                    conn.execute(text(f"ALTER TRIGGER {dm_qualify(schema, trg)} DISABLE"))
                     disabled_triggers.append(trg)
         log.info("  disabled %d FK(s), %d trigger(s)", len(disabled_fks), len(disabled_triggers))
 
@@ -453,15 +594,15 @@ def run_job(
     try:
         for t in tables:
             actual = actual_map.get(t, t.upper())
-            grand_total += copy_table(src_engine, dst_engine, t, actual, batch_size, truncate, dry_run)
+            grand_total += copy_table(src_engine, dst_engine, t, actual, batch_size, truncate, dry_run, schema)
     finally:
         if not dry_run:
             with dst_engine.begin() as conn:
                 for trg in disabled_triggers:
-                    _safe(conn, f"ALTER TRIGGER {trg} ENABLE")
+                    _safe(conn, f"ALTER TRIGGER {dm_qualify(schema, trg)} ENABLE")
                 for tname, cname in disabled_fks:
                     # ENABLE NOVALIDATE: trust copied data, skip full re-check.
-                    _safe(conn, f"ALTER TABLE {dm_quote(tname)} ENABLE NOVALIDATE CONSTRAINT {cname}")
+                    _safe(conn, f"ALTER TABLE {dm_qualify(schema, tname)} ENABLE NOVALIDATE CONSTRAINT {cname}")
             log.info("  re-enabled triggers and FK constraints")
 
     log.info("DATABASE %s complete: %d rows total", job.name, grand_total)
@@ -478,14 +619,19 @@ def verify_job(job: DbJob) -> bool:
     log.info("  target: %s", _mask(job.target_url))
 
     src_engine = sa.create_engine(job.source_url, pool_pre_ping=True)
-    dst_engine = sa.create_engine(_dm_strip_path(job.target_url), pool_pre_ping=True)
+    dst_engine = sa.create_engine(_dm_connect_url(job.target_url), pool_pre_ping=True)
 
-    tables = resolve_tables(dst_engine, job)
+    schema = _dm_schema_from_url(job.target_url)
+    if schema is not None:
+        with dst_engine.connect() as conn:
+            schema = resolve_dm_schema(conn, schema)
+
+    tables = resolve_tables(src_engine, dst_engine, job, schema)
     ok = True
     with src_engine.connect() as s_conn, dst_engine.connect() as d_conn:
-        actual_map = dm_actual_table_map(d_conn)
+        actual_map = dm_actual_table_map(d_conn, schema)
         for t in tables:
-            quoted = dm_quote(actual_map.get(t, t.upper()))
+            quoted = dm_qualify(schema, actual_map.get(t, t.upper()))
             dst_n = d_conn.execute(text(f"SELECT COUNT(*) FROM {quoted}")).scalar_one()
             try:
                 src_n = s_conn.execute(text(f"SELECT COUNT(*) FROM `{t}`")).scalar_one()
@@ -510,24 +656,105 @@ def _safe(conn, statement: str) -> None:
         log.warning("  statement failed (continuing): %s -> %s", statement, exc)
 
 
-def _dm_strip_path(url: str) -> str:
-    """Strip /SCHEMA from a dm+dmPython sync URL (see bisheng connection.py)."""
+def _dm_schema_from_url(url: str) -> str | None:
+    """Return the target DM schema named in a dm+dmPython URL, or None.
+
+    Mirrors bisheng connection.py::_normalize_dm_url: the schema may be given as a
+    ?schema= query param (DaMeng's connect kwarg, preferred) or a legacy /SCHEMA
+    path; an explicit ?schema= wins. None means "use the login user's own schema".
+    The schema is also applied explicitly to reflection/DML (OWNER=:schema /
+    "SCHEMA"."TABLE") so a one-account/multi-schema deployment targets the right
+    schema regardless of the login user.
+    """
+    if "dm+dmPython" not in url:
+        return None
+    parsed = sa.make_url(url)
+    schema = parsed.query.get("schema") or parsed.database
+    if isinstance(schema, (tuple, list)):  # a repeated ?schema= yields a tuple
+        schema = schema[0] if schema else None
+    return schema or None
+
+
+def _dm_connect_url(url: str) -> str:
+    """Build the DM connect URL: carry the schema via ?schema=, clear the path.
+
+    Mirrors bisheng connection.py::_normalize_dm_url. dmPython.connect() rejects a
+    URL *path* (SQLAlchemy maps it to the 'database' kwarg) but accepts the schema
+    via the query string, which dmSQLAlchemy passes straight through to connect();
+    both the sync (dmPython) and async (dmAsync) dialects accept schema=. So move
+    any /SCHEMA path into ?schema= and clear the path (an existing ?schema= wins).
+    Non-DM URLs are returned unchanged.
+    """
     if "dm+dmPython" not in url:
         return url
-    at = url.find("@")
-    if at == -1:
-        return url
-    after = url[at + 1 :]
-    slash = after.find("/")
-    if slash == -1:
-        return url
-    return url[: at + 1 + slash]
+    parsed = sa.make_url(url)
+    schema = parsed.query.get("schema") or parsed.database
+    if isinstance(schema, (tuple, list)):
+        schema = schema[0] if schema else None
+    new = parsed._replace(database=None)  # None means "keep"; _replace forces clear
+    if schema:
+        query = {k: v for k, v in new.query.items() if k != "schema"}
+        query["schema"] = schema
+        new = new.set(query=query)
+    return new.render_as_string(hide_password=False)
+
+
+def resolve_dm_schema(conn, schema_hint: str) -> str:
+    """Resolve schema_hint to the actual OWNER as stored in the DM catalog.
+
+    DM stores unquoted identifiers UPPERCASE; quoted ones keep their case. Match
+    the hint case-insensitively against the schemas that actually own tables. Fail
+    loudly (listing the available schemas) if there is no match — a typo in the
+    ?schema= value would otherwise silently reflect zero tables and migrate
+    nothing, or write into the wrong (login-user) schema.
+    """
+    owners = [r[0] for r in conn.execute(text("SELECT DISTINCT OWNER FROM SYS.ALL_TABLES"))]
+    if schema_hint in owners:
+        return schema_hint
+    by_lower = {o.lower(): o for o in owners}
+    if schema_hint.lower() in by_lower:
+        return by_lower[schema_hint.lower()]
+    raise SystemExit(
+        f"DM schema '{schema_hint}' not found (no tables under that OWNER). "
+        f"Available schemas: {sorted(owners)}. Fix the ?schema= in target_url."
+    )
 
 
 def _mask(url: str) -> str:
     """Hide the password when logging a DSN."""
 
     return re.sub(r"(://[^:/@]+:)[^@]+(@)", r"\1***\2", url)
+
+
+def _warn_source_table_collisions(jobs: list[DbJob]) -> None:
+    """Warn when the same table name lives in more than one job's source DB.
+
+    Consolidating several logical databases into ONE DM account/schema is fine as
+    long as their table names are disjoint. If two source databases share a table
+    name, both jobs would write to the same DM table and the second would clobber
+    or pollute the first. Reflect each source's table list up front and flag any
+    overlap so the operator can fix the config before loading (especially before
+    --truncate). Reflection failures here are non-fatal: the per-job run reports
+    them properly later, so we only log and move on.
+    """
+    if len(jobs) < 2:
+        return
+    owners: dict[str, list[str]] = {}
+    for job in jobs:
+        try:
+            eng = sa.create_engine(job.source_url, pool_pre_ping=True)
+            for t in inspect(eng).get_table_names():
+                owners.setdefault(t.lower(), []).append(job.name)
+        except Exception as exc:
+            log.warning("  collision pre-check: could not reflect source of '%s' (%s)", job.name, exc)
+    collisions = {t: dbs for t, dbs in owners.items() if len(dbs) > 1}
+    if collisions:
+        log.warning("=" * 70)
+        log.warning("Table-name collisions across source databases sharing one DM schema:")
+        for t, dbs in sorted(collisions.items()):
+            log.warning("  %-40s present in: %s", t, ", ".join(dbs))
+        log.warning("These would overwrite each other on the shared DM target. Use per-job")
+        log.warning("`include:`/`exclude:` lists or separate DM accounts before migrating.")
 
 
 # ---------------------------------------------------------------------------
@@ -571,6 +798,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         if not jobs:
             log.error("No matching database for --db %s", args.db)
             return 2
+
+    _warn_source_table_collisions(jobs)
 
     if args.verify:
         all_ok = True

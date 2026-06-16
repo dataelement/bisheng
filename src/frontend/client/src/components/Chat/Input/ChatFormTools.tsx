@@ -58,12 +58,12 @@ export const ChatToolDown = ({
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-xl p-2 w-52">
+      <SelectContent className="bg-white rounded-[8px] w-52">
         {config?.webSearch.enabled && (
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center px-2 py-[5px]">
             <div className="flex gap-2 items-center">
-              <GlobeIcon className="" size="16" />
-              <span className="text-xs font-normal">
+              <GlobeIcon className="text-[#999]" size="16" />
+              <span className="text-sm font-normal">
                 {localize("com_tools_web_search")}
               </span>
             </div>

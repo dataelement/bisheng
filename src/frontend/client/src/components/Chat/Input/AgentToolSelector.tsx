@@ -43,8 +43,8 @@ interface Props {
 
 function iconForGroup(group: AvailableToolGroup) {
   const firstKey = group.children?.[0]?.tool_key;
-  if (firstKey === "web_search") return <GlobeIcon size="16" />;
-  return <Hammer size="16" />;
+  if (firstKey === "web_search") return <GlobeIcon size="16" className="text-[#999]" />;
+  return <Hammer size="16" className="text-[#999]" />;
 }
 
 export default function AgentToolSelector({ availableTools, disabled }: Props) {
@@ -126,13 +126,13 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-xl p-2 w-64 max-h-[320px] overflow-y-auto">
+      <SelectContent className="bg-white rounded-[8px] w-64 max-h-[320px] overflow-y-auto">
         {availableTools.map((group) => (
-          <div key={group.id} className="flex justify-between items-center mb-3 last:mb-0">
+          <div key={group.id} className="flex justify-between items-center px-2 py-[5px]">
             <div className="flex gap-2 items-center min-w-0">
               {iconForGroup(group)}
               <span
-                className="max-w-40 text-xs font-normal line-clamp-1 flex-1 truncate"
+                className="max-w-40 text-sm font-normal line-clamp-1 flex-1 truncate"
                 title={group.description || group.name}
               >
                 {group.name}

@@ -34,12 +34,17 @@ class _Admin:
 
 
 def _service(channel_repository=None, member_repository=None):
-    return ChannelService(
+    service = ChannelService(
         channel_repository=channel_repository or SimpleNamespace(),
         space_channel_member_repository=member_repository or SimpleNamespace(),
         channel_info_source_repository=SimpleNamespace(),
         article_es_service=SimpleNamespace(count_articles=AsyncMock(return_value=0)),
     )
+    # get_my_channels builds a shared ReBAC context (subjects/bindings/models) up front;
+    # this test mocks the permission resolution directly, so stub the builder to avoid
+    # its DB round-trips in unit scope.
+    service._build_channel_permission_context = AsyncMock(return_value={})
+    return service
 
 
 @pytest.mark.asyncio

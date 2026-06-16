@@ -165,3 +165,28 @@ class SkillPermissionError(BaseErrorCode):
 class SkillNameDuplicateError(BaseErrorCode):
     Code: int = 11055
     Msg: str = "A skill with the same name already exists"
+
+
+# ---------------------------------------------------------------------------
+# Skill import-from-GitHub errors (11056–11058). Transport/parse concerns only;
+# the downloaded directory then flows through the same create chain as upload,
+# so frontmatter/size/duplicate failures still reuse 11051/11052/11055.
+# ---------------------------------------------------------------------------
+
+
+# The pasted URL is not a parseable public GitHub directory link
+class SkillGitHubUrlInvalidError(BaseErrorCode):
+    Code: int = 11056
+    Msg: str = "Invalid GitHub URL: expecting https://github.com/{owner}/{repo}/tree/{branch}/{path}"
+
+
+# Repo/branch/path not found, network error or timeout while fetching from GitHub
+class SkillGitHubFetchError(BaseErrorCode):
+    Code: int = 11057
+    Msg: str = "Failed to fetch skill from GitHub (repo/branch/path not found or network error)"
+
+
+# GitHub API rate limit exceeded (anonymous access is capped at 60 requests/hour)
+class SkillGitHubRateLimitError(BaseErrorCode):
+    Code: int = 11058
+    Msg: str = "GitHub API rate limit exceeded, please retry later"

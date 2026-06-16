@@ -195,13 +195,23 @@ class ChannelService:
         channel_id: str,
         login_user: UserPayload,
         membership=None,
+        *,
+        context: dict | None = None,
     ) -> set[str]:
+        # F037: when resolving permission ids for a *list* of channels, the user
+        # subject strings / bindings / models / binding index are identical across
+        # every channel in the request. Building them once (via
+        # ``_build_channel_permission_context``) and passing them in here is
+        # equivalent to letting ``get_effective_permission_ids_async`` derive them
+        # per call -- it falls back to the same helpers when the kwargs are omitted
+        # -- but avoids recomputing them (and their DB round-trips) per channel.
         try:
             permission_ids = set(
                 await FineGrainedPermissionService.get_effective_permission_ids_async(
                     login_user,
                     "channel",
                     channel_id,
+                    **(context or {}),
                 )
             )
         except Exception:
@@ -209,6 +219,29 @@ class ChannelService:
             permission_ids = set()
         permission_ids.update(_business_member_permission_ids(membership))
         return permission_ids
+
+    async def _build_channel_permission_context(self, login_user: UserPayload) -> dict:
+        """F037: per-request shared ReBAC evaluation context for channel-list paths.
+
+        These inputs do not vary by channel within a single request; computing them
+        once and passing them to each ``_get_channel_permission_ids`` call collapses
+        N per-channel recomputations (subject expansion, bindings/models fetch,
+        binding index build) into one. The object-specific ``lineage`` is
+        intentionally *not* included so every channel still gets its own lineage.
+        """
+        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+
+        bindings = await _get_bindings()
+        models = await FineGrainedPermissionService.get_relation_models_map()
+        user_subject_strings = await FineGrainedPermissionService.get_current_user_subject_strings(login_user)
+        binding_department_paths = await FineGrainedPermissionService.get_binding_department_paths(bindings)
+        return {
+            "models": models,
+            "bindings": bindings,
+            "binding_department_paths": binding_department_paths,
+            "user_subject_strings": user_subject_strings,
+            "binding_index": FineGrainedPermissionService.build_binding_index(bindings),
+        }
 
     async def _get_channel_organization_grant_subject_types(
         self,
@@ -568,12 +601,16 @@ class ChannelService:
 
         # Build a map of business_id to membership for quick lookup
         membership_map = {m.business_id: m for m in memberships}
+        # F037: build the shared ReBAC evaluation context once, then reuse it for
+        # every channel instead of recomputing subjects/bindings/models per channel.
+        permission_context = await self._build_channel_permission_context(login_user)
         permission_id_results = await asyncio.gather(
             *[
                 self._get_channel_permission_ids(
                     channel.id,
                     login_user,
                     membership_map.get(channel.id),
+                    context=permission_context,
                 )
                 for channel in channels
             ]

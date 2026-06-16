@@ -1,4 +1,4 @@
-import { FolderPlus, FolderInput, FileSearch } from "lucide-react";
+import { FolderPlus, FolderUp, FolderInput, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -34,6 +34,7 @@ interface KnowledgeSpaceHeaderProps {
     onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
+    onTriggerUploadFolder: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
     /** Localized comma-joined list of supported upload formats for the upload-button tooltip. */
@@ -59,9 +60,9 @@ interface KnowledgeSpaceHeaderProps {
     canShareSpace?: boolean;
     /** Version management: gates the "process similar documents" entry + per-row version actions. */
     versionManagementEnabled?: boolean;
-    /** Count of pending similar-document files; drives the header entry badge. */
-    pendingSimilarCount?: number;
-    /** Opens the similar-document processing dialog. */
+    /** True when the current selection contains at least one pending similar document. */
+    hasSimilarSelected?: boolean;
+    /** Opens the similar-document processing dialog (restricted to the current selection). */
     onProcessSimilar?: () => void;
     /** Whether the current user can manage members (gates the process-similar entry). */
     canManageMembers?: boolean;
@@ -83,6 +84,7 @@ export function KnowledgeSpaceHeader({
     onSort,
     onCreateFolder,
     onTriggerUpload,
+    onTriggerUploadFolder,
     canCreateFolder = false,
     canUploadFile = false,
     supportedFormatsLabel,
@@ -102,7 +104,7 @@ export function KnowledgeSpaceHeader({
     enableCardMode = true,
     canShareSpace = false,
     versionManagementEnabled = false,
-    pendingSimilarCount = 0,
+    hasSimilarSelected = false,
     onProcessSimilar,
     canManageMembers = false,
 }: KnowledgeSpaceHeaderProps) {
@@ -242,20 +244,6 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
-            {versionManagementEnabled && canManageMembers && pendingSimilarCount > 0 && onProcessSimilar && (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-md border border-[#F76F44] bg-[#FFF3E8] px-3 font-normal text-[#F76F44] hover:bg-[#FFE6D2] hover:text-[#F76F44]"
-                    onClick={onProcessSimilar}
-                >
-                    <FileSearch className="size-4" />
-                    {localize("com_knowledge.version.header_process_similar_label")}
-                    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded bg-white px-1 text-xs text-[#F76F44]">
-                        {pendingSimilarCount}
-                    </span>
-                </Button>
-            )}
             {viewModeToggleButton}
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
@@ -266,6 +254,13 @@ export function KnowledgeSpaceHeader({
                         </Button>
                     </DropdownMenuTrigger>
                     <ActionMenuContent align="end">
+                        {versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar && (
+                            <ActionMenuItem
+                                onClick={onProcessSimilar}
+                                icon={<FileSearch />}
+                                label={localize("com_knowledge.version.header_process_similar_label")}
+                            />
+                        )}
                         {canBatchDownload && (
                             <ActionMenuItem
                                 onClick={onBatchDownload}
@@ -319,32 +314,37 @@ export function KnowledgeSpaceHeader({
                             className={cn(
                                 "inline-flex items-center justify-center px-4 text-sm text-[#212121] transition-colors",
                                 "hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent",
-                                canCreateFolder && "border-r border-[#ebebeb]"
+                                "border-r border-[#ebebeb]"
                             )}
                         >
                             {localize("com_knowledge.add_new")}
                         </button>
-                        {canCreateFolder && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <button
-                                        type="button"
-                                        disabled={isSearching}
-                                        aria-label={localize("com_knowledge.add_new")}
-                                        className="inline-flex items-center justify-center px-2 text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
-                                    >
-                                        <Outlined.Down className="size-4" />
-                                    </button>
-                                </DropdownMenuTrigger>
-                                <ActionMenuContent align="end">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button
+                                    type="button"
+                                    disabled={isSearching}
+                                    aria-label={localize("com_knowledge.add_new")}
+                                    className="inline-flex items-center justify-center px-2 text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
+                                >
+                                    <Outlined.Down className="size-4" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <ActionMenuContent align="end">
+                                <ActionMenuItem
+                                    onClick={onTriggerUploadFolder}
+                                    icon={<FolderUp />}
+                                    label={localize("com_knowledge.upload_folder")}
+                                />
+                                {canCreateFolder && (
                                     <ActionMenuItem
                                         onClick={onCreateFolder}
                                         icon={<FolderPlus />}
                                         label={localize("com_knowledge.new_folder")}
                                     />
-                                </ActionMenuContent>
-                            </DropdownMenu>
-                        )}
+                                )}
+                            </ActionMenuContent>
+                        </DropdownMenu>
                     </div>
                 ) : (
                     // Fallback when the user can only create folders: keep the original dropdown shape

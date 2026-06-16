@@ -1,11 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
 import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
+import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
+import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
+import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
+import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
+import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
+import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -225,17 +231,31 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const navigate = useNavigate();
 
+  // F035: distinguishes the post-submit URL self-rewrite (same conversation
+  // just got its real id — keep the composing mode) from a genuine navigation
+  // to a different existing conversation (drop task mode). Set right before the
+  // self-rewrite navigate below, consumed by the reset effect it triggers.
+  const keepTaskModeOnRewriteRef = useRef(false);
+
   // F035: sync the local task-mode toggle to navigation. ChatView is NOT
   // remounted across `/c/:id` param changes (same route element), so the
   // useState initializer above only runs on first mount. This effect picks up
   // subsequent navigations:
   //  - sidebar "新建任务" lands on /c/new with state.taskMode=true → enter task mode.
-  //  - any navigation to an existing conversation (id !== 'new') leaves task
-  //    mode (you are viewing a daily chat, not composing a task).
+  //  - the first submit on /c/new self-rewrites the URL to the real id; that is
+  //    the SAME conversation, so the user's chosen mode is preserved (they can
+  //    keep composing task turns, or toggle off manually).
+  //  - any OTHER navigation to an existing conversation (id !== 'new') leaves
+  //    task mode (you switched to viewing a daily chat, not composing a task).
   // location.key changes on every navigation so re-entering /c/new with the
   // same state still re-triggers.
   useEffect(() => {
     if (conversationId !== 'new') {
+      // Post-submit self-rewrite: keep whatever mode the user is composing in.
+      if (keepTaskModeOnRewriteRef.current) {
+        keepTaskModeOnRewriteRef.current = false;
+        return;
+      }
       setTaskMode(false);
       return;
     }
@@ -256,11 +276,25 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       activeConvoId &&
       activeConvoId !== 'new'
     ) {
+      // Flag the rewrite so the reset effect above preserves the current mode.
+      keepTaskModeOnRewriteRef.current = true;
       navigate(`/c/${activeConvoId}`, { replace: true });
     }
   }, [activeConvoId]); // intentionally ONLY on activeConvoId — don't add navigate/conversationId
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // F035: task mode is a ROLE permission. The backend folds each role's
+  // menu_ids into web_menu → client `user.plugins`; `linsight_task_mode` is the
+  // workbench-home sub-capability toggled per role in the admin console. When
+  // the current user's role lacks it, hide the input's task-mode entry + skill
+  // submenu (the sidebar "新建任务" button gates on the same key in Nav/NewChat).
+  // plugins absent / non-array → allow (matches the NewChat default, and keeps
+  // super-admin/dept-admin — who always carry the key — unaffected).
+  const canUseTaskMode = useMemo(() => {
+    const plugins = (user as any)?.plugins;
+    return Array.isArray(plugins) ? plugins.includes('linsight_task_mode') : true;
+  }, [user]);
 
   const handleSend = useCallback((text: string, files?: any[] | null) => {
     // F035 Track J (TJ-6): both modes go through the SAME unified entry now.
@@ -272,7 +306,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     // does not yet thread linsight-native tool/file/skill selection (backend
     // _to_linsight_submit leaves them empty). Task turns currently carry only
     // question + knowledge-base selection. Restore once the backend threads them.
-    if (taskMode) {
+    if (taskMode && canUseTaskMode) {
       const trimmed = text.trim();
       if (!trimmed && !(files || []).length) return;
       sendMessage(trimmed, files, { taskMode: true });
@@ -282,11 +316,39 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
     sendMessage(text, files);
     setInputText('');
-  }, [taskMode, sendMessage]);
+  }, [taskMode, canUseTaskMode, sendMessage]);
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
   const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
+
+  // F035: the task checklist is pinned above the input (Figma 12221-39902 /
+  // 12221-40080) for the conversation's latest task turn — it tracks that turn's
+  // execution detail from the linsight store rather than scrolling away in the
+  // message stream.
+  const latestTaskVersionId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i] as any;
+      if (m?.category === 'task' && m?.linsightSessionVersionId) {
+        return m.linsightSessionVersionId as string;
+      }
+    }
+    return '';
+  }, [messages]);
+
+  // F035: workspace drawer for the chat-embedded task mode. Lifted to ChatView
+  // (the task turn renders inline per message, but the entry button lives in the
+  // shared header) and bound to the LATEST task turn. Shows uploaded sources +
+  // generated deliverables. The drawer only opens on the header button — no
+  // auto-expand (the entry icon appearing is enough).
+  const { getLinsight } = useLinsightManager();
+  const taskArtifacts = useArtifactsPanel();
+  const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
+  const taskWorkspaceFiles = useMemo(() => {
+    const uploaded = toUploadedArtifacts(taskLinsight?.files as any[]);
+    const generated = (taskLinsight?.file_list as ArtifactFile[]) || [];
+    return [...uploaded, ...generated];
+  }, [taskLinsight?.files, taskLinsight?.file_list]);
 
   return (
     <Presentation isLingsi={false}>
@@ -318,7 +380,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Left: Chat Main (Messages + Input) */}
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
-                      <div className="flex min-h-0 flex-1 overflow-hidden">
+                      <div className="relative flex min-h-0 flex-1 overflow-hidden">
                         <AiChatMessages
                           messages={messages}
                           conversationId={activeConvoId}
@@ -331,7 +393,16 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onRegenerate={regenerate}
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
+                          onOpenWorkspace={taskArtifacts.openWorkspace}
+                          hasWorkspaceFiles={taskWorkspaceFiles.length > 0}
                           flatMode
+                        />
+                        {/* Soft translucent fade so the scrolling step flow
+                            dissolves into the pinned task panel / input instead of
+                            ending on a hard cut. */}
+                        <div
+                          aria-hidden
+                          className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-12 bg-gradient-to-t from-white to-white/0"
                         />
                       </div>
 
@@ -350,10 +421,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           </div>
                         ) : (
                         <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
+                          {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             isStreaming={isStreaming}
-                            features={{ taskModeEntry: true, taskMode }}
+                            features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
                             onToggleTaskMode={() => setTaskMode((v) => !v)}
                             placeholder={taskMode
                               ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
@@ -406,7 +478,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         <AiChatInput
                           disabled={!bsConfig?.models?.length || !!shareToken}
                           isStreaming={isStreaming}
-                          features={{ taskModeEntry: true, taskMode }}
+                          features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
                           onToggleTaskMode={() => setTaskMode((v) => !v)}
                           placeholder={taskMode
                             ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
@@ -456,6 +528,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               mode="channel_sync"
               dataSourceApi={listUploadableSpacesApi}
               onSyncSelect={handleImportSelect}
+            />
+          </>
+        )}
+
+        {/* F035: task-mode workspace drawer / file preview for the latest task turn,
+            opened from the header button (HeaderTitle -> onOpenWorkspace). */}
+        {latestTaskVersionId && (
+          <>
+            <WorkspaceDrawer
+              open={taskArtifacts.workspaceOpen}
+              onOpenChange={taskArtifacts.setWorkspaceOpen}
+              files={taskWorkspaceFiles}
+              onPreview={(file) => taskArtifacts.openPreview(file, true)}
+            />
+            <FilePreviewPanel
+              open={!!taskArtifacts.previewFile}
+              onOpenChange={(open) => !open && taskArtifacts.closePreview()}
+              file={taskArtifacts.previewFile}
+              versionId={latestTaskVersionId}
+              onBack={taskArtifacts.fromWorkspace ? taskArtifacts.backToWorkspace : undefined}
             />
           </>
         )}

@@ -124,6 +124,9 @@ async def init_default_data():
 
                 await _backfill_guest_department_membership(session)
 
+                # Initialize preset approval scenarios (channel / knowledge-space subscribe)
+                await _init_default_approval_scenarios(session)
+
                 # Initialize preset application templates
                 templates = await session.exec(select(Template).limit(1))
                 templates = templates.all()
@@ -345,6 +348,129 @@ async def _init_default_root_department(session):
                 await session.commit()
 
     logger.info(f"Default root department ready (id={root_dept.id}), guest dept ready (dept_id={guest_dept_id})")
+
+
+# Preset approval scenarios seeded on first deploy. Each scenario gets one
+# catch-all "default branch" routed to a single-node "default flow"; the node is
+# OR-mode (或签, any one approver passes) and resolves approvers from the
+# resource's owner + manager roles.
+_DEFAULT_APPROVAL_SCENARIO_SEEDS = [
+    {
+        "scenario_code": "channel_subscribe_request",
+        "scenario_name": "频道订阅审批",
+        "flow_code": "channel_subscribe_default_flow",
+        "flow_name": "默认流程",
+        "node_code": "channel_owner_manager",
+        "node_name": "频道负责人审批",
+        "sources": [{"type": "channel_owner"}, {"type": "channel_manager"}],
+    },
+    {
+        "scenario_code": "knowledge_space_subscribe_request",
+        "scenario_name": "知识空间加入审批",
+        "flow_code": "knowledge_space_subscribe_default_flow",
+        "flow_name": "默认流程",
+        "node_code": "knowledge_space_owner_manager",
+        "node_name": "知识空间负责人审批",
+        "sources": [{"type": "knowledge_space_owner"}, {"type": "knowledge_space_manager"}],
+    },
+]
+
+
+async def _init_default_approval_scenarios(session):
+    """Idempotently seed preset approval scenarios for the default tenant.
+
+    Mirrors what the admin UI builds when an operator configures a scenario:
+    scenario → catch-all route (default branch) → flow definition → active flow
+    version → single OR-mode node. Existing scenarios (matched by
+    ``tenant_id + scenario_code``) are left untouched so re-running init or a
+    later manual edit is never overwritten.
+    """
+    from bisheng.approval.domain.models.approval_scenario import (
+        ApprovalFlowDefinition,
+        ApprovalFlowVersion,
+        ApprovalNodeDefinition,
+        ApprovalRouteRule,
+        ApprovalScenario,
+    )
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
+
+    with bypass_tenant_filter():
+        for seed in _DEFAULT_APPROVAL_SCENARIO_SEEDS:
+            existing = (
+                await session.exec(
+                    select(ApprovalScenario).where(
+                        ApprovalScenario.tenant_id == DEFAULT_TENANT_ID,
+                        ApprovalScenario.scenario_code == seed["scenario_code"],
+                    )
+                )
+            ).first()
+            if existing:
+                continue
+
+            scenario = ApprovalScenario(
+                tenant_id=DEFAULT_TENANT_ID,
+                scenario_code=seed["scenario_code"],
+                scenario_name=seed["scenario_name"],
+                enabled=True,
+            )
+            session.add(scenario)
+            await session.flush()
+            await session.refresh(scenario)
+
+            flow = ApprovalFlowDefinition(
+                tenant_id=DEFAULT_TENANT_ID,
+                scenario_id=scenario.id,
+                flow_code=seed["flow_code"],
+                flow_name=seed["flow_name"],
+                is_active=True,
+            )
+            session.add(flow)
+            await session.flush()
+            await session.refresh(flow)
+
+            node_snapshot = {
+                "node_code": seed["node_code"],
+                "node_name": seed["node_name"],
+                "node_order": 1,
+                "node_mode": "or",
+                "approver_config": {"sources": seed["sources"]},
+            }
+            version = ApprovalFlowVersion(
+                tenant_id=DEFAULT_TENANT_ID,
+                flow_definition_id=flow.id,
+                version_no=1,
+                is_active=True,
+                definition_snapshot={"nodes": [node_snapshot]},
+            )
+            session.add(version)
+            await session.flush()
+            await session.refresh(version)
+
+            session.add(
+                ApprovalNodeDefinition(
+                    tenant_id=DEFAULT_TENANT_ID,
+                    flow_version_id=version.id,
+                    node_code=seed["node_code"],
+                    node_name=seed["node_name"],
+                    node_order=1,
+                    node_mode="or",
+                    approver_config={"sources": seed["sources"]},
+                )
+            )
+            session.add(
+                ApprovalRouteRule(
+                    tenant_id=DEFAULT_TENANT_ID,
+                    scenario_id=scenario.id,
+                    route_name="默认分支",
+                    route_type="flow",
+                    sort_order=1,
+                    flow_definition_id=flow.id,
+                    match_config={},
+                    enabled=True,
+                )
+            )
+            await session.commit()
+            logger.info(f"Seeded approval scenario {seed['scenario_code']} (id={scenario.id}) for default tenant")
 
 
 async def _backfill_guest_department_membership(session):

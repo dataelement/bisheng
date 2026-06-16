@@ -238,6 +238,29 @@ export function FileCard({
         );
     };
 
+    // Similar-document tag — placed in the SAME slot as the status tag: overlaid on the
+    // icon for the desktop card, inline after the name for the H5 row. The two never
+    // co-occur (similar only shows on SUCCESS files, the status tag only on non-success).
+    const renderSimilarTag = (overlay = false) => {
+        if (!(versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && file.status === FileStatus.SUCCESS)) {
+            return null;
+        }
+        const btn = (
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenVersionManagement?.(file);
+                }}
+                className="flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
+            >
+                <FileSearch className="size-3" />
+                {localize("com_knowledge.version.pill_similar")}
+            </button>
+        );
+        return overlay ? <div className="absolute bottom-1 left-1 z-10">{btn}</div> : btn;
+    };
+
     const getStatusText = () => {
         if (isRenaming) {
             return (
@@ -262,19 +285,6 @@ export function FileCard({
                     <span className="mt-0.5 flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
                         {`V${file.version_no}`}
                     </span>
-                )}
-                {versionManagementEnabled && canManageMembers && file.has_similar && !file.is_multi_version && (
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenVersionManagement?.(file);
-                        }}
-                        className="mt-0.5 flex h-5 shrink-0 items-center gap-1 rounded bg-[#FFF3E8] px-1.5 text-xs text-[#F76F44] hover:bg-[#FFE6D2]"
-                    >
-                        <FileSearch className="size-3" />
-                        {localize("com_knowledge.version.pill_similar")}
-                    </button>
                 )}
                 <span
                     className={cn(
@@ -331,6 +341,7 @@ export function FileCard({
     // Rendered independently from the desktop card so the desktop path is untouched.
     if (mobileListMode) {
         const mobileStatusPill = renderStatusOverlayTag(true);
+        const mobileSimilarTag = renderSimilarTag();
         return (
             <div
                 className={cn(
@@ -373,6 +384,11 @@ export function FileCard({
                             {mobileStatusPill && (
                                 <span className="inline-flex shrink-0 items-center self-center leading-5">
                                     {mobileStatusPill}
+                                </span>
+                            )}
+                            {mobileSimilarTag && (
+                                <span className="inline-flex shrink-0 items-center self-center leading-5">
+                                    {mobileSimilarTag}
                                 </span>
                             )}
                         </div>
@@ -486,6 +502,7 @@ export function FileCard({
                     )}>
                         <FileIconRenderer file={file} isFolder={isFolder} />
                         {renderStatusOverlayTag()}
+                        {renderSimilarTag(true)}
                     </div>
 
                     {!hideSelectionCheckbox && (
@@ -583,7 +600,7 @@ export function FileCard({
                                         )}
                                         {showMoveItem && (
                                             <ActionMenuItem
-                                                disabled={!canMove}
+                                                disabled={!canMove || isUploading}
                                                 onClick={(e) => { e.stopPropagation(); onMove?.(); }}
                                                 icon={<FolderInput />}
                                                 label={localize("com_knowledge.move")}
@@ -727,7 +744,7 @@ export function FileCard({
                                 )}
                                 {showMoveItem && (
                                     <ActionMenuItem
-                                        disabled={!canMove}
+                                        disabled={!canMove || isUploading}
                                         onClick={(e) => { e.stopPropagation(); onMove?.(); }}
                                         icon={<FolderInput />}
                                         label={localize("com_knowledge.move")}

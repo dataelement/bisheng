@@ -14,7 +14,7 @@ import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPan
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
-import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
+import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
@@ -29,6 +29,7 @@ import { QueueCard } from './QueueCard';
 import { StepList } from './StepList';
 import { TaskPanel } from './TaskPanel';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
+import { isTaskStarted } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
 
 interface ExecutionFlowProps {
@@ -71,6 +72,12 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
 
     // P4 artifacts: output files + the shared right-side panel (workspace/preview)
     const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
+    // Workspace drawer shows both zones: user-uploaded sources + agent deliverables.
+    const uploadedFiles = useMemo(
+        () => toUploadedArtifacts(linsight?.files as any[]),
+        [linsight?.files],
+    );
+    const workspaceFiles = useMemo(() => [...uploadedFiles, ...fileList], [uploadedFiles, fileList]);
 
     // clarify requests: the newest unanswered one is the active card;
     // session-level answered ones become flow-level intent rows
@@ -140,8 +147,9 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             {/* planning breathing row */}
                             {planning && <PlanningRow />}
 
-                            {/* task rows with nested sub-step flows */}
-                            {tasks.map((task) => (
+                            {/* task rows with nested sub-step flows — only tasks
+                                execution has reached; not-started ones stay in TaskPanel. */}
+                            {tasks.filter((task) => isTaskStarted(task.status)).map((task) => (
                                 <TaskStepRow key={task.id} task={task} />
                             ))}
 
@@ -183,12 +191,16 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
             {/* ── footer: waiting hint + task panel + unified input ─────────── */}
             <div className="mx-auto w-full max-w-[800px] shrink-0 px-4 pb-4">
                 {pendingInput && (
-                    <div className="mb-2 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-1.5 text-xs text-blue-600">
-                        <span className="size-1.5 animate-pulse rounded-full bg-blue-500" />
+                    <div className="mb-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-800">
+                        <span className="size-1.5 animate-pulse-scale rounded-full bg-gray-700" />
                         {localize('com_linsight_waiting_your_input')}
                     </div>
                 )}
-                <TaskPanel tasks={tasks} completed={completed} />
+                {/* Design (Figma 12221-40080/40081): card inset 24px each side
+                    relative to the input, 12px gap above it. */}
+                <div className="px-6 pb-3">
+                    <TaskPanel tasks={tasks} completed={completed} />
+                </div>
                 {/* Share pages are read-only — no input, no footer controls
                     ("make same style" removed per product decision, F035). */}
                 {!isSharePage && (
@@ -215,7 +227,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
             <WorkspaceDrawer
                 open={artifactsPanel.workspaceOpen}
                 onOpenChange={artifactsPanel.setWorkspaceOpen}
-                files={fileList}
+                files={workspaceFiles}
                 onPreview={(file) => artifactsPanel.openPreview(file, true)}
             />
             <FilePreviewPanel

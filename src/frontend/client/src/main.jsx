@@ -6,13 +6,14 @@ if (!Object.hasOwn) {
 }
 
 const DEV_SW_RESET_KEY = '__bisheng_dev_sw_reset__';
-const isLocalDevHost =
-  typeof window !== 'undefined' &&
-  (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost');
 
+// Dev mode never ships a service worker (VitePWA devOptions.enabled = false),
+// so proactively unregister any stale SW left over from a prior prod build on
+// this origin. Must NOT be gated on hostname: LAN-IP access (e.g. a shared dev
+// box reached via 192.168.x.x) would otherwise keep serving stale cached chunks
+// from the dead SW and white-screen on every visit.
 if (
   import.meta.env.DEV &&
-  isLocalDevHost &&
   typeof window !== 'undefined' &&
   'serviceWorker' in navigator &&
   window.sessionStorage.getItem(DEV_SW_RESET_KEY) !== 'done'

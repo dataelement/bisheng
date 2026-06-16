@@ -1,3 +1,4 @@
+import { PanelRight } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import ShareChat from '../Share/ShareChat';
@@ -9,7 +10,13 @@ const types = {
   15: 'workbench_chat'
 } as const;
 
-export default function HeaderTitle({ conversation, readOnly, hideShare = false }) {
+export default function HeaderTitle({ conversation, readOnly, hideShare = false, onOpenWorkspace, hasWorkspaceFiles = false }: {
+  conversation?: any;
+  readOnly?: boolean;
+  hideShare?: boolean;
+  onOpenWorkspace?: () => void;
+  hasWorkspaceFiles?: boolean;
+}) {
   const localize = useLocalize();
   const { pathname } = useLocation();
   const isNarrowViewport = usePrefersMobileLayout();
@@ -37,13 +44,26 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false 
       </div>
 
       {/* Right actions */}
-      <div className="flex-1 flex justify-end items-center">
+      <div className="flex-1 flex justify-end items-center gap-1">
         {!readOnly && !hideShare && (
           <ShareChat
             type={types[conversation?.flowType as keyof typeof types] ?? 'workbench_chat'}
             flowId={conversation?.flowId}
             chatId={conversation?.conversationId || ''}
           />
+        )}
+        {/* F035: task-mode workspace entry — opens the drawer of uploaded sources +
+            generated deliverables for the latest task turn (ChatView owns the drawer). */}
+        {hasWorkspaceFiles && onOpenWorkspace && (
+          <button
+            type="button"
+            onClick={onOpenWorkspace}
+            title={localize('com_linsight_workspace')}
+            aria-label="workspace"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100"
+          >
+            <PanelRight size={16} />
+          </button>
         )}
       </div>
     </div>

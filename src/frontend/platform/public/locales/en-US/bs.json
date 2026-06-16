@@ -319,6 +319,7 @@
     "treeDepartmentSelectEmpty": "No departments yet. Create the org tree under Organization & Members first.",
     "menuPermissionSection": "Menu permissions",
     "menuPermissionHint": "Turning off Admin Console disables its child menus; turning off Workspace blocks the workspace entry.",
+    "workbenchTaskModeHint": "Sub-capability of Home. When off, the workspace home hides skills and the task-mode switch, and the top-left \"New Task\" entry is hidden too.",
     "menuApprovalMode": "Show unauthorized menus (supports requests)",
     "menuApprovalModeHint": "When on, unauthorized menu entries stay visible and users may request permission; when off, all menus without access are hidden automatically.",
     "roleMenuLoading": "Loading menu permissions for this role...",
@@ -2632,12 +2633,18 @@
     },
     "uploadDialog": {
       "title": "Import Skill",
+      "tabFile": "Local file",
+      "tabGithub": "GitHub URL",
       "dropHint": "Drag and drop or click to import",
       "dropSub": "Supports .md file or .zip / .skill archive (SKILL.md at root)",
       "requirementsTitle": "File requirements",
       "reqMd": ".md file must contain YAML frontmatter (name and description required)",
       "reqZip": ".zip / .skill archive must include SKILL.md at root; assets allowed",
       "reqSize": "Whole bundle ≤ 10MB",
+      "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
+      "githubHint": "Paste a GitHub URL pointing to a skill directory (must contain SKILL.md)",
+      "githubReqHost": "Public github.com repositories only",
+      "githubReqDir": "URL must point to a directory containing SKILL.md; branch names with slashes are not supported",
       "unsupported": "Unsupported file type — please import .md / .zip / .skill",
       "confirm": "Import"
     },
@@ -2653,6 +2660,9 @@
       "notFound": "Skill not found",
       "noPermission": "No permission for this operation",
       "duplicate": "A skill with the same display name or skill ID already exists",
+      "githubUrlInvalid": "Invalid GitHub URL — expected https://github.com/{owner}/{repo}/tree/{branch}/{path}",
+      "githubFetch": "Failed to fetch from GitHub: repo / branch / path not found or network error. Check the URL and retry",
+      "githubRateLimit": "GitHub rate limit exceeded, please retry later",
       "unknown": "Operation failed, please retry"
     }
   }

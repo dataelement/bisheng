@@ -435,18 +435,28 @@ class QuotaService:
 
     @classmethod
     def _aggregate_knowledge_space_file_limit_gb(cls, roles) -> float:
-        """Multi-role max for knowledge space upload (GB); ``-1`` = unlimited."""
+        """Multi-role MIN for knowledge space upload (GB); ``-1`` = unlimited.
+
+        Per product rule the effective cap is the STRICTEST (smallest) finite
+        quota across the user's roles. ``-1`` (unlimited) is treated as +∞: it is
+        ignored whenever any finite cap exists, and only wins when every role
+        that sets this quota is unlimited.
+        """
         if not roles:
             return float(DEFAULT_ROLE_QUOTA["knowledge_space_file"])
-        max_gb: float | None = None
+        min_gb: float | None = None
+        saw_unlimited = False
         for role in roles:
             g = cls.role_knowledge_space_file_limit_gb(role)
             if g == -1.0:
-                return -1.0
+                saw_unlimited = True  # +∞: never the min unless it is the only kind
+                continue
             if g > 0:
-                max_gb = g if max_gb is None else max(max_gb, g)
-        if max_gb is not None:
-            return round(float(max_gb), 1)
+                min_gb = g if min_gb is None else min(min_gb, g)
+        if min_gb is not None:
+            return round(float(min_gb), 1)
+        if saw_unlimited:
+            return -1.0  # every role that sets this quota is unlimited
         return float(DEFAULT_ROLE_QUOTA["knowledge_space_file"])
 
     @staticmethod

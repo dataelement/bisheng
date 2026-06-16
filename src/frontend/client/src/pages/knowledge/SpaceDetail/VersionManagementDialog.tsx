@@ -40,6 +40,13 @@ export function VersionManagementDialog({
         onOpenChange(false);
     };
 
+    // Dismissing ("不关联") refreshes the file list and closes the dialog, the
+    // same way a successful link does — onLinked already triggers the refresh.
+    const handleDismissed = () => {
+        onLinked?.();
+        onOpenChange(false);
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -65,6 +72,7 @@ export function VersionManagementDialog({
                         fileId={typeof file.id === "string" ? parseInt(file.id, 10) : file.id}
                         file={file}
                         onLinked={handleLinked}
+                        onDismissed={handleDismissed}
                     />
                 </div>
 

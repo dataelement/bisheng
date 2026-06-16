@@ -849,9 +849,16 @@ class LinsightWorkflowTask:
             ExecuteTaskStatusEnum.SUCCESS if event.status == TaskStatus.SUCCESS.value else ExecuteTaskStatusEnum.FAILED
         )
 
-        task_data = await self._state_manager.update_execution_task_status(
-            task_id=event.task_id, status=status, result={"answer": event.answer}, task_data=event.data
-        )
+        # F035 fix: TaskEnd.data is frequently empty for deepagents tasks; passing
+        # it as task_data would OVERWRITE the task_data stored at write_todos time
+        # (which holds the task name), leaving completed tasks with an empty
+        # task_data — so the history view rebuilt from the DB shows blank task
+        # rows. Only overwrite task_data when the event actually carries it;
+        # otherwise preserve the write_todos task_data (and its name).
+        update_kwargs = {"status": status, "result": {"answer": event.answer}}
+        if event.data:
+            update_kwargs["task_data"] = event.data
+        task_data = await self._state_manager.update_execution_task_status(task_id=event.task_id, **update_kwargs)
 
         await self._state_manager.push_message(MessageData(event_type=MessageEventType.TASK_END, data=task_data))
 
@@ -1016,9 +1023,26 @@ class LinsightWorkflowTask:
             return
 
         session_model.status = SessionVersionStatusEnum.COMPLETED
+        # A direct-answer completion with NO sub-tasks is a genuine trivial reply
+        # (greeting / plain Q&A) — no deliverable expected, keep final_files empty.
+        # But a weak model can plan (write_todos) yet finish without a TaskEnd or any
+        # output/ file; that still warrants a report. So when todos were generated,
+        # collect any output/ deliverable and otherwise synthesize one from the
+        # answer (F035 backstop) — same as the _handle_task_success path.
+        final_files = []
+        execution_tasks = await self._state_manager.get_execution_tasks()
+        if execution_tasks:
+            file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
+            final_files = await linsight_execute_utils.get_final_result_file(
+                session_model=session_model, file_details=file_details, answer=answer
+            )
+            if not final_files:
+                final_files = await linsight_execute_utils.build_fallback_report_file(
+                    session_model=session_model, answer=answer, file_dir=self.file_dir
+                )
         session_model.output_result = {
             "answer": answer,
-            "final_files": [],
+            "final_files": final_files,
             "all_from_session_files": [],
         }
         await self._state_manager.set_session_version_info(session_model)
@@ -1027,7 +1051,7 @@ class LinsightWorkflowTask:
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
-        logger.info("Task completed via direct-answer fallback (no sub-tasks)")
+        logger.info(f"Task completed via direct-answer fallback ({len(final_files)} report files)")
 
     async def _handle_task_success(self, session_model: LinsightSessionVersion):
         """Processing task successful"""
@@ -1036,9 +1060,22 @@ class LinsightWorkflowTask:
             file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
             logger.debug(f"Read File Directory File Details: {file_details}")
 
+            # The TaskEnd answer can be empty when the model delegates to `task`
+            # sub-agents (the parent's final message carries no text). Fall back to
+            # the last streamed assistant text so the answer field — and the
+            # synthesized report below — still carry the real content.
+            answer = (self._final_result.answer or "").strip() or (self._last_assistant_text or "").strip()
+
             final_result_files = await linsight_execute_utils.get_final_result_file(
-                session_model=session_model, file_details=file_details, answer=self._final_result.answer
+                session_model=session_model, file_details=file_details, answer=answer
             )
+            # F035 backstop: weak models can finish without ever writing an output/
+            # deliverable (they loop on write_todos), leaving no report. Synthesize
+            # one from the final answer so the task always yields a report file.
+            if not final_result_files:
+                final_result_files = await linsight_execute_utils.build_fallback_report_file(
+                    session_model=session_model, answer=answer, file_dir=self.file_dir
+                )
             execution_tasks = await self._state_manager.get_execution_tasks()
             all_from_session_files = await linsight_execute_utils.get_all_files_from_session(
                 execution_tasks=execution_tasks, file_details=file_details
@@ -1047,7 +1084,7 @@ class LinsightWorkflowTask:
             # Update session status
             session_model.status = SessionVersionStatusEnum.COMPLETED
             session_model.output_result = {
-                "answer": self._final_result.answer,
+                "answer": answer,
                 "final_files": final_result_files,
                 "all_from_session_files": all_from_session_files,
             }

@@ -17,11 +17,10 @@ export function StepList({ history }: { history: ExecStepEventData[] | null | un
     if (!nodes.length) return null;
 
     return (
-        <div className="relative flex flex-col">
-            {/* Timeline spine: vertical line through the leading-icon centers, so
-                each step icon reads as a node on the line. The left offset (left-2
-                ≈ icon center) and top-3/bottom-3 insets are visually tunable. */}
-            <span aria-hidden className="pointer-events-none absolute left-2 top-3 bottom-3 w-px bg-gray-200" />
+        <div className="flex flex-col">
+            {/* No continuous spine: each StepRow draws its own per-node connector
+                while expanded (see StepRow's left rail), so the timeline reads as
+                discrete segments rather than one line running through every node. */}
             {nodes.map((node) => {
                 if (node.kind === 'subagent_group') {
                     return <SubagentRow key={node.agents[0].step.callId} group={node} />;

@@ -20,7 +20,7 @@ export function UiCardRow({ step }: { step: MergedStep }) {
     const paramsText = formatStepParams(step.params);
     return (
         <StepRow
-            icon={step.running ? <RunningSpinner /> : <Send size={14} className="text-[#333]" />}
+            icon={step.running ? <RunningSpinner /> : <Send size={16} className="text-[#333]" />}
             title={step.name}
             running={step.running}
         >

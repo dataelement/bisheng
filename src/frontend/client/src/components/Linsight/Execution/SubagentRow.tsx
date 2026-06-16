@@ -51,7 +51,7 @@ export function SubagentRow({ group }: { group: SubagentGroup }) {
 
     return (
         <StepRow
-            icon={<Outlined.PeopleRound size={14} className={cn(running ? 'text-primary' : 'text-[#333]')} />}
+            icon={<Outlined.PeopleRound size={16} className={cn(running ? 'text-primary' : 'text-[#333]')} />}
             title={
                 <span>
                     {localize('com_linsight_subagent_delegate', {

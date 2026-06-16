@@ -76,3 +76,9 @@ class SkillCreateForm(BaseModel):
     name: str = Field(..., max_length=64, description="Skill ID: lowercase alnum + single hyphens")
     description: str = Field(..., max_length=1024)
     content: str = Field(..., description="SKILL.md markdown body (frontmatter is generated)")
+
+
+class SkillGitHubImportRequest(BaseModel):
+    """Import-from-GitHub payload: a public github.com URL pointing at a skill directory."""
+
+    url: str = Field(..., max_length=2048, description="https://github.com/{owner}/{repo}/tree/{branch}/{path}")

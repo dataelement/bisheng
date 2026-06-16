@@ -122,7 +122,9 @@ ApprovalCenterService.decide_task()
 
 ## 4. 预置场景
 
-三个场景由 `ApprovalRegistry.with_default_presets()` 注册。每个场景的业务入口在创建 `ApprovalGateRequest` 时**都需要传 `applicant_department_id`**（供 `department_admin` 审批人来源使用，查 `UserDepartmentDao.aget_user_primary_department()`）。
+三个场景由 `ApprovalRegistry.with_default_presets()` 注册（仅是"目录/下拉来源"，**不等于已启用**）。每个场景的业务入口在创建 `ApprovalGateRequest` 时**都需要传 `applicant_department_id`**（供 `department_admin` 审批人来源使用，查 `UserDepartmentDao.aget_user_primary_department()`）。
+
+**首次部署自动落库**：4.2 频道订阅审批、4.3 知识空间加入审批由 `common/init_data.py::_init_default_approval_scenarios()`（在 `init_default_data` 内）为默认租户幂等 seed——各建「默认分支(catch-all, route_type=flow) → 默认流程 → 单节点(node_mode=or 或签)」，审批人来源即资源 owner+manager（频道 `channel_owner`/`channel_manager`，知识空间 `knowledge_space_owner`/`knowledge_space_manager`），场景 `enabled=True`。按 `tenant_id+scenario_code` 判存在即跳过，绝不覆盖人工改动。菜单权限申请(4.1)**不**自动 seed。新租户不自动 seed，需管理后台手工配置。
 
 ### 4.1 菜单权限申请 (`menu_access_request`)
 - **入口**：Client `/workspace/menu-unavailable?plugin=xxx` → `POST /api/v1/approval/menu-access/apply`

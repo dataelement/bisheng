@@ -126,8 +126,9 @@ class LinsightWorkbenchImpl:
         if not files:
             return None
 
+        # Workspace is keyed by session_version id (svid), matching WorkspaceBackend.
         processed_files = await cls._process_submitted_files(
-            files, linsight_session_version.session_id, linsight_session_version.user_id
+            files, linsight_session_version.id, linsight_session_version.user_id
         )
 
         if linsight_session_version.files:
@@ -171,8 +172,15 @@ class LinsightWorkbenchImpl:
                     continuing = False
                     chat_id = uuid.uuid4().hex
 
+            # F035 fix: workspace attachments MUST be keyed by the session_version
+            # id (svid), because the execution agent's WorkspaceBackend reads from
+            # ``workspace/{svid}/``. In the unified model chat_id != svid, so
+            # writing under chat_id left the uploaded file unreadable by the agent
+            # (read_file -> MinIO NoSuchKey -> whole task failed). Generate the
+            # svid up-front and use it both for ingestion and the version row id.
+            svid = uuid.uuid4().hex
             # Process files (if present) — after chat_id is finalized
-            processed_files = await cls._process_submitted_files(submit_obj.files, chat_id, login_user.user_id)
+            processed_files = await cls._process_submitted_files(submit_obj.files, svid, login_user.user_id)
 
             if not continuing:
                 # F035 Track J (unified conversation model): a task turn is not a
@@ -204,8 +212,9 @@ class LinsightWorkbenchImpl:
                     ),
                 )
 
-            # Create Ideas Conversation Version
+            # Create Ideas Conversation Version (id == svid used for the workspace)
             linsight_session_version = LinsightSessionVersion(
+                id=svid,
                 session_id=chat_id,
                 user_id=login_user.user_id,
                 question=submit_obj.question,
@@ -1160,9 +1169,14 @@ class LinsightWorkbenchImpl:
         # &Extraction toolID
         tool_ids = cls._extract_tool_ids(session_version.tools)
 
-        # Tools to get workbench configurationsID
-        linsight_config = await WorkStationService.get_linsight_config()
-        config_tool_ids = cls._extract_tool_ids(linsight_config.tools or [])
+        # Code-interpreter whitelist source. Unified-resource direction
+        # (2026-06-16): task mode reuses the DAILY chat config tool selection,
+        # not the legacy per-app linsight config. get_daily_chat_config falls
+        # back to defaults (never None in practice), but guard defensively so a
+        # missing config degrades to an empty whitelist instead of crashing the
+        # task with 'NoneType' object has no attribute 'tools'.
+        daily_config = await WorkStationService.get_daily_chat_config()
+        config_tool_ids = cls._extract_tool_ids(daily_config.tools or []) if daily_config else []
 
         # todo Better tool initialization scheme
         if need_upload and file_dir:
@@ -1177,10 +1191,9 @@ class LinsightWorkbenchImpl:
                 )
 
         # Unified-resource direction (2026-06-16): task mode reuses the daily
-        # tool selection directly. The legacy per-app linsight whitelist
-        # (config_tool_ids) is no longer applied — every selected tool id (a real
-        # GptsTools id the user already has access to) binds. config_tool_ids is
-        # still computed above for the code-interpreter branch only.
+        # tool selection directly. Every selected tool id (a real GptsTools id
+        # the user already has access to) binds. config_tool_ids (from the daily
+        # chat config) is used only by the code-interpreter branch above.
         valid_tool_ids = list(dict.fromkeys(tool_ids))  # de-dup, preserve order
 
         # Initialization Tools
@@ -1210,8 +1223,14 @@ class LinsightWorkbenchImpl:
         """
         tool_ids = []
         for tool in tools:
-            if tool.get("children"):
-                tool_ids.extend(int(child.get("id")) for child in tool["children"] if child.get("id"))
+            # Tolerate both raw dicts (linsight config / session_version.tools)
+            # and pydantic ToolConfig models (daily config re-validates tools on
+            # assignment, so its parent rows come back as models, not dicts).
+            if hasattr(tool, "model_dump"):
+                tool = tool.model_dump()
+            children = tool.get("children")
+            if children:
+                tool_ids.extend(int(child.get("id")) for child in children if child.get("id"))
         return tool_ids
 
     @classmethod

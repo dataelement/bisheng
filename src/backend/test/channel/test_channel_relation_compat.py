@@ -36,12 +36,17 @@ class _LoginUser:
 
 
 def _service(channel_repository, member_repository, article_es_service=None):
-    return ChannelService(
+    service = ChannelService(
         channel_repository=channel_repository,
         space_channel_member_repository=member_repository,
         channel_info_source_repository=SimpleNamespace(find_by_ids=AsyncMock(return_value=[])),
         article_es_service=article_es_service or SimpleNamespace(count_articles=AsyncMock(return_value=0)),
     )
+    # get_my_channels builds a shared ReBAC context (subjects/bindings/models) up front;
+    # these tests mock get_effective_permission_ids_async directly, so the context content
+    # is irrelevant — stub the builder to avoid its DB round-trips in unit scope.
+    service._build_channel_permission_context = AsyncMock(return_value={})
+    return service
 
 
 @pytest.mark.asyncio

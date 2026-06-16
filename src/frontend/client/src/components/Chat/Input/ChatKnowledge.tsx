@@ -1,14 +1,9 @@
 import {
-  Check,
-  ChevronDown,
   ChevronLeft,
-  ChevronRight,
   Glasses,
   Loader2,
   PaperclipIcon,
-  Plus,
   SearchIcon,
-  Sparkles,
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -26,6 +21,7 @@ import {
   DropdownMenuTrigger,
   Input
 } from "~/components/ui";
+import { Checkbox } from "~/components/ui/Checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
 import BookOpen from "~/components/ui/icon/BookOpen";
 import BooksIcon from "~/components/ui/icon/Books";
@@ -202,7 +198,7 @@ const KnowledgeListPanel = ({
       <div className="relative shrink-0">
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
         <Input
-          className="h-[28px] text-xs bg-white border border-[#ECECEC] rounded-[6px] pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
+          className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-[6px] pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
           placeholder={placeholder}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -214,7 +210,7 @@ const KnowledgeListPanel = ({
       {/* 滚动列表 */}
       <div
         ref={listScrollRevealRef}
-        className="overflow-y-auto flex flex-col gap-0.5 scrollbar-on-scroll min-h-0 flex-1"
+        className="overflow-y-auto flex flex-col gap-0 scrollbar-on-scroll min-h-0 flex-1"
         onScroll={handleScroll}
       >
         {items.map((item) => {
@@ -229,17 +225,14 @@ const KnowledgeListPanel = ({
                 e.preventDefault();
                 onToggle(item);
               }}
-              className="flex items-center gap-2.5 px-0.5 py-2 cursor-pointer rounded-lg hover:bg-slate-50 focus:bg-slate-50 outline-none"
+              className="flex items-center gap-2 px-2 py-[5px] cursor-pointer rounded-[6px] data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
             >
-              <div
-                className={cn(
-                  "size-4 rounded border flex items-center justify-center transition-colors shrink-0",
-                  isChecked ? "bg-blue-600 border-blue-600" : "border-slate-300 bg-white"
-                )}
-              >
-                {isChecked && <Check size={12} className="text-white stroke-[3]" />}
-              </div>
-              <span className="truncate flex-1 text-[13px] text-slate-700 leading-none">
+              <Checkbox
+                checked={isChecked}
+                tabIndex={-1}
+                className="pointer-events-none shrink-0 border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+              />
+              <span className="truncate flex-1 text-[14px] text-slate-700 leading-[22px]">
                 {item.name}
               </span>
             </DropdownMenuItem>
@@ -554,7 +547,7 @@ export const ChatKnowledge = ({
                     )}
                   </div>
                   <span>{localize('com_ui_knowledge_space')}</span>
-                  <ChevronDown size={14} className="text-slate-400" />
+                  <Outlined.Down size={16} className="text-[#999]" />
                 </button>
               ) : (
                 <button
@@ -566,7 +559,7 @@ export const ChatKnowledge = ({
                   )}
                   aria-label={localize('com_knowledge_add_file')}
                 >
-                  <Plus size={18} strokeWidth={1.5} />
+                  <Outlined.Plus size={18} />
                 </button>
               )}
             </DropdownMenuTrigger>
@@ -586,13 +579,13 @@ export const ChatKnowledge = ({
         collisionPadding={isMobile ? MOBILE_MENU_COLLISION : BOTTOM_GAP}
         sticky={isMobile ? 'partial' : undefined}
         className={cn(
-          'flex flex-col gap-0 rounded-2xl border-slate-100 shadow-xl',
+          'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list
           // directly, so it needs the wider list layout; the "+" menu stays
           // compact for its short action items.
           variant === 'knowledge'
-            ? 'w-[280px] overflow-hidden p-3'
-            : 'w-[200px] p-1.5',
+            ? 'w-[240px] overflow-hidden p-2'
+            : 'w-[200px] p-2',
           isMobile && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
           isMobile &&
           mobileTallPanel &&
@@ -601,7 +594,11 @@ export const ChatKnowledge = ({
         style={
           isMobile && mobileTallPanel && mobileDrillMaxH !== undefined
             ? { maxHeight: mobileDrillMaxH }
-            : undefined
+            : // Desktop knowledge pill: cap height so the space list scrolls
+              // internally instead of growing past the viewport.
+              !isMobile && variant === 'knowledge'
+              ? { maxHeight: MAX_SUB_HEIGHT }
+              : undefined
         }
       >
         {variant === 'plus' && showFileUpload && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
@@ -612,13 +609,9 @@ export const ChatKnowledge = ({
               if (fileUploadDisabled) return;
               onFileUploadClick?.();
             }}
-            className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
+            className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <img
-              src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/link.svg`}
-              alt=""
-              className="size-[18px] text-slate-600"
-            />
+            <Outlined.Attachment size={18} className="text-[#999]" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
@@ -644,7 +637,7 @@ export const ChatKnowledge = ({
         {/* Knowledge pill (desktop): show the SPACES list directly — no sub. */}
         {variant === 'knowledge' && !isMobile && (
           <div className="flex min-h-0 w-full flex-1 flex-col">
-            <p className="mb-1 shrink-0 py-1.5 text-sm font-medium leading-5">
+            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
               {localize('com_ui_knowledge_space')}
             </p>
             <KnowledgeListPanel
@@ -675,17 +668,12 @@ export const ChatKnowledge = ({
             <DropdownMenuSubTrigger
               data-sub-key="org"
               className={cn(
-                'mt-0.5 flex cursor-pointer items-center justify-between rounded-xl px-2 py-1.5 outline-none',
-                '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
+                'mt-0.5 flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
               )}
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <div className="relative">
-                  <img
-                    src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/books.svg`}
-                    alt=""
-                    className="size-[18px] text-slate-600"
-                  />
+                  <Outlined.Books size={18} className="text-[#999]" />
                   {selectedOrgKbs.length > 0 && (
                     <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                   )}
@@ -699,7 +687,7 @@ export const ChatKnowledge = ({
             <DropdownMenuSubContent
               alignOffset={orgLayout.alignOffset}
               collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-2xl"
+              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white p-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
                   '--tw-enter-duration': '0.35s',
@@ -708,7 +696,7 @@ export const ChatKnowledge = ({
                 } as React.CSSProperties
               }
             >
-              <p className="mb-1 shrink-0 py-1.5 text-sm font-medium leading-5">
+              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
                 {localize('com_tools_org_knowledge')}
               </p>
               <KnowledgeListPanel
@@ -734,15 +722,11 @@ export const ChatKnowledge = ({
               e.preventDefault();
               setMobilePanel('org');
             }}
-            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 outline-none"
+            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
           >
-            <div className="flex min-w-0 items-center gap-3">
+            <div className="flex min-w-0 items-center gap-2">
               <div className="relative shrink-0">
-                <img
-                  src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/books.svg`}
-                  alt=""
-                  className="size-[18px] text-slate-600"
-                />
+                <Outlined.Books size={18} className="text-[#999]" />
                 {selectedOrgKbs.length > 0 && (
                   <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                 )}
@@ -751,7 +735,7 @@ export const ChatKnowledge = ({
                 {localize('com_tools_org_knowledge')}
               </span>
             </div>
-            <ChevronRight className="size-4 shrink-0 text-slate-400" strokeWidth={2} />
+            <Outlined.Right className="size-4 shrink-0 text-slate-400" />
           </DropdownMenuItem>
         )}
 
@@ -803,13 +787,13 @@ export const ChatKnowledge = ({
                 setRootOpen(false);
                 onEnterTaskMode?.();
               }}
-              className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
+              className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none"
             >
-              <Outlined.Binoculars size={18} className={taskModeActive ? 'text-blue-600' : 'text-slate-600'} />
+              <Outlined.Binoculars size={18} className={taskModeActive ? 'text-blue-600' : 'text-[#999]'} />
               <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-600' : 'text-slate-700')}>
                 {localize('com_linsight_task_mode')}
               </span>
-              {taskModeActive && <Check size={14} className="text-blue-600" />}
+              {taskModeActive && <Outlined.Check size={14} className="text-blue-600" />}
             </DropdownMenuItem>
             {/* 添加 Skill — 桌面：悬停展开技能选择器；移动 root：下钻进技能面板。
                 选中技能即进入任务模式（由 renderSkillSubmenu 内部导航），故传入
@@ -819,18 +803,17 @@ export const ChatKnowledge = ({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
                     className={cn(
-                      'flex cursor-pointer items-center justify-between rounded-xl outline-none',
-                      '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
+                      'flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
                     )}
                   >
-                    <div className="flex items-center gap-3">
-                      <Sparkles size={18} strokeWidth={1.5} className="text-slate-600" />
+                    <div className="flex items-center gap-2">
+                      <Outlined.Newspaper size={18} className="text-[#999]" />
                       <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_linsight_add_skill')}
                       </span>
                     </div>
                   </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="ml-2 flex max-h-[360px] w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-2xl">
+                  <DropdownMenuSubContent className="ml-2 flex max-h-[360px] w-[280px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white p-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -840,15 +823,15 @@ export const ChatKnowledge = ({
                     e.preventDefault();
                     setMobilePanel('skill');
                   }}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1.5 outline-none"
+                  className="flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
                 >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <Sparkles size={18} strokeWidth={1.5} className="text-slate-600" />
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Outlined.Newspaper size={18} className="text-[#999]" />
                     <span className="truncate text-[14px] font-normal text-slate-700">
                       {localize('com_linsight_add_skill')}
                     </span>
                   </div>
-                  <ChevronRight className="size-4 shrink-0 text-slate-400" strokeWidth={2} />
+                  <Outlined.Right className="size-4 shrink-0 text-slate-400" />
                 </DropdownMenuItem>
               )
             )}

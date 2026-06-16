@@ -148,10 +148,10 @@ export default function NewChat({
         ) : (
           <div>
             <div className="pb-0">
-              <div className="flex items-center pl-3">
+              <div className="flex items-center">
                 <span className="text-base font-bold leading-8 text-[#1A1A1A]">{localize('com_nav_home')}</span>
               </div>
-              <div className="mt-5 flex w-full flex-col gap-1">
+              <div className="py-3 flex w-full flex-col gap-1">
                 {/* Create chat button */}
                 <Button
                   variant="outline"
