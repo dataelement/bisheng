@@ -1551,6 +1551,8 @@
     "folder_name_empty": "Folder name cannot be empty",
     "folder_upload_exceed_limit": "A folder upload can contain at most {{0}} files.",
     "folder_upload_no_valid_files": "No uploadable files in the folder (unsupported, hidden, and oversize files are filtered out).",
+    "folder_upload_skipped_oversize": "{{0}} file(s) skipped for exceeding the size limit",
+    "folder_upload_skipped_unsupported": "{{0}} file(s) skipped for unsupported format",
     "format_list": "pdf (including scans), ofd, txt, docx, ppt, pptx, md, html, xls, xlsx, csv, doc, png, jpg, jpeg, bmp, wps, dps, et",
     "get_download_link_failed": "Failed to get download link",
     "go_to_square": "Go to square",

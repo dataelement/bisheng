@@ -340,7 +340,21 @@ export function useFileUpload({
                 // via createFolderApi if it really collides.
             }
 
-            const validFiles = filterFolderUploadFiles(allFiles, options);
+            const { valid: validFiles, oversizeCount, unsupportedCount } =
+                filterFolderUploadFiles(allFiles, options);
+            // ⑦: tell the user which files were dropped (oversize / unsupported
+            // format) instead of silently skipping them; hidden files stay
+            // silent. Shown even when some valid files still upload.
+            if (oversizeCount > 0 || unsupportedCount > 0) {
+                const parts: string[] = [];
+                if (oversizeCount > 0) {
+                    parts.push(localize("com_knowledge.folder_upload_skipped_oversize", { 0: oversizeCount }));
+                }
+                if (unsupportedCount > 0) {
+                    parts.push(localize("com_knowledge.folder_upload_skipped_unsupported", { 0: unsupportedCount }));
+                }
+                showToast({ message: parts.join("\n"), severity: NotificationSeverity.WARNING });
+            }
             if (validFiles.length === 0) {
                 // Every file was silently filtered (format / hidden / oversize):
                 // nothing to upload, and no empty tree is created (AC-27 edge).

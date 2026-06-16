@@ -237,20 +237,40 @@ export function isHiddenPath(relativePath: string): boolean {
  *
  * Caller is expected to have already handled the integral-batch rejections
  * (hidden root folder / duplicate folder name / > MAX_FOLDER_UPLOAD_COUNT).
+ *
+ * Returns the kept files plus counts of what was dropped, so the caller can
+ * tell the user why some files didn't upload (oversize / unsupported). Hidden
+ * files stay a silent drop (expected behaviour, not worth a toast).
  */
+export interface FolderUploadFilterResult {
+    valid: File[];
+    oversizeCount: number;
+    unsupportedCount: number;
+}
+
 export function filterFolderUploadFiles(
     files: File[],
     options: { allowedExtensions: readonly string[]; maxSizeMB: number },
-): File[] {
+): FolderUploadFilterResult {
     const maxBytes = options.maxSizeMB * 1024 * 1024;
-    return files.filter((file) => {
+    const valid: File[] = [];
+    let oversizeCount = 0;
+    let unsupportedCount = 0;
+    for (const file of files) {
         const rel = file.webkitRelativePath || file.name;
-        if (isHiddenPath(rel)) return false;
-        if (file.size > maxBytes) return false;
+        if (isHiddenPath(rel)) continue; // hidden: silent drop
+        if (file.size > maxBytes) {
+            oversizeCount++;
+            continue;
+        }
         const ext = file.name.split(".").pop()?.toLowerCase();
-        if (!ext || !options.allowedExtensions.includes(ext)) return false;
-        return true;
-    });
+        if (!ext || !options.allowedExtensions.includes(ext)) {
+            unsupportedCount++;
+            continue;
+        }
+        valid.push(file);
+    }
+    return { valid, oversizeCount, unsupportedCount };
 }
 
 /**

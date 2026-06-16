@@ -1478,6 +1478,8 @@
     "folder_name_empty": "文件夹名称不能为空",
     "folder_upload_exceed_limit": "单次批量文件总数最多 {{0}} 个",
     "folder_upload_no_valid_files": "文件夹内没有可上传的文件（不支持格式、隐藏文件及超大文件已被过滤）",
+    "folder_upload_skipped_oversize": "{{0}} 个文件因超出大小限制已跳过",
+    "folder_upload_skipped_unsupported": "{{0}} 个文件因格式不支持已跳过",
     "format_list": "pdf(含扫描件)、ofd、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、dps、et",
     "get_download_link_failed": "下载链接获取失败",
     "go_to_square": "前往广场",
