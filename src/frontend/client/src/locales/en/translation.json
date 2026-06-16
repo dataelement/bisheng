@@ -1788,6 +1788,8 @@
     "root_dir": "Root",
     "move_empty_folder": "This folder is empty",
     "move_here": "Move here",
+    "move_search_placeholder": "Search by knowledge space name",
+    "move_no_spaces": "No knowledge spaces available to move into",
     "move": "Move",
     "move_success": "Moved {{0}} item(s)",
     "move_cross_success": "Moved {{0}} item(s); updating retrieval data in the background",

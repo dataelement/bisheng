@@ -48,7 +48,10 @@ def _service(channel_repository=None, member_repository=None):
         channel_repository=channel_repository or SimpleNamespace(),
         space_channel_member_repository=member_repository or SimpleNamespace(),
         channel_info_source_repository=SimpleNamespace(),
-        article_es_service=SimpleNamespace(count_articles=AsyncMock(return_value=0)),
+        article_es_service=SimpleNamespace(
+            count_articles=AsyncMock(return_value=0),
+            count_articles_batch=AsyncMock(side_effect=lambda requests: [0] * len(requests)),
+        ),
     )
 
 
@@ -99,6 +102,7 @@ async def test_get_my_channels_forwards_one_shared_context_to_every_channel():
             id=f"ch-{i}",
             name=f"频道{i}",
             source_list=[],
+            filter_rules=[],
             visibility=ChannelVisibilityEnum.PUBLIC,
             is_released=True,
             latest_article_update_time=None,

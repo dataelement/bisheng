@@ -40,7 +40,11 @@ def _service(channel_repository, member_repository, article_es_service=None):
         channel_repository=channel_repository,
         space_channel_member_repository=member_repository,
         channel_info_source_repository=SimpleNamespace(find_by_ids=AsyncMock(return_value=[])),
-        article_es_service=article_es_service or SimpleNamespace(count_articles=AsyncMock(return_value=0)),
+        article_es_service=article_es_service
+        or SimpleNamespace(
+            count_articles=AsyncMock(return_value=0),
+            count_articles_batch=AsyncMock(side_effect=lambda requests: [0] * len(requests)),
+        ),
     )
     # get_my_channels builds a shared ReBAC context (subjects/bindings/models) up front;
     # these tests mock get_effective_permission_ids_async directly, so the context content

@@ -1,4 +1,4 @@
-import { FileCheck2, SendToBack } from "lucide-react";
+import { FileCheck2, SendToBack, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   decideApprovalTaskApi,
@@ -19,6 +19,7 @@ import { NotificationSeverity } from "~/common";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { Dialog, DialogContent } from "../ui/Dialog";
+import { ExpandableSearchField } from "../ui/ExpandableSearchField";
 
 type ApprovalCenterTarget = {
   tab?: ApprovalCenterTab;
@@ -105,7 +106,7 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
   const comment = detail?.comment || detail?.reason;
   return (
     <div className="flex gap-3">
-      <div className="flex flex-col items-center">
+      <div className="flex w-6 flex-col items-center">
         <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px]", dotCls)}>{icon}</span>
         {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
       </div>
@@ -122,7 +123,7 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
 function PendingTimelineStep({ nodeName }: { nodeName?: string | null }) {
   return (
     <div className="flex gap-3">
-      <div className="flex flex-col items-center">
+      <div className="flex w-6 flex-col items-center">
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#165dff] text-[11px] text-white">●</span>
       </div>
       <div className="pt-0.5">
@@ -386,11 +387,19 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[80vh] max-h-[820px] w-[calc(100vw-64px)] max-w-[1080px] rounded-2xl p-0">
+      <DialogContent close={false} className="h-[80vh] max-h-[820px] w-[calc(100vw-64px)] max-w-[1080px] rounded-2xl p-0">
         <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-white">
           {/* Header */}
-          <div className="border-b border-[#f2f3f5] px-6 py-4">
+          <div className="flex items-center justify-between border-b border-[#f2f3f5] px-6 py-4">
             <h2 className="text-[18px] font-semibold text-[#1d2129]">{localize("com_approval_center_title")}</h2>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              aria-label={localize("com_ui_close")}
+              className="rounded-sm text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
           <div className="grid min-h-0 flex-1 grid-cols-[84px_300px_minmax(0,1fr)]">
@@ -401,7 +410,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                 return (
                   <button key={tab} type="button"
                     className={cn("flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-[12px] leading-none transition-colors",
-                      activeTab === tab ? "bg-[#e8f3ff] text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
+                      activeTab === tab ? "text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
                     onClick={() => { setActiveTab(tab); setSearchQuery(""); }}>
                     <TabIcon className="size-[22px]" />
                     {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
@@ -412,38 +421,38 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
             {/* Left list */}
             <div className="flex min-h-0 flex-col border-r border-[#f2f3f5] bg-[#fafbfc]">
-              <div className="flex gap-1 px-3 pt-3 pb-1">
+              <div className="flex gap-2 px-3 pt-3 pb-2">
                 {activeTab === "my_tasks"
                   ? (["pending_me", "processed"] as TaskFilter[]).map((f) => (
                       <button key={f} type="button"
-                        className={cn("rounded-md px-3 py-1 text-[13px] transition-colors",
-                          taskFilter === f ? "bg-[#165dff] text-white" : "text-[#4e5969] hover:bg-[#edf0f5]")}
+                        className={cn(
+                          "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-[#335CFF]",
+                          taskFilter === f ? "border-[#335CFF] text-[#335CFF]" : "text-[#212121]")}
                         onClick={() => setTaskFilter(f)}>
                         {f === "pending_me" ? localize("com_approval_task_filter_pending") : localize("com_approval_task_filter_processed")}
                       </button>
                     ))
                   : (["in_progress", "completed"] as RequestsFilter[]).map((f) => (
                       <button key={f} type="button"
-                        className={cn("rounded-md px-3 py-1 text-[13px] transition-colors",
-                          requestsFilter === f ? "bg-[#165dff] text-white" : "text-[#4e5969] hover:bg-[#edf0f5]")}
+                        className={cn(
+                          "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-[#335CFF]",
+                          requestsFilter === f ? "border-[#335CFF] text-[#335CFF]" : "text-[#212121]")}
                         onClick={() => setRequestsFilter(f)}>
                         {f === "in_progress" ? localize("com_approval_status_pending") : localize("com_approval_tab_completed")}
                       </button>
                     ))}
               </div>
 
-              {/* Search box (moved from the old top bar into the list column) */}
+              {/* Search box — reuse the app-center search field style (always expanded + clear button) */}
               <div className="px-3 pb-2 pt-1">
-                <div className="flex items-center gap-1.5 rounded-lg border border-[#e5e6eb] px-3 py-1.5 text-[13px] text-[#c9cdd4] focus-within:border-[#165dff]">
-                  <span>⌕</span>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={localize("com_approval_search_placeholder")}
-                    className="w-full bg-transparent text-[#1d2129] placeholder:text-[#c9cdd4] outline-none"
-                  />
-                </div>
+                <ExpandableSearchField
+                  alwaysExpanded
+                  showClearButton
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  placeholder={localize("com_approval_search_placeholder")}
+                  expandedWidthClassName="w-full"
+                />
               </div>
 
               {loadingList ? (
@@ -471,11 +480,6 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                                 <StatusBadge status={item.status} instanceStatus={item.instance_status} scope="task" localize={localize} />
                               </div>
                             </div>
-                            {item.current_node_name && (
-                              <div className="mt-1.5 text-[12px] text-[#86909c]">
-                                {localize("com_approval_current_node_label")}：{item.current_node_name}
-                              </div>
-                            )}
                             <div className="mt-1.5 flex items-center justify-between text-[12px] text-[#c9cdd4]">
                               <span>{item.applicant_user_name}{item.applicant_department_name ? ` · ${item.applicant_department_name}` : ""}</span>
                               <span>{formatTime(item.create_time)}</span>
@@ -507,10 +511,6 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                                 {item.current_approver_names && <span>{localize("com_approval_approver_label")}：{item.current_approver_names}</span>}
                               </div>
                             )}
-                            <div className="mt-1.5 flex items-center justify-between text-[12px] text-[#c9cdd4]">
-                              <span>{item.applicant_user_name}{item.applicant_department_name ? ` · ${item.applicant_department_name}` : ""}</span>
-                              <span>{formatTime(item.create_time)}</span>
-                            </div>
                           </button>
                         );
                       })}
@@ -754,7 +754,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
               };
               return (
                 <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
-                  <div className="flex flex-col items-center">
+                  <div className="flex w-6 flex-col items-center">
                     <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full", dotColor)} />
                     {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
                   </div>
@@ -927,7 +927,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
               };
               return (
                 <div key={node.node_code ?? node.task_id ?? i} className="flex gap-3">
-                  <div className="flex flex-col items-center">
+                  <div className="flex w-6 flex-col items-center">
                     <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full", dotColor)} />
                     {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
                   </div>

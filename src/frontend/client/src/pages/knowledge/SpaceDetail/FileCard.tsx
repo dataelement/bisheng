@@ -1,4 +1,4 @@
-import { Download, MoreVertical, FolderInput, GitBranch, History, FileSearch } from "lucide-react";
+import { Download, MoreVertical, GitBranch, History, FileSearch } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
@@ -401,19 +401,25 @@ export function FileCard({
                         </span>
                         {isFolder ? (
                             (isAdmin || file.successFileNum != null) && file.fileNum != null && (
-                                <span className="shrink-0 whitespace-nowrap text-xs leading-5 text-[#999999] tabular-nums">
-                                    {localize("com_knowledge_items_count", {
-                                        count: isAdmin ? (file.fileNum ?? 0) : (file.successFileNum ?? 0),
-                                    })}
-                                </span>
+                                <>
+                                    <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
+                                    <span className="shrink-0 whitespace-nowrap text-xs leading-5 text-[#999999] tabular-nums">
+                                        {localize("com_knowledge_items_count", {
+                                            count: isAdmin ? (file.fileNum ?? 0) : (file.successFileNum ?? 0),
+                                        })}
+                                    </span>
+                                </>
                             )
                         ) : (
                             file.tags && file.tags.length > 0 && (
-                                <TagGroup
-                                    tags={file.tags}
-                                    variant="text-h5"
-                                    highlightedTagIds={highlightedTagIds}
-                                />
+                                <>
+                                    <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
+                                    <TagGroup
+                                        tags={file.tags}
+                                        variant="text-h5"
+                                        highlightedTagIds={highlightedTagIds}
+                                    />
+                                </>
                             )
                         )}
                     </div>
@@ -602,7 +608,7 @@ export function FileCard({
                                             <ActionMenuItem
                                                 disabled={!canMove || isUploading}
                                                 onClick={(e) => { e.stopPropagation(); onMove?.(); }}
-                                                icon={<FolderInput />}
+                                                icon={<Outlined.MoveToFolder />}
                                                 label={localize("com_knowledge.move")}
                                             />
                                         )}
@@ -746,7 +752,7 @@ export function FileCard({
                                     <ActionMenuItem
                                         disabled={!canMove || isUploading}
                                         onClick={(e) => { e.stopPropagation(); onMove?.(); }}
-                                        icon={<FolderInput />}
+                                        icon={<Outlined.MoveToFolder />}
                                         label={localize("com_knowledge.move")}
                                     />
                                 )}
