@@ -138,7 +138,10 @@ export function KnowledgeSpaceContent({
     const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
-        ...uploadingFiles,
+        // Uploading placeholders are keyed to the space they were started in.
+        // Filter to the active space so an in-progress upload in space A does
+        // not leak into space B's list after switching spaces.
+        ...uploadingFiles.filter((f) => String(f.spaceId) === String(space.id)),
         ...files
     ];
 
@@ -306,8 +309,11 @@ export function KnowledgeSpaceContent({
     const [canCreateFolder, setCanCreateFolder] = useState(false);
     const [canUploadFile, setCanUploadFile] = useState(false);
     // Move permission is separate from upload (both can_edit tier, but a role may
-    // grant one without the other). Drives the move menu items' greyed state.
+    // grant one without the other). Files and folders have independent move
+    // permissions (move_file / move_folder) — probe both so a user with only
+    // one of them isn't blocked on the other. Drives the move menu greyed state.
     const [canMoveFile, setCanMoveFile] = useState(false);
+    const [canMoveFolder, setCanMoveFolder] = useState(false);
     const isSearching = searchQuery.trim().length > 0 || searchTagIds.length > 0;
     const [permTarget, setPermTarget] = useState<{
         id: string;
@@ -356,7 +362,14 @@ export function KnowledgeSpaceContent({
                 "move_file",
                 { signal: controller.signal },
             ),
-        ]).then(([createFolderResult, uploadFileResult, moveFileResult]) => {
+            checkPermission(
+                objectType,
+                objectId,
+                "can_edit",
+                "move_folder",
+                { signal: controller.signal },
+            ),
+        ]).then(([createFolderResult, uploadFileResult, moveFileResult, moveFolderResult]) => {
             if (cancelled) return;
             setCanCreateFolder(
                 createFolderResult.status === "fulfilled" && Boolean(createFolderResult.value?.allowed)
@@ -367,11 +380,15 @@ export function KnowledgeSpaceContent({
             setCanMoveFile(
                 moveFileResult.status === "fulfilled" && Boolean(moveFileResult.value?.allowed)
             );
+            setCanMoveFolder(
+                moveFolderResult.status === "fulfilled" && Boolean(moveFolderResult.value?.allowed)
+            );
         }).catch(() => {
             if (!cancelled) {
                 setCanCreateFolder(false);
                 setCanUploadFile(false);
                 setCanMoveFile(false);
+                setCanMoveFolder(false);
             }
         });
 
@@ -940,6 +957,15 @@ export function KnowledgeSpaceContent({
     // Uploading placeholders have no backend identity yet — a selection containing one
     // cannot be moved (the menu entry is disabled below).
     const selectionHasUploading = selectedList.some((f) => isKnowledgeItemUploading(f));
+    const selectionHasFile = selectedList.some((f) => f.type !== FileType.FOLDER);
+    // Batch move requires the matching move permission for every kind in the
+    // selection: folders need move_folder, files need move_file (a role may
+    // grant only one). Uploading placeholders also block it.
+    const canBatchMove =
+        selectedList.length > 0 &&
+        !selectionHasUploading &&
+        (!hasFoldersSelected || canMoveFolder) &&
+        (!selectionHasFile || canMoveFile);
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
         deleteEntryIds.has(file.id)
     );
@@ -977,7 +1003,7 @@ export function KnowledgeSpaceContent({
         },
         (isAdmin && !hasFoldersSelected) && { key: "tag", label: localize("com_knowledge.batch_add_tags"), Icon: Outlined.Tag, onClick: handleBatchTag },
         (isAdmin && hasFailedFiles) && { key: "retry", label: localize("com_knowledge.retry"), Icon: Outlined.Refresh, onClick: handleBatchRetry },
-        (canMoveFile && !selectionHasUploading) && { key: "move", label: localize("com_knowledge.move"), Icon: FolderInput, onClick: handleBatchMove },
+        canBatchMove && { key: "move", label: localize("com_knowledge.move"), Icon: FolderInput, onClick: handleBatchMove },
         canManageSinglePermission && { key: "permission", label: localize("com_permission.manage_permission"), Icon: Outlined.PeopleSafe, onClick: () => handleManagePermission(singleSelectedId!) },
         canBatchDelete && { key: "delete", label: localize("com_knowledge.delete"), Icon: Outlined.Delete, onClick: handleBatchDelete, danger: true },
     ].filter(Boolean) as BatchAction[];
@@ -1197,7 +1223,7 @@ export function KnowledgeSpaceContent({
                 onBatchTag={handleBatchTag}
                 onBatchRetry={handleBatchRetry}
                 onBatchMove={handleBatchMove}
-                canBatchMove={canMoveFile && !selectionHasUploading}
+                canBatchMove={canBatchMove}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
@@ -1292,7 +1318,7 @@ export function KnowledgeSpaceContent({
                                             onDownload={() => handleSingleDownload(file.id)}
                                             onRename={(newName) => onRenameFile(file.id, newName)}
                                             onMove={() => openMove([file])}
-                                            canMove={canMoveFile}
+                                            canMove={file.type === FileType.FOLDER ? canMoveFolder : canMoveFile}
                                             onDelete={() => handleDelete(file.id)}
                                             onEditTags={() => handleOpenEditTags(file.id)}
                                             onRetry={() => handleSingleRetry(file.id)}
@@ -1339,7 +1365,8 @@ export function KnowledgeSpaceContent({
                                     onEditTags={(id) => handleOpenEditTags(id)}
                                     onRename={(id, newName) => onRenameFile(id, newName)}
                                     onMove={(file) => openMove([file])}
-                                    canMove={canMoveFile}
+                                    canMoveFile={canMoveFile}
+                                    canMoveFolder={canMoveFolder}
                                     onMoveToFolder={canUploadFile ? (folderId, items, folderName) => dropMoveToFolder(items, folderId, folderName) : undefined}
                                     onDelete={(id) => handleDelete(id)}
                                     onRetry={(id) => handleSingleRetry(id)}

@@ -584,7 +584,7 @@ export function FileCard({
                                         )}
                                         {showMoveItem && (
                                             <ActionMenuItem
-                                                disabled={!canMove}
+                                                disabled={!canMove || isUploading}
                                                 onClick={(e) => { e.stopPropagation(); onMove?.(); }}
                                                 icon={<FolderInput />}
                                                 label={localize("com_knowledge.move")}
@@ -728,7 +728,7 @@ export function FileCard({
                                 )}
                                 {showMoveItem && (
                                     <ActionMenuItem
-                                        disabled={!canMove}
+                                        disabled={!canMove || isUploading}
                                         onClick={(e) => { e.stopPropagation(); onMove?.(); }}
                                         icon={<FolderInput />}
                                         label={localize("com_knowledge.move")}

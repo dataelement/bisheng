@@ -1958,7 +1958,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
         accessible_ids = await PermissionService.list_accessible_ids(
             user_id=self.login_user.user_id,
-            relation="can_edit",
+            relation="can_read",
             object_type="knowledge_space",
             login_user=self.login_user,
         )
@@ -1984,6 +1984,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return []
             spaces = await KnowledgeDao.aget_list_by_ids(list(ids))
             spaces = [s for s in spaces if s.type == KnowledgeTypeEnum.SPACE.value]
+            # can_read only narrows the candidate set; filter to spaces the user
+            # can actually upload into, using the SAME fine-grained check as the
+            # upload path. A custom permission template may grant upload_file
+            # under a viewer-tier relation that can_read/can_edit can't express,
+            # so the coarse list_objects relation alone is not a valid proxy.
+            uploadable = []
+            for s in spaces:
+                perms = await self._get_effective_permission_ids("knowledge_space", s.id)
+                if "upload_file" in perms:
+                    uploadable.append(s)
+            spaces = uploadable
             spaces.sort(
                 key=lambda s: s.update_time or datetime.min,
                 reverse=True,
@@ -3580,6 +3591,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 target_level = 0
                 new_parent = ("knowledge_space", target_space_id)
 
+            # Target-side upload permission (same + cross space): moving items
+            # into a folder / space root is semantically "placing files there",
+            # so require upload_file on the target — mirrors add_file. The move
+            # dialog already hides targets the user can't upload to; this also
+            # blocks direct API calls into a no-permission target (decision-8
+            # reversal, see 测试反馈修复-R1.md #5).
+            if target_folder_id:
+                target_perms = await self._get_effective_permission_ids(
+                    "folder", target_folder_id, space_id=target_space_id
+                )
+            else:
+                target_perms = await self._get_effective_permission_ids(
+                    "knowledge_space", target_space_id, space_id=target_space_id
+                )
+            if "upload_file" not in target_perms:
+                raise SpacePermissionDeniedError()
+
             # ── validate each item ──
             valid: list[KnowledgeFile] = []
             invalid: list[dict] = []
@@ -3627,12 +3655,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     # same-space and cross-space moves (the dup query already scopes
                     # to target_space_id). Files are never name-checked on move.
                     if reason is None and is_folder:
+                        # Root-level rows persist file_level_path as NULL or "";
+                        # normalise both at the target root, otherwise SQL's
+                        # NULL == "" (false) lets a same-name root folder slip
+                        # through the dup check and the move silently succeeds.
+                        level_path_cond = (
+                            SpaceFileDao._root_path_filter()
+                            if target_level_path == ""
+                            else KnowledgeFile.file_level_path == target_level_path
+                        )
                         dup = await session.scalar(
                             select(func.count(KnowledgeFile.id)).where(
                                 KnowledgeFile.knowledge_id == target_space_id,
                                 KnowledgeFile.file_type == FileType.DIR.value,
                                 KnowledgeFile.file_name == rec.file_name,
-                                KnowledgeFile.file_level_path == target_level_path,
+                                level_path_cond,
                                 KnowledgeFile.id != rec.id,
                             )
                         )

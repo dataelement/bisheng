@@ -1475,6 +1475,8 @@
     "folder_name_empty": "フォルダー名を入力してください",
     "folder_upload_exceed_limit": "1 回のフォルダーアップロードで最大 {{0}} 件までです。",
     "folder_upload_no_valid_files": "フォルダー内にアップロード可能なファイルがありません（未対応形式・隠しファイル・サイズ超過のファイルは除外されます）",
+    "folder_upload_skipped_oversize": "{{0}} 件のファイルはサイズ上限超過のためスキップされました",
+    "folder_upload_skipped_unsupported": "{{0}} 件のファイルは未対応形式のためスキップされました",
     "format_list": "pdf（スキャンを含む）、ofd、txt、docx、ppt、pptx、md、html、xls、xlsx、csv、doc、png、jpg、jpeg、bmp、wps、dps、et",
     "get_download_link_failed": "ダウンロードリンクの取得に失敗しました",
     "go_to_square": "広場へ行く",

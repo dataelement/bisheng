@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bisheng.common.errcode.knowledge_space import (
+    SpacePermissionDeniedError,
     SpaceTenantMismatchError,
 )
 from bisheng.knowledge.domain.models.knowledge import Knowledge
@@ -286,7 +287,9 @@ async def test_no_permission_blocks_item(async_db_session):
     await _add(async_db_session, id=20, knowledge_id=1, file_name="a.pdf", file_type=FILE, level=0, file_level_path="")
 
     svc = _svc()
-    svc._get_effective_permission_ids = AsyncMock(return_value={"view_space", "view_file"})  # no move_file
+    # upload_file present so the target check (#5) passes; no move_file on the
+    # item → it's rejected with no_permission by the per-item gate.
+    svc._get_effective_permission_ids = AsyncMock(return_value={"upload_file", "view_space", "view_file"})
     res = await svc.move_items(1, [{"id": 20, "type": "file"}], target_space_id=1, target_folder_id=10)
     assert res["moved"] == []
     assert res["invalid"][0]["reason"] == "no_permission"
@@ -387,3 +390,33 @@ async def test_cross_space_cross_tenant_rejected(async_db_session):
     svc = _svc()
     with pytest.raises(SpaceTenantMismatchError):
         await svc.move_items(1, [{"id": 20, "type": "file"}], target_space_id=9, target_folder_id=None)
+
+
+@pytest.mark.asyncio
+async def test_cross_space_folder_name_conflict_at_target_root_null_path(async_db_session):
+    """#2 fix: a same-name folder at the TARGET space root must be detected even
+    when its file_level_path is NULL (historical rows), not "". Without root-path
+    normalisation NULL == "" is false in SQL and the dup check silently passes."""
+    await _seed_spaces(async_db_session)
+    await _add(async_db_session, id=210, knowledge_id=2, file_name="dup", file_type=DIR, level=0, file_level_path=None)
+    await _add(async_db_session, id=211, knowledge_id=1, file_name="dup", file_type=DIR, level=0, file_level_path="")
+
+    svc = _svc()
+    res = await svc.move_items(1, [{"id": 211, "type": "folder"}], target_space_id=2, target_folder_id=None)
+    assert res["invalid"][0]["reason"] == "name_conflict"
+    assert res["moved"] == []
+
+
+@pytest.mark.asyncio
+async def test_move_rejected_without_upload_file_on_target(async_db_session):
+    """#5 (decision-8 reversal): moving into a target the user has no upload_file
+    on is rejected server-side. The target check runs before per-item checks, so
+    a missing upload_file raises outright."""
+    await _seed_spaces(async_db_session)
+    await _add(async_db_session, id=10, knowledge_id=1, file_name="dst", file_type=DIR, level=0, file_level_path="")
+    await _add(async_db_session, id=20, knowledge_id=1, file_name="a.pdf", file_type=FILE, level=0, file_level_path="")
+
+    svc = _svc()
+    svc._get_effective_permission_ids = AsyncMock(return_value={"move_file", "move_folder", "view_space"})
+    with pytest.raises(SpacePermissionDeniedError):
+        await svc.move_items(1, [{"id": 20, "type": "file"}], target_space_id=1, target_folder_id=10)
