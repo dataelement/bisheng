@@ -387,6 +387,7 @@
   "com_linsight_voice_coming_soon": "Voice input is not available yet",
   "com_linsight_intent_confirmed": "User intent confirmed",
   "com_linsight_planning": "Planning tasks",
+  "com_linsight_executing": "Working",
   "com_linsight_thinking": "Thinking",
   "com_linsight_step_input": "Input",
   "com_linsight_step_output": "Output",

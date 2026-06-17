@@ -30,7 +30,7 @@ import { QueueCard } from './QueueCard';
 import { StepList } from './StepList';
 import { TaskPanel } from './TaskPanel';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
-import { isTaskStarted } from './stepUtils';
+import { isTaskRunning, isTaskStarted } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
 
 interface ExecutionFlowProps {
@@ -106,8 +106,19 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
         [sessionSteps],
     );
 
+    // The session-global pseudo task (id == versionId) carries planning/wrap-up
+    // steps; exclude it so it doesn't count as a "real" planned todo in the
+    // loading-state flags (on reload it arrives inside `tasks`; live it lives in
+    // sessionSteps).
+    const realTasks = useMemo(() => tasks.filter((t: any) => t.id !== versionId), [tasks, versionId]);
+
     // planning row: running, todo list not generated yet, nothing else pending
-    const planning = running && !queueing && !tasks.length && !pendingInput;
+    const planning = running && !queueing && !pendingInput && !realTasks.length;
+    // working row: todos exist but no task is actively streaming a spinner right
+    // now (gap before the first task starts, between tasks, or wrap-up after the
+    // last one). Without this the run looks frozen in those windows.
+    const executing =
+        running && !queueing && !pendingInput && realTasks.length > 0 && !realTasks.some((t: any) => isTaskRunning(t.status));
 
     const handleClarifySubmit = (taskId: string, answer: string) => {
         sendInput({ task_id: taskId || versionId, user_input: answer, files: [] });
@@ -165,6 +176,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             {tasks.filter((task) => isTaskStarted(task.status)).map((task) => (
                                 <TaskStepRow key={task.id} task={task} />
                             ))}
+
+                            {/* working breathing row — bridges the gaps between
+                                tasks / wrap-up so the run never looks frozen */}
+                            {executing && <PlanningRow label={localize('com_linsight_executing')} />}
 
                             {/* active clarify / follow-up card */}
                             {pendingInput && (

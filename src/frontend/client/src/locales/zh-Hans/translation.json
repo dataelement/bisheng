@@ -375,6 +375,7 @@
   "com_linsight_voice_coming_soon": "语音输入暂未开放",
   "com_linsight_intent_confirmed": "已经明确用户意图",
   "com_linsight_planning": "正在规划任务",
+  "com_linsight_executing": "正在执行任务",
   "com_linsight_thinking": "思考中",
   "com_linsight_step_input": "输入",
   "com_linsight_step_output": "输出",

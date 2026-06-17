@@ -59,6 +59,26 @@
 - `_save_task_info` 的 todo 合并按 8 字符 hash id，与 svid 伪任务 id 不冲突。
 - 多租户：伪任务 `tenant_id` 走自动注入，禁手写 WHERE（C3/C4）。
 
+---
+
+## 问题三：HITL 等待用户输入期间刷新后无 loading（且答完无动效）
+
+**现象**：任务模式 `ask_user` 等待输入期间刷新页面 → 输入框看不到、一直加载；答完后也没有 loading 动效。
+
+**根因（两层）**：
+
+1. **前端动效只覆盖两种状态**：`PlanningRow`（仅「running 且还没 todo」）+ `TaskStepRow` 内的任务 spinner（仅「已开始执行的任务」）。todo 已生成但下一个任务还没开始流式、或收尾期，两者都不满足 → 出现「无动效空窗」。叠加 session 级伪任务在 reload 时混进 `tasks` 数组污染 `tasks.length` 判断。
+2. **后端从不推送 `user_input_completed`**：`/workbench/user-input` 答完只 `set_user_input` + 重新入队，**没有 `push_message(USER_INPUT_COMPLETED)`**（design §3.3 行5 / §4.5 要求推）。前端 `user_input_completed` 处理器（标记 clarify 完成 + fall-through 刷新状态）永不触发；完成态只靠 `sendInput` 本地乐观更新，刷新即丢。且 session 级 clarify 还跳过了 `set_user_input` → 完成态从不落库 → 刷新后 clarify 卡重现。
+
+**修复**：
+
+- **前端**（`ExecutionFlow.tsx` / `PlanningRow.tsx`）：用 `realTasks = tasks.filter(t => t.id !== versionId)` 剔除伪任务后再判 `planning`；新增 `executing = running && !pendingInput && realTasks.length>0 && !realTasks.some(isTaskRunning)`，在任务行之后渲染一条 `PlanningRow label="正在执行任务"` 呼吸行，桥接「todo 生成→首个任务启动」「任务之间」「收尾期」的空窗。任务正在流式时（`isTaskRunning`）抑制，避免与任务行 spinner 双转。新增 i18n `com_linsight_executing`（zh/en/ja）。
+- **后端**（`endpoints/linsight.py`）：伪任务行已存在（问题二），故**统一走 `set_user_input`**（不再 session 级特判），答完 `push_message(USER_INPUT_COMPLETED, data=task.model_dump())`；legacy 无行会话回退为「只入队、不落库」。这样答完前端正规收卡 + 刷新后显示已答状态。
+
+测试：`test/linsight/test_hitl_worker.py` 新增 `test_user_input_pushes_user_input_completed`（断言推 USER_INPUT_COMPLETED）+ 幂等用例补断言不重复推。
+
+---
+
 ## 测试
 
 `test/linsight/test_step_persistence.py`（新增）：

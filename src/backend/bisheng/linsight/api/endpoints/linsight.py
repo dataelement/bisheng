@@ -371,35 +371,39 @@ async def user_input(
     # If there are documents Process files first
     processed_files = await LinsightWorkbenchImpl.human_participate_add_file(session_version_model, files=files)
 
-    # Session-level clarify (ask_user fired before any todo exists): the interrupt
-    # routes to the session pseudo task (task_id == session_version_id), which has
-    # NO LinsightExecuteTask row, so set_user_input would 500. The resume only
-    # needs the user_input VALUE (the worker reads it from the queue item, not the
-    # task); persistence here is just for display/idempotency. So for the
-    # session-level case we skip set_user_input and enqueue the resume directly.
-    session_level = linsight_execute_task_id == session_version_id
+    # The session pseudo task row (id == session_version_id) now exists (F035
+    # problem 2), so set_user_input works for BOTH task-level and session-level
+    # clarifies — no special-casing. Persisting the answer marks the
+    # call_user_input step is_completed so a refresh after answering shows the
+    # answered state (not a re-prompt) and flips status to USER_INPUT_COMPLETED.
+    existing_task = await state_message_manager.get_execution_task(linsight_execute_task_id)
 
-    if session_level:
-        already_completed = False
-    else:
-        # Idempotency guard: if the task is already USER_INPUT_COMPLETED, a resume
-        # payload was already enqueued by the first submit; skip re-enqueue so a
-        # double-submit cannot spawn two resume pick-ups for the same thread.
-        existing_task = await state_message_manager.get_execution_task(linsight_execute_task_id)
-        already_completed = (
-            existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
-        )
+    # Idempotency guard: if the task is already USER_INPUT_COMPLETED, a resume
+    # payload was already enqueued by the first submit; skip so a double-submit
+    # cannot spawn two resume pick-ups for the same thread.
+    already_completed = existing_task is not None and existing_task.status == ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
-        await state_message_manager.set_user_input(
-            task_id=linsight_execute_task_id, user_input=input_content, files=processed_files
-        )
-
-    # park-and-release (design §4.6): re-enqueue the parked task at the HEAD of
-    # the queue so it resumes ahead of newly-queued tasks (PRD §4.4.4). A parked
-    # task holds no worker slot; this lpush is what wakes it up. set_user_input
-    # raises on failure, so reaching here means the input was persisted and the
-    # task is now USER_INPUT_COMPLETED.
     if not already_completed:
+        # Legacy parked sessions created before the pseudo-task row existed have
+        # no row for a session-level clarify; the resume reads the answer from the
+        # queue item, so persistence is best-effort there (skip when no row).
+        if existing_task is not None:
+            await state_message_manager.set_user_input(
+                task_id=linsight_execute_task_id, user_input=input_content, files=processed_files
+            )
+            # Push user_input_completed so the live UI collapses the ClarifyCard
+            # into an answered intent row and refreshes status (design §3.3 row 5
+            # / §4.5). Without this the frontend only stamped completion
+            # optimistically — lost on refresh, and the status never refreshed.
+            updated_task = await state_message_manager.get_execution_task(linsight_execute_task_id)
+            if updated_task is not None:
+                await state_message_manager.push_message(
+                    MessageData(event_type=MessageEventType.USER_INPUT_COMPLETED, data=updated_task.model_dump())
+                )
+
+        # park-and-release (design §4.6): re-enqueue the parked task at the HEAD
+        # of the queue so it resumes ahead of newly-queued tasks (PRD §4.4.4). A
+        # parked task holds no worker slot; this lpush is what wakes it up.
         from bisheng.linsight.worker import LinsightQueue, encode_queue_item
 
         redis_client = await get_redis_client()

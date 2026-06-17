@@ -377,6 +377,8 @@ def _build_session(user_id=1):
 def _build_task(status):
     task = MagicMock()
     task.status = status
+    # model_dump must return a real dict so MessageData(data=...) validates.
+    task.model_dump = MagicMock(return_value={"id": "task-1", "status": str(status)})
     return task
 
 
@@ -392,6 +394,7 @@ async def _call_user_input(real_queue, existing_task_status):
     sm = MagicMock()
     sm.get_execution_task = AsyncMock(return_value=_build_task(existing_task_status))
     sm.set_user_input = AsyncMock()
+    sm.push_message = AsyncMock()
 
     with (
         patch.object(
@@ -433,11 +436,26 @@ async def test_user_input_enqueues_resume_at_head(queue):
     assert head["user_input"] == "my answer"
 
 
+async def test_user_input_pushes_user_input_completed(queue):
+    """The endpoint pushes a user_input_completed message so the live UI collapses
+    the ClarifyCard and refreshes status (design §3.3 row 5 / §4.5)."""
+    from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum
+    from bisheng.linsight.domain.services.state_message_manager import MessageEventType
+
+    _resp, sm = await _call_user_input(queue, existing_task_status=ExecuteTaskStatusEnum.WAITING_FOR_USER_INPUT)
+
+    sm.push_message.assert_awaited_once()
+    pushed = sm.push_message.await_args.args[0]
+    assert pushed.event_type == MessageEventType.USER_INPUT_COMPLETED
+
+
 async def test_user_input_idempotent_no_double_enqueue(queue):
     from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum
 
     # Task already USER_INPUT_COMPLETED -> a resume payload was already enqueued
     # by the first submit; a second submit must NOT enqueue again.
-    await _call_user_input(queue, existing_task_status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED)
+    _resp, sm = await _call_user_input(queue, existing_task_status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED)
 
     assert await queue.qsize() == 0
+    # No re-push on an already-completed input.
+    sm.push_message.assert_not_awaited()
