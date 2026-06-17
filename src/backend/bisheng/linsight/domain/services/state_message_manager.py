@@ -354,8 +354,28 @@ class LinsightStateMessageManager:
             if task_model.history is None:
                 task_model.history = []
 
-            # Adding new Steps
-            task_model.history.append(step.model_dump())
+            # Upsert by call_id so a streamed step is stored as ONE history entry
+            # instead of one-per-token / one-per-frame (F035 problem 1,
+            # design-增量-步骤持久化修复.md):
+            #   - thinking: deltas accumulate (concatenate output text)
+            #   - tool/knowledge/subagent: the end frame supersedes the start
+            #     frame (same call_id; end carries params + output)
+            #   - no call_id (NeedUserInput call_user_input step): append, so
+            #     set_user_input can still read history[-1].
+            step_dump = step.model_dump()
+            call_id = step_dump.get("call_id")
+            merged = False
+            if call_id:
+                for i in range(len(task_model.history) - 1, -1, -1):
+                    prev = task_model.history[i]
+                    if isinstance(prev, dict) and prev.get("call_id") == call_id:
+                        if step_dump.get("step_type") == "thinking":
+                            step_dump["output"] = (prev.get("output") or "") + (step_dump.get("output") or "")
+                        task_model.history[i] = step_dump
+                        merged = True
+                        break
+            if not merged:
+                task_model.history.append(step_dump)
 
             # Update Redis and database
             await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)

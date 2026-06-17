@@ -102,6 +102,11 @@ class LinsightWorkflowTask:
             # Initialization file directory
             self.file_dir = await self._init_file_directory(session_model)
 
+            # F035 problem 2: ensure the session-level pseudo task row exists so
+            # planning/wrap-up/direct-answer steps (mapper routes them to
+            # task_id = svid) are persisted and survive a refresh.
+            await self._ensure_session_pseudo_task(session_model)
+
             yield session_model
 
         finally:
@@ -219,6 +224,9 @@ class LinsightWorkflowTask:
         try:
             await self._start_termination_monitor(session_model)
             self.file_dir = await self._init_file_directory(session_model)
+            # F035 problem 2: resume/continue can also produce session-level
+            # (task_id = svid) steps; ensure the pseudo task row is present.
+            await self._ensure_session_pseudo_task(session_model)
             yield session_model
         finally:
             await self._cleanup_resources()
@@ -572,6 +580,55 @@ class LinsightWorkflowTask:
 
     # ==================== Mission Execution ====================
 
+    async def _ensure_session_pseudo_task(self, session_model: LinsightSessionVersion) -> None:
+        """Create the session-level pseudo task row (F035 problem 2).
+
+        The StreamEventMapper routes steps to ``task_id = svid`` whenever no todo
+        is in_progress (planning phase, wrap-up, or a direct answer that plans no
+        todo). Without a DB row whose id == svid, those steps hit the orphan
+        branch in ``add_execution_task_step`` / ``update_execution_task_status``
+        and are dropped — invisible after a refresh. This inserts one pseudo task
+        (id == svid) to carry them. Idempotent: skips when it already exists, so
+        resume/continue re-entry and concurrent workers are safe. tenant_id is
+        injected by the SQLAlchemy tenant event (worker has restored the context).
+        """
+        svid = session_model.id
+        try:
+            existing = await LinsightExecuteTaskDao.get_by_id(svid)
+            if existing:
+                return
+            pseudo = LinsightExecuteTask(
+                id=svid,
+                session_version_id=svid,
+                parent_task_id=None,
+                previous_task_id=None,
+                next_task_id=None,
+                task_type=ExecuteTaskTypeEnum.SINGLE,
+                task_data={"name": "执行准备", "is_session_global": True},
+                status=ExecuteTaskStatusEnum.IN_PROGRESS,
+                history=[],
+            )
+            await LinsightExecuteTaskDao.batch_create_tasks([pseudo])
+            logger.info(f"Created session-level pseudo task for {svid}")
+        except Exception as e:
+            # A concurrent worker may have created it first; non-fatal — orphan
+            # steps simply fall back to the (now rare) skip branch.
+            logger.warning(f"Failed to ensure session pseudo task for {svid}: {e}")
+
+    async def _complete_session_pseudo_task(self, session_model: LinsightSessionVersion) -> None:
+        """Mark the session pseudo task SUCCESS on normal completion (best-effort).
+
+        Empty-history pseudo tasks are dropped by ``get_execute_task_detail`` so a
+        SUCCESS flip on an empty one is harmless; one that carried orphan steps
+        then shows as a completed "执行准备" node instead of a stuck in_progress.
+        """
+        try:
+            await self._state_manager.update_execution_task_status(
+                task_id=session_model.id, status=ExecuteTaskStatusEnum.SUCCESS
+            )
+        except Exception as e:
+            logger.warning(f"Failed to finalize session pseudo task: {e}")
+
     async def _save_task_info(self, session_model: LinsightSessionVersion, task_info: list[dict]):
         """Save Task Information.
 
@@ -768,32 +825,30 @@ class LinsightWorkflowTask:
         return {"messages": [{"role": "user", "content": content}]}
 
     async def _resolve_user_knowledge_bases(self, session_model: LinsightSessionVersion) -> list:
-        """Resolve the user's accessible knowledge bases (coarse, permission-safe).
+        """Resolve the EXACT knowledge bases the user picked in the daily picker.
 
-        org_knowledge_enabled -> all NORMAL KBs; personal -> all PRIVATE KBs,
-        each capped by the linsight ``max_knowledge_num``. ``aget_user_knowledge``
-        already filters to KBs the user can see, so this list IS the permission
-        whitelist — both the prompt advertisement (``_resolve_knowledge_block``)
-        and the tool gate (``_resolve_allowed_knowledge_ids``) derive from it, so
-        what the model is told it may search and what it is actually allowed to
-        search stay in lockstep.
+        Mirrors daily mode (``_resolve_user_kb_selection``): load precisely the
+        selected organization-KB ids + knowledge-space ids — NOT every KB of a
+        coarse type. The deprecated ``org_knowledge_enabled`` /
+        ``personal_knowledge_enabled`` booleans are intentionally NOT consulted
+        here; an empty id selection means the user picked none. Both the prompt
+        advertisement (``_resolve_knowledge_block``) and the tool gate
+        (``_resolve_allowed_knowledge_ids``) derive from this list, so what the
+        model is told it may search and what it is actually allowed to search stay
+        in lockstep.
         """
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
-        linsight_conf = settings.get_linsight_conf()
-        cap = getattr(linsight_conf, "max_knowledge_num", 0) or 0
-        if cap <= 0:
+        org_ids = [int(x) for x in (session_model.organization_knowledge_ids or [])]
+        space_ids = [int(x) for x in (session_model.knowledge_space_ids or [])]
+        ids = org_ids + space_ids
+        if not ids:
             return []
-        kbs: list = []
-        if session_model.org_knowledge_enabled:
-            kbs += await KnowledgeDao.aget_user_knowledge(
-                session_model.user_id, None, KnowledgeTypeEnum.NORMAL, limit=cap
-            )
-        if session_model.personal_knowledge_enabled:
-            kbs += await KnowledgeDao.aget_user_knowledge(
-                session_model.user_id, None, KnowledgeTypeEnum.PRIVATE, limit=cap
-            )
-        return kbs
+        try:
+            return list(await KnowledgeDao.aget_list_by_ids(ids))
+        except Exception as e:
+            logger.warning(f"Failed to load selected knowledge bases {ids}: {e}")
+            return []
 
     async def _resolve_knowledge_block(self, session_model: LinsightSessionVersion) -> str | None:
         """Render the user's accessible KBs into a prompt block advertising each
@@ -1096,7 +1151,13 @@ class LinsightWorkflowTask:
         # answer (F035 backstop) — same as the _handle_task_success path.
         final_files = []
         execution_tasks = await self._state_manager.get_execution_tasks()
-        if execution_tasks:
+        # Only REAL planned todos warrant a synthesized report. The always-present
+        # session-level pseudo task (F035 problem 2) must NOT count here, otherwise
+        # a trivial greeting/Q&A that planned no todo would wrongly get a report.
+        planned_tasks = [
+            t for t in execution_tasks if not (getattr(t, "task_data", None) or {}).get("is_session_global")
+        ]
+        if planned_tasks:
             file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
             final_files = await linsight_execute_utils.get_final_result_file(
                 session_model=session_model, file_details=file_details, answer=answer
@@ -1111,6 +1172,9 @@ class LinsightWorkflowTask:
             "all_from_session_files": [],
         }
         await self._state_manager.set_session_version_info(session_model)
+        # F035 problem 2: finalize the session pseudo task carrying any
+        # planning/direct-answer steps so it isn't left stuck in_progress.
+        await self._complete_session_pseudo_task(session_model)
         # F035 Track J: land the answer in the unified conversation stream.
         await linsight_execute_utils.persist_task_turn_message(session_model)
         await self._state_manager.push_message(
@@ -1156,6 +1220,9 @@ class LinsightWorkflowTask:
 
             # Save session information and push messages
             await self._state_manager.set_session_version_info(session_model)
+            # F035 problem 2: finalize the session pseudo task carrying any
+            # planning/wrap-up steps so it isn't left stuck in_progress.
+            await self._complete_session_pseudo_task(session_model)
             # F035 Track J: land the answer in the unified conversation stream.
             await linsight_execute_utils.persist_task_turn_message(session_model)
             await self._state_manager.push_message(
