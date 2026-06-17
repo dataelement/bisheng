@@ -317,6 +317,10 @@ const AiChatInput = memo(
         // Show file upload feature
         const showUpload = fileUpload && bsConfig?.fileUpload?.enabled;
 
+        // F035 (v2.6): the 添加技能 entry is hidden until admin enables it in
+        // 工作台-技能管理. Absent on legacy deployments → treated as disabled.
+        const showAddSkill = !!bsConfig?.skillEntry?.enabled;
+
         // v2.5: daily chat always runs through the LangGraph Agent flow. Tools,
         // knowledge bases and files coexist freely — there's no mutex anymore.
         // `agentMode` stays around only so Lingsi / legacy renderers keep working.
@@ -539,7 +543,7 @@ const AiChatInput = memo(
                                     showTaskModeEntry={taskModeEntry || taskMode}
                                     onEnterTaskMode={onToggleTaskMode ? onToggleTaskMode : () => navigate(taskMode ? '/c/new' : '/linsight/new')}
                                     taskModeActive={taskMode}
-                                    renderSkillSubmenu={(close) => (
+                                    renderSkillSubmenu={showAddSkill ? (close) => (
                                         <SkillSelector
                                             selected={dailySkills}
                                             onChange={(next) => {
@@ -555,7 +559,7 @@ const AiChatInput = memo(
                                                 }
                                             }}
                                         />
-                                    )}
+                                    ) : undefined}
                                 />
                             )}
                             {/* Knowledge-space pill — separate "+"-menu sibling that

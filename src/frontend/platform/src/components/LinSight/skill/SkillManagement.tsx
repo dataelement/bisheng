@@ -26,7 +26,14 @@ import { getSkillErrorMessage } from "./skillErrors";
 
 const PAGE_SIZE = 10;
 
-export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number }) {
+interface SkillManagementProps {
+    scopeVersion?: number;
+    /** F035 (v2.6): whether the client 添加技能 entry is shown. Default off. */
+    entryEnabled?: boolean;
+    onEntryToggle?: (enabled: boolean) => void;
+}
+
+export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntryToggle }: SkillManagementProps) {
     const { t } = useTranslation();
     const [skills, setSkills] = useState<SkillBrief[]>([]);
     const [total, setTotal] = useState(0);
@@ -125,7 +132,11 @@ export function SkillManagement({ scopeVersion = 0 }: { scopeVersion?: number })
 
     return (
         <div className="mb-6">
-            <p className="text-lg font-bold mb-3">{t('skillManage.title')}</p>
+            <div className="flex items-center gap-2 mb-3">
+                <p className="text-lg font-bold">{t('skillManage.title')}</p>
+                <Switch checked={entryEnabled} onCheckedChange={onEntryToggle} />
+                <span className="text-sm text-muted-foreground">{t('skillManage.entryToggleTip')}</span>
+            </div>
             <div className="flex items-center gap-2 mb-3">
                 <SearchInput
                     placeholder={t('skillManage.searchPlaceholder')}

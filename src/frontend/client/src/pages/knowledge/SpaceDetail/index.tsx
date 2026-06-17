@@ -662,6 +662,10 @@ export function KnowledgeSpaceContent({
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
         onUploadFile: canUploadFile ? onUploadFile : () => undefined,
+        // Without this the folder-drop branch in handleDrop is skipped (it
+        // guards on `onUploadFolder` being defined), so dropping a folder did
+        // nothing. Gate on canUploadFile like onUploadFile.
+        onUploadFolder: canUploadFile ? onUploadFolder : undefined,
         maxFileSizeMB,
         enableEtl4lm,
     });

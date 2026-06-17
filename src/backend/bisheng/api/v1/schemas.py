@@ -444,6 +444,9 @@ class WorkstationConfig(BaseModel):
     webSearch: Optional[WSPrompt] = None  # DEPRECATED, superseded by `tools`
     knowledgeBase: Optional[WSPrompt] = None
     fileUpload: Optional[WSPrompt] = None
+    # F035 (v2.6): gate for the client 添加技能 (Add Skill) entry. Defaults to
+    # off — the entry only shows in the input when admin enables it.
+    skillEntry: Optional[WSPrompt] = None
     systemPrompt: Optional[str] = None
     # --- v2.5 Agent-mode additions ---
     tools: Optional[List[ToolConfig]] = Field(

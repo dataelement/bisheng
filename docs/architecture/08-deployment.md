@@ -85,19 +85,6 @@ bisheng-milvus-standalone
 - `database_url`：正则匹配 `:password@` 中的密码部分，调用 `decrypt_token()` 解密
 - `redis_url`：支持字符串 URL 和字典两种格式，字典格式使用 `encrypt(...)` 包装标记加密值
 
-### 达梦（DM）数据库 schema 配置
-
-达梦连接串格式为 `dm+dmPython://用户:密码@host:port`。达梦的 **schema 默认等于登录用户名**，因此用「拥有目标 schema 的用户」登录即可，无需额外配置。
-
-如需显式指定 schema，**必须用查询串 `?schema=XXX`**，不能写成 path 形式 `/XXX`：
-
-```text
-✅ dm+dmPython://BISHENG:<enc>@192.168.107.9:5236/?schema=BISHENG
-❌ dm+dmPython://BISHENG:<enc>@192.168.107.9:5236/BISHENG
-```
-
-原因：SQLAlchemy 会把 URL 的 path 段映射成 `connect()` 的 `database` 关键字参数，而 `dmPython.connect()` 不接受 `database`（报 `'database' is an invalid keyword argument`）；它接受的是 `schema`，由查询串透传。`DatabaseConnectionManager`（`src/backend/bisheng/core/database/connection.py`）在构造时通过 `_normalize_dm_url()` 统一把 path/query 里的 schema 归一化为 `?schema=`，确保同步（dmPython）与异步（dmAsync）引擎行为一致；若 path 与 query 同时存在，`?schema=` 优先。
-
 ### Settings 类主要字段
 
 `Settings` 类定义在 `src/backend/bisheng/core/config/settings.py`，主要配置分组：
@@ -218,6 +205,28 @@ npm start -- --host 0.0.0.0   # 端口 3001，API 代理到 localhost:7860
 | `restart` | `./deploy.sh restart [backend worker]` | 重启指定服务 |
 
 支持的 service 别名：`backend`、`worker`（backend_worker）、`frontend`、`mysql`、`redis`、`es`（elasticsearch）、`minio`、`milvus`、`etcd`。
+
+## 升级 checklist
+
+> 跨版本升级时，除 `alembic upgrade head`（DDL）外，部分版本还引入了**一次性数据迁移 / backfill 脚本**。这类数据操作按约定不放进 Alembic（见 `src/backend/CLAUDE.md`「Migration vs. script」），需在升级后**手动按序执行**。脚本均**默认 dry-run、可重复执行（幂等）**，建议先空跑看摘要再加 `--apply`。脚本详细说明见 `src/backend/scripts/README.md`。
+
+### v2.6 · 灵思任务模式迁移（F035）
+
+从 < v2.6 升级到 v2.6（自研 ReAct → deepagents）涉及 4 件事。其中**步骤 2/3 在服务首次启动时自动执行**（`main.lifespan` 里的幂等 backfill，对齐 F034 先例：失败只记日志、绝不阻塞启动，下次启动自愈），运维**无需手动跑**——对应脚本仅在需要时供手动补跑 / dry-run 核对。**步骤 1 由部署流程执行、步骤 4 需手动执行。**
+
+| # | 步骤 | 触发方式 | 命令（手动补跑 / 核对，从 `src/backend/`） | 不执行的后果 |
+|---|------|---------|------------------------------------------|-------------|
+| 1 | **建表**（DDL，先决条件） | 🔧 部署流程 | `uv run alembic upgrade head` | 后续 backfill / 脚本所依赖的 `linsight_skill` 等表不存在 |
+| 2 | **灵思执行模型收敛**（Track E） | ✅ 启动自动 | `python scripts/migrate_linsight_task_model_to_default.py` → `--apply` | `task_model` / `linsight_executor_mode` 残留，新内核取不到 `linsight_default_model_id`，灵思无可用执行模型 |
+| 3 | **任务模式菜单权限**（WEB_MENU） | ✅ 启动自动 | `python scripts/backfill_linsight_task_mode_web_menu.py` → `--apply` | 存量角色丢失 `linsight_task_mode` 菜单，路由守卫拦截，看不到任务模式入口 |
+| 4 | **存量 SOP → Skill**（Track G） | ✋ 手动 | `bash scripts/migrate_sop_to_skill.sh` → `bash scripts/migrate_sop_to_skill.sh apply` | 存量 `linsight_sop` 不会转为可用 Skill，管理页 / 技能选择器为空 |
+
+要点：
+
+- **为什么 2/3 自动、4 手动**：2/3 是纯 DB、幂等、轻量的 backfill，失败只影响菜单 / 模型配置且可自愈，适合放进启动 lifespan；步骤 4 要写对象存储（MinIO 上的 `SKILL.md`）、数据量可能大、需人工核对迁移摘要，副作用重，故保持手动运维脚本（详见 `src/backend/CLAUDE.md`「Migration vs. script」与 PRD 决策）。
+- **步骤 4 说明**：需要完整 app context（写 MinIO 的 `SKILL.md`）。**不调用 LLM**——技能描述取 SOP 原描述，缺失时用 SOP 名称兜底（技能描述为必填，不会留空）。产出 JSON 迁移摘要（成功/跳过/失败，**运维产物，无管理页报告界面**），失败 / 超大 SOP 项需人工处理（拆分后经管理页重建）。`linsight_sop` 原表保留归档、不删。
+- **幂等**：四步均可安全重跑。步骤 2/3 重复启动是 no-op；步骤 4 借 `metadata.sop-id` 识别已迁移项并覆盖自身 bundle，不会重复产生带后缀的技能。
+- 步骤 4 单租户灰度可加 `--tenant-id <id>`。
 
 ## 相关文档
 
