@@ -12,9 +12,10 @@ metadata row:
 - ``name`` (skill ID) = pypinyin slug of the SOP name (e.g. 标书撰写流程 ->
   ``biao-shu-zhuan-xie-liu-cheng``); empty/symbol-only names fall back to
   ``sop-{id}``; per-tenant duplicates get a ``-2/-3`` suffix;
-- ``description`` = SOP description truncated to 1024; when missing it is
-  generated via ``SOPManageService.generate_sop_summary`` (pass ``--no-llm``
-  to skip the LLM call and use a static fallback);
+- ``description`` = SOP description truncated to 1024; when the SOP has none,
+  the SOP name is used as a fallback (no LLM call). A skill description is
+  mandatory — ``linsight_skill.description`` is NOT NULL and ``SkillService``
+  rejects empty descriptions — so it is never left blank;
 - frontmatter carries ``metadata.display-name`` and ``metadata.sop-id`` —
   the latter makes re-runs idempotent: a SOP already migrated overwrites its
   own bundle instead of allocating a new suffixed name.
@@ -33,7 +34,6 @@ Dry-run is the default; pass ``--apply`` to persist:
     cd src/backend/
     PYTHONPATH=./ .venv/bin/python scripts/migrate_sop_to_skill.py
     PYTHONPATH=./ .venv/bin/python scripts/migrate_sop_to_skill.py --apply
-    PYTHONPATH=./ .venv/bin/python scripts/migrate_sop_to_skill.py --apply --no-llm
     PYTHONPATH=./ .venv/bin/python scripts/migrate_sop_to_skill.py --tenant-id 2 --apply
 """
 
@@ -79,7 +79,10 @@ from bisheng.linsight.domain.services.skill_store import (  # noqa: E402
 # Aligned with SOPManageService import/export limit (SopContentOverLimitError).
 SOP_CONTENT_LIMIT = 50000
 DEFAULT_TENANT_ID = 1
-_FALLBACK_DESCRIPTION = "由历史 SOP「{name}」迁移生成的技能。"
+# Only used when a SOP has neither a description nor a name (content-only row);
+# the description is mandatory (NOT NULL + SkillService validation), so it must
+# never be blank.
+_FALLBACK_DESCRIPTION = "历史 SOP（#{sop_id}）迁移生成的技能。"
 
 
 def _dedupe_name(base: str, used: set[str]) -> tuple[str, bool]:
@@ -127,25 +130,25 @@ async def _load_tenant_state(store: SkillStore, tenant_id: int) -> tuple[dict[st
     return sop_map, used_names, used_display
 
 
-async def _generate_description(sop: LinsightSOP, no_llm: bool) -> tuple[str, str]:
-    """Return (description, mode) where mode in {existing, generated, fallback}."""
+def _resolve_description(sop: LinsightSOP) -> tuple[str, str]:
+    """Return (description, mode) where mode in {existing, name_fallback, fallback}.
+
+    No LLM: the SOP's own description wins; otherwise the SOP name is used as a
+    fallback (per product decision — a skill description is mandatory, so an
+    empty one would make the migrated skill uneditable in the management page).
+    The static fallback only kicks in for the degenerate content-only row that
+    has neither description nor name.
+    """
     if sop.description and sop.description.strip():
         return sop.description.strip()[:MAX_DESCRIPTION_LEN], "existing"
-    if not no_llm:
-        try:
-            from bisheng.linsight.domain.services.sop_manage import SOPManageService
-
-            summary = await SOPManageService.generate_sop_summary(invoke_user_id=sop.user_id, sop_content=sop.content)
-            desc = str(summary.get("sop_description") or "").strip()
-            if desc and desc != "SOP Description":
-                return desc[:MAX_DESCRIPTION_LEN], "generated"
-        except Exception as exc:
-            logger.warning("generate_sop_summary failed for sop#{}: {}", sop.id, exc)
-    return _FALLBACK_DESCRIPTION.format(name=(sop.name or "").strip()[:64])[:MAX_DESCRIPTION_LEN], "fallback"
+    name = (sop.name or "").strip()
+    if name:
+        return name[:MAX_DESCRIPTION_LEN], "name_fallback"
+    return _FALLBACK_DESCRIPTION.format(sop_id=sop.id)[:MAX_DESCRIPTION_LEN], "fallback"
 
 
 async def _migrate_tenant(
-    store: SkillStore, tenant_id: int, sops: list[LinsightSOP], apply: bool, no_llm: bool, report: dict
+    store: SkillStore, tenant_id: int, sops: list[LinsightSOP], apply: bool, report: dict
 ) -> None:
     set_current_tenant_id(tenant_id)
     sop_map, used_names, used_display = await _load_tenant_state(store, tenant_id)
@@ -182,7 +185,7 @@ async def _migrate_tenant(
             if err := validate_skill_name(name):
                 raise ValueError(f"illegal generated skill id {name!r}: {err}")
 
-            description, desc_mode = await _generate_description(sop, no_llm)
+            description, desc_mode = _resolve_description(sop)
             skill_md = compose_skill_md(
                 name=name,
                 description=description,
@@ -236,7 +239,7 @@ async def _migrate_tenant(
             print(f"[FAIL]    sop#{sop.id} 「{raw_name}」 {exc}")
 
 
-async def _run(apply: bool, no_llm: bool, only_tenant: int | None, report_file: str) -> int:
+async def _run(apply: bool, only_tenant: int | None, report_file: str) -> int:
     await initialize_app_context(config=settings)
     try:
         store = SkillStore()
@@ -259,7 +262,7 @@ async def _run(apply: bool, no_llm: bool, only_tenant: int | None, report_file: 
 
         report: dict = {"summary": {}, "success": [], "skipped": [], "failed": []}
         for tenant_id in sorted(groups):
-            await _migrate_tenant(store, tenant_id, groups[tenant_id], apply, no_llm, report)
+            await _migrate_tenant(store, tenant_id, groups[tenant_id], apply, report)
 
         report["summary"] = {
             "mode": mode,
@@ -286,9 +289,6 @@ async def _run(apply: bool, no_llm: bool, only_tenant: int | None, report_file: 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Migrate linsight_sop rows into tenant custom skills (F035)")
     parser.add_argument("--apply", action="store_true", help="persist changes (default: dry-run)")
-    parser.add_argument(
-        "--no-llm", action="store_true", help="skip LLM summary for missing descriptions, use static fallback"
-    )
     parser.add_argument("--tenant-id", type=int, default=None, help="restrict to a single tenant")
     parser.add_argument(
         "--report-file",
@@ -296,7 +296,7 @@ def main() -> int:
         help="path of the JSON summary artifact (default: ./migrate_sop_to_skill_report.json)",
     )
     args = parser.parse_args()
-    return asyncio.run(_run(args.apply, args.no_llm, args.tenant_id, args.report_file))
+    return asyncio.run(_run(args.apply, args.tenant_id, args.report_file))
 
 
 if __name__ == "__main__":
