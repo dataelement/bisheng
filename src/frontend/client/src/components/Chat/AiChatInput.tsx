@@ -624,15 +624,6 @@ const AiChatInput = memo(
                                     onChange={onModelChange!}
                                 />
                             )}
-                            {showVoice && (
-                                <SpeechToTextComponent
-                                    disabled={disabled}
-                                    onChange={(e) => {
-                                        const newText = (text || "") + e;
-                                        setText(newText);
-                                    }}
-                                />
-                            )}
                             {isStreaming ? (
                                 <button
                                     type="button"
@@ -658,6 +649,16 @@ const AiChatInput = memo(
                                         />
                                     </svg>
                                 </button>
+                            ) : showVoice && !text?.trim() ? (
+                                // Empty input → voice button (default); typing any
+                                // text flips it to the send button below.
+                                <SpeechToTextComponent
+                                    disabled={disabled}
+                                    onChange={(e) => {
+                                        const newText = (text || "") + e;
+                                        setText(newText);
+                                    }}
+                                />
                             ) : (
                                 <button
                                     type="button"
