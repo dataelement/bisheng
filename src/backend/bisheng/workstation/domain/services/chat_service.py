@@ -180,6 +180,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
 )
 from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItemSchema
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
 DEFAULT_AGENT_MAX_ITERATIONS = 50
 DAILY_CHAT_CITATION_PROMPT_RULES = f"""{CITATION_PROMPT_RULES}
@@ -539,6 +540,7 @@ async def _build_knowledge_search_tool(
         login_user: UserPayload,
         max_token: int,
         citation_collector: CitationRegistryCollector,
+        file_ids_by_space: dict[int, list[int]] | None = None,
 ) -> StructuredTool | None:
     """StructuredTool wrapper around WorkStationService.queryChunksFromDB.
 
@@ -777,6 +779,7 @@ async def _build_knowledge_search_tool(
                 ),
                 max_token=max_token,
                 login_user=login_user,
+                file_ids_by_space=file_ids_by_space,
             )
         except Exception as exc:
             logger.exception(f'[search_kb] queryChunksFromDB failed: {exc}')
@@ -895,6 +898,7 @@ async def _retrieve_selected_knowledge_context(
         login_user: UserPayload,
         max_token: int,
         citation_collector: CitationRegistryCollector,
+        file_ids_by_space: dict[int, list[int]] | None = None,
 ) -> str:
     """调用模型前先检索用户选择的知识库内容。
 
@@ -921,6 +925,7 @@ async def _retrieve_selected_knowledge_context(
             ),
             max_token=max_token,
             login_user=login_user,
+            file_ids_by_space=file_ids_by_space,
         )
     except Exception as exc:
         logger.exception(f'[pre_retrieve_kb] queryChunksFromDB failed: {exc}')
@@ -1038,6 +1043,36 @@ async def _resolve_user_kb_selection(data: APIChatCompletion) -> list[dict]:
         f' tag_counts={[len(kb["tags"]) for kb in resolved]}'
     )
     return resolved
+
+
+async def _resolve_user_kb_file_filters(
+        request: Request,
+        data: APIChatCompletion,
+        login_user: UserPayload,
+) -> dict[int, list[int]] | None:
+    ukb = data.use_knowledge_base
+    scope = getattr(ukb, 'knowledge_scope', None) if ukb else None
+    if not scope or scope.mode != 'files':
+        return None
+
+    folder_refs = list(scope.folder_refs or [])
+    file_refs = list(scope.file_refs or [])
+    unique_file_refs = {
+        (int(ref.knowledge_space_id), int(ref.file_id))
+        for ref in file_refs
+        if int(ref.knowledge_space_id or 0) > 0 and int(ref.file_id or 0) > 0
+    }
+    if len(unique_file_refs) > 20:
+        raise ValueError('一次最多可选择20个文件进行问答。')
+    if not folder_refs and not file_refs:
+        raise ValueError('请选择可用于问答的文件。')
+
+    service = KnowledgeSpaceService(request, login_user)
+    return await service.resolve_qa_scope_file_ids(
+        folder_refs=folder_refs,
+        file_refs=file_refs,
+        max_files=20,
+    )
 
 
 async def _prepare_tools(
@@ -1349,6 +1384,7 @@ async def _agent_stream_chat_completion(
         try:
             # ---- Step 1: resolve user-selected KBs ----
             knowledge_bases_info = await _resolve_user_kb_selection(data)
+            file_ids_by_space = await _resolve_user_kb_file_filters(request, data, login_user)
 
             # ---- Step 2: assemble LangChain tools ----
             tool_payloads = [t.model_dump() for t in (data.tools or [])]
@@ -1397,6 +1433,7 @@ async def _agent_stream_chat_completion(
                 login_user=login_user,
                 max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
                 citation_collector=citation_collector,
+                file_ids_by_space=file_ids_by_space,
             )
             user_text = _build_user_content(
                 question=data.text or '',
