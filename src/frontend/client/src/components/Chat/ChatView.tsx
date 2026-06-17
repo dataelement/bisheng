@@ -11,6 +11,7 @@ import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
 import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
 import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus } from '~/store/linsight';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
@@ -341,7 +342,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // shared header) and bound to the LATEST task turn. Shows uploaded sources +
   // generated deliverables. The drawer only opens on the header button — no
   // auto-expand (the entry icon appearing is enough).
-  const { getLinsight } = useLinsightManager();
+  const { getLinsight, updateLinsight } = useLinsightManager();
   const taskArtifacts = useWorkspacePanel();
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
@@ -362,6 +363,28 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       status === SopStatus.Running
     );
   }, [taskLinsight]);
+
+  // Stop button handler. A task round runs via the linsight worker/WS AFTER the
+  // handoff SSE stream closed, so `isStreaming` is already false — route the stop
+  // to terminate-execute in that case; otherwise abort the daily SSE stream.
+  const handleStop = useCallback(() => {
+    if (taskRunning && latestTaskVersionId) {
+      userStopLinsightEvent(latestTaskVersionId).catch(() => { /* best-effort: WS task_terminated reconciles */ });
+      updateLinsight(latestTaskVersionId, (prev) => ({
+        ...prev,
+        status: SopStatus.Stoped,
+        tasks: (prev.tasks || []).map((tk: any) => ({
+          ...tk,
+          status: tk.status === 'in_progress' ? 'terminated' : tk.status,
+          children: tk.children
+            ? tk.children.map((c: any) => ({ ...c, status: c.status === 'in_progress' ? 'terminated' : c.status }))
+            : tk.children,
+        })),
+      }));
+      return;
+    }
+    stopGenerating();
+  }, [taskRunning, latestTaskVersionId, updateLinsight, stopGenerating]);
 
   return (
     <Presentation isLingsi={false}>
@@ -444,7 +467,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               disabled={!bsConfig?.models?.length || !!shareToken}
                               sendDisabled={taskRunning}
                               isStreaming={isStreaming}
-                              features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
+                              taskRunning={taskRunning}
+                              features={{ taskModeEntry: canUseTaskMode, taskMode: (taskMode || taskRunning) && canUseTaskMode }}
                               onToggleTaskMode={() => setTaskMode((v) => !v)}
                               placeholder={taskMode
                                 ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
@@ -460,7 +484,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                                 });
                               }}
                               onSend={handleSend}
-                              onStop={stopGenerating}
+                              onStop={handleStop}
                               value={inputText}
                               onChange={setInputText}
                               bsConfig={bsConfig}

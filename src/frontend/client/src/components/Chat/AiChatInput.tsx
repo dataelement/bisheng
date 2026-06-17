@@ -170,6 +170,14 @@ interface AiChatInputProps {
      */
     sendDisabled?: boolean;
     isStreaming?: boolean;
+    /**
+     * F035: a linsight task round is executing. The handoff SSE stream already
+     * closed (so ``isStreaming`` is false), but the task keeps running via the
+     * worker/WS — show the stop button (wired to terminate-execute) and keep the
+     * task-mode toggle highlighted. The textarea stays editable (unlike
+     * ``isStreaming``) so the user can compose the next round's prompt.
+     */
+    taskRunning?: boolean;
     modelOptions?: any[];
     modelValue?: any;
     hasMessages?: boolean;
@@ -208,6 +216,7 @@ const AiChatInput = memo(
         disabled = false,
         sendDisabled = false,
         isStreaming = false,
+        taskRunning = false,
         modelOptions,
         modelValue,
         placeholder = '',
@@ -624,7 +633,7 @@ const AiChatInput = memo(
                                     onChange={onModelChange!}
                                 />
                             )}
-                            {isStreaming ? (
+                            {isStreaming || taskRunning ? (
                                 <button
                                     type="button"
                                     className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100"
