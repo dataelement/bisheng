@@ -7,9 +7,8 @@ import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appCha
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
-import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
-import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
-import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
+import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
+import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
 import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { SopStatus } from '~/store/linsight';
@@ -343,7 +342,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // generated deliverables. The drawer only opens on the header button — no
   // auto-expand (the entry icon appearing is enough).
   const { getLinsight } = useLinsightManager();
-  const taskArtifacts = useArtifactsPanel();
+  const taskArtifacts = useWorkspacePanel();
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
     const uploaded = toUploadedArtifacts(taskLinsight?.files as any[]);
@@ -392,7 +391,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   </div>
                 ) : hasMessages ? (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
-                    {/* Left: Chat Main (Messages + Input) */}
+                    {/* Left: Chat Main (Messages + Input). */}
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
                       <div className="relative flex min-h-0 flex-1 overflow-hidden">
                         <AiChatMessages
@@ -409,6 +408,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           activeCitationMessageId={activeCitationMessageId}
                           onOpenWorkspace={taskArtifacts.openWorkspace}
                           hasWorkspaceFiles={taskWorkspaceFiles.length > 0}
+                          workspaceOpen={taskArtifacts.open}
                           flatMode
                         />
                         {/* Soft translucent fade so the scrolling step flow
@@ -434,41 +434,60 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             />
                           </div>
                         ) : (
-                        <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
-                          {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
-                          <AiChatInput
-                            disabled={!bsConfig?.models?.length || !!shareToken}
-                            sendDisabled={taskRunning}
-                            isStreaming={isStreaming}
-                            features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
-                            onToggleTaskMode={() => setTaskMode((v) => !v)}
-                            placeholder={taskMode
-                              ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
-                              : undefined}
-                            onScrollToBottom={() => { }}
-                            modelOptions={bsConfig?.models}
-                            modelValue={chatModel.id}
-                            onModelChange={(val) => {
-                              const model = bsConfig?.models?.find((m) => m.id === val);
-                              setChatModel({
-                                id: Number(val),
-                                name: model?.displayName || '',
-                              });
-                            }}
-                            onSend={handleSend}
-                            onStop={stopGenerating}
-                            value={inputText}
-                            onChange={setInputText}
-                            bsConfig={bsConfig}
-                            selectedOrgKbs={selectedOrgKbs}
-                            onSelectedOrgKbsChange={setSelectedOrgKbs}
-                            searchType={searchType}
-                            onSearchTypeChange={setSearchType}
-                          />
-                        </div>
+                          <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
+                            {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
+                            <AiChatInput
+                              disabled={!bsConfig?.models?.length || !!shareToken}
+                              sendDisabled={taskRunning}
+                              isStreaming={isStreaming}
+                              features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
+                              onToggleTaskMode={() => setTaskMode((v) => !v)}
+                              placeholder={taskMode
+                                ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
+                                : undefined}
+                              onScrollToBottom={() => { }}
+                              modelOptions={bsConfig?.models}
+                              modelValue={chatModel.id}
+                              onModelChange={(val) => {
+                                const model = bsConfig?.models?.find((m) => m.id === val);
+                                setChatModel({
+                                  id: Number(val),
+                                  name: model?.displayName || '',
+                                });
+                              }}
+                              onSend={handleSend}
+                              onStop={stopGenerating}
+                              value={inputText}
+                              onChange={setInputText}
+                              bsConfig={bsConfig}
+                              selectedOrgKbs={selectedOrgKbs}
+                              onSelectedOrgKbsChange={setSelectedOrgKbs}
+                              searchType={searchType}
+                              onSearchTypeChange={setSearchType}
+                            />
+                          </div>
                         )
                       )}
                     </div>
+
+                    {/* F035: inline workspace panel docked to the right of the chat
+                        main for the latest task turn. Opens from the header entry
+                        button; the file preview renders in place. Fullscreen is a
+                        separate overlay (below) covering the whole route viewport. */}
+                    {latestTaskVersionId && taskArtifacts.open && !taskArtifacts.fullscreen && (
+                      <div className="min-h-0 shrink-0 p-1 w-[46%] min-w-[440px] max-w-[720px]">
+                        <WorkspacePanel
+                          files={taskWorkspaceFiles}
+                          versionId={latestTaskVersionId}
+                          previewFile={taskArtifacts.previewFile}
+                          fullscreen={false}
+                          onPreview={taskArtifacts.openPreview}
+                          onBack={taskArtifacts.backToList}
+                          onClose={taskArtifacts.closeWorkspace}
+                          onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                        />
+                      </div>
+                    )}
 
                     {citationPanelElement}
                   </div>
@@ -527,6 +546,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               </div>
             );
           })()}
+
+          {/* F035: fullscreen workspace preview — overlays the whole route
+              viewport (chatContainerRef is relative + un-clipped), flush to the
+              edges with no padding. Covers the chat (incl. its header) but not the
+              browser, so the global nav stays. Separate instance from the inline
+              panel above (toggling fullscreen remounts the preview). */}
+          {latestTaskVersionId && taskArtifacts.open && taskArtifacts.fullscreen && (
+            <div className="absolute inset-0 z-50 bg-white">
+              <WorkspacePanel
+                files={taskWorkspaceFiles}
+                versionId={latestTaskVersionId}
+                previewFile={taskArtifacts.previewFile}
+                fullscreen={true}
+                onPreview={taskArtifacts.openPreview}
+                onBack={taskArtifacts.backToList}
+                onClose={taskArtifacts.closeWorkspace}
+                onToggleFullscreen={taskArtifacts.toggleFullscreen}
+              />
+            </div>
+          )}
         </div>
 
         {/* F028: portal-style sheets/modals (the floating toolbar lives next to the input) */}
@@ -548,25 +587,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           </>
         )}
 
-        {/* F035: task-mode workspace drawer / file preview for the latest task turn,
-            opened from the header button (HeaderTitle -> onOpenWorkspace). */}
-        {latestTaskVersionId && (
-          <>
-            <WorkspaceDrawer
-              open={taskArtifacts.workspaceOpen}
-              onOpenChange={taskArtifacts.setWorkspaceOpen}
-              files={taskWorkspaceFiles}
-              onPreview={(file) => taskArtifacts.openPreview(file, true)}
-            />
-            <FilePreviewPanel
-              open={!!taskArtifacts.previewFile}
-              onOpenChange={(open) => !open && taskArtifacts.closePreview()}
-              file={taskArtifacts.previewFile}
-              versionId={latestTaskVersionId}
-              onBack={taskArtifacts.fromWorkspace ? taskArtifacts.backToWorkspace : undefined}
-            />
-          </>
-        )}
       </div>
     </Presentation>
   );

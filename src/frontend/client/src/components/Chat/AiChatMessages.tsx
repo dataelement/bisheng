@@ -49,6 +49,8 @@ interface AiChatMessagesProps {
     onOpenWorkspace?: () => void;
     /** F035: whether the latest task turn has any uploaded/generated files */
     hasWorkspaceFiles?: boolean;
+    /** F035: panel already open — hide the header entry button (shown only when closed) */
+    workspaceOpen?: boolean;
 }
 
 /**
@@ -155,6 +157,7 @@ export default function AiChatMessages({
     activeCitationMessageId,
     onOpenWorkspace,
     hasWorkspaceFiles = false,
+    workspaceOpen = false,
 }: AiChatMessagesProps) {
     const localize = useLocalize();
     const isNarrowViewport = usePrefersMobileLayout();
@@ -312,7 +315,7 @@ export default function AiChatMessages({
                     hideShare={hideShare}
                     conversation={{ title: headerTitleText, flowId: "", conversationId, flowType: 15 }}
                     onOpenWorkspace={onOpenWorkspace}
-                    hasWorkspaceFiles={hasWorkspaceFiles}
+                    hasWorkspaceFiles={hasWorkspaceFiles && !workspaceOpen}
                 />
             )}
             <div
