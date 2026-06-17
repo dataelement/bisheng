@@ -2008,20 +2008,36 @@ export async function batchRetryApi(
 // API functions — File preview
 // ─────────────────────────────────────────────
 
+export interface KnowledgeFilePreview {
+    original_url: string;
+    preview_url: string;
+    file_source: string;
+    source_url: string;
+    final_url: string;
+    web_title: string;
+    media_kind: string;
+    html_preview_url: string;
+}
+
 /**
- * Get file preview URL
- * Returns { original_url, preview_url } — prefer preview_url, fallback to original_url
+ * Get file preview URLs and source metadata.
  */
 export async function getFilePreviewApi(
     space_id: string,
     file_id: string
-): Promise<{ original_url: string; preview_url: string }> {
+): Promise<KnowledgeFilePreview> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await request.get<any>(`/api/v1/knowledge/space/${space_id}/files/${file_id}/preview`);
     const data = res?.data ?? res;
     return {
         original_url: data?.original_url ?? "",
         preview_url: data?.preview_url ?? "",
+        file_source: data?.file_source ?? "",
+        source_url: data?.source_url ?? "",
+        final_url: data?.final_url ?? "",
+        web_title: data?.web_title ?? "",
+        media_kind: data?.media_kind ?? "",
+        html_preview_url: data?.html_preview_url ?? "",
     };
 }
 

@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { getFileDownloadApi, getFilePreviewApi, getSpaceInfoApi } from "~/api/knowledge";
-import type { SpaceLevel } from "~/api/knowledge";
+import type { KnowledgeFilePreview, SpaceLevel } from "~/api/knowledge";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import { Button } from "~/components";
 import { AiChatIcon } from "~/components/icons";
@@ -15,6 +15,7 @@ import { PermissionDialog } from "~/components/permission";
 import { AiAssistantPanel } from "~/pages/Subscription/AiChat/AiAssistantPanel";
 import { useResizablePanel } from "~/pages/Subscription/hooks/useResizablePanel";
 import FilePreview from "./index";
+import { RichKnowledgePreview } from "./RichKnowledgePreview";
 import { useLocalize } from "~/hooks";
 
 const AI_SPLIT_STORAGE_KEY = "file-preview-ai-split-width";
@@ -40,6 +41,30 @@ function extractExtFromUrl(url: string, fallback: string): string {
     return fallback;
 }
 
+function resolvePreviewUrl(url: string): string {
+    if (!url) return "";
+    return /^https?:\/\//.test(url)
+        ? url
+        : `${window.location.origin}${__APP_ENV__.BASE_URL}${url}`;
+}
+
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
+
+function isRichPreviewData(data: KnowledgeFilePreview | null): boolean {
+    if (!data) return false;
+    const ext = extractExtFromUrl(data.original_url || data.preview_url || "", "");
+    return (
+        data.file_source === "web_link"
+        || data.file_source === "audio_transcript"
+        || data.file_source === "video_transcript"
+        || data.media_kind === "audio"
+        || data.media_kind === "video"
+        || AUDIO_EXTENSIONS.has(ext)
+        || VIDEO_EXTENSIONS.has(ext)
+    );
+}
+
 export default function FilePreviewPage() {
     const localize = useLocalize();
     const { fileId } = useParams<{ fileId: string }>();
@@ -50,6 +75,7 @@ export default function FilePreviewPage() {
     // Fetch real preview URL via API
     const [fileUrl, setFileUrl] = useState<string>("");
     const [fileType, setFileType] = useState<string>("pdf");
+    const [previewData, setPreviewData] = useState<KnowledgeFilePreview | null>(null);
     const [loading, setLoading] = useState(true);
     const [conversionFailed, setConversionFailed] = useState(false);
     const [canDownload, setCanDownload] = useState(false);
@@ -62,8 +88,24 @@ export default function FilePreviewPage() {
         if (!fileId || !spaceId) { setLoading(false); return; }
         setLoading(true);
         setConversionFailed(false);
+        setPreviewData(null);
         getFilePreviewApi(spaceId, fileId)
             .then((data) => {
+                const resolvedPreview = {
+                    ...data,
+                    original_url: resolvePreviewUrl(data.original_url),
+                    preview_url: resolvePreviewUrl(data.preview_url),
+                    html_preview_url: resolvePreviewUrl(data.html_preview_url),
+                };
+                setPreviewData(resolvedPreview);
+
+                if (isRichPreviewData(data)) {
+                    const richUrl = resolvedPreview.preview_url || resolvedPreview.html_preview_url || resolvedPreview.original_url;
+                    setFileUrl(richUrl);
+                    setFileType(data.file_source === "web_link" ? "html" : extractExtFromUrl(data.original_url, "md"));
+                    return;
+                }
+
                 // Prefer preview_url, fallback to original_url
                 const chosenUrl = data.preview_url || data.original_url;
                 if (!chosenUrl) {
@@ -82,10 +124,7 @@ export default function FilePreviewPage() {
                     return;
                 }
 
-                const resolvedUrl = /^https?:\/\//.test(chosenUrl)
-                    ? chosenUrl
-                    : `${window.location.origin}${__APP_ENV__.BASE_URL}${chosenUrl}`;
-                setFileUrl(resolvedUrl);
+                setFileUrl(resolvePreviewUrl(chosenUrl));
                 setFileType(ext);
             })
             .catch((err) => console.error("Failed to load preview URL:", err))
@@ -297,15 +336,25 @@ export default function FilePreviewPage() {
                 style={{ width: showAiAssistant && !isMobile ? `${leftWidth}px` : "100%" }}
                 className="h-full flex-shrink-0 overflow-hidden"
             >
-                <FilePreview
-                    fileName={fileName}
-                    fileType={fileType}
-                    fileUrl={fileUrl}
-                    actions={topBarActions}
-                    conversionFailed={conversionFailed}
-                    allowDownload={canDownload}
-                    onDownloadFile={handleDownloadFile}
-                />
+                {previewData && isRichPreviewData(previewData) ? (
+                    <RichKnowledgePreview
+                        fileName={fileName}
+                        preview={previewData}
+                        actions={topBarActions}
+                        allowDownload={canDownload}
+                        onDownloadFile={handleDownloadFile}
+                    />
+                ) : (
+                    <FilePreview
+                        fileName={fileName}
+                        fileType={fileType}
+                        fileUrl={fileUrl}
+                        actions={topBarActions}
+                        conversionFailed={conversionFailed}
+                        allowDownload={canDownload}
+                        onDownloadFile={handleDownloadFile}
+                    />
+                )}
             </div>
 
             {/* Splitter (desktop only) */}

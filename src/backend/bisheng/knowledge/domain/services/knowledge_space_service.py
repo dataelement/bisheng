@@ -6353,6 +6353,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         created_files: list[KnowledgeFile] = []
         minio_client = get_minio_storage_sync()
+        html_snapshot_object_name = ""
         try:
             db_file = KnowledgeFileDao.add_file(db_file)
             created_files.append(db_file)
@@ -6363,6 +6364,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 file=markdown_bytes,
                 content_type="text/markdown; charset=utf-8",
             )
+            if result.html_snapshot:
+                html_snapshot_object_name = f"preview/{db_file.id}.html"
+                minio_client.put_object_sync(
+                    bucket_name=minio_client.bucket,
+                    object_name=html_snapshot_object_name,
+                    file=result.html_snapshot.encode("utf-8"),
+                    content_type="text/html; charset=utf-8",
+                )
+                db_file.user_metadata = {
+                    **(db_file.user_metadata or {}),
+                    "html_snapshot_object_name": html_snapshot_object_name,
+                }
             db_file = KnowledgeFileDao.update(db_file)
             await self._create_primary_document_for_file(db_file)
             await self._initialize_child_resource_permissions(
@@ -6375,6 +6388,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
             try:
                 if getattr(db_file, "object_name", None):
                     minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name)
+                if html_snapshot_object_name:
+                    minio_client.remove_object_sync(
+                        bucket_name=minio_client.bucket,
+                        object_name=html_snapshot_object_name,
+                    )
                 await self._cleanup_created_knowledge_files(created_files)
             except Exception as cleanup_exc:
                 logger.warning(f"Failed to cleanup web link import after error: {cleanup_exc}")
@@ -6758,15 +6776,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_record = await self._require_file_relation(file_id, "can_read")
         await self._require_permission_id("knowledge_file", file_id, "view_file", space_id=file_record.knowledge_id)
 
-        original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
         asyncio.create_task(self._log_file_preview_success(file_record))  # noqa: RUF006
         if not self._is_portal_bff_proxy_request():
             asyncio.create_task(self._log_portal_document_read_success(file_record))  # noqa: RUF006
 
-        return {
-            "original_url": original_url,
-            "preview_url": preview_url,
-        }
+        return KnowledgeService.get_file_share_detail(file_record)
 
     def _is_portal_bff_proxy_request(self) -> bool:
         return is_portal_bff_proxy_source(self.request.headers.get(PORTAL_BFF_TELEMETRY_SOURCE_HEADER))

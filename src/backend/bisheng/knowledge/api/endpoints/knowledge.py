@@ -568,11 +568,7 @@ def delete_knowledge_chunk(request: Request,
 async def get_file_share_url(request: Request,
                              login_user: UserPayload = Depends(UserPayload.get_login_user),
                              file_id: int = Query(description='File UniqueID')):
-    original_url, preview_url = await KnowledgeService.aget_file_share_with_auth(login_user, file_id)
-    return resp_200(data={
-        'original_url': original_url,
-        'preview_url': preview_url
-    })
+    return resp_200(data=await KnowledgeService.aget_file_share_detail_with_auth(login_user, file_id))
 
 
 @router.get('/file_bbox')

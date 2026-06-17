@@ -2009,6 +2009,41 @@ class KnowledgeService(KnowledgeUtils):
         return await run_in_threadpool(cls.get_file_share_url, file=file)
 
     @classmethod
+    async def aget_file_share_detail_with_auth(cls, login_user: UserPayload, file_id: int) -> dict:
+        """Return preview/download URLs plus source metadata for file preview UIs."""
+        file = await KnowledgeFileDao.query_by_id(file_id)
+        if not file:
+            raise NotFoundError(msg="file not found")
+        knowledge_info = await KnowledgeDao.aquery_by_id(file.knowledge_id)
+        if not knowledge_info:
+            raise NotFoundError(msg="knowledge not found")
+        await cls.permission_service.ensure_knowledge_read_async(
+            login_user=login_user,
+            owner_user_id=knowledge_info.user_id,
+            knowledge_id=knowledge_info.id,
+        )
+        return await run_in_threadpool(cls.get_file_share_detail, file=file)
+
+    @classmethod
+    def get_file_share_detail(cls, file: KnowledgeFile) -> dict:
+        original_url, preview_url = cls.get_file_share_url(file=file)
+        metadata = file.user_metadata or {}
+        html_preview_url = ""
+        html_snapshot_object_name = metadata.get("html_snapshot_object_name")
+        if html_snapshot_object_name:
+            html_preview_url = cls.get_file_share_url_with_empty(html_snapshot_object_name)
+        return {
+            "original_url": original_url,
+            "preview_url": preview_url,
+            "file_source": file.file_source or "",
+            "source_url": metadata.get("source_url") or "",
+            "final_url": metadata.get("final_url") or "",
+            "web_title": metadata.get("web_title") or "",
+            "media_kind": metadata.get("media_kind") or "",
+            "html_preview_url": html_preview_url,
+        }
+
+    @classmethod
     def get_file_share_url(cls, file_id: int = None, file: KnowledgeFile = None) -> Tuple[str, str]:
         """ Get the original download address of the file And Corresponding preview file download address """
         if file is None:

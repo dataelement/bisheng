@@ -29,7 +29,34 @@ def test_extract_markdown_removes_stylesheet_and_css_noise() -> None:
     assert "display:none" not in result.markdown
     assert "#app" not in result.markdown
     assert "这是第一段正文内容" in result.markdown
+    assert "来源链接" not in result.markdown
+    assert "导入时间" not in result.markdown
+    assert not result.markdown.lstrip().startswith("# 测试文章")
     assert not result.needs_rendered_fallback
+
+
+def test_build_html_snapshot_adds_base_href() -> None:
+    snapshot = KnowledgeWebLinkImportService._build_html_snapshot(
+        "<html><head><title>内网页面</title></head><body><img src='/logo.png'></body></html>",
+        "http://192.168.106.171:3002/apps",
+        "text/html",
+    )
+
+    assert '<base href="http://192.168.106.171:3002/apps"/>' in snapshot
+    assert '<meta charset="utf-8"/>' in snapshot
+
+
+def test_build_readable_html_snapshot_uses_extracted_body() -> None:
+    snapshot = KnowledgeWebLinkImportService._build_readable_html_snapshot(
+        "公众号文章",
+        "第一段正文\n\n第二段正文",
+        "https://mp.weixin.qq.com/s/example",
+    )
+
+    assert "<h1>公众号文章</h1>" in snapshot
+    assert "第一段正文" in snapshot
+    assert "第二段正文" in snapshot
+    assert "visibility:hidden" not in snapshot
 
 
 def test_spa_shell_triggers_rendered_fallback() -> None:

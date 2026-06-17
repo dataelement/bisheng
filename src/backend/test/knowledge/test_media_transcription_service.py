@@ -38,6 +38,10 @@ def test_normalize_segments_keeps_aliyun_millisecond_timestamps_consistent() -> 
         "[00:00:06 - 00:00:10] My entire life's been spent only in one industry."
         in markdown
     )
+    assert "## 入库文本" in markdown
+    assert "## 识别文本" in markdown
+    assert "来源文件" not in markdown
+    assert "ASR 模型" not in markdown
     assert "01:51:00" not in markdown
 
 

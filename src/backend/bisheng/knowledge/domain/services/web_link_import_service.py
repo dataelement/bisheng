@@ -1,11 +1,11 @@
 import asyncio
 import hashlib
+import html as html_lib
 import ipaddress
 import logging
 import re
 import socket
 from dataclasses import dataclass
-from datetime import datetime
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -24,6 +24,7 @@ class WebLinkImportResult:
     final_url: str
     content_hash: str
     content_length: int
+    html_snapshot: str = ""
 
 
 @dataclass
@@ -196,6 +197,7 @@ class KnowledgeWebLinkImportService:
 
         title = extraction.title
         markdown = extraction.markdown
+        html_snapshot = cls._build_readable_html_snapshot(title, extraction.body, response_url)
         markdown_bytes = markdown.encode("utf-8")
         return WebLinkImportResult(
             title=title,
@@ -203,6 +205,7 @@ class KnowledgeWebLinkImportService:
             final_url=response_url,
             content_hash=hashlib.sha256(markdown_bytes).hexdigest(),
             content_length=len(markdown_bytes),
+            html_snapshot=html_snapshot,
         )
 
     @classmethod
@@ -284,6 +287,79 @@ class KnowledgeWebLinkImportService:
         return content.decode(encoding, errors="replace")
 
     @classmethod
+    def _build_html_snapshot(cls, content: str, source_url: str, content_type: str) -> str:
+        if "text/plain" in content_type:
+            title = cls._title_from_url(source_url)
+            escaped_title = html_lib.escape(title)
+            escaped_body = html_lib.escape(content)
+            return "\n".join(
+                [
+                    "<!doctype html>",
+                    '<html lang="zh-CN">',
+                    "<head>",
+                    '<meta charset="utf-8">',
+                    f"<title>{escaped_title}</title>",
+                    "</head>",
+                    "<body>",
+                    f"<pre>{escaped_body}</pre>",
+                    "</body>",
+                    "</html>",
+                ]
+            )
+
+        soup = cls._make_soup(content)
+        if not soup.find("base"):
+            head = soup.head
+            if head is None:
+                html_tag = soup.html
+                head = soup.new_tag("head")
+                if html_tag:
+                    html_tag.insert(0, head)
+                else:
+                    soup.insert(0, head)
+            base_tag = soup.new_tag("base", href=source_url)
+            head.insert(0, base_tag)
+        if not soup.find("meta", attrs={"charset": True}):
+            head = soup.head
+            if head:
+                meta = soup.new_tag("meta", charset="utf-8")
+                head.insert(0, meta)
+        return str(soup)
+
+    @classmethod
+    def _build_readable_html_snapshot(cls, title: str, body: str, source_url: str) -> str:
+        escaped_title = html_lib.escape(title or cls._title_from_url(source_url))
+        escaped_source = html_lib.escape(source_url)
+        escaped_body = html_lib.escape(body or "")
+        return "\n".join(
+            [
+                "<!doctype html>",
+                '<html lang="zh-CN">',
+                "<head>",
+                '<meta charset="utf-8">',
+                '<meta name="viewport" content="width=device-width, initial-scale=1">',
+                f"<title>{escaped_title}</title>",
+                "<style>",
+                "body{margin:0;background:#f5f7fb;color:#1d2129;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}",
+                "main{box-sizing:border-box;max-width:860px;margin:32px auto;padding:32px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.06);}",
+                "h1{margin:0 0 18px;font-size:28px;line-height:1.35;font-weight:700;}",
+                ".source{margin:0 0 24px;color:#86909c;font-size:14px;}",
+                ".source a{color:#165dff;text-decoration:none;word-break:break-all;}",
+                "article{white-space:pre-wrap;font-size:16px;line-height:1.85;word-break:break-word;}",
+                "</style>",
+                "</head>",
+                "<body>",
+                "<main>",
+                f"<h1>{escaped_title}</h1>",
+                f'<p class="source">来源链接：<a href="{escaped_source}" target="_blank" rel="noreferrer">{escaped_source}</a></p>',
+                f"<article>{escaped_body}</article>",
+                "</main>",
+                "</body>",
+                "</html>",
+            ]
+        )
+
+    @classmethod
     async def _fetch_rendered_content(cls, source_url: str) -> _RenderedContent | None:
         try:
             await cls._validate_url(source_url)
@@ -339,6 +415,7 @@ class KnowledgeWebLinkImportService:
                 body = fallback_body
 
         body = cls._normalize_markdown_body(body)
+        body = cls._strip_leading_title_heading(body, title)
         is_placeholder = cls._is_placeholder_body(body)
         low_value_reason = cls._get_low_value_reason(title, body)
         needs_rendered_fallback = is_placeholder or bool(low_value_reason) or cls._is_low_quality_body(body)
@@ -349,18 +426,7 @@ class KnowledgeWebLinkImportService:
         if not body:
             body = "该网页可能为动态渲染页面，未能提取到静态正文内容。"
 
-        imported_at = datetime.now().isoformat(timespec="seconds")
-        markdown = "\n".join(
-            [
-                f"# {title}",
-                "",
-                f"- 来源链接: {source_url}",
-                f"- 导入时间: {imported_at}",
-                "",
-                body,
-                "",
-            ]
-        )
+        markdown = body.strip() + "\n"
         return _MarkdownExtraction(
             title=title,
             body=body,
@@ -375,6 +441,27 @@ class KnowledgeWebLinkImportService:
             return BeautifulSoup(content, "lxml")
         except Exception:
             return BeautifulSoup(content, "html.parser")
+
+    @staticmethod
+    def _strip_leading_title_heading(body: str, title: str) -> str:
+        normalized_title = re.sub(r"\s+", " ", (title or "").strip()).strip("# ")
+        if not normalized_title:
+            return body
+        lines = body.splitlines()
+        index = 0
+        while index < len(lines) and not lines[index].strip():
+            index += 1
+        if index >= len(lines):
+            return body
+        first_line = lines[index].strip()
+        if not first_line.startswith("#"):
+            return body
+        heading_text = re.sub(r"^#+\s*", "", first_line).strip()
+        heading_text = re.sub(r"\s+", " ", heading_text)
+        if heading_text != normalized_title:
+            return body
+        remaining = lines[:index] + lines[index + 1 :]
+        return "\n".join(remaining).strip()
 
     @classmethod
     def _clean_soup(cls, soup: BeautifulSoup, source_url: str = "") -> None:

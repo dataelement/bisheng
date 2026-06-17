@@ -326,13 +326,13 @@ class KnowledgeMediaTranscriptionService:
         model_name: str,
         segments: list[TranscriptSegment],
     ) -> str:
+        entry_text = "\n".join(segment.text for segment in segments if segment.text).strip()
         lines = [
-            f"# {source_file_name} 转写文本",
+            "## 入库文本",
             "",
-            f"- 来源文件: {source_file_name}",
-            f"- ASR 模型: {model_name}",
+            entry_text,
             "",
-            "## 转写内容",
+            "## 识别文本",
             "",
         ]
         for segment in segments:

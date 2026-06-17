@@ -158,6 +158,7 @@ export default function PortalKnowledgeWorkbench() {
         fileUrl: "",
         fileType: "",
         error: "",
+        previewData: null,
     });
     const activeSpaceIdRef = useRef<string | undefined>();
 
@@ -954,7 +955,7 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         if (!activeSpace || !selectedFile || isFolder(selectedFile)) {
-            setPreview({ loading: false, fileUrl: "", fileType: "", error: "" });
+            setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
             return;
         }
 
@@ -964,6 +965,7 @@ export default function PortalKnowledgeWorkbench() {
                 fileUrl: "",
                 fileType: "",
                 error: "文件尚未完成解析，暂时不可预览。",
+                previewData: null,
             });
             return;
         }
@@ -974,18 +976,26 @@ export default function PortalKnowledgeWorkbench() {
             fileUrl: "",
             fileType: extractExt(selectedFile.name),
             error: "",
+            previewData: null,
         });
 
         getFilePreviewApi(activeSpace.id, selectedFile.id)
             .then((res) => {
                 if (cancelled) return;
-                const nextUrl = res.preview_url || res.original_url;
+                const resolvedPreview = {
+                    ...res,
+                    original_url: resolvePreviewUrl(res.original_url),
+                    preview_url: resolvePreviewUrl(res.preview_url),
+                    html_preview_url: resolvePreviewUrl(res.html_preview_url),
+                };
+                const nextUrl = res.preview_url || res.html_preview_url || res.original_url;
                 if (!nextUrl) {
                     setPreview({
                         loading: false,
                         fileUrl: "",
                         fileType: extractExt(selectedFile.name),
                         error: "未获取到文件预览地址。",
+                        previewData: null,
                     });
                     return;
                 }
@@ -994,6 +1004,7 @@ export default function PortalKnowledgeWorkbench() {
                     fileUrl: resolvePreviewUrl(nextUrl),
                     fileType: extractExt(selectedFile.name, nextUrl),
                     error: "",
+                    previewData: resolvedPreview,
                 });
             })
             .catch(() => {
@@ -1003,6 +1014,7 @@ export default function PortalKnowledgeWorkbench() {
                     fileUrl: "",
                     fileType: extractExt(selectedFile.name),
                     error: "文件预览加载失败。",
+                    previewData: null,
                 });
             });
 
@@ -1201,7 +1213,7 @@ export default function PortalKnowledgeWorkbench() {
         setActivePanel(null);
         setAiDrawerOpen(false);
         setSummaryExpanded(false);
-        setPreview({ loading: false, fileUrl: "", fileType: "", error: "" });
+        setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
     }, []);
 
     const handleToggleFileSelection = useCallback((file: KnowledgeFile, checked: boolean) => {
