@@ -240,6 +240,14 @@ flowchart TD
 ### Track I · 前端·Platform
 - [x] **TI-1** Skill 管理页（列表/搜索/Preview·Source/上传·新建/编辑/删除/启停/校验/空态）。**对** C3 mock。**覆盖** FR-5.x。
   ↳ 2026-06-12 由 D/G owner 代完成（用户授权越界）：`components/LinSight/skill/{SkillManagement,SkillFormDrawer,SkillUploadDialog,SkillDetailSheet}.tsx` + `skillApi`；列表仅展示 display_name（FR-5.1）、bundle 文件树详情（FR-5.14）、上传 .md/.zip/.skill（**文件夹上传暂缓**：需引入 jszip 前端打包，留 Track I 后续）、技能 ID 自动拼音走后端 `GET /skill/slugify`（新增 helper，复用 slugify_pinyin）。
+  ↳ 2026-06-16 详情抽屉超长内容加固（`SkillDetailSheet.tsx`，纯布局/CSS，无新依赖）：标题独占一行 `truncate`+`title` 悬停看全名、编辑/删除按钮 `shrink-0` 锚定右上不被名称挤飞；ID chip 与状态胶囊下移到「元信息行」，ID `min-w-0 max-w-full truncate`+`title`、状态 `shrink-0` 不破行；描述 `break-words line-clamp-2`+`title`；SKILL.md 预览 Markdown 段落/标题/列表/链接补 `break-words`（代码块保留自身横向滚动）；内容区文件名补 `min-w-0`+`title`。根因：flex 子项默认 `min-width:auto` 不缩到内容以下，原 `truncate` 失效。
+    **手动验证清单**（造一个字段顶满的 skill：`display_name`=255、`name`=64、`description`=1024、SKILL.md 正文含无空格长 token；114 用 `scripts/seed_overflow_skill.py --apply` 一键种）：
+    - [ ] ① 标题单行省略号、悬停 tooltip 看全名；编辑/删除按钮不被推出视口、不与右上 × 重叠。
+    - [ ] ② ID chip 行内省略号、悬停看全 ID；状态胶囊整体不破行（必要时整体换到下一行）。
+    - [ ] ③ 描述最多 2 行后省略号、悬停看全文；下方文件树/预览区位置不被描述顶下去。
+    - [ ] ④ 预览区长 token 在面板内折行、无横向溢出；代码块（```）仍可横向滚动。
+    - [ ] ⑤ 文件树超长文件名省略号 + 悬停看全路径；内容区顶部文件名同样省略号。
+    - [ ] ⑥ 暗色主题下以上五点表现一致。
 - [x] **TI-4**（新增，PRD §4.8 / FR-8.x，偏差 D9）工作台配置「灵思」tab 并入「日常」：移除灵思 tab（`DialogueWork.tsx`）；「任务模式展示名称/任务模式输入框提示语」并入日常 tab（读写 `workstation/config/linsight` 的 `tab_display_name/input_placeholder`，`linsight_entry/tools` 字段原样回写不丢）；技能管理区挂首页 tab「推荐应用」上方。**2026-06-12 二次调整（用户确认）**：「日常」tab 更名「首页」（bench.home）；移除「日常模式展示名称」配置项（值仍随保存原样回写）；新增「应用」tab（`AppCenter.tsx`）承载「应用中心欢迎语/描述」（仍写 daily 配置，整包 round-trip）。`LingSiWork.tsx` 成为死代码，随 AC-8 SOP 链路下线一并清理。
 - [ ] **TI-2** 模型配置：工作台对话模型行「灵思默认模型」单选；移除「灵思任务执行模型」区。**对** C4。**覆盖** §4.1.10。
 - [ ] **TI-3** 角色编辑器「工作台菜单→首页→任务模式」开关。**对** C6。**覆盖** FR-7.8。
