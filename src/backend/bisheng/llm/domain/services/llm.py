@@ -590,7 +590,9 @@ class LLMService:
         }
         try:
             if model.model_type == LLMModelType.LLM.value:
-                bisheng_model = await cls.get_bisheng_llm(model_id=model.id, ignore_online=True, **common_params)
+                bisheng_model = await cls.get_bisheng_llm(
+                    model_id=model.id, ignore_online=True, streaming=False, **common_params
+                )
                 await bisheng_model.ainvoke("hello")
             elif model.model_type == LLMModelType.EMBEDDING.value:
                 bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, **common_params)
@@ -1243,9 +1245,6 @@ class LLMService:
                     await embeddings.aembed_query("test")
                 except Exception as e:
                     raise Exception(f"EmbeddingModel initialization failed: {e!s}")
-                from bisheng.linsight.domain.services.sop_manage import SOPManageService
-
-                background_tasks.add_task(SOPManageService.rebuild_sop_vector_store_task, embeddings)
 
                 # Update Personal Knowledge Base
                 # 1.Upgrading alltypeare2(Private Repository)right of privacyknowledgeStatus and Model

@@ -287,7 +287,10 @@ export default function MobileNav({
               type="button"
               data-testid="mobile-header-new-chat-button"
               aria-label={localize('com_ui_new_chat')}
-              className={mobileHeadIconBtnClassName}
+              className={cn(
+                mobileHeadIconBtnClassName,
+                (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-[#C9CDD4]',
+              )}
               onClick={handleNewChat}
             >
               <Outlined.Plus className="size-5" />

@@ -48,7 +48,7 @@ LINSIGHT_SYSTEM_PROMPT_ZH = """你是毕昇灵思任务智能体，负责把用�
 
 
 @tool
-def ask_user(reason: str, questions: list[dict] | None = None) -> str:
+async def ask_user(reason: str, questions: list[dict] | None = None) -> str:
     """需要用户补充信息、做选择或确认时调用本工具暂停任务并向用户提问；用户回答后任务自动继续。
 
     只有调用本工具才会真正暂停等待用户输入——不要直接用普通文字提问后就结束任务。
@@ -109,6 +109,10 @@ async def create_linsight_agent(
     svid = svid or session_model.id
     model = await _resolve_model(session_model, model_id)
 
+    # F035: turn OFF subagent delegation (the deepagents `task` tool) at the
+    # profile level — the only reliable way (see _disable_subagent_delegation).
+    _disable_subagent_delegation(model)
+
     if backend is None:
         backend = _default_backend(svid, file_dir)
     if checkpointer is None:
@@ -160,6 +164,51 @@ async def create_linsight_agent(
         checkpointer=checkpointer,
         store=None,
     )
+
+
+def _disable_subagent_delegation(model: BaseChatModel) -> None:
+    """Disable deepagents' auto-added general-purpose subagent (the ``task``
+    tool) for this model via the official harness-profile API.
+
+    Why: the model over-delegated (spawning ``ls`` / ``glob`` "subagents" that
+    called 0 tools) and could call ``ask_user`` INSIDE a subagent, where the
+    HITL ``interrupt()`` never bubbles up to park the task. The earlier approach
+    — a user-supplied ``_ToolExclusionMiddleware({"task"})`` — does not reliably
+    strip ``task`` because user middleware is ordered before ``SubAgentMiddleware``
+    in the assembled stack, so the injected ``task`` tool reappears before the
+    model. Disabling the general-purpose subagent at the profile level stops
+    ``task`` from being added at all (graph.py: ``gp_profile.enabled is False``
+    → no ``task`` tool). Registration is additive/idempotent and scoped to this
+    model's provider; deriving no provider key is a safe no-op.
+    """
+    try:
+        from deepagents._models import get_model_identifier, get_model_provider
+        from deepagents.profiles import (
+            GeneralPurposeSubagentProfile,
+            HarnessProfile,
+            register_harness_profile,
+        )
+
+        disabled = HarnessProfile(general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False))
+        provider = get_model_provider(model)
+        identifier = get_model_identifier(model)
+        keys: set[str] = set()
+        if provider:
+            keys.add(provider)
+            if identifier and ":" not in identifier:
+                keys.add(f"{provider}:{identifier}")
+        if identifier and ":" in identifier:
+            keys.add(identifier)
+        for key in keys:
+            register_harness_profile(key, disabled)
+        if not keys:
+            from loguru import logger
+
+            logger.warning("disable_subagent_delegation: no harness-profile key derivable; `task` tool may remain")
+    except Exception as e:
+        from loguru import logger
+
+        logger.warning(f"could not disable subagent delegation via harness profile: {e}")
 
 
 async def _resolve_model(session_model, model_id: str | None) -> BaseChatModel:

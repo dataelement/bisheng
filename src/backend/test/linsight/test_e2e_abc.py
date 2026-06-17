@@ -5,8 +5,8 @@ Redis/MinIO and use InMemorySaver), against the real infrastructure in
 ``bisheng/config.yaml``:
 
   - Track A (AC-1): ``create_linsight_agent`` assembles a real deepagents graph.
-  - Track B (AC-5): ``PlainRedisCheckpointer`` round-trips through real Redis and
-    ``adelete_thread`` purges a parked thread (park-and-terminate).
+  - Track B (AC-5): ``PlainRedisCheckpointer`` round-trips through real Redis
+    (put/get/list + pending_writes); parked-thread keys expire via TTL.
   - Track C (AC-6): ``WorkspaceBackend`` writes/reads/ls through real MinIO with
     write-through cache + per-svid tenant isolation.
 
@@ -97,7 +97,7 @@ def test_track_a_agent_factory(abc_results):
 
 
 def test_track_b_checkpointer(abc_results):
-    """AC-5: PlainRedisCheckpointer round-trips through real Redis + adelete_thread."""
+    """AC-5: PlainRedisCheckpointer round-trips through real Redis (put/get/list/writes)."""
     _assert_prefix(abc_results, "B/")
 
 

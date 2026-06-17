@@ -99,6 +99,15 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         setIsLoading(initialConversationId !== "new");
         setMessages([]);
         setTitle("");
+        // Drop the post-handoff skip guard: it only protects the ONE in-place
+        // refetch right after a task handoff. The handoff happens mid-stream, so
+        // the load effect's `isStreaming` guard already suppresses that refetch
+        // and the skip guard never gets consumed — it lingers set to that convo.
+        // Once we genuinely navigate away, it's stale; if left set, returning to
+        // that convo would hit the skip branch and load NOTHING (blank page on the
+        // first switch-back, only loading on the second). Clearing it here makes
+        // the first return load history normally.
+        skipLoadConvoRef.current = null;
         setConversationId(initialConversationId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialConversationId]);
@@ -396,7 +405,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     });
 
                     // New task conversations have no daily `final` event to drive
-                    // title generation — request it explicitly.
+                    // title generation — request it explicitly. The gen_title
+                    // endpoint waits until the backend has persisted a real name,
+                    // so this no longer races slow models.
                     if (wasNewConvo && chat_id) {
                         dataService.genTitle({ conversationId: chat_id })
                             .then((res: { title?: string }) => {
@@ -488,7 +499,9 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                     if (data.conversation?.conversationId) {
                         setConversationId(data.conversation.conversationId);
                     }
-                    // If this was a new conversation, call gen_title to get AI-generated title
+                    // New conversation: fetch the AI-generated title. The gen_title
+                    // endpoint waits until the backend's background task persists a
+                    // real name, so this no longer races slow models (>5s).
                     const finalConvoId = data.conversation?.conversationId || internalConvoIdRef.current;
                     if (wasNewConvo && finalConvoId && finalConvoId !== 'new') {
                         dataService.genTitle({ conversationId: finalConvoId })

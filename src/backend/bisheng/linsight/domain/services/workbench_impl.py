@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import uuid
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
@@ -17,42 +16,34 @@ from bisheng.api.services.workstation import WorkStationService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.linsight import LinsightBishengLLMError, LinsightGenerateSopError, LinsightToolInitError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.cache.utils import CACHE_DIR, save_file_to_folder
+from bisheng.core.cache.utils import save_file_to_folder
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
     LinsightSessionVersionDao,
-    SessionVersionStatusEnum,
 )
-from bisheng.linsight.domain.models.linsight_sop import LinsightSOPRecord
 from bisheng.linsight.domain.schemas.linsight_schema import (
     DownloadFilesSchema,
     LinsightQuestionSubmitSchema,
     SubmitFileSchema,
 )
-from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
-from bisheng.tool.domain.services.tool import ToolServices
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
-from bisheng_langchain.linsight.const import ExecConfig
 
 
 @dataclass
@@ -77,7 +68,6 @@ class LinsightWorkbenchImpl:
     """LinsightWorkbench Implementation Class"""
 
     # Class Constant
-    COLLECTION_NAME_PREFIX = "col_linsight_file_"
     FILE_INFO_REDIS_KEY_PREFIX = "linsight_file:"
     CACHE_EXPIRATION_HOURS = 24
 
@@ -221,6 +211,8 @@ class LinsightWorkbenchImpl:
                 tools=submit_obj.tools,
                 org_knowledge_enabled=submit_obj.org_knowledge_enabled,
                 personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
+                organization_knowledge_ids=submit_obj.organization_knowledge_ids,
+                knowledge_space_ids=submit_obj.knowledge_space_ids,
                 files=processed_files,
                 model=submit_obj.model,
             )
@@ -539,147 +531,6 @@ class LinsightWorkbenchImpl:
         return await LinsightSessionVersionDao.get_session_versions_by_session_id(session_id)
 
     @classmethod
-    async def modify_sop(cls, linsight_session_version_id: str, sop_content: str) -> dict:
-        """
-        Modify Inspiration Conversation Version ofSOPContents
-
-        Args:
-            linsight_session_version_id: Session VersionID
-            sop_content: SOPContents
-
-        Returns:
-            Operating result
-        """
-        try:
-            await LinsightSessionVersionDao.modify_sop_content(
-                linsight_session_version_id=linsight_session_version_id, sop_content=sop_content
-            )
-            return {"success": True, "message": "modify sop content successfully"}
-        except Exception as e:
-            logger.error(f"ChangeSOPContent failed: {e!s}")
-            raise cls.LinsightError(str(e))
-
-    @classmethod
-    async def generate_sop(
-        cls,
-        linsight_session_version_id: str,
-        previous_session_version_id: str | None = None,
-        feedback_content: str | None = None,
-        reexecute: bool = False,
-        login_user: UserPayload | None = None,
-        knowledge_list: list[KnowledgeRead] = None,
-        example_sop: str | None = None,
-    ) -> AsyncGenerator[dict, None]:
-        """
-        BuatSOPContents
-
-        Args:
-            linsight_session_version_id: Current Session VersionID
-            previous_session_version_id: Previous Session VersionID
-            feedback_content: Content of feedback
-            reexecute: Whether to re-execute
-            login_user: Logged in user information
-            knowledge_list: Knowledge Base Columns
-            example_sop: Ref.sop, incoming when doing the same modelsopContents
-
-        Yields:
-            Date GeneratedSOPContent Events
-        """
-        error_message = None
-        try:
-            # Get workbench configuration and session version
-            session_version = await cls._get_session_version(linsight_session_version_id)
-
-            if login_user.user_id != session_version.user_id:
-                yield UnAuthorizedError().to_sse_event_instance()
-                return
-            try:
-                # BuatLLMand tools
-                llm, workbench_conf = await cls._get_llm(session_version.user_id)
-            except Exception as e:
-                logger.error(f"BuatSOPContent failed: session_version_id={linsight_session_version_id}, error={e!s}")
-                raise cls.BishengLLMError(str(e))
-            tools = await cls._prepare_tools(session_version, llm)
-
-            # Preparation History Summary
-            history_summary = await cls._prepare_history_summary(reexecute, previous_session_version_id)
-
-            # Create proxy and generateSOP
-            agent = await cls._create_linsight_agent(session_version, llm, tools, workbench_conf)
-
-            if previous_session_version_id:
-                session_version = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
-
-            content = ""
-            async for res in cls._generate_sop_content(
-                agent,
-                session_version,
-                feedback_content,
-                history_summary,
-                knowledge_list,
-                example_sop=example_sop,
-                login_user=login_user,
-            ):
-                if isinstance(res, cls.SearchSOPError):
-                    yield res.error_class.to_sse_event(event="search_sop_error")
-                    continue
-
-                content += res.content
-                yield {"event": "generate_sop_content", "data": res.model_dump_json()}
-
-            # Update session version status and sop content
-            await LinsightSessionVersionDao.modify_sop_content(
-                linsight_session_version_id=linsight_session_version_id, sop_content=content
-            )
-
-            logger.info(f"BuatSOPContent Success: session_version_id={linsight_session_version_id}")
-
-        except cls.ToolsInitializationError as e:
-            logger.exception(
-                f"Failed to initialize the Inspiration Workbench tool: session_version_id={linsight_session_version_id}, error={e!s}"
-            )
-            error_message = LinsightToolInitError(exception=e)
-        except cls.BishengLLMError as e:
-            logger.exception(f"Bisheng LLMError-free: session_version_id={linsight_session_version_id}, error={e!s}")
-            error_message = LinsightBishengLLMError(exception=e)
-        except Exception as e:
-            logger.exception(f"BuatSOPContent failed: session_version_id={linsight_session_version_id}, error={e!s}")
-            error_message = LinsightGenerateSopError(exception=e)
-
-        finally:
-            if error_message:
-                session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
-                if session_version:
-                    session_version.sop = f"{error_message.Msg}: {error_message.exception!s}"
-                    session_version.status = SessionVersionStatusEnum.SOP_GENERATION_FAILED
-                    await LinsightSessionVersionDao.insert_one(session_version)
-                yield error_message.to_sse_event_instance()
-
-    @classmethod
-    async def _get_session_version(cls, session_version_id: str) -> LinsightSessionVersion:
-        """Get session version"""
-        session_version = await LinsightSessionVersionDao.get_by_id(session_version_id)
-        if not session_version:
-            raise cls.LinsightError("Inspiration session version does not exist")
-        return session_version
-
-    @classmethod
-    async def _prepare_tools(cls, session_version: LinsightSessionVersion, llm: BishengLLM) -> list[BaseTool]:
-        """Preparation Tools List"""
-        try:
-            tools = await cls.init_linsight_config_tools(session_version, llm)
-
-            root_path = os.path.join(CACHE_DIR, "linsight", session_version.id)
-            os.makedirs(root_path, exist_ok=True)
-
-            linsight_tools = await ToolServices.init_linsight_tools(root_path=root_path)
-            tools.extend(linsight_tools)
-
-            return tools
-        except Exception as e:
-            raise cls.ToolsInitializationError(str(e))
-
-    @classmethod
     async def prepare_file_list(cls, session_version: LinsightSessionVersion) -> list[str]:
         """Prepare the zero-body ``<uploaded_files>`` pointer block (design §9.3.3).
 
@@ -719,100 +570,20 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> list[str]:
+        """Render each available KB as a clean, readable prompt line that clearly
+        exposes its ``knowledge_id`` so the agent's ``search_knowledge_base`` tool
+        can target a real id. One item per KB: name + id (+ optional description).
+        Private KBs use a generic name to avoid leaking their titles."""
         res = []
         if not knowledge_list:
             return res
-        # Check if there is a personal knowledge base
-        template_str = (
-            """@{name}Stored information for:{{'The knowledge base is stored in a semantic repositoryid':'{id}'}}@"""
-        )
         for one in knowledge_list:
-            if one.type == KnowledgeTypeEnum.PRIVATE.value:
-                res.append(template_str.format(name="Personal Knowledge Base", id=one.id))
-            else:
-                knowledge_str = template_str.format(name=one.name, id=one.id)
-                if one.description:
-                    knowledge_str += f"，{one.name}is described as{one.description}"
-                res.append(knowledge_str)
+            name = "个人知识库" if one.type == KnowledgeTypeEnum.PRIVATE.value else one.name
+            line = f"- {name} (knowledge_id: {one.id})"
+            if one.type != KnowledgeTypeEnum.PRIVATE.value and one.description:
+                line += f": {one.description}"
+            res.append(line)
         return res
-
-    @classmethod
-    async def _prepare_history_summary(cls, reexecute: bool, previous_session_version_id: str) -> list[str]:
-        """Preparation History Summary"""
-        history_summary = []
-
-        if reexecute and previous_session_version_id:
-            execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(previous_session_version_id)
-
-            for task in execute_tasks:
-                if task.result:
-                    answer = task.result.get("answer", "")
-                    if answer:
-                        history_summary.append(answer)
-
-        return history_summary
-
-    @classmethod
-    async def _create_linsight_agent(
-        cls, session_version: LinsightSessionVersion, llm: BishengLLM, tools: list[BaseTool], workbench_conf
-    ):
-        """BuatLinsightAgent"""
-        from bisheng_langchain.linsight.agent import LinsightAgent
-
-        root_path = os.path.join(CACHE_DIR, "linsight", session_version.id[:8])
-        linsight_conf = settings.get_linsight_conf()
-        exec_config = ExecConfig(**linsight_conf.model_dump(), debug_id=session_version.id)
-        return LinsightAgent(
-            file_dir=root_path,
-            query=session_version.question,
-            llm=llm,
-            tools=tools,
-            exec_config=exec_config,
-        )
-
-    @classmethod
-    async def _generate_sop_content(
-        cls,
-        agent,
-        session_version: LinsightSessionVersion,
-        feedback_content: str | None,
-        history_summary: list[str],
-        knowledge_list: list[KnowledgeRead] = None,
-        example_sop: str = None,
-        login_user: UserPayload | None = None,
-    ) -> AsyncGenerator:
-        """BuatSOPContents"""
-        file_list = await cls.prepare_file_list(session_version)
-        knowledge_list = await cls.prepare_knowledge_list(knowledge_list)
-        if example_sop:
-            async for res in agent.generate_sop(sop=example_sop, file_list=file_list, knowledge_list=knowledge_list):
-                yield res
-        elif feedback_content is None:
-            # RetrieveSOPTemplates
-            sop_template, search_sop_error = await SOPManageService.search_sop(
-                invoke_user_id=login_user.user_id, query=session_version.question, k=3
-            )
-
-            if search_sop_error:
-                search_sop_error: BaseErrorCode
-                logger.error(f"RetrieveSOPTemplate failed: {search_sop_error.Msg}")
-                yield cls.SearchSOPError(error_class=search_sop_error)
-
-            sop_template = "\n\n".join([f"Examples:\n\n{sop.page_content}" for sop in sop_template if sop.page_content])
-
-            async for res in agent.generate_sop(sop=sop_template, file_list=file_list, knowledge_list=knowledge_list):
-                yield res
-        else:
-            sop_template = session_version.sop if session_version.sop else ""
-
-            async for res in agent.feedback_sop(
-                sop=sop_template,
-                feedback=feedback_content,
-                history_summary=history_summary if history_summary else None,
-                file_list=file_list,
-                knowledge_list=knowledge_list,
-            ):
-                yield res
 
     @classmethod
     async def get_execute_task_detail(cls, session_version_id: str, login_user: UserPayload | None = None):
@@ -828,6 +599,16 @@ class LinsightWorkbenchImpl:
         """
         execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id)
 
+        if not execute_tasks:
+            return []
+
+        # F035 problem 2: the session-level pseudo task (task_data.is_session_global)
+        # carries planning/wrap-up/direct-answer steps. Drop it when it captured no
+        # steps so we never render an empty "执行准备" node.
+        def _is_session_global(task: Any) -> bool:
+            return bool((task.task_data or {}).get("is_session_global"))
+
+        execute_tasks = [t for t in execute_tasks if not (_is_session_global(t) and not t.history)]
         if not execute_tasks:
             return []
 
@@ -873,6 +654,9 @@ class LinsightWorkbenchImpl:
 
         # Sort first level tasks
         sorted_root_tasks = sort_tasks_by_chain(root_tasks)
+        # Surface the session-global pseudo task first (planning precedes the
+        # planned sub-tasks). Stable sort keeps the rest of the chain order.
+        sorted_root_tasks = sorted(sorted_root_tasks, key=lambda t: 0 if _is_session_global(t) else 1)
 
         # 3. Build task tree Use parent_task_id Associate subtasks with parent tasks
         def build_task_tree(parent_tasks: list[Any], all_tasks: list[Any]) -> list[TaskNode]:
@@ -975,14 +759,8 @@ class LinsightWorkbenchImpl:
         original_filename = upload_result["original_filename"]
         file_path = upload_result["file_path"]
         try:
-            # Get workbench configuration
-            workbench_conf = await cls._get_workbench_config()
-            collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
-
             # Asynchronous execution of file parsing
-            parse_result = await cls._parse_file(
-                invoke_user_id, file_id, file_path, original_filename, collection_name, workbench_conf
-            )
+            parse_result = await cls._parse_file(invoke_user_id, file_id, file_path, original_filename)
 
             # Cache Result
             await cls._cache_parse_result(file_id, parse_result)
@@ -1007,18 +785,19 @@ class LinsightWorkbenchImpl:
         file_id: str,
         file_path: str,
         original_filename: str,
-        collection_name: str,
-        workbench_conf,
     ) -> dict:
         """
         Synchronize parsed files
+
+        Parses the upload into markdown and uploads that markdown to MinIO so the
+        execution agent can read it from its workspace (``read_file``). The file is
+        intentionally NOT vectorised into milvus/es: task execution reads the full
+        markdown directly, so the old ``col_linsight_file_*`` vectors are unused.
 
         Args:
             file_id: Doc.ID
             file_path: FilePath
             original_filename: Original Filename
-            collection_name: Set Name
-            workbench_conf: Workbench configuration
 
         Returns:
             Parsing results
@@ -1055,9 +834,6 @@ class LinsightWorkbenchImpl:
             await minio_client.put_object_tmp(markdown_filename, markdown_bytes)
             markdown_md5 = await async_calculate_md5(markdown_bytes)
 
-            # Process vector storage
-            await cls._process_vector_storage(invoke_user_id, texts, file_id, collection_name, workbench_conf)
-
             return {
                 "file_id": file_id,
                 "original_filename": original_filename,
@@ -1066,8 +842,6 @@ class LinsightWorkbenchImpl:
                 "markdown_filename": markdown_filename,
                 "markdown_file_path": markdown_filename,
                 "markdown_file_md5": markdown_md5,
-                "embedding_model_id": workbench_conf.embedding_model.id,
-                "collection_name": collection_name,
             }
         except Exception as e:
             logger.error(f"File parsing failed: file_id={file_id}, error={e!s}")
@@ -1077,25 +851,6 @@ class LinsightWorkbenchImpl:
                 "parsing_status": "failed",
                 "error_message": str(e),
             }
-
-    @classmethod
-    async def _process_vector_storage(
-        cls, invoke_user_id: int, texts: list[str], file_id: str, collection_name: str, workbench_conf
-    ) -> None:
-        """Process vector storage"""
-        # Buatembeddings
-        embeddings = await LLMService.get_bisheng_linsight_embedding(
-            model_id=workbench_conf.embedding_model.id, invoke_user_id=invoke_user_id
-        )
-
-        # Create Vector Store
-        vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
-        es_client = KnowledgeRag.init_es_vectorstore(collection_name)
-
-        # Adding Text to Vector Storage
-        metadatas = [{"file_id": file_id} for _ in texts]
-        await vector_client.aadd_texts(texts, metadatas=metadatas)
-        await es_client.aadd_texts(texts, metadatas=metadatas)
 
     @classmethod
     async def _cache_parse_result(cls, file_id: str, parse_result: dict) -> None:
@@ -1232,72 +987,6 @@ class LinsightWorkbenchImpl:
             if children:
                 tool_ids.extend(int(child.get("id")) for child in children if child.get("id"))
         return tool_ids
-
-    @classmethod
-    async def feedback_regenerate_sop_task(cls, session_version_model: LinsightSessionVersion, feedback: str) -> None:
-        """
-        Regenerate from feedbackSOPTask
-
-        Args:
-            session_version_model: Inspiration Conversation Version Model
-            feedback: Content of feedback
-        """
-        try:
-            file_list = await cls.prepare_file_list(session_version_model)
-
-            # BuatLLMand tools
-            llm, workbench_conf = await cls._get_llm(session_version_model.user_id)
-            tools = await cls._prepare_tools(session_version_model, llm)
-
-            # Get a summary of your history
-            history_summary = await cls._get_history_summary(session_version_model.id)
-
-            # Create proxy and generateSOP
-            agent = await cls._create_linsight_agent(session_version_model, llm, tools, workbench_conf)
-
-            sop_content = ""
-            sop_template = session_version_model.sop or ""
-
-            async for res in agent.feedback_sop(
-                sop=sop_template,
-                feedback=feedback,
-                history_summary=history_summary if history_summary else None,
-                file_list=file_list,
-            ):
-                sop_content += res.content
-
-            # sopWrite it down on the record sheet, thissopThere is no need to associate sessions because there is no need to update scores
-            await SOPManageService.add_sop_record(
-                LinsightSOPRecord(
-                    name=session_version_model.title,
-                    description=None,
-                    user_id=session_version_model.user_id,
-                    content=sop_content,
-                )
-            )
-        except cls.ToolsInitializationError as e:
-            logger.exception(
-                f"Failed to initialize the Inspiration Workbench tool: session_version_id={session_version_model.id}, error={e!s}"
-            )
-
-        except Exception as e:
-            logger.exception(
-                f"Feedback regenerationSOPMisi Gagal: session_version_id={session_version_model.id}, error={e!s}"
-            )
-
-    @classmethod
-    async def _get_history_summary(cls, session_version_id: str) -> list[str]:
-        """Get a summary of your history"""
-        history_summary = []
-        execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id)
-
-        for task in execute_tasks:
-            if task.result:
-                answer = task.result.get("answer", "")
-                if answer:
-                    history_summary.append(answer)
-
-        return history_summary
 
     @classmethod
     async def download_file(cls, file_info: DownloadFilesSchema) -> tuple[str, bytes]:

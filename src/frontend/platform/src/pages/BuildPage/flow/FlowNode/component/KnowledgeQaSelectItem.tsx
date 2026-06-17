@@ -5,6 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import useFlowStore from "../../flowStore";
 
+const PAGE_SIZE = 60
+
+const mergeOptionsByValue = (currentOptions, nextOptions) => {
+    const existingValues = new Set(currentOptions.map(option => option.value))
+    return [
+        ...currentOptions,
+        ...nextOptions.filter(option => !existingValues.has(option.value))
+    ]
+}
+
 
 export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValidate, onVarEvent, i18nPrefix }) {
     const { t } = useTranslation('flow')
@@ -15,24 +25,27 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
     const [options, setOptions] = useState<any>([]);
     const originOptionsRef = useRef([])
 
-    const pageRef = useRef(1)
-    const reload = (page, name) => {
-        readFileLibDatabase({ page, pageSize: 60, name, type: 1, permissionId: 'use_kb' }).then(res => {
-            pageRef.current = page
+    const cursorRef = useRef<string | null>(null)
+    const requestSeqRef = useRef(0)
+    const reload = (cursor: string | null, name: string) => {
+        const requestSeq = ++requestSeqRef.current
+        readFileLibDatabase({ cursor, pageSize: PAGE_SIZE, name, type: 1, permissionId: 'use_kb' }).then(res => {
+            if (requestSeq !== requestSeqRef.current) return
+            cursorRef.current = res.next_cursor
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
-            setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
+            setOptions(_ops => cursor ? mergeOptionsByValue(_ops, opts) : opts)
         })
     }
 
 
     useEffect(() => {
-        reload(1, '')
+        reload(null, '')
     }, [])
 
     // 加载更多
     const loadMore = (name) => {
-        reload(pageRef.current + 1, name)
+        if (cursorRef.current) reload(cursorRef.current, name)
     }
 
     const handleSelect = (resVals) => {
@@ -104,8 +117,8 @@ export default function KnowledgeQaSelectItem({ nodeId, data, onChange, onValida
             placeholder={t(`${i18nPrefix}placeholder`)}
             searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
             onChange={handleSelect}
-            onLoad={() => reload(1, '')}
-            onSearch={(val) => reload(1, val)}
+            onLoad={() => reload(null, '')}
+            onSearch={(val) => reload(null, val)}
             onScrollLoad={(val) => loadMore(val)}
         >
             {/* {children?.(reload)} */}

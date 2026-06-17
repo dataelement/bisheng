@@ -86,3 +86,42 @@ async def test_init_config_tools_reads_code_interpreter_from_daily_config(monkey
     )
 
     assert captured["ids"] == [100, 200]
+
+
+# Legacy local_file tools (list_files / read_text_file / add_text_to_file / ...)
+# are retired in task mode: deepagents' FilesystemMiddleware already provides
+# ls/read_file/write_file/edit_file over the same WorkspaceBackend, so injecting
+# the old ones duplicated the file toolset and confused the model.
+_LEGACY_LOCAL_FILE_TOOL_NAMES = {
+    "list_files",
+    "get_file_details",
+    "search_files",
+    "read_text_file",
+    "add_text_to_file",
+    "replace_file_lines",
+}
+
+
+async def test_init_linsight_tools_drops_legacy_local_file_tools():
+    """init_linsight_tools must not surface the retired local_file tools."""
+    from bisheng.tool.domain.services.tool import ToolServices
+
+    tools = await ToolServices.init_linsight_tools(root_path="/tmp/linsight-test")
+    names = {t.name for t in tools}
+
+    assert not (names & _LEGACY_LOCAL_FILE_TOOL_NAMES), (
+        f"legacy local_file tools must be removed, found: {names & _LEGACY_LOCAL_FILE_TOOL_NAMES}"
+    )
+    # Knowledge retrieval is NOT provided by deepagents — it must stay.
+    assert "search_knowledge_base" in names
+
+
+async def test_get_linsight_tools_drops_file_operation_group():
+    """The frontend tool tree must no longer advertise the legacy file-op group."""
+    from bisheng.tool.domain.services.tool import ToolServices
+
+    groups = await ToolServices.get_linsight_tools()
+    child_keys = {child.tool_key for grp in groups for child in (grp.children or [])}
+
+    assert not (child_keys & _LEGACY_LOCAL_FILE_TOOL_NAMES)
+    assert "search_knowledge_base" in child_keys
