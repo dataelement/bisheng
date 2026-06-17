@@ -35,6 +35,7 @@ from bisheng.database.models.flow import Flow
 from bisheng.database.models.message import ChatMessageDao
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum
+from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services import LLMService
@@ -1079,21 +1080,64 @@ class WorkStationService(BaseService):
             )
             space_kb_id_set = {int(x) for x in visibility_filter["space_kb_ids"]}
 
-            knowledge_ids = []
-            if visibility_filter["org_kb_ids"]:
-                knowledge_ids.extend(visibility_filter["org_kb_ids"])
+            org_kb_ids = [int(x) for x in visibility_filter["org_kb_ids"]]
+            if org_kb_ids and not login_user.is_admin():
+                permitted_org_ids = await KnowledgePermissionService().filter_knowledge_ids_by_permission_async(
+                    login_user,
+                    org_kb_ids,
+                    "use_kb",
+                )
+                denied_org_ids = [kb_id for kb_id in org_kb_ids if kb_id not in set(permitted_org_ids)]
+                for kb_id in denied_org_ids:
+                    failures.append(
+                        {
+                            "id": kb_id,
+                            "name": "",
+                            "error": "No permission to use this knowledge base",
+                        }
+                    )
+                org_kb_ids = permitted_org_ids
 
-            knowledge_vector_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
-                invoke_user_id=login_user.user_id,
-                knowledge_ids=knowledge_ids,
-                user_name=login_user.user_name,
-            )
-            knowledge_space_list = await KnowledgeRag.get_multi_knowledge_vectorstore(
-                invoke_user_id=login_user.user_id,
-                knowledge_ids=visibility_filter["space_kb_ids"],
-                check_auth=False,
-            )
-            knowledge_vector_list.update(knowledge_space_list)
+            vectorstore_targets = [(kb_id, False) for kb_id in org_kb_ids] + [
+                (int(kb_id), True)
+                for kb_id in visibility_filter["space_kb_ids"]
+            ]
+
+            knowledge_vector_list = {}
+            for kb_id, is_space_bucket in vectorstore_targets:
+                try:
+                    vectorstore_info = await KnowledgeRag.get_multi_knowledge_vectorstore(
+                        invoke_user_id=login_user.user_id,
+                        knowledge_ids=[kb_id],
+                        check_auth=False,
+                    )
+                    if not vectorstore_info:
+                        failures.append(
+                            {
+                                "id": kb_id,
+                                "name": "",
+                                "error": "Knowledge base is unavailable",
+                            }
+                        )
+                        logger.warning(
+                            f"[queryChunksFromDB] kb={kb_id} source="
+                            f"{'space' if is_space_bucket else 'organization'} unavailable"
+                        )
+                        continue
+                    knowledge_vector_list.update(vectorstore_info)
+                except Exception as exc:
+                    err_msg = str(exc) or exc.__class__.__name__
+                    failures.append(
+                        {
+                            "id": kb_id,
+                            "name": "",
+                            "error": err_msg,
+                        }
+                    )
+                    logger.warning(
+                        f"[queryChunksFromDB] kb={kb_id} source="
+                        f"{'space' if is_space_bucket else 'organization'} init failed: {err_msg}"
+                    )
 
             # Per-KB failure isolation — a single KB whose embedding model is
             # broken (e.g. expired Volcengine key → 403) must not poison the

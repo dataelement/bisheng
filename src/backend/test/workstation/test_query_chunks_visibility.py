@@ -15,20 +15,24 @@ ACs covered:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.documents import Document
 
 from bisheng.api.services.workstation import WorkStationService
-from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
-    IndexFilter,
-)
+from bisheng.api.v1.schema.chat_schema import UseKnowledgeBaseParam
 
 
 def _make_doc(file_id: int, content: str = "") -> Document:
     return Document(
-        page_content=content or f"chunk-{file_id}", metadata={"document_id": file_id}
+        page_content=content or f"chunk-{file_id}",
+        metadata={
+            "document_id": file_id,
+            "document_name": f"doc-{file_id}.txt",
+            "knowledge_id": 100,
+        },
     )
 
 
@@ -44,7 +48,7 @@ async def test_filter_visible_space_kb_ids_drops_no_view_space(monkeypatch):
     """
     visibility_calls: list[int] = []
 
-    async def fake_is_space_visible(self, space_id: int) -> bool:  # noqa: ARG001
+    async def fake_is_space_visible(self, space_id: int) -> bool:
         visibility_calls.append(space_id)
         # Only KB 1 is visible; KB 2 is not.
         return space_id == 1
@@ -77,7 +81,7 @@ async def test_filter_visible_space_kb_ids_admin_bypasses(monkeypatch):
     """
     calls: list[int] = []
 
-    async def fake_is_space_visible(self, space_id: int) -> bool:  # noqa: ARG001
+    async def fake_is_space_visible(self, space_id: int) -> bool:
         calls.append(space_id)
         return True
 
@@ -108,7 +112,7 @@ async def test_filter_visible_space_kb_ids_admin_bypasses(monkeypatch):
 @pytest.mark.asyncio
 async def test_post_filter_kb_docs_drops_inaccessible_files(monkeypatch):
     """post_filter_visible_files reports only {1, 3} → docs for 2 and 4 dropped."""
-    async def fake_post(self, space_id, file_ids):  # noqa: ARG001
+    async def fake_post(self, space_id, file_ids):
         return {1, 3}
 
     monkeypatch.setattr(
@@ -131,7 +135,7 @@ async def test_post_filter_kb_docs_drops_inaccessible_files(monkeypatch):
 @pytest.mark.asyncio
 async def test_post_filter_kb_docs_empty_when_nothing_permitted(monkeypatch):
     """User has zero permitted files → empty docs (AC-12 second route)."""
-    async def fake_post(self, space_id, file_ids):  # noqa: ARG001
+    async def fake_post(self, space_id, file_ids):
         return set()
 
     monkeypatch.setattr(
@@ -168,7 +172,7 @@ async def test_post_filter_kb_docs_no_docs_short_circuits(monkeypatch):
     """Empty input → empty output, no FGA calls."""
     calls = []
 
-    async def fake_post(self, space_id, file_ids):  # noqa: ARG001
+    async def fake_post(self, space_id, file_ids):
         calls.append(space_id)
         return set()
 
@@ -200,7 +204,7 @@ async def test_post_filter_kb_docs_org_bucket_passthrough(monkeypatch):
     """
     fga_called = False
 
-    async def fake_post(self, space_id, file_ids):  # noqa: ARG001
+    async def fake_post(self, space_id, file_ids):
         nonlocal fga_called
         fga_called = True
         return set()
@@ -220,3 +224,120 @@ async def test_post_filter_kb_docs_org_bucket_passthrough(monkeypatch):
     )
     assert survivors == raw_docs
     assert fga_called is False
+
+
+# ---------------------------------------------------------------------------
+# Workstation org-KB retrieval path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(monkeypatch):
+    permission_calls = []
+    vector_calls = []
+
+    async def fake_filter_ids(self, login_user, knowledge_ids, permission_id):
+        permission_calls.append((knowledge_ids, permission_id))
+        return [100]
+
+    async def fake_get_vectorstore(**kwargs):
+        vector_calls.append(kwargs)
+        return {
+            100: {
+                "knowledge": SimpleNamespace(id=100, name="kb-100"),
+                "milvus": object(),
+                "es": None,
+            }
+        }
+
+    class FakeKnowledgeRetrieverTool:
+        def __init__(self, **kwargs):
+            pass
+
+        async def ainvoke(self, payload):
+            return [_make_doc(1, "answer chunk")]
+
+    class FakeMultiRetriever:
+        def __init__(self, **kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.workstation_service."
+        "KnowledgePermissionService.filter_knowledge_ids_by_permission_async",
+        fake_filter_ids,
+    )
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.workstation_service."
+        "KnowledgeRag.get_multi_knowledge_vectorstore",
+        fake_get_vectorstore,
+    )
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.workstation_service.KnowledgeRetrieverTool",
+        FakeKnowledgeRetrieverTool,
+    )
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.workstation_service.MultiRetriever",
+        FakeMultiRetriever,
+    )
+
+    login_user = MagicMock(user_id=42, user_name="sarah")
+    login_user.is_admin = MagicMock(return_value=False)
+
+    formatted, docs, failures = await WorkStationService.queryChunksFromDB(
+        question="related question",
+        use_knowledge_param=UseKnowledgeBaseParam(organization_knowledge_ids=[100]),
+        max_token=1000,
+        login_user=login_user,
+    )
+
+    assert failures == []
+    assert [doc.page_content for doc in docs] == ["answer chunk"]
+    assert "[file content begin]\nanswer chunk\n[file content end]" in formatted[0]
+    assert permission_calls == [([100], "use_kb")]
+    assert vector_calls == [
+        {
+            "invoke_user_id": 42,
+            "knowledge_ids": [100],
+            "check_auth": False,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_query_chunks_org_kb_init_failure_is_reported(monkeypatch):
+    async def fake_filter_ids(self, login_user, knowledge_ids, permission_id):
+        return [100]
+
+    async def fake_get_vectorstore(**kwargs):
+        raise RuntimeError("embedding init failed")
+
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.workstation_service."
+        "KnowledgePermissionService.filter_knowledge_ids_by_permission_async",
+        fake_filter_ids,
+    )
+    monkeypatch.setattr(
+        "bisheng.workstation.domain.services.workstation_service."
+        "KnowledgeRag.get_multi_knowledge_vectorstore",
+        fake_get_vectorstore,
+    )
+
+    login_user = MagicMock(user_id=42, user_name="sarah")
+    login_user.is_admin = MagicMock(return_value=False)
+
+    formatted, docs, failures = await WorkStationService.queryChunksFromDB(
+        question="related question",
+        use_knowledge_param=UseKnowledgeBaseParam(organization_knowledge_ids=[100]),
+        max_token=1000,
+        login_user=login_user,
+    )
+
+    assert formatted == []
+    assert docs == []
+    assert failures == [
+        {
+            "id": 100,
+            "name": "",
+            "error": "embedding init failed",
+        }
+    ]

@@ -484,9 +484,6 @@ class AgentNode(BaseNode):
 
             # Handler Call Log
             one_ret.extend(self.parse_tool_log(self._tool_invoke_list[index]))
-            if self._log_reasoning_content[index]:
-                one_ret.append(
-                    {"key": "Thinking about content", "value": self._log_reasoning_content[index], "type": "params"})
             one_ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
             ret.append(one_ret)
             index += 1

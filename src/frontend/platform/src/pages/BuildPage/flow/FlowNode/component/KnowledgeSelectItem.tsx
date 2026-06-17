@@ -35,6 +35,14 @@ const enum KnowledgeType {
 type KnowledgeTypeValues = `${KnowledgeType}`;
 const pageSize = 60
 
+const mergeOptionsByValue = (currentOptions, nextOptions) => {
+    const existingValues = new Set(currentOptions.map(option => option.value))
+    return [
+        ...currentOptions,
+        ...nextOptions.filter(option => !existingValues.has(option.value))
+    ]
+}
+
 export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate, i18nPrefix }) {
     const { flow } = useFlowStore()
     const { t } = useTranslation('flow')
@@ -49,16 +57,16 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     const [fileOptions, setFileOptions] = useState<any>([])
     const originOptionsRef = useRef([])
 
-    const pageRef = useRef(1)
-    const hasMoreRef = useRef(true)
-    const reload = (page, name) => {
-        if (page > 1 && !hasMoreRef.current) return
-        readFileLibDatabase({ page, pageSize, name, type: 0, permissionId: 'use_kb' }).then(res => {
-            pageRef.current = page
+    const cursorRef = useRef<string | null>(null)
+    const requestSeqRef = useRef(0)
+    const reload = (cursor: string | null, name: string) => {
+        const requestSeq = ++requestSeqRef.current
+        readFileLibDatabase({ cursor, pageSize, name, type: 0, permissionId: 'use_kb' }).then(res => {
+            if (requestSeq !== requestSeqRef.current) return
+            cursorRef.current = res.next_cursor
             originOptionsRef.current = res.data
             const opts = res.data.map(el => ({ label: el.name, value: el.id }))
-            setOptions(_ops => page > 1 ? [..._ops, ...opts] : opts)
-            hasMoreRef.current = res.data.length === pageSize
+            setOptions(_ops => cursor ? mergeOptionsByValue(_ops, opts) : opts)
         })
     }
     // input文件变量s
@@ -85,7 +93,7 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
     }
 
     useEffect(() => {
-        reload(1, '')
+        reload(null, '')
         loadFiles()
     }, [])
 
@@ -96,11 +104,11 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
 
     // 加载更多
     const loadMore = (name) => {
-        hasMoreRef.current && reload(pageRef.current + 1, name)
+        if (cursorRef.current) reload(cursorRef.current, name)
     }
 
     const handleTabChange = (val) => {
-        KnowledgeType.Knowledge === val ? reload(1, '') : loadFiles()
+        KnowledgeType.Knowledge === val ? reload(null, '') : loadFiles()
 
         setTabType(val)
         const inputDom = document.getElementById('knowledge-select-item')
@@ -204,8 +212,8 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
             placeholder={data.placeholder && t(`${i18nPrefix}placeholder`) || ''}
             searchPlaceholder={t('build.searchBaseName', { ns: 'bs' })}
             onChange={handleSelect}
-            onLoad={() => { reload(1, ''); loadFiles() }}
-            onSearch={(val) => reload(1, val)}
+            onLoad={() => { reload(null, ''); loadFiles() }}
+            onSearch={(val) => reload(null, val)}
             onScrollLoad={(val) => loadMore(val)}
         >
             {/* {children?.(reload)} */}

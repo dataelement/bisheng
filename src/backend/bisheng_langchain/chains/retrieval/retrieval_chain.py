@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_classic.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
@@ -23,21 +23,27 @@ class RetrievalChain(Chain):
         question: str,
         *,
         run_manager: CallbackManagerForChainRun,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Get docs."""
-        return self.retriever.get_relevant_documents(question, callbacks=run_manager.get_child())
+        child_manager = run_manager.get_child()
+        if hasattr(self.retriever, "invoke"):
+            return self.retriever.invoke(question, config={"callbacks": child_manager})
+        return self.retriever.get_relevant_documents(question, callbacks=child_manager)
 
     async def _aget_docs(
         self,
         question: str,
         *,
         run_manager: AsyncCallbackManagerForChainRun,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """Get docs."""
-        return await self.retriever.aget_relevant_documents(question, callbacks=run_manager.get_child())
+        child_manager = run_manager.get_child()
+        if hasattr(self.retriever, "ainvoke"):
+            return await self.retriever.ainvoke(question, config={"callbacks": child_manager})
+        return await self.retriever.aget_relevant_documents(question, callbacks=child_manager)
 
     @property
-    def input_keys(self) -> List[str]:
+    def input_keys(self) -> list[str]:
         """Return the input keys.
 
         :meta private:
@@ -45,21 +51,21 @@ class RetrievalChain(Chain):
         return [self.input_key]
 
     @property
-    def output_keys(self) -> List[str]:
+    def output_keys(self) -> list[str]:
         """Return the output keys.
 
         :meta private:
         """
         _output_keys = [self.output_key]
         if self.return_source_documents:
-            _output_keys = _output_keys + ["source_documents"]
+            _output_keys = [*_output_keys, "source_documents"]
         return _output_keys
 
     def _call(
         self,
-        inputs: Dict[str, Any],
-        run_manager: Optional[CallbackManagerForChainRun] = None,
-    ) -> Dict[str, Any]:
+        inputs: dict[str, Any],
+        run_manager: CallbackManagerForChainRun | None = None,
+    ) -> dict[str, Any]:
         _run_manager = run_manager or CallbackManagerForChainRun.get_noop_manager()
         question = inputs[self.input_key]
         accepts_run_manager = "run_manager" in inspect.signature(self._get_docs).parameters
@@ -75,9 +81,9 @@ class RetrievalChain(Chain):
 
     async def _acall(
         self,
-        inputs: Dict[str, Any],
-        run_manager: Optional[AsyncCallbackManagerForChainRun] = None,
-    ) -> Dict[str, Any]:
+        inputs: dict[str, Any],
+        run_manager: AsyncCallbackManagerForChainRun | None = None,
+    ) -> dict[str, Any]:
         _run_manager = run_manager or AsyncCallbackManagerForChainRun.get_noop_manager()
         question = inputs[self.input_key]
         accepts_run_manager = "run_manager" in inspect.signature(self._aget_docs).parameters
