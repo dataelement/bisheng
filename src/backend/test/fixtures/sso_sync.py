@@ -76,3 +76,26 @@ def disable_sso_secret(monkeypatch):
     )
     monkeypatch.setattr(mod, 'settings', SimpleNamespace(sso_sync=conf))
     return conf
+
+
+@pytest.fixture
+def configure_sg_fixed_header(monkeypatch, hmac_secret):
+    """Install SSOSyncConf for SG fixed-header auth (``verify_sg_fixed_header``)."""
+    import bisheng.sso_sync.domain.services.sg_fixed_header_auth as mod
+
+    conf = SSOSyncConf(
+        gateway_hmac_secret=hmac_secret,
+        signature_header='X-Signature',
+    )
+    monkeypatch.setattr(mod, 'settings', SimpleNamespace(sso_sync=conf))
+    return conf
+
+
+@pytest.fixture
+def disable_sg_fixed_header(monkeypatch):
+    """Force empty secret for SG fixed-header fail-closed branch."""
+    import bisheng.sso_sync.domain.services.sg_fixed_header_auth as mod
+
+    conf = SSOSyncConf(gateway_hmac_secret='', signature_header='X-Signature')
+    monkeypatch.setattr(mod, 'settings', SimpleNamespace(sso_sync=conf))
+    return conf

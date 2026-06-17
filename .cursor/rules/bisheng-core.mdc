@@ -1,0 +1,67 @@
+---
+description: BiSheng 项目核心 P0 规则 — 架构、权限、SDD 工作流
+alwaysApply: true
+---
+
+# BiSheng Core Rules
+
+**BiSheng (毕昇)** — Enterprise LLM application DevOps platform. Monorepo:
+
+| Path | Stack |
+|------|-------|
+| `src/backend/` | FastAPI + Celery + Linsight Worker, Python 3.10+, uv, SQLModel |
+| `src/frontend/platform/` | Vite 5 + Zustand + react-query v3 + bs-ui |
+| `src/frontend/client/` | Vite 6 + Recoil + react-query v5 + shadcn/ui |
+
+## Commands
+
+```bash
+cd src/frontend/platform && npm install && npm start -- --host 0.0.0.0   # :3001
+cd src/frontend/client  && npm install && npm run dev                     # :4001
+bash docker/local-dev/start-middleware.sh                                 # MySQL/Redis/Milvus/ES/MinIO/OpenFGA
+```
+
+Backend commands → `src/backend/AGENTS.md`.
+
+## Backend P0
+
+**DDD call chain (never skip):** `Router → Endpoint → Service → Repository → DB`
+
+- Never `import bisheng.database.models.*` in endpoints
+- Never write ORM queries in Service; no new DAO entry points for new features
+- New module: `<module>/{api/router.py, api/endpoints/, domain/services/, domain/models/, domain/schemas/, domain/repositories/}`
+- Register router in `bisheng/api/router.py`
+
+**Dual-DB (MySQL + DM8):** Use `dialect_helpers.JsonType`, `LargeText`, `UPDATE_TIME_SERVER_DEFAULT`. Never `sqlalchemy.JSON`, `LONGTEXT`, `information_schema`, `JSON_EXTRACT`.
+
+**Multi-tenancy:** Never write `WHERE tenant_id = X` manually — SQLAlchemy events auto-inject.
+
+**Permissions:** Always use `PermissionService.check()` / `PermissionService.authorize()`. Never query `role_access` for authorization.
+
+**API:** `UserPayload = Depends(UserPayload.get_login_user)`, `resp_200` / `resp_500`. Error codes: 5-digit `MMMEE` in `common/errcode/`.
+
+## Frontend P0
+
+Two React apps **must not be mixed**. Platform uses Zustand + `@/`; Client uses Recoil + `~/`. Never import axios directly. Single file ≤ 600 lines. 403 handled by interceptors — never add 403 branches.
+
+## Architecture Guard
+
+`scripts/arch-guard.sh` runs after file edits (`.cursor/hooks.json`). VIOLATION rules must be fixed immediately.
+
+## SDD Workflow (non-trivial features)
+
+```
+spec.md → /sdd-review spec → tasks.md → /sdd-review tasks → implement → /task-review → /e2e-test → /code-review
+```
+
+Artifacts: `features/v{X.Y.Z}/{NNN}-{name}/`. Pause points cannot be skipped.
+
+## Skills
+
+`/sdd-review`, `/task-review`, `/code-review`, `/e2e-test`, `/i18n-localizer`, `/react-component-refactor`
+
+## Common Pitfalls
+
+- MinIO 403: Vite `fileServiceTarget` must match `config.yaml` `object_storage.minio.sharepoint`
+- `BISHENG_PRO=true` must be set before backend start for SSO endpoint
+- DB config changes: 100s Redis TTL — flush Redis after changes

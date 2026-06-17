@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/ruff-format.sh"
+      },
+      {
+        "command": ".cursor/hooks/arch-guard.sh"
+      }
+    ]
+  }
+}
