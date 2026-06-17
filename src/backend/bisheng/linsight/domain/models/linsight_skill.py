@@ -4,6 +4,11 @@ from sqlalchemy import Integer, update
 from sqlmodel import Column, DateTime, Field, String, Text, UniqueConstraint, col, or_, select, text
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.context.tenant import (
+    DEFAULT_TENANT_ID,
+    get_current_tenant_id,
+    strict_tenant_filter,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.base import async_get_count
@@ -87,8 +92,16 @@ class LinsightSkill(LinsightSkillBase, table=True):
 class LinsightSkillDao:
     """Data access for tenant custom skills.
 
-    tenant_id is injected automatically by the SQLAlchemy tenant filter
-    (core/database/tenant_filter.py) — never hand-write tenant WHERE clauses here.
+    Skills are **tenant-private** (F035): a tenant only ever sees and mutates
+    its own rows; Root skills are never shared down to children. The global
+    tenant filter (core/database/tenant_filter.py) defaults to the F012 IN-list
+    ``WHERE tenant_id IN (leaf, ROOT)`` for child tenants, which would otherwise
+    leak Root skills into a child's list. So every SELECT here runs inside
+    ``strict_tenant_filter()`` to collapse that IN-list to ``tenant_id = current``.
+
+    Bulk ``UPDATE`` statements (``set_enabled``) are *not* rewritten by the
+    do_orm_execute listener — it only touches SELECTs — so they carry an
+    explicit ``WHERE tenant_id = current`` of their own.
     """
 
     @classmethod
@@ -110,15 +123,17 @@ class LinsightSkillDao:
 
     @classmethod
     async def get_by_name(cls, name: str) -> LinsightSkill | None:
-        async with get_async_db_session() as session:
-            result = await session.exec(select(LinsightSkill).where(LinsightSkill.name == name))
-            return result.first()
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(select(LinsightSkill).where(LinsightSkill.name == name))
+                return result.first()
 
     @classmethod
     async def get_by_display_name(cls, display_name: str) -> LinsightSkill | None:
-        async with get_async_db_session() as session:
-            result = await session.exec(select(LinsightSkill).where(LinsightSkill.display_name == display_name))
-            return result.first()
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(select(LinsightSkill).where(LinsightSkill.display_name == display_name))
+                return result.first()
 
     @classmethod
     async def get_page(
@@ -139,30 +154,38 @@ class LinsightSkillDao:
             )
         if enabled is not None:
             statement = statement.where(LinsightSkill.enabled == enabled)
-        async with get_async_db_session() as session:
-            total = await async_get_count(session, statement)
-            statement = (
-                statement.order_by(col(LinsightSkill.update_time).desc())
-                .offset((page - 1) * page_size)
-                .limit(page_size)
-            )
-            result = await session.exec(statement)
-            return list(result.all()), total
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                total = await async_get_count(session, statement)
+                statement = (
+                    statement.order_by(col(LinsightSkill.update_time).desc())
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+                result = await session.exec(statement)
+                return list(result.all()), total
 
     @classmethod
     async def list_enabled(cls) -> list[LinsightSkill]:
-        async with get_async_db_session() as session:
-            statement = select(LinsightSkill).where(LinsightSkill.enabled == True)  # noqa: E712
-            statement = statement.order_by(col(LinsightSkill.create_time).desc())
-            result = await session.exec(statement)
-            return list(result.all())
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                statement = select(LinsightSkill).where(LinsightSkill.enabled == True)  # noqa: E712
+                statement = statement.order_by(col(LinsightSkill.create_time).desc())
+                result = await session.exec(statement)
+                return list(result.all())
 
     @classmethod
     async def set_enabled(cls, name: str, enabled: bool) -> bool:
+        # Bulk UPDATE is not intercepted by the do_orm_execute tenant filter
+        # (it only rewrites SELECTs), so scope the write to the current tenant
+        # explicitly — otherwise toggling a name shared with Root (or any
+        # same-named skill in another tenant) would flip every tenant's row.
+        tid = get_current_tenant_id() or DEFAULT_TENANT_ID
         async with get_async_db_session() as session:
             statement = (
                 update(LinsightSkill)
                 .where(col(LinsightSkill.name) == name)
+                .where(col(LinsightSkill.tenant_id) == tid)
                 .values(enabled=enabled, update_time=datetime.now())
             )
             result = await session.exec(statement)
@@ -171,11 +194,12 @@ class LinsightSkillDao:
 
     @classmethod
     async def delete_by_name(cls, name: str) -> bool:
-        async with get_async_db_session() as session:
-            result = await session.exec(select(LinsightSkill).where(LinsightSkill.name == name))
-            skill = result.first()
-            if not skill:
-                return False
-            await session.delete(skill)
-            await session.commit()
-            return True
+        with strict_tenant_filter():
+            async with get_async_db_session() as session:
+                result = await session.exec(select(LinsightSkill).where(LinsightSkill.name == name))
+                skill = result.first()
+                if not skill:
+                    return False
+                await session.delete(skill)
+                await session.commit()
+                return True
