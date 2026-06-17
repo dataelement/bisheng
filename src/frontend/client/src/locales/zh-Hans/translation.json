@@ -395,6 +395,7 @@
   "com_linsight_task_panel_done": "任务已完成",
   "com_linsight_task_terminated": "任务已终止",
   "com_linsight_loading": "加载中…",
+  "com_linsight_generating": "正在生成结果，请稍候…",
   "com_linsight_detail_load_failed": "任务详情加载失败",
   "com_linsight_waiting_your_input": "等待你的输入",
   "com_linsight_queue_waiting": "当前使用人数较多，正在排队中…",

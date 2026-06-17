@@ -205,6 +205,18 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
             {/* task checklist progress is rendered by <PinnedTaskPanel> pinned
                 above the input (ChatView) — not inline in the message stream. */}
 
+            {/* Persistent "still working" indicator — covers the quiet windows
+                between steps and, crucially, the final report-generation phase
+                (status stays Running with no step events while the backend
+                synthesizes get_final_result_file / the report), so the user does
+                not mistake an in-progress task for a finished one. */}
+            {running && !queueing && !planning && !pendingInput && (
+                <div className="mb-2 mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-800">
+                    <span className="size-1.5 animate-pulse-scale rounded-full bg-gray-700" />
+                    {localize('com_linsight_generating')}
+                </div>
+            )}
+
             {/* artifacts: report link / answer markdown / file card */}
             {completed && (
                 <div data-slot="execution-artifacts" className="mt-4">

@@ -69,7 +69,9 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
         // IntentRow — not a normal tool step. Its tool-call frame emits a `start`
         // but never an `end` (interrupt() halts the graph), so rendering it as a
         // ToolRow would spin forever. Drop it.
-        if (frame.name === 'ask_user') return;
+        // `ls` is the agent's internal workspace exploration (typically empty at
+        // the start of a no-upload task) — display noise, not a deliverable step.
+        if (frame.name === 'ask_user' || frame.name === 'ls') return;
         const callId = frame.call_id || `__step_${idx}`;
         const existing = byId.get(callId);
         if (!existing) {
