@@ -14,5 +14,7 @@ export interface EffectiveQuotaItem {
 export async function getEffectiveQuotaApi(): Promise<EffectiveQuotaItem[]> {
     const resp: any = await request.get("/api/v1/quota/effective");
     // request.get returns the unified envelope (response.data); items live under .data.
-    return resp?.data ?? resp ?? [];
+    // Guard against error envelopes (data null / an {exception} object): only an
+    // array is usable — anything else would crash the caller's items.forEach.
+    return Array.isArray(resp?.data) ? resp.data : [];
 }

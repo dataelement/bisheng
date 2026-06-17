@@ -1802,6 +1802,7 @@
     "move_reason_name_conflict_folder": "A folder with the same name already exists at the target",
     "move_reason_name_conflict_file": "A file with the same name already exists at the target",
     "move_reason_no_permission": "Files/folders without move permission",
+    "move_reason_uploading": "Still uploading, cannot be moved yet",
     "move_reason_into_self": "Cannot move into itself",
     "move_reason_into_subtree": "Cannot move into its own subfolder",
     "move_reason_into_current_parent": "Already in the current directory",

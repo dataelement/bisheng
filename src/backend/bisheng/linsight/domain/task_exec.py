@@ -480,22 +480,34 @@ class LinsightWorkflowTask:
         if not session_model.files:
             return file_dir
 
+        # Only entries that carry a parsed-markdown object can be prefetched. A
+        # file without ``markdown_file_path`` (e.g. an org-KB reference, or a file
+        # still parsing) must be SKIPPED — not crash task startup. (The agent reads
+        # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
+        # this local prefetch is best-effort cache warming, not the access path.)
+        downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
+        skipped = len(session_model.files) - len(downloadable)
+        if skipped:
+            logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
+
         # Concurrent downloads
-        download_tasks = [self._download_file(file_info, file_dir) for file_info in session_model.files]
+        download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
 
         results = await asyncio.gather(*download_tasks, return_exceptions=True)
 
         # Record Download Failed Files
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                file_name = os.path.basename(session_model.files[i]["markdown_file_path"])
+                file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
                 logger.error(f"This content failed to load {file_name}: {result}")
 
         return file_dir
 
     async def _download_file(self, file_info: dict, target_dir: str) -> str:
         """Download individual files"""
-        object_name = file_info["markdown_file_path"]
+        object_name = file_info.get("markdown_file_path")
+        if not object_name:
+            raise ValueError("file entry missing markdown_file_path")
         file_name = file_info.get("markdown_filename", os.path.basename(object_name))
         file_path = os.path.join(target_dir, file_name)
         minio_client = await get_minio_storage()

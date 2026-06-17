@@ -775,17 +775,18 @@ export function KnowledgeSpaceContent({
         },
     });
     const handleBatchMove = () => {
-        // Uploading placeholders have no backend id yet → excluded.
-        const movable = displayFiles.filter(
-            (f) => selectedFiles.has(f.id) && !isKnowledgeItemUploading(f),
-        );
-        if (!movable.length) return;
+        const selected = displayFiles.filter((f) => selectedFiles.has(f.id));
+        // Uploading placeholders have no backend id yet → can't be moved. Surface
+        // them in the partial-move dialog so the user can still move the rest.
+        const uploading = selected.filter((f) => isKnowledgeItemUploading(f));
+        const movable = selected.filter((f) => !isKnowledgeItemUploading(f));
+        if (!movable.length && !uploading.length) return;
         // Frontend pre-flight (space-level move permission, simple block): if the user
-        // can't move in this space, every selected item is denied → block dialog before
+        // can't move in this space, every movable item is denied → block dialog before
         // the picker. The backend re-validates per item on the move.
         const permitted = canMoveFile ? movable : [];
         const denied = canMoveFile ? [] : movable;
-        requestBatchMove(permitted, denied);
+        requestBatchMove(permitted, denied, uploading);
     };
 
     const handleSingleDownload = async (fileId: string) => {
@@ -970,16 +971,13 @@ export function KnowledgeSpaceContent({
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
-    // Uploading placeholders have no backend identity yet — a selection containing one
-    // cannot be moved (the menu entry is disabled below).
-    const selectionHasUploading = selectedList.some((f) => isKnowledgeItemUploading(f));
     const selectionHasFile = selectedList.some((f) => f.type !== FileType.FOLDER);
     // Batch move requires the matching move permission for every kind in the
     // selection: folders need move_folder, files need move_file (a role may
-    // grant only one). Uploading placeholders also block it.
+    // grant only one). Uploading placeholders no longer block the entry — the
+    // move flow warns about them and lets the user move the rest (handleBatchMove).
     const canBatchMove =
         selectedList.length > 0 &&
-        !selectionHasUploading &&
         (!hasFoldersSelected || canMoveFolder) &&
         (!selectionHasFile || canMoveFile);
     const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
