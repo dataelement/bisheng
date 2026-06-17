@@ -90,7 +90,7 @@ function TreeNodeRow({ node, depth, baseIndent, selectedFolderId, onExpand, onSe
                     ) : (
                         <Outlined.Right
                             className={cn(
-                                "size-4 text-[#8D93A0] transition-transform duration-150",
+                                "size-3.5 text-[#8D93A0] transition-transform duration-150",
                                 node.expanded && "rotate-90",
                             )}
                         />
@@ -100,9 +100,9 @@ function TreeNodeRow({ node, depth, baseIndent, selectedFolderId, onExpand, onSe
                 {/* Icon wrapper: 20×20 wrapper, 16×16 folder icon inside */}
                 <div className="flex size-5 shrink-0 items-center justify-center">
                     {hasExpandedChildren ? (
-                        <Outlined.FolderOpen className={cn("size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderOpen className={cn("size-3.5 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
                     ) : (
-                        <Outlined.FolderClose className={cn("size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderClose className={cn("size-3.5 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
                     )}
                 </div>
 
