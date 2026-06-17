@@ -31,6 +31,13 @@ class SessionVersionStatusEnum(str, Enum):
     SOP_GENERATION_FAILED = "sop_generation_failed"
     # TERMINATION
     TERMINATED = "terminated"
+    # Parked on an ask_user interrupt, waiting for the user's answer
+    # (park-and-release). A dedicated state — NOT IN_PROGRESS — so the
+    # worker-startup crash sweep (check_and_terminate_incomplete_tasks, which
+    # terminates IN_PROGRESS tasks whose Redis owner key is gone) does not
+    # mistake a legitimately parked task for a crashed one. Resume flips it back
+    # to IN_PROGRESS.
+    WAITING_FOR_USER_INPUT = "waiting_for_user_input"
 
 
 class LinsightSessionVersionBase(SQLModelSerializable):
@@ -171,28 +178,6 @@ class LinsightSessionVersionDao:
             )
 
             return (await session.exec(statement)).all()
-
-    @staticmethod
-    async def modify_sop_content(linsight_session_version_id: str, sop_content: str):
-        """
-        Modify Inspiration Conversation Version ofSOPContents
-        :param linsight_session_version_id:
-        :param sop_content:
-        :return:
-        """
-
-        async with get_async_db_session() as session:
-            stmt = (
-                update(LinsightSessionVersion)
-                .where(col(LinsightSessionVersion.id) == str(linsight_session_version_id))  # Explicit Transfer str
-                .values(sop=sop_content)
-            )
-
-            result = await session.exec(stmt)
-            if result.rowcount == 0:
-                logger.warning(f"No session version found with ID: {linsight_session_version_id}")
-
-            await session.commit()
 
     @staticmethod
     async def get_session_version_by_file_id(file_id: str) -> LinsightSessionVersion | None:

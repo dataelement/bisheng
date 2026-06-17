@@ -1245,9 +1245,6 @@ class LLMService:
                     await embeddings.aembed_query("test")
                 except Exception as e:
                     raise Exception(f"EmbeddingModel initialization failed: {e!s}")
-                from bisheng.linsight.domain.services.sop_manage import SOPManageService
-
-                background_tasks.add_task(SOPManageService.rebuild_sop_vector_store_task, embeddings)
 
                 # Update Personal Knowledge Base
                 # 1.Upgrading alltypeare2(Private Repository)right of privacyknowledgeStatus and Model

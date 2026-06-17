@@ -469,6 +469,12 @@ class StreamEventMapper:
         return "|".join(str(n) for n in namespace) if len(namespace) > 1 else str(namespace[0])
 
     def _infer_step_type(self, name: str, ns: str | None) -> str:
+        # DORMANT branch (F035): subgraph events only carry a namespace when a
+        # `task` subagent runs, but the `task` tool is currently stripped by
+        # `_ToolExclusionMiddleware` (see agent_factory), so `ns` is always None
+        # and this never returns "subagent" in production. Kept as forward-compat
+        # parsing — it reactivates automatically once named subagents are
+        # reintroduced (after the HITL subgraph-interrupt-bubbling fix).
         if ns:
             return "subagent"
         lowered = (name or "").lower()

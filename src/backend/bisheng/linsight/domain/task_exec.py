@@ -235,6 +235,12 @@ class LinsightWorkflowTask:
         """Rebuild the agent on the same thread (Redis checkpointer) and drive resume."""
         from bisheng.linsight.domain.services.checkpointer import make_checkpointer
 
+        # The task was parked as WAITING_FOR_USER_INPUT; resuming means it is
+        # actively running again. Flip it back to IN_PROGRESS so status reflects
+        # reality (and the worker-startup crash sweep, which scans IN_PROGRESS,
+        # again covers it while a worker is genuinely driving it).
+        await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
+
         self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
@@ -722,6 +728,10 @@ class LinsightWorkflowTask:
             }
             # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
             # prefix the mapper uses to归并 nested step cards (design §3.1/§3.7).
+            # NOTE (F035): currently DORMANT — the `task` subagent tool is stripped
+            # by `_ToolExclusionMiddleware` (agent_factory), so no subgraph events
+            # are emitted and namespaces stay empty. Kept as forward-compat; it
+            # reactivates once named subagents are reintroduced.
             async for chunk in agent.astream(
                 task_input,
                 config=config,
@@ -797,19 +807,17 @@ class LinsightWorkflowTask:
         """Assemble the first-message input for the deepagents graph.
 
         LangGraph agents take ``{"messages": [...]}``. We seed the user turn with
-        the prior conversation context (F035 Track J, by chat_id) + question + SOP
-        guidance; the file pointer block (offload-first, design §9) and the
-        available knowledge-base list (so ``search_knowledge_base`` has real ids)
-        are appended when present. The deepagents kernel plans the todo清单 from
-        this seed during astream.
+        the prior conversation context (F035 Track J, by chat_id) + question; the
+        file pointer block (offload-first, design §9) and the available
+        knowledge-base list (so ``search_knowledge_base`` has real ids) are
+        appended when present. The deepagents kernel plans the todo清单 from this
+        seed during astream.
         """
         parts: list[str] = []
         if history_summary:
             parts.append(history_summary)
         if session_model.question:
             parts.append(str(session_model.question))
-        if session_model.sop:
-            parts.append(f"\n# 执行规范(SOP)\n{session_model.sop}")
         if file_list:
             # file_list is a list[str] (prepare_file_list returns a single-element
             # list holding the <uploaded_files> block). Join it — interpolating the
@@ -1007,6 +1015,15 @@ class LinsightWorkflowTask:
         # for a direct-answer completion and push a FINAL_RESULT (which would
         # close the session and hide the clarify card).
         self._waiting_for_input = True
+
+        # Flip the SESSION-version status to WAITING_FOR_USER_INPUT too. Without
+        # this the parked session stays IN_PROGRESS, and the worker-startup crash
+        # sweep (check_and_terminate_incomplete_tasks scans IN_PROGRESS) sees a
+        # parked task whose owner key was released by park-and-release and wrongly
+        # marks it FAILED ("Worker node crash detected"). The dedicated WAITING
+        # status keeps parked tasks out of that IN_PROGRESS sweep; resume flips it
+        # back to IN_PROGRESS.
+        await self._update_session_status(session_model, SessionVersionStatusEnum.WAITING_FOR_USER_INPUT)
 
     async def _handle_exec_step(self, agent, event: ExecStep, session_model: LinsightSessionVersion):
         """Handle execution step events.
