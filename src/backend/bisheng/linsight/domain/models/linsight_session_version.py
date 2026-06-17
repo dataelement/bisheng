@@ -86,7 +86,14 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     status: SessionVersionStatusEnum = Field(
         default=SessionVersionStatusEnum.NOT_STARTED,
         description="Session Version Status",
-        sa_column=Column(SQLEnum(SessionVersionStatusEnum), nullable=False),
+        # Plain VARCHAR (no native ENUM / CHECK): a native ENUM created at table
+        # time freezes the allowed set, so a newly-added status like
+        # WAITING_FOR_USER_INPUT is rejected with "Data truncated" on upgraded
+        # DBs. Storage stays the enum NAME (back-compatible with existing rows).
+        sa_column=Column(
+            SQLEnum(SessionVersionStatusEnum, native_enum=False, length=50, create_constraint=False),
+            nullable=False,
+        ),
     )
     score: int | None = Field(None, description="Session Score", ge=1, le=5, nullable=True)
     # Execution Result Feedback Information
