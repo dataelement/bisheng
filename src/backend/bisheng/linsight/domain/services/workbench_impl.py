@@ -26,7 +26,6 @@ from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
@@ -69,7 +68,6 @@ class LinsightWorkbenchImpl:
     """LinsightWorkbench Implementation Class"""
 
     # Class Constant
-    COLLECTION_NAME_PREFIX = "col_linsight_file_"
     FILE_INFO_REDIS_KEY_PREFIX = "linsight_file:"
     CACHE_EXPIRATION_HOURS = 24
 
@@ -748,14 +746,8 @@ class LinsightWorkbenchImpl:
         original_filename = upload_result["original_filename"]
         file_path = upload_result["file_path"]
         try:
-            # Get workbench configuration
-            workbench_conf = await cls._get_workbench_config()
-            collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
-
             # Asynchronous execution of file parsing
-            parse_result = await cls._parse_file(
-                invoke_user_id, file_id, file_path, original_filename, collection_name, workbench_conf
-            )
+            parse_result = await cls._parse_file(invoke_user_id, file_id, file_path, original_filename)
 
             # Cache Result
             await cls._cache_parse_result(file_id, parse_result)
@@ -780,18 +772,19 @@ class LinsightWorkbenchImpl:
         file_id: str,
         file_path: str,
         original_filename: str,
-        collection_name: str,
-        workbench_conf,
     ) -> dict:
         """
         Synchronize parsed files
+
+        Parses the upload into markdown and uploads that markdown to MinIO so the
+        execution agent can read it from its workspace (``read_file``). The file is
+        intentionally NOT vectorised into milvus/es: task execution reads the full
+        markdown directly, so the old ``col_linsight_file_*`` vectors are unused.
 
         Args:
             file_id: Doc.ID
             file_path: FilePath
             original_filename: Original Filename
-            collection_name: Set Name
-            workbench_conf: Workbench configuration
 
         Returns:
             Parsing results
@@ -828,9 +821,6 @@ class LinsightWorkbenchImpl:
             await minio_client.put_object_tmp(markdown_filename, markdown_bytes)
             markdown_md5 = await async_calculate_md5(markdown_bytes)
 
-            # Process vector storage
-            await cls._process_vector_storage(invoke_user_id, texts, file_id, collection_name, workbench_conf)
-
             return {
                 "file_id": file_id,
                 "original_filename": original_filename,
@@ -839,8 +829,6 @@ class LinsightWorkbenchImpl:
                 "markdown_filename": markdown_filename,
                 "markdown_file_path": markdown_filename,
                 "markdown_file_md5": markdown_md5,
-                "embedding_model_id": workbench_conf.embedding_model.id,
-                "collection_name": collection_name,
             }
         except Exception as e:
             logger.error(f"File parsing failed: file_id={file_id}, error={e!s}")
@@ -850,25 +838,6 @@ class LinsightWorkbenchImpl:
                 "parsing_status": "failed",
                 "error_message": str(e),
             }
-
-    @classmethod
-    async def _process_vector_storage(
-        cls, invoke_user_id: int, texts: list[str], file_id: str, collection_name: str, workbench_conf
-    ) -> None:
-        """Process vector storage"""
-        # Buatembeddings
-        embeddings = await LLMService.get_bisheng_linsight_embedding(
-            model_id=workbench_conf.embedding_model.id, invoke_user_id=invoke_user_id
-        )
-
-        # Create Vector Store
-        vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
-        es_client = KnowledgeRag.init_es_vectorstore(collection_name)
-
-        # Adding Text to Vector Storage
-        metadatas = [{"file_id": file_id} for _ in texts]
-        await vector_client.aadd_texts(texts, metadatas=metadatas)
-        await es_client.aadd_texts(texts, metadatas=metadatas)
 
     @classmethod
     async def _cache_parse_result(cls, file_id: str, parse_result: dict) -> None:
