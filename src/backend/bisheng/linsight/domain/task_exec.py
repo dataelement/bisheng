@@ -80,9 +80,6 @@ class LinsightWorkflowTask:
         self._waiting_for_input: bool = False
         self.file_dir: str | None = None
         self.session_version_id: str | None = None
-        self.step_event_extra_files: list[
-            dict
-        ] = []  # File information for storing additional processing of step events
         self.llm: BaseChatModel | None = None  # For storageLLMInstances
 
     # ==================== Resource Management ====================
@@ -332,7 +329,10 @@ class LinsightWorkflowTask:
         self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
-            linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
+            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+            linsight_tools = await ToolServices.init_linsight_tools(
+                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+            )
             tools.extend(linsight_tools)
             agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
             self._check_termination()
@@ -390,8 +390,13 @@ class LinsightWorkflowTask:
         self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
-            # Build Tool List
-            linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
+            # Build Tool List. The knowledge tool is gated by the user's
+            # accessible-KB whitelist (C4) so the model cannot search a KB/file
+            # it has no access to.
+            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+            linsight_tools = await ToolServices.init_linsight_tools(
+                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+            )
             tools.extend(linsight_tools)
             # Create agent (deepagents CompiledStateGraph, F035 §2.1).
             # Durable Redis checkpointer (same as the resume path) so a HITL
@@ -750,27 +755,39 @@ class LinsightWorkflowTask:
         content = "\n".join(parts) if parts else (session_model.question or "")
         return {"messages": [{"role": "user", "content": content}]}
 
-    async def _resolve_knowledge_block(self, session_model: LinsightSessionVersion) -> str | None:
-        """Resolve the user's knowledge bases (coarse) into a prompt block that
-        advertises each KB's id, so the agent's search_knowledge_base tool can
-        target a real id. org_knowledge_enabled -> all NORMAL KBs; personal ->
-        all PRIVATE KBs (capped by the linsight max_knowledge_num)."""
+    async def _resolve_user_knowledge_bases(self, session_model: LinsightSessionVersion) -> list:
+        """Resolve the user's accessible knowledge bases (coarse, permission-safe).
+
+        org_knowledge_enabled -> all NORMAL KBs; personal -> all PRIVATE KBs,
+        each capped by the linsight ``max_knowledge_num``. ``aget_user_knowledge``
+        already filters to KBs the user can see, so this list IS the permission
+        whitelist — both the prompt advertisement (``_resolve_knowledge_block``)
+        and the tool gate (``_resolve_allowed_knowledge_ids``) derive from it, so
+        what the model is told it may search and what it is actually allowed to
+        search stay in lockstep.
+        """
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
 
+        linsight_conf = settings.get_linsight_conf()
+        cap = getattr(linsight_conf, "max_knowledge_num", 0) or 0
+        if cap <= 0:
+            return []
+        kbs: list = []
+        if session_model.org_knowledge_enabled:
+            kbs += await KnowledgeDao.aget_user_knowledge(
+                session_model.user_id, None, KnowledgeTypeEnum.NORMAL, limit=cap
+            )
+        if session_model.personal_knowledge_enabled:
+            kbs += await KnowledgeDao.aget_user_knowledge(
+                session_model.user_id, None, KnowledgeTypeEnum.PRIVATE, limit=cap
+            )
+        return kbs
+
+    async def _resolve_knowledge_block(self, session_model: LinsightSessionVersion) -> str | None:
+        """Render the user's accessible KBs into a prompt block advertising each
+        KB's id, so the agent's search_knowledge_base tool can target a real id."""
         try:
-            linsight_conf = settings.get_linsight_conf()
-            cap = getattr(linsight_conf, "max_knowledge_num", 0) or 0
-            if cap <= 0:
-                return None
-            kbs: list = []
-            if session_model.org_knowledge_enabled:
-                kbs += await KnowledgeDao.aget_user_knowledge(
-                    session_model.user_id, None, KnowledgeTypeEnum.NORMAL, limit=cap
-                )
-            if session_model.personal_knowledge_enabled:
-                kbs += await KnowledgeDao.aget_user_knowledge(
-                    session_model.user_id, None, KnowledgeTypeEnum.PRIVATE, limit=cap
-                )
+            kbs = await self._resolve_user_knowledge_bases(session_model)
             if not kbs:
                 return None
             knowledge_strs = await LinsightWorkbenchImpl.prepare_knowledge_list(kbs)
@@ -778,6 +795,27 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.warning(f"Failed to resolve knowledge block: {e}")
             return None
+
+    async def _resolve_allowed_knowledge_ids(self, session_model: LinsightSessionVersion) -> set[str]:
+        """Build the SearchKnowledgeBase whitelist (C4 permission isolation).
+
+        Allowed = the user-visible KB ids (same source as the prompt block) plus
+        this session's uploaded file ids (``search_linsight_file`` targets). The
+        tool refuses any id outside this set, so a hallucinated/coaxed id can
+        never reach another tenant's KB or another session's uploaded file.
+        """
+        allowed: set[str] = set()
+        for f in session_model.files or []:
+            fid = f.get("file_id") if isinstance(f, dict) else None
+            if fid:
+                allowed.add(str(fid))
+        try:
+            kbs = await self._resolve_user_knowledge_bases(session_model)
+            for kb in kbs:
+                allowed.add(str(kb.id))
+        except Exception as e:
+            logger.warning(f"Failed to resolve allowed knowledge ids: {e}")
+        return allowed
 
     @staticmethod
     def _unpack_stream_chunk(chunk):
@@ -907,11 +945,14 @@ class LinsightWorkflowTask:
         self._waiting_for_input = True
 
     async def _handle_exec_step(self, agent, event: ExecStep, session_model: LinsightSessionVersion):
-        """Handle execution step events"""
+        """Handle execution step events.
 
-        # Additional Processing Step Events
-        event = await linsight_execute_utils.handle_step_event_extra(event, self)
-
+        Files written by a step are persisted by the deepagents WorkspaceBackend
+        (MinIO truth + write-through cache) and surfaced as deliverables by
+        ``get_final_result_file`` (output/ zone scan), so no per-step file upload
+        is done here. The legacy ``handle_step_event_extra`` hook (which keyed off
+        the retired local_file tool names) is removed.
+        """
         await self._state_manager.add_execution_task_step(event.task_id, step=event)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=event.model_dump())

@@ -1,7 +1,6 @@
 import asyncio
 import json
 from time import perf_counter
-from typing import Optional, List
 
 import yaml
 from fastapi import Request
@@ -11,10 +10,19 @@ from pydantic import BaseModel, ConfigDict
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError
-from bisheng.common.errcode.tool import ToolTypeNotExistsError, ToolTypeRepeatError, ToolTypeNameError, \
-    ToolTypeIsPresetError, ToolSchemaDownloadError, ToolSchemaEmptyError, ToolSchemaParseError, ToolSchemaServerError, \
-    ToolMcpSchemaError, ToolMcpStdioError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.common.errcode.tool import (
+    ToolMcpSchemaError,
+    ToolMcpStdioError,
+    ToolSchemaDownloadError,
+    ToolSchemaEmptyError,
+    ToolSchemaParseError,
+    ToolSchemaServerError,
+    ToolTypeIsPresetError,
+    ToolTypeNameError,
+    ToolTypeNotExistsError,
+    ToolTypeRepeatError,
+)
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.database.models.role_access import AccessType
@@ -23,34 +31,34 @@ from bisheng.mcp_manage.manager import ClientManager
 from bisheng.permission.domain.services.tool_permission_service import ToolPermissionService
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.linsight_knowledge import SearchKnowledgeBase
-from bisheng.tool.domain.models.gpts_tools import GptsToolsDao, GptsTools, GptsToolsType, GptsToolsTypeRead
+from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, GptsToolsTypeRead
 from bisheng.tool.domain.services.openapi import OpenApiSchema
-from bisheng.utils import md5_hash, get_request_ip
+from bisheng.utils import get_request_ip, md5_hash
 from bisheng.utils.mask_data import JsonFieldMasker
-from bisheng_langchain.gpts.load_tools import load_tools
 
 
 class ToolServices(BaseModel):
-    """ Tool service class """
+    """Tool service class"""
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    request: Optional[Request] = None
-    login_user: Optional[UserPayload] = None
+    request: Request | None = None
+    login_user: UserPayload | None = None
 
     def _is_scoped_super_admin(self) -> bool:
         current_tid = get_current_tenant_id()
         return bool(
-            getattr(self.login_user, 'is_global_super', False)
+            getattr(self.login_user, "is_global_super", False)
             and current_tid is not None
             and current_tid != DEFAULT_TENANT_ID
         )
 
     async def get_tool_list(
         self,
-        is_preset: Optional[int] = None,
-        permission_id: str = 'use_tool',
-    ) -> List[GptsToolsTypeRead]:
-        """ Get a list of tools visible to users """
+        is_preset: int | None = None,
+        permission_id: str = "use_tool",
+    ) -> list[GptsToolsTypeRead]:
+        """Get a list of tools visible to users"""
         total_start = perf_counter()
         current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
         if self._is_scoped_super_admin():
@@ -61,7 +69,7 @@ class ToolServices(BaseModel):
                 is_preset=scoped_preset,
             )
             tool_type_id = [one.id for one in all_tool_type]
-            res: List[GptsToolsTypeRead] = []
+            res: list[GptsToolsTypeRead] = []
             tool_type_children = {one.id: [] for one in all_tool_type}
             for one in all_tool_type:
                 res.append(GptsToolsTypeRead.model_validate(one))
@@ -89,8 +97,8 @@ class ToolServices(BaseModel):
                 )
                 tool_type_ids_extra = [int(access) for access in filtered_ids]
                 logger.info(
-                    '[perf][tool.list.prefilter] user_id={} tenant_id={} is_preset={} permission_id={} '
-                    'access_resources={} filtered_ids={} took_ms={:.2f}',
+                    "[perf][tool.list.prefilter] user_id={} tenant_id={} is_preset={} permission_id={} "
+                    "access_resources={} filtered_ids={} took_ms={:.2f}",
                     self.login_user.user_id,
                     current_tid,
                     is_preset,
@@ -114,8 +122,9 @@ class ToolServices(BaseModel):
                 all_tool_type = await GptsToolsDao.aget_preset_tool_type()
         else:
             # Get a list of custom tools visible to users
-            all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra, False,
-                                                                   ToolPresetType(is_preset))
+            all_tool_type = await GptsToolsDao.aget_user_tool_type(
+                self.login_user.user_id, tool_type_ids_extra, False, ToolPresetType(is_preset)
+            )
 
         if is_preset is None and current_tid != DEFAULT_TENANT_ID:
             preset_tool_types = await GptsToolsDao.aget_tenant_tool_type(
@@ -126,11 +135,14 @@ class ToolServices(BaseModel):
             preset_ids = {one.id for one in preset_tool_types}
             all_tool_type = [
                 *preset_tool_types,
-                *(one for one in all_tool_type if
-                  one.id not in preset_ids and one.is_preset != ToolPresetType.PRESET.value),
+                *(
+                    one
+                    for one in all_tool_type
+                    if one.id not in preset_ids and one.is_preset != ToolPresetType.PRESET.value
+                ),
             ]
         tool_type_id = [one.id for one in all_tool_type]
-        res: List[GptsToolsTypeRead] = []
+        res: list[GptsToolsTypeRead] = []
         tool_type_children = {}
         for one in all_tool_type:
             tool_type_children[one.id] = []
@@ -147,36 +159,33 @@ class ToolServices(BaseModel):
             permission_map = await ToolPermissionService.get_tool_permission_map_async(
                 self.login_user,
                 tool_type_id,
-                ['edit_tool', 'delete_tool'],
+                ["edit_tool", "delete_tool"],
             )
             logger.info(
-                '[perf][tool.list.permission_map] user_id={} tenant_id={} tool_types={} map_size={} took_ms={:.2f}',
+                "[perf][tool.list.permission_map] user_id={} tenant_id={} tool_types={} map_size={} took_ms={:.2f}",
                 self.login_user.user_id,
                 current_tid,
                 len(tool_type_id),
                 len(permission_map),
                 (perf_counter() - permission_map_start) * 1000,
             )
-        tenant_admin = (
-            current_tid != DEFAULT_TENANT_ID
-            and await self.login_user.has_tenant_admin(current_tid)
-        )
+        tenant_admin = current_tid != DEFAULT_TENANT_ID and await self.login_user.has_tenant_admin(current_tid)
         for one in res:
             if self.login_user.is_admin() or tenant_admin or one.user_id == self.login_user.user_id:
                 one.write = True
                 one.delete = True
             else:
                 one_permissions = permission_map.get(str(one.id), set())
-                one.write = 'edit_tool' in one_permissions
-                one.delete = 'delete_tool' in one_permissions
+                one.write = "edit_tool" in one_permissions
+                one.delete = "delete_tool" in one_permissions
             one.children = tool_type_children.get(one.id, [])
 
             # Data desensitization
             one.mask_sensitive_data()
 
         logger.info(
-            '[perf][tool.list.total] user_id={} tenant_id={} is_preset={} permission_id={} tool_types={} '
-            'children={} took_ms={:.2f}',
+            "[perf][tool.list.total] user_id={} tenant_id={} is_preset={} permission_id={} tool_types={} "
+            "children={} took_ms={:.2f}",
             self.login_user.user_id,
             current_tid,
             is_preset,
@@ -188,12 +197,13 @@ class ToolServices(BaseModel):
         return res
 
     async def add_tools(
-        self, req: GptsToolsTypeRead,
+        self,
+        req: GptsToolsTypeRead,
     ) -> GptsToolsTypeRead:
-        """ Add custom tool. """
+        """Add custom tool."""
         # Try to parse theopenapi schemaSee if it can be parsed normally, Save if not possible Do not allow to save
         if req.is_preset == ToolPresetType.API.value:
-            await self.parse_openapi_schema('', req.openapi_schema)
+            await self.parse_openapi_schema("", req.openapi_schema)
         elif req.is_preset == ToolPresetType.MCP.value:
             await self.parse_mcp_schema(req.openapi_schema)
 
@@ -223,12 +233,14 @@ class ToolServices(BaseModel):
 
     @classmethod
     async def add_gpts_tools_hook(cls, request: Request, user: UserPayload, gpts_tool_type: GptsToolsTypeRead) -> bool:
-        """ After adding custom toolshookFunction """
+        """After adding custom toolshookFunction"""
         # F008: Write owner tuple to OpenFGA (INV-2)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        await OwnerService.write_owner_tuple(user.user_id, 'tool', str(gpts_tool_type.id))
+
+        await OwnerService.write_owner_tuple(user.user_id, "tool", str(gpts_tool_type.id))
 
         from bisheng.api.services.audit_log import AuditLogService
+
         await asyncio.to_thread(AuditLogService.create_tool, user, get_request_ip(request), [], gpts_tool_type)
         return True
 
@@ -239,23 +251,20 @@ class ToolServices(BaseModel):
             raise NotFoundError()
 
         current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
-        tenant_admin = (
-            current_tid != DEFAULT_TENANT_ID
-            and await self.login_user.has_tenant_admin(current_tid)
-        )
+        tenant_admin = current_tid != DEFAULT_TENANT_ID and await self.login_user.has_tenant_admin(current_tid)
         if not (
             self.login_user.is_admin()
             or tenant_admin
             or await ToolPermissionService.has_any_permission_async(
-            self.login_user,
-            str(tool_type.id),
-            ['edit_tool'],
-        )
+                self.login_user,
+                str(tool_type.id),
+                ["edit_tool"],
+            )
         ):
             raise UnAuthorizedError()
 
         if tool_type.extra is None:
-            tool_type.extra = '{}'
+            tool_type.extra = "{}"
 
         json_masker = JsonFieldMasker()
 
@@ -287,75 +296,81 @@ class ToolServices(BaseModel):
         if download_url:
             try:
                 from bisheng.api.utils import get_url_content
+
                 file_content = await get_url_content(download_url)
             except Exception as e:
-                logger.exception(f'file {download_url} download error')
+                logger.exception(f"file {download_url} download error")
                 raise ToolSchemaDownloadError(exception=e)
         if not file_content:
             raise ToolSchemaEmptyError()
         # Depending on the content of the document, is it possible to`{`At the beginning, what analytical method is used to determine
         try:
-            if file_content.startswith('{'):
+            if file_content.startswith("{"):
                 res = json.loads(file_content)
             else:
                 res = yaml.safe_load(file_content)
         except Exception as e:
-            logger.exception(f'openapi schema parse error {e}')
+            logger.exception(f"openapi schema parse error {e}")
             raise ToolSchemaParseError(exception=e)
 
         #  analyzingopenapi schemaConvert to Helper Tool Format
         try:
             schema = OpenApiSchema(res)
             schema.parse_server()
-            if not schema.default_server.startswith(('http', 'https')):
+            if not schema.default_server.startswith(("http", "https")):
                 raise ToolSchemaServerError(data={"url": schema.default_server})
-            tool_type = GptsToolsTypeRead(name=schema.title,
-                                          description=schema.description,
-                                          is_preset=ToolPresetType.API.value,
-                                          server_host=schema.default_server,
-                                          openapi_schema=file_content,
-                                          api_location=schema.api_location,
-                                          parameter_name=schema.parameter_name,
-                                          auth_type=schema.auth_type,
-                                          auth_method=schema.auth_method,
-                                          children=[])
+            tool_type = GptsToolsTypeRead(
+                name=schema.title,
+                description=schema.description,
+                is_preset=ToolPresetType.API.value,
+                server_host=schema.default_server,
+                openapi_schema=file_content,
+                api_location=schema.api_location,
+                parameter_name=schema.parameter_name,
+                auth_type=schema.auth_type,
+                auth_method=schema.auth_method,
+                children=[],
+            )
             # Parsing to get all theapi
             schema.parse_paths()
             for one in schema.apis:
                 tool_type.children.append(
                     GptsTools(
-                        name=one['operationId'],
-                        desc=one['description'],
-                        tool_key=md5_hash(one['operationId']),
+                        name=one["operationId"],
+                        desc=one["description"],
+                        tool_key=md5_hash(one["operationId"]),
                         is_preset=0,
                         is_delete=0,
-                        api_params=one['parameters'],
+                        api_params=one["parameters"],
                         extra=json.dumps(one, ensure_ascii=False),
-                    ))
+                    )
+                )
             return tool_type
         except BaseErrorCode as e:
             raise e
         except Exception as e:
-            logger.exception(f'openapi schema parse error {e}')
+            logger.exception(f"openapi schema parse error {e}")
             raise ToolSchemaParseError(exception=e)
 
     @staticmethod
     async def parse_mcp_schema(file_content: str) -> GptsToolsTypeRead:
         try:
             result = json.loads(file_content)
-            mcp_servers = result['mcpServers']
+            mcp_servers = result["mcpServers"]
         except Exception as e:
-            logger.exception(f'mcp tool schema parse error {e}')
+            logger.exception(f"mcp tool schema parse error {e}")
             raise ToolMcpSchemaError(exception=e)
         tool_type = None
         for key, value in mcp_servers.items():
             # analyzingmcpService Config
-            tool_type = GptsToolsTypeRead(name=value.get('name', ''),
-                                          server_host=value.get('url', ''),
-                                          description=value.get('description', ''),
-                                          is_preset=ToolPresetType.MCP.value,
-                                          openapi_schema=file_content,
-                                          children=[])
+            tool_type = GptsToolsTypeRead(
+                name=value.get("name", ""),
+                server_host=value.get("url", ""),
+                description=value.get("description", ""),
+                is_preset=ToolPresetType.MCP.value,
+                openapi_schema=file_content,
+                children=[],
+            )
             mcp_conf = await settings.get_mcp_conf()
             if not mcp_conf.enable_stdio:
                 client_type, _ = ClientManager.parse_mcp_client_type(tool_type.openapi_schema)
@@ -367,14 +382,16 @@ class ToolServices(BaseModel):
             tools = await client.list_tools()
 
             for one in tools:
-                tool_type.children.append(GptsTools(
-                    name=one.name,
-                    desc=one.description,
-                    tool_key=md5_hash(one.name),
-                    is_preset=ToolPresetType.MCP.value,
-                    api_params=ToolServices.convert_input_schema(one.inputSchema),
-                    extra=one.model_dump_json(),
-                ))
+                tool_type.children.append(
+                    GptsTools(
+                        name=one.name,
+                        desc=one.description,
+                        tool_key=md5_hash(one.name),
+                        is_preset=ToolPresetType.MCP.value,
+                        api_params=ToolServices.convert_input_schema(one.inputSchema),
+                        extra=one.model_dump_json(),
+                    )
+                )
             break
         if tool_type is None:
             raise ToolMcpSchemaError()
@@ -425,8 +442,7 @@ class ToolServices(BaseModel):
             one.is_delete = 0
             add_children.append(one)
 
-        await GptsToolsDao.update_tool_type(exist_tool_type, delete_tool_id_list,
-                                            add_children, update_tool_list)
+        await GptsToolsDao.update_tool_type(exist_tool_type, delete_tool_id_list, add_children, update_tool_list)
 
         children = await GptsToolsDao.aget_list_by_type([exist_tool_type.id])
         return GptsToolsTypeRead(**exist_tool_type.model_dump(), children=children)
@@ -437,7 +453,7 @@ class ToolServices(BaseModel):
         """
         # Try to parse theopenapi schemaSee if it can be parsed normally, Save if not possible Do not allow to save
         if req.is_preset == ToolPresetType.API.value:
-            await self.parse_openapi_schema('', req.openapi_schema)
+            await self.parse_openapi_schema("", req.openapi_schema)
         elif req.is_preset == ToolPresetType.MCP.value:
             await self.parse_mcp_schema(req.openapi_schema)
 
@@ -455,7 +471,7 @@ class ToolServices(BaseModel):
         if not await ToolPermissionService.has_any_permission_async(
             self.login_user,
             str(exist_tool_type.id),
-            ['edit_tool'],
+            ["edit_tool"],
         ):
             raise UnAuthorizedError()
 
@@ -467,10 +483,11 @@ class ToolServices(BaseModel):
     async def update_tool_hook(cls, request: Request, user: UserPayload, exist_tool_type):
         # F008: removed GroupResourceDao for audit (AC-08)
         from bisheng.api.services.audit_log import AuditLogService
+
         await asyncio.to_thread(AuditLogService.update_tool, user, get_request_ip(request), [], exist_tool_type)
 
     async def delete_tools(self, tool_type_id: int) -> bool:
-        """ Delete Tool Category """
+        """Delete Tool Category"""
         exist_tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id)
         if not exist_tool_type:
             return True
@@ -480,7 +497,7 @@ class ToolServices(BaseModel):
         if not await ToolPermissionService.has_any_permission_async(
             self.login_user,
             str(exist_tool_type.id),
-            ['delete_tool'],
+            ["delete_tool"],
         ):
             raise UnAuthorizedError()
 
@@ -490,19 +507,21 @@ class ToolServices(BaseModel):
 
     @classmethod
     async def delete_tool_hook(cls, request, user: UserPayload, gpts_tool_type) -> bool:
-        """ After deleting the customizerhookFunction """
+        """After deleting the customizerhookFunction"""
         logger.info(f"delete_gpts_tool_hook id: {gpts_tool_type.id}, user: {user.user_id}")
 
         # F008: Clean up all FGA tuples (AC-03)
         from bisheng.permission.domain.services.owner_service import OwnerService
-        await OwnerService.delete_resource_tuples('tool', str(gpts_tool_type.id))
+
+        await OwnerService.delete_resource_tuples("tool", str(gpts_tool_type.id))
 
         from bisheng.api.services.audit_log import AuditLogService
+
         await asyncio.to_thread(AuditLogService.delete_tool, user, get_request_ip(request), [], gpts_tool_type)
         return True
 
     async def refresh_all_mcp(self) -> list[str]:
-        """ return mcp server error msg """
+        """return mcp server error msg"""
         # get user all mcp tool
         tool_types = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, is_preset=ToolPresetType.MCP)
         if not tool_types:
@@ -519,63 +538,69 @@ class ToolServices(BaseModel):
             try:
                 await self.refresh_mcp_tools(one, tools_map.get(one.id, []))
             except Exception:
-                logger.exception(f'{one.name} tool refresh failed')
+                logger.exception(f"{one.name} tool refresh failed")
                 error_name.append(one.name)
         return error_name
 
     async def refresh_mcp_tools(self, tool_type: GptsToolsType, old_tools: list[GptsTools]):
-        """ refresh mcp tools """
+        """refresh mcp tools"""
         # 1. get all new tools
         # Instantiatemcpservice object, getting a list of tools
         client = await ClientManager.connect_mcp_from_json(tool_type.openapi_schema)
         tools = await client.list_tools()
         children = []
         for one in tools:
-            children.append(GptsTools(
-                name=one.name,
-                desc=one.description,
-                is_preset=ToolPresetType.MCP.value,
-                api_params=self.convert_input_schema(one.inputSchema),
-                extra=one.model_dump_json(),
-                type=tool_type.id,
-            ))
+            children.append(
+                GptsTools(
+                    name=one.name,
+                    desc=one.description,
+                    is_preset=ToolPresetType.MCP.value,
+                    api_params=self.convert_input_schema(one.inputSchema),
+                    extra=one.model_dump_json(),
+                    type=tool_type.id,
+                )
+            )
 
         req = GptsToolsTypeRead(**tool_type.model_dump(), children=children)
         await self._update_gpts_tools(tool_type, req)
 
     @classmethod
     def convert_input_schema(cls, input_schema: dict):
-        """ TukarmcpInput parameters for the tool Formatting for custom tools"""
-        required = input_schema.get('required', [])
-        properties = input_schema.get('properties', {})
+        """TukarmcpInput parameters for the tool Formatting for custom tools"""
+        required = input_schema.get("required", [])
+        properties = input_schema.get("properties", {})
         res = []
         for filed, field_info in properties.items():
-            res.append({
-                'in': "query",
-                'name': filed,
-                'description': field_info.get('description'),
-                'required': filed in required,
-                'schema': {
-                    'type': field_info.get('type'),
+            res.append(
+                {
+                    "in": "query",
+                    "name": filed,
+                    "description": field_info.get("description"),
+                    "required": filed in required,
+                    "schema": {
+                        "type": field_info.get("type"),
+                    },
                 }
-            })
+            )
         return res
 
     @classmethod
-    async def init_linsight_tools(cls, root_path: str) -> List[BaseTool]:
-        """ InisialisasiLinsight Default Tools, The special point is that the parameters initialized by the local file tool are not fixed, but are determined during rerun """
-        # Tools for loading local file operations
-        local_file_tools = load_tools({
-            "list_files": {"root_path": root_path},
-            "get_file_details": {"root_path": root_path},
-            "search_files": {"root_path": root_path},
-            # "search_text_in_file": {"root_path": root_path},
-            "read_text_file": {"root_path": root_path},
-            "add_text_to_file": {"root_path": root_path},
-            "replace_file_lines": {"root_path": root_path},
-        })
-        knowledge_tools = [SearchKnowledgeBase()]
-        return knowledge_tools + local_file_tools
+    async def init_linsight_tools(cls, root_path: str, allowed_knowledge_ids: set[str] | None = None) -> list[BaseTool]:
+        """Initialize Linsight task-mode built-in tools.
+
+        Only the knowledge-retrieval tool is injected here. The legacy local_file
+        tools (list_files / read_text_file / add_text_to_file / ...) are retired:
+        deepagents' FilesystemMiddleware already ships ls/read_file/write_file/
+        edit_file over the SAME WorkspaceBackend the agent is built with, so the
+        old tools duplicated the file toolset and made the model pick between two
+        equivalent file APIs. ``root_path`` is kept in the signature for callers
+        but no longer needed by the (now file-tool-free) built-in set.
+
+        ``allowed_knowledge_ids`` is the C4 permission whitelist (user-visible KB
+        ids + this session's uploaded file ids) handed to ``SearchKnowledgeBase``;
+        the tool refuses any id outside it. ``None`` leaves the tool ungated.
+        """
+        return [SearchKnowledgeBase(allowed_knowledge_ids=allowed_knowledge_ids)]
 
     @classmethod
     async def get_linsight_tools(cls) -> list[GptsToolsTypeRead]:
@@ -591,49 +616,10 @@ class ToolServices(BaseModel):
                         desc="检索组织知识库、个人知识库以及本地上传文件的内容。",
                         tool_key="search_knowledge_base",
                     )
-                ]
+                ],
             ),
-            GptsToolsTypeRead(
-                id=200000,
-                name="文件操作",
-                description="本地文件系统的浏览、搜索与编辑工具集",
-                children=[
-                    GptsTools(
-                        id=200001,
-                        name="获取所有文件和目录",
-                        desc="列出指定目录下的所有文件和子目录。",
-                        tool_key="list_files"
-                    ),
-                    GptsTools(
-                        id=200002,
-                        name="获取文件详细信息",
-                        desc="获取指定文件的文件名、文件大小、文件地址、字数、行数等详细信息。",
-                        tool_key="get_file_details"
-                    ),
-                    GptsTools(
-                        id=200003,
-                        name="搜索文件",
-                        desc="在指定目录中搜索文件和子目录。",
-                        tool_key="search_files"
-                    ),
-                    GptsTools(
-                        id=200004,
-                        name="读取文件内容",
-                        desc="读取本地文本文件的内容。",
-                        tool_key="read_text_file"
-                    ),
-                    GptsTools(
-                        id=200005,
-                        name="写入文件内容",
-                        desc="将文本内容追加到文本文件，如果文件不存在，则创建文件",
-                        tool_key="add_text_to_file"
-                    ),
-                    GptsTools(
-                        id=200006,
-                        name="替换文件指定行范围内容",
-                        desc="替换文件中的指定行范围。",
-                        tool_key="replace_file_lines"
-                    ),
-                ]
-            )
+            # Legacy "文件操作" group (list_files / read_text_file / add_text_to_file
+            # / ...) removed: task mode runs on deepagents, whose FilesystemMiddleware
+            # provides ls/read_file/write_file/edit_file transparently. They are not
+            # user-configurable, so they no longer belong in the advertised tree.
         ]

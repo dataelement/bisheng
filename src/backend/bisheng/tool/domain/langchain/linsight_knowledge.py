@@ -35,6 +35,15 @@ class SearchKnowledgeBase(BaseTool):
             包含搜索结果（chunk的列表）的字典"""
     args_schema: type[BaseModel] = ToolInput
 
+    # C4 permission isolation: the whitelist of knowledge ids the model may
+    # search — the user-visible KB ids plus this session's uploaded file ids,
+    # resolved at agent-assembly time. ``None`` disables gating (back-compat for
+    # callers that don't inject it). The prompt advertises these same ids, but a
+    # model can hallucinate or be coaxed into an arbitrary id; without this gate
+    # that id would reach ``KnowledgeDao.query_by_id`` directly and leak another
+    # tenant's / unauthorised KB content.
+    allowed_knowledge_ids: set[str] | None = None
+
     def _run(self, query: str, knowledge_id: str | None = None, **kwargs) -> str:
         """Use the tool."""
         return "not supported in sync mode, please use async version"
@@ -43,6 +52,15 @@ class SearchKnowledgeBase(BaseTool):
         limit = kwargs.get("limit", None) or 2
         if not query:
             return '{"状态": "失败", "错误信息": "检索关键词不能为空"}'
+
+        # Enforce the whitelist before any DB/vector lookup (C4). An id outside
+        # the user's accessible set is refused outright — never queried.
+        if self.allowed_knowledge_ids is not None and str(knowledge_id) not in self.allowed_knowledge_ids:
+            logger.warning(f"search_knowledge_base rejected out-of-whitelist knowledge_id={knowledge_id!r}")
+            return json.dumps(
+                {"状态": "无权限", "错误信息": "该知识库不在当前任务可用的知识库列表中"},
+                ensure_ascii=False,
+            )
 
         # A knowledge_id is either a numeric KB id or a linsight uploaded file_id.
         # The model sometimes hallucinates a non-id sentinel (e.g.
