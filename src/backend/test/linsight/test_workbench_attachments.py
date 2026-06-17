@@ -88,15 +88,15 @@ async def test_process_writes_workspace_and_pointer_meta():
 
     assert result and len(result) == 1
     entry = result[0]
-    # pointer-block metadata present
-    assert entry["workspace_path"].startswith("/uploads/")
-    assert entry["workspace_path"].endswith("/index.md")
+    # pointer-block metadata present; stored under the real filename (.md), not
+    # a generic uploads/<name>/index.md
+    assert entry["workspace_path"] == "/uploads/My Report.md"
     assert entry["line_count"] >= 1
     assert "image_count" in entry
     assert entry.get("valid", True) is True
-    # workspace object written under workspace/{svid}/uploads/<name>/index.md
+    # workspace object written under workspace/{svid}/uploads/<name>.md
     ws_keys = [k for (b, k) in fake_minio.store if k.startswith("workspace/chat1/uploads/")]
-    assert any(k.endswith("/index.md") for k in ws_keys)
+    assert "workspace/chat1/uploads/My Report.md" in ws_keys
 
 
 async def test_prepare_file_list_pointer_block_format():
@@ -214,11 +214,11 @@ async def test_daily_file_ingested_into_workspace(monkeypatch):
     entry = result[0]
     assert entry.get("valid") is True
     assert entry["parsing_status"] == "completed"
-    assert entry["workspace_path"].startswith("/uploads/")
-    assert entry["workspace_path"].endswith("/index.md")
+    # stored under the real filename as markdown (Report.pdf -> Report.md)
+    assert entry["workspace_path"] == "/uploads/Report.md"
     # markdown written into the session workspace where WorkspaceBackend.ls reads
     ws_keys = [k for (b, k) in fake_minio.store if k.startswith("workspace/svid1/uploads/")]
-    assert any(k.endswith("/index.md") for k in ws_keys)
+    assert "workspace/svid1/uploads/Report.md" in ws_keys
 
 
 async def test_daily_file_ingest_failure_degrades_gracefully(monkeypatch):
@@ -248,8 +248,96 @@ async def test_daily_file_ingest_failure_degrades_gracefully(monkeypatch):
     assert entry["file_id"] == "d1"
     # real cause carried for diagnosis / user-facing message
     assert "boom" in entry["error_message"]
-    # nothing half-written into the workspace
+    # download failed -> nothing to fall back to -> nothing in the workspace
     assert not [k for (b, k) in fake_minio.store if k.startswith("workspace/svid1/uploads/")]
+
+
+async def test_daily_parse_failure_keeps_original_in_workspace(tmp_path, monkeypatch):
+    """When download succeeds but parsing fails, the ORIGINAL file is kept in the
+    workspace under its real name+ext (uploads/<name>.<ext>) so the agent's ls
+    still sees it; marked valid=False for the chip (user decision)."""
+    fake_minio = FakeMinio()
+    local = tmp_path / "raw.pdf"
+    local.write_bytes(b"%PDF-1.4 raw bytes")
+
+    class _BoomPipeline:
+        def __init__(self, *a, **k):
+            pass
+
+        async def arun(self):
+            raise RuntimeError("etl4lm unreachable")
+
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(return_value=(str(local), "委托书.pdf")),
+        ),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _BoomPipeline),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files(
+            [_daily_submit(file_id="d1", name="委托书.pdf")], "svid1", user_id=7
+        )
+
+    entry = result[0]
+    assert entry["valid"] is False
+    assert entry["parsing_status"] == "failed"
+    # original (with extension, real name) kept in the workspace -> ls sees it
+    assert entry["workspace_path"] == "/uploads/委托书.pdf"
+    assert ("bisheng", "workspace/svid1/uploads/委托书.pdf") in fake_minio.store
+    assert fake_minio.store[("bisheng", "workspace/svid1/uploads/委托书.pdf")] == b"%PDF-1.4 raw bytes"
+
+
+async def test_daily_files_preserve_chinese_names_and_dedupe(monkeypatch):
+    """Distinct Chinese-named files get distinct workspace names (not collapsed to
+    'file'); identical base names are de-duplicated instead of overwriting."""
+
+    class _Doc:
+        page_content = "content"
+
+    class _Result:
+        documents = [_Doc()]
+
+    class _OkPipeline:
+        def __init__(self, *a, **k):
+            pass
+
+        async def arun(self):
+            return _Result()
+
+    fake_minio = FakeMinio()
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(return_value=("/tmp/x", "x")),
+        ),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _OkPipeline),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files(
+            [
+                _daily_submit(file_id="a", name="委托书.pdf"),
+                _daily_submit(file_id="b", name="授权书.pdf"),
+                _daily_submit(file_id="c", name="委托书.pdf"),  # same base name as a
+            ],
+            "svid1",
+            user_id=7,
+        )
+
+    paths = [e["workspace_path"] for e in result]
+    # real names preserved, no collapse to "file", all distinct
+    assert paths[0] == "/uploads/委托书.md"
+    assert paths[1] == "/uploads/授权书.md"
+    assert paths[2] == "/uploads/委托书-2.md"  # de-duplicated
+    assert len(set(paths)) == 3
 
 
 def test_annotate_display_files_stamps_parse_result():
