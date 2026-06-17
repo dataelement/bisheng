@@ -22,17 +22,6 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.utils import util
-from bisheng_langchain.linsight.event import ExecStep
-
-# The corresponding file parameter name of the Inscription file processing tool
-local_file_tool_dict = {"add_text_to_file": "file_path", "replace_file_lines": "file_path"}
-
-# Step event extra processing tool corresponding to parameter name,
-step_event_extra_tool_dict = {
-    "add_text_to_file": "file_path",
-    "replace_file_lines": "file_path",
-    "read_text_file": "file_path",
-}
 
 
 # Get all manipulated files in a task
@@ -229,73 +218,6 @@ async def build_fallback_report_file(session_model: LinsightSessionVersion, answ
     except Exception as e:
         logger.warning(f"fallback report generation failed: {e}")
         return []
-
-
-# Additional Handling of Step Events
-async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
-    """
-    Additional logic for handling step events
-    :param task_exec_obj:
-    :param event: Event Object
-    """
-    logger.debug(
-        f"extra processing of step events,call_id: {event.call_id}, name: {event.name}, status: {event.status}"
-    )
-    try:
-        if event.status == "end" and event.name in step_event_extra_tool_dict.keys():
-            file_path = event.params.get(step_event_extra_tool_dict[event.name], "")
-            if not file_path:
-                return event
-
-            file_name = os.path.basename(file_path)
-            logger.debug(f"Step event extra processing, filename: {file_name}")
-
-            # File path processing
-            if not os.path.isabs(file_path):
-                # relative paths, converting to absolute paths
-                file_path = os.path.join(task_exec_obj.file_dir, file_path)
-                file_path = os.path.normpath(file_path)
-
-            logger.debug(f"Step event extra processing, converted file path: {file_path}")
-
-            if not os.path.exists(file_path):
-                logger.error(f"Step event extra processing, file does not exist: {file_path}")
-                return event
-
-            file_md5 = await util.async_calculate_md5(file_path)
-
-            # Determine if the document has already been uploaded
-            step_event_extra_files = task_exec_obj.step_event_extra_files
-            if step_event_extra_files:
-                existing_file = next((f for f in step_event_extra_files if f["file_md5"] == file_md5), None)
-                if existing_file:
-                    logger.debug(
-                        f"Step event extra processing, file already exists: {existing_file['file_name']}, file_md5: {file_md5}"
-                    )
-                    event.extra_info["file_info"] = {
-                        "file_name": file_name,
-                        "file_md5": existing_file["file_md5"],
-                        "file_url": existing_file["file_url"],
-                    }
-                    return event
-
-            object_name = f"linsight/step_event/{task_exec_obj.session_version_id}/{uuid.uuid4().hex[:8]}.{file_name.split('.')[-1]}"
-            logger.debug(f"Extra processing of step events, uploading files toMinIO: {object_name}")
-
-            minio_client = await get_minio_storage()
-            # Upload files toMinIO
-            await minio_client.put_object(bucket_name=minio_client.bucket, object_name=object_name, file=file_path)
-
-            event.extra_info["file_info"] = {"file_name": file_name, "file_md5": file_md5, "file_url": object_name}
-
-            # Add to Step Event Extra File List
-            task_exec_obj.step_event_extra_files.append(event.extra_info["file_info"])
-
-    except Exception as e:
-        logger.error(f"Step event extra handling exception: {e}")
-        # When an exception occurs, return to the original event without modification
-
-    return event
 
 
 # Initiateworkerwhen checking for incomplete tasks and terminating

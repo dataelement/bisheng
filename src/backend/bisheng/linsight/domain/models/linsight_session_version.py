@@ -57,6 +57,17 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     org_knowledge_enabled: bool = Field(
         False, description="Whether to enable organization knowledge base", sa_type=Boolean
     )
+    # Exact knowledge selection threaded from the daily picker (unified entry,
+    # use_knowledge_base). These are the SPECIFIC ids the user chose, so the task
+    # agent searches exactly those — not all KBs of a coarse type. organization =
+    # NORMAL-type KB ids; knowledge_space = SPACE-type KB ids. Nullable for
+    # backward compatibility with sessions created before this column existed.
+    organization_knowledge_ids: list[int] | None = Field(
+        None, description="Selected organization knowledge base ids", sa_column=Column(JsonType, nullable=True)
+    )
+    knowledge_space_ids: list[int] | None = Field(
+        None, description="Selected knowledge space ids", sa_column=Column(JsonType, nullable=True)
+    )
     files: list[dict] | None = Field(
         None, description="Uploaded files list:", sa_column=Column(JsonType, nullable=True)
     )
