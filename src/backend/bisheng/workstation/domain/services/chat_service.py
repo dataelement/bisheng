@@ -1770,7 +1770,12 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 
     submit_obj = _to_linsight_submit(data)
-    _session, session_version = await LinsightWorkbenchImpl.submit_user_question(submit_obj, login_user)
+    # Pass the original daily-shape files (filepath/type/file_id) so the user
+    # question turn persists its attachments and they render after a refresh
+    # (the submit schema's SubmitFileSchema drops the display fields).
+    _session, session_version = await LinsightWorkbenchImpl.submit_user_question(
+        submit_obj, login_user, display_files=data.files
+    )
 
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode

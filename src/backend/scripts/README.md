@@ -361,3 +361,24 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py --apply    # create
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py --remove   # clean up
 ```
+
+## Tenant / Data Fix Scripts
+
+### `dedupe_gpts_tools.py`
+
+清理同一租户下 `(tool_key, tenant_id)` 重复的**预置**工具 / 工具类型行。历史上"复制内置工具到子租户"未显式带 `tenant_id`，在 root 上下文下被 `server_default=1` 盖成 root，加上 `t_gpts_tools.tool_key` 当时没有唯一约束，导致 root 下同一 `tool_key` 堆了多份（如 `web_search` ×3）。这会让 `get_tool_by_tool_key().first()` 解析到非预期的那条（工作流读到旧配置），也会阻止后续添加 `UNIQUE(tool_key, tenant_id)` 约束。
+
+行为：每组保留最小 id 为 canonical，重定向 `assistantlink.tool_id`、`t_gpts_tools.type` 到 canonical，硬删 stray 行。非预置（自定义 API/MCP）重复**只报告不删除**。工作台配置 JSON / OpenFGA 中对 stray id 的引用也只报告，需人工跟进。
+
+Usage (from `src/backend/`，**apply 前先备份数据库**):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/dedupe_gpts_tools.py           # dry-run（默认，不写库）
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/dedupe_gpts_tools.py --apply    # 执行清理（硬删 + 重定向引用）
+```
+
+apply 干净后再手动加约束：
+
+```sql
+ALTER TABLE t_gpts_tools ADD CONSTRAINT uk_gpts_tools_key_tenant UNIQUE (tool_key, tenant_id);
+```

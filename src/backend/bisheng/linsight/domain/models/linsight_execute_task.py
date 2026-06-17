@@ -66,8 +66,11 @@ class LinsightExecuteTaskBase(SQLModelSerializable):
     # input_prompt: Optional[str] = Field(None, description='Enter a prompt', sa_type=Text, nullable=True)
     # user_input: Optional[str] = Field(None, description='User input', sa_type=Text, nullable=True)
     history: Optional[List[Dict]] = Field(None, description='Execute Step Record', sa_column=Column(JsonType, nullable=True))
+    # Plain VARCHAR (no native ENUM / CHECK): a native ENUM freezes the allowed set
+    # at table-creation time, so a newly-added status like WAITING_FOR_USER_INPUT is
+    # rejected with "Data truncated" on upgraded DBs. Storage stays the enum NAME.
     status: ExecuteTaskStatusEnum = Field(ExecuteTaskStatusEnum.NOT_STARTED, description="Status Misi",
-                                          sa_column=Column(SQLEnum(ExecuteTaskStatusEnum), nullable=False))
+                                          sa_column=Column(SQLEnum(ExecuteTaskStatusEnum, native_enum=False, length=50, create_constraint=False), nullable=False))
     result: Optional[Dict] = Field(None, description='Result of Task', sa_column=Column(JsonType, nullable=True))
     tenant_id: Optional[int] = Field(
         default=None,

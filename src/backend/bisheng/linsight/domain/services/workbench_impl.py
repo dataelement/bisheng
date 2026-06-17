@@ -132,7 +132,10 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def submit_user_question(
-        cls, submit_obj: LinsightQuestionSubmitSchema, login_user: UserPayload
+        cls,
+        submit_obj: LinsightQuestionSubmitSchema,
+        login_user: UserPayload,
+        display_files: list[dict] | None = None,
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -140,6 +143,11 @@ class LinsightWorkbenchImpl:
         Args:
             submit_obj: Submitted Question Objects
             login_user: Logged in user information
+            display_files: Original daily-shape attachment dicts (filepath/type/
+                file_id) for the unified entry. Persisted on the user-question
+                ChatMessage so the uploaded attachments render after a refresh,
+                mirroring the daily-chat question envelope. ``None`` for the
+                legacy /linsight entry (it renders attachments its own way).
 
         Returns:
             tuple: (Message Session Model, Inspiration Conversation Version Model)
@@ -221,8 +229,13 @@ class LinsightWorkbenchImpl:
             # F035 Track J: land the user question in the unified conversation
             # stream so the round reads as one Q→A pair regardless of task mode.
             # (The bot answer turn is written at completion in task_exec.)
+            # Annotate the persisted attachments with each file's parse result so
+            # the attachment chip can show a "parse failed" state after a refresh.
             await linsight_execute_utils.persist_task_user_turn(
-                chat_id=chat_id, user_id=login_user.user_id, question=submit_obj.question
+                chat_id=chat_id,
+                user_id=login_user.user_id,
+                question=submit_obj.question,
+                files=cls._annotate_display_files(display_files, processed_files),
             )
 
             return message_session, linsight_session_version
@@ -230,6 +243,35 @@ class LinsightWorkbenchImpl:
         except Exception as e:
             logger.error(f"Failed to submit user question: {e!s}")
             raise cls.LinsightError(f"Failed to submit user question: {e!s}")
+
+    @staticmethod
+    def _annotate_display_files(display_files: list[dict] | None, processed_files: list | None) -> list[dict] | None:
+        """Stamp each persisted attachment with its parse result (by file_id).
+
+        ``display_files`` are the daily-shape dicts the frontend renders; the
+        ingestion result (``processed_files``) carries ``valid`` /
+        ``parsing_status`` per file. Merging them lets the attachment chip show a
+        "parse failed" state on reload instead of a normal-looking attachment the
+        model can't actually use.
+        """
+        if not display_files:
+            return display_files
+        status_by_id: dict[str, dict] = {}
+        for p in processed_files or []:
+            if isinstance(p, dict) and p.get("file_id") is not None:
+                status_by_id[str(p["file_id"])] = p
+        annotated: list[dict] = []
+        for f in display_files:
+            item = dict(f)
+            fid = str(f.get("file_id") or f.get("id") or "")
+            p = status_by_id.get(fid)
+            if p is not None:
+                item["valid"] = p.get("valid", True)
+                item["parsing_status"] = p.get("parsing_status") or item.get("parsing_status")
+                if p.get("error_message"):
+                    item["error_message"] = p["error_message"]
+            annotated.append(item)
+        return annotated
 
     @classmethod
     async def _get_redis(cls):
@@ -249,7 +291,7 @@ class LinsightWorkbenchImpl:
           2. Copy temp -> formal bucket only on first processing (skipped when a
              formal product already exists).
           3. Write the parsed markdown into the session **workspace**
-             (``workspace/{chat_id}/uploads/<name>/index.md``) so deepagents file
+             (``workspace/{chat_id}/uploads/<name>.md``) so deepagents file
              tools and E2B copy-in/out read it as the single truth (design §9.3.2).
           4. Attach pointer-block metadata (``workspace_path`` / ``line_count`` /
              ``image_count``) for ``prepare_file_list`` (zero body in prompt).
@@ -284,35 +326,70 @@ class LinsightWorkbenchImpl:
         minio_client = await get_minio_storage()
 
         processed_files: list[dict] = []
+        # Track workspace filenames used in THIS submission so distinct files with
+        # the same base name don't collide at the same uploads/<name> key.
+        used_names: set[str] = set()
         for submit_file in files:
             if submit_file.file_url:
-                entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id)
+                entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id, used_names)
             else:
                 entry = await cls._ingest_one_file(
-                    submit_file, temp_by_id.get(submit_file.file_id), chat_id, minio_client
+                    submit_file, temp_by_id.get(submit_file.file_id), chat_id, minio_client, used_names
                 )
             processed_files.append(entry)
 
         return processed_files
 
     @classmethod
-    async def _ingest_daily_file(cls, submit_file: SubmitFileSchema, chat_id: str, minio_client, user_id: int) -> dict:
+    async def _ingest_daily_file(
+        cls,
+        submit_file: SubmitFileSchema,
+        chat_id: str,
+        minio_client,
+        user_id: int,
+        used_names: set[str] | None = None,
+    ) -> dict:
         """Ingest a DAILY-bucket file into the linsight workspace (unified-resource).
 
         The daily upload only stores the raw file (no parse). We reuse the same
         parser the daily chat uses (``TempFilePipeline``): download the raw file,
         extract its text/markdown, write that to the formal bucket, then drop it
-        into the workspace as ``uploads/<name>/index.md`` so the offload-first
+        into the workspace as ``uploads/<original-name>.md`` so the offload-first
         file tools (read_file) + ``prepare_file_list`` pointer block see it like
         any linsight-uploaded attachment.
+
+        Graceful degradation (never abort the task):
+          - download fails -> nothing to fall back to: skip, mark ``valid=False``.
+          - parse fails (raw downloaded) -> keep the ORIGINAL file in the
+            workspace (``uploads/<original-name>.<ext>``) so the agent's ``ls``
+            still shows it (user decision); mark ``valid=False`` for the chip.
         """
         from bisheng.api.v1.schemas import FileProcessBase
         from bisheng.core.cache.utils import async_file_download
         from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
 
+        # 1) Download the raw daily-bucket file. A download failure can't be
+        # recovered (no bytes for a fallback) — log the full traceback and skip.
         try:
             local_path, dl_name = await async_file_download(submit_file.file_url)
-            file_name = submit_file.file_name or dl_name
+        except Exception as e:
+            logger.exception(
+                f"daily file download failed (name={submit_file.file_name!r} "
+                f"url={submit_file.file_url!r} chat_id={chat_id})"
+            )
+            return {
+                "file_id": submit_file.file_id,
+                "original_filename": submit_file.file_name,
+                "parsing_status": "failed",
+                "valid": False,
+                "error_message": f"file download failed: {e}",
+            }
+
+        file_name = submit_file.file_name or dl_name
+
+        # 2) Parse to markdown. On failure we still have the raw bytes, so keep the
+        # original file in the workspace instead of dropping it.
+        try:
             file_rule = FileProcessBase(
                 knowledge_id=0,
                 separator=["\n\n", "\n"],
@@ -329,14 +406,12 @@ class LinsightWorkbenchImpl:
             result = await pipeline.arun()
             markdown = "\n\n".join(doc.page_content for doc in (result.documents or []) if doc.page_content)
         except Exception as e:
-            logger.warning(f"daily file ingest failed ({submit_file.file_name}): {e}")
-            return {
-                "file_id": submit_file.file_id,
-                "original_filename": submit_file.file_name,
-                "parsing_status": "expired",
-                "valid": False,
-                "error_message": "file parse failed, please re-upload",
-            }
+            logger.exception(
+                f"daily file parse failed; keeping original in workspace (name={file_name!r} chat_id={chat_id})"
+            )
+            return await cls._keep_original_in_workspace(
+                submit_file, file_name, chat_id, minio_client, local_path, e, used_names
+            )
 
         formal_object = cls._formal_markdown_object(submit_file.file_id, chat_id)
         await minio_client.put_object(
@@ -345,18 +420,61 @@ class LinsightWorkbenchImpl:
 
         entry: dict = {
             "file_id": submit_file.file_id,
-            "original_filename": submit_file.file_name,
+            "original_filename": file_name,
             "parsing_status": "completed",
             "valid": True,
             "markdown_file_path": formal_object,
-            "markdown_filename": f"{cls._sanitize_name(submit_file.file_name)}.md",
         }
-        await cls._write_attachment_to_workspace(entry, chat_id, minio_client)
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
+        return entry
+
+    @classmethod
+    async def _keep_original_in_workspace(
+        cls,
+        submit_file: SubmitFileSchema,
+        file_name: str,
+        chat_id: str,
+        minio_client,
+        local_path: str,
+        error: Exception,
+        used_names: set[str] | None,
+    ) -> dict:
+        """Parse-failure fallback: copy the raw original into the workspace.
+
+        Keeps the user-attached file visible to the agent (``ls``) under its real
+        name + extension (``uploads/<name>.<ext>``) even though it couldn't be
+        converted to markdown. Marked ``valid=False`` so the attachment chip shows
+        a failed state.
+        """
+
+        def _read_bytes(path: str) -> bytes:
+            with open(path, "rb") as fh:
+                return fh.read()
+
+        raw = await asyncio.to_thread(_read_bytes, local_path)
+        ext = os.path.splitext(file_name)[1]
+        formal_object = f"linsight/{chat_id}/{submit_file.file_id}{ext}"
+        await minio_client.put_object(bucket_name=minio_client.bucket, object_name=formal_object, file=raw)
+
+        entry: dict = {
+            "file_id": submit_file.file_id,
+            "original_filename": file_name,
+            "parsing_status": "failed",
+            "valid": False,
+            "error_message": f"file parse failed, original kept: {error}",
+            "markdown_file_path": formal_object,
+        }
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, as_markdown=False, used_names=used_names)
         return entry
 
     @classmethod
     async def _ingest_one_file(
-        cls, submit_file: SubmitFileSchema, temp_info: dict | None, chat_id: str, minio_client
+        cls,
+        submit_file: SubmitFileSchema,
+        temp_info: dict | None,
+        chat_id: str,
+        minio_client,
+        used_names: set[str] | None = None,
     ) -> dict:
         """Ingest a single submitted file into the session workspace.
 
@@ -397,10 +515,9 @@ class LinsightWorkbenchImpl:
         entry["parsing_status"] = "completed"
         entry["valid"] = True
         entry["markdown_file_path"] = formal_object
-        entry["markdown_filename"] = f"{cls._sanitize_name(entry['original_filename'])}.md"
 
-        # Write parsed markdown into the workspace (uploads/<name>/index.md).
-        await cls._write_attachment_to_workspace(entry, chat_id, minio_client)
+        # Write parsed markdown into the workspace (uploads/<name>.md).
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
         return entry
 
     @staticmethod
@@ -413,50 +530,97 @@ class LinsightWorkbenchImpl:
         return f"linsight/{chat_id}/{file_id}.md"
 
     @staticmethod
-    def _sanitize_name(original_filename: str) -> str:
-        """Normalize an original filename to a safe workspace ``<name>``.
+    def _safe_basename(original_filename: str) -> str:
+        """Path-safe filename that PRESERVES the original (incl. non-ASCII) name.
 
-        Lowercased, illegal characters normalized to '-', traversal-safe.
-        (Same naming discipline as Skill names, design §9.3.2.)
+        Only directory separators, traversal, and control characters are
+        neutralized — the human-readable name (e.g. ``委托书.pdf``) is kept so
+        ``ls`` shows a recognizable per-file entry instead of a generic
+        ``file/index.md``. Returns ``"file"`` only if nothing usable remains.
         """
         import re
 
-        stem = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
-        stem = stem.strip().lower()
-        stem = re.sub(r"[^a-z0-9._-]+", "-", stem).strip("-._")
-        return stem or "file"
+        base = (original_filename or "").strip()
+        base = re.sub(r"[\x00-\x1f]+", "", base)  # control characters
+        base = re.sub(r"[/\\]+", "_", base)  # path separators
+        base = base.replace("..", "_").strip()  # path traversal
+        return base or "file"
+
+    @staticmethod
+    def _dedupe_workspace_name(filename: str, used_names: set[str] | None) -> str:
+        """Make ``filename`` unique within one submission (append ``-2``, ``-3`` …).
+
+        Without this, two distinct files sharing a base name would map to the same
+        ``uploads/<name>`` key and the second would overwrite the first.
+        """
+        if used_names is None:
+            return filename
+        if filename not in used_names:
+            used_names.add(filename)
+            return filename
+        stem, dot, ext = filename.rpartition(".")
+        base = stem if dot else filename
+        suffix = f".{ext}" if dot else ""
+        i = 2
+        while f"{base}-{i}{suffix}" in used_names:
+            i += 1
+        unique = f"{base}-{i}{suffix}"
+        used_names.add(unique)
+        return unique
 
     @classmethod
-    async def _write_attachment_to_workspace(cls, entry: dict, chat_id: str, minio_client) -> None:
-        """Write parsed markdown into the session workspace and set pointer metadata.
+    async def _write_attachment_to_workspace(
+        cls,
+        entry: dict,
+        chat_id: str,
+        minio_client,
+        *,
+        as_markdown: bool = True,
+        used_names: set[str] | None = None,
+    ) -> None:
+        """Write an attachment into the session workspace under its real filename.
 
-        Workspace layout (design §9.3.2):
-            workspace/{chat_id}/uploads/<name>/index.md
-        Sets ``workspace_path`` / ``line_count`` / ``image_count`` on ``entry``
-        for the zero-body pointer block (``prepare_file_list``).
+        Workspace layout (design §9.3.2): ``workspace/{chat_id}/uploads/<name>``
+          - parsed markdown   -> ``uploads/<original-stem>.md`` (as_markdown=True)
+          - unconverted original -> ``uploads/<original-name>.<ext>`` (False)
+
+        The original filename (incl. non-ASCII) is preserved so ``ls`` shows a
+        recognizable per-file name; same-name collisions are de-duplicated. Sets
+        ``workspace_path`` / ``markdown_filename`` / ``line_count`` /
+        ``image_count`` on ``entry`` for the pointer block + local prefetch.
         """
         from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
-        name = cls._sanitize_name(entry["original_filename"])
-        rel_path = f"uploads/{name}/index.md"
+        safe = cls._safe_basename(entry["original_filename"])
+        if as_markdown:
+            stem = safe.rsplit(".", 1)[0] if "." in safe else safe
+            filename = f"{stem}.md"
+        else:
+            filename = safe
+        filename = cls._dedupe_workspace_name(filename, used_names)
+        rel_path = f"uploads/{filename}"
         object_key = f"{WORKSPACE_PREFIX}/{chat_id}/{rel_path}"
 
-        # Read the parsed markdown (formal bucket) and write it into the workspace.
-        markdown_bytes = await minio_client.get_object(
+        # Read the stored product (formal bucket) and write it into the workspace.
+        file_bytes = await minio_client.get_object(
             bucket_name=minio_client.bucket, object_name=entry["markdown_file_path"]
         )
-        if markdown_bytes is None:
-            markdown_bytes = b""
+        if file_bytes is None:
+            file_bytes = b""
         await minio_client.put_object(
             bucket_name=minio_client.bucket,
             object_name=object_key,
-            file=markdown_bytes,
-            content_type="text/markdown",
+            file=file_bytes,
+            content_type="text/markdown" if as_markdown else "application/octet-stream",
         )
 
-        text = markdown_bytes.decode("utf-8", errors="replace")
         entry["workspace_path"] = f"/{rel_path}"
-        entry["line_count"] = entry.get("line_count") or (text.count("\n") + 1 if text else 0)
+        entry["markdown_filename"] = filename
+        if as_markdown:
+            text = file_bytes.decode("utf-8", errors="replace")
+            entry["line_count"] = entry.get("line_count") or (text.count("\n") + 1 if text else 0)
+        else:
+            entry.setdefault("line_count", 0)
         entry["image_count"] = entry.get("image_count", 0)
 
     @classmethod

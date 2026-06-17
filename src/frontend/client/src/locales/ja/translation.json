@@ -320,6 +320,7 @@
   "com_feedback_title": "フィードバック",
   "com_file_content_exceed_tokens": "ファイル内容が 3 万トークンを超えています",
   "com_file_current_empty": "現在のファイルは空です",
+  "com_file_parse_failed": "解析に失敗",
   "com_file_parse_failed_auto_removed": "ファイル {{0}} の解析に失敗し、自動的に削除しました",
   "com_file_size_exceed_limit": "ファイル：{{name}} は {{size}}MB を超えたため、削除されました",
   "com_file_tip_text_only": "添付ファイル内の文字のみを認識",
