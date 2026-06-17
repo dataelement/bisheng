@@ -55,14 +55,23 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         const validFiles = [];
         const invalidFiles = [];
         const invalidTypeFiles = [];
+        const duplicateFiles = [];
 
         fileInputRef.current.value = ''
+        // Block re-uploading a file already attached this round (filesRef stays in
+        // sync with state) plus intra-batch dupes — the chat has no server-side
+        // dedup. Scoped to the current turn since the list clears after send.
+        const seenNames = new Set(filesRef.current.map((f) => f.name));
         // Validate files based on file extensions
         selectedFiles.forEach((file) => {
             if (!checkFileType(file, accepts)) {
                 invalidTypeFiles.push(file);
                 return;
+            } else if (seenNames.has(file.name)) {
+                duplicateFiles.push(file);
+                return;
             } else if (file.size <= fileSizeLimit) {
+                seenNames.add(file.name);
                 validFiles.push({ id: generateUUID(6), file });
             } else {
                 invalidFiles.push({ id: generateUUID(6), file });
@@ -71,6 +80,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
 
         if (invalidTypeFiles.length > 0) {
             showToast({ message: t('com_ui_upload_file_type_error'), status: 'error' }); // 请确保你有对应多语言key或直接写死中文测试
+        }
+        // Notify about skipped duplicates
+        if (duplicateFiles.length > 0) {
+            showToast({ message: t('com_error_files_dupe'), status: 'info' });
         }
         // Show invalid file toast
         if (invalidFiles.length > 0) {
