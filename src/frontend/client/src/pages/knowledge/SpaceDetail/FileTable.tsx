@@ -53,8 +53,8 @@ const FILE_ROW_ACTION_BTN_CLASS =
 const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
     name: { minWidth: 140, initialWidth: 280 },
-    fileType: { minWidth: 100, initialWidth: 100 },
-    size: { minWidth: 100, initialWidth: 100 },
+    fileType: { minWidth: 140, initialWidth: 140 },
+    size: { minWidth: 140, initialWidth: 140 },
     tags: { minWidth: 140, initialWidth: 200 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
     updateTime: { minWidth: 140, initialWidth: 180 },
