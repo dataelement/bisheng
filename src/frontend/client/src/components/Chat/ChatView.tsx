@@ -378,7 +378,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             const loadingExistingConvo = isLoading && conversationId !== 'new';
             // Keep input pinned to bottom as soon as a send starts (before first token lands),
             // otherwise mobile can briefly fall back to the centered landing layout.
-            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming;
+            // An EXISTING conversation (id !== 'new') always uses the detail layout,
+            // even with zero messages — opening an empty conversation must show the
+            // conversation view, not the welcome/landing page (landing is /c/new only).
+            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming || !isNew;
             return (
               <div className={cn(
                 'flex flex-col relative',
@@ -389,7 +392,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   <div className="flex h-screen items-center justify-center">
                     <Spinner className="opacity-0" />
                   </div>
-                ) : hasMessages ? (
+                ) : (hasMessages || !isNew) ? (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
                     {/* Left: Chat Main (Messages + Input). */}
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
@@ -409,6 +412,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onOpenWorkspace={taskArtifacts.openWorkspace}
                           hasWorkspaceFiles={taskWorkspaceFiles.length > 0}
                           workspaceOpen={taskArtifacts.open}
+                          hideEmptyState
                           flatMode
                         />
                         {/* Soft translucent fade so the scrolling step flow

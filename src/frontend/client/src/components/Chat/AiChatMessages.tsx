@@ -39,6 +39,11 @@ interface AiChatMessagesProps {
     knowledgeChatLayout?: boolean;
     /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
     emptyStateHint?: string;
+    /** Skip the centered empty-state (AI-home image + article-assistant hint) and
+        fall through to the normal layout (HeaderTitle + empty message area). Used
+        by the daily/task conversation detail so an empty existing conversation
+        still shows its title + share header, not the knowledge-assistant welcome. */
+    hideEmptyState?: boolean;
     /** Optional width utility classes for the inner message column */
     contentWidthClassName?: string;
     onPresetClick?: (question: string) => void;
@@ -158,6 +163,7 @@ export default function AiChatMessages({
     onOpenWorkspace,
     hasWorkspaceFiles = false,
     workspaceOpen = false,
+    hideEmptyState = false,
 }: AiChatMessagesProps) {
     const localize = useLocalize();
     const isNarrowViewport = usePrefersMobileLayout();
@@ -254,7 +260,7 @@ export default function AiChatMessages({
     const hasMessages = messages.length > 0;
 
     // --- Empty state ---
-    if (!hasMessages && !isLoading) {
+    if (!hasMessages && !isLoading && !hideEmptyState) {
         return (
             <div
                 ref={emptyScrollRevealRef}
