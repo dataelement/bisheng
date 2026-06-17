@@ -1412,6 +1412,7 @@
     "18032": "You can subscribe to a maximum of {{quota}} knowledge spaces",
     "18040": "Permission denied: only the creator or admin can perform this operation",
     "18041": "The current tenant does not match the knowledge space owner tenant. This operation is not supported here. Switch to the knowledge space tenant and try again.",
+    "18042": "Maximum number of knowledge space administrators reached (up to 5 admins)",
     "18050": "Tag already exists in this space",
     "18060": "Version management is disabled.",
     "18061": "File must finish parsing before version management.",
