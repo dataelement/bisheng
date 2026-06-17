@@ -1,11 +1,9 @@
-import asyncio
-import concurrent
-import concurrent.futures
 from typing import Any
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict
 
+from bisheng.mcp_manage.async_runner import run_mcp_async_task
 from bisheng.mcp_manage.clients.base import BaseMcpClient
 from bisheng_langchain.utils.openapi import convert_openapi_field_value
 
@@ -29,11 +27,7 @@ class McpTool(BaseModel):
         return kwargs
 
     def run(self, *args, **kwargs: Any) -> Any:
-        # todo call async method better when using in event pool
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            future = pool.submit(asyncio.run, self.arun(*args, **kwargs))
-            resp = future.result()
-        return resp
+        return run_mcp_async_task(lambda: self.arun(*args, **kwargs))
 
     async def arun(self, *args, **kwargs: Any) -> Any:
         """Use the tool asynchronously."""
@@ -42,14 +36,17 @@ class McpTool(BaseModel):
         return resp
 
     @classmethod
-    def get_mcp_tool(cls, name: str, description: str, mcp_client: BaseMcpClient,
-                     mcp_tool_name: str, arg_schema: Any, **kwargs) -> StructuredTool:
+    def get_mcp_tool(
+        cls, name: str, description: str, mcp_client: BaseMcpClient, mcp_tool_name: str, arg_schema: Any, **kwargs
+    ) -> StructuredTool:
         """Get a tool from the class."""
-        c = cls(name=name, description=description, mcp_client=mcp_client,
-                mcp_tool_name=mcp_tool_name, arg_schema=arg_schema)
-        return StructuredTool(name=c.name,
-                              description=c.description,
-                              func=c.run,
-                              coroutine=c.arun,
-                              args_schema=arg_schema,
-                              **kwargs)
+        c = cls(
+            name=name,
+            description=description,
+            mcp_client=mcp_client,
+            mcp_tool_name=mcp_tool_name,
+            arg_schema=arg_schema,
+        )
+        return StructuredTool(
+            name=c.name, description=c.description, func=c.run, coroutine=c.arun, args_schema=arg_schema, **kwargs
+        )

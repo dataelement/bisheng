@@ -47,3 +47,37 @@ def test_agent_node_history_respects_window_size():
     assert len(messages) == 2
     assert messages[0].content == 'q2'
     assert messages[1].content == 'a2'
+
+
+def test_agent_node_parse_log_keeps_only_real_tool_logs():
+    node = AgentNode.__new__(AgentNode)
+    node.id = 'agent_1'
+    node._system_prompt_list = ['system']
+    node._user_prompt_list = ['user']
+    node._batch_variable_list = []
+    node._log_reasoning_content = ['I called search_company with the user query.']
+    node._tool_invoke_list = [[
+        {
+            'type': 'start',
+            'run_id': 'run_1',
+            'name': 'search_company',
+            'input': {'query': 'baidu'},
+        },
+        {
+            'type': 'end',
+            'run_id': 'run_1',
+            'name': 'search_company',
+            'output': 'ok',
+        },
+    ]]
+
+    logs = node.parse_log('exec_1', {'output': 'final answer'})[0]
+
+    assert [item['key'] for item in logs] == [
+        'system_prompt',
+        'user_prompt',
+        'search_company',
+        'agent_1.output',
+    ]
+    assert len([item for item in logs if item['type'] == 'tool']) == 1
+    assert all(item['key'] != 'Thinking about content' for item in logs)
