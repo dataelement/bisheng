@@ -84,7 +84,11 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
                 callReason: frame.call_reason || '',
                 params: frame.params || null,
                 output: frame.output || '',
-                namespace: frame.namespace ?? null,
+                // The backend ships the subgraph namespace nested in
+                // extra_info.namespace (ExecStep has no top-level `namespace`
+                // field — see stream_event_mapper). Read it from there; keep the
+                // top-level `frame.namespace` as a legacy fallback for fixtures.
+                namespace: frame.extra_info?.namespace ?? frame.namespace ?? null,
                 extraInfo: frame.extra_info || {},
                 raw: frame,
             });
