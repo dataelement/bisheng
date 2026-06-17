@@ -296,7 +296,7 @@ export const validateFiles = ({
     ),
     ...fileList.map(
       (file: File | undefined) =>
-        `${file?.name}-${file?.size}-${file?.type.split('/')[0] ?? 'file'}`,
+        `${file?.name}-${file?.size}-${file?.type?.split('/')[0] ?? 'file'}`,
     ),
   ];
 
