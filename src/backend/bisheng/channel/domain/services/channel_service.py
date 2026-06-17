@@ -459,9 +459,18 @@ class ChannelService:
             login_user.user_id, QuotaResourceType.CHANNEL, login_user.tenant_id, login_user=login_user
         )
         if effective != -1:
-            existing_channels = await self.space_channel_member_repository.find_channel_memberships(
+            # Count only channels that STILL EXIST. find_channel_memberships reads
+            # space_channel_member without joining `channel`, so a stale creator membership
+            # left behind by an already-deleted channel (orphan row) would inflate the count
+            # and reject creation one slot early (configured 14 -> only 13 usable). Intersecting
+            # the membership business_ids with find_channels_by_ids mirrors what the "created
+            # channels" list (get_my_channels) and the front-end pre-check count, keeping all
+            # three in lock-step.
+            memberships = await self.space_channel_member_repository.find_channel_memberships(
                 user_id=login_user.user_id, roles=[UserRoleEnum.CREATOR], statuses=[MembershipStatusEnum.ACTIVE]
             )
+            channel_ids = [m.business_id for m in memberships]
+            existing_channels = await self.channel_repository.find_channels_by_ids(channel_ids) if channel_ids else []
             if len(existing_channels) >= effective:
                 raise ChannelCreateLimitExceededError(quota=effective)
 

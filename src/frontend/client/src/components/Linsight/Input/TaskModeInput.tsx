@@ -327,6 +327,8 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                             onToggleTaskMode={handleExitTaskMode}
                             selectedSkills={skills}
                             onSkillsChange={setSkills}
+                            // F035 (v2.6): Add-Skill entry stays hidden unless admin enabled it.
+                            showAddSkill={!!bsConfig?.skillEntry?.enabled}
                         />
                         <KnowledgeSpaceSelect
                             value={context.knowledge}

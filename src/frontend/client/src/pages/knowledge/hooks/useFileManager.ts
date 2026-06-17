@@ -364,6 +364,13 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         [loadFiles]
     );
 
+    // Infinite-scroll "load next page": page>1 makes loadFiles append (keyset
+    // cursor on the default path, page-number on the search path). The scroll
+    // sentinel guards re-entry with `loading`/`hasMore`, so no guard needed here.
+    const loadMore = useCallback(() => {
+        loadFiles(currentPage + 1);
+    }, [loadFiles, currentPage]);
+
     // ─── Folder navigation ───────────────────────────────────────────────
     const handleNavigateFolder = useCallback(
         async (folderId?: string) => {
@@ -422,6 +429,7 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         currentFolderId,
         currentPath,
         loadFiles,
+        loadMore,
         handleSearch,
         handleSort,
         handlePageChange,

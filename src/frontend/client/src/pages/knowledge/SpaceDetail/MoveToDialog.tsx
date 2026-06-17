@@ -23,6 +23,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "~/components/ui/Dialog";
+import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { useDynamicEllipsis } from "../hooks/useDynamicEllipsis";
@@ -123,17 +124,17 @@ function SpaceRow({
                     aria-label={expanded ? "Collapse space" : "Expand space"}
                 >
                     {expanded ? (
-                        <Outlined.Down className="size-4 text-[#8D93A0]" />
+                        <Outlined.Down className="size-3.5 text-[#8D93A0]" />
                     ) : (
-                        <Outlined.Right className="size-4 text-[#8D93A0]" />
+                        <Outlined.Right className="size-3.5 text-[#8D93A0]" />
                     )}
                 </button>
 
                 <div className="flex size-5 shrink-0 items-center justify-center">
                     {category === "department" ? (
-                        <Outlined.City className={cn("size-4", rootSelected ? "text-[#1d2129]" : "text-[#86909C]")} />
+                        <Outlined.City className={cn("size-3.5", rootSelected ? "text-[#1d2129]" : "text-[#86909C]")} />
                     ) : (
-                        <Outlined.Notebook className={cn("size-4", rootSelected ? "text-[#1d2129]" : "text-[#86909C]")} />
+                        <Outlined.Notebook className={cn("size-3.5", rootSelected ? "text-[#1d2129]" : "text-[#86909C]")} />
                     )}
                 </div>
 
@@ -182,7 +183,8 @@ export function MoveToDialog({
     // extend to their natural width so the panel scrolls horizontally, while the
     // visible ellipsis tracks the viewport's right edge as you scroll.
     const treeScrollRef = useRef<HTMLDivElement>(null);
-    useDynamicEllipsis(treeScrollRef);
+    // Re-attach when the dialog opens — Radix only mounts the container then.
+    useDynamicEllipsis(treeScrollRef, [open]);
 
     const crossSpace = selection.spaceId !== currentSpaceId;
 
@@ -296,7 +298,7 @@ export function MoveToDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl">
+            <DialogContent className="max-w-3xl" onOpenAutoFocus={(e) => e.preventDefault()}>
                 <DialogHeader>
                     <DialogTitle>{localize("com_knowledge.move_to")}</DialogTitle>
                 </DialogHeader>
@@ -304,21 +306,23 @@ export function MoveToDialog({
                 <div className="flex h-[420px] overflow-hidden rounded-lg border border-[#ececec]">
                     {/* Left: categorized space + folder tree */}
                     <div className="flex w-72 shrink-0 flex-col border-r border-[#ececec]">
-                        <div className="border-b border-[#ececec] p-3">
-                            <div className="flex items-center gap-2 rounded-lg border border-[#ececec] px-3 py-1.5">
-                                <Outlined.Search className="size-4 shrink-0 text-[#818181]" />
-                                <input
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    placeholder={localize("com_knowledge.move_search_placeholder")}
-                                    className="min-w-0 flex-1 bg-transparent text-[14px] leading-[22px] text-[#212121] outline-none placeholder:text-[#818181]"
-                                />
-                            </div>
+                        <div className="p-3">
+                            <ExpandableSearchField
+                                alwaysExpanded
+                                showClearButton
+                                value={search}
+                                onChange={setSearch}
+                                placeholder={localize("com_knowledge.move_search_placeholder")}
+                                expandedWidthClassName="w-full"
+                                containerClassName="!rounded-md"
+                            />
                         </div>
 
                         {/* overflow-auto + w-max wrapper → horizontal scroll for deep/long
-                            names, mirroring the sidebar directory. */}
-                        <div ref={treeScrollRef} className="flex-1 overflow-auto p-2">
+                            names, mirroring the sidebar directory. scrollbar-os opts out of
+                            the global custom scrollbar so the OS setting (auto-hide vs
+                            always-on) is respected. */}
+                        <div ref={treeScrollRef} className="scrollbar-os flex-1 overflow-auto px-2 pb-2">
                             {categories.length === 0 ? (
                                 <div className="flex h-full items-center justify-center px-3 text-center text-[12px] text-[#86909C]">
                                     {localize("com_knowledge.move_no_spaces")}
@@ -330,10 +334,10 @@ export function MoveToDialog({
                                         return (
                                             <div key={cat.key} className="mb-2 last:mb-0">
                                                 <div
-                                                    className="group/cat flex cursor-pointer select-none items-center gap-1 rounded-md px-2 py-1 hover:bg-[#F4F4F4]"
+                                                    className="group/cat flex cursor-pointer select-none items-center gap-1 px-2 py-1"
                                                     onClick={() => handleToggleCategory(cat.key)}
                                                 >
-                                                    <span className="whitespace-nowrap text-[12px] font-medium text-[#86909C]">
+                                                    <span className="whitespace-nowrap text-[12px] font-medium text-[#86909C] transition-colors group-hover/cat:text-[#4e5969]">
                                                         {cat.label}
                                                     </span>
                                                     {/* Collapse toggle sits to the RIGHT of the label, revealed on
@@ -374,13 +378,15 @@ export function MoveToDialog({
 
                     {/* Right: contents of the selected location */}
                     <div className="flex flex-1 flex-col">
-                        <div className="flex-1 overflow-y-auto py-1">
+                        {/* Row metrics mirror the left tree items: 28px (h-7) rows, 12px text,
+                            16px icon in a 20px slot, p-2 container padding. */}
+                        <div className="scrollbar-os flex-1 overflow-y-auto p-2">
                             {isLoading ? (
                                 <div className="flex h-full items-center justify-center text-[#86909C]">
                                     <Loader2 className="size-5 animate-spin" />
                                 </div>
                             ) : folders.length === 0 && files.length === 0 ? (
-                                <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
+                                <div className="flex h-full items-center justify-center text-[12px] text-[#86909C]">
                                     {localize("com_knowledge.move_empty_folder")}
                                 </div>
                             ) : (
@@ -390,11 +396,13 @@ export function MoveToDialog({
                                             key={f.id}
                                             type="button"
                                             onClick={() => handleEnterFolder(f)}
-                                            className="flex w-full items-center gap-2 px-4 py-2 text-left text-[14px] hover:bg-[#F4F4F4]"
+                                            className="flex h-7 w-full items-center rounded-md px-1 text-left text-[12px] leading-5 hover:bg-[#F4F4F4]"
                                         >
-                                            <Outlined.FolderClose className="size-4 shrink-0 text-[#8D93A0]" />
-                                            <span className="flex-1 truncate text-[#212121]">{f.name}</span>
-                                            <Outlined.Right className="size-4 shrink-0 text-[#C9CDD4]" />
+                                            <div className="flex size-5 shrink-0 items-center justify-center">
+                                                <Outlined.FolderClose className="size-3.5 text-[#212121]" />
+                                            </div>
+                                            <span className="ml-0.5 min-w-0 flex-1 truncate text-[#212121]">{f.name}</span>
+                                            <Outlined.Right className="size-3.5 shrink-0 text-[#C9CDD4]" />
                                         </button>
                                     ))}
                                     {/* Files are not move targets — greyed out, not selectable. */}
@@ -403,10 +411,12 @@ export function MoveToDialog({
                                         return (
                                             <div
                                                 key={f.id}
-                                                className="flex w-full cursor-default items-center gap-2 px-4 py-2 text-[14px] text-[#999]"
+                                                className="flex h-7 w-full cursor-default items-center px-1 text-[12px] leading-5 text-[#999]"
                                             >
-                                                <Glyph className="size-4 shrink-0 text-[#999]" />
-                                                <span className="flex-1 truncate">{f.name}</span>
+                                                <div className="flex size-5 shrink-0 items-center justify-center">
+                                                    <Glyph className="size-3.5 text-[#999]" />
+                                                </div>
+                                                <span className="ml-0.5 min-w-0 flex-1 truncate">{f.name}</span>
                                             </div>
                                         );
                                     })}
@@ -417,10 +427,10 @@ export function MoveToDialog({
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button variant="outline" className="h-8 !rounded-md" onClick={() => onOpenChange(false)}>
                         {localize("cancel")}
                     </Button>
-                    <Button onClick={handleConfirm}>{localize("com_knowledge.move_here")}</Button>
+                    <Button className="h-8 !rounded-md" onClick={handleConfirm}>{localize("com_knowledge.move_here")}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

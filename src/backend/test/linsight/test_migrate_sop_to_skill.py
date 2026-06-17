@@ -41,9 +41,9 @@ def env(tmp_path, monkeypatch):
     return SkillStore(root=tmp_path)
 
 
-async def _run_tenant(store, sops, apply=True, no_llm=True):
+async def _run_tenant(store, sops, apply=True):
     report = _report()
-    await script._migrate_tenant(store, TENANT, sops, apply, no_llm, report)
+    await script._migrate_tenant(store, TENANT, sops, apply, report)
     return report
 
 
@@ -96,10 +96,18 @@ class TestMigrateTenant:
         report = await _run_tenant(env, [_sop(61, "！！！")])
         assert report["success"][0]["skill_name"] == "sop-61"
 
-    async def test_missing_description_fallback_no_llm(self, env):
+    async def test_missing_description_uses_sop_name(self, env):
+        # No LLM: a SOP without a description falls back to its (Chinese) name.
         report = await _run_tenant(env, [_sop(52, "会议纪要整理", description="")])
+        assert report["success"][0]["description_mode"] == "name_fallback"
+        assert FakeSkillDao.rows["hui-yi-ji-yao-zheng-li"].description == "会议纪要整理"
+
+    async def test_no_description_no_name_static_fallback(self, env):
+        # Degenerate content-only row (no description, no name): description must
+        # still be non-empty, so the static fallback fills it.
+        report = await _run_tenant(env, [_sop(62, "", description="")])
         assert report["success"][0]["description_mode"] == "fallback"
-        assert "会议纪要整理" in FakeSkillDao.rows["hui-yi-ji-yao-zheng-li"].description
+        assert FakeSkillDao.rows["sop-62"].description == "历史 SOP（#62）迁移生成的技能。"
 
     async def test_idempotent_rerun_reuses_names(self, env):
         sops = [_sop(17, "标书撰写流程"), _sop(31, "客户投诉处理SOP")]

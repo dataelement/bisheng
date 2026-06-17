@@ -71,6 +71,11 @@ export interface ChatConfigForm {
         enabled: boolean;
         prompt: string;
     };
+    /** F035 (v2.6): gate for the client 添加技能 entry. Default off — only when
+     * enabled does the task-mode input surface the Add-Skill submenu. */
+    skillEntry: {
+        enabled: boolean;
+    };
     recommendedApps: string[];
     /** 日常模式 Tab 名称，对应接口 tabDisplayName */
     tabDisplayName?: string;
@@ -312,8 +317,13 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
                             {null}
                         </ToggleSection>
 
-                        {/* F035 (PRD §4.5): skill management replaces the legacy SOP manual library */}
-                        <SkillManagement scopeVersion={scopeVersion} />
+                        {/* F035 (PRD §4.5): skill management replaces the legacy SOP manual library.
+                            The header toggle (default off) gates the client 添加技能 entry. */}
+                        <SkillManagement
+                            scopeVersion={scopeVersion}
+                            entryEnabled={formData.skillEntry.enabled}
+                            onEntryToggle={(enabled) => toggleFeature('skillEntry', enabled)}
+                        />
 
                         {/* Recommended Apps */}
                         <RecommendedAppsConfig
@@ -371,6 +381,10 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             enabled: true,
             prompt: `{file_content}
 {question}`,
+        },
+        // F035 (v2.6): Add-Skill entry defaults off until admin opts in.
+        skillEntry: {
+            enabled: false,
         },
         // 默认展示名称：接口为空时展示默认文案
         tabDisplayName: t('dailyFullName'),
@@ -494,6 +508,8 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
                     assistantIcon: mergeObj(prev.assistantIcon, cfg.assistantIcon),
                     knowledgeBase: mergeObj(prev.knowledgeBase, cfg.knowledgeBase),
                     fileUpload: mergeObj(prev.fileUpload, cfg.fileUpload),
+                    // Absent skillEntry (legacy configs) keeps the default-off state.
+                    skillEntry: mergeObj(prev.skillEntry, cfg.skillEntry),
                     tabDisplayName: (() => {
                         // Treat empty string / whitespace as "API empty" and don't override defaults.
                         const raw = (cfg as any).tabDisplayName ?? (cfg as any).tab_display_name;
@@ -670,6 +686,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             systemPrompt: formData.systemPrompt,
             knowledgeBase: formData.knowledgeBase,
             fileUpload: formData.fileUpload,
+            skillEntry: formData.skillEntry,
             tabDisplayName: formData.tabDisplayName ?? '',
             // v2.5 Agent-mode fields
             tools: formData.tools,

@@ -4,7 +4,6 @@
 # Usage (run from src/backend/):
 #   bash scripts/migrate_sop_to_skill.sh                       # dry-run, all tenants
 #   bash scripts/migrate_sop_to_skill.sh apply                 # persist, all tenants
-#   bash scripts/migrate_sop_to_skill.sh --no-llm apply        # persist, skip LLM summaries
 #   bash scripts/migrate_sop_to_skill.sh --tenant-id 2 apply   # persist, one tenant
 set -e
 

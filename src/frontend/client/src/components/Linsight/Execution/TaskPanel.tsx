@@ -84,7 +84,7 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                                         className={cn(
                                             'min-w-0 flex-1 truncate',
                                             done
-                                                ? 'text-[#999] line-through'
+                                                ? 'text-[#999]'
                                                 : running
                                                     ? 'font-medium text-[#212121]'
                                                     : 'text-[#212121]',

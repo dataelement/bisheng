@@ -542,6 +542,11 @@ export type BsConfig = {
     enabled: boolean;
     prompt: string;
   };
+  /** F035 (v2.6): gate for the task-mode 添加技能 entry. Absent on legacy
+   * deployments → treated as disabled (entry hidden). */
+  skillEntry?: {
+    enabled: boolean;
+  };
   host: '',
   linsight_invitation_code: boolean
   linsight_cache_dir: string

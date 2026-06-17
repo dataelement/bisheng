@@ -274,25 +274,37 @@ The 3rd argument can be omitted if one of these environment variables is set:
 
 ### `migrate_sop_to_skill.sh` / `migrate_sop_to_skill.py`
 
+> **Upgrade-required (< v2.6 → v2.6, F035 step 4 of 4) — MANUAL.** Run after
+> `alembic upgrade head`. Unlike the F035 menu/model backfills (steps 2/3, which
+> auto-run at startup), this SOP→Skill data migration is **not** auto-run — it
+> writes object storage and is heavier, so it stays a manual ops script. Part of
+> the F035 upgrade checklist — see `docs/architecture/08-deployment.md` → 升级 checklist.
+
 One-shot migration of legacy `linsight_sop` rows into tenant custom skills
 (`linsight_skill` + `SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md`).
 `display_name` keeps the original (Chinese) SOP name; the skill ID is a
-pypinyin slug; `metadata.sop-id` makes re-runs idempotent. Prints and writes a
-JSON migration summary (ops artifact — there is no in-product migration report).
+pypinyin slug; `metadata.sop-id` makes re-runs idempotent. The skill description
+uses the SOP's own description, falling back to the SOP name when absent (no LLM
+call — a skill description is mandatory and can never be blank). Prints and writes
+a JSON migration summary (ops artifact — there is no in-product migration report).
 
 Usage (from `src/backend/`, dry-run by default):
 
 ```bash
 bash scripts/migrate_sop_to_skill.sh                       # dry-run, all tenants
 bash scripts/migrate_sop_to_skill.sh apply                 # persist
-bash scripts/migrate_sop_to_skill.sh --no-llm apply        # skip LLM summaries for missing descriptions
 bash scripts/migrate_sop_to_skill.sh --tenant-id 2 apply   # single tenant
 ```
 
-Options: `--apply` (persist), `--no-llm`, `--tenant-id <id>`,
+Options: `--apply` (persist), `--tenant-id <id>`,
 `--report-file <path>` (default `./migrate_sop_to_skill_report.json`).
 
 ### `backfill_linsight_task_mode_web_menu.py`
+
+> **F035 step 3 of 4 — AUTO at startup.** Runs automatically on service startup
+> (`main.lifespan`, idempotent, failure never blocks boot); shared logic in
+> `bisheng/permission/domain/linsight_task_mode_menu_backfill.py`. This CLI is only
+> for a manual re-run or dry-run preview. See `docs/architecture/08-deployment.md` → 升级 checklist.
 
 Grants WEB_MENU `linsight_task_mode` to every role that already has `home`.
 F035 split 任务模式 (`/linsight`) out of the shared `home` menu permission into
@@ -308,6 +320,11 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_linsight_task
 ```
 
 ### `migrate_linsight_task_model_to_default.py`
+
+> **F035 step 2 of 4 — AUTO at startup.** Runs automatically on service startup
+> (`main.lifespan`, idempotent, failure never blocks boot); shared logic in
+> `bisheng/llm/domain/services/linsight_default_model_backfill.py`. This CLI is only
+> for a manual re-run or dry-run preview. See `docs/architecture/08-deployment.md` → 升级 checklist.
 
 F035 Track E (deepagents). Rewrites every tenant's `linsight_llm` config row in
 `tenant_system_model_config`: drops the legacy `task_model` / `linsight_executor_mode`

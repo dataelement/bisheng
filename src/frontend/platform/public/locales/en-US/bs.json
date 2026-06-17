@@ -1955,6 +1955,7 @@
     "18032": "You can subscribe to a maximum of {{quota}} knowledge spaces",
     "18040": "Permission denied: only the creator or admin can perform this operation",
     "18041": "The current tenant does not match the knowledge space owner tenant. This operation is not supported here. Switch to the knowledge space tenant and try again.",
+    "18042": "Maximum number of knowledge space administrators reached (up to 5 admins)",
     "18050": "Tag already exists in this space",
     "18100": "Approval request not found",
     "18101": "No permission to view or process this approval",
@@ -2584,6 +2585,7 @@
   "success": "Success",
   "skillManage": {
     "title": "Skill Management",
+    "entryToggleTip": "When on, the Add-Skill entry shows in the chat input box",
     "searchPlaceholder": "Search name / description",
     "statusAll": "All",
     "statusEnabled": "Enabled",

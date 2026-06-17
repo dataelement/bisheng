@@ -85,16 +85,15 @@ export default function NewChat({
 
   const { conversation } = store.useCreateConversationAtom(index);
 
-  // F035 Track H (P5): "new task" sidebar entry — only for users holding the
+  // F035 Track H (P5): "new task" sidebar entry — gated solely by the
   // linsight_task_mode menu permission (backend web_menu mapped to plugins;
-  // absent plugins array = legacy mode, everything allowed) and when the
-  // admin hasn't disabled the linsight entry.
+  // absent plugins array = legacy mode, everything allowed). The legacy global
+  // `linsight_entry` switch was retired when task mode replaced 灵思 mode (its
+  // admin toggle is gone), so it must not gate task mode anymore.
   const plugins: string[] | null = Array.isArray((user as any)?.plugins)
     ? ((user as any)?.plugins as string[])
     : null;
-  const showNewTaskEntry =
-    (plugins ? plugins.includes('linsight_task_mode') : true) &&
-    ((bsConfig as any)?.linsightConfig?.linsight_entry ?? true);
+  const showNewTaskEntry = plugins ? plugins.includes('linsight_task_mode') : true;
 
   const handleNewTask = () => {
     // F035: task mode is now a local toggle on the daily welcome page (/c),

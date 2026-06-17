@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { Channel, ChannelRole, SortType, getChannelsApi } from "~/api/channels";
+import { Channel, SortType, canManageChannelPermissions, getChannelsApi } from "~/api/channels";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -84,7 +84,9 @@ export function ChannelActionsMenu({
         onChannelSelect,
     });
 
-    const canManageMembers = [ChannelRole.CREATOR, ChannelRole.ADMIN].includes(liveChannel.role);
+    // Use the shared permission helper (role + ReBAC permissionIds) so the entry stays
+    // visible in permissionIds-based deployments, matching the channel-sidebar gating.
+    const canManageMembers = canManageChannelPermissions(liveChannel.role, liveChannel.permissionIds);
     const isCreated = type === "created";
     const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] text-[#212121]";
     const iconCls = "size-4 text-[#4E5969]";

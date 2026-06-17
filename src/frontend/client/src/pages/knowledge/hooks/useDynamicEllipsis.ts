@@ -22,7 +22,13 @@ const HOVER_GUTTER = 44;
  * more-button on hover must carry `[data-ee-row]` (a `:hover` check widens the
  * gutter for that row only).
  */
-export function useDynamicEllipsis(containerRef: RefObject<HTMLElement>) {
+/**
+ * @param deps Extra effect dependencies. Pass these when the scroll container is
+ *   mounted conditionally (e.g. inside a Radix Dialog that only renders its
+ *   content while open) so the observers re-attach once the container exists —
+ *   without them the effect runs once at mount, finds a null ref, and bails.
+ */
+export function useDynamicEllipsis(containerRef: RefObject<HTMLElement>, deps: unknown[] = []) {
     useEffect(() => {
         const container = containerRef.current;
         if (!container || typeof window === "undefined") return;
@@ -81,5 +87,6 @@ export function useDynamicEllipsis(containerRef: RefObject<HTMLElement>) {
             ro.disconnect();
             mo.disconnect();
         };
-    }, [containerRef]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [containerRef, ...deps]);
 }
