@@ -283,11 +283,19 @@ export function KnowledgeAiBottomDock({
             )}
             <div
                 className={cn(
-                    "absolute inset-x-0 bottom-0 z-20 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
+                    // z-40 sits above the file table's sticky header (z-30) and its sticky cells
+                    // (up to z-[35]); otherwise the expanded dialog's top is covered by the column header.
+                    "absolute inset-x-0 bottom-0 z-40 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
                     // pt-10 always — the fade backdrop hides on focus but the input
                     // shouldn't jump when the keyboard opens.
                     !open && "pt-10",
-                    !open && !keyboardVisible && "bg-gradient-to-b from-white/0 to-white",
+                    // White fade backdrop. On mobile it hides while the input is focused so the
+                    // grey keyboard overlay's gradient can carry through; on desktop there is no
+                    // such overlay, so keep the fade consistent regardless of focus.
+                    !open && (!isH5 || !keyboardVisible) && "bg-gradient-to-b from-white/0 to-white",
+                    // Expanded: same transparent→white fade as the collapsed state, sized to the
+                    // dialog (the container hugs the card when open, no pt-10), masking the list behind.
+                    open && "bg-gradient-to-b from-white/0 to-white",
                 )}
             >
                 <div
@@ -318,14 +326,16 @@ export function KnowledgeAiBottomDock({
                         </TooltipProvider>
                     )}
 
-                    {/* Header + messages grow upward above the input. */}
+                    {/* Header + messages grow upward above the input. Height scales with the
+                        viewport (taller on large screens) — floored at 440px so small screens
+                        don't regress, capped so it never overflows the file-display area. */}
                     <div
                         className={cn(
                             "overflow-hidden transition-[max-height] duration-300 ease-out",
-                            open ? "max-h-[440px]" : "max-h-0",
+                            open ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]" : "max-h-0",
                         )}
                     >
-                        <div className="flex h-[440px] flex-col">
+                        <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
                             {/* Header */}
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
                                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-[#212121]">

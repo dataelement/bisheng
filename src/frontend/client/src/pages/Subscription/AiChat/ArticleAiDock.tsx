@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useRecoilState } from "recoil";
 import { Outlined } from "bisheng-icons";
-import { Button, TextareaAutosize } from "~/components/ui";
+import { TextareaAutosize } from "~/components/ui";
 import {
     Tooltip,
     TooltipContent,
@@ -129,7 +129,7 @@ function DockInput({
                 variant === "box"
                     ? "rounded-[20px] border border-[#E5E6EB] p-3 shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
                     : "border-t border-[#EBEBEB] p-3",
-                stacked ? "flex-col gap-2" : "items-end gap-2",
+                stacked ? "flex-col gap-2" : "items-center gap-2",
             )}
             style={fixedHeight ? { height: `${fixedHeight}px` } : undefined}
         >
@@ -298,25 +298,23 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
                     {localize("com_subscription.ai_assistant")}
                 </h3>
-                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+8px)] flex items-center gap-1">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-gray-400 hover:text-gray-600"
+                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] flex items-center justify-end gap-3 py-1">
+                    <button
+                        type="button"
                         onClick={handleClear}
                         aria-label={localize("com_subscription.clear_chat")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
                     >
                         <Outlined.Delete className="size-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 text-[#86909c] hover:text-[#4e5969]"
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setOpen(false)}
                         aria-label={localize("com_ui_collapse")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
                     >
                         <Outlined.DoubleDown className="size-4" />
-                    </Button>
+                    </button>
                 </div>
             </div>
         );
@@ -415,17 +413,22 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
             )}
         <div
             className={cn(
-                "absolute inset-x-0 bottom-0 z-20 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
+                // z-40 sits above any sticky list header so the expanded dialog isn't covered.
+                "absolute inset-x-0 bottom-0 z-40 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
                 // Keep the pt-10 spacing regardless so the input doesn't jump when the
                 // keyboard opens; only the white-fade backdrop hides while focused so the
                 // grey overlay's gradient can carry through to the input area.
                 !open && "pt-10",
-                !open && !keyboardVisible && "bg-gradient-to-b from-white/0 to-white",
+                // On mobile the fade hides while focused (grey keyboard overlay carries through);
+                // on desktop there is no such overlay, so keep the fade consistent regardless of focus.
+                !open && (!isH5 || !keyboardVisible) && "bg-gradient-to-b from-white/0 to-white",
+                // Expanded: same transparent→white fade masks the content behind the dialog.
+                open && "bg-gradient-to-b from-white/0 to-white",
             )}
         >
             <div
                 className={cn(
-                    "relative flex flex-col",
+                    "relative mx-auto flex w-full max-w-[800px] flex-col",
                     open &&
                         "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-gradient-to-b from-white/80 to-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)] backdrop-blur-[16px]",
                 )}
@@ -451,36 +454,34 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         </Tooltip>
                     </TooltipProvider>
                 )}
-                {/* Header + messages grow upward above the input. Animating max-height
-                    between 0 and the fixed 440px panel height keeps the reveal smooth and
-                    monotonic — unlike a grid `fr` transition, which can overshoot/bounce. */}
+                {/* Header + messages grow upward above the input. Height scales with the viewport
+                    (taller on large screens), floored at 440px and capped so it never overflows. */}
                 <div
                     className={cn(
                         "overflow-hidden transition-[max-height] duration-300 ease-out",
-                        open ? "max-h-[440px]" : "max-h-0",
+                        open ? "max-h-[clamp(440px,70vh,calc(100vh_-_160px))]" : "max-h-0",
                     )}
                 >
-                    <div className="flex h-[440px] flex-col">
+                    <div className="flex h-[clamp(440px,70vh,calc(100vh_-_160px))] flex-col">
                             {/* Header: title left, clear + collapse-down right */}
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
                                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-[#212121]">
                                     {localize("com_subscription.ai_assistant")}
                                 </h3>
                                 <div className="min-w-0 flex-1" aria-hidden />
-                            <div className="flex shrink-0 items-center gap-0">
+                            {/* Clear · DoubleDown — bare 16px icons, 12px gap, right-aligned (matches the knowledge dock). */}
+                            <div className="flex shrink-0 items-center justify-end gap-3 py-1">
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Button
-                                                variant="ghost"
+                                            <button
                                                 type="button"
-                                                size="icon"
-                                                className="size-8 shrink-0 text-gray-400 hover:text-gray-600"
                                                 onClick={handleClear}
                                                 aria-label={localize("com_subscription.clear_chat")}
+                                                className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
                                             >
                                                 <Outlined.Delete className="size-4 shrink-0" />
-                                            </Button>
+                                            </button>
                                         </TooltipTrigger>
                                         <TooltipContent>
                                             <p>{localize("com_subscription.clear_chat")}</p>
@@ -490,16 +491,14 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Button
-                                                variant="ghost"
+                                            <button
                                                 type="button"
-                                                size="icon"
-                                                className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
                                                 onClick={() => setOpen(false)}
                                                 aria-label={localize("com_ui_collapse")}
+                                                className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
                                             >
                                                 <Outlined.DoubleDown className="size-4 shrink-0" />
-                                            </Button>
+                                            </button>
                                         </TooltipTrigger>
                                         <TooltipContent side="top">
                                             <p>{localize("com_ui_collapse")}</p>
