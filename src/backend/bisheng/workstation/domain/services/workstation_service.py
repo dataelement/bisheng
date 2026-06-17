@@ -151,6 +151,8 @@ class WorkStationService(BaseService):
             knowledgeBase=WSPrompt(enabled=True, prompt=""),
             fileUpload=WSPrompt(enabled=True, prompt=""),
             webSearch=WSPrompt(enabled=True, prompt=""),
+            # F035 (v2.6): the client Add-Skill entry stays hidden until admin opts in.
+            skillEntry=WSPrompt(enabled=False, prompt=""),
             tools=tools,
             orgKbs=[],
         )

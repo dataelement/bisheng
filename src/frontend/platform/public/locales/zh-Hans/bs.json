@@ -2529,6 +2529,7 @@
   },
   "skillManage": {
     "title": "技能管理",
+    "entryToggleTip": "开启后，前台对话输入框的「添加技能」入口才会展示",
     "searchPlaceholder": "搜索名称/描述",
     "statusAll": "全部",
     "statusEnabled": "已启用",

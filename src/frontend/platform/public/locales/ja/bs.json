@@ -2529,6 +2529,7 @@
   },
   "skillManage": {
     "title": "スキル管理",
+    "entryToggleTip": "オンにすると、チャット入力欄に「スキルを追加」が表示されます",
     "searchPlaceholder": "名前 / 説明で検索",
     "statusAll": "すべて",
     "statusEnabled": "有効",

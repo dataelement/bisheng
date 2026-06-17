@@ -2584,6 +2584,7 @@
   "success": "Success",
   "skillManage": {
     "title": "Skill Management",
+    "entryToggleTip": "When on, the Add-Skill entry shows in the chat input box",
     "searchPlaceholder": "Search name / description",
     "statusAll": "All",
     "statusEnabled": "Enabled",
