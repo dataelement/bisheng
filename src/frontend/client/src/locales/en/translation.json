@@ -334,6 +334,7 @@
   "com_feedback_title": "Feedback",
   "com_file_content_exceed_tokens": "File content exceeds 30k tokens",
   "com_file_current_empty": "Current file is empty",
+  "com_file_parse_failed": "Parse failed",
   "com_file_parse_failed_auto_removed": "File {{0}} parsing failed, auto removed",
   "com_file_size_exceed_limit": "File: {{name}} exceeds {{size}}MB and has been removed.",
   "com_file_tip_text_only": "Only text in attachments is recognized",

@@ -302,10 +302,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     // submission pipeline. The turn stays in this daily conversation; the
     // backend hands off the linsight SV and the inline task bubble renders it.
     //
-    // NOTE (TJ-6, tools/files/skills temporarily degraded): the unified entry
-    // does not yet thread linsight-native tool/file/skill selection (backend
-    // _to_linsight_submit leaves them empty). Task turns currently carry only
-    // question + knowledge-base selection. Restore once the backend threads them.
+    // The unified entry now threads question + knowledge-base selection +
+    // tools + uploaded files (backend _to_linsight_submit maps them onto the
+    // linsight submit schema; daily-bucket files are parsed on-the-fly into the
+    // task workspace). Skills are still resolved separately.
     if (taskMode && canUseTaskMode) {
       const trimmed = text.trim();
       if (!trimmed && !(files || []).length) return;

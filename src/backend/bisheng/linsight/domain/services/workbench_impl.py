@@ -132,7 +132,10 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def submit_user_question(
-        cls, submit_obj: LinsightQuestionSubmitSchema, login_user: UserPayload
+        cls,
+        submit_obj: LinsightQuestionSubmitSchema,
+        login_user: UserPayload,
+        display_files: list[dict] | None = None,
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -140,6 +143,11 @@ class LinsightWorkbenchImpl:
         Args:
             submit_obj: Submitted Question Objects
             login_user: Logged in user information
+            display_files: Original daily-shape attachment dicts (filepath/type/
+                file_id) for the unified entry. Persisted on the user-question
+                ChatMessage so the uploaded attachments render after a refresh,
+                mirroring the daily-chat question envelope. ``None`` for the
+                legacy /linsight entry (it renders attachments its own way).
 
         Returns:
             tuple: (Message Session Model, Inspiration Conversation Version Model)
@@ -221,8 +229,13 @@ class LinsightWorkbenchImpl:
             # F035 Track J: land the user question in the unified conversation
             # stream so the round reads as one Q→A pair regardless of task mode.
             # (The bot answer turn is written at completion in task_exec.)
+            # Annotate the persisted attachments with each file's parse result so
+            # the attachment chip can show a "parse failed" state after a refresh.
             await linsight_execute_utils.persist_task_user_turn(
-                chat_id=chat_id, user_id=login_user.user_id, question=submit_obj.question
+                chat_id=chat_id,
+                user_id=login_user.user_id,
+                question=submit_obj.question,
+                files=cls._annotate_display_files(display_files, processed_files),
             )
 
             return message_session, linsight_session_version
@@ -230,6 +243,35 @@ class LinsightWorkbenchImpl:
         except Exception as e:
             logger.error(f"Failed to submit user question: {e!s}")
             raise cls.LinsightError(f"Failed to submit user question: {e!s}")
+
+    @staticmethod
+    def _annotate_display_files(display_files: list[dict] | None, processed_files: list | None) -> list[dict] | None:
+        """Stamp each persisted attachment with its parse result (by file_id).
+
+        ``display_files`` are the daily-shape dicts the frontend renders; the
+        ingestion result (``processed_files``) carries ``valid`` /
+        ``parsing_status`` per file. Merging them lets the attachment chip show a
+        "parse failed" state on reload instead of a normal-looking attachment the
+        model can't actually use.
+        """
+        if not display_files:
+            return display_files
+        status_by_id: dict[str, dict] = {}
+        for p in processed_files or []:
+            if isinstance(p, dict) and p.get("file_id") is not None:
+                status_by_id[str(p["file_id"])] = p
+        annotated: list[dict] = []
+        for f in display_files:
+            item = dict(f)
+            fid = str(f.get("file_id") or f.get("id") or "")
+            p = status_by_id.get(fid)
+            if p is not None:
+                item["valid"] = p.get("valid", True)
+                item["parsing_status"] = p.get("parsing_status") or item.get("parsing_status")
+                if p.get("error_message"):
+                    item["error_message"] = p["error_message"]
+            annotated.append(item)
+        return annotated
 
     @classmethod
     async def _get_redis(cls):
@@ -329,13 +371,22 @@ class LinsightWorkbenchImpl:
             result = await pipeline.arun()
             markdown = "\n\n".join(doc.page_content for doc in (result.documents or []) if doc.page_content)
         except Exception as e:
-            logger.warning(f"daily file ingest failed ({submit_file.file_name}): {e}")
+            # A download/parse failure must NOT abort the task — the user may have
+            # attached this file as optional context. Degrade gracefully: skip it
+            # (no workspace write, so the agent's ls won't list a broken file) but
+            # mark it ``valid=False`` so the caller can TELL the user it failed.
+            # Log the full traceback (not just a warning) so the real cause is
+            # diagnosable instead of silently lost.
+            logger.exception(
+                f"daily file ingest failed (name={submit_file.file_name!r} "
+                f"url={submit_file.file_url!r} chat_id={chat_id})"
+            )
             return {
                 "file_id": submit_file.file_id,
                 "original_filename": submit_file.file_name,
-                "parsing_status": "expired",
+                "parsing_status": "failed",
                 "valid": False,
-                "error_message": "file parse failed, please re-upload",
+                "error_message": f"file parse failed: {e}",
             }
 
         formal_object = cls._formal_markdown_object(submit_file.file_id, chat_id)

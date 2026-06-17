@@ -372,6 +372,35 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                             file_name: decodeURIComponent(f.original_filename),
                                         })),
                                     } as any);
+
+                                    // Stamp the user question's attachment chips with each
+                                    // file's parse result so a failed attachment shows its
+                                    // failed state live (not only after a refresh).
+                                    const statusById = new Map<string, any>(
+                                        item.files
+                                            .filter((f: any) => f?.file_id != null)
+                                            .map((f: any) => [String(f.file_id), f]),
+                                    );
+                                    setMessages((prev) =>
+                                        prev.map((m) =>
+                                            m.messageId === realUserMessageId && m.files?.length
+                                                ? {
+                                                      ...m,
+                                                      files: m.files.map((mf: any) => {
+                                                          const p = statusById.get(String(mf.file_id));
+                                                          return p
+                                                              ? {
+                                                                    ...mf,
+                                                                    valid: p.valid,
+                                                                    parsing_status: p.parsing_status,
+                                                                    error_message: p.error_message,
+                                                                }
+                                                              : mf;
+                                                      }),
+                                                  }
+                                                : m,
+                                        ),
+                                    );
                                 }
                             })
                             .catch(() => {

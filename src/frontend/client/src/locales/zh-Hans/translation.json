@@ -323,6 +323,7 @@
   "com_feedback_title": "反馈",
   "com_file_content_exceed_tokens": "文件内容超出3万token",
   "com_file_current_empty": "当前文件为空",
+  "com_file_parse_failed": "解析失败",
   "com_file_parse_failed_auto_removed": "文件 {{0}} 解析失败, 自动移除",
   "com_file_size_exceed_limit": "文件：{{name}}超过{{size}}MB，已移除",
   "com_file_tip_text_only": "仅识别附件中的文字",

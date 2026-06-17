@@ -162,6 +162,125 @@ async def test_idempotent_reuse_skips_copy(monkeypatch):
     assert second[0].get("valid", True) is True
 
 
+# ---------------------------------------------------------------------------
+# Unified-resource: DAILY-bucket file (file_url set) is parsed on-the-fly and
+# written into the workspace, so the task agent's ls/read_file sees it.
+# ---------------------------------------------------------------------------
+def _daily_submit(file_id="d1", name="Report.pdf"):
+    return SubmitFileSchema(
+        file_id=file_id,
+        file_name=name,
+        parsing_status="completed",
+        file_url="/tmp-dir/abc.pdf?X-Amz-Algorithm=AWS4",
+    )
+
+
+async def test_daily_file_ingested_into_workspace(monkeypatch):
+    """A DAILY-bucket file (filepath -> file_url) is parsed via TempFilePipeline
+    and lands as ``workspace/{svid}/uploads/<name>/index.md`` so the agent's
+    ``ls`` can see it (covers the unified-resource ingestion path)."""
+
+    class _Doc:
+        def __init__(self, content):
+            self.page_content = content
+
+    class _Result:
+        documents = [_Doc("# Heading\nbody line\n")]
+
+    class _FakePipeline:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def arun(self):
+            return _Result()
+
+    fake_minio = FakeMinio()
+
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(return_value=("/tmp/abc.pdf", "Report.pdf")),
+        ),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _FakePipeline),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files([_daily_submit()], "svid1", user_id=7)
+
+    assert result and len(result) == 1
+    entry = result[0]
+    assert entry.get("valid") is True
+    assert entry["parsing_status"] == "completed"
+    assert entry["workspace_path"].startswith("/uploads/")
+    assert entry["workspace_path"].endswith("/index.md")
+    # markdown written into the session workspace where WorkspaceBackend.ls reads
+    ws_keys = [k for (b, k) in fake_minio.store if k.startswith("workspace/svid1/uploads/")]
+    assert any(k.endswith("/index.md") for k in ws_keys)
+
+
+async def test_daily_file_ingest_failure_degrades_gracefully(monkeypatch):
+    """A DAILY-bucket file that fails to download/parse must NOT abort the task:
+    it is marked ``valid=False`` / ``parsing_status='failed'`` (so the caller can
+    tell the user it failed) and nothing broken is written into the workspace
+    (the agent's ``ls`` won't list a half-ingested file)."""
+    fake_minio = FakeMinio()
+
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(side_effect=ValueError("minio download boom")),
+        ),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files([_daily_submit()], "svid1", user_id=7)
+
+    assert result and len(result) == 1
+    entry = result[0]
+    assert entry["valid"] is False
+    assert entry["parsing_status"] == "failed"
+    assert entry["file_id"] == "d1"
+    # real cause carried for diagnosis / user-facing message
+    assert "boom" in entry["error_message"]
+    # nothing half-written into the workspace
+    assert not [k for (b, k) in fake_minio.store if k.startswith("workspace/svid1/uploads/")]
+
+
+def test_annotate_display_files_stamps_parse_result():
+    """Persisted attachments are stamped with each file's parse result (by
+    file_id) so the chip can show a 'parse failed' state on reload."""
+    display = [
+        {"file_id": "ok", "filename": "good.txt", "type": "text/plain"},
+        {"file_id": "bad", "filename": "broken.pdf", "type": "application/pdf"},
+        {"file_id": "unknown", "filename": "x.txt"},  # no processed entry -> untouched
+    ]
+    processed = [
+        {"file_id": "ok", "valid": True, "parsing_status": "completed"},
+        {"file_id": "bad", "valid": False, "parsing_status": "failed", "error_message": "boom"},
+    ]
+    out = LinsightWorkbenchImpl._annotate_display_files(display, processed)
+    by_id = {f["file_id"]: f for f in out}
+    assert by_id["ok"]["valid"] is True
+    assert by_id["ok"]["parsing_status"] == "completed"
+    assert by_id["bad"]["valid"] is False
+    assert by_id["bad"]["parsing_status"] == "failed"
+    assert by_id["bad"]["error_message"] == "boom"
+    # original display fields preserved; unmatched file left as-is
+    assert by_id["ok"]["filename"] == "good.txt"
+    assert "valid" not in by_id["unknown"]
+
+
+def test_annotate_display_files_handles_empty():
+    assert LinsightWorkbenchImpl._annotate_display_files(None, []) is None
+    assert LinsightWorkbenchImpl._annotate_display_files([], None) == []
+
+
 async def test_expired_temp_no_formal_marks_invalid():
     """Temp metadata expired (Redis returns None) and no formal product -> invalid flag."""
     fake_minio = FakeMinio()
