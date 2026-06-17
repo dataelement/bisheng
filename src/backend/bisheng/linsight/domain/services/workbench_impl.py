@@ -539,27 +539,6 @@ class LinsightWorkbenchImpl:
         return await LinsightSessionVersionDao.get_session_versions_by_session_id(session_id)
 
     @classmethod
-    async def modify_sop(cls, linsight_session_version_id: str, sop_content: str) -> dict:
-        """
-        Modify Inspiration Conversation Version ofSOPContents
-
-        Args:
-            linsight_session_version_id: Session VersionID
-            sop_content: SOPContents
-
-        Returns:
-            Operating result
-        """
-        try:
-            await LinsightSessionVersionDao.modify_sop_content(
-                linsight_session_version_id=linsight_session_version_id, sop_content=sop_content
-            )
-            return {"success": True, "message": "modify sop content successfully"}
-        except Exception as e:
-            logger.error(f"ChangeSOPContent failed: {e!s}")
-            raise cls.LinsightError(str(e))
-
-    @classmethod
     async def generate_sop(
         cls,
         linsight_session_version_id: str,
