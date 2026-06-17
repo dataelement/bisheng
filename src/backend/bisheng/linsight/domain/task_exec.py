@@ -151,7 +151,7 @@ class LinsightWorkflowTask:
             )
             await self._handle_execution_error(e)
         except Exception as e:
-            logger.error(f"Unknown error: session_version_id={self.session_version_id}, error={e}")
+            logger.exception(f"Unknown error: session_version_id={self.session_version_id}")
             await self._handle_execution_error(e)
         finally:
             if tenant_context_token is not None:
