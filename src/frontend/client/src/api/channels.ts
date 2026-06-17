@@ -1,5 +1,5 @@
 import request from "./request";
-import type { GrantItem, PermissionEntry, RelationModel, RevokeItem } from "./permission";
+import type { GrantItem, GrantUser, PermissionEntry, RelationModel, RevokeItem } from "./permission";
 
 // 排序方式
 export enum SortType {
@@ -360,7 +360,7 @@ export async function getChannelGrantSubjectsUsersApi(
     channelId: string,
     params?: { keyword?: string; page?: number; page_size?: number },
     config?: ChannelPermissionRequestConfig
-): Promise<{ user_id: number; user_name: string }[]> {
+): Promise<GrantUser[]> {
     const res = await request.get(
         `/api/v1/channel/manager/${channelId}/grant-subjects/users`,
         {

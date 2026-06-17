@@ -12,7 +12,7 @@ import { RunningSpinner } from './StepRow';
 export function PlanningRow({ label }: { label?: string }) {
     const localize = useLocalize();
     return (
-        <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-[#8C8C8C]">
+        <div className="flex items-center gap-2 py-1.5 text-sm text-[#8C8C8C]">
             <Outlined.ListSuccess className="size-4 text-[#1A1A1A]" />
             <span>{label ?? localize('com_linsight_planning')}</span>
             <RunningSpinner />

@@ -163,6 +163,18 @@ export async function canOpenPermissionDialog(
 
 // ── Subject search APIs ──────────────────────────────
 
+/**
+ * A grantable user candidate. The backend `grant-subjects/users` endpoint
+ * (shared by knowledge spaces and channels) also returns the person id and
+ * the user's primary department path, surfaced under the username in the picker.
+ */
+export interface GrantUser {
+  user_id: number;
+  user_name: string;
+  external_id?: string | null;
+  primary_department_path?: string | null;
+}
+
 export async function searchUsers(
   name: string,
   params?: { page?: number; pageSize?: number },
@@ -190,7 +202,7 @@ export async function getResourceGrantUsers(
   resourceId: string,
   params?: { keyword?: string; page?: number; page_size?: number },
   config?: { signal?: AbortSignal }
-): Promise<{ user_id: number; user_name: string }[]> {
+): Promise<GrantUser[]> {
   const res = await request.get(
     `/api/v1/permissions/resources/${resourceType}/${resourceId}/grant-subjects/users`,
     {
@@ -209,7 +221,7 @@ export async function getKnowledgeSpaceGrantUsers(
   resourceId: string,
   params?: { keyword?: string; page?: number; page_size?: number },
   config?: { signal?: AbortSignal }
-): Promise<{ user_id: number; user_name: string }[]> {
+): Promise<GrantUser[]> {
   return getResourceGrantUsers("knowledge_space", resourceId, params, config);
 }
 

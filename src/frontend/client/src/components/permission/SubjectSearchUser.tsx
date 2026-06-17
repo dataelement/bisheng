@@ -1,6 +1,6 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import { getResourceGrantUsers, searchUsers } from "~/api/permission";
-import type { ResourceType, SelectedSubject } from "~/api/permission";
+import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
@@ -14,7 +14,7 @@ interface SubjectSearchUserProps {
   grantUsersApi?: typeof getResourceGrantUsers;
 }
 
-type UserRow = { user_id: number; user_name: string };
+type UserRow = GrantUser;
 
 const PAGE_SIZE = 50;
 
@@ -223,6 +223,11 @@ export function SubjectSearchUser({
         {!loading &&
           results.map((user) => {
             const isDisabled = disabledIdSet.has(user.user_id);
+            // Secondary line: person id + primary department path, mirroring the
+            // admin-side picker. Both fields are optional, so join only what exists.
+            const subText = [user.external_id, user.primary_department_path]
+              .filter(Boolean)
+              .join(" / ");
             return (
               <div
                 key={user.user_id}
@@ -238,8 +243,13 @@ export function SubjectSearchUser({
                   checked={selectedIds.has(user.user_id)}
                   disabled={isDisabled}
                 />
-                <UserIcon className="h-4 w-4 text-gray-400" />
-                <span className="min-w-0 flex-1 truncate text-sm">{user.user_name}</span>
+                {/* Name column (fixed width) + department caption after it, mirroring the
+                    permission-list row layout. */}
+                <div className="flex w-[180px] shrink-0 items-center gap-2">
+                  <UserIcon className="h-4 w-4 shrink-0 text-gray-400" />
+                  <span className="truncate text-sm" title={user.user_name}>{user.user_name}</span>
+                </div>
+                <span className="min-w-0 flex-1 truncate text-xs text-[#999999]" title={subText}>{subText}</span>
                 {isDisabled && (
                   <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
                     {localize("com_permission.already_granted")}
