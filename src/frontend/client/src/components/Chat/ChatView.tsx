@@ -410,8 +410,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
                           onOpenWorkspace={taskArtifacts.openWorkspace}
-                          hasWorkspaceFiles={taskWorkspaceFiles.length > 0}
+                          // Show the workspace entry whenever this is a task
+                          // conversation (regardless of whether files exist yet);
+                          // it's hidden only while the panel itself is open.
+                          hasWorkspaceFiles={!!latestTaskVersionId}
                           workspaceOpen={taskArtifacts.open}
+                          onPreviewFile={taskArtifacts.openPreview}
                           hideEmptyState
                           flatMode
                         />

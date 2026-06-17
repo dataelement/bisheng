@@ -24,10 +24,7 @@
 import { CircleAlert, OctagonX } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
-import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
-import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
-import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
@@ -52,6 +49,9 @@ interface TaskTurnPanelProps {
     answer?: string;
     /** read-only (share page) — disable clarify input */
     readOnly?: boolean;
+    /** Preview a result document in the chat-embedded inline workspace panel
+        (ChatView owns it). A doc link opens the file directly — no drawer. */
+    onPreviewFile?: (file: ArtifactFile) => void;
 }
 
 /** Collect every clarify (call_user_input) entry across session + tasks. */
@@ -67,10 +67,9 @@ function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[])
     return entries;
 }
 
-export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = false }: TaskTurnPanelProps) {
+export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
     const localize = useLocalize();
     const { getLinsight, switchAndUpdateLinsight } = useLinsightManager();
-    const artifactsPanel = useArtifactsPanel();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
     const { sendInput, stop } = useLinsightWebSocket(versionId);
@@ -217,32 +216,19 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 </div>
             )}
 
-            {/* artifacts: report link / answer markdown / file card */}
+            {/* artifacts: report link / answer markdown / file card. Clicking a
+                document link opens it directly in ChatView's inline workspace
+                panel (preview), replacing the legacy right-side drawer. */}
             {completed && (
                 <div data-slot="execution-artifacts" className="mt-4">
                     <ResultSection
                         answer={linsight.output_result?.answer}
                         files={fileList}
                         versionId={versionId}
-                        onPreview={(file) => artifactsPanel.openPreview(file)}
+                        onPreview={(file) => onPreviewFile?.(file)}
                     />
                 </div>
             )}
-
-            {/* right-side workspace / preview drawers (shared, mutually exclusive) */}
-            <WorkspaceDrawer
-                open={artifactsPanel.workspaceOpen}
-                onOpenChange={artifactsPanel.setWorkspaceOpen}
-                files={fileList}
-                onPreview={(file) => artifactsPanel.openPreview(file, true)}
-            />
-            <FilePreviewPanel
-                open={!!artifactsPanel.previewFile}
-                onOpenChange={(open) => !open && artifactsPanel.closePreview()}
-                file={artifactsPanel.previewFile}
-                versionId={versionId}
-                onBack={artifactsPanel.fromWorkspace ? artifactsPanel.backToWorkspace : undefined}
-            />
         </div>
     );
 }

@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
 import type { CitationReferencesDesktopPayload } from "./Messages/Content/CitationReferencesDrawer";
+import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { cn } from "~/utils";
 import AiMessageBubble from "./AiMessageBubble";
 import { SelectionMessagesProvider, SelectAllBelowBanner } from "./MessageSelection";
@@ -56,6 +57,9 @@ interface AiChatMessagesProps {
     hasWorkspaceFiles?: boolean;
     /** F035: panel already open — hide the header entry button (shown only when closed) */
     workspaceOpen?: boolean;
+    /** F035: preview a task-turn document in the inline workspace panel (ChatView
+        owns it) — a conversation doc link opens the file directly, no drawer. */
+    onPreviewFile?: (file: ArtifactFile) => void;
 }
 
 /**
@@ -71,12 +75,14 @@ function MessageTreeNode({
     knowledgeChatLayout,
     onOpenCitationPanel,
     activeCitationMessageId,
+    onPreviewFile,
 }: {
     siblings: ChatMessage[];
     isStreaming?: boolean;
     totalMessages: number;
     currentIndex: number;
     onRegenerate?: (parentMessageId: string) => void;
+    onPreviewFile?: (file: ArtifactFile) => void;
     knowledgeChatLayout?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
@@ -124,6 +130,7 @@ function MessageTreeNode({
                 knowledgeChatLayout={knowledgeChatLayout}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
+                onPreviewFile={onPreviewFile}
             />
             {/* Recursively render children */}
             {children.length > 0 && (
@@ -136,6 +143,7 @@ function MessageTreeNode({
                     knowledgeChatLayout={knowledgeChatLayout}
                     onOpenCitationPanel={onOpenCitationPanel}
                     activeCitationMessageId={activeCitationMessageId}
+                    onPreviewFile={onPreviewFile}
                 />
             )}
         </>
@@ -164,6 +172,7 @@ export default function AiChatMessages({
     hasWorkspaceFiles = false,
     workspaceOpen = false,
     hideEmptyState = false,
+    onPreviewFile,
 }: AiChatMessagesProps) {
     const localize = useLocalize();
     const isNarrowViewport = usePrefersMobileLayout();
@@ -371,6 +380,7 @@ export default function AiChatMessages({
                                     knowledgeChatLayout={knowledgeChatLayout}
                                     onOpenCitationPanel={onOpenCitationPanel}
                                     activeCitationMessageId={activeCitationMessageId}
+                                    onPreviewFile={onPreviewFile}
                                 />
                             );
                         })
@@ -386,6 +396,7 @@ export default function AiChatMessages({
                                 knowledgeChatLayout={knowledgeChatLayout}
                                 onOpenCitationPanel={onOpenCitationPanel}
                                 activeCitationMessageId={activeCitationMessageId}
+                                onPreviewFile={onPreviewFile}
                             />
                         )
                     )}
