@@ -274,8 +274,9 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                 />
             )}
 
-            {/* Footer: Confirm (when answered) + Skip */}
-            <div className="mt-6 flex items-center justify-end gap-4">
+            {/* Footer: Confirm (when answered) + Skip. pr-4 matches the custom-answer
+                box's px-4 so 跳过 / 确定 line up with the inline 确定 inside it. */}
+            <div className="mt-6 flex items-center justify-end gap-4 pr-4">
                 {hasAnswer && (q?.multiple || !q) && (
                     <Button
                         size="sm"

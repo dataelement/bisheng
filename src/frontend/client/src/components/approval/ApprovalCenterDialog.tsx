@@ -1,4 +1,5 @@
-import { FileCheck2, SendToBack, X } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   decideApprovalTaskApi,
@@ -90,11 +91,11 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
   detail?: Record<string, any> | null; localize: ReturnType<typeof useLocalize>; isLast?: boolean;
 }) {
   const a = String(action || "").toLowerCase();
-  const dotCls = a === "approved" ? "bg-[#00b42a] text-white" : a === "rejected" ? "bg-[#f53f3f] text-white" :
-    a === "withdrawn" ? "bg-[#86909c] text-white" :
-    a === "revoke_grant" ? "bg-[#ff7d00] text-white" : "bg-[#165dff] text-white";
-  const icon = a === "approved" ? "✓" : a === "rejected" ? "✗" :
-    a === "revoke_grant" ? "⊘" : "●";
+  // Match the flow-node markers: a plain 12px colored dot (color keyed on the action, not the
+  // instance result — "submitted" stays blue because the submit action itself always succeeded).
+  const dotCls = a === "approved" ? "bg-[#00b42a]" : a === "rejected" ? "bg-[#f53f3f]" :
+    a === "withdrawn" ? "bg-[#86909c]" :
+    a === "revoke_grant" ? "bg-[#ff7d00]" : "bg-[#165dff]";
   const title = a === "submitted" ? localize("com_approval_step_submitted") :
     a === "resubmitted" ? localize("com_approval_action_resubmitted") :
     a === "approved" ? localize("com_approval_action_approved") :
@@ -107,27 +108,14 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
   return (
     <div className="flex gap-3">
       <div className="flex w-6 flex-col items-center">
-        <span className={cn("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px]", dotCls)}>{icon}</span>
+        <span className={cn("mt-1 h-3 w-3 shrink-0 rounded-full", dotCls)} />
         {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
       </div>
-      <div className={cn("min-w-0 pt-0.5", isLast ? "pb-1" : "pb-4")}>
+      <div className={cn("min-w-0 flex-1", isLast ? "pb-1" : "pb-4")}>
         <div className="text-[14px] font-medium text-[#1d2129]">{title}</div>
         {desc && <div className="mt-0.5 text-[12px] text-[#86909c]">{desc}</div>}
         {comment && <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>}
         <div className="mt-1 text-[11px] text-[#c9cdd4]">{formatTime(createTime)}</div>
-      </div>
-    </div>
-  );
-}
-
-function PendingTimelineStep({ nodeName }: { nodeName?: string | null }) {
-  return (
-    <div className="flex gap-3">
-      <div className="flex w-6 flex-col items-center">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#165dff] text-[11px] text-white">●</span>
-      </div>
-      <div className="pt-0.5">
-        <div className="text-[14px] font-medium text-[#1d2129]">{nodeName || "--"}</div>
       </div>
     </div>
   );
@@ -406,7 +394,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
             {/* Vertical icon tabs (my_tasks / my_requests) */}
             <div className="flex flex-col gap-2 border-r border-[#f2f3f5] bg-[#fafbfc] p-2 pt-3">
               {(["my_tasks", "my_requests"] as ApprovalCenterTab[]).map((tab) => {
-                const TabIcon = tab === "my_tasks" ? FileCheck2 : SendToBack;
+                const TabIcon = tab === "my_tasks" ? Outlined.ApprovalTodo : Outlined.ApprovalSubmitted;
                 return (
                   <button key={tab} type="button"
                     className={cn("flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-[12px] leading-none transition-colors",

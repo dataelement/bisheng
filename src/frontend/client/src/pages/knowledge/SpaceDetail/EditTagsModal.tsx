@@ -228,7 +228,7 @@ export function EditTagsModal({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] transition-colors hover:bg-[#F2F3F5]"
+                        className="absolute right-4 top-1/2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-[#4E5969] transition-colors hover:bg-[#F2F3F5]"
                         aria-label={localize("com_knowledge.close") || "Close"}
                     >
                         <X className="size-4" />
