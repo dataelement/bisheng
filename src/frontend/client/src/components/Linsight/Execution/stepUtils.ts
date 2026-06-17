@@ -256,3 +256,29 @@ export function isTaskRunning(status?: string): boolean {
 export function isTaskStarted(status?: string): boolean {
     return isTaskRunning(status) || isTaskDone(status) || TASK_ERROR_STATUSES.includes(status || '');
 }
+
+/**
+ * F035 (live vs refresh parity): the backend persists all session-level steps
+ * (planning / thinking / write_todos / ask_user) inside a single "执行准备"
+ * pseudo-task (``task_data.is_session_global``) so they survive a refresh — see
+ * task_exec._ensure_session_pseudo_task. The LIVE flow instead keeps them in a
+ * separate inline ``sessionSteps`` bucket and renders the answered clarify as an
+ * "已经明确用户意图" IntentRow.
+ *
+ * To make the reloaded view match the live one, lift the pseudo-task's steps
+ * back out: drop it from the rendered task list and expose its ``history`` as
+ * the session steps (so they render inline + the clarify becomes an IntentRow).
+ * Live steps win when present (active turn); the persisted history is used only
+ * on reload. A no-op for sessions without the pseudo-task.
+ */
+export function splitSessionPseudoTask<T extends { task_data?: any; history?: ExecStepEventData[] }>(
+    rawTasks: T[],
+    liveSessionSteps: ExecStepEventData[],
+): { tasks: T[]; sessionSteps: ExecStepEventData[] } {
+    const pseudo = rawTasks.find((t) => t?.task_data?.is_session_global);
+    if (!pseudo) return { tasks: rawTasks, sessionSteps: liveSessionSteps };
+    return {
+        tasks: rawTasks.filter((t) => t !== pseudo),
+        sessionSteps: liveSessionSteps.length ? liveSessionSteps : pseudo.history || [],
+    };
+}

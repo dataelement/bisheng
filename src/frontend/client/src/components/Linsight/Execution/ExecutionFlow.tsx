@@ -30,7 +30,7 @@ import { QueueCard } from './QueueCard';
 import { StepList } from './StepList';
 import { TaskPanel } from './TaskPanel';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
-import { isTaskRunning, isTaskStarted } from './stepUtils';
+import { isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
 
 interface ExecutionFlowProps {
@@ -68,8 +68,12 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     const { stop, sendInput } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
-    const tasks: ExecTask[] = (linsight?.tasks as any) || [];
-    const sessionSteps: ExecStepEventData[] = (linsight as any)?.sessionSteps || [];
+    // On reload, session-level steps come back inside the "执行准备" pseudo-task;
+    // lift them out so the rebuilt view matches the live one (inline + IntentRow).
+    const { tasks, sessionSteps } = splitSessionPseudoTask<ExecTask>(
+        (linsight?.tasks as any) || [],
+        ((linsight as any)?.sessionSteps as ExecStepEventData[]) || [],
+    );
     const status = linsight?.status;
     const running = status === SopStatus.Running;
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;

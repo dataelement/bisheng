@@ -38,7 +38,7 @@ import { PlanningRow } from './PlanningRow';
 import { StepList } from './StepList';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
-import { isTaskStarted } from './stepUtils';
+import { isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 
 interface TaskTurnPanelProps {
     /** linsight session_version id holding this turn's execution detail */
@@ -100,8 +100,12 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
         })();
     }, [versionId, conversationId, linsight, switchAndUpdateLinsight]);
 
-    const tasks: ExecTask[] = (linsight?.tasks as any) || [];
-    const sessionSteps: ExecStepEventData[] = (linsight as any)?.sessionSteps || [];
+    // On reload, session-level steps come back inside the "执行准备" pseudo-task;
+    // lift them out so the rebuilt view matches the live one (inline + IntentRow).
+    const { tasks, sessionSteps } = splitSessionPseudoTask<ExecTask>(
+        (linsight?.tasks as any) || [],
+        ((linsight as any)?.sessionSteps as ExecStepEventData[]) || [],
+    );
     const status = linsight?.status;
     const running = status === SopStatus.Running;
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
