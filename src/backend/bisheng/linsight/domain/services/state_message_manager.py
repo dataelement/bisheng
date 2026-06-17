@@ -18,6 +18,16 @@ from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
 from bisheng.utils.util import retry_async
 from bisheng_langchain.linsight.event import BaseEvent
 
+# Cap a single tool param/output value in the troubleshooting log so a tool that
+# passes large content (e.g. write_file body) doesn't flood the log.
+_PREVIEW_LIMIT = 1000
+
+
+def _preview(value: Any) -> str:
+    """Repr a tool param/output value, truncated for log safety."""
+    text = repr(value)
+    return text if len(text) <= _PREVIEW_LIMIT else f"{text[:_PREVIEW_LIMIT]}…(+{len(text) - _PREVIEW_LIMIT} chars)"
+
 
 class MessageEventType(str, Enum):
     """
@@ -382,7 +392,21 @@ class LinsightStateMessageManager:
 
             await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
 
-            self._logger.info(f"Added step to task {task_id}")
+            # Tool-call steps carry the model's chosen input params (e.g. the
+            # knowledge_id / query passed to search_knowledge_base) + result. The
+            # params already live in `history`, but log them explicitly here so a
+            # later investigation (e.g. "why was this knowledge base searched?")
+            # is greppable from the backend log without dumping the history JSON.
+            # Thinking deltas merge per-token, so they are left to the bland line.
+            step_type = step_dump.get("step_type")
+            if step_type in ("tool_call", "knowledge", "subagent", "call_user_input"):
+                self._logger.info(
+                    f"Tool step persisted task={task_id} call_id={step_dump.get('call_id')!r} "
+                    f"name={step_dump.get('name')!r} step_type={step_type} status={step_dump.get('status')!r} "
+                    f"params={_preview(step_dump.get('params'))} output={_preview(step_dump.get('output'))}"
+                )
+            else:
+                self._logger.info(f"Added step to task {task_id}")
 
         except Exception as e:
             self._logger.error(f"Failed to add step to task {task_id}: {e}")
