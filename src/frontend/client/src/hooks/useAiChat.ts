@@ -99,6 +99,15 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         setIsLoading(initialConversationId !== "new");
         setMessages([]);
         setTitle("");
+        // Drop the post-handoff skip guard: it only protects the ONE in-place
+        // refetch right after a task handoff. The handoff happens mid-stream, so
+        // the load effect's `isStreaming` guard already suppresses that refetch
+        // and the skip guard never gets consumed — it lingers set to that convo.
+        // Once we genuinely navigate away, it's stale; if left set, returning to
+        // that convo would hit the skip branch and load NOTHING (blank page on the
+        // first switch-back, only loading on the second). Clearing it here makes
+        // the first return load history normally.
+        skipLoadConvoRef.current = null;
         setConversationId(initialConversationId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialConversationId]);

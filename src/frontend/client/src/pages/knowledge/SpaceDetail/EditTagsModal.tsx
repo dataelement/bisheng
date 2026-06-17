@@ -221,7 +221,7 @@ export function EditTagsModal({
                 onInteractOutside={(e) => e.preventDefault()}
                 className="flex w-[600px] flex-col items-stretch gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none touch-mobile:inset-0 touch-mobile:left-0 touch-mobile:top-0 touch-mobile:h-dvh touch-mobile:w-screen touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none [&>button]:hidden"
             >
-                <DialogHeader className="h-12 shrink-0 justify-center space-y-0 px-6 py-3 text-left touch-mobile:h-auto touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
+                <DialogHeader className="relative h-12 shrink-0 justify-center space-y-0 px-6 py-3 text-left touch-mobile:h-auto touch-mobile:px-4 touch-mobile:pt-6 touch-mobile:pb-4">
                     <DialogTitle className="text-[16px] leading-6 font-medium text-[#212121]">
                         {isBatchMode ? localize("com_knowledge.batch_add_tags") : localize("com_knowledge.edit_tags")}
                     </DialogTitle>

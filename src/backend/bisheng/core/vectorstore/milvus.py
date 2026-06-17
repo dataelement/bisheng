@@ -19,6 +19,7 @@ of the deprecated ORM ``Collection`` API.
 """
 
 import threading
+from collections.abc import Callable
 from typing import Any
 
 from langchain_milvus import Milvus as _LangchainMilvus
@@ -57,3 +58,20 @@ class Milvus(_LangchainMilvus):
     @col.setter
     def col(self, value) -> None:
         _LangchainMilvus.col.fset(self, value)
+
+    def _select_relevance_score_fn(self) -> Callable[[float], float]:
+        try:
+            return super()._select_relevance_score_fn()
+        except ValueError as exc:
+            if "No index params provided" not in str(exc):
+                raise
+
+        metric_type = "L2"
+        if self.index_params:
+            index_params = self._as_list(self.index_params)
+            if len(index_params) == 1:
+                metric_type = index_params[0].get("metric_type") or metric_type
+
+        if metric_type in {"IP", "COSINE"}:
+            return lambda score: (score + 1) / 2.0
+        return lambda distance: 1 - distance / 4.0

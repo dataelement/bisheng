@@ -555,15 +555,19 @@ export const useGetWorkbenchModelsQuery = () => {
     queryKey: [QueryKeys.getWorkspaceModel],
     queryFn: () => getWorkbenchModelListApi(),
     select(data) {
-      // Back-fill missing voice models so consumers can read `.id` safely.
-      // (independent ifs — asr present must not skip the tts default.)
-      if (data && !data.data.asr_model) {
-        data.data.asr_model = {}
+      // The endpoint nests the config under resp_200 ({ data }) and, since F019,
+      // an admin-scope envelope ({ data, inherited_from_root, fallback_blocked }),
+      // so the real config sits at body.data.data. Unwrap to it, tolerating the
+      // legacy single-layer shape. Reading one level too shallow left asr_model /
+      // tts_model undefined, hiding the voice input even when a model was set.
+      const envelope = data?.data;
+      const cfg = envelope?.data ?? envelope;
+      if (cfg) {
+        // Compatible with historical data
+        if (!cfg.asr_model) cfg.asr_model = {};
+        if (!cfg.tts_model) cfg.tts_model = {};
       }
-      if (data && !data.data.tts_model) {
-        data.data.tts_model = {}
-      }
-      return data?.data;
+      return cfg;
     },
     // Was refetchOnMount:false with no staleTime, so the workbench model config
     // (models / asr_model / tts_model) was fetched once per SPA session and never

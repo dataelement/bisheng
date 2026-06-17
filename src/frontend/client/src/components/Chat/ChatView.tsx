@@ -285,6 +285,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // Landing layout: measure the welcome+input block via callback ref so the
+  // recommended-apps section can sit exactly 40px below it while the block
+  // itself stays pinned at viewport vertical center via absolute positioning.
+  // A callback ref re-attaches the ResizeObserver whenever the landing branch
+  // is (re)mounted, which a useEffect with stale deps would miss.
+  const landingResizeObserverRef = useRef<ResizeObserver | null>(null);
+  const [landingBlockHeight, setLandingBlockHeight] = useState(0);
+  const landingBlockRef = useCallback((el: HTMLDivElement | null) => {
+    if (landingResizeObserverRef.current) {
+      landingResizeObserverRef.current.disconnect();
+      landingResizeObserverRef.current = null;
+    }
+    if (!el) return;
+    const update = () => setLandingBlockHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    landingResizeObserverRef.current = ro;
+  }, []);
+
   // F035: task mode is a ROLE permission. The backend folds each role's
   // menu_ids into web_menu → client `user.plugins`; `linsight_task_mode` is the
   // workbench-home sub-capability toggled per role in the admin console. When
@@ -433,8 +453,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
                           onOpenWorkspace={taskArtifacts.openWorkspace}
-                          hasWorkspaceFiles={taskWorkspaceFiles.length > 0}
+                          // Show the workspace entry whenever this is a task
+                          // conversation (regardless of whether files exist yet);
+                          // it's hidden only while the panel itself is open.
+                          hasWorkspaceFiles={!!latestTaskVersionId}
                           workspaceOpen={taskArtifacts.open}
+                          onPreviewFile={taskArtifacts.openPreview}
                           hideEmptyState
                           flatMode
                         />
@@ -520,55 +544,74 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {citationPanelElement}
                   </div>
                 ) : (
-                  /* Landing page branch — Landing+input are pinned at ~25vh
-                     from the viewport top via padding-top (independent of how
-                     tall DailyFeaturedApps below becomes), so the welcome
-                     block stays in roughly the same screen position whether
-                     apps are absent or fill multiple rows. Apps follow
-                     directly after the input with only their own mt-4 gap. */
-                  <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[8vh]">
-                    <div className="shrink-0">
+                  /* Landing page branch — welcome + input are pinned to viewport
+                     vertical center via absolute positioning (top:50% + translateY).
+                     Recommended apps sit exactly 40px below the input by using
+                     `paddingTop: calc(50vh + landingHalfHeight + 40px)`, where
+                     `landingBlockHeight` is measured live with a ResizeObserver.
+                     When total content exceeds viewport, the parent's
+                     overflow-y-auto handles scrolling — the centered block scrolls
+                     up with the document as expected. */
+                  <div className="relative min-h-full">
+                    {/* Centered: welcome message + input. `top: 50vh` (viewport
+                        height), NOT `top: 50%` — the parent's effective height
+                        gets stretched by the apps' paddingTop below, so a
+                        percentage would resolve to a non-viewport midpoint. */}
+                    <div
+                      ref={landingBlockRef}
+                      className="absolute inset-x-0 top-[45vh] -translate-y-1/2"
+                    >
                       {/* F035 Track H (P5): daily/task mode switch removed —
                           task mode is reached via the sidebar "new task" entry
                           and the input-bar task-mode button. */}
                       <Landing isNew={isNew} />
+
+                      {/* Input area for landing page */}
+                      {!shareToken && (
+                        <div className="w-full max-w-[800px] mx-auto px-3 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
+                          <AiChatInput
+                            disabled={!bsConfig?.models?.length || !!shareToken}
+                            sendDisabled={taskRunning}
+                            isStreaming={isStreaming}
+                            features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
+                            onToggleTaskMode={() => setTaskMode((v) => !v)}
+                            placeholder={taskMode
+                              ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
+                              : undefined}
+                            onScrollToBottom={() => { }}
+                            modelOptions={bsConfig?.models}
+                            modelValue={chatModel.id}
+                            onModelChange={(val) => {
+                              const model = bsConfig?.models?.find((m) => m.id === val);
+                              setChatModel({
+                                id: Number(val),
+                                name: model?.displayName || '',
+                              });
+                            }}
+                            onSend={handleSend}
+                            onStop={stopGenerating}
+                            value={inputText}
+                            onChange={setInputText}
+                            bsConfig={bsConfig}
+                            selectedOrgKbs={selectedOrgKbs}
+                            onSelectedOrgKbsChange={setSelectedOrgKbs}
+                            searchType={searchType}
+                            onSearchTypeChange={setSearchType}
+                          />
+                        </div>
+                      )}
                     </div>
 
-                    {/* Input area for landing page */}
-                    {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto px-3 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full shrink-0 pb-3">
-                        <AiChatInput
-                          disabled={!bsConfig?.models?.length || !!shareToken}
-                          sendDisabled={taskRunning}
-                          isStreaming={isStreaming}
-                          features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
-                          onToggleTaskMode={() => setTaskMode((v) => !v)}
-                          placeholder={taskMode
-                            ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
-                            : undefined}
-                          onScrollToBottom={() => { }}
-                          modelOptions={bsConfig?.models}
-                          modelValue={chatModel.id}
-                          onModelChange={(val) => {
-                            const model = bsConfig?.models?.find((m) => m.id === val);
-                            setChatModel({
-                              id: Number(val),
-                              name: model?.displayName || '',
-                            });
-                          }}
-                          onSend={handleSend}
-                          onStop={stopGenerating}
-                          value={inputText}
-                          onChange={setInputText}
-                          bsConfig={bsConfig}
-                          selectedOrgKbs={selectedOrgKbs}
-                          onSelectedOrgKbsChange={setSelectedOrgKbs}
-                          searchType={searchType}
-                          onSearchTypeChange={setSearchType}
-                        />
-                      </div>
-                    )}
-                    <DailyFeaturedApps t={t} />
+                    {/* Recommended apps: 40px below the centered block. The
+                        paddingTop pushes apps to (viewport midpoint) + (landing
+                        half-height) + 40px = (landing block bottom) + 40px. */}
+                    <div
+                      style={{
+                        paddingTop: `calc(45vh + ${landingBlockHeight / 2 + 40}px)`,
+                      }}
+                    >
+                      <DailyFeaturedApps t={t} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -673,7 +716,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
 
 
   return (
-    <div className="relative z-10 w-full mt-4 pb-24">
+    <div className="relative z-10 w-full pb-24">
       <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4">
         <h2 className="text-sm text-gray-400">推荐应用</h2>
       </div>

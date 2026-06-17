@@ -442,6 +442,10 @@ function buildTaskTree(tasks) {
             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
             call_reason: task.input_prompt || '',
             errorMsg: task.result?.answer || '',
+            // Preserve task_data so splitSessionPseudoTask / PinnedTaskPanel can
+            // recognize the session-global "执行准备" pseudo task (is_session_global)
+            // on reload and lift its steps out, instead of rendering it as a task row.
+            task_data: task.task_data,
             children: task.children?.map(child => {
                 return {
                     id: child.id,
@@ -449,7 +453,8 @@ function buildTaskTree(tasks) {
                     status: child.status === 'waiting_for_user_input' ? 'user_input' : child.status,
                     history: child.history || [],
                     event_type: child.status === 'waiting_for_user_input' ? 'user_input' : '',
-                    call_reason: ''
+                    call_reason: '',
+                    task_data: child.task_data
                 }
             }) || []
         }

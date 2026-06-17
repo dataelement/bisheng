@@ -92,7 +92,7 @@ export function MobileChatHistoryDropdown({
             <div
                 ref={containerRef}
                 className={cn(
-                    'scrollbar-trigger min-h-0 flex-1 overflow-y-auto px-2 py-2',
+                    'scrollbar-trigger scrollbar-os min-h-0 flex-1 overflow-y-auto px-2 py-2',
                 )}
             >
                 <Conversations

@@ -255,6 +255,13 @@ class LinsightWorkflowTask:
             agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
             self._check_termination()
             await self._drive_resume(agent, session_model, user_input)
+            # F035 reload parity: the resume re-stream above may have rewritten the
+            # session pseudo task's history, dropping the is_completed/user_input
+            # stamp on the answered clarify steps. Re-apply the persisted answers
+            # (task_data.clarify_answers) so a refreshed turn still shows the
+            # answered "已明确用户意图" rows. This is the last history write of the
+            # turn, so it wins over anything the re-stream did.
+            await self._state_manager.restamp_clarify_answers(session_model.id)
             # Finalize the resumed turn. Without this the resumed task never
             # pushes FINAL_RESULT (the frontend keeps spinning on the answered
             # ask_user) — the fresh/continue paths finalize, the resume path

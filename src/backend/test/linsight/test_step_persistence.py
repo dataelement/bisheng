@@ -290,3 +290,95 @@ async def test_detail_surfaces_nonempty_pseudo_first(monkeypatch):
     ids = [node["id"] for node in result]
     assert ids[0] == "svid"  # global pseudo task first
     assert "aaaa" in ids
+
+
+# ---------------------------------------------------------------------------
+# F035 reload parity: clarify answers survive resume re-stream
+# ---------------------------------------------------------------------------
+
+
+def _make_answer_manager(monkeypatch, history, task_data):
+    """Manager whose task carries a stateful history + task_data store.
+
+    Unlike _make_manager this also tracks task_data so set_user_input's
+    clarify_answers append and restamp_clarify_answers can be observed.
+    """
+    from bisheng.linsight.domain.services import state_message_manager as smm
+
+    monkeypatch.setattr(smm, "get_redis_client_sync", lambda: MagicMock())
+    mgr = smm.LinsightStateMessageManager("svid")
+    mgr._redis_client = MagicMock()
+    mgr._redis_client.aset = AsyncMock()
+
+    store = {"history": list(history), "task_data": dict(task_data)}
+    task = LinsightExecuteTask(
+        id="svid",
+        session_version_id="svid",
+        task_type=ExecuteTaskTypeEnum.SINGLE,
+        status=ExecuteTaskStatusEnum.IN_PROGRESS,
+        task_data=dict(task_data),
+        history=list(history),
+    )
+
+    async def fake_get(task_id):
+        task.history = [dict(h) for h in store["history"]]
+        task.task_data = dict(store["task_data"])
+        return task
+
+    async def fake_update(task_id, **kwargs):
+        if "history" in kwargs:
+            store["history"] = kwargs["history"]
+        if "task_data" in kwargs:
+            store["task_data"] = kwargs["task_data"]
+        return task
+
+    mgr.get_execution_task = fake_get
+    monkeypatch.setattr(smm.LinsightExecuteTaskDao, "update_by_id", fake_update)
+    return mgr, store
+
+
+def _clarify_entry(reason, answered=False, answer=None):
+    entry = {"step_type": "call_user_input", "call_reason": reason, "params": {"tool_calls": []}}
+    if answered:
+        entry["is_completed"] = True
+        entry["user_input"] = answer
+    return entry
+
+
+async def test_restamp_reapplies_answers_after_clobber(monkeypatch):
+    # Two clarifies were answered, but a resume re-stream wiped the per-step stamp
+    # (entries back to unanswered). The authoritative answers live in task_data.
+    history = [
+        {"step_type": "thinking", "call_id": "th1", "output": "planning"},
+        _clarify_entry("q1"),
+        _clarify_entry("q2"),
+    ]
+    mgr, store = _make_answer_manager(monkeypatch, history, {"clarify_answers": ["male, 40", "80kg"]})
+
+    await mgr.restamp_clarify_answers("svid")
+
+    clarifies = [h for h in store["history"] if h["step_type"] == "call_user_input"]
+    assert [c["is_completed"] for c in clarifies] == [True, True]
+    assert [c["user_input"] for c in clarifies] == ["male, 40", "80kg"]
+
+
+async def test_restamp_leaves_still_pending_clarify_untouched(monkeypatch):
+    # One answer recorded but two clarifies present (the 2nd is genuinely pending).
+    history = [_clarify_entry("q1"), _clarify_entry("q2")]
+    mgr, store = _make_answer_manager(monkeypatch, history, {"clarify_answers": ["male, 40"]})
+
+    await mgr.restamp_clarify_answers("svid")
+
+    clarifies = [h for h in store["history"] if h["step_type"] == "call_user_input"]
+    assert clarifies[0].get("is_completed") is True
+    assert clarifies[0]["user_input"] == "male, 40"
+    assert clarifies[1].get("is_completed") is not True  # pending — untouched
+
+
+async def test_restamp_noop_without_recorded_answers(monkeypatch):
+    history = [_clarify_entry("q1")]
+    mgr, store = _make_answer_manager(monkeypatch, history, {})
+
+    await mgr.restamp_clarify_answers("svid")
+
+    assert store["history"][0].get("is_completed") is not True
