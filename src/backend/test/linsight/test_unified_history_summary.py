@@ -107,16 +107,73 @@ def test_build_agent_input_prepends_history_before_question():
     assert content.index("前情回顾") < content.index("当前问题")
 
 
-async def test_summary_keeps_most_recent_within_char_budget(patch_messages):
-    """When prior history is long, keep the most recent pairs within the budget."""
-    patch_messages.extend([
-        _q(1, "最旧问题" + "X" * 50),
-        _a(2, "最旧回答" + "X" * 50),
-        _q(3, "最新问题"),
-        _a(4, "最新回答"),
-    ])
+async def test_summary_head_tail_keeps_first_turn_and_recent(patch_messages):
+    """Long history: deterministic head+tail retention.
 
-    summary = await linsight_execute_utils.build_prior_conversation_summary("chat-1", max_chars=30)
+    The FIRST turn (original requirements) is ALWAYS kept so the deliverable
+    never drifts from the founding ask; the budget then holds the most-recent
+    turn(s); an over-budget MIDDLE turn is dropped and flagged with an elision
+    marker. (Replaces the old "keep most recent, drop oldest first" contract,
+    which silently dropped the user's original requirements — see fix #5.)
+    """
+    patch_messages.extend(
+        [
+            _q(1, "最初需求"),
+            _a(2, "最初回答"),
+            _q(3, "中间问题" + "X" * 80),
+            _a(4, "中间回答" + "X" * 80),
+            _q(5, "最新问题"),
+            _a(6, "最新回答"),
+        ]
+    )
 
+    summary = await linsight_execute_utils.build_prior_conversation_summary("chat-1", max_chars=40)
+
+    # first turn always kept (the original ask)
+    assert "最初需求" in summary and "最初回答" in summary
+    # most-recent turn kept
     assert "最新问题" in summary and "最新回答" in summary
-    assert "最旧问题" not in summary
+    # over-budget middle turn dropped + flagged
+    assert "中间问题" not in summary
+    assert "省略中间" in summary
+
+
+def test_build_agent_input_joins_file_list_not_repr():
+    """fix #3: file_list (a list[str]) is joined, NOT interpolated as a Python repr.
+
+    prepare_file_list returns a single-element list holding the <uploaded_files>
+    block. Interpolating the list directly would emit ``['...\\n...']`` (brackets,
+    quotes, escaped newlines), mangling the pointer block the model must parse.
+    """
+    from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersion
+    from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
+
+    block = "<uploaded_files>\n- path: /uploads/a/index.md\n  name: 年报.pdf\n</uploaded_files>"
+    session = LinsightSessionVersion(id="SV-1", session_id="chat-1", user_id=1, question="问", tenant_id=1)
+    out = LinsightWorkflowTask._build_agent_input(session, file_list=[block])
+
+    content = out["messages"][0]["content"]
+    assert block in content  # real newlines preserved
+    assert "['" not in content and "']" not in content  # no list repr brackets/quotes
+    assert "\\n" not in content  # no escaped newlines
+
+
+async def test_prepare_knowledge_list_clean_format_exposes_id():
+    """fix #4: each KB renders as a clean line exposing knowledge_id (no i18n garble)."""
+    from types import SimpleNamespace
+
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+    from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+
+    kbs = [
+        SimpleNamespace(type=KnowledgeTypeEnum.NORMAL.value, id=45, name="财报库", description="历年财报"),
+        SimpleNamespace(type=KnowledgeTypeEnum.PRIVATE.value, id=7, name="某私有库", description="x"),
+    ]
+    lines = await LinsightWorkbenchImpl.prepare_knowledge_list(kbs)
+
+    assert lines[0] == "- 财报库 (knowledge_id: 45): 历年财报"
+    # private KB: generic name (no title leak), id still exposed, no description
+    assert lines[1] == "- 个人知识库 (knowledge_id: 7)"
+    # no leftover machine-translation garble
+    joined = "\n".join(lines)
+    assert "Stored information for" not in joined and "Personal Knowledge Base" not in joined

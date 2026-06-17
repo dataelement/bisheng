@@ -495,7 +495,10 @@ async def build_prior_conversation_summary(chat_id: str, max_chars: int = 8000) 
     input) forms no pair and is excluded, so it is never duplicated.
 
     ``max_chars`` caps the injected context (design §3.8 — long histories must not
-    blow the window): the MOST RECENT pairs are kept, oldest dropped first.
+    blow the window). Retention is deterministic head+tail: the FIRST turn (the
+    user's original requirements) is ALWAYS kept, the remaining budget holds the
+    most-recent turns, and any elided middle turns are flagged. This is truncation,
+    not a semantic summary — a true LLM summary is a separate follow-up.
     Returns "" if there is no prior completed Q/A.
     """
     messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
@@ -511,13 +514,26 @@ async def build_prior_conversation_summary(chat_id: str, max_chars: int = 8000) 
     if not pairs:
         return ""
 
-    # Keep most recent pairs within the char budget (walk newest -> oldest).
-    kept: list[str] = []
-    used = 0
-    for block in reversed(pairs):
-        if kept and used + len(block) > max_chars:
+    # Deterministic head+tail retention (NOT an LLM summary): always keep the
+    # FIRST turn — it usually carries the user's original requirements, which a
+    # naive "keep most recent" truncation silently drops on long histories,
+    # letting the deliverable drift from the founding ask. Fill the rest of the
+    # budget with the most-recent turns (newest first); flag any elided middle.
+    first = pairs[0]
+    rest = pairs[1:]
+    kept_tail: list[str] = []
+    used = len(first)
+    for block in reversed(rest):
+        # Always keep at least the most-recent turn; then respect the budget.
+        if kept_tail and used + len(block) > max_chars:
             break
-        kept.append(block)
+        kept_tail.append(block)
         used += len(block)
-    kept.reverse()
-    return "# 前情回顾(本会话此前的对话)\n" + "\n".join(kept)
+    kept_tail.reverse()
+
+    dropped = len(rest) - len(kept_tail)
+    blocks = [first]
+    if dropped > 0:
+        blocks.append(f"(...此处省略中间 {dropped} 轮较早对话...)")
+    blocks.extend(kept_tail)
+    return "# 前情回顾(本会话此前的对话)\n" + "\n".join(blocks)

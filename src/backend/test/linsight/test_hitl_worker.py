@@ -91,12 +91,22 @@ def queue(fake_redis):
 # ===========================================================================
 def test_encode_queue_item_new_task():
     item = encode_queue_item("svid-1")
-    assert item == {"session_version_id": "svid-1", "resume": False, "user_input": None}
+    assert item == {
+        "session_version_id": "svid-1",
+        "resume": False,
+        "user_input": None,
+        "continue_question": None,
+    }
 
 
 def test_encode_queue_item_resume():
     item = encode_queue_item("svid-1", resume=True, user_input="hello")
-    assert item == {"session_version_id": "svid-1", "resume": True, "user_input": "hello"}
+    assert item == {
+        "session_version_id": "svid-1",
+        "resume": True,
+        "user_input": "hello",
+        "continue_question": None,
+    }
 
 
 def test_parse_queue_item_legacy_string_is_new_task():
