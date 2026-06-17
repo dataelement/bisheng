@@ -19,6 +19,7 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    SpaceAdminLimitExceededError,
     SpaceFileExtensionError,
     SpaceFileNameDuplicateError,
     SpaceFileNotFoundError,
@@ -126,6 +127,8 @@ if TYPE_CHECKING:
 
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 30
+# Maximum number of admins per Knowledge Space (mirrors channel's MAX_ADMIN_COUNT)
+MAX_SPACE_ADMIN_COUNT = 5
 SPACE_ADMIN_ASSIGNMENT_MESSAGE = "assigned_knowledge_space_admin"
 SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
 SPACE_MEMBER_REMOVED_MESSAGE = "removed_knowledge_space_member"
@@ -2233,13 +2236,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if target_membership.user_role == UserRoleEnum.ADMIN:
                 raise ValueError("Admins do not have permission to modify the roles of other admins")
 
-        # 5. Check maximum limit when setting as an admin
+        # 5. Check maximum limit when setting as an admin. Mirrors the channel side
+        #    (ChannelAdminLimitExceededError / 19051): raise a structured business error
+        #    so the front-end can i18n it, instead of a bare ValueError surfaced as a 500.
         if req.role == UserRoleEnum.ADMIN.value:
             current_admins = await SpaceChannelMemberDao.async_get_members_by_space(
                 space_id=req.space_id, user_roles=[UserRoleEnum.ADMIN]
             )
-            if len(current_admins) >= 5:
-                raise ValueError("Maximum number of administrators reached")
+            if len(current_admins) >= MAX_SPACE_ADMIN_COUNT:
+                raise SpaceAdminLimitExceededError()
 
         should_notify_admin_assignment = (
             target_membership.user_role == UserRoleEnum.MEMBER and req.role == UserRoleEnum.ADMIN.value
@@ -4306,7 +4311,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 login_user=self.login_user,
             )
             if effective != -1:
-                count = await SpaceChannelMemberDao.async_count_user_space_subscriptions(self.login_user.user_id)
+                # Count only joined spaces that STILL EXIST. The legacy DAO count reads
+                # space_channel_member without joining `knowledge`, so a subscription to a
+                # since-deleted space (orphan row) would inflate the count and reject the
+                # next join one slot early. get_user_resource_count uses the canonical
+                # INNER JOIN knowledge template, matching the front-end joined-spaces count.
+                count = await QuotaService.get_user_resource_count(
+                    self.login_user.user_id, QuotaResourceType.KNOWLEDGE_SPACE_SUBSCRIBE
+                )
                 if count >= effective:
                     raise SpaceSubscribeLimitError(quota=effective)
 

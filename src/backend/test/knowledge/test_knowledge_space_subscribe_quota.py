@@ -56,6 +56,19 @@ def test_resource_is_countable_dimension():
     assert "{qualified_col}" in sql
 
 
+def test_subscribe_count_joins_knowledge_to_skip_orphans():
+    """Orphan-safety: the subscribe count must INNER JOIN the knowledge table so a
+    subscription to a since-deleted space does not inflate the count and block the next
+    join one slot early. The enforcement path (subscribe_space) routes through
+    get_user_resource_count, which uses this template — so the join here is what guarantees
+    orphan rows are excluded."""
+    from bisheng.role.domain.services.quota_service import _RESOURCE_COUNT_TEMPLATES
+
+    sql = _RESOURCE_COUNT_TEMPLATES["knowledge_space_subscribe"]
+    assert "INNER JOIN knowledge" in sql
+    assert "k.id=scm.business_id" in sql
+
+
 async def test_no_roles_falls_back_to_default_100():
     from bisheng.role.domain.services.quota_service import (
         QuotaResourceType,

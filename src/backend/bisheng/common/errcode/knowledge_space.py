@@ -106,6 +106,12 @@ class SpaceTenantMismatchError(BaseErrorCode):
     Msg: str = "当前租户与知识空间归属租户不一致，暂不支持该操作，请切换到知识空间所属租户后重试"
 
 
+# —— Member management
+class SpaceAdminLimitExceededError(BaseErrorCode):
+    Code: int = 18042
+    Msg: str = "Maximum number of knowledge space administrators reached (up to 5 admins)"
+
+
 # —— TAG
 class SpaceTagExistsError(BaseErrorCode):
     Code: int = 18050
