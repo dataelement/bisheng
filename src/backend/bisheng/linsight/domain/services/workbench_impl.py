@@ -604,6 +604,16 @@ class LinsightWorkbenchImpl:
         if not execute_tasks:
             return []
 
+        # F035 problem 2: the session-level pseudo task (task_data.is_session_global)
+        # carries planning/wrap-up/direct-answer steps. Drop it when it captured no
+        # steps so we never render an empty "执行准备" node.
+        def _is_session_global(task: Any) -> bool:
+            return bool((task.task_data or {}).get("is_session_global"))
+
+        execute_tasks = [t for t in execute_tasks if not (_is_session_global(t) and not t.history)]
+        if not execute_tasks:
+            return []
+
         # 1. Get Level 1 Tasks parent_task_id Yes  None Task
         root_tasks = [task for task in execute_tasks if task.parent_task_id is None]
 
@@ -646,6 +656,9 @@ class LinsightWorkbenchImpl:
 
         # Sort first level tasks
         sorted_root_tasks = sort_tasks_by_chain(root_tasks)
+        # Surface the session-global pseudo task first (planning precedes the
+        # planned sub-tasks). Stable sort keeps the rest of the chain order.
+        sorted_root_tasks = sorted(sorted_root_tasks, key=lambda t: 0 if _is_session_global(t) else 1)
 
         # 3. Build task tree Use parent_task_id Associate subtasks with parent tasks
         def build_task_tree(parent_tasks: list[Any], all_tasks: list[Any]) -> list[TaskNode]:
