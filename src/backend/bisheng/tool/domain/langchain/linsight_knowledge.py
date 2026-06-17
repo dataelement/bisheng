@@ -6,8 +6,6 @@ from pydantic import BaseModel, Field
 
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-from bisheng.linsight.domain.models.linsight_session_version import LinsightSessionVersionDao
-from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.share_fallback import (
     get_model_by_id_with_share_fallback,
 )
@@ -15,24 +13,25 @@ from bisheng.llm.domain.share_fallback import (
 
 class ToolInput(BaseModel):
     query: str = Field(..., description="需要检索的关键词")
-    knowledge_id: str = Field(..., description="语义检索库id")
+    knowledge_id: str = Field(..., description="知识库或知识空间的id")
     limit: int = Field(default=2, description="返回结果的最大数量")
-    call_reason: str = Field(default="", description="调用该工具的原因，原因中不要使用id来描述文件或知识库")
+    call_reason: str = Field(default="", description="调用该工具的原因，原因中不要使用id来描述知识库")
 
 
 class SearchKnowledgeBase(BaseTool):
     name: str = "search_knowledge_base"
-    description: str = """在语义检索库中搜索相关内容。
+    description: str = """在知识库或知识空间中进行语义检索。
 
-        用法:在你需要在知识库中进行语义搜索时,调用此工具。
+        用法:当你需要从知识库 / 知识空间中检索相关内容时,调用此工具。
+        本工具只检索知识库和知识空间;用户上传的文件请直接用 ls / read_file 在工作目录中查看,不要在此检索。
 
         Args:
             query: 需要检索的关键词
-            knowledge_id: 语义检索库id
+            knowledge_id: 知识库或知识空间的id
             limit: 返回结果的最大数量，默认为2
 
         Returns:
-            包含搜索结果（chunk的列表）的字典"""
+            包含搜索结果(chunk 列表)的字典"""
     args_schema: type[BaseModel] = ToolInput
 
     # C4 permission isolation: the whitelist of knowledge ids the model may
@@ -62,17 +61,21 @@ class SearchKnowledgeBase(BaseTool):
                 ensure_ascii=False,
             )
 
-        # A knowledge_id is either a numeric KB id or a linsight uploaded file_id.
-        # The model sometimes hallucinates a non-id sentinel (e.g.
-        # 'general_knowledge') when no real knowledge base is bound; in that case
-        # search_linsight_file finds nothing. Either way a tool failure must NOT
-        # raise — that propagates through the deepagents tool node and kills the
-        # whole task. Return a soft error so the agent can recover and continue.
+        # knowledge_id must be a numeric knowledge-base / knowledge-space id. The
+        # model sometimes hallucinates a non-numeric sentinel (e.g.
+        # 'general_knowledge') or passes an uploaded file_id — uploaded files are
+        # NOT searched here (they are read from the workspace via read_file), so a
+        # non-numeric id is simply "no result". A tool failure must NOT raise —
+        # that propagates through the deepagents tool node and kills the whole
+        # task. Return a soft error so the agent can recover and continue.
         try:
             try:
                 kid = int(knowledge_id)
             except (ValueError, TypeError):
-                return await self.search_linsight_file(query, knowledge_id, limit)
+                return json.dumps(
+                    {"状态": "无结果", "错误信息": "knowledge_id 不是有效的知识库/知识空间 id"},
+                    ensure_ascii=False,
+                )
             return await self.search_knowledge(query, kid, limit)
         except Exception as e:
             logger.warning(f"search_knowledge_base failed for knowledge_id={knowledge_id!r}: {e}")
@@ -90,25 +93,6 @@ class SearchKnowledgeBase(BaseTool):
         result = json.dumps(result, ensure_ascii=False, indent=2)
 
         return result
-
-    async def search_linsight_file(self, query: str, file_id: str, limit: int) -> str:
-        """检索Linsight用户上传的文件"""
-        session_info = await LinsightSessionVersionDao.get_session_version_by_file_id(file_id=file_id)
-        if not session_info:
-            raise Exception("文件不存在或已被删除")
-        files = session_info.files
-        file_info = None
-        for one in files:
-            if one.get("file_id") == file_id:
-                file_info = one
-                break
-        if not file_info:
-            raise Exception("File does not exist or has been deleted")
-        embeddings = await LLMService.get_bisheng_linsight_embedding(
-            session_info.user_id, file_info.get("embedding_model_id")
-        )
-        milvus_client = KnowledgeRag.init_milvus_vectorstore(file_info.get("collection_name"), embeddings)
-        return await self.base_search(milvus_client, query, limit, expr=f"file_id in {[file_id]}")
 
     async def search_knowledge(self, query: str, knowledge_id: int, limit: int) -> str:
         knowledge_info = KnowledgeDao.query_by_id(knowledge_id)

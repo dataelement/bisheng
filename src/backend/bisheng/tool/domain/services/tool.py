@@ -607,13 +607,13 @@ class ToolServices(BaseModel):
         return [
             GptsToolsTypeRead(
                 id=100000,
-                name="知识库和文件内容检索",
-                description="检索组织知识库、个人知识库以及本地上传文件的内容",
+                name="知识库和知识空间检索",
+                description="检索组织知识库、个人知识库以及知识空间的内容",
                 children=[
                     GptsTools(
                         id=100001,
-                        name="知识库和文件内容检索",
-                        desc="检索组织知识库、个人知识库以及本地上传文件的内容。",
+                        name="知识库和知识空间检索",
+                        desc="检索组织知识库、个人知识库以及知识空间的内容。",
                         tool_key="search_knowledge_base",
                     )
                 ],

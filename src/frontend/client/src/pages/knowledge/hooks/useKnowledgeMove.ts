@@ -76,26 +76,39 @@ export function useKnowledgeMove({ spaceId, onMoved }: UseKnowledgeMoveArgs) {
 
     /**
      * Batch-move entry from the toolbar. `denied` = selected items the user lacks
-     * move permission for (decided up-front on the frontend, space-level). If any
-     * are denied, show the block dialog listing them with 【移动其余文件】【取消移动】;
-     * "move the rest" then opens the picker with only the permitted items. The
-     * backend re-validates every item on the actual move (safety net).
+     * move permission for (decided up-front on the frontend, space-level);
+     * `uploading` = selected items still uploading (no backend id yet). If any of
+     * either exist, show the block dialog listing them by reason with
+     * 【移动其余文件】【取消移动】; "move the rest" then opens the picker with only the
+     * permitted items. The backend re-validates every item on the actual move.
      */
     const requestBatchMove = useCallback(
-        async (permitted: KnowledgeFile[], denied: KnowledgeFile[]) => {
-            if (denied.length === 0) {
+        async (permitted: KnowledgeFile[], denied: KnowledgeFile[], uploading: KnowledgeFile[] = []) => {
+            if (denied.length === 0 && uploading.length === 0) {
                 openMove(permitted);
                 return;
             }
-            const blocked: InvalidEntry[] = denied.map((f) => ({
-                id: Number(f.id),
-                type: f.type === FileType.FOLDER ? "folder" : "file",
-                name: f.name,
-                reason: "no_permission",
-            }));
+            const parts: string[] = [];
+            if (denied.length > 0) {
+                const blocked: InvalidEntry[] = denied.map((f) => ({
+                    id: Number(f.id),
+                    type: f.type === FileType.FOLDER ? "folder" : "file",
+                    name: f.name,
+                    reason: "no_permission",
+                }));
+                parts.push(describeInvalid(blocked, localize));
+            }
+            if (uploading.length > 0) {
+                // "uploading" is a frontend-only reason (not a backend MoveInvalidReason),
+                // so render its group line directly instead of via describeInvalid.
+                parts.push(localize("com_knowledge.move_reason_group", {
+                    0: localize("com_knowledge.move_reason_uploading"),
+                    1: uploading.map((f) => f.name).join("、"),
+                }));
+            }
             const ok = await confirm({
                 title: localize("com_knowledge.move_partial_title"),
-                description: describeInvalid(blocked, localize),
+                description: parts.join("\n"),
                 cancelText: localize("com_knowledge.move_cancel_all"),
                 confirmText: localize("com_knowledge.move_rest"),
             });

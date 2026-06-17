@@ -1,0 +1,126 @@
+/**
+ * F035: shared file-preview body — resolves the artifact source (text / image)
+ * and renders it (markdown / plain text / image / "download to view" fallback).
+ * Used by both the legacy drawer (FilePreviewPanel) and the inline WorkspacePanel
+ * so the two surfaces render identical content.
+ */
+import { useEffect, useState } from 'react';
+import { NotificationSeverity } from '~/common';
+import Markdown from '~/components/Chat/Messages/Content/Markdown';
+import { Button } from '~/components/ui';
+import FileIcon from '~/components/ui/icon/File';
+import { useLocalize } from '~/hooks';
+import '~/markdown.css';
+import { useToastContext } from '~/Providers';
+import {
+    type ArtifactFile,
+    downloadArtifactFile,
+    getArtifactPreviewKind,
+    getFileExtension,
+    resolveArtifactUrl,
+} from './artifactUtils';
+
+/** Resolve + load the preview source (text content or same-origin image url). */
+export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(false);
+    const [text, setText] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
+
+    useEffect(() => {
+        setText('');
+        setImageUrl('');
+        setError(false);
+        if (!file) return undefined;
+        const kind = getArtifactPreviewKind(file);
+        if (kind === 'unsupported') return undefined;
+
+        let cancelled = false;
+        setLoading(true);
+        (async () => {
+            try {
+                const url = await resolveArtifactUrl(file.file_url, versionId);
+                if (cancelled) return;
+                if (kind === 'image') {
+                    setImageUrl(url);
+                } else {
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const content = await response.text();
+                    if (!cancelled) setText(content);
+                }
+            } catch (e) {
+                console.error('artifact preview failed:', e);
+                if (!cancelled) setError(true);
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [file, versionId]);
+
+    return { loading, error, text, imageUrl };
+}
+
+interface PreviewBodyProps {
+    file: ArtifactFile;
+    versionId: string;
+}
+
+export function PreviewBody({ file, versionId }: PreviewBodyProps) {
+    const localize = useLocalize();
+    const { showToast } = useToastContext();
+    const { loading, error, text, imageUrl } = usePreviewSource(file, versionId);
+    const kind = getArtifactPreviewKind(file);
+
+    const handleDownloadToView = async () => {
+        try {
+            await downloadArtifactFile(file, versionId);
+        } catch (e) {
+            console.error('artifact download failed:', e);
+            showToast?.({ message: localize('com_linsight_download_failed'), severity: NotificationSeverity.ERROR });
+        }
+    };
+
+    if (kind === 'unsupported' || error) {
+        // not inline-renderable (docx / pdf / xlsx …) or load failure → download hint
+        return (
+            <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
+                <FileIcon type={getFileExtension(file.file_name) as any} className="h-20 w-20" />
+                <div className="max-w-[80%] truncate text-base font-medium text-gray-900">{file.file_name}</div>
+                <div className="mb-2 text-sm text-gray-500">
+                    {error ? localize('com_linsight_preview_load_failed') : localize('com_linsight_preview_unsupported')}
+                </div>
+                <Button variant="outline" size="sm" onClick={handleDownloadToView}>
+                    {localize('com_linsight_download_to_view')}
+                </Button>
+            </div>
+        );
+    }
+    if (loading) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <img className="size-6 animate-spin" src={`${__APP_ENV__.BASE_URL}/assets/load.webp`} alt="" />
+            </div>
+        );
+    }
+    if (kind === 'image') {
+        return (
+            <div className="flex h-full items-center justify-center p-4">
+                <img className="max-h-full max-w-full object-contain" src={imageUrl} alt={file.file_name} />
+            </div>
+        );
+    }
+    if (kind === 'markdown') {
+        return (
+            <div className="bs-mkdown p-8">
+                <Markdown content={text} isLatestMessage={true} webContent={false} />
+            </div>
+        );
+    }
+    // plain text
+    return <pre className="whitespace-pre-wrap break-words p-6 text-sm text-gray-800">{text}</pre>;
+}
