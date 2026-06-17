@@ -32,8 +32,10 @@ import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils
 import { useLocalize } from '~/hooks';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
+import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { SopStatus } from '~/store/linsight';
 import { ClarifyCard } from './ClarifyCard';
+import { QueueCard } from './QueueCard';
 import { IntentRow } from './IntentRow';
 import { PlanningRow } from './PlanningRow';
 import { StepList } from './StepList';
@@ -71,7 +73,7 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     const artifactsPanel = useArtifactsPanel();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
-    const { sendInput } = useLinsightWebSocket(versionId);
+    const { sendInput, stop } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
     const [loadFailed, setLoadFailed] = useState(false);
@@ -118,7 +120,18 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
         [sessionSteps],
     );
 
-    const planning = running && !tasks.length && !pendingInput;
+    // Queued in the worker queue: running but the worker hasn't started us yet
+    // (no task list / steps produced). Poll queue-status only in this window so
+    // the badge clears the moment the worker picks us up (index → 0) or any
+    // execution output arrives over the WS.
+    const noProgressYet = !tasks.length && !sessionSteps.length;
+    useLinsightQueuePolling(versionId, running && noProgressYet);
+    // Gate on noProgressYet too: once steps/tasks arrive polling stops and the
+    // last-polled queueCount may stay stale >0, so this prevents the queue card
+    // from lingering next to real task rows.
+    const queueing = running && noProgressYet && (linsight?.queueCount || 0) > 0;
+
+    const planning = running && !queueing && !tasks.length && !pendingInput;
 
     const handleClarifySubmit = (taskId: string, ans: string) => {
         sendInput({ task_id: taskId || versionId, user_input: ans, files: [] });
@@ -142,6 +155,9 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
 
     return (
         <div className="w-full">
+            {/* queueing card (auto-disappears when the worker picks us up) */}
+            {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
+
             {/* answered session-level clarifies -> intent summary rows */}
             {answeredSessionInputs.map((entry, i) => (
                 <IntentRow key={`intent_${i}`} data={entry} />

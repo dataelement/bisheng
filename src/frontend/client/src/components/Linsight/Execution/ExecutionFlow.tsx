@@ -18,6 +18,7 @@ import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Ar
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
+import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLocalize } from '~/hooks';
 import { ClarifyCard } from './ClarifyCard';
@@ -73,7 +74,14 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     const running = status === SopStatus.Running;
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
     const stopped = status === SopStatus.Stoped;
-    const queueing = running && (linsight?.queueCount || 0) > 0;
+    // Poll queue-status while queued (running but no execution output yet); the
+    // badge clears when the worker picks us up (index → 0) or steps arrive.
+    const noProgressYet = !tasks.length && !sessionSteps.length;
+    useLinsightQueuePolling(versionId, running && noProgressYet);
+    // Gate on noProgressYet too: once steps/tasks arrive polling stops and the
+    // last-polled queueCount may stay stale >0, so this prevents the queue card
+    // from lingering next to real task rows.
+    const queueing = running && noProgressYet && (linsight?.queueCount || 0) > 0;
 
     // P4 artifacts: output files + the shared right-side panel (workspace/preview)
     const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];

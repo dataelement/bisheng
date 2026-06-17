@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useActivate } from 'react-activation';
-import { checkSopQueueStatus, getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
+import { getCaseDetail, getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { useGetLinsightToolList, useGetOrgToolList, useGetPersonalToolList } from '~/hooks/queries/data-provider';
 import { useLinsightManager, useLinsightSubmit } from '~/hooks/useLinsightManager';
 import { formatTime } from '~/utils';
@@ -11,7 +11,6 @@ import { ExecutionFlow } from '~/components/Linsight/Execution/ExecutionFlow';
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { LoadingIcon } from '../ui/icon/Loading';
 import { Header } from './Header';
-import { SopStatus } from '~/store/linsight';
 
 export default function index({ id = '', vid = '', shareToken = '' }) {
     // 获取url参数
@@ -21,7 +20,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     // 兼容历史链接 case开头
     const sopId = conversationId ? (conversationId.match(/case(\d+)/)?.[1] || '') : sid; // Compatible with historical cases 
 
-    const { loading, versionId, setVersionId, switchVersion, versions, setVersions, checkQueueStatus } = useLinsightData({ conversationId, sopId, vid, shareToken });
+    const { loading, versionId, setVersionId, switchVersion, versions, setVersions } = useLinsightData({ conversationId, sopId, vid, shareToken });
     const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions)
     const { getLinsight } = useLinsightManager()
     const artifactsPanel = useArtifactsPanel();
@@ -93,9 +92,10 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
     // 状态管理
     const [versions, setVersions] = useState<{ id: string, name: string }[]>([]);
     const [versionId, setVersionId] = useState('new')
-    const { getLinsight, updateLinsight, switchAndUpdateLinsight } = useLinsightManager();
-    // 检查排队情况
-    const checkQueueStatus = useQueueStatus(versionId, updateLinsight)
+    const { getLinsight, switchAndUpdateLinsight } = useLinsightManager();
+    // Queue-status polling now lives inside ExecutionFlow via
+    // useLinsightQueuePolling (shared with the F035 daily-chat TaskTurnPanel),
+    // so the page-level hook is no longer needed here.
 
     const loadSessionVersionsAndTasks = async (_conversationId: string, versionId?: string) => {
         setLoading(true);
@@ -179,39 +179,5 @@ export const useLinsightData = ({ vid, sopId, conversationId, shareToken }
         setVersionId,
         switchVersion,
         setVersions,
-        checkQueueStatus
     };
 };
-
-
-const useQueueStatus = (vid, updateLinsight) => {
-    const timerRef = useRef<any>(null)
-
-    const checkQueueStatus = async (vid: string) => {
-        const res = await checkSopQueueStatus(vid);
-        const count = res.data.index
-        const params = { queueCount: count }
-        if (count > 0) {
-            params.status = SopStatus.Running
-        }
-        updateLinsight(vid, params);
-        if (count > 0) {
-            timerRef.current = setTimeout(() => {
-                checkQueueStatus(vid)
-            }, 60000)
-        } else {
-            clearTimeout(timerRef.current)
-        }
-    }
-
-    useEffect(() => {
-        if (vid === 'new') return;
-        checkQueueStatus(vid)
-
-        return () => {
-            clearTimeout(timerRef.current)
-        }
-    }, [vid])
-
-    return () => checkQueueStatus(vid)
-}
