@@ -65,6 +65,10 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
                         versionId={versionId}
                         conversationId={conversationId}
                         isSharePage={!!(isSharePage || sopId)}
+                        // Historical session opened from the home list keeps a real
+                        // conversationId (a fresh /linsight/new keeps 'new' via
+                        // replaceState), so this marks it read-only — hide the input.
+                        readOnly={!!conversationId && conversationId !== 'new'}
                         artifactsPanel={artifactsPanel}
                     />
                 </div>

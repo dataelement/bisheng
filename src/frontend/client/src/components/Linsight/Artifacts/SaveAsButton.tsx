@@ -92,7 +92,7 @@ export function SaveAsButton({ file, versionId, iconOnly = false }: SaveAsButton
             aria-label={localize('com_linsight_save_as')}
             className="rounded-md p-1 text-[#8C8C8C] transition-colors hover:text-[#335CFF] disabled:opacity-50"
         >
-            <Outlined.AddToKnowledgeBase className="size-[18px]" />
+            <Outlined.Download className="size-[18px]" />
         </button>
     ) : (
         <button
@@ -100,7 +100,7 @@ export function SaveAsButton({ file, versionId, iconOnly = false }: SaveAsButton
             disabled={busy}
             className="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-gray-500 transition-colors hover:text-blue-600 disabled:opacity-50"
         >
-            <Outlined.AddToKnowledgeBase className="size-4" />
+            <Outlined.Download className="size-4" />
             {localize('com_linsight_save_as')}
         </button>
     );

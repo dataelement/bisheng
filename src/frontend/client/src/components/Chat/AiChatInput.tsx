@@ -163,6 +163,12 @@ interface AiChatInputProps {
     size?: '' | 'mini';
     features?: AiChatInputFeatures;
     disabled?: boolean;
+    /**
+     * F035: disable only the send button while keeping the textarea editable.
+     * Used by chat-embedded task mode: a running round must not accept a new
+     * submission, but the user may still type the next round's prompt ahead.
+     */
+    sendDisabled?: boolean;
     isStreaming?: boolean;
     modelOptions?: any[];
     modelValue?: any;
@@ -200,6 +206,7 @@ const AiChatInput = memo(
         size = '',
         features,
         disabled = false,
+        sendDisabled = false,
         isStreaming = false,
         modelOptions,
         modelValue,
@@ -337,7 +344,7 @@ const AiChatInput = memo(
 
         const handleSend = useCallback(() => {
             const trimmed = text.trim();
-            if ((!trimmed && !chatFiles?.length) || disabled || isStreaming || fileUploading) return;
+            if ((!trimmed && !chatFiles?.length) || disabled || sendDisabled || isStreaming || fileUploading) return;
             // Pass files through to parent
             onSend(trimmed, chatFiles);
             setText("");
@@ -354,7 +361,7 @@ const AiChatInput = memo(
                 window.clearTimeout(textareaScrollHideTimerRef.current);
                 textareaScrollHideTimerRef.current = null;
             }
-        }, [text, disabled, isStreaming, fileUploading, onSend, chatFiles, setText]);
+        }, [text, disabled, sendDisabled, isStreaming, fileUploading, onSend, chatFiles, setText]);
 
         const handleKeyDown = useCallback(
             (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -651,6 +658,7 @@ const AiChatInput = memo(
                                     disabled={
                                         !text?.trim() ||
                                         disabled ||
+                                        sendDisabled ||
                                         fileUploading
                                     }
                                     className="rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"

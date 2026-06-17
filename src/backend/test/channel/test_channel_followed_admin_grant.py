@@ -38,7 +38,10 @@ def _service(channel_repository=None, member_repository=None):
         channel_repository=channel_repository or SimpleNamespace(),
         space_channel_member_repository=member_repository or SimpleNamespace(),
         channel_info_source_repository=SimpleNamespace(),
-        article_es_service=SimpleNamespace(count_articles=AsyncMock(return_value=0)),
+        article_es_service=SimpleNamespace(
+            count_articles=AsyncMock(return_value=0),
+            count_articles_batch=AsyncMock(side_effect=lambda requests: [0] * len(requests)),
+        ),
     )
     # get_my_channels builds a shared ReBAC context (subjects/bindings/models) up front;
     # this test mocks the permission resolution directly, so stub the builder to avoid
@@ -68,6 +71,7 @@ async def test_admin_followed_list_includes_directly_authorized_channel():
         id="ch-1",
         name="资讯频道",
         source_list=[],
+        filter_rules=[],
         visibility=ChannelVisibilityEnum.PUBLIC,
         is_released=True,
         latest_article_update_time=None,

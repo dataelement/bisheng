@@ -4,20 +4,23 @@ Article ES CRUD Service
 Encapsulates all operations on ES article index: index, bulk index, get, update, delete, search.
 All methods are async, using get_es_connection to obtain AsyncElasticsearch client.
 """
-import logging
-from typing import List, Optional, Dict, Any, Tuple
 
-from elasticsearch import AsyncElasticsearch, helpers as es_helpers
+import logging
+from typing import Any
+
+from elasticsearch import AsyncElasticsearch
+from elasticsearch import helpers as es_helpers
 
 from bisheng.channel.domain.es.article_index import (
     ARTICLE_INDEX_NAME,
-    ensure_article_index_exists, ensure_article_index_exists_sync,
+    ensure_article_index_exists,
+    ensure_article_index_exists_sync,
 )
 from bisheng.channel.domain.schemas.article_schema import (
     ArticleDocument,
-    ArticleSearchResultItem,
-    ArticleSearchPageResponse,
     ArticleFullDocument,
+    ArticleSearchPageResponse,
+    ArticleSearchResultItem,
 )
 from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_connection_sync
 
@@ -30,7 +33,7 @@ class ArticleEsService:
     CONTENT_PREVIEW_MAX_LENGTH = 256
 
     def __init__(self):
-        self._es_client: Optional[AsyncElasticsearch] = None
+        self._es_client: AsyncElasticsearch | None = None
 
     async def _get_client(self) -> AsyncElasticsearch:
         """Get ES client, lazy loading"""
@@ -64,16 +67,16 @@ class ArticleEsService:
             logger.warning(f"ES refresh failed for {ARTICLE_INDEX_NAME}: {e}")
 
     @classmethod
-    def _build_content_preview(cls, content: Optional[str]) -> str:
+    def _build_content_preview(cls, content: str | None) -> str:
         """Build a truncated content preview for search list responses."""
         if not content:
             return ""
-        return content[:cls.CONTENT_PREVIEW_MAX_LENGTH]
+        return content[: cls.CONTENT_PREVIEW_MAX_LENGTH]
 
     @classmethod
-    def _build_article_body(cls, article: ArticleDocument) -> Dict[str, Any]:
+    def _build_article_body(cls, article: ArticleDocument) -> dict[str, Any]:
         """Serialize article and ensure preview field is populated."""
-        body = article.model_dump(mode='json')
+        body = article.model_dump(mode="json")
         body["content_preview"] = cls._build_content_preview(body.get("content"))
         return body
 
@@ -81,7 +84,7 @@ class ArticleEsService:
     #  Create
     # ──────────────────────────────────────────
 
-    async def index_article(self, article: ArticleDocument, doc_id: Optional[str] = None) -> str:
+    async def index_article(self, article: ArticleDocument, doc_id: str | None = None) -> str:
         """
         Index a single article.
 
@@ -95,7 +98,7 @@ class ArticleEsService:
         client = await self._get_client()
         body = self._build_article_body(article)
 
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "index": ARTICLE_INDEX_NAME,
             "body": body,
         }
@@ -105,8 +108,7 @@ class ArticleEsService:
         result = await client.index(**kwargs)
         return result["_id"]
 
-    async def bulk_index_articles(self, articles: List[ArticleDocument],
-                                  doc_ids: Optional[List[str]] = None) -> int:
+    async def bulk_index_articles(self, articles: list[ArticleDocument], doc_ids: list[str] | None = None) -> int:
         """
         Bulk index articles.
 
@@ -137,8 +139,7 @@ class ArticleEsService:
         return success
 
     @staticmethod
-    def bulk_index_articles_sync(articles: List[ArticleDocument],
-                                 doc_ids: Optional[List[str]] = None) -> int:
+    def bulk_index_articles_sync(articles: list[ArticleDocument], doc_ids: list[str] | None = None) -> int:
         """Synchronous version: Bulk index articles."""
         if not articles:
             return 0
@@ -161,7 +162,7 @@ class ArticleEsService:
     #  Read
     # ──────────────────────────────────────────
 
-    async def get_article(self, doc_id: str) -> Optional[ArticleFullDocument]:
+    async def get_article(self, doc_id: str) -> ArticleFullDocument | None:
         """
         Get article by document ID.
 
@@ -184,7 +185,7 @@ class ArticleEsService:
     #  Update
     # ──────────────────────────────────────────
 
-    async def update_article(self, doc_id: str, updates: Dict[str, Any]) -> bool:
+    async def update_article(self, doc_id: str, updates: dict[str, Any]) -> bool:
         """
         Partially update article fields.
 
@@ -236,7 +237,7 @@ class ArticleEsService:
     #  Search & Count
     # ──────────────────────────────────────────
 
-    def _build_rule_query(self, rule: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    def _build_rule_query(self, rule: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
         """Build ES query for a single rule. Handles both SingleRule and MultiRule.
         Returns (query, rule_type) where rule_type is 'include', 'exclude', or None for MultiRule.
         """
@@ -296,14 +297,14 @@ class ArticleEsService:
             return {"bool": {"should": keyword_queries, "minimum_should_match": 1}}, rule.get("rule_type")
 
     @staticmethod
-    def _is_rule_group(item: Dict[str, Any]) -> bool:
+    def _is_rule_group(item: dict[str, Any]) -> bool:
         """Check whether the item uses ChannelFilterRules group structure."""
         return "type" not in item and "relation" in item and "rules" in item
 
     def _normalize_rule_groups(
-            self,
-            filter_rules: Optional[List[Dict[str, Any]]],
-    ) -> List[Dict[str, Any]]:
+        self,
+        filter_rules: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
         """Normalize filter rules into a list of top-level rule groups.
         Only supports ChannelFilterRules group format: {"relation": "and"/"or", "rules": [...]}
         """
@@ -313,7 +314,7 @@ class ArticleEsService:
         # Only accept group format
         return [item for item in filter_rules if isinstance(item, dict) and self._is_rule_group(item)]
 
-    def _build_rule_group_query(self, rule_group: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _build_rule_group_query(self, rule_group: dict[str, Any]) -> dict[str, Any] | None:
         """Build ES query for a top-level ChannelFilterRules group."""
         relation = rule_group.get("relation", "or")
         rules = rule_group.get("rules") or []
@@ -348,7 +349,7 @@ class ArticleEsService:
             else:
                 must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
 
-        bool_query: Dict[str, Any] = {}
+        bool_query: dict[str, Any] = {}
         if must_clauses:
             bool_query["must"] = must_clauses
         if must_not_clauses:
@@ -359,14 +360,14 @@ class ArticleEsService:
 
         return {"bool": bool_query}
 
-    def _build_rule_groups_query(self, rule_groups: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _build_rule_groups_query(self, rule_groups: list[dict[str, Any]]) -> dict[str, Any] | None:
         """构造多个规则组的 ES 查询。
 
         同一 channel_type 的规则组保留原有 OR 语义；不同 channel_type
         之间使用 AND，使子频道规则在主频道过滤结果上继续收窄。
         """
-        grouped_queries: Dict[str, List[Dict[str, Any]]] = {}
-        channel_type_order: List[str] = []
+        grouped_queries: dict[str, list[dict[str, Any]]] = {}
+        channel_type_order: list[str] = []
         for group in rule_groups:
             group_query = self._build_rule_group_query(group)
             if group_query is None:
@@ -383,12 +384,14 @@ class ArticleEsService:
             if len(group_queries) == 1:
                 channel_type_queries.append(group_queries[0])
             else:
-                channel_type_queries.append({
-                    "bool": {
-                        "should": group_queries,
-                        "minimum_should_match": 1,
+                channel_type_queries.append(
+                    {
+                        "bool": {
+                            "should": group_queries,
+                            "minimum_should_match": 1,
+                        }
                     }
-                })
+                )
 
         if not channel_type_queries:
             return None
@@ -397,11 +400,12 @@ class ArticleEsService:
         return {"bool": {"must": channel_type_queries}}
 
     def _build_count_query(
-            self,
-            source_ids: Optional[List[str]] = None,
-            filter_rules: Optional[List[Dict[str, Any]]] = None,
-            include_article_ids: Optional[List[str]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        self,
+        source_ids: list[str] | None = None,
+        filter_rules: list[dict[str, Any]] | None = None,
+        include_article_ids: list[str] | None = None,
+        exclude_article_ids: list[str] | None = None,
+    ) -> dict[str, Any] | None:
         """Build count query, returns None if result is definitively 0"""
         must_clauses = []
         must_not_clauses = []
@@ -417,13 +421,21 @@ class ArticleEsService:
                 return None
             filter_clauses.append({"terms": {"_id": include_article_ids}})
 
+        # F037-B: counting unread = (channel filter) AND NOT (in the user's read
+        # set). Expressing the read set as a single must_not terms clause yields
+        # the unread count directly (no total-minus-read subtraction, no per-1000
+        # chunking — a terms query is one clause holding up to index.max_terms_count
+        # ids). An empty list means "exclude nothing", not "definitively zero".
+        if exclude_article_ids:
+            must_not_clauses.append({"terms": {"_id": exclude_article_ids}})
+
         if filter_rules:
             rule_groups = self._normalize_rule_groups(filter_rules)
             rule_groups_query = self._build_rule_groups_query(rule_groups)
             if rule_groups_query is not None:
                 must_clauses.append(rule_groups_query)
 
-        bool_query: Dict[str, Any] = {}
+        bool_query: dict[str, Any] = {}
         if must_clauses:
             bool_query["must"] = must_clauses
         if must_not_clauses:
@@ -437,15 +449,16 @@ class ArticleEsService:
             return {"match_all": {}}
 
     async def count_articles(
-            self,
-            source_ids: Optional[List[str]] = None,
-            filter_rules: Optional[List[Dict[str, Any]]] = None,
-            include_article_ids: Optional[List[str]] = None,
+        self,
+        source_ids: list[str] | None = None,
+        filter_rules: list[dict[str, Any]] | None = None,
+        include_article_ids: list[str] | None = None,
+        exclude_article_ids: list[str] | None = None,
     ) -> int:
         """
-        Count articles, supports source filtering, filter rules, and article ID list inclusion.
+        Count articles, supports source filtering, filter rules, and article ID inclusion/exclusion.
         """
-        query = self._build_count_query(source_ids, filter_rules, include_article_ids)
+        query = self._build_count_query(source_ids, filter_rules, include_article_ids, exclude_article_ids)
         if query is None:
             return 0
 
@@ -453,16 +466,14 @@ class ArticleEsService:
         response = await client.count(index=ARTICLE_INDEX_NAME, query=query)
         return response["count"]
 
-    async def count_articles_batch(
-            self,
-            requests: List[Dict[str, Any]]
-    ) -> List[int]:
+    async def count_articles_batch(self, requests: list[dict[str, Any]]) -> list[int]:
         """
         Batch count articles.
         requests is a list of dictionaries, each containing parameters for count_articles:
         - source_ids
         - filter_rules
         - include_article_ids
+        - exclude_article_ids
         """
         if not requests:
             return []
@@ -476,6 +487,7 @@ class ArticleEsService:
                 source_ids=req.get("source_ids"),
                 filter_rules=req.get("filter_rules"),
                 include_article_ids=req.get("include_article_ids"),
+                exclude_article_ids=req.get("exclude_article_ids"),
             )
             if query is None:
                 zero_indices.add(i)
@@ -498,14 +510,14 @@ class ArticleEsService:
         return counts
 
     async def search_articles(
-            self,
-            source_ids: Optional[List[str]] = None,
-            keyword: Optional[str] = None,
-            filter_rules: Optional[List[Dict[str, Any]]] = None,
-            page: int = 1,
-            page_size: int = 20,
-            exclude_article_ids: Optional[List[str]] = None,
-            include_content: bool = False,
+        self,
+        source_ids: list[str] | None = None,
+        keyword: str | None = None,
+        filter_rules: list[dict[str, Any]] | None = None,
+        page: int = 1,
+        page_size: int = 20,
+        exclude_article_ids: list[str] | None = None,
+        include_content: bool = False,
     ) -> ArticleSearchPageResponse:
         """
         Search articles, supports source filtering, keyword search, filter rules, highlighting, and pagination.
@@ -531,28 +543,26 @@ class ArticleEsService:
 
         # 1. Source ID filtering
         if source_ids:
-            filter_clauses.append({
-                "terms": {"source_id": source_ids}
-            })
+            filter_clauses.append({"terms": {"source_id": source_ids}})
 
         # 1.5 Exclude specified article IDs
         if exclude_article_ids:
-            must_not_clauses.append({
-                "terms": {"_id": exclude_article_ids}
-            })
+            must_not_clauses.append({"terms": {"_id": exclude_article_ids}})
 
         # 2. Keyword search (title + content + source ID)
         if keyword:
-            must_clauses.append({
-                "bool": {
-                    "should": [
-                        {"match_phrase": {"title": {"query": keyword, "boost": 3}}},
-                        {"match_phrase": {"content": {"query": keyword}}},
-                        {"match_phrase": {"source_id": {"query": keyword}}},
-                    ],
-                    "minimum_should_match": 1,
+            must_clauses.append(
+                {
+                    "bool": {
+                        "should": [
+                            {"match_phrase": {"title": {"query": keyword, "boost": 3}}},
+                            {"match_phrase": {"content": {"query": keyword}}},
+                            {"match_phrase": {"source_id": {"query": keyword}}},
+                        ],
+                        "minimum_should_match": 1,
+                    }
                 }
-            })
+            )
 
         # 3. Channel filter rules
         if filter_rules:
@@ -562,7 +572,7 @@ class ArticleEsService:
                 must_clauses.append(rule_groups_query)
 
         # Assemble complete query
-        bool_query: Dict[str, Any] = {}
+        bool_query: dict[str, Any] = {}
         if must_clauses:
             bool_query["must"] = must_clauses
         if must_not_clauses:
@@ -593,8 +603,12 @@ class ArticleEsService:
                 "post_tags": ["</em>"],
                 "fields": {
                     "title": {"number_of_fragments": 0, "highlight_query": highlight_query},
-                    "content": {"fragment_size": 200, "number_of_fragments": 3, "highlight_query": highlight_query,
-                                "max_analyzed_offset": 999999},
+                    "content": {
+                        "fragment_size": 200,
+                        "number_of_fragments": 3,
+                        "highlight_query": highlight_query,
+                        "max_analyzed_offset": 999999,
+                    },
                 },
             }
 
@@ -614,7 +628,7 @@ class ArticleEsService:
         if include_content:
             source_fields.append("content")
 
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "query": query,
             "sort": [{"publish_time": {"order": "desc"}}],
             "from": from_offset,
@@ -639,9 +653,7 @@ class ArticleEsService:
             source = dict(hit["_source"])
             highlight = hit.get("highlight")
             review_content = source.pop("content", "")
-            source["content_preview"] = (
-                source.pop("content_preview", "") or self._build_content_preview(review_content)
-            )
+            source["content_preview"] = source.pop("content_preview", "") or self._build_content_preview(review_content)
 
             item = ArticleSearchResultItem(
                 doc_id=hit["_id"],
@@ -660,11 +672,11 @@ class ArticleEsService:
         )
 
     def match_article_ids_sync(
-            self,
-            article_ids: List[str],
-            source_ids: Optional[List[str]] = None,
-            filter_rules: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[str]:
+        self,
+        article_ids: list[str],
+        source_ids: list[str] | None = None,
+        filter_rules: list[dict[str, Any]] | None = None,
+    ) -> list[str]:
         """Return the subset of `article_ids` that match the given source/filter
         predicate. Used by the knowledge-sync worker to evaluate sub-channel
         rules against freshly-indexed articles.
@@ -688,14 +700,12 @@ class ArticleEsService:
         return [hit["_id"] for hit in response.get("hits", {}).get("hits", [])]
 
     @staticmethod
-    def get_source_latest_article_time_sync(source_id: str) -> Optional[str]:
+    def get_source_latest_article_time_sync(source_id: str) -> str | None:
         """Get source's latest article update time (synchronous method)"""
         client = get_es_connection_sync()
         body = {
             "size": 1,
-            "query": {
-                "term": {"source_id": source_id}
-            },
+            "query": {"term": {"source_id": source_id}},
             "sort": [{"create_time": {"order": "desc"}}],
             "_source": ["create_time"],
         }

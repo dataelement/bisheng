@@ -148,6 +148,24 @@ export function buildFlowNodes(steps: MergedStep[]): FlowNode[] {
     return nodes;
 }
 
+/** True if a flow node is still running (any agent for a group; the step otherwise). */
+export function isFlowNodeRunning(node: FlowNode): boolean {
+    return node.kind === 'subagent_group' ? node.agents.some((a) => a.step.running) : node.step.running;
+}
+
+/**
+ * The flow node a collapsed task header should summarize: the last running node,
+ * or the most recent node if none is running. Returns null for an empty history.
+ */
+export function activeFlowNode(history: ExecStepEventData[] | null | undefined): FlowNode | null {
+    const nodes = buildFlowNodes(mergeStepFrames(history));
+    if (!nodes.length) return null;
+    for (let i = nodes.length - 1; i >= 0; i--) {
+        if (isFlowNodeRunning(nodes[i])) return nodes[i];
+    }
+    return nodes[nodes.length - 1];
+}
+
 // ── clarify / user_input parsing ─────────────────────────────────────────────
 
 /** One question page parsed from `user_input.data.params.tool_calls[].args`. */

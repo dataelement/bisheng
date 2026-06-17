@@ -1,7 +1,7 @@
 import { Fragment, useState, useRef, useEffect, useLayoutEffect, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderPlus, FolderInput, Loader2, FileSearch } from "lucide-react";
+import { FolderPlus, Loader2 } from "lucide-react";
 import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
@@ -674,9 +674,10 @@ export function KnowledgeSpaceContent({
     };
 
     const handleStatusFilter = (status: FileStatus, checked: boolean) => {
+        const coupled = [status];
         const newFilter = checked
-            ? [...statusFilter, status]
-            : statusFilter.filter(s => s !== status);
+            ? [...statusFilter, ...coupled.filter(s => !statusFilter.includes(s))]
+            : statusFilter.filter(s => !coupled.includes(s));
         setStatusFilter(newFilter);
         onFilterStatus(newFilter);
     };
@@ -876,6 +877,7 @@ export function KnowledgeSpaceContent({
             });
             setSelectedFiles(new Set());
             showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
+            dispatchKnowledgeSpaceFilesRefresh(space.id);
             // Notify parent to refresh the list
             onDeleteFile("");
         } catch {
@@ -1017,8 +1019,8 @@ export function KnowledgeSpaceContent({
         },
         (isAdmin && !hasFoldersSelected) && { key: "tag", label: localize("com_knowledge.batch_add_tags"), Icon: Outlined.Tag, onClick: handleBatchTag },
         (isAdmin && hasFailedFiles) && { key: "retry", label: localize("com_knowledge.retry"), Icon: Outlined.Refresh, onClick: handleBatchRetry },
-        (versionManagementEnabled && canManageMembers && hasSimilarSelected) && { key: "similar", label: localize("com_knowledge.version.header_process_similar_label"), Icon: FileSearch, onClick: handleProcessSimilar },
-        canBatchMove && { key: "move", label: localize("com_knowledge.move"), Icon: FolderInput, onClick: handleBatchMove },
+        (versionManagementEnabled && canManageMembers && hasSimilarSelected) && { key: "similar", label: localize("com_knowledge.version.header_process_similar_label"), Icon: Outlined.FileSearch, onClick: handleProcessSimilar },
+        canBatchMove && { key: "move", label: localize("com_knowledge.move"), Icon: Outlined.MoveToFolder, onClick: handleBatchMove },
         canManageSinglePermission && { key: "permission", label: localize("com_permission.manage_permission"), Icon: Outlined.PeopleSafe, onClick: () => handleManagePermission(singleSelectedId!) },
         canBatchDelete && { key: "delete", label: localize("com_knowledge.delete"), Icon: Outlined.Delete, onClick: handleBatchDelete, danger: true },
     ].filter(Boolean) as BatchAction[];

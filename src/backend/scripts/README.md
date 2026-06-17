@@ -323,3 +323,24 @@ Usage (from `src/backend/`):
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_model_to_default.py            # dry-run
 config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/migrate_linsight_task_model_to_default.py --apply    # write
 ```
+
+### `seed_overflow_skill.py`
+
+> **Dev/QA fixture — NOT part of any upgrade checklist.** Seeds ONE throwaway
+> "overflow QA" skill whose fields are pushed to their limits so the skill-detail
+> drawer (`SkillDetailSheet.tsx`, 2026-06-16 overflow hardening, Track I) can be
+> eyeballed. Idempotent (re-run replaces the same skill); `--remove` deletes it.
+
+Inserts a skill into the target tenant (default 1) with `display_name`=255 chars,
+`name`=64 chars, `description`=1024 chars (no spaces), a SKILL.md body carrying a
+400-char unbroken token, and a long-named bundle asset — covering all four
+overflow points (title / ID chip / description / preview) plus the file tree.
+Manual-verification checklist: `features/v2.6.0/035-linsight-task-mode/tasks.md` → TI-1.
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py            # dry-run
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py --apply    # create
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py --remove   # clean up
+```

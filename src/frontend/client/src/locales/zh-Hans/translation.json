@@ -1715,6 +1715,8 @@
     "root_dir": "根目录",
     "move_empty_folder": "此文件夹为空",
     "move_here": "移动到此",
+    "move_search_placeholder": "输入知识空间名称进行搜索",
+    "move_no_spaces": "暂无可移动到的知识空间",
     "move": "移动",
     "move_success": "已移动 {{0}} 项",
     "move_cross_success": "已移动 {{0}} 项，正在后台处理检索数据",

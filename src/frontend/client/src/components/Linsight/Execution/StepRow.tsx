@@ -4,7 +4,7 @@
  * toggled manually, in which case the manual choice wins.
  */
 import { Outlined } from 'bisheng-icons';
-import { ChevronDown, Wrench } from 'lucide-react';
+import { Wrench } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { cn } from '~/utils';
 
@@ -22,6 +22,7 @@ export function stepTypeIcon(name?: string) {
     if (/think|reason|思考/.test(n)) return <Outlined.Bulb size={16} className={cls} />;
     if (/research|调研/.test(n)) return <Outlined.Dashboard size={16} className={cls} />;
     if (/web[_\s-]?search|websearch|联网|网页|网络搜索/.test(n)) return <Outlined.Earth size={16} className={cls} />;
+    if (/write|edit|撰写|编写|写入/.test(n)) return <Outlined.Write size={16} className={cls} />;
     return <Wrench size={16} className={cls} />; // default
 }
 
@@ -40,26 +41,34 @@ export function formatStepParams(params: Record<string, any> | null): string {
     }
 }
 
+/** icon / title may depend on the open state (e.g. collapsed shows a running
+ *  sub-step summary, expanded shows the node's own title). */
+type OpenAware<T> = T | ((open: boolean) => T);
+
 interface StepRowProps {
     /** leading icon (status glyph / tool icon) */
-    icon: ReactNode;
+    icon: OpenAware<ReactNode>;
     /** row title content */
-    title: ReactNode;
+    title: OpenAware<ReactNode>;
     /** optional content rendered when expanded; row is not collapsible without it */
     children?: ReactNode;
     /** running steps default to expanded; completed default to collapsed */
     running?: boolean;
+    /** override the auto open-while-running rule for the initial state */
+    defaultOpen?: boolean;
     /** extra content pinned to the right side of the header */
     rightExtra?: ReactNode;
     className?: string;
     titleClassName?: string;
 }
 
-export function StepRow({ icon, title, children, running = false, rightExtra, className, titleClassName }: StepRowProps) {
+export function StepRow({ icon, title, children, running = false, defaultOpen, rightExtra, className, titleClassName }: StepRowProps) {
     // null = follow auto rule (open while running); boolean = manual override
     const [manualOpen, setManualOpen] = useState<boolean | null>(null);
     const collapsible = children != null;
-    const open = collapsible && (manualOpen ?? running);
+    const open = collapsible && (manualOpen ?? defaultOpen ?? running);
+    const renderedIcon = typeof icon === 'function' ? icon(open) : icon;
+    const renderedTitle = typeof title === 'function' ? title(open) : title;
 
     return (
         <div className={cn('flex w-full min-w-0 gap-2 mb-6', className)}>
@@ -68,14 +77,14 @@ export function StepRow({ icon, title, children, running = false, rightExtra, cl
                 an open node) rather than a single continuous spine — mirrors the
                 daily "思考内容" rail. flex-1 makes the segment span the node's body. */}
             <div className="flex shrink-0 flex-col items-center gap-1 self-stretch pt-[3px]">
-                <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
+                <span className="flex size-4 shrink-0 items-center justify-center">{renderedIcon}</span>
                 {open && <div aria-hidden className="w-px flex-1 bg-[#E0E0E0]" />}
             </div>
             <div className="flex min-w-0 flex-1 flex-col">
                 <button
                     type="button"
                     className={cn(
-                        'flex w-fit max-w-full items-center gap-2 text-left text-sm',
+                        'flex w-fit max-w-full items-center gap-1 text-left text-sm',
                         collapsible ? 'group cursor-pointer' : 'cursor-default',
                     )}
                     onClick={() => collapsible && setManualOpen(!open)}
@@ -85,13 +94,13 @@ export function StepRow({ icon, title, children, running = false, rightExtra, cl
                         on the button only when collapsible, so static rows don't get
                         a false clickable affordance. min-w-0 (not flex-1) keeps the
                         chevron right after the title; long titles truncate. */}
-                    <span className={cn('min-w-0 truncate text-[#8C8C8C] transition-colors group-hover:text-[#212121]', titleClassName)}>{title}</span>
+                    <span className={cn('min-w-0 truncate text-[#8C8C8C] transition-colors group-hover:text-[#212121]', titleClassName)}>{renderedTitle}</span>
                     {collapsible && (
                         <span className="shrink-0 text-[#8C8C8C] transition-colors group-hover:text-[#212121]">
                             {/* single chevron rotates right→down, matching the daily
                                 "深度思考" toggle instead of swapping two glyphs */}
-                            <ChevronDown
-                                size={14}
+                            <Outlined.Down
+                                size={16}
                                 className={cn('transform-gpu transition-transform duration-200', !open && '-rotate-90')}
                             />
                         </span>

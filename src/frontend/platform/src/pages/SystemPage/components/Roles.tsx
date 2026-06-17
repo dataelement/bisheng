@@ -445,6 +445,31 @@ export default function Roles() {
     })
   }
 
+  /** One workbench child toggle (首页/应用/订阅/知识空间) — reused for the 首页
+      row above and the remaining-items row, so they stay visually identical. */
+  const renderWorkbenchChild = (m: { id: string; label: string }) => (
+    <label
+      key={m.id}
+      className={`inline-flex w-fit items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+        !isMenuEnabled(WORKBENCH_PARENT_ID) ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+      }`}
+      onClick={() =>
+        isMenuEnabled(WORKBENCH_PARENT_ID) &&
+        toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, !isMenuEnabled(m.id))
+      }
+    >
+      <Switch
+        checked={isMenuEnabled(m.id)}
+        disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
+        onCheckedChange={(checked) =>
+          toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, checked)
+        }
+        onClick={(e) => e.stopPropagation()}
+      />
+      <span>{m.label}</span>
+    </label>
+  )
+
   const scopeLabel = (el: ROLE) => {
     // 作用域以 department_id 为准；全路径优先用后端按 path 解析的字段（不受部门树裁剪影响）
     if (!el.department_id) return t("system.scopeGlobal")
@@ -871,70 +896,50 @@ export default function Roles() {
                     />
                     <span>{t("menu.workspace")}</span>
                   </label>
-                  <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
-                    {WORKBENCH_MENU_OPTIONS.map((m) => (
+                  {/* 首页 sits on its own with the 任务模式 sub-toggle nested right
+                      under it; 应用/订阅/知识空间 then share a single row below. */}
+                  <div className="mt-3 flex flex-col gap-2">
+                    {renderWorkbenchChild(WORKBENCH_MENU_OPTIONS.find((m) => m.id === "home")!)}
+
+                    {/* 「首页」子能力：任务模式 —— 紧跟首页下方，缩进 + 竖线体现层级。
+                        依赖首页，首页（或工作台）关闭时置灰不可用并级联移除。 */}
+                    <div className="ml-6 border-l border-border pl-3">
                       <label
-                        key={m.id}
-                        className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
-                          !isMenuEnabled(WORKBENCH_PARENT_ID)
+                        className={`inline-flex w-fit items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
+                          !isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")
                             ? "cursor-not-allowed opacity-50"
                             : "cursor-pointer"
                         }`}
                         onClick={() =>
                           isMenuEnabled(WORKBENCH_PARENT_ID) &&
+                          isMenuEnabled("home") &&
                           toggleMenuItem(
                             WORKBENCH_PARENT_ID,
                             WORKBENCH_CHILD_MENUS,
-                            m.id,
-                            !isMenuEnabled(m.id)
+                            TASK_MODE_MENU_ID,
+                            !isMenuEnabled(TASK_MODE_MENU_ID)
                           )
                         }
                       >
                         <Switch
-                          checked={isMenuEnabled(m.id)}
-                          disabled={!isMenuEnabled(WORKBENCH_PARENT_ID)}
+                          checked={isMenuEnabled(TASK_MODE_MENU_ID)}
+                          disabled={!isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")}
                           onCheckedChange={(checked) =>
-                            toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, m.id, checked)
+                            toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, TASK_MODE_MENU_ID, checked)
                           }
                           onClick={(e) => e.stopPropagation()}
                         />
-                        <span>{m.label}</span>
+                        <span>{t("menu.linsightTaskMode")}</span>
                       </label>
-                    ))}
-                  </div>
-                  {/* 「首页」子能力：任务模式。左侧缩进 + 竖线体现"首页 → 任务模式"层级；
-                      依赖首页，首页（或工作台）关闭时置灰不可用并级联移除。 */}
-                  <div className="ml-6 mt-3 border-l border-border pl-3">
-                    <label
-                      className={`inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1.5 text-sm ${
-                        !isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")
-                          ? "cursor-not-allowed opacity-50"
-                          : "cursor-pointer"
-                      }`}
-                      onClick={() =>
-                        isMenuEnabled(WORKBENCH_PARENT_ID) &&
-                        isMenuEnabled("home") &&
-                        toggleMenuItem(
-                          WORKBENCH_PARENT_ID,
-                          WORKBENCH_CHILD_MENUS,
-                          TASK_MODE_MENU_ID,
-                          !isMenuEnabled(TASK_MODE_MENU_ID)
-                        )
-                      }
-                    >
-                      <Switch
-                        checked={isMenuEnabled(TASK_MODE_MENU_ID)}
-                        disabled={!isMenuEnabled(WORKBENCH_PARENT_ID) || !isMenuEnabled("home")}
-                        onCheckedChange={(checked) =>
-                          toggleMenuItem(WORKBENCH_PARENT_ID, WORKBENCH_CHILD_MENUS, TASK_MODE_MENU_ID, checked)
-                        }
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <span>{t("menu.linsightTaskMode")}</span>
-                    </label>
-                    <p className="mt-1 pl-2 text-xs text-muted-foreground">
-                      {t("system.workbenchTaskModeHint")}
-                    </p>
+                      <p className="mt-1 pl-2 text-xs text-muted-foreground">
+                        {t("system.workbenchTaskModeHint")}
+                      </p>
+                    </div>
+
+                    {/* 应用 / 订阅 / 知识空间 同一行 */}
+                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                      {WORKBENCH_MENU_OPTIONS.filter((m) => m.id !== "home").map(renderWorkbenchChild)}
+                    </div>
                   </div>
                 </div>
 

@@ -12,6 +12,7 @@ import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPan
 import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
 import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { SopStatus } from '~/store/linsight';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -350,6 +351,19 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     return [...uploaded, ...generated];
   }, [taskLinsight?.files, taskLinsight?.file_list]);
 
+  // F035: while the latest task round is in a non-terminal state (generating /
+  // running / queued), the input stays editable but the send button is disabled
+  // — the next round can only be submitted after the current one finishes.
+  const taskRunning = useMemo(() => {
+    const status = (taskLinsight as any)?.status;
+    return (
+      status === SopStatus.NotStarted ||
+      status === SopStatus.SopGenerating ||
+      status === SopStatus.SopGenerated ||
+      status === SopStatus.Running
+    );
+  }, [taskLinsight]);
+
   return (
     <Presentation isLingsi={false}>
       <div className={cn('h-full')}>
@@ -424,6 +438,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
+                            sendDisabled={taskRunning}
                             isStreaming={isStreaming}
                             features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
                             onToggleTaskMode={() => setTaskMode((v) => !v)}
@@ -477,6 +492,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       <div className="w-full max-w-[800px] mx-auto px-3 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full shrink-0 pb-3">
                         <AiChatInput
                           disabled={!bsConfig?.models?.length || !!shareToken}
+                          sendDisabled={taskRunning}
                           isStreaming={isStreaming}
                           features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
                           onToggleTaskMode={() => setTaskMode((v) => !v)}
