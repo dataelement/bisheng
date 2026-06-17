@@ -3,14 +3,13 @@ import { useEffect, useMemo } from 'react';
 import { FileSources, LocalStorageKeys } from '~/types/chat';
 import type { ExtendedFile } from '~/common';
 import { useDeleteFilesMutation } from '~/hooks/queries/data-provider';
-import DragDropWrapper from '~/components/Chat/Input/Files/DragDropWrapper';
 import Artifacts from '~/components/Artifacts/Artifacts';
 import { SidePanelGroup } from '~/components/SidePanel';
 import { useSetFilesToDelete } from '~/hooks';
 import { EditorProvider } from '~/Providers';
 import store from '~/store';
 
-export default function Presentation({ isLingsi, children }: { isLingsi: boolean, children: React.ReactNode }) {
+export default function Presentation({ children }: { isLingsi: boolean, children: React.ReactNode }) {
   const artifacts = useRecoilValue(store.artifactsState);
   const artifactsVisible = useRecoilValue(store.artifactsVisible);
 
@@ -66,7 +65,11 @@ export default function Presentation({ isLingsi, children }: { isLingsi: boolean
   );
 
   return (
-    <DragDropWrapper isLingsi={isLingsi} className="relative flex w-full grow overflow-hidden bg-presentation">
+    // Drag-and-drop is handled by AiChatInput's window-level `useFileDropAndPaste`
+    // (isLinsight-aware, with its own overlay). A second react-dnd DragDropWrapper
+    // here double-handled every drop — both fired for one drop, racing two uploads
+    // and surfacing a spurious "file validation" toast — so it was removed.
+    <div className="relative flex w-full grow overflow-hidden bg-presentation">
       <SidePanelGroup
         defaultLayout={defaultLayout}
         fullPanelCollapse={fullCollapse}
@@ -83,6 +86,6 @@ export default function Presentation({ isLingsi, children }: { isLingsi: boolean
           {children}
         </main>
       </SidePanelGroup>
-    </DragDropWrapper>
+    </div>
   );
 }

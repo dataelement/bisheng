@@ -570,21 +570,19 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> list[str]:
+        """Render each available KB as a clean, readable prompt line that clearly
+        exposes its ``knowledge_id`` so the agent's ``search_knowledge_base`` tool
+        can target a real id. One item per KB: name + id (+ optional description).
+        Private KBs use a generic name to avoid leaking their titles."""
         res = []
         if not knowledge_list:
             return res
-        # Check if there is a personal knowledge base
-        template_str = (
-            """@{name}Stored information for:{{'The knowledge base is stored in a semantic repositoryid':'{id}'}}@"""
-        )
         for one in knowledge_list:
-            if one.type == KnowledgeTypeEnum.PRIVATE.value:
-                res.append(template_str.format(name="Personal Knowledge Base", id=one.id))
-            else:
-                knowledge_str = template_str.format(name=one.name, id=one.id)
-                if one.description:
-                    knowledge_str += f"，{one.name}is described as{one.description}"
-                res.append(knowledge_str)
+            name = "个人知识库" if one.type == KnowledgeTypeEnum.PRIVATE.value else one.name
+            line = f"- {name} (knowledge_id: {one.id})"
+            if one.type != KnowledgeTypeEnum.PRIVATE.value and one.description:
+                line += f": {one.description}"
+            res.append(line)
         return res
 
     @classmethod

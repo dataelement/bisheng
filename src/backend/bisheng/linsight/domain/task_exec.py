@@ -238,6 +238,12 @@ class LinsightWorkflowTask:
         self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
+            # Rebuild the SAME tool set the parked graph had: the fresh/continue
+            # paths extend with init_linsight_tools (knowledge + local-file tools),
+            # so resume must too — otherwise the resumed graph is missing those
+            # built-in tools and can't finish a deliverable that needs them.
+            linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
+            tools.extend(linsight_tools)
             # Rebuild on the SAME thread_id with a durable checkpointer so the
             # parked interrupt checkpoint is located (design §4.4).
             agent = await self._create_agent(session_model, tools, checkpointer=make_checkpointer())
@@ -805,7 +811,12 @@ class LinsightWorkflowTask:
         if session_model.sop:
             parts.append(f"\n# 执行规范(SOP)\n{session_model.sop}")
         if file_list:
-            parts.append(f"\n# 可用文件\n{file_list}")
+            # file_list is a list[str] (prepare_file_list returns a single-element
+            # list holding the <uploaded_files> block). Join it — interpolating the
+            # list directly emits its Python repr (brackets/quotes + escaped "\n"),
+            # mangling the pointer block the model has to parse.
+            files_block = "\n".join(file_list) if isinstance(file_list, (list, tuple)) else str(file_list)
+            parts.append(f"\n# 可用文件\n{files_block}")
         if knowledge_block:
             parts.append(
                 f"\n# 可用知识库(用 search_knowledge_base 检索,knowledge_id 用下方括号内的 id)\n{knowledge_block}"
@@ -1110,7 +1121,11 @@ class LinsightWorkflowTask:
         if self._final_result.status == TaskStatus.SUCCESS.value:
             await self._handle_task_success(session_model)
         else:
-            await self._handle_task_failure(session_model, "Task execution failed:<g id='1'></g> ")
+            # NB: ``<g id='1'></g>`` here was a machine-translation artifact that
+            # clobbered the ``{...}`` interpolation (same class of bug fixed in
+            # 54be7498e for the async_run error log). Restore the real failure
+            # reason — TaskEnd.answer carries the agent's final result/message.
+            await self._handle_task_failure(session_model, f"Task execution failed: {self._final_result.answer}")
 
     async def _handle_direct_answer_completion(self, session_model: LinsightSessionVersion):
         """Complete a session that produced no TaskEnd event.
