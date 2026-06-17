@@ -12,7 +12,6 @@ from starlette.responses import StreamingResponse
 from starlette.websockets import WebSocket
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
-from bisheng.api.v1.schema.base_schema import PageList
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -24,14 +23,12 @@ from bisheng.common.errcode.linsight import (
     LinsightSessionVersionRunningError,
     LinsightStartTaskError,
     LinsightUseUpError,
-    SopShowcaseError,
 )
 from bisheng.common.errcode.server import InvalidOperationError, ResourceDownloadError
 from bisheng.common.schemas.telemetry.event_data_schema import ApplicationAliveEventData, ApplicationProcessEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.context.tenant import strict_tenant_filter
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
@@ -40,15 +37,13 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
     SessionVersionStatusEnum,
 )
-from bisheng.linsight.domain.models.linsight_sop import LinsightSOPDao, LinsightSOPRecord
-from bisheng.linsight.domain.schemas.inspiration_schema import SOPManagementSchema, SOPManagementUpdateSchema
+from bisheng.linsight.domain.models.linsight_sop import LinsightSOPDao
 from bisheng.linsight.domain.schemas.linsight_schema import (
     DownloadFilesSchema,
     LinsightQuestionSubmitSchema,
     SubmitFileSchema,
 )
 from bisheng.linsight.domain.services.message_stream_handle import MessageStreamHandle
-from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
@@ -217,13 +212,12 @@ async def submit_linsight_workbench(
 
 # workbench to process
 @router.post("/workbench/start-execute", summary="Start Executing Reims", response_model=UnifiedResponseModel)
-async def start_execute_sop(
-    background_tasks: BackgroundTasks,
+async def start_execute(
     linsight_session_version_id: str = Body(..., description="Inspiration Conversation VersionID", embed=True),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ) -> UnifiedResponseModel:
     """
-    Start Executing ReimsSOP
+    Start executing a task-mode session (enqueue it for the Linsight worker).
     :param linsight_session_version_id:
     :param login_user:
     :return:
@@ -255,22 +249,6 @@ async def start_execute_sop(
         queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
 
         await queue.put(data=linsight_session_version_id)
-        # Persist a SOP record only when the session actually carries SOP content.
-        # Post-de-SOP (F035), session_version_model.sop can be None; writing it
-        # would violate the linsight_sop_record.content NOT NULL constraint and
-        # is meaningless without the removed "做同款" reuse flow.
-        if session_version_model.sop:
-            background_tasks.add_task(
-                SOPManageService.add_sop_record,
-                LinsightSOPRecord(
-                    name=session_version_model.title,
-                    description=None,
-                    user_id=login_user.user_id,
-                    content=session_version_model.sop,
-                    linsight_version_id=session_version_model.id,
-                    create_time=session_version_model.create_time,
-                ),
-            )
 
     except Exception as e:
         logger.error(f"Failed to start the Ideas task: {e!s}")
@@ -710,181 +688,6 @@ async def download_md_to_pdf_or_docx(
     except Exception as e:
         logger.error(f"This content failed to load: {e!s}")
         return ResourceDownloadError.return_resp(data=str(e))
-
-
-@router.post("/sop/add", summary="Add InspirationSOP", response_model=UnifiedResponseModel)
-async def add_sop(
-    sop_obj: SOPManagementSchema = Body(..., description="SOPObjects"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-) -> UnifiedResponseModel:
-    """
-    Add InspirationSOP
-    :return:
-    """
-    with strict_tenant_filter():
-        return await SOPManageService.add_sop(sop_obj, user_id=login_user.user_id)
-
-
-@router.post("/sop/update", summary="Update IdeasSOP", response_model=UnifiedResponseModel)
-async def update_sop(
-    sop_obj: SOPManagementUpdateSchema = Body(..., description="SOPObjects"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-) -> UnifiedResponseModel:
-    """
-    Update IdeasSOP
-    :return:
-    """
-    sop_obj.user_id = login_user.user_id
-    with strict_tenant_filter():
-        return await SOPManageService.update_sop(sop_obj, update_version_id=False)
-
-
-@router.get("/sop/list", summary="Get IdeasSOPVertical", response_model=UnifiedResponseModel)
-async def get_sop_list(
-    keywords: str = Query(None, description="Keywords Search"),
-    showcase: bool = Query(None, description="Get featured cases only?"),
-    page: int = Query(1, ge=1, description="Page"),
-    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
-    sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-) -> UnifiedResponseModel:
-    """
-    Get IdeasSOPVertical
-    :return:
-    """
-
-    with strict_tenant_filter():
-        sop_pages = await SOPManageService.get_sop_list(
-            keywords=keywords, showcase=showcase, page=page, page_size=page_size, sort=sort
-        )
-    return resp_200(data=sop_pages)
-
-
-@router.get("/sop/record", summary="Get IdeasSOPRecord", response_model=UnifiedResponseModel)
-async def get_sop_record(
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-    keyword: str = Query(None, description="Search keyword ..."),
-    sort: str = Query(default="desc", description="Sort ByascORdesc"),
-    page: int = Query(1, ge=1, description="Page"),
-    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
-):
-    with strict_tenant_filter():
-        res, count = await SOPManageService.get_sop_record(keyword, sort, page, page_size)
-    return resp_200(PageList(total=count, list=res))
-
-
-@router.post("/sop/record/sync", summary="SynchronoussopRecord toSOPGallery", response_model=UnifiedResponseModel)
-async def sync_sop_record(
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-    record_ids: list[int] = Body(..., description="sopThe only one in the record sheetid"),
-    override: bool | None = Body(default=False, description="Force override or not"),
-    save_new: bool | None = Body(default=False, description="Do you want to save as newsop"),
-) -> UnifiedResponseModel:
-    """
-    SynchronousSOP"Log to"SOPGallery
-    """
-    with strict_tenant_filter():
-        repeat_name = await SOPManageService.sync_sop_record(record_ids, override, save_new)
-    return resp_200(
-        data={
-            "repeat_name": repeat_name,
-        },
-        message="success",
-    )
-
-
-@router.post("/sop/upload", summary="Batch importSOPWarehousing", response_model=UnifiedResponseModel)
-async def upload_sop_file(
-    file: UploadFile = File(..., description="Uploaded bySOPDoc."),
-    override: bool | None = Body(default=False, description="Force override or not"),
-    save_new: bool | None = Body(default=False, description="Do you want to save as newsop"),
-    ignore_error: bool | None = Body(default=False, description="Whether to ignore the file and find the wrong record"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-) -> UnifiedResponseModel:
-    """
-    Batch importSOPWarehousing
-    """
-
-    try:
-        with strict_tenant_filter():
-            success_rows, error_rows, repeat_rows = await SOPManageService.upload_sop_file(
-                login_user,
-                file,
-                ignore_error,
-                override,
-                save_new,
-            )
-
-        return resp_200(
-            data={
-                "success_rows": success_rows,
-                "error_rows": error_rows,
-                "repeat_rows": repeat_rows,
-            }
-        )
-    except Exception as e:
-        raise e
-    finally:
-        await file.close()
-
-
-@router.delete("/sop/remove", summary="Delete IdeasSOP", response_model=UnifiedResponseModel)
-async def remove_sop(
-    sop_ids: list[int] = Body(..., description="SOPUniqueness quantificationIDVertical", embed=True),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-) -> UnifiedResponseModel:
-    """
-    Delete IdeasSOP
-    :return:
-    """
-
-    with strict_tenant_filter():
-        return await SOPManageService.remove_sop(sop_ids, login_user)
-
-
-@router.get("/sop/showcase", summary="InspirationsopLibrary's Featured Cases", response_model=UnifiedResponseModel)
-async def get_sop_banner(
-    page: int = Query(1, ge=1, description="Page"),
-    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
-    sort: Literal["asc", "desc"] = Query("desc", description="Sort ByascORdesc"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
-) -> UnifiedResponseModel:
-    """
-    Set or cancel IdeasSOPLibrary's Featured Cases
-    :return:
-    """
-    sop_pages = await SOPManageService.get_sop_list(showcase=True, page=page, page_size=page_size, sort=sort)
-    return resp_200(data=sop_pages)
-
-
-@router.post(
-    "/sop/showcase", summary="Set or unset a featured case for Inspirations", response_model=UnifiedResponseModel
-)
-async def set_sop_banner(
-    sop_id: int = Body(..., description="SOPUniqueness quantificationID"),
-    showcase: bool = Body(..., description="Set as featured case or not"),
-    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
-) -> UnifiedResponseModel:
-    """
-    Set or cancel IdeasSOPLibrary's Featured Cases
-    :return:
-    """
-    # CorrectionSOPpresence or does it
-    with strict_tenant_filter():
-        existing_sop = await LinsightSOPDao.get_sops_by_ids([sop_id])
-        if not existing_sop:
-            raise NotFoundError.http_exception(msg="sop not found")
-        if showcase:
-            # Setting as featured case requires checking for run results
-            existing_sop = existing_sop[0]
-            if not existing_sop.linsight_version_id:
-                raise SopShowcaseError.http_exception()
-            execute_task_models = await LinsightWorkbenchImpl.get_execute_task_detail(existing_sop.linsight_version_id)
-            if not execute_task_models:
-                raise SopShowcaseError.http_exception()
-
-        await LinsightSOPDao.set_sop_showcase(sop_id, showcase)
-    return resp_200()
 
 
 @router.get(

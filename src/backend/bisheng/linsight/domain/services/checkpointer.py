@@ -19,12 +19,11 @@ Key schema (all keys are UTF-8):
     task_id is base64url-encoded in the key to avoid ambiguity with the colon delimiter.
 
 All keys expire after ``ttl_seconds`` (default: 7 days).
-``adelete_thread()`` removes all keys for a thread immediately (called by the park-and-terminate path).
 
 Thread lifecycle:
   - Park:        LangGraph interrupt() → worker releases slot
   - Resume:      /workbench/user-input lpush queue → worker picks up → Command(resume=...)
-  - Terminate:   terminate endpoint calls adelete_thread() before ACKing → ensures task cannot be resumed
+  - Terminate:   terminate endpoint marks the session TERMINATED; checkpoint keys then expire via the 7-day TTL
 
 Usage (Track B):
     checkpointer = make_checkpointer()
@@ -320,23 +319,6 @@ class PlainRedisCheckpointer(BaseCheckpointSaver):
                 )
                 await pipe.expire(write_key, self._ttl)
             await pipe.execute()
-
-    # ------------------------------------------------------------------
-    # Thread lifecycle
-    # ------------------------------------------------------------------
-
-    async def adelete_thread(self, thread_id: str) -> None:
-        """Delete all checkpoint data for a thread.
-
-        Called by the park-and-terminate path so that a terminated task cannot
-        be revived by a stale resume payload in the queue.
-        """
-        client = await self._get_redis_client()
-        rc = client.async_connection
-        pattern = f"linsight:ckpt:*:{thread_id}:*"
-        keys = [k async for k in rc.scan_iter(match=pattern, count=100)]
-        if keys:
-            await rc.delete(*keys)
 
     # ------------------------------------------------------------------
     # Sync fallback (satisfies BaseCheckpointSaver; not used by async worker)

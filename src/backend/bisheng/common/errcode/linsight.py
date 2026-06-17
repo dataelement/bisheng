@@ -1,16 +1,6 @@
 from bisheng.common.errcode.base import BaseErrorCode
 
 
-class SopFileError(BaseErrorCode):
-    Code: int = 11010
-    Msg: str = "SOPFile format does not meet requirements"
-
-
-class SopShowcaseError(BaseErrorCode):
-    Code: int = 11011
-    Msg: str = "SOPFailed to set featured case"
-
-
 class FileUploadError(BaseErrorCode):
     __doc__ = "LinsightFailed to upload documents"
     Code: int = 11020
@@ -29,24 +19,6 @@ class LinsightQuestionError(BaseErrorCode):
     Msg: str = "Failed to submit Idea User Issue"
 
 
-# Please contact the administrator to check the status of the workbench vector retrieval model
-class LinsightVectorModelError(BaseErrorCode):
-    Code: int = 11050
-    Msg: str = "Please contact the administrator to check the status of the workbench vector retrieval model"
-
-
-# Instruction manual retrieval failed, vector retrieval and keyword retrieval are not available
-class LinsightDocSearchError(BaseErrorCode):
-    Code: int = 11060
-    Msg: str = "Instruction manual retrieval failed, vector retrieval and keyword retrieval are not available"
-
-
-# Guidebook retrieval failed
-class LinsightDocNotFoundError(BaseErrorCode):
-    Code: int = 11070
-    Msg: str = "Guidebook retrieval failed"
-
-
 # Failed to initialize the Inspiration Workbench tool
 class LinsightToolInitError(BaseErrorCode):
     Code: int = 11080
@@ -57,18 +29,6 @@ class LinsightToolInitError(BaseErrorCode):
 class LinsightBishengLLMError(BaseErrorCode):
     Code: int = 11090
     Msg: str = "InspirationBisheng LLMRelated Errors"
-
-
-# BuatSOPContent failed
-class LinsightGenerateSopError(BaseErrorCode):
-    Code: int = 11100
-    Msg: str = "BuatSOPContent failed"
-
-
-# ChangeSOPContent failed
-class LinsightModifySopError(BaseErrorCode):
-    Code: int = 11110
-    Msg: str = "ChangeSOPContent failed"
 
 
 # The Inspiration session version has been completed or is being executed and cannot be executed again
@@ -89,29 +49,6 @@ class LinsightQueueStatusError(BaseErrorCode):
     Msg: str = "Failed to get Ideas queue queue status"
 
 
-# Failed to add instruction manual, failed to add data for vector store
-class LinsightAddSopError(BaseErrorCode):
-    Code: int = 11150
-    Msg: str = "Failed to add instruction manual, failed to add data for vector store"
-
-
-# Failed to update the instruction manual, vector store update data failed
-class LinsightUpdateSopError(BaseErrorCode):
-    Code: int = 11160
-    Msg: str = "Failed to update the instruction manual, vector store update data failed"
-
-
-# Failed to delete instruction manual, failed to delete data in vector store
-class LinsightDeleteSopError(BaseErrorCode):
-    Code: int = 11170
-    Msg: str = "Failed to delete instruction manual, failed to delete data in vector store"
-
-
-class SopContentOverLimitError(BaseErrorCode):
-    Code: int = 11171
-    Msg: str = "{sop_name}The content is too long"
-
-
 class InviteCodeInvalidError(BaseErrorCode):
     Code: int = 11180
     Msg: str = "The invite code you entered is invalid"
@@ -125,13 +62,11 @@ class InviteCodeBindError(BaseErrorCode):
 # ---------------------------------------------------------------------------
 # F035 灵思任务模式 · Skill 管理错误码（段位 11050–11069）
 #
-# 契约 release-contract 表 3 将 Skill 管理分配在 11050–11069 段。该段的
-# 11050/11060/11070 历史上已被 SOP 检索链路（LinsightVectorModelError /
-# LinsightDocSearchError / LinsightDocNotFoundError，见上方，sop_manage.py 在用）
-# 占用。这些旧码属于 design §8.6 计划下线的 SOP 动态生成链路，但下线属于后续
-# Track（A/D/G），Track 0 阶段不得删除在用代码，因此新 Skill 错误码落在该段内
-# 当前未占用的槽位：11051/11052/11053/11054，并将「重名」从契约原定的 11050
-# 顺延到 11055（11050 仍被 LinsightVectorModelError 占用）。详见 tasks.md §8 实际偏差记录。
+# 契约 release-contract 表 3 将 Skill 管理分配在 11050–11069 段。原占用该段的存量
+# SOP 检索/管理错误码（LinsightVectorModelError 11050 / LinsightDocSearchError 11060
+# / LinsightDocNotFoundError 11070，design §8.6「计划下线的 SOP 动态生成链路」）已
+# 随 SOP 残留代码整体移除（2026-06-17，sop_manage.py 等已删，段位腾空）。
+# Skill 错误码沿用已发布编号 11051–11058，不回迁到腾空的 11050（已发布编码不重编）。
 # ---------------------------------------------------------------------------
 
 
@@ -160,8 +95,9 @@ class SkillPermissionError(BaseErrorCode):
 
 
 # A skill with the same name already exists in the current tenant
-# NOTE: contract originally allocated 11050 for duplicate-name; shifted to 11055
-# because 11050 is still occupied by the live LinsightVectorModelError.
+# NOTE: contract originally allocated 11050 for duplicate-name; shipped as 11055
+# (11050 was occupied by a since-removed SOP code). Kept at 11055 — released error
+# codes are not renumbered.
 class SkillNameDuplicateError(BaseErrorCode):
     Code: int = 11055
     Msg: str = "A skill with the same name already exists"

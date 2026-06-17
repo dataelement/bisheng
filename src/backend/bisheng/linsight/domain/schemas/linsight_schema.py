@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
 
-from bisheng.linsight.domain.models.linsight_sop import LinsightSOPRecord
 from bisheng_langchain.linsight.event import NeedUserInput
 
 
@@ -65,10 +64,6 @@ class LinsightQuestionSubmitSchema(BaseModel):
 class DownloadFilesSchema(BaseModel):
     file_name: str = Field(..., description="File Name")
     file_url: str = Field(..., description="File download link")
-
-
-class SopRecordRead(LinsightSOPRecord, table=False):
-    user_name: str | None = Field(default=None, description="Client Name")
 
 
 class UserInputEventSchema(NeedUserInput):
