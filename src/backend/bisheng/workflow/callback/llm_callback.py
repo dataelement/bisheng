@@ -1,12 +1,13 @@
 import threading
-from typing import Any, Dict, Optional, List, Union
+from typing import Any, Union
+
+from langchain_core.callbacks.base import BaseCallbackHandler
+from langchain_core.outputs import LLMResult
+from loguru import logger
 
 from bisheng.llm.domain.utils import extract_reasoning_content
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import OutputMsgData, StreamMsgData, StreamMsgOverData
-from langchain_core.callbacks.base import BaseCallbackHandler
-from langchain_core.outputs import LLMResult
-from loguru import logger
 
 
 class LLMNodeCallbackHandler(BaseCallbackHandler):
@@ -15,16 +16,16 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
     _thread_state = threading.local()
 
     def __init__(
-            self,
-            callback: BaseCallback,
-            unique_id: str,
-            node_id: str,
-            node_name: str,
-            output: bool,
-            output_key: str,
-            stream: bool = True,
-            tool_list: Optional[List[Any]] = None,
-            cancel_llm_end: bool = False,
+        self,
+        callback: BaseCallback,
+        unique_id: str,
+        node_id: str,
+        node_name: str,
+        output: bool,
+        output_key: str,
+        stream: bool = True,
+        tool_list: list[Any] | None = None,
+        cancel_llm_end: bool = False,
     ):
         self.callback_manager = callback
         self.unique_id = unique_id
@@ -36,67 +37,70 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         self.stream = stream
         self.tool_list = tool_list
         self.cancel_llm_end = cancel_llm_end
-        self.reasoning_content = ''
-        logger.info('on_llm_new_token {} outkey={}', self.output, self.output_key)
+        self.reasoning_content = ""
+        logger.info("on_llm_new_token {} outkey={}", self.output, self.output_key)
 
     @classmethod
     def push_global_stream_suppression(cls) -> None:
-        current = getattr(cls._thread_state, 'suppression_count', 0)
+        current = getattr(cls._thread_state, "suppression_count", 0)
         cls._thread_state.suppression_count = current + 1
 
     @classmethod
     def pop_global_stream_suppression(cls) -> None:
-        current = getattr(cls._thread_state, 'suppression_count', 0)
+        current = getattr(cls._thread_state, "suppression_count", 0)
         cls._thread_state.suppression_count = max(current - 1, 0)
 
     @classmethod
     def is_global_stream_suppressed(cls) -> bool:
-        return getattr(cls._thread_state, 'suppression_count', 0) > 0
+        return getattr(cls._thread_state, "suppression_count", 0) > 0
 
-    async def on_tool_start(self, serialized: Dict[str, Any], input_str: str,
-                            **kwargs: Any) -> Any:
+    def on_tool_start(self, serialized: dict[str, Any], input_str: str, **kwargs: Any) -> Any:
         """Run when tool starts running."""
-        logger.debug(
-            f'on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}')
+        logger.debug(f"on_tool_start  serialized={serialized} input_str={input_str} kwargs={kwargs}")
         if self.tool_list is not None:
-            self.tool_list.append({
-                'type': 'start',
-                'run_id': kwargs.get('run_id').hex,
-                'name': serialized['name'],
-                'input': input_str,
-            })
-        if serialized['name'] == 'sql_agent':
+            self.tool_list.append(
+                {
+                    "type": "start",
+                    "run_id": kwargs.get("run_id").hex,
+                    "name": serialized["name"],
+                    "input": input_str,
+                }
+            )
+        if serialized["name"] == "sql_agent":
             self.output = False
 
-    async def on_tool_end(self, output: str, **kwargs: Any) -> Any:
+    def on_tool_end(self, output: str, **kwargs: Any) -> Any:
         """Run when tool ends running."""
-        logger.debug(f'on_tool_end  output={output} kwargs={kwargs}')
-        result = output if isinstance(output, str) else getattr(output, 'content', output)
+        logger.debug(f"on_tool_end  output={output} kwargs={kwargs}")
+        result = output if isinstance(output, str) else getattr(output, "content", output)
         if self.tool_list is not None:
-            self.tool_list.append({
-                'type': 'end',
-                'run_id': kwargs.get('run_id').hex,
-                'name': kwargs['name'],
-                'output': result,
-            })
-        if kwargs['name'] == 'sql_agent':
+            self.tool_list.append(
+                {
+                    "type": "end",
+                    "run_id": kwargs.get("run_id").hex,
+                    "name": kwargs["name"],
+                    "output": result,
+                }
+            )
+        if kwargs["name"] == "sql_agent":
             self.output = True
 
-    async def on_tool_error(self, error: Union[Exception, KeyboardInterrupt],
-                            **kwargs: Any) -> Any:
+    def on_tool_error(self, error: Union[Exception, KeyboardInterrupt], **kwargs: Any) -> Any:
         """Run when tool errors."""
-        logger.debug(f'on_tool_error error={error} kwargs={kwargs}')
+        logger.debug(f"on_tool_error error={error} kwargs={kwargs}")
         if self.tool_list is not None:
-            self.tool_list.append({
-                'type': 'error',
-                'run_id': kwargs.get('run_id').hex,
-                'error': str(error),
-            })
-        if kwargs['name'] == 'sql_agent':
+            self.tool_list.append(
+                {
+                    "type": "error",
+                    "run_id": kwargs.get("run_id").hex,
+                    "error": str(error),
+                }
+            )
+        if kwargs["name"] == "sql_agent":
             self.output = True
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
-        chunk = kwargs.get('chunk', None)
+        chunk = kwargs.get("chunk", None)
         # azureOccasionally returns aNone
         if token is None and chunk is None:
             return
@@ -107,12 +111,15 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
 
         self.output_len += len(token)  # Determine if the streaming output has been completed
         self.callback_manager.on_stream_msg(
-            StreamMsgData(node_id=self.node_id,
-                          name=self.node_name,
-                          msg=token,
-                          reasoning_content=extract_reasoning_content(chunk),
-                          unique_id=self.unique_id,
-                          output_key=self.output_key))
+            StreamMsgData(
+                node_id=self.node_id,
+                name=self.node_name,
+                msg=token,
+                reasoning_content=extract_reasoning_content(chunk),
+                unique_id=self.unique_id,
+                output_key=self.output_key,
+            )
+        )
 
     def on_llm_end(self, response: LLMResult, **kwargs: Any) -> None:
         self.reasoning_content = extract_reasoning_content(response)
@@ -123,27 +130,30 @@ class LLMNodeCallbackHandler(BaseCallbackHandler):
         msg = response.generations[0][0].message
         # ChatTongYi vl model special text
         if isinstance(msg.content, list):
-            msg = ''.join([one.get('text', '') for one in msg.content])
+            msg = "".join([one.get("text", "") for one in msg.content])
         else:
             msg = msg.content
         if not msg:
-            logger.warning('LLM output is empty')
+            logger.warning("LLM output is empty")
             return
 
         if self.stream and self.output_len > 0:
             # Streaming output end needs to return a streaming end event
-            self.callback_manager.on_stream_over(StreamMsgOverData(node_id=self.node_id,
-                                                                   name=self.node_name,
-                                                                   msg=msg,
-                                                                   reasoning_content=self.reasoning_content,
-                                                                   unique_id=self.unique_id,
-                                                                   output_key=self.output_key))
+            self.callback_manager.on_stream_over(
+                StreamMsgOverData(
+                    node_id=self.node_id,
+                    name=self.node_name,
+                    msg=msg,
+                    reasoning_content=self.reasoning_content,
+                    unique_id=self.unique_id,
+                    output_key=self.output_key,
+                )
+            )
             return
 
         # If the output is required, but the stream output is not performed, a supplement is made. This happens when the cache is hit. This is also the case when output is required
         self.callback_manager.on_output_msg(
-            OutputMsgData(node_id=self.node_id,
-                          name=self.node_name,
-                          msg=msg,
-                          unique_id=self.unique_id,
-                          output_key=self.output_key))
+            OutputMsgData(
+                node_id=self.node_id, name=self.node_name, msg=msg, unique_id=self.unique_id, output_key=self.output_key
+            )
+        )

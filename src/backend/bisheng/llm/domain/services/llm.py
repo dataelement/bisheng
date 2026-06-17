@@ -590,7 +590,9 @@ class LLMService:
         }
         try:
             if model.model_type == LLMModelType.LLM.value:
-                bisheng_model = await cls.get_bisheng_llm(model_id=model.id, ignore_online=True, **common_params)
+                bisheng_model = await cls.get_bisheng_llm(
+                    model_id=model.id, ignore_online=True, streaming=False, **common_params
+                )
                 await bisheng_model.ainvoke("hello")
             elif model.model_type == LLMModelType.EMBEDDING.value:
                 bisheng_embed = await cls.get_bisheng_embedding(model_id=model.id, ignore_online=True, **common_params)
