@@ -533,7 +533,10 @@ const AiChatInput = memo(
                                     fileUploadDisabled={filesDisabled}
                                     onFileUploadClick={() => inputFilesRef.current?.openPicker?.()}
                                     // Task mode toggle present in both modes (plan-mode style).
-                                    showTaskModeEntry={(taskModeEntry || taskMode) && (bsConfig?.linsightConfig?.linsight_entry ?? true)}
+                                    // Gated by the caller's taskModeEntry feature (role permission in
+                                    // ChatView); the legacy global `linsight_entry` switch was retired
+                                    // when task mode replaced 灵思 mode, so it no longer gates here.
+                                    showTaskModeEntry={taskModeEntry || taskMode}
                                     onEnterTaskMode={onToggleTaskMode ? onToggleTaskMode : () => navigate(taskMode ? '/c/new' : '/linsight/new')}
                                     taskModeActive={taskMode}
                                     renderSkillSubmenu={(close) => (
