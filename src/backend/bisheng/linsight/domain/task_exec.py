@@ -788,16 +788,13 @@ class LinsightWorkflowTask:
     async def _resolve_allowed_knowledge_ids(self, session_model: LinsightSessionVersion) -> set[str]:
         """Build the SearchKnowledgeBase whitelist (C4 permission isolation).
 
-        Allowed = the user-visible KB ids (same source as the prompt block) plus
-        this session's uploaded file ids (``search_linsight_file`` targets). The
-        tool refuses any id outside this set, so a hallucinated/coaxed id can
-        never reach another tenant's KB or another session's uploaded file.
+        Allowed = the user-visible KB / knowledge-space ids (same source as the
+        prompt block). The tool refuses any id outside this set, so a
+        hallucinated/coaxed id can never reach another tenant's KB. Uploaded files
+        are NOT included: they are not searched through this tool — the agent reads
+        their parsed markdown from the workspace via ``read_file``.
         """
         allowed: set[str] = set()
-        for f in session_model.files or []:
-            fid = f.get("file_id") if isinstance(f, dict) else None
-            if fid:
-                allowed.add(str(fid))
         try:
             kbs = await self._resolve_user_knowledge_bases(session_model)
             for kb in kbs:
