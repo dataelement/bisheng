@@ -85,3 +85,84 @@ async def test_no_whitelist_is_unrestricted(monkeypatch: pytest.MonkeyPatch):
     await tool._arun(query="问题", knowledge_id="287")
 
     search_kb.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Exact KB-id selection must be threaded daily -> task (not collapsed to coarse
+# booleans). Regression: a single org KB + single space were injecting ALL 20+
+# org KBs because the resolver fell back to ``aget_user_knowledge``.
+# ---------------------------------------------------------------------------
+def test_to_linsight_submit_threads_exact_kb_ids():
+    from bisheng.api.v1.schema.chat_schema import APIChatCompletion, UseKnowledgeBaseParam
+    from bisheng.workstation.domain.services.chat_service import _to_linsight_submit
+
+    data = APIChatCompletion(
+        clientTimestamp="0",
+        model="727",
+        text="q",
+        task_mode=True,
+        use_knowledge_base=UseKnowledgeBaseParam(
+            personal_knowledge_enabled=False,
+            organization_knowledge_ids=[2745],
+            knowledge_space_ids=[3124],
+        ),
+    )
+
+    submit = _to_linsight_submit(data)
+
+    assert submit.organization_knowledge_ids == [2745]
+    assert submit.knowledge_space_ids == [3124]
+    assert submit.org_knowledge_enabled is True
+
+
+async def test_resolve_kbs_uses_exact_ids_not_coarse_all(monkeypatch: pytest.MonkeyPatch):
+    """The resolver loads exactly the selected ids and must NOT pull every KB of a
+    coarse type via ``aget_user_knowledge`` (the 20+ KB bug)."""
+    from types import SimpleNamespace
+
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+    from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
+
+    sv = SimpleNamespace(
+        organization_knowledge_ids=[2745],
+        knowledge_space_ids=[3124],
+        # Booleans are deliberately True to prove they are ignored now.
+        org_knowledge_enabled=True,
+        personal_knowledge_enabled=True,
+        user_id=1,
+    )
+    by_ids = AsyncMock(return_value=[SimpleNamespace(id=2745), SimpleNamespace(id=3124)])
+    all_kbs = AsyncMock(return_value=[SimpleNamespace(id=i) for i in range(20)])
+    monkeypatch.setattr(KnowledgeDao, "aget_list_by_ids", by_ids)
+    monkeypatch.setattr(KnowledgeDao, "aget_user_knowledge", all_kbs)
+
+    task = LinsightWorkflowTask.__new__(LinsightWorkflowTask)
+    result = await task._resolve_user_knowledge_bases(sv)
+
+    assert sorted(kb.id for kb in result) == [2745, 3124]
+    by_ids.assert_awaited_once_with([2745, 3124])
+    all_kbs.assert_not_awaited()
+
+
+async def test_resolve_kbs_empty_selection_returns_none(monkeypatch: pytest.MonkeyPatch):
+    """No id selection => no KBs (booleans no longer force a coarse fallback)."""
+    from types import SimpleNamespace
+
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+    from bisheng.linsight.domain.task_exec import LinsightWorkflowTask
+
+    sv = SimpleNamespace(
+        organization_knowledge_ids=None,
+        knowledge_space_ids=None,
+        org_knowledge_enabled=True,
+        personal_knowledge_enabled=True,
+        user_id=1,
+    )
+    all_kbs = AsyncMock(return_value=[SimpleNamespace(id=i) for i in range(20)])
+    monkeypatch.setattr(KnowledgeDao, "aget_user_knowledge", all_kbs)
+
+    task = LinsightWorkflowTask.__new__(LinsightWorkflowTask)
+    result = await task._resolve_user_knowledge_bases(sv)
+
+    assert result == []
+    all_kbs.assert_not_awaited()

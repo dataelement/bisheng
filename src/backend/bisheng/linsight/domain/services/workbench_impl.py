@@ -211,6 +211,8 @@ class LinsightWorkbenchImpl:
                 tools=submit_obj.tools,
                 org_knowledge_enabled=submit_obj.org_knowledge_enabled,
                 personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
+                organization_knowledge_ids=submit_obj.organization_knowledge_ids,
+                knowledge_space_ids=submit_obj.knowledge_space_ids,
                 files=processed_files,
                 model=submit_obj.model,
             )

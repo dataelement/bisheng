@@ -37,6 +37,13 @@ class LinsightQuestionSubmitSchema(BaseModel):
     question: str = Field(..., description="User Submitted Questions")
     org_knowledge_enabled: bool = Field(False, description="Whether to enable organization knowledge base")
     personal_knowledge_enabled: bool = Field(False, description="Whether or not to enable Personal Knowledge Base")
+    # Exact KB selection carried from the daily picker. These are the SPECIFIC ids
+    # the user chose, so the task agent searches exactly those — not every KB of a
+    # coarse type. organization = NORMAL-type KB ids; knowledge_space = SPACE-type
+    # ids. The coarse booleans above are kept for storage/back-compat but no longer
+    # drive knowledge injection.
+    organization_knowledge_ids: list[int] | None = Field(None, description="Selected organization knowledge base ids")
+    knowledge_space_ids: list[int] | None = Field(None, description="Selected knowledge space ids")
     files: list[SubmitFileSchema] | None = Field(None, description="Uploaded files list:")
     tools: list[LinsightToolSchema] | None = Field(None, description="List of available tools")
     # F035: per-task selected execution model id; None falls back to the tenant

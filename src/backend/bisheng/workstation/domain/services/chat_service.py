@@ -1841,20 +1841,22 @@ def _to_linsight_submit(data: APIChatCompletion):
             )
         submit_files = submit_files or None
 
-    # Knowledge (coarse, unified-resource): the daily picker selects specific KB
-    # ids (org) + knowledge-space ids; linsight's model is two coarse booleans.
-    # Map org-KB selection -> org (NORMAL) enabled, knowledge-space selection ->
-    # personal (PRIVATE) enabled. The task agent then gets ALL the user's KBs of
-    # the enabled type injected at execution (coarse: not filtered to the exact
-    # ids — honoring the specific selection would need a per-SV id column).
-    personal_enabled = bool(ukb and (ukb.knowledge_space_ids or ukb.personal_knowledge_enabled))
-    org_enabled = bool(ukb and ukb.organization_knowledge_ids)
+    # Knowledge (unified-resource): thread the daily picker's EXACT selection so
+    # the task agent searches precisely the chosen KBs — organization (NORMAL) KB
+    # ids + knowledge-space (SPACE) ids — instead of every KB of a coarse type.
+    # The booleans are still set for storage/back-compat but no longer drive
+    # injection (task_exec resolves from the id lists).
+    org_ids = list(ukb.organization_knowledge_ids or []) if ukb else []
+    space_ids = list(ukb.knowledge_space_ids or []) if ukb else []
+    personal_enabled = bool(ukb and ukb.personal_knowledge_enabled)
 
     return LinsightQuestionSubmitSchema(
         question=data.text or "",
         session_id=data.conversationId,
         personal_knowledge_enabled=personal_enabled,
-        org_knowledge_enabled=org_enabled,
+        org_knowledge_enabled=bool(org_ids),
+        organization_knowledge_ids=org_ids or None,
+        knowledge_space_ids=space_ids or None,
         model=data.model or None,
         files=submit_files,
         tools=submit_tools,

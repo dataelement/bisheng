@@ -757,32 +757,30 @@ class LinsightWorkflowTask:
         return {"messages": [{"role": "user", "content": content}]}
 
     async def _resolve_user_knowledge_bases(self, session_model: LinsightSessionVersion) -> list:
-        """Resolve the user's accessible knowledge bases (coarse, permission-safe).
+        """Resolve the EXACT knowledge bases the user picked in the daily picker.
 
-        org_knowledge_enabled -> all NORMAL KBs; personal -> all PRIVATE KBs,
-        each capped by the linsight ``max_knowledge_num``. ``aget_user_knowledge``
-        already filters to KBs the user can see, so this list IS the permission
-        whitelist — both the prompt advertisement (``_resolve_knowledge_block``)
-        and the tool gate (``_resolve_allowed_knowledge_ids``) derive from it, so
-        what the model is told it may search and what it is actually allowed to
-        search stay in lockstep.
+        Mirrors daily mode (``_resolve_user_kb_selection``): load precisely the
+        selected organization-KB ids + knowledge-space ids — NOT every KB of a
+        coarse type. The deprecated ``org_knowledge_enabled`` /
+        ``personal_knowledge_enabled`` booleans are intentionally NOT consulted
+        here; an empty id selection means the user picked none. Both the prompt
+        advertisement (``_resolve_knowledge_block``) and the tool gate
+        (``_resolve_allowed_knowledge_ids``) derive from this list, so what the
+        model is told it may search and what it is actually allowed to search stay
+        in lockstep.
         """
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
-        linsight_conf = settings.get_linsight_conf()
-        cap = getattr(linsight_conf, "max_knowledge_num", 0) or 0
-        if cap <= 0:
+        org_ids = [int(x) for x in (session_model.organization_knowledge_ids or [])]
+        space_ids = [int(x) for x in (session_model.knowledge_space_ids or [])]
+        ids = org_ids + space_ids
+        if not ids:
             return []
-        kbs: list = []
-        if session_model.org_knowledge_enabled:
-            kbs += await KnowledgeDao.aget_user_knowledge(
-                session_model.user_id, None, KnowledgeTypeEnum.NORMAL, limit=cap
-            )
-        if session_model.personal_knowledge_enabled:
-            kbs += await KnowledgeDao.aget_user_knowledge(
-                session_model.user_id, None, KnowledgeTypeEnum.PRIVATE, limit=cap
-            )
-        return kbs
+        try:
+            return list(await KnowledgeDao.aget_list_by_ids(ids))
+        except Exception as e:
+            logger.warning(f"Failed to load selected knowledge bases {ids}: {e}")
+            return []
 
     async def _resolve_knowledge_block(self, session_model: LinsightSessionVersion) -> str | None:
         """Render the user's accessible KBs into a prompt block advertising each
