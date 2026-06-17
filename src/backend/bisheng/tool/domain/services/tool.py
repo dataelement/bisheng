@@ -599,7 +599,14 @@ class ToolServices(BaseModel):
         ``allowed_knowledge_ids`` is the C4 permission whitelist (user-visible KB
         ids + this session's uploaded file ids) handed to ``SearchKnowledgeBase``;
         the tool refuses any id outside it. ``None`` leaves the tool ungated.
+
+        When the caller passes an EMPTY set (no knowledge base selected and no
+        uploaded files), there is nothing to search, so the tool is NOT injected
+        at all — otherwise the model would still see it and call it with a missing
+        knowledge_id ("Field required"). ``None`` (back-compat) keeps the tool.
         """
+        if allowed_knowledge_ids is not None and not allowed_knowledge_ids:
+            return []
         return [SearchKnowledgeBase(allowed_knowledge_ids=allowed_knowledge_ids)]
 
     @classmethod
