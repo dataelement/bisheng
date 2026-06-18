@@ -218,6 +218,7 @@ function CitationPreviewCard({
   label,
   isLoading,
   error,
+  notPermitted,
   onCardClick,
   onOpenDocumentPreview,
 }: {
@@ -226,6 +227,7 @@ function CitationPreviewCard({
   label?: number;
   isLoading: boolean;
   error: boolean;
+  notPermitted?: boolean;
   onCardClick?: () => void;
   onOpenDocumentPreview?: () => void;
 }) {
@@ -234,6 +236,16 @@ function CitationPreviewCard({
       <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         <Loader2 className="mr-2 size-4 animate-spin" />
         加载溯源详情...
+      </div>
+    );
+  }
+
+  // Backend returned 404: the viewer has no permission for this source (or it no
+  // longer exists). Product decision: show "no permission", not "no source detail".
+  if (notPermitted) {
+    return (
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+        暂无权限
       </div>
     );
   }
@@ -447,6 +459,9 @@ const Citation = ({
   const [detail, setDetail] = useState<ChatCitation | null>(initialDetail ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
+  // Backend 404 → viewer lacks permission for this source. Renders "no permission"
+  // and makes the marker un-clickable (product decision).
+  const [notPermitted, setNotPermitted] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
   const citationClassName = getCitationClassName(data.type);
   const legacyPreview = data.ref?.startsWith('citation:')
@@ -455,7 +470,7 @@ const Citation = ({
   const preview = legacyPreview ?? buildCitationPreview(detail, data);
 
   const fetchDetail = async () => {
-    if (detail || legacyPreview || !data.citationId || data.citationId.startsWith('citation:')) {
+    if (detail || notPermitted || legacyPreview || !data.citationId || data.citationId.startsWith('citation:')) {
       return detail;
     }
 
@@ -465,9 +480,13 @@ const Citation = ({
       const nextDetail = await loadCitationDetail(data.citationId);
       setDetail(nextDetail);
       return nextDetail;
-    } catch (err) {
-      console.error('Failed to load citation detail:', err);
-      setError(true);
+    } catch (err: any) {
+      if (err?.citationForbidden) {
+        setNotPermitted(true);
+      } else {
+        console.error('Failed to load citation detail:', err);
+        setError(true);
+      }
       return null;
     } finally {
       setIsLoading(false);
@@ -513,6 +532,13 @@ const Citation = ({
   ) => {
     event?.preventDefault();
     event?.stopPropagation();
+
+    // No permission for this source — keep the marker inert: only toggle the hover
+    // card (so the "no permission" hint can show) and never open the viewer/link.
+    if (notPermitted) {
+      handleOpenChange(!isOpen);
+      return;
+    }
 
     const isWebCitation = normalizeCitationType(preview?.type || data.type) === 'web';
     if (isWebCitation && preview?.link) {
@@ -596,7 +622,7 @@ const Citation = ({
             if (!citationPreviewUsesHover) return;
             scheduleClose();
           }}
-          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] cursor-pointer select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-[#024DE3]/25 focus-visible:ring-2 ${citationClassName}`}
+          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] ${notPermitted ? 'cursor-default' : 'cursor-pointer'} select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-[#024DE3]/25 focus-visible:ring-2 ${citationClassName}`}
         >
           <span className="flex items-center justify-center">{children}</span>
         </button>
@@ -630,6 +656,7 @@ const Citation = ({
             label={data.label}
             isLoading={isLoading}
             error={error}
+            notPermitted={notPermitted}
             onCardClick={() => void handleCitationClick(undefined, { forceDocument: true })}
             onOpenDocumentPreview={() => void handleCitationClick(undefined, { forceDocument: true })}
           />
