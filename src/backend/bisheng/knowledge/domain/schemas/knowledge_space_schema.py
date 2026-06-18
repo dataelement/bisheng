@@ -442,6 +442,7 @@ class WebLinkCreateReq(BaseModel):
     title: Optional[str] = Field(None, max_length=200, description="Optional display title")
     parent_id: Optional[int] = Field(None, description="Parent Folder ID")
     file_category_code: Optional[str] = Field(None, max_length=16, description="Selected business file category code")
+    overwrite: bool = Field(False, description="Overwrite an existing web link file with the same name or content")
 
 
 class UploadFolderRecommendFileReq(BaseModel):

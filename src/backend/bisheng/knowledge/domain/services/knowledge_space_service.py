@@ -160,6 +160,7 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
+    WebLinkImportResult,
 )
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.message.domain.services.notification_content import build_notify_content
@@ -6265,6 +6266,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         title: Optional[str] = None,
         parent_id: Optional[int] = None,
         file_category_code: Optional[str] = None,
+        overwrite: bool = False,
     ) -> KnowledgeFile:
         if parent_id:
             await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
@@ -6291,10 +6293,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_name = self._build_web_link_file_name(title or result.title, result.final_url)
         markdown_bytes = result.markdown.encode("utf-8")
 
-        if KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, md5_=result.content_hash):
-            raise SpaceFileDuplicateError()
-        if KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, file_name=file_name):
+        duplicate_files: list[KnowledgeFile] = []
+        content_duplicates = KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, md5_=result.content_hash)
+        name_duplicates = KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, file_name=file_name)
+        for duplicate_file in [*(content_duplicates or []), *(name_duplicates or [])]:
+            if duplicate_file and all(existing.id != duplicate_file.id for existing in duplicate_files):
+                duplicate_files.append(duplicate_file)
+
+        if duplicate_files and not overwrite:
+            if content_duplicates:
+                raise SpaceFileDuplicateError()
             raise SpaceFileNameDuplicateError()
+        overwrite_file = duplicate_files[0] if duplicate_files and overwrite else None
+        replaced_total_bytes = int(overwrite_file.file_size or 0) if overwrite_file else 0
+        replaced_user_bytes = (
+            int(overwrite_file.file_size or 0)
+            if overwrite_file and overwrite_file.user_id == self.login_user.user_id
+            else 0
+        )
 
         role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
         current_user_total = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
@@ -6303,7 +6319,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if tenant_remaining_bytes is not None:
             tenant_used_at_start_bytes = await QuotaService.get_tenant_storage_used_bytes(target_tid)
             tenant_cap_bytes = tenant_used_at_start_bytes + tenant_remaining_bytes
-            next_tenant_total_bytes = tenant_used_at_start_bytes + result.content_length
+            next_tenant_total_bytes = tenant_used_at_start_bytes - replaced_total_bytes + result.content_length
         else:
             tenant_cap_bytes = None
             next_tenant_total_bytes = 0
@@ -6316,7 +6332,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "",
             )
             raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
-        if role_user_limit_bytes is not None and current_user_total + result.content_length > role_user_limit_bytes:
+        if role_user_limit_bytes is not None and current_user_total - replaced_user_bytes + result.content_length > role_user_limit_bytes:
             raise SpaceFileSizeLimitError()
 
         split_rule_dict = FileProcessBase(knowledge_id=knowledge_id).model_dump()
@@ -6328,6 +6344,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             split_rule_dict[self.file_category_code_key] = normalized_file_category_code
 
         imported_at = datetime.now().isoformat(timespec="seconds")
+        if overwrite_file:
+            return await self._overwrite_web_link_file(
+                db_file=overwrite_file,
+                url=url,
+                result=result,
+                file_name=file_name,
+                markdown_bytes=markdown_bytes,
+                split_rule_dict=split_rule_dict,
+                imported_at=imported_at,
+                level=level,
+                file_level_path=file_level_path,
+                new_parent_type=parent_type,
+                new_parent_id=parent_resource_id,
+            )
+
         db_file = KnowledgeFile(
             knowledge_id=knowledge_id,
             tenant_id=db_knowledge.tenant_id,
@@ -6403,6 +6434,96 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_worker.parse_knowledge_file_celery.delay(db_file.id, preview_cache_key)
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        return db_file
+
+    async def _overwrite_web_link_file(
+        self,
+        *,
+        db_file: KnowledgeFile,
+        url: str,
+        result: WebLinkImportResult,
+        file_name: str,
+        markdown_bytes: bytes,
+        split_rule_dict: dict,
+        imported_at: str,
+        level: int,
+        file_level_path: str,
+        new_parent_type: str,
+        new_parent_id: int,
+    ) -> KnowledgeFile:
+        old_file_level_path = db_file.file_level_path or ""
+        old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(
+            old_file_level_path,
+            db_file.knowledge_id,
+        )
+        minio_client = get_minio_storage_sync()
+        old_object_name = db_file.object_name
+        object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, file_name)
+        html_snapshot_object_name = f"preview/{db_file.id}.html" if result.html_snapshot else ""
+
+        minio_client.put_object_sync(
+            bucket_name=minio_client.bucket,
+            object_name=object_name,
+            file=markdown_bytes,
+            content_type="text/markdown; charset=utf-8",
+        )
+        if result.html_snapshot:
+            minio_client.put_object_sync(
+                bucket_name=minio_client.bucket,
+                object_name=html_snapshot_object_name,
+                file=result.html_snapshot.encode("utf-8"),
+                content_type="text/html; charset=utf-8",
+            )
+        if old_object_name and old_object_name != object_name:
+            try:
+                minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=old_object_name)
+            except Exception as exc:
+                logger.warning(f"Failed to remove old web link object after overwrite: {exc}")
+
+        db_file.file_name = file_name
+        db_file.file_size = result.content_length
+        db_file.md5 = result.content_hash
+        db_file.object_name = object_name
+        db_file.split_rule = json.dumps(split_rule_dict, ensure_ascii=False)
+        db_file.updater_id = self.login_user.user_id
+        db_file.updater_name = self.login_user.user_name
+        db_file.level = level
+        db_file.file_level_path = file_level_path
+        db_file.file_source = FileSource.WEB_LINK.value
+        db_file.status = KnowledgeFileStatus.WAITING.value
+        db_file.remark = ""
+        db_file.similar_status = 0
+        db_file.simhash = None
+        db_file.user_metadata = {
+            "source_type": "web_link",
+            "source_url": url,
+            "final_url": result.final_url,
+            "web_title": result.title,
+            "imported_at": imported_at,
+            **({"html_snapshot_object_name": html_snapshot_object_name} if html_snapshot_object_name else {}),
+        }
+        db_file = await KnowledgeFileDao.async_update(db_file)
+
+        await self._replace_resource_parent_tuple(
+            object_type="knowledge_file",
+            object_id=db_file.id,
+            old_parent_type=old_parent_type,
+            old_parent_id=old_parent_id,
+            new_parent_type=new_parent_type,
+            new_parent_id=new_parent_id,
+        )
+        await self._sync_document_folder_for_file(db_file.id, file_level_path, level)
+        preview_cache_key = self.get_preview_cache_key(
+            db_file.knowledge_id,
+            result.final_url,
+            md5_value=result.content_hash,
+        )
+        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([db_file.id])
+        await self.update_folder_update_time(old_file_level_path)
+        if file_level_path != old_file_level_path:
+            await self.update_folder_update_time(file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(db_file.knowledge_id)
         return db_file
 
     @staticmethod

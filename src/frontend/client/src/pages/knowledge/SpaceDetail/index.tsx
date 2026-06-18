@@ -52,6 +52,8 @@ import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarList
 import { cn, getFullWidthLength } from "~/utils";
 import type { PortalFileCategoryOption } from "../portal/types";
 
+const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
+
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
     files: KnowledgeFile[];
@@ -659,6 +661,30 @@ export function KnowledgeSpaceContent({
         setWebLinkDialogOpen(true);
     };
 
+    const isWebLinkDuplicateError = (error: any) => WEB_LINK_DUPLICATE_ERROR_CODES.has(Number(error?.status_code));
+
+    const submitWebLink = async (overwrite = false) => {
+        const created = await importWebLinkApi(space.id, {
+            url: webLinkUrl.trim(),
+            title: webLinkTitle.trim() || undefined,
+            parent_id: currentFolderId ? Number(currentFolderId) : null,
+            ...(overwrite ? { overwrite: true } : {}),
+        });
+        setFiles((prev) => [
+            created,
+            ...prev.filter((file) => (
+                file.id !== created.id
+                && file.name !== created.name
+                && file.sourceUrl !== created.sourceUrl
+            )),
+        ]);
+        setTotal((prev) => prev + (overwrite ? 0 : 1));
+        setWebLinkUrl("");
+        setWebLinkTitle("");
+        setWebLinkDialogOpen(false);
+        showToast({ message: "网页链接已开始导入", status: "success" });
+    };
+
     const handleSubmitWebLink = async () => {
         const normalizedUrl = webLinkUrl.trim();
         if (!normalizedUrl) {
@@ -678,18 +704,29 @@ export function KnowledgeSpaceContent({
 
         setWebLinkSubmitting(true);
         try {
-            const created = await importWebLinkApi(space.id, {
-                url: normalizedUrl,
-                title: webLinkTitle.trim() || undefined,
-                parent_id: currentFolderId ? Number(currentFolderId) : null,
-            });
-            setFiles((prev) => [created, ...prev]);
-            setTotal((prev) => prev + 1);
-            setWebLinkUrl("");
-            setWebLinkTitle("");
-            setWebLinkDialogOpen(false);
-            showToast({ message: "网页链接已开始导入", status: "success" });
+            await submitWebLink();
         } catch (error: any) {
+            if (isWebLinkDuplicateError(error)) {
+                const shouldOverwrite = await confirm({
+                    title: "发现重复网页链接",
+                    description: webLinkTitle.trim() || normalizedUrl,
+                    cancelText: "取消",
+                    confirmText: "覆盖",
+                });
+                if (shouldOverwrite) {
+                    setWebLinkDialogOpen(false);
+                    try {
+                        await submitWebLink(true);
+                    } catch (overwriteError: any) {
+                        showToast({ message: overwriteError?.message || "网页链接覆盖失败", status: "error" });
+                    }
+                } else {
+                    setWebLinkUrl("");
+                    setWebLinkTitle("");
+                    setWebLinkDialogOpen(false);
+                }
+                return;
+            }
             showToast({ message: error?.message || "网页链接导入失败", status: "error" });
         } finally {
             setWebLinkSubmitting(false);

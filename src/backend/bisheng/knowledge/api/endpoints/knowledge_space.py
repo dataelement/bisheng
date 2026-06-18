@@ -546,6 +546,7 @@ async def import_web_link(
         title=req.title,
         parent_id=req.parent_id,
         file_category_code=req.file_category_code,
+        overwrite=req.overwrite,
     )
     return resp_200(file_record)
 

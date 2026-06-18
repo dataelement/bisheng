@@ -420,9 +420,9 @@ export async function subUploadLibFile(data: UploadFileFc | DefaultUploadFileFc)
 
 export async function importKnowledgeWebLinkApi(
     knowledgeId: string | number,
-    data: { url: string; title?: string }
+    data: { url: string; title?: string; overwrite?: boolean }
 ) {
-    return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data);
+    return await axios.post(`/api/v1/knowledge/space/${knowledgeId}/web-links`, data, { silent: true } as any);
 }
 //调整分段策略
 export async function rebUploadFile(data) {

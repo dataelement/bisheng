@@ -87,6 +87,8 @@ const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
     space?.spaceLevel ?? (space as any)?.space_level
 );
 
+const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
+
 export default function PortalKnowledgeWorkbench() {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -1055,21 +1057,57 @@ export default function PortalKnowledgeWorkbench() {
         }
 
         setWebLinkSubmitting(true);
-        try {
+        const isDuplicateError = (error: any) => WEB_LINK_DUPLICATE_ERROR_CODES.has(Number(error?.status_code));
+        const submitWebLink = async (overwrite = false) => {
             const created = await importWebLinkApi(spaceId, {
                 url: normalizedUrl,
                 title: webLinkTitle.trim() || undefined,
                 parent_id: currentFolderId ? Number(currentFolderId) : null,
+                ...(overwrite ? { overwrite: true } : {}),
             });
             setSearchMode(false);
             setSearchResults([]);
-            setCurrentFolderFiles((prev) => [created, ...prev]);
-            setCurrentFileListTotal((prev) => prev + 1);
+            setCurrentFolderFiles((prev) => [
+                created,
+                ...prev.filter((file) => (
+                    file.id !== created.id
+                    && file.name !== created.name
+                    && file.sourceUrl !== created.sourceUrl
+                )),
+            ]);
+            setCurrentFileListTotal((prev) => prev + (overwrite ? 0 : 1));
             setWebLinkUrl("");
             setWebLinkTitle("");
             setWebLinkDialogOpen(false);
             showToast({ message: "网页链接已开始导入", severity: NotificationSeverity.SUCCESS });
+        };
+        try {
+            await submitWebLink();
         } catch (error: any) {
+            if (isDuplicateError(error)) {
+                const shouldOverwrite = await confirm({
+                    title: "发现重复网页链接",
+                    description: webLinkTitle.trim() || normalizedUrl,
+                    cancelText: "取消",
+                    confirmText: "覆盖",
+                });
+                if (shouldOverwrite) {
+                    setWebLinkDialogOpen(false);
+                    try {
+                        await submitWebLink(true);
+                    } catch (overwriteError: any) {
+                        showToast({
+                            message: overwriteError?.message || "网页链接覆盖失败",
+                            severity: NotificationSeverity.ERROR,
+                        });
+                    }
+                } else {
+                    setWebLinkUrl("");
+                    setWebLinkTitle("");
+                    setWebLinkDialogOpen(false);
+                }
+                return;
+            }
             showToast({
                 message: error?.message || "网页链接导入失败",
                 severity: NotificationSeverity.ERROR,
@@ -1079,6 +1117,7 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [
         activeSpace?.id,
+        confirm,
         currentFolderId,
         setCurrentFileListTotal,
         setCurrentFolderFiles,

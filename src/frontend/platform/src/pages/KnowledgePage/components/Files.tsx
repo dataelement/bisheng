@@ -48,6 +48,7 @@ const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgCl
     6: { labelKey: "timeout", colorClass: "text-red-500", bgClass: "bg-red-500" },
     7: { labelKey: "violation", colorClass: "text-red-500", bgClass: "bg-red-500" },
 };
+const POLLING_STATUS = new Set([1, 4, 5]);
 
 function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?: Record<string, any>) => string) {
     const words = hits
@@ -177,13 +178,13 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     // Polling during parsing
     const timerRef = useRef(null)
     useEffect(() => {
-        if (datalist.some(el => el.status === 1)) {
+        if (datalist.some(el => POLLING_STATUS.has(el.status))) {
             timerRef.current = setTimeout(() => {
                 reload()
             }, 5000)
             return () => clearTimeout(timerRef.current)
         }
-    }, [datalist])
+    }, [datalist, reload])
 
     const applyFilters = () => {
         setSelectedFilters([...tempFilters]);

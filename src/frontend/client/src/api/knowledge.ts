@@ -1786,15 +1786,21 @@ export async function addFilesApi(
 
 export async function importWebLinkApi(
     space_id: string,
-    data: { url: string; title?: string; parent_id?: number | null; file_category_code?: string }
+    data: { url: string; title?: string; parent_id?: number | null; file_category_code?: string; overwrite?: boolean }
 ): Promise<KnowledgeFile> {
     const res = await request.post(
         `/api/v1/knowledge/space/${space_id}/web-links`,
         data,
-        { showError: true } as any
+        { showError: false } as any
     ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "import web link failed");
+        const error = new Error(res.status_message || res.message || res.msg || "import web link failed") as Error & {
+            status_code?: number;
+            status_message?: string;
+        };
+        error.status_code = res.status_code;
+        error.status_message = res.status_message;
+        throw error;
     }
     return mapChild(res.data, space_id);
 }
