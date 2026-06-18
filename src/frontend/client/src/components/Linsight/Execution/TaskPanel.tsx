@@ -8,6 +8,7 @@ import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
+import { ACCENT, FAINT, INK, MUTED } from './execTokens';
 import type { ExecTask } from './TaskStepRow';
 import { isTaskDone, isTaskRunning } from './stepUtils';
 
@@ -38,12 +39,14 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                 onClick={() => setOpen(!open)}
                 className="flex w-full items-center gap-2 px-4 py-3 text-left"
             >
+                {/* §2.7 unified icon regime: running → Accent spinner; otherwise the
+                    Ink hero glyph. */}
                 {runningTask ? (
-                    <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
+                    <Outlined.Loading size={16} className="shrink-0 animate-spin" style={{ color: ACCENT }} />
                 ) : (
-                    <Outlined.ListSuccess size={16} className="shrink-0 text-[#212121]" />
+                    <Outlined.ListSuccess size={16} className="shrink-0" style={{ color: INK }} />
                 )}
-                <span className="shrink-0 text-[16px] font-medium text-[#212121]">
+                <span className="shrink-0 text-[16px] font-medium" style={{ color: INK }}>
                     {allDone ? localize('com_linsight_task_panel_done') : localize('com_linsight_task_panel')}
                 </span>
                 {showRunningInline && (
@@ -51,10 +54,17 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                         {runningName}
                     </span>
                 )}
-                <span className={cn('shrink-0 text-[14px] text-[#999]', showRunningInline ? 'ml-2' : 'ml-1')}>
+                {/* progress digits: tabular-nums + Muted (§2.7) */}
+                <span
+                    className={cn('shrink-0 text-[14px] tabular-nums', showRunningInline ? 'ml-2' : 'ml-1')}
+                    style={{ color: MUTED }}
+                >
                     {doneCount}/{tasks.length}
                 </span>
-                <span className={cn('shrink-0 text-[#999]', showRunningInline ? 'ml-2' : 'ml-auto')}>
+                <span
+                    className={cn('shrink-0', showRunningInline ? 'ml-2' : 'ml-auto')}
+                    style={{ color: MUTED }}
+                >
                     {/* one rotating chevron (down = expanded, up = collapsed) so the
                         glyph eases between states instead of hard-swapping */}
                     <Outlined.DoubleDown
@@ -80,24 +90,22 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                             const running = isTaskRunning(task.status);
                             return (
                                 <li key={task.id} className="flex items-center gap-2.5 py-2 text-[14px]">
+                                    {/* §2.7 status glyphs: done → Muted CheckCircle;
+                                        running → Accent spinner; not-started → Faint
+                                        placeholder ring (the old invisible-icon grey
+                                        is fully retired). */}
                                     <span className="flex size-4 shrink-0 items-center justify-center">
                                         {done ? (
-                                            <Outlined.CheckCircle size={16} className="text-gray-300" />
+                                            <Outlined.CheckCircle size={16} style={{ color: MUTED }} />
                                         ) : running ? (
-                                            <Outlined.Loading size={16} className="animate-spin text-primary" />
+                                            <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
                                         ) : (
-                                            <Outlined.Round size={16} className="text-gray-300" />
+                                            <Outlined.Round size={16} style={{ color: FAINT }} />
                                         )}
                                     </span>
                                     <span
-                                        className={cn(
-                                            'min-w-0 flex-1 truncate',
-                                            done
-                                                ? 'text-[#999]'
-                                                : running
-                                                    ? 'font-medium text-[#212121]'
-                                                    : 'text-[#212121]',
-                                        )}
+                                        className={cn('min-w-0 flex-1 truncate', running && 'font-medium')}
+                                        style={{ color: done ? MUTED : INK }}
                                     >
                                         {task.name || task.task_data?.name}
                                     </span>

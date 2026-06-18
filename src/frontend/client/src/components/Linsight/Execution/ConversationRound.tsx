@@ -14,6 +14,7 @@ import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import { useLocalize } from '~/hooks';
 import { IntentRow } from './IntentRow';
+import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
 import { TaskErrorCard } from './TaskErrorCard';
@@ -38,6 +39,9 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
     const stopped = round.status === SopStatus.Stoped;
 
     return (
+        // A historical round is always finished — force non-live so nothing
+        // renders a stuck "running" ticker.
+        <ExecutionLiveContext.Provider value={false}>
         <div className="border-b border-dashed border-gray-200 pb-4 mb-4">
             {/* user question bubble */}
             {round.question && (
@@ -85,5 +89,6 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
                 </ResultPanel>
             )}
         </div>
+        </ExecutionLiveContext.Provider>
     );
 }

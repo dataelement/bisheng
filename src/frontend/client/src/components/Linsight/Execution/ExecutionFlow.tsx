@@ -32,6 +32,7 @@ import { ResultPanel } from './ResultPanel';
 import { TaskPanel } from './TaskPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
+import { ExecutionLiveContext } from './executionLive';
 import { isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
 
@@ -143,6 +144,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     });
 
     return (
+        // Provide turn liveness so timeline groups never stay stuck "running"
+        // (ticking clock) after the turn completes — a dangling step that never
+        // got its end frame (e.g. a safety-blocked subagent) would otherwise loop.
+        <ExecutionLiveContext.Provider value={running}>
         <div className="relative flex h-full w-full flex-col">
             {/* ── conversational flow ─────────────────────────────────────── */}
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-hover">
@@ -174,7 +179,11 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                     {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
 
                     {!queueing && (
-                        <>
+                        // §1.4 spacing rhythm: a uniform gap-3 between top-level
+                        // groups (intent / timeline groups / breathing / task rows /
+                        // clarify) so the flow reads with one cadence instead of each
+                        // row's ad-hoc margin. Structure/logic unchanged.
+                        <div className="flex flex-col gap-3">
                             {/* session-level answered clarifies -> intent summary rows */}
                             {answeredSessionInputs.map((entry, i) => (
                                 <IntentRow key={`intent_${i}`} data={entry} />
@@ -201,7 +210,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             {pendingInput && (
                                 <ClarifyCard data={pendingInput} disabled={isSharePage} onSubmit={handleClarifySubmit} />
                             )}
-                        </>
+                        </div>
                     )}
 
                     {/* error / terminated banners */}
@@ -284,5 +293,6 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                 onBack={artifactsPanel.fromWorkspace ? artifactsPanel.backToWorkspace : undefined}
             />
         </div>
+        </ExecutionLiveContext.Provider>
     );
 }

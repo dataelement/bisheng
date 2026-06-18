@@ -10,11 +10,13 @@
  * the existing input/output sections (no MergedStep→AgentToolCall adapter, so a
  * bare-string output never degrades into a single result chip).
  */
+import { Outlined } from 'bisheng-icons';
 import { useState, type FC } from 'react';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import CollapsibleTimelineItem from './CollapsibleTimelineItem';
-import { detailTextCls, formatStepParams, RunningSpinner, stepTypeIcon } from './StepRow';
+import { ACCENT, BODY, MUTED } from './execTokens';
+import { detailTextCls, formatStepParams, stepTypeIcon } from './StepRow';
 import type { MergedStep } from './stepUtils';
 
 export interface ToolRowLiteProps {
@@ -35,8 +37,15 @@ const TOOL_VERB_I18N: Record<string, string> = {
     write_todos: '已更新任务清单',
 };
 
-/** Detail text matching the North Star ThinkingContent body (#818181). */
-const DETAIL_TEXT = 'whitespace-pre-wrap break-words text-xs leading-5 text-[#818181]';
+/** Detail text class (color applied via the Body token at the call site). */
+const DETAIL_TEXT = 'whitespace-pre-wrap break-words text-xs leading-5';
+
+/**
+ * Recolor stepTypeIcon's glyph to the Muted token (§1.3 — single color by state,
+ * not by icon). stepTypeIcon hardcodes text-[#333]; this arbitrary descendant
+ * selector overrides the inner svg color without editing StepRow.
+ */
+const MUTED_GLYPH = '[&>svg]:text-[#8A8A8A]';
 
 /** Resolve the running / finished verb-phrase title for a tool step. */
 function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>): string {
@@ -63,7 +72,11 @@ const ToolRowLite: FC<ToolRowLiteProps> = ({ step }) => {
     const hasDetails = !!(step.callReason || paramsText || step.output);
 
     const title = resolveTitle(step, localize);
-    const icon = step.running ? <RunningSpinner /> : stepTypeIcon(step.name);
+    // Unified icon system (§1.3): running → Accent Loading spinner; done →
+    // stepTypeIcon recolored to Muted via the descendant selector.
+    const icon = step.running
+        ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
+        : <span className={cn('flex', MUTED_GLYPH)}>{stepTypeIcon(step.name)}</span>;
 
     return (
         <CollapsibleTimelineItem
@@ -75,17 +88,17 @@ const ToolRowLite: FC<ToolRowLiteProps> = ({ step }) => {
             open={hasDetails && open}
             onToggle={(next) => hasDetails && setOpen(next)}
         >
-            {step.callReason && <p className={cn(DETAIL_TEXT, 'text-[#666]')}>{step.callReason}</p>}
+            {step.callReason && <p className={DETAIL_TEXT} style={{ color: BODY }}>{step.callReason}</p>}
             {paramsText && (
                 <div className="mt-1">
-                    <p className="text-xs font-medium text-gray-400">{localize('com_linsight_step_input')}</p>
-                    <p className={cn(detailTextCls, 'max-h-40 overflow-y-auto')}>{paramsText}</p>
+                    <p className="text-xs font-medium" style={{ color: MUTED }}>{localize('com_linsight_step_input')}</p>
+                    <p className={cn(detailTextCls, 'max-h-40 overflow-y-auto')} style={{ color: BODY }}>{paramsText}</p>
                 </div>
             )}
             {step.output && (
                 <div className="mt-1">
-                    <p className="text-xs font-medium text-gray-400">{localize('com_linsight_step_output')}</p>
-                    <p className={cn(DETAIL_TEXT, 'max-h-40 overflow-y-auto')}>{step.output}</p>
+                    <p className="text-xs font-medium" style={{ color: MUTED }}>{localize('com_linsight_step_output')}</p>
+                    <p className={cn(DETAIL_TEXT, 'max-h-40 overflow-y-auto')} style={{ color: BODY }}>{step.output}</p>
                 </div>
             )}
         </CollapsibleTimelineItem>

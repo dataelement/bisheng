@@ -1,24 +1,20 @@
 /**
- * SubagentTeamGroup — the delegation team shell (Wave2). Replaces SubagentRow.
+ * SubagentTeamGroup — the delegation team monitor panel (§2.2). Replaces the old
+ * "正在派出 N 子智能体（M 秒）" header with the spec narrative title.
  *
  * After backend B2, ONE main-graph `task` delegation point + the distinct
  * subgraph namespaces under it fold into ONE team group (agents.length = the
- * real number of subagents, e.g. 3 — not the old 22). The header reads
- * "Dispatched N subagents to research (M s)"; each agent is rendered as a
- * collapsible <SubagentTrack> so its real internal trail can be drilled into.
+ * real number of subagents, e.g. 3 — not the old 22). Per §2.2 the header reads
+ * "已派出 N 个子智能体并行调研" with a right-aligned tabular meta
+ * "N 个子代理 · 用时 M秒"; each agent is rendered as a collapsible <SubagentTrack>.
  *
- * Group-level collapse (per §5.4 / F7): default = running (expanded while live,
- * collapsed once done to a summary line), persisted to sessionStorage so a
- * manual toggle survives refresh / session switch. The shell never auto-toggles
- * after a user choice (inc-1 SubagentRow bound open to running and collapsed on
- * completion, which caused the whole group to snap shut on the last end frame).
+ * Monitor panel (§2.2): the agents sit in a `rounded-lg border #E8EAED` panel
+ * grounded #FAFBFC, separated by 1px hairlines (not independent boxes).
  *
- * Parallel expression (§5.4): the tracks lay out in a CSS grid with
- * `auto-fill, minmax(180px, 1fr)` — wide containers fit 3-4 cards per row (the
- * parallel signal), narrow surfaces (the TaskTurnPanel 80% bubble) reflow to a
- * single column. Pure CSS, no JS measurement, no first-paint stacked flash.
- * Expanding a card lets it span the full row (gridColumn '1 / -1', set inside
- * SubagentTrack) so its drilldown reads at full content width.
+ * Group-level collapse (§2.1 fold contract): default = running (expanded while
+ * live, collapsed once done), persisted to sessionStorage so a manual toggle
+ * survives refresh / session switch. The shell never auto-toggles after a user
+ * choice.
  *
  * Token-for-token copy of the daily /c timeline tokens (no Chat/Messages import).
  */
@@ -27,6 +23,8 @@ import { memo, type FC } from 'react';
 import { useLocalize } from '~/hooks';
 import { useCollapseState } from '~/store/linsightCollapse';
 import { cn } from '~/utils';
+import { ACCENT, HAIRLINE, INK, MUTED, SURFACE } from './execTokens';
+import { useExecutionLive } from './executionLive';
 import SubagentTrack from './SubagentTrack';
 import TimelineRail from './TimelineRail';
 import { formatSeconds, useElapsedTicker } from './useElapsedTicker';
@@ -67,32 +65,42 @@ function groupEndMs(group: SubagentGroup): number | undefined {
 export const SubagentTeamGroup: FC<SubagentTeamGroupProps> = memo(({ group }) => {
     const localize = useLocalize();
 
-    const running = group.agents.some((a) => a.step.running || a.children.some((c) => c.running));
-    const count = String(group.agents.length);
+    // Gate on the turn being live: a completed/stopped turn means nothing is
+    // running, so a safety-blocked subagent step that never got its end frame
+    // can't keep "正在派出…（已用 N 秒）…" ticking after the task finished.
+    const live = useExecutionLive();
+    const running = live && group.agents.some((a) => a.step.running || a.children.some((c) => c.running));
+    const count = group.agents.length;
 
-    // Group-level collapse (F7): persisted to sessionStorage keyed by the first
-    // agent's callId; default = running (expanded while live to watch the team,
-    // collapsed once done to the "已派出 N 个子智能体（用时 M 秒）" summary line).
-    // NOT auto-bound to running after a user toggle — the shell never snaps shut
-    // on the last end frame.
+    // Group-level collapse: persisted to sessionStorage keyed by the first agent's
+    // callId; default = running. NOT auto-bound to running after a user toggle.
     const persistKey = group.agents[0]?.step.callId ?? '';
     const [open, setOpen] = useCollapseState(persistKey, running);
 
     const startMs = groupStartMs(group);
     const endMs = groupEndMs(group);
     const { elapsedMs } = useElapsedTicker(startMs, endMs, running);
-    const seconds = formatSeconds(elapsedMs);
+
+    // Stable label scheme (reverted from the narration experiment): the original
+    // "已派出 N 个子智能体调研（用时 M 秒）" key carries both the count and the
+    // duration inline, so there is no separate right-side meta. The i18n key bakes
+    // in "（用时 {{1}} 秒）" → feed the bare number (formatSeconds).
+    const label = localize(
+        running ? 'com_linsight_subagent_team_running' : 'com_linsight_subagent_team_done',
+        { 0: String(count), 1: formatSeconds(elapsedMs) },
+    );
 
     const handleToggle = (next: boolean) => setOpen(next);
 
     return (
-        // Reuse the timeline rail anatomy directly (not CollapsibleTimelineItem)
-        // because the group HEADER style differs from a track trigger: the team
-        // header is the bolder #212121 group title, while a track trigger is the
-        // muted #999999 node title.
-        <div className="flex w-full min-w-0 gap-1.5 animate-thinking-appear">
+        <div className="flex w-full min-w-0 gap-2 animate-thinking-appear">
             <TimelineRail
-                icon={<Outlined.PeopleRound size={16} className={cn(running ? 'text-primary' : 'text-[#C9CDD4]')} />}
+                icon={
+                    <Outlined.PeopleRound
+                        size={16}
+                        style={{ color: running ? ACCENT : MUTED }}
+                    />
+                }
                 showConnector={open}
             />
             <div className="flex min-w-0 flex-1 flex-col pb-3">
@@ -100,22 +108,16 @@ export const SubagentTeamGroup: FC<SubagentTeamGroupProps> = memo(({ group }) =>
                     type="button"
                     onClick={() => handleToggle(!open)}
                     className={cn(
-                        'group flex w-fit max-w-full items-center gap-1 text-sm font-medium leading-[22px] text-[#212121]',
+                        'group flex w-full items-center gap-2 text-sm font-medium leading-[22px]',
                         running && 'animate-pulse',
                     )}
+                    style={{ color: INK }}
                 >
-                    <span className="min-w-0 truncate">
-                        {localize(running ? 'com_linsight_subagent_team_running' : 'com_linsight_subagent_team_done', {
-                            0: count,
-                            1: seconds,
-                        })}
-                    </span>
+                    <span className="min-w-0 truncate">{label}</span>
                     <Outlined.Down
                         size={16}
-                        className={cn(
-                            'shrink-0 transform-gpu text-[#999999] transition-transform duration-200',
-                            open && 'rotate-180',
-                        )}
+                        className={cn('shrink-0 transform-gpu transition-transform duration-200', open && 'rotate-180')}
+                        style={{ color: MUTED }}
                     />
                 </button>
                 <div
@@ -123,18 +125,20 @@ export const SubagentTeamGroup: FC<SubagentTeamGroupProps> = memo(({ group }) =>
                     style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
                 >
                     <div className="min-h-0 overflow-hidden">
-                        {/* Parallel layout: a CSS grid auto-fill of minmax(180px,
-                            1fr) cards (no JS measurement). Wide → 3-4 cards/row;
-                            narrow bubble → single column. Each SubagentTrack is the
-                            grid item; an expanded one spans the full row via its own
-                            gridColumn '1 / -1'. No connector between cards (§5.4
-                            "卡片间无连接线"). */}
+                        {/* Monitor panel (§2.2): one rounded-lg hairline-bordered
+                            surface; each agent is a row separated from its
+                            neighbour by a 1px hairline (no independent boxes). */}
                         <div
-                            className="grid gap-2.5"
-                            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}
+                            className="overflow-hidden rounded-lg"
+                            style={{ border: `1px solid ${HAIRLINE}`, background: SURFACE }}
                         >
-                            {group.agents.map((agent) => (
-                                <SubagentTrack key={agent.step.callId} agent={agent} />
+                            {group.agents.map((agent, i) => (
+                                <div
+                                    key={agent.step.callId}
+                                    style={i > 0 ? { borderTop: `1px solid ${HAIRLINE}` } : undefined}
+                                >
+                                    <SubagentTrack agent={agent} />
+                                </div>
                             ))}
                         </div>
                     </div>

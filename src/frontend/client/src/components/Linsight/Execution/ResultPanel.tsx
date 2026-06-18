@@ -11,6 +11,7 @@
 import { Outlined } from 'bisheng-icons';
 import type { ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
+import { INK } from './execTokens';
 
 interface ResultPanelProps {
     /** the terminal deliverable (typically <ResultSection />) */
@@ -19,11 +20,21 @@ interface ResultPanelProps {
 
 export function ResultPanel({ children }: ResultPanelProps) {
     const localize = useLocalize();
+    // peak-end (§2.6): a DoubleCheck Ink "task completed" header marks the
+    // terminal state and lifts the deliverable out of the homogeneous flow; body
+    // is 14px Ink (one notch larger than the process body so the result reads as
+    // the run's peak). The old 2px Ink top rule was dropped for a cleaner seam.
     return (
-        <div data-slot="execution-result" className="mt-6 border-t border-gray-200 pt-4">
+        <div
+            data-slot="execution-result"
+            className="mt-6 text-sm"
+            style={{ color: INK }}
+        >
             <div className="mb-3 flex items-center gap-2">
-                <Outlined.DoubleCheck size={16} className="shrink-0 text-[#212121]" />
-                <span className="text-sm font-medium text-[#212121]">{localize('com_linsight_task_completed')}</span>
+                <Outlined.DoubleCheck size={16} className="shrink-0" style={{ color: INK }} />
+                <span className="text-sm font-medium" style={{ color: INK }}>
+                    {localize('com_linsight_task_completed')}
+                </span>
             </div>
             {children}
         </div>

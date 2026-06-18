@@ -37,6 +37,7 @@ import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { QueueCard } from './QueueCard';
 import { IntentRow } from './IntentRow';
+import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
 import { TaskErrorCard } from './TaskErrorCard';
@@ -189,6 +190,9 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     }
 
     return (
+        // Provide turn liveness so a dangling/blocked step can't keep a group
+        // ticking "running" after this turn completes (see ExecutionLiveContext).
+        <ExecutionLiveContext.Provider value={running}>
         <div ref={rootRef} className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
             {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
@@ -255,5 +259,6 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 </ResultPanel>
             )}
         </div>
+        </ExecutionLiveContext.Provider>
     );
 }

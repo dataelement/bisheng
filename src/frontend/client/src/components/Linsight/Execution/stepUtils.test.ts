@@ -1,5 +1,13 @@
-import { buildFlowNodes, buildTimelineGroups, firstLine, mergeStepFrames } from './stepUtils';
-import type { DeepStepGroup, ExecStepEventData, SubagentGroup } from './stepUtils';
+import {
+    buildFlowNodes,
+    buildTimelineGroups,
+    extractNarration,
+    firstLine,
+    mergeStepFrames,
+    narrationFromSteps,
+    summarizeActivity,
+} from './stepUtils';
+import type { DeepStepGroup, ExecStepEventData, MergedStep, SubagentGroup } from './stepUtils';
 
 // These frames mirror the REAL persisted history contract (ExecStep.model_dump()):
 // the subgraph namespace lives in extra_info.namespace and a second-level int
@@ -192,18 +200,20 @@ describe('stepUtils — top-level steps stay inline alongside team groups', () =
 });
 
 describe('stepUtils — buildTimelineGroups (Wave2 deep_step_group aggregation)', () => {
-    it('wraps a continuous top-level thinking+tool run into ONE deep_step_group (ordered, both kinds)', () => {
+    it('wraps a continuous top-level thinking+tool run into ONE deep_step_group (ordered, both kinds; write_todos dropped)', () => {
         const history: ExecStepEventData[] = [
             frame({ call_id: 'p_think1', name: 'thinking', step_type: 'thinking', output: '先拆解问题', timestamp: 10 }),
+            // write_todos is plan-only noise — dropped by mergeStepFrames, must not appear
             frame({ call_id: 'p_todos', name: 'write_todos', step_type: 'tool', output: '已写清单', timestamp: 12 }),
+            frame({ call_id: 'p_tool', name: 'web_search', step_type: 'tool', output: '搜到了', timestamp: 13 }),
             frame({ call_id: 'p_know', name: 'search_knowledge_base', step_type: 'knowledge', output: '查到背景', timestamp: 14 }),
         ];
         const nodes = buildTimelineGroups(mergeStepFrames(history));
         expect(nodes).toHaveLength(1);
         expect(nodes[0].kind).toBe('deep_step_group');
         const grp = nodes[0] as DeepStepGroup;
-        // steps preserved in order, carrying both thinking and tool/knowledge kinds
-        expect(grp.steps.map((s) => s.callId)).toEqual(['p_think1', 'p_todos', 'p_know']);
+        // write_todos is gone; remaining steps preserved in order, both kinds present
+        expect(grp.steps.map((s) => s.callId)).toEqual(['p_think1', 'p_tool', 'p_know']);
         expect(grp.steps.map((s) => s.stepType)).toEqual(['thinking', 'tool', 'knowledge']);
     });
 
@@ -211,7 +221,7 @@ describe('stepUtils — buildTimelineGroups (Wave2 deep_step_group aggregation)'
         const history: ExecStepEventData[] = [
             // top-level planning run
             frame({ call_id: 'p_think', name: 'thinking', step_type: 'thinking', output: '规划', timestamp: 10 }),
-            frame({ call_id: 'p_todos', name: 'write_todos', step_type: 'tool', output: '清单', timestamp: 11 }),
+            frame({ call_id: 'p_plan_tool', name: 'web_search', step_type: 'tool', output: '查', timestamp: 11 }),
             // delegation + 3 distinct subagents
             delegation,
             nsStep(NS_A, { call_id: 'a_tool', name: 'web_search', step_type: 'tool', output: 'a', timestamp: 101 }),
@@ -225,7 +235,7 @@ describe('stepUtils — buildTimelineGroups (Wave2 deep_step_group aggregation)'
         expect(team.agents).toHaveLength(3);
         // the leading planning run aggregated into one episode
         const planning = nodes[0] as DeepStepGroup;
-        expect(planning.steps.map((s) => s.callId)).toEqual(['p_think', 'p_todos']);
+        expect(planning.steps.map((s) => s.callId)).toEqual(['p_think', 'p_plan_tool']);
     });
 
     it('keeps top-level runs on BOTH sides of a subagent_group as separate deep_step_groups', () => {
@@ -323,5 +333,155 @@ describe('stepUtils — lazy team group (empty-group crash regression)', () => {
         expect(groups).toHaveLength(1);
         expect(groups[0].agents).toHaveLength(2);
         expect(groups[0].goals).toContain('调研三大框架对比');
+    });
+});
+
+describe('stepUtils — write_todos exclusion (mergeStepFrames discard set)', () => {
+    it('drops write_todos frames entirely (plan is owned by the bottom TaskPanel)', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'k1', name: 'think', step_type: 'thinking', output: '想', timestamp: 1 }),
+            frame({ call_id: 'k2', name: 'write_todos', step_type: 'tool', output: '清单', timestamp: 2 }),
+            frame({ call_id: 'k3', name: 'web_search', step_type: 'tool', output: 'hit', timestamp: 3 }),
+        ];
+        const merged = mergeStepFrames(history);
+        expect(merged.map((s) => s.name)).toEqual(['think', 'web_search']);
+        expect(merged.some((s) => s.name === 'write_todos')).toBe(false);
+    });
+
+    it('still drops ask_user and ls alongside write_todos (full discard set)', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'a', name: 'ask_user', step_type: 'tool', status: 'start', timestamp: 1 }),
+            frame({ call_id: 'b', name: 'ls', step_type: 'tool', output: '', timestamp: 2 }),
+            frame({ call_id: 'c', name: 'write_todos', step_type: 'tool', output: 'x', timestamp: 3 }),
+            frame({ call_id: 'd', name: 'web_search', step_type: 'tool', output: 'hit', timestamp: 4 }),
+        ];
+        const merged = mergeStepFrames(history);
+        expect(merged.map((s) => s.name)).toEqual(['web_search']);
+    });
+});
+
+// helper: build a minimal MergedStep for the pure-function tests
+function step(over: Partial<MergedStep>): MergedStep {
+    return {
+        callId: over.callId || 'c',
+        taskId: 't1',
+        name: over.name || '',
+        stepType: over.stepType || 'tool',
+        running: over.running ?? false,
+        callReason: '',
+        params: null,
+        output: over.output ?? '',
+        namespace: over.namespace ?? null,
+        extraInfo: {},
+        startedAt: over.startedAt,
+        endedAt: over.endedAt,
+        raw: {} as ExecStepEventData,
+        ...over,
+    };
+}
+
+describe('stepUtils — summarizeActivity (§3 readable activity meta)', () => {
+    it('classifies by tool name and sorts by count descending', () => {
+        const steps: MergedStep[] = [
+            step({ name: 'web_search', stepType: 'tool' }),
+            step({ name: 'web_search', stepType: 'tool' }),
+            step({ name: 'web_search', stepType: 'tool' }),
+            step({ name: 'search_knowledge_base', stepType: 'knowledge' }),
+            step({ name: 'export_pdf', stepType: 'tool' }),
+            step({ name: 'export_docx', stepType: 'tool' }),
+        ];
+        const out = summarizeActivity(steps);
+        // web_search(3) > export(2) > knowledge(1), descending by count
+        expect(out).toEqual([
+            { category: 'web_search', count: 3 },
+            { category: 'export', count: 2 },
+            { category: 'knowledge', count: 1 },
+        ]);
+    });
+
+    it('routes knowledge before web_search (search_knowledge_base != web_search)', () => {
+        const out = summarizeActivity([step({ name: 'search_knowledge_base', stepType: 'knowledge' })]);
+        expect(out).toEqual([{ category: 'knowledge', count: 1 }]);
+    });
+
+    it('maps the write/read/code/browse families to their categories', () => {
+        const steps: MergedStep[] = [
+            step({ name: 'write_file', stepType: 'tool' }),
+            step({ name: 'add_text_to_file', stepType: 'tool' }),
+            step({ name: 'read_file', stepType: 'tool' }),
+            step({ name: 'bisheng_code_interpreter', stepType: 'tool' }),
+            step({ name: 'glob', stepType: 'tool' }),
+            step({ name: 'grep', stepType: 'tool' }),
+        ];
+        const map = Object.fromEntries(summarizeActivity(steps).map((a) => [a.category, a.count]));
+        expect(map.write_file).toBe(2);
+        expect(map.read_file).toBe(1);
+        expect(map.code).toBe(1);
+        expect(map.browse).toBe(2);
+    });
+
+    it('excludes thinking / ls / write_todos / ask_user, buckets unknown tools as other', () => {
+        const steps: MergedStep[] = [
+            step({ name: 'thinking', stepType: 'thinking', output: '想' }),
+            step({ name: 'ls', stepType: 'tool' }),
+            step({ name: 'write_todos', stepType: 'tool' }),
+            step({ name: 'ask_user', stepType: 'tool' }),
+            step({ name: 'some_unknown_mcp_tool', stepType: 'tool' }),
+        ];
+        const out = summarizeActivity(steps);
+        expect(out).toEqual([{ category: 'other', count: 1 }]);
+    });
+
+    it('returns [] for a pure-thinking group / empty input', () => {
+        expect(summarizeActivity([step({ name: 'thinking', stepType: 'thinking', output: 'x' })])).toEqual([]);
+        expect(summarizeActivity([])).toEqual([]);
+        expect(summarizeActivity(null)).toEqual([]);
+    });
+});
+
+describe('stepUtils — extractNarration (§3 narration 旁白)', () => {
+    it('returns the last sentence after stripping markdown / code', () => {
+        const text = '## 计划\n我先看看 `workspace` 有什么。我需要先看看工作区有什么文件，找到之前写的报告。';
+        expect(extractNarration(text)).toBe('我需要先看看工作区有什么文件，找到之前写的报告。');
+    });
+
+    it('strips fenced code blocks and takes the trailing narration', () => {
+        const text = 'Let me run it.\n```python\nprint(1)\n```\nI just need to call the export tool.';
+        expect(extractNarration(text)).toBe('I just need to call the export tool.');
+    });
+
+    it('falls back to the previous sentence when the last one is too short', () => {
+        const text = '我已经完成了生平与从政时间线的整理。好。';
+        expect(extractNarration(text)).toBe('我已经完成了生平与从政时间线的整理。');
+    });
+
+    it('returns empty string for empty / code-only input', () => {
+        expect(extractNarration('')).toBe('');
+        expect(extractNarration(null)).toBe('');
+        expect(extractNarration('```py\nx=1\n```')).toBe('');
+    });
+});
+
+describe('stepUtils — narrationFromSteps (§3 running vs done)', () => {
+    it('running -> the latest thinking passage last sentence', () => {
+        const steps: MergedStep[] = [
+            step({ name: 'thinking', stepType: 'thinking', output: '第一段思考。先看资料。' }),
+            step({ name: 'web_search', stepType: 'tool', output: 'hit' }),
+            step({ name: 'thinking', stepType: 'thinking', output: '现在我要开始动手写报告了。', running: true }),
+        ];
+        expect(narrationFromSteps(steps, true)).toBe('现在我要开始动手写报告了。');
+    });
+
+    it('done -> the final thinking passage last sentence', () => {
+        const steps: MergedStep[] = [
+            step({ name: 'thinking', stepType: 'thinking', output: '开始。先列大纲。' }),
+            step({ name: 'thinking', stepType: 'thinking', output: '已界定范围并完成权威来源核实。' }),
+        ];
+        expect(narrationFromSteps(steps, false)).toBe('已界定范围并完成权威来源核实。');
+    });
+
+    it('returns empty string when there is no thinking step', () => {
+        expect(narrationFromSteps([step({ name: 'web_search', stepType: 'tool' })], false)).toBe('');
+        expect(narrationFromSteps([], true)).toBe('');
     });
 });

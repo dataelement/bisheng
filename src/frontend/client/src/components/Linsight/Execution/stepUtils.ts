@@ -135,6 +135,131 @@ export function firstLine(text: string | null | undefined): string {
     return head.slice(0, FIRST_LINE_MAX) + '…';
 }
 
+/**
+ * (Activity §3) The readable activity categories — one localized "动作摘要" verb
+ * phrase each. `other` is the catch-all bucket for unknown MCP tools. The i18n
+ * key for each lives in execTokens.ts (ACTIVITY_I18N), kept here only as the
+ * category vocabulary so summarizeActivity stays pure / i18n-free.
+ */
+export type ActivityCategory =
+    | 'web_search'
+    | 'knowledge'
+    | 'read_file'
+    | 'write_file'
+    | 'export'
+    | 'code'
+    | 'browse'
+    | 'other';
+
+/** One readable activity bucket: a category + how many times it fired. */
+export interface ActivityCount {
+    category: ActivityCategory;
+    count: number;
+}
+
+/**
+ * Classify a tool name (lowercased) into an ActivityCategory per spec §3. Order
+ * matters: knowledge/search is checked before the generic `search` so that
+ * `search_knowledge_base` lands in `knowledge`, not `web_search`. Returns null
+ * for names that should never count (caller already excludes thinking/ls/
+ * write_todos/ask_user, but this guards defensively).
+ */
+function classifyActivity(name: string): ActivityCategory | null {
+    const n = name.toLowerCase();
+    if (!n) return 'other';
+    // never-count noise (defensive — callers already drop these)
+    if (n === 'thinking' || n === 'ls' || n === 'write_todos' || n === 'ask_user') return null;
+    // knowledge before web_search: search_knowledge_base must not match web_search
+    if (n.includes('knowledge') || n.includes('search_knowledge')) return 'knowledge';
+    if (n.includes('web_search') || n.includes('search')) return 'web_search';
+    if (n.includes('export')) return 'export';
+    // write/edit family before read so `read` doesn't swallow add_text_to_file etc.
+    if (
+        n.includes('write_file') ||
+        n.includes('add_text_to_file') ||
+        n.includes('replace_file_lines') ||
+        n.includes('write') ||
+        n.includes('edit')
+    ) {
+        return 'write_file';
+    }
+    if (n.includes('read_file') || n.includes('read')) return 'read_file';
+    if (n.includes('code_interpreter') || n.includes('python') || n.includes('code')) return 'code';
+    if (n.includes('glob') || n.includes('grep')) return 'browse';
+    return 'other';
+}
+
+/**
+ * (Activity §3) Summarize a group of steps into readable activity counts. Walks
+ * the steps, excludes thinking / ls / write_todos / ask_user, classifies the
+ * rest by tool name (classifyActivity), and returns the categories sorted by
+ * count descending. Empty input (or a pure-thinking group) returns []. Pure —
+ * no i18n; the caller maps category → localized phrase via ACTIVITY_I18N.
+ */
+export function summarizeActivity(steps: MergedStep[] | null | undefined): ActivityCount[] {
+    const counts = new Map<ActivityCategory, number>();
+    (steps || []).forEach((step) => {
+        if (!step || step.stepType === 'thinking') return;
+        const category = classifyActivity(step.name || '');
+        if (!category) return;
+        counts.set(category, (counts.get(category) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * (Narration §3) Extract a one-line natural-language narration (旁白) from a
+ * thinking passage. Strips markdown emphasis / inline code / fenced code blocks,
+ * then takes the LAST sentence split on `。！？.!?`. If that last sentence is too
+ * short (<4 chars — e.g. a lone "好。") it falls back to the previous sentence.
+ * Empty / unusable input returns '' (caller falls back to a localized label).
+ * The expanded thinking body is unaffected — this only feeds the collapsed hero.
+ */
+const NARRATION_MIN_LEN = 4;
+export function extractNarration(text: string | null | undefined): string {
+    if (!text) return '';
+    let cleaned = text
+        // drop fenced code blocks entirely (```...```)
+        .replace(/```[\s\S]*?```/g, ' ')
+        // inline code `x` -> its inner text
+        .replace(/`([^`]*)`/g, '$1')
+        // markdown emphasis / heading / list / quote markers
+        .replace(/[*_#>~]/g, ' ');
+    // collapse whitespace runs (incl. newlines) to single spaces
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    if (!cleaned) return '';
+    // split into sentences, keeping each sentence's trailing terminator
+    const sentences = cleaned
+        .split(/(?<=[。！？.!?])/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    if (!sentences.length) return '';
+    const last = sentences[sentences.length - 1];
+    // count chars without the trailing terminator for the short-sentence check
+    const bare = last.replace(/[。！？.!?]+$/, '').trim();
+    if (bare.length < NARRATION_MIN_LEN && sentences.length >= 2) {
+        return sentences[sentences.length - 2];
+    }
+    return last;
+}
+
+/**
+ * (Narration §3) Pick the narration for a group of steps. While `running`, use
+ * the LATEST thinking passage's last sentence (live旁白); once done, use the LAST
+ * thinking passage's last sentence (its final summarizing line). Returns '' when
+ * the group has no thinking step (caller falls back to a localized label).
+ */
+export function narrationFromSteps(steps: MergedStep[] | null | undefined, running: boolean): string {
+    const thinking = (steps || []).filter((s) => s && s.stepType === 'thinking');
+    if (!thinking.length) return '';
+    // running -> the most recent thinking passage; done -> the final one. Both
+    // resolve to the last thinking step in document order for this render model.
+    const target = thinking[thinking.length - 1];
+    return extractNarration(target.output);
+}
+
 /** Merge raw start/end frames by call_id, preserving first-seen order. */
 export function mergeStepFrames(history: ExecStepEventData[] | null | undefined): MergedStep[] {
     const byId = new Map<string, MergedStep>();
@@ -148,7 +273,10 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
         // ToolRow would spin forever. Drop it.
         // `ls` is the agent's internal workspace exploration (typically empty at
         // the start of a no-upload task) — display noise, not a deliverable step.
-        if (frame.name === 'ask_user' || frame.name === 'ls') return;
+        // `write_todos` only mutates the plan; the plan is rendered exclusively by
+        // the bottom TaskPanel (single source of truth), so it is display noise in
+        // the execution flow and must not show up in steps or activity summaries.
+        if (frame.name === 'ask_user' || frame.name === 'ls' || frame.name === 'write_todos') return;
         const callId = frame.call_id || `__step_${idx}`;
         const ts = typeof frame.timestamp === 'number' ? frame.timestamp : undefined;
         const existing = byId.get(callId);
