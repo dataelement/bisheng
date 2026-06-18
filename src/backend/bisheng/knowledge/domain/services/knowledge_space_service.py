@@ -4294,11 +4294,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "status": "subscribed",
                     "space_id": space_id,
                 }
-            if existing.status == MembershipStatusEnum.PENDING and target_status == MembershipStatusEnum.PENDING:
-                return {
-                    "status": "pending",
-                    "space_id": space_id,
-                }
+            # NOTE: no early "already pending → return" short-circuit here. That
+            # trusted a possibly-stale async_find_member read (which has returned
+            # phantom PENDING rows on DM under rapid requests), returning success
+            # without writing anything — the membership silently vanished on
+            # refresh. We now always fall through to the (idempotent) approval
+            # gate + an authoritative upsert, so the row is durably written even
+            # when the read lied. The gate dedupes on business_key, so a genuine
+            # re-click creates no duplicate approval instance.
 
         if not existing or existing.status == MembershipStatusEnum.REJECTED:
             # Limit is role-configurable via F005 quota (knowledge_space_subscribe,
@@ -4402,23 +4405,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def _persist_space_member(self, existing, space_id: int, status: MembershipStatusEnum):
-        """Insert or update the current user's space membership to ``status``.
+        """Authoritatively set the current user's space membership to ``status``.
 
-        Centralizes the insert/update branch so callers can defer persistence
-        until after a decision (e.g. the approval gate) has been made.
+        Centralizes persistence so callers can defer it until after a decision
+        (e.g. the approval gate) has been made. The write is read-independent: it
+        does NOT trust the passed-in ``existing`` (a prior async_find_member read
+        can be stale — phantom rows on DM under rapid requests caused the
+        membership to silently not persist). The DAO UPSERTs by natural key
+        (UPDATE; INSERT only if no row was actually affected).
         """
-        if existing:
-            existing.status = status
-            return await SpaceChannelMemberDao.update(existing)
-        member = SpaceChannelMember(
-            business_id=str(space_id),
-            business_type=BusinessTypeEnum.SPACE,
+        return await SpaceChannelMemberDao.async_upsert_space_member_status(
+            space_id=space_id,
             user_id=self.login_user.user_id,
-            user_role=UserRoleEnum.MEMBER,
             status=status,
         )
-        await SpaceChannelMemberDao.async_insert_member(member)
-        return member
 
     def _build_space_approval_gate(self) -> ApprovalGate:
         registry = ApprovalRegistry.with_default_presets()
