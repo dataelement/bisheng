@@ -18,6 +18,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalHomeReq,
     ShougangPortalHomeResp,
     ShougangPortalHomeStatsResp,
+    ShougangPortalQaFileSearchReq,
+    ShougangPortalQaFileSearchResp,
     ShougangPortalPersonalSpacesResp,
     ShougangPortalShareLinkAccessResp,
     ShougangPortalShareLinkCreateReq,
@@ -174,3 +176,12 @@ async def search_shougang_portal_files(
 ) -> Any:
     result = await svc.search_shougang_portal_files(req)
     return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode='json'))
+
+
+@router.post('/qa/files/search')
+async def search_shougang_portal_qa_files(
+        req: ShougangPortalQaFileSearchReq,
+        svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.search_shougang_portal_qa_files_by_name(req)
+    return resp_200(ShougangPortalQaFileSearchResp(**result).model_dump(mode='json'))
