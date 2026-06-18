@@ -23,3 +23,4 @@ from bisheng.worker.telemetry.mid_table import (
 )
 from bisheng.worker.test.test import add
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, stop_workflow
+from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
