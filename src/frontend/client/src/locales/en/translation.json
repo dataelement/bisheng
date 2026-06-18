@@ -404,6 +404,7 @@
   "com_linsight_clarify_skipped": "Skipped",
   "com_linsight_clarify_next": "Next",
   "com_linsight_clarify_submit": "Confirm",
+  "com_linsight_clarify_default": "Default",
   "com_linsight_task_panel": "Tasks",
   "com_linsight_task_panel_done": "Tasks completed",
   "com_linsight_task_terminated": "Task terminated",

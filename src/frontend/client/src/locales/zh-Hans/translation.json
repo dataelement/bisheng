@@ -392,6 +392,7 @@
   "com_linsight_clarify_skipped": "跳过",
   "com_linsight_clarify_next": "下一题",
   "com_linsight_clarify_submit": "确定",
+  "com_linsight_clarify_default": "默认",
   "com_linsight_task_panel": "任务",
   "com_linsight_task_panel_done": "任务已完成",
   "com_linsight_task_terminated": "任务已终止",

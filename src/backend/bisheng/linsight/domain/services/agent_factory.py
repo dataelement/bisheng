@@ -30,21 +30,129 @@ from langgraph.types import interrupt
 from bisheng.common.services.config_service import settings
 from bisheng.llm.domain.services import LLMService
 
+# --- Subagent (researcher) tool blacklist (design #1 §4.3 / §5.1, decision 4) ---
+# The researcher subagent gets a BLACKLIST-filtered subset of the main graph's
+# `tools` arg (user-configured MCP/business tools + SearchKnowledgeBase). Default
+# allow keeps research powerful; only HITL/interrupt and write-side-effect tools
+# are denied. The subagent NEVER receives ask_user (it is injected separately into
+# the MAIN graph as [*tools, ask_user], so it is not even in `tools`; listed here
+# as belt-and-suspenders), so its only interrupt source is removed by construction.
+#
+# ⚠️ MAINTENANCE CONTRACT: ANY newly added HITL/interrupt tool OR write-side-effect
+#    tool MUST be registered in _SUBAGENT_TOOL_DENY below. Otherwise the blacklist
+#    (default-allow) leaks it to the subagent — re-arming root cause B (a subagent
+#    that can interrupt) or letting it clobber deliverables in output/.
+_SUBAGENT_TOOL_DENY = frozenset(
+    {
+        "ask_user",  # HITL interrupt source — must stay pinned to the main graph
+        "add_text_to_file",  # write side-effect — deliverable assembly stays in main graph
+        "replace_file_lines",  # write side-effect
+        "export_docx",  # write side-effect — deliverable export stays in the main graph
+        "export_pdf",  # write side-effect — deliverable export stays in the main graph
+    }
+)
+# Runtime double safety: even if someone forgets to register a HITL tool in
+# _SUBAGENT_TOOL_DENY, every known HITL tool name is also force-stripped here.
+_KNOWN_HITL_TOOL_NAMES = frozenset({"ask_user"})
+
+# Chinese system prompt for the researcher subagent (design #1 §4.1 / §4.4),
+# adapted from the deepagents demo RESEARCH_SUBAGENT_PROMPT. The subagent runs in
+# an isolated context window and returns only a distilled, sourced summary.
+LINSIGHT_RESEARCHER_PROMPT_ZH = """你是调研子代理（researcher）。你的职责是深入调研主智能体派发给你的**单一**子任务，并返回结构化、有出处的摘要。
+
+工作约定：
+- 优先使用 search_knowledge_base 进行检索（若该工具可用），并用 read_file / ls 阅读工作区中已有的资料。
+- 多轮逐步细化查询：先广后窄，根据已检索到的内容不断调整下一轮查询，直到信息足够支撑结论。
+- 中间产物（草稿、笔记、原始检索摘录）只写入工作区 scratch/ 目录，绝不写 output/。最终交付物的撰写与拼装由主智能体负责，不归你管。
+- 你**没有** ask_user 工具，也不得以任何方式向用户提问；遇到信息不足时基于已掌握的资料给出最佳结论并说明不确定性，而不是停下来等待澄清。
+- 调用方（主智能体）只能看到你的**最后一条消息**。因此请把蒸馏后的结论（含关键事实、出处/来源标识、必要的不确定性说明）作为最后一条消息完整回传，不要把结论只留在中间步骤里。
+
+请使用简体中文进行调研与回传。"""
+
 # Chinese system prompt for the Linsight task-mode agent (design §2.4). Kept
 # inline so it stays co-located with the factory. No call_reason schema is
 # injected — step titles come from deepagents' native tool output (the frontend
 # renders the tool name); only the HITL interrupt reason is model-authored.
-LINSIGHT_SYSTEM_PROMPT_ZH = """你是毕昇灵思任务智能体，负责把用户的复杂任务拆解为可执行的待办清单并逐项完成。
+LINSIGHT_SYSTEM_PROMPT_ZH = """你是深度研究任务智能体，负责把用户的复杂任务拆解为可执行的待办清单并逐项完成，最终产出结构化、有依据的交付物。
 
-工作约定：
-- 使用 write_todos 维护任务清单；更新待办时只翻转 status（pending/in_progress/completed），不要改写已有文案，以保证任务标识稳定。
-- 同一时刻只有一个待办处于 in_progress。
-- 当任务依赖只有用户才知道的信息（个人情况、偏好、目标、约束、口味、预算、时间安排、选择等）且这些信息缺失或不明确时，必须先调用 ask_user 工具向用户收集，再开始 write_todos 规划与执行；不要凭空假设或编造，也不要只用普通文字提问后就结束任务。
-- 【关键】ask_user 必须由你本人（主智能体）在主流程中**直接调用**，严禁通过 task 工具/子代理来调用 ask_user。所有需要向用户澄清的问题，必须在创建任何子任务（task）之前，一次性用 ask_user 问完；子代理（task）内部不得调用 ask_user。
-- 调用 ask_user 时，reason 用中文说明原因，questions 给出结构化的问题与可选项（单选/多选/开放输入）。
-- 交付物请写入工作区 output/ 目录；中间产物写入 scratch/。
+# 工作流程（必须严格按顺序执行）
 
-请使用简体中文与用户和工具交互。"""
+0. 【先澄清，再动手】先判断请求是否“明确”。一个请求是明确的，当且仅当同时满足：
+   (a) 有清晰的目标产出——你清楚要做出/交付什么；
+   (b) 完成它所需、且只有用户本人才知道的关键信息都已给出（个人情况、偏好、目标、约束、预算、时间安排、具体数据，或在多个合理方案间的选择等）。
+   只要 (a) 或 (b) 缺失或不明确，就【只调用一次 ask_user，然后立即结束本轮】：
+   - 不要输出任何普通文字回复——澄清卡本身就是你的回应；
+   - 【questions 必须结构化、不能为空】把每个缺失项写成一个带 2-4 个预设选项（options）的问题，单选恰好标一个 is_default 默认项，让用户点选；只给 reason 而把 questions 留空、或把问题塞进 reason 文字里，都是错误的；
+   - 同一轮内不要调用任何其它工具（连 write_todos 也不行）；
+   - 待 ask_user 返回用户答案后，再进入第 1 步，并据此设定任务范围与做法。
+   能用下方“默认假设”合理补齐的不要问——只问“只有用户知道、且不问就会做错”的关键缺口。
+   【整个会话最多澄清一轮】：用户回答后若仍有个别字段不明确，直接采用“默认假设”推进，绝不第二次调用 ask_user。
+   ask_user 必须由你本人（主智能体）在主流程中直接调用；所有澄清必须在创建任何子任务（task）之前一次性问完，严禁通过 task 工具/子代理调用 ask_user（子代理没有 ask_user，无法向用户提问）。
+
+1. 【规划】调用 write_todos 写出有编号的待办清单（通常 3-6 项，含一个“产出交付物”收尾项）。
+
+2. 【执行】按清单逐项推进，选用合适工具：
+   - 需要资料时用 search_knowledge_base 检索知识库；读写文件用 write_file / read_file / edit_file / ls。
+   - 对“独立、需多轮检索/阅读、产出可蒸馏为一段摘要”的子任务，可用 task 委派给 "general-purpose" 子代理做隔离调研（它在独立上下文检索/阅读，只把蒸馏后的有出处摘要回传给你）；同一时刻并行委派不超过 2~3 个。
+   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定；同一时刻只允许一个待办处于 in_progress。
+
+3. 【产出交付物】按用户在澄清时选择的输出格式产出，markdown 是唯一规范源：
+   - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。
+   - 3b（仅当选了 html）：write_file 写 output/<name>.html（完整自包含 HTML，内联样式，无外部脚本/CDN）。
+   - 3c（仅当选了 docx）：export_docx(source_path="output/<name>.md")，必须在 3a 之后。
+   - 3d（仅当选了 pdf）：export_pdf(source_path="output/<name>.md")，必须在 3a 之后。
+   最终交付物的撰写与拼装必须由你（主智能体）亲自完成，不得委派给子代理；中间产物写 scratch/。
+
+4. 【收尾】用 2-3 句话告知用户产出了哪些文件（例如“已完成。见 output/report.md 与 output/report.docx”）。
+
+# 如何填写 ask_user（仅第 0 步触发时）
+
+- reason：一句话说明为何需要先确认，使用与用户输入一致的语言。
+- questions：1-3 个（**不能为空数组**），按“对结果影响最大”优先排序（任务范围/目标 > 输出格式/形态 > 其它细节）。每个形如：{"question": "完整问题文本", "options": [...], "multiple": false}
+  - 每个问题**必须给 2-4 个具体预设选项**（options），形如 {"text": "选项文案", "is_default": true}，优先让用户点选；只有该信息天然无法预设选项（如“请输入你的身高”）时，才把该问题的 options 留空走开放输入——但问题本身仍要写出来，不能整个 questions 留空。
+  - 单选问题（multiple=false）：必须恰好一个选项 is_default=true（对应下方默认假设）。
+  - 多选问题（multiple=true，如输出格式）：把推荐项标 is_default=true。
+  - 收集“输出格式”用一个多选问题，选项含 markdown(默认,is_default) / html / docx / pdf。
+- 一次性把所有要问的问完。不要罗列工具或能力限制，也不要预先解释工作流。
+
+# 默认假设（无需追问，缺失时直接采用）
+
+- 输出语言：始终与用户输入语言一致（中文输入则中文交付，英文则英文，不写死中文）。
+- 输出格式：默认仅 markdown；仅当用户明确选择才追加 html / docx / pdf，不要擅自猜测。
+- 深度：3-5 个子任务 + 1 个“产出交付物”待办。
+- 受众：具备一定背景的通用读者；时间范围：近 12 个月，除非主题本身具有历史性。
+- 凡能从常识或上下文合理推断的偏好/参数：直接推断，不要问。
+- 仅当信息“只有用户本人才知道、且影响结果正确性”时才值得澄清。
+
+# 你可用的工具
+
+- ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。
+- write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。
+- search_knowledge_base：在授权的知识库/知识空间语义检索（仅在有可用知识库时存在）。
+- write_file / read_file / edit_file / ls：工作区文件工具；交付物写 output/，中间产物写 scratch/。
+- export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
+- export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
+- task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
+
+# 风格
+
+- 简洁，工具调用之间不加多余解释性文字。
+- 不要凭空编造事实；交付内容应基于检索到的资料/依据。
+- 面向用户的所有文字（ask_user 的 reason、最终回复、交付物正文）一律与用户输入语言保持一致。"""
+
+
+def _norm_option(o) -> dict:
+    """Normalize a clarify option to ``{"text", "is_default"}`` (back-compat with str).
+
+    The front-end uses ``text`` as both the display label and the submitted answer
+    value; ``is_default`` only drives the card's pre-selection + ★ badge and never
+    enters the answer text. A bare string is treated as a non-default option, so
+    legacy callers / replayed checkpoints keep working.
+    """
+    if isinstance(o, dict):
+        text = str(o.get("text", o.get("value", o.get("label", ""))))
+        return {"text": text, "is_default": bool(o.get("is_default", False))}
+    return {"text": str(o), "is_default": False}
 
 
 @tool
@@ -54,11 +162,14 @@ async def ask_user(reason: str, questions: list[dict] | None = None) -> str:
     只有调用本工具才会真正暂停等待用户输入——不要直接用普通文字提问后就结束任务。
 
     Args:
-        reason: 总体说明（中文），例如“为了制定计划，请先确认以下问题”。
+        reason: 总体说明，使用与用户输入一致的语言（例如“为了制定计划，请先确认以下问题”）。
         questions: 结构化问题列表，每项形如
-            {"question": "问题标题", "options": ["选项1", "选项2"], "multiple": false}。
-            options 为空表示开放式自由输入；multiple=true 表示多选。没有具体选项时
-            questions 可留空，只给 reason。
+            {"question": "问题标题", "options": [...], "multiple": false}。
+            - options 每项可写成 {"text": "选项文案", "is_default": true} 或纯字符串；
+              留空表示开放式自由输入。
+            - 单选问题（multiple=false）应恰好有一个选项 is_default=true（对应合理默认值），
+              澄清卡会默认选中它；多选问题（multiple=true）可把推荐项标 is_default=true。
+            没有具体选项时 questions 可留空，只给 reason。
 
     Returns:
         用户的回答文本。
@@ -69,13 +180,63 @@ async def ask_user(reason: str, questions: list[dict] | None = None) -> str:
             "name": "clarify",
             "args": {
                 "question": str(q.get("question", "")),
-                "options": [str(o) for o in (q.get("options") or [])],
+                "options": [_norm_option(o) for o in (q.get("options") or [])],
                 "multiple": bool(q.get("multiple", False)),
             },
         }
         for i, q in enumerate(questions or [])
     ]
     return interrupt({"reason": reason, "params": {"tool_calls": tool_calls}})
+
+
+def _subagent_tools(tools: Sequence[BaseTool]) -> list[BaseTool]:
+    """Filter the main-graph tool list down to the researcher subagent's subset.
+
+    Decision 4 (design #1 §4.3): a BLACKLIST — every tool is allowed for the
+    subagent unless it appears in _SUBAGENT_TOOL_DENY (HITL / write side-effects)
+    or _KNOWN_HITL_TOOL_NAMES (runtime double safety). ``tools`` here is the
+    factory's ``tools`` arg (user-configured MCP/business tools +
+    init_linsight_tools' SearchKnowledgeBase); it does NOT contain ask_user, which
+    the factory injects separately into the MAIN graph only.
+
+    The returned list MUST be passed as the subagent spec's explicit ``tools`` key
+    so deepagents does NOT fall back to inheriting ``[*tools, ask_user]``
+    (graph.py:670 — an explicit ``tools`` means the subagent gets ONLY those). The
+    subagent still receives ls/read_file/write_file/edit_file + write_todos from
+    its own middleware stack (graph.py:618-627), sharing the main WorkspaceBackend.
+    """
+    return [t for t in tools if t.name not in _SUBAGENT_TOOL_DENY and t.name not in _KNOWN_HITL_TOOL_NAMES]
+
+
+def _build_researcher_subagent(tools: Sequence[BaseTool]) -> dict:
+    """Build the single MVP researcher subagent spec (deepagents ``SubAgent``).
+
+    Design #1 §4.1 (MVP = one researcher) / §4.2 (decision 1: same-name override).
+
+    - ``name="general-purpose"``: providing our own spec with this name SUPPRESSES
+      deepagents' auto-injected default general-purpose subagent (graph.py:693), so
+      the unsafe default GP — which would inherit ``[*tools, ask_user]`` — never
+      gets built. The model decides whether to delegate from ``description``, not
+      ``name``, so the honest description below is what actually steers it.
+    - ``tools=_subagent_tools(tools)``: explicit subset (blacklist). Explicit
+      ``tools`` is REQUIRED so the subagent does not inherit ask_user (§4.3).
+    - NO ``model`` key: the subagent inherits the parent's per-task tenant model
+      (graph.py:608 ``spec.get("model", model)``).
+    - NO ``permissions`` / ``interrupt_on`` keys: this is the SAFETY BASIS
+      (design §3.1). Without them the subagent stack carries no
+      HumanInTheLoopMiddleware and no filesystem interrupts, so the subagent has
+      NO interrupt source at all — root cause B (HITL not bubbling out of a
+      subgraph) cannot recur because the subagent simply cannot interrupt.
+    """
+    return {
+        "name": "general-purpose",
+        "description": (
+            "用于隔离的调研/分析子任务：在独立上下文中多轮检索与阅读资料，"
+            "返回蒸馏后的、有出处的结构化摘要。它不能向用户提问，也不负责最终交付物的撰写与拼装。"
+        ),
+        "system_prompt": LINSIGHT_RESEARCHER_PROMPT_ZH,
+        "tools": _subagent_tools(tools),
+    }
 
 
 async def create_linsight_agent(
@@ -109,10 +270,6 @@ async def create_linsight_agent(
     svid = svid or session_model.id
     model = await _resolve_model(session_model, model_id)
 
-    # F035: turn OFF subagent delegation (the deepagents `task` tool) at the
-    # profile level — the only reliable way (see _disable_subagent_delegation).
-    _disable_subagent_delegation(model)
-
     if backend is None:
         backend = _default_backend(svid, file_dir)
     if checkpointer is None:
@@ -128,24 +285,13 @@ async def create_linsight_agent(
     # Re-enable only once skills compose without hijacking the workspace filesystem
     # (separate file-tool namespaces). Skills are coarse/optional; the deliverable
     # pipeline is core, so it wins.
+    #
+    # The `task` tool (subagent delegation) is now RE-ENABLED (design #1). The
+    # earlier _ToolExclusionMiddleware({"task"}) that stripped it has been removed;
+    # the over-delegation + HITL-bubbling root causes are now defused by
+    # construction, not by removing the tool — see _build_researcher_subagent
+    # (subagent has no interrupt source) and the delegation-budget prompt section.
     middlewares: list = []
-
-    # F035 HITL fix (2026-06-16): strip the deepagents `task` tool (subagent
-    # delegation). The model was over-delegating (100+ subagents per run) and
-    # calling ask_user INSIDE subagents, where the HITL interrupt never bubbled up
-    # to park the task — so clarification never reached the user and the task ran
-    # to a direct-answer fallback. Removing `task` forces all work (incl. ask_user)
-    # into the main graph, where interrupt() parks correctly. _ToolExclusionMiddleware
-    # is added AFTER SubAgentMiddleware so it strips the injected `task` tool before
-    # the model sees it.
-    try:
-        from deepagents.middleware._tool_exclusion import _ToolExclusionMiddleware
-
-        middlewares.append(_ToolExclusionMiddleware(excluded=frozenset({"task"})))
-    except Exception as e:
-        from loguru import logger
-
-        logger.warning(f"could not exclude `task` subagent tool: {e}")
 
     # No custom history-compression middleware: deepagents already ships a
     # built-in summarization middleware (deepagents.middleware.summarization),
@@ -155,60 +301,30 @@ async def create_linsight_agent(
     # ask_user (HITL): a tool that calls langgraph ``interrupt()`` so the agent
     # can park-and-release for user input (F035 §4.6); deepagents ships no
     # built-in ask-human tool, so we inject our own.
+    # design #1 §4.1/§4.2: a single MVP researcher subagent, named
+    # "general-purpose" to suppress deepagents' auto default GP (graph.py:693).
+    # ask_user is appended ONLY to the MAIN graph tools below; the subagent
+    # receives _subagent_tools(tools), which never includes ask_user.
+    #
+    # Export tools (export_docx / export_pdf): closure-injected with the session
+    # WorkspaceBackend, appended to the MAIN graph only. They are NOT in `tools`
+    # (so the researcher never inherits them) and are also listed in
+    # _SUBAGENT_TOOL_DENY as belt-and-suspenders — deliverable export stays in the
+    # main graph. init_linsight_export_tools returns [] for a non-writable backend
+    # (e.g. the test FakeWorkspaceBackend), so the tools never surface when unusable.
+    from bisheng.tool.domain.langchain.linsight_export import init_linsight_export_tools
+
+    export_tools = init_linsight_export_tools(backend)
     return create_deep_agent(
         model=model,
-        tools=[*tools, ask_user],
+        tools=[*tools, ask_user, *export_tools],
         system_prompt=LINSIGHT_SYSTEM_PROMPT_ZH,
         middleware=middlewares,
+        subagents=[_build_researcher_subagent(tools)],
         backend=backend,
         checkpointer=checkpointer,
         store=None,
     )
-
-
-def _disable_subagent_delegation(model: BaseChatModel) -> None:
-    """Disable deepagents' auto-added general-purpose subagent (the ``task``
-    tool) for this model via the official harness-profile API.
-
-    Why: the model over-delegated (spawning ``ls`` / ``glob`` "subagents" that
-    called 0 tools) and could call ``ask_user`` INSIDE a subagent, where the
-    HITL ``interrupt()`` never bubbles up to park the task. The earlier approach
-    — a user-supplied ``_ToolExclusionMiddleware({"task"})`` — does not reliably
-    strip ``task`` because user middleware is ordered before ``SubAgentMiddleware``
-    in the assembled stack, so the injected ``task`` tool reappears before the
-    model. Disabling the general-purpose subagent at the profile level stops
-    ``task`` from being added at all (graph.py: ``gp_profile.enabled is False``
-    → no ``task`` tool). Registration is additive/idempotent and scoped to this
-    model's provider; deriving no provider key is a safe no-op.
-    """
-    try:
-        from deepagents._models import get_model_identifier, get_model_provider
-        from deepagents.profiles import (
-            GeneralPurposeSubagentProfile,
-            HarnessProfile,
-            register_harness_profile,
-        )
-
-        disabled = HarnessProfile(general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False))
-        provider = get_model_provider(model)
-        identifier = get_model_identifier(model)
-        keys: set[str] = set()
-        if provider:
-            keys.add(provider)
-            if identifier and ":" not in identifier:
-                keys.add(f"{provider}:{identifier}")
-        if identifier and ":" in identifier:
-            keys.add(identifier)
-        for key in keys:
-            register_harness_profile(key, disabled)
-        if not keys:
-            from loguru import logger
-
-            logger.warning("disable_subagent_delegation: no harness-profile key derivable; `task` tool may remain")
-    except Exception as e:
-        from loguru import logger
-
-        logger.warning(f"could not disable subagent delegation via harness profile: {e}")
 
 
 async def _resolve_model(session_model, model_id: str | None) -> BaseChatModel:

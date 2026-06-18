@@ -244,11 +244,17 @@ class LinsightWorkflowTask:
         self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
         try:
-            # Rebuild the SAME tool set the parked graph had: the fresh/continue
-            # paths extend with init_linsight_tools (knowledge + local-file tools),
-            # so resume must too — otherwise the resumed graph is missing those
-            # built-in tools and can't finish a deliverable that needs them.
-            linsight_tools = await ToolServices.init_linsight_tools(root_path=self.file_dir)
+            # Rebuild the SAME tool set the parked graph had — INCLUDING the C4
+            # knowledge whitelist. The fresh/continue paths gate SearchKnowledgeBase
+            # with allowed_knowledge_ids; resume MUST pass the same set, otherwise
+            # (a) the resumed graph's tool topology diverges from the parked one, and
+            # (b) the knowledge tool is rebuilt UNGATED (allowed_knowledge_ids=None),
+            # bypassing the C4 whitelist — which since design #1 also leaks into the
+            # researcher subagent's tool subset.
+            allowed_knowledge_ids = await self._resolve_allowed_knowledge_ids(session_model)
+            linsight_tools = await ToolServices.init_linsight_tools(
+                root_path=self.file_dir, allowed_knowledge_ids=allowed_knowledge_ids
+            )
             tools.extend(linsight_tools)
             # Rebuild on the SAME thread_id with a durable checkpointer so the
             # parked interrupt checkpoint is located (design §4.4).
@@ -735,10 +741,11 @@ class LinsightWorkflowTask:
             }
             # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
             # prefix the mapper uses to归并 nested step cards (design §3.1/§3.7).
-            # NOTE (F035): currently DORMANT — the `task` subagent tool is stripped
-            # by `_ToolExclusionMiddleware` (agent_factory), so no subgraph events
-            # are emitted and namespaces stay empty. Kept as forward-compat; it
-            # reactivates once named subagents are reintroduced.
+            # LIVE (design #1, 2026-06-17): the `task` subagent tool is RE-ENABLED —
+            # agent_factory now registers a single "general-purpose" researcher
+            # subagent and no longer strips `task`, so subgraph events ARE emitted
+            # with a non-empty namespace. The mapper drops namespaced todos (the main
+            # plan stays clean) and tags namespaced tool steps step_type="subagent".
             async for chunk in agent.astream(
                 task_input,
                 config=config,

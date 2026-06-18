@@ -56,8 +56,10 @@ SKILL_OBJECT_TYPE = "linsight_skill"
 
 class SkillService:
     """All methods assume the tenant context is already established
-    (endpoint dependency or worker context, design §6.5) — tenant scoping of
-    DB reads/writes happens via the automatic tenant filter."""
+    (endpoint dependency or worker context, design §6.5). Skills are
+    tenant-private: ``LinsightSkillDao`` enforces strict ``tenant_id = current``
+    isolation on every read/write (no Root→child sharing), so a tenant only
+    ever sees and mutates its own skills."""
 
     def __init__(self, store: SkillStore | None = None):
         self.store = store or SkillStore()

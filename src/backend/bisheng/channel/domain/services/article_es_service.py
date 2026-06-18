@@ -6,6 +6,7 @@ All methods are async, using get_es_connection to obtain AsyncElasticsearch clie
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from elasticsearch import AsyncElasticsearch
@@ -27,10 +28,45 @@ from bisheng.core.search.elasticsearch.manager import get_es_connection, get_es_
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class ArticleQueryParts:
+    query: dict[str, Any] | None
+    runtime_mappings: dict[str, Any]
+
+
 class ArticleEsService:
     """Article ES Service, encapsulates all operations on channel_articles index"""
 
     CONTENT_PREVIEW_MAX_LENGTH = 256
+    SUB_CHANNEL_SOURCE_CONTAINS_SCRIPT = """
+def source = params._source;
+String title = "";
+String content = "";
+
+if (source != null) {
+    if (source.containsKey("title") && source["title"] != null) {
+        title = source["title"].toString();
+    }
+    if (source.containsKey("content") && source["content"] != null) {
+        content = source["content"].toString();
+    }
+}
+
+for (keyword in params.keywords) {
+    if (keyword == null) {
+        continue;
+    }
+    String value = keyword.toString();
+    if (value.length() == 0) {
+        continue;
+    }
+    if (title.contains(value) || content.contains(value)) {
+        emit(true);
+        return;
+    }
+}
+emit(false);
+"""
 
     def __init__(self):
         self._es_client: AsyncElasticsearch | None = None
@@ -237,7 +273,71 @@ class ArticleEsService:
     #  Search & Count
     # ──────────────────────────────────────────
 
-    def _build_rule_query(self, rule: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    @staticmethod
+    def _normalize_script_keywords(keywords: list[Any] | None) -> list[str]:
+        if not keywords:
+            return []
+        return [keyword for kw in keywords if (keyword := str(kw).strip())]
+
+    def _build_source_contains_runtime_query(
+        self,
+        keywords: list[Any] | None,
+        runtime_mappings: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        normalized_keywords = self._normalize_script_keywords(keywords)
+        if not normalized_keywords:
+            return None
+
+        runtime_field_name = f"__channel_sub_filter_{len(runtime_mappings)}"
+        runtime_mappings[runtime_field_name] = {
+            "type": "boolean",
+            "script": {
+                "source": self.SUB_CHANNEL_SOURCE_CONTAINS_SCRIPT,
+                "params": {"keywords": normalized_keywords},
+            },
+        }
+        return {"term": {runtime_field_name: True}}
+
+    @classmethod
+    def _combine_rule_queries(
+        cls,
+        typed_queries: list[tuple[dict[str, Any], str | None]],
+        relation: str,
+    ) -> dict[str, Any] | None:
+        if not typed_queries:
+            return None
+
+        if relation == "and":
+            must_clauses = [query for query, rule_type in typed_queries if rule_type != "exclude"]
+            must_not_clauses = [query for query, rule_type in typed_queries if rule_type == "exclude"]
+
+            bool_query: dict[str, Any] = {}
+            if must_clauses:
+                bool_query["must"] = must_clauses
+            if must_not_clauses:
+                bool_query["must_not"] = must_not_clauses
+
+            return {"bool": bool_query} if bool_query else None
+
+        include_clauses = [query for query, rule_type in typed_queries if rule_type != "exclude"]
+        exclude_clauses = [query for query, rule_type in typed_queries if rule_type == "exclude"]
+
+        should_clauses: list[dict[str, Any]] = []
+        should_clauses.extend(include_clauses)
+        if exclude_clauses:
+            should_clauses.append(
+                {"bool": {"must_not": [{"bool": {"should": exclude_clauses, "minimum_should_match": 1}}]}}
+            )
+
+        return {"bool": {"should": should_clauses, "minimum_should_match": 1}}
+
+    def _build_rule_query(
+        self,
+        rule: dict[str, Any],
+        *,
+        use_source_script: bool = False,
+        runtime_mappings: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any] | None, str | None]:
         """Build ES query for a single rule. Handles both SingleRule and MultiRule.
         Returns (query, rule_type) where rule_type is 'include', 'exclude', or None for MultiRule.
         """
@@ -248,48 +348,26 @@ class ArticleEsService:
         if rule_type == "multi" or nested_rules is not None:
             # MultiRule: build queries for nested SingleRules, combine with internal relation
             internal_relation = rule.get("relation", "or")
-            include_queries = []
-            exclude_queries = []
+            typed_queries = []
 
             for sub_rule in nested_rules:
-                sub_query, sub_rule_type = self._build_rule_query(sub_rule)
+                sub_query, sub_rule_type = self._build_rule_query(
+                    sub_rule,
+                    use_source_script=use_source_script,
+                    runtime_mappings=runtime_mappings,
+                )
                 if sub_query is None:
                     continue
-                if sub_rule_type == "include":
-                    include_queries.append(sub_query)
-                elif sub_rule_type == "exclude":
-                    exclude_queries.append(sub_query)
+                typed_queries.append((sub_query, sub_rule_type))
 
-            # Build combined query using internal relation
-            must_clauses = []
-            must_not_clauses = []
-
-            if include_queries:
-                if internal_relation == "and":
-                    must_clauses.append({"bool": {"must": include_queries}})
-                else:
-                    must_clauses.append({"bool": {"should": include_queries, "minimum_should_match": 1}})
-
-            if exclude_queries:
-                if internal_relation == "and":
-                    must_not_clauses.append({"bool": {"must": exclude_queries}})
-                else:
-                    must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
-
-            bool_query = {}
-            if must_clauses:
-                bool_query["must"] = must_clauses
-            if must_not_clauses:
-                bool_query["must_not"] = must_not_clauses
-
-            if bool_query:
-                return {"bool": bool_query}, None
-            else:
-                return None, None
+            return self._combine_rule_queries(typed_queries, internal_relation), None
         else:
             # SingleRule
             if not keywords:
                 return None, None
+            if use_source_script and runtime_mappings is not None:
+                return self._build_source_contains_runtime_query(keywords, runtime_mappings), rule.get("rule_type")
+
             keyword_queries = []
             for kw in keywords:
                 keyword_queries.append({"match_phrase": {"title": {"query": kw}}})
@@ -314,62 +392,55 @@ class ArticleEsService:
         # Only accept group format
         return [item for item in filter_rules if isinstance(item, dict) and self._is_rule_group(item)]
 
-    def _build_rule_group_query(self, rule_group: dict[str, Any]) -> dict[str, Any] | None:
+    def _build_rule_group_query(
+        self,
+        rule_group: dict[str, Any],
+        runtime_mappings: dict[str, Any] | None = None,
+        enable_sub_channel_runtime: bool = True,
+    ) -> dict[str, Any] | None:
         """Build ES query for a top-level ChannelFilterRules group."""
         relation = rule_group.get("relation", "or")
         rules = rule_group.get("rules") or []
+        use_source_script = (
+            enable_sub_channel_runtime and runtime_mappings is not None and rule_group.get("channel_type") == "sub"
+        )
 
-        include_queries = []
-        exclude_queries = []
+        typed_queries = []
 
         for rule in rules:
-            rule_query, rule_type = self._build_rule_query(rule)
+            rule_query, rule_type = self._build_rule_query(
+                rule,
+                use_source_script=use_source_script,
+                runtime_mappings=runtime_mappings,
+            )
             if rule_query is None:
                 continue
 
-            if rule_type == "include":
-                include_queries.append(rule_query)
-            elif rule_type == "exclude":
-                exclude_queries.append(rule_query)
-            else:
-                include_queries.append(rule_query)
+            typed_queries.append((rule_query, rule_type))
 
-        must_clauses = []
-        must_not_clauses = []
+        return self._combine_rule_queries(typed_queries, relation)
 
-        if include_queries:
-            if relation == "and":
-                must_clauses.append({"bool": {"must": include_queries}})
-            else:
-                must_clauses.append({"bool": {"should": include_queries, "minimum_should_match": 1}})
+    def _build_rule_groups_query_parts(
+        self,
+        rule_groups: list[dict[str, Any]],
+        *,
+        enable_sub_channel_runtime: bool = True,
+    ) -> ArticleQueryParts:
+        """Build an ES query for multiple rule groups.
 
-        if exclude_queries:
-            if relation == "and":
-                must_not_clauses.append({"bool": {"must": exclude_queries}})
-            else:
-                must_not_clauses.append({"bool": {"should": exclude_queries, "minimum_should_match": 1}})
-
-        bool_query: dict[str, Any] = {}
-        if must_clauses:
-            bool_query["must"] = must_clauses
-        if must_not_clauses:
-            bool_query["must_not"] = must_not_clauses
-
-        if not bool_query:
-            return None
-
-        return {"bool": bool_query}
-
-    def _build_rule_groups_query(self, rule_groups: list[dict[str, Any]]) -> dict[str, Any] | None:
-        """构造多个规则组的 ES 查询。
-
-        同一 channel_type 的规则组保留原有 OR 语义；不同 channel_type
-        之间使用 AND，使子频道规则在主频道过滤结果上继续收窄。
+        Rule groups with the same channel_type keep OR semantics; different
+        channel_type groups use AND semantics so sub-channel rules narrow the
+        main-channel result.
         """
+        runtime_mappings: dict[str, Any] = {}
         grouped_queries: dict[str, list[dict[str, Any]]] = {}
         channel_type_order: list[str] = []
         for group in rule_groups:
-            group_query = self._build_rule_group_query(group)
+            group_query = self._build_rule_group_query(
+                group,
+                runtime_mappings,
+                enable_sub_channel_runtime=enable_sub_channel_runtime,
+            )
             if group_query is None:
                 continue
             channel_type = group.get("channel_type", "main")
@@ -394,31 +465,37 @@ class ArticleEsService:
                 )
 
         if not channel_type_queries:
-            return None
+            return ArticleQueryParts(query=None, runtime_mappings=runtime_mappings)
         if len(channel_type_queries) == 1:
-            return channel_type_queries[0]
-        return {"bool": {"must": channel_type_queries}}
+            return ArticleQueryParts(query=channel_type_queries[0], runtime_mappings=runtime_mappings)
+        return ArticleQueryParts(query={"bool": {"must": channel_type_queries}}, runtime_mappings=runtime_mappings)
 
-    def _build_count_query(
+    def _build_rule_groups_query(self, rule_groups: list[dict[str, Any]]) -> dict[str, Any] | None:
+        return self._build_rule_groups_query_parts(rule_groups, enable_sub_channel_runtime=False).query
+
+    def _build_count_query_parts(
         self,
         source_ids: list[str] | None = None,
         filter_rules: list[dict[str, Any]] | None = None,
         include_article_ids: list[str] | None = None,
         exclude_article_ids: list[str] | None = None,
-    ) -> dict[str, Any] | None:
+        *,
+        enable_sub_channel_runtime: bool = True,
+    ) -> ArticleQueryParts:
         """Build count query, returns None if result is definitively 0"""
         must_clauses = []
         must_not_clauses = []
         filter_clauses = []
+        runtime_mappings: dict[str, Any] = {}
 
         if source_ids is not None:
             if not source_ids:
-                return None
+                return ArticleQueryParts(query=None, runtime_mappings={})
             filter_clauses.append({"terms": {"source_id": source_ids}})
 
         if include_article_ids is not None:
             if not include_article_ids:
-                return None
+                return ArticleQueryParts(query=None, runtime_mappings={})
             filter_clauses.append({"terms": {"_id": include_article_ids}})
 
         # F037-B: counting unread = (channel filter) AND NOT (in the user's read
@@ -431,9 +508,13 @@ class ArticleEsService:
 
         if filter_rules:
             rule_groups = self._normalize_rule_groups(filter_rules)
-            rule_groups_query = self._build_rule_groups_query(rule_groups)
-            if rule_groups_query is not None:
-                must_clauses.append(rule_groups_query)
+            rule_group_parts = self._build_rule_groups_query_parts(
+                rule_groups,
+                enable_sub_channel_runtime=enable_sub_channel_runtime,
+            )
+            if rule_group_parts.query is not None:
+                must_clauses.append(rule_group_parts.query)
+            runtime_mappings.update(rule_group_parts.runtime_mappings)
 
         bool_query: dict[str, Any] = {}
         if must_clauses:
@@ -444,9 +525,30 @@ class ArticleEsService:
             bool_query["filter"] = filter_clauses
 
         if bool_query:
-            return {"bool": bool_query}
+            return ArticleQueryParts(query={"bool": bool_query}, runtime_mappings=runtime_mappings)
         else:
-            return {"match_all": {}}
+            return ArticleQueryParts(query={"match_all": {}}, runtime_mappings=runtime_mappings)
+
+    def _build_count_query(
+        self,
+        source_ids: list[str] | None = None,
+        filter_rules: list[dict[str, Any]] | None = None,
+        include_article_ids: list[str] | None = None,
+        exclude_article_ids: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        return self._build_count_query_parts(
+            source_ids=source_ids,
+            filter_rules=filter_rules,
+            include_article_ids=include_article_ids,
+            exclude_article_ids=exclude_article_ids,
+            enable_sub_channel_runtime=False,
+        ).query
+
+    @staticmethod
+    def _extract_total_count(total: dict[str, Any] | int) -> int:
+        if isinstance(total, dict):
+            return total["value"]
+        return total
 
     async def count_articles(
         self,
@@ -458,12 +560,24 @@ class ArticleEsService:
         """
         Count articles, supports source filtering, filter rules, and article ID inclusion/exclusion.
         """
-        query = self._build_count_query(source_ids, filter_rules, include_article_ids, exclude_article_ids)
-        if query is None:
+        query_parts = self._build_count_query_parts(source_ids, filter_rules, include_article_ids, exclude_article_ids)
+        if query_parts.query is None:
             return 0
 
         client = await self._get_client()
-        response = await client.count(index=ARTICLE_INDEX_NAME, query=query)
+        if query_parts.runtime_mappings:
+            response = await client.search(
+                index=ARTICLE_INDEX_NAME,
+                body={
+                    "query": query_parts.query,
+                    "runtime_mappings": query_parts.runtime_mappings,
+                    "size": 0,
+                    "track_total_hits": True,
+                },
+            )
+            return self._extract_total_count(response["hits"]["total"])
+
+        response = await client.count(index=ARTICLE_INDEX_NAME, query=query_parts.query)
         return response["count"]
 
     async def count_articles_batch(self, requests: list[dict[str, Any]]) -> list[int]:
@@ -483,20 +597,24 @@ class ArticleEsService:
         zero_indices = set()
 
         for i, req in enumerate(requests):
-            query = self._build_count_query(
+            query_parts = self._build_count_query_parts(
                 source_ids=req.get("source_ids"),
                 filter_rules=req.get("filter_rules"),
                 include_article_ids=req.get("include_article_ids"),
                 exclude_article_ids=req.get("exclude_article_ids"),
             )
-            if query is None:
+            if query_parts.query is None:
                 zero_indices.add(i)
                 # msearch requires valid query even if we know it's zero to maintain order easily
                 body.append({"index": ARTICLE_INDEX_NAME})
                 body.append({"query": {"match_none": {}}, "size": 0})
             else:
                 body.append({"index": ARTICLE_INDEX_NAME})
-                body.append({"query": query, "size": 0})
+                search_body: dict[str, Any] = {"query": query_parts.query, "size": 0}
+                if query_parts.runtime_mappings:
+                    search_body["runtime_mappings"] = query_parts.runtime_mappings
+                    search_body["track_total_hits"] = True
+                body.append(search_body)
 
         response = await client.msearch(body=body)
 
@@ -506,7 +624,7 @@ class ArticleEsService:
                 counts.append(0)
             else:
                 total = r["hits"]["total"]
-                counts.append(total["value"] if isinstance(total, dict) else total)
+                counts.append(self._extract_total_count(total))
         return counts
 
     async def search_articles(
@@ -540,6 +658,7 @@ class ArticleEsService:
         must_clauses = []
         must_not_clauses = []
         filter_clauses = []
+        runtime_mappings: dict[str, Any] = {}
 
         # 1. Source ID filtering
         if source_ids:
@@ -567,9 +686,10 @@ class ArticleEsService:
         # 3. Channel filter rules
         if filter_rules:
             rule_groups = self._normalize_rule_groups(filter_rules)
-            rule_groups_query = self._build_rule_groups_query(rule_groups)
-            if rule_groups_query is not None:
-                must_clauses.append(rule_groups_query)
+            rule_group_parts = self._build_rule_groups_query_parts(rule_groups)
+            if rule_group_parts.query is not None:
+                must_clauses.append(rule_group_parts.query)
+            runtime_mappings.update(rule_group_parts.runtime_mappings)
 
         # Assemble complete query
         bool_query: dict[str, Any] = {}
@@ -637,6 +757,8 @@ class ArticleEsService:
         }
         if highlight_config:
             body["highlight"] = highlight_config
+        if runtime_mappings:
+            body["runtime_mappings"] = runtime_mappings
 
         # Execute search
         response = await client.search(index=ARTICLE_INDEX_NAME, body=body)
@@ -683,19 +805,21 @@ class ArticleEsService:
         """
         if not article_ids:
             return []
-        query = self._build_count_query(
+        query_parts = self._build_count_query_parts(
             source_ids=source_ids,
             filter_rules=filter_rules,
             include_article_ids=article_ids,
         )
-        if query is None:
+        if query_parts.query is None:
             return []
         client = get_es_connection_sync()
         body = {
-            "query": query,
+            "query": query_parts.query,
             "_source": False,
             "size": len(article_ids),
         }
+        if query_parts.runtime_mappings:
+            body["runtime_mappings"] = query_parts.runtime_mappings
         response = client.search(index=ARTICLE_INDEX_NAME, body=body)
         return [hit["_id"] for hit in response.get("hits", {}).get("hits", [])]
 
