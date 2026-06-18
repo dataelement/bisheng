@@ -1,37 +1,36 @@
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Optional, List
 
-from sqlalchemy import Column, CHAR, Enum as SQLEnum, DateTime, String, text, Boolean, delete, func, case, Integer
+from sqlalchemy import CHAR, Boolean, Column, DateTime, Integer, String, case, delete, func, text
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.types import TypeDecorator
-from sqlmodel import Field, select, update, col
+from sqlmodel import Field, col, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 from bisheng.user.domain.models.user import User
 
 
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
-
 class BusinessTypeEnum(str, Enum):
-    SPACE = 'space'
-    CHANNEL = 'channel'
+    SPACE = "space"
+    CHANNEL = "channel"
 
 
 class UserRoleEnum(str, Enum):
-    CREATOR = 'creator'
-    ADMIN = 'admin'
-    MEMBER = 'member'
+    CREATOR = "creator"
+    ADMIN = "admin"
+    MEMBER = "member"
 
 
 class ChannelRelationEnum(str, Enum):
-    OWNER = 'owner'
-    MANAGER = 'manager'
-    EDITOR = 'editor'
-    VIEWER = 'viewer'
+    OWNER = "owner"
+    MANAGER = "manager"
+    EDITOR = "editor"
+    VIEWER = "viewer"
 
 
-def normalize_channel_relation(value: ChannelRelationEnum | str | None) -> Optional[ChannelRelationEnum]:
+def normalize_channel_relation(value: ChannelRelationEnum | str | None) -> ChannelRelationEnum | None:
     if value is None:
         return None
     if isinstance(value, ChannelRelationEnum):
@@ -58,9 +57,9 @@ class ChannelRelationType(TypeDecorator):
 
 
 class MembershipStatusEnum(str, Enum):
-    ACTIVE = 'ACTIVE'
-    PENDING = 'PENDING'
-    REJECTED = 'REJECTED'
+    ACTIVE = "ACTIVE"
+    PENDING = "PENDING"
+    REJECTED = "REJECTED"
 
 
 REJECTED_STATUS_DISPLAY_WINDOW = timedelta(hours=24)
@@ -87,7 +86,7 @@ CHANNEL_RELATION_PRIORITY = {
 }
 
 
-def resolve_channel_relation(member: 'SpaceChannelMember') -> Optional[ChannelRelationEnum]:
+def resolve_channel_relation(member: "SpaceChannelMember") -> ChannelRelationEnum | None:
     if member.relation:
         return normalize_channel_relation(member.relation)
     return CHANNEL_ROLE_TO_RELATION.get(UserRoleEnum(member.user_role))
@@ -98,63 +97,65 @@ def legacy_role_for_channel_relation(relation: ChannelRelationEnum | str) -> Use
 
 
 class SpaceChannelMember(SQLModelSerializable, table=True):
-    __tablename__ = 'space_channel_member'
-    id: Optional[int] = Field(default=None, primary_key=True)
+    __tablename__ = "space_channel_member"
+    id: int | None = Field(default=None, primary_key=True)
 
-    business_id: str = Field(..., description='Business ID', sa_column=Column(CHAR(36), nullable=False, index=True))
-    business_type: BusinessTypeEnum = Field(...,
-                                            sa_column=Column(SQLEnum(BusinessTypeEnum), nullable=False, index=True))
-    user_id: int = Field(..., description='User ID', nullable=False)
-    user_role: UserRoleEnum = Field(..., description='User Role',
-                                    sa_column=Column(SQLEnum(UserRoleEnum), nullable=False))
+    business_id: str = Field(..., description="Business ID", sa_column=Column(CHAR(36), nullable=False, index=True))
+    business_type: BusinessTypeEnum = Field(
+        ..., sa_column=Column(SQLEnum(BusinessTypeEnum), nullable=False, index=True)
+    )
+    user_id: int = Field(..., description="User ID", nullable=False)
+    user_role: UserRoleEnum = Field(
+        ..., description="User Role", sa_column=Column(SQLEnum(UserRoleEnum), nullable=False)
+    )
     status: MembershipStatusEnum = Field(
         default=MembershipStatusEnum.ACTIVE,
-        description='Membership Status',
+        description="Membership Status",
         sa_column=Column(
-            SQLEnum(MembershipStatusEnum, name='space_channel_member_status_enum'),
+            SQLEnum(MembershipStatusEnum, name="space_channel_member_status_enum"),
             nullable=False,
             server_default=text("'ACTIVE'"),
         ),
     )
     membership_source: str = Field(
-        default='manual',
-        description='manual | department_admin',
+        default="manual",
+        description="manual | department_admin",
         sa_column=Column(
             String(32),
             nullable=False,
             server_default=text("'manual'"),
         ),
     )
-    department_admin_promoted_from_role: Optional[str] = Field(
+    department_admin_promoted_from_role: str | None = Field(
         default=None,
-        description='Original role preserved when a manual member is temporarily promoted by department-admin sync',
+        description="Original role preserved when a manual member is temporarily promoted by department-admin sync",
         sa_column=Column(
             String(32),
             nullable=True,
         ),
     )
-    relation: Optional[ChannelRelationEnum] = Field(
+    relation: ChannelRelationEnum | None = Field(
         default=None,
-        description='Channel relation: owner / manager / editor / viewer',
+        description="Channel relation: owner / manager / editor / viewer",
         sa_column=Column(
             ChannelRelationType(),
             nullable=True,
             index=True,
         ),
     )
-    grant_subject_type: Optional[str] = Field(
+    grant_subject_type: str | None = Field(
         default=None,
-        description='Grant source subject type: user / department / user_group / self',
+        description="Grant source subject type: user / department / user_group / self",
         sa_column=Column(String(32), nullable=True, index=True),
     )
-    grant_subject_id: Optional[int] = Field(
+    grant_subject_id: int | None = Field(
         default=None,
-        description='Grant source subject ID',
+        description="Grant source subject ID",
         sa_column=Column(Integer, nullable=True, index=True),
     )
-    grant_relation: Optional[ChannelRelationEnum] = Field(
+    grant_relation: ChannelRelationEnum | None = Field(
         default=None,
-        description='Relation carried by this grant source',
+        description="Relation carried by this grant source",
         sa_column=Column(
             ChannelRelationType(),
             nullable=True,
@@ -162,27 +163,34 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
     )
     grant_include_children: bool = Field(
         default=False,
-        description='Whether department grant includes child departments',
-        sa_column=Column(Boolean, nullable=False, server_default=text('0')),
+        description="Whether department grant includes child departments",
+        sa_column=Column(Boolean, nullable=False, server_default=text("0")),
     )
-    grant_model_id: Optional[str] = Field(
+    grant_model_id: str | None = Field(
         default=None,
-        description='Relation model id attached to this grant source',
+        description="Relation model id attached to this grant source",
         sa_column=Column(String(64), nullable=True),
     )
-    grant_binding_key: Optional[str] = Field(
+    grant_binding_key: str | None = Field(
         default=None,
-        description='Stable relation-model binding key attached to this grant source',
+        description="Stable relation-model binding key attached to this grant source",
         sa_column=Column(String(255), nullable=True, index=True),
     )
-    is_pinned: bool = Field(default=False, description='Whether the channel is pinned to top',
-                            sa_column=Column(Boolean, nullable=False, server_default=text('0')))
+    is_pinned: bool = Field(
+        default=False,
+        description="Whether the channel is pinned to top",
+        sa_column=Column(Boolean, nullable=False, server_default=text("0")),
+    )
 
-    create_time: datetime = Field(default_factory=datetime.now, description='Creation Time',
-                                  sa_column=Column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
+    create_time: datetime = Field(
+        default_factory=datetime.now,
+        description="Creation Time",
+        sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    )
 
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=True, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
     @property
     def is_active(self) -> bool:
@@ -196,7 +204,7 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
     def is_rejected(self) -> bool:
         return self.status == MembershipStatusEnum.REJECTED
 
-    def is_recently_rejected(self, now: Optional[datetime] = None) -> bool:
+    def is_recently_rejected(self, now: datetime | None = None) -> bool:
         if not self.is_rejected or self.update_time is None:
             return False
 
@@ -205,13 +213,13 @@ class SpaceChannelMember(SQLModelSerializable, table=True):
 
 
 class SpaceChannelMemberDao:
-    """ DAO for all DB access on space_channel_member table """
+    """DAO for all DB access on space_channel_member table"""
 
     @classmethod
     async def update(cls, member: SpaceChannelMember) -> SpaceChannelMember:
-        """ Async: Update an existing member record """
+        """Async: Update an existing member record"""
         if member.id is None:
-            raise ValueError('Member ID is required')
+            raise ValueError("Member ID is required")
 
         async with get_async_db_session() as session:
             session.add(member)
@@ -221,7 +229,7 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def async_insert_member(cls, member: SpaceChannelMember) -> SpaceChannelMember:
-        """ Async: Insert a new member record """
+        """Async: Insert a new member record"""
 
         async with get_async_db_session() as session:
             session.add(member)
@@ -230,8 +238,68 @@ class SpaceChannelMemberDao:
             return member
 
     @classmethod
-    async def async_find_member(cls, space_id: int, user_id: int) -> Optional[SpaceChannelMember]:
-        """ Async: Find an existing membership record for a user in a space (regardless of status) """
+    async def async_upsert_space_member_status(
+        cls,
+        space_id: int,
+        user_id: int,
+        status: "MembershipStatusEnum",
+    ) -> SpaceChannelMember:
+        """Authoritatively set a user's SPACE membership to ``status`` by natural key.
+
+        Read-independent: a prior ``async_find_member`` read can be stale under
+        rapid requests (it has returned phantom rows on DM, see subscribe_space),
+        so we never trust a passed-in object for the write. UPDATE by
+        (business_id, business_type, user_id); if no row was actually affected,
+        INSERT a fresh MEMBER row. Standard SQL — works on both MySQL and DM.
+        """
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                update(SpaceChannelMember)
+                .where(
+                    SpaceChannelMember.business_id == str(space_id),
+                    SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                    SpaceChannelMember.user_id == user_id,
+                )
+                .values(status=status)
+            )
+            if (result.rowcount or 0) > 0:
+                await session.commit()
+                row = (
+                    await session.exec(
+                        select(SpaceChannelMember).where(
+                            SpaceChannelMember.business_id == str(space_id),
+                            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                            SpaceChannelMember.user_id == user_id,
+                        )
+                    )
+                ).first()
+                if row is not None:
+                    return row
+                # Defensive: an UPDATE affected a row but the re-read came back
+                # empty — return a transient object carrying what we just wrote so
+                # callers (which only read user_id/user_role/status) don't crash.
+                return SpaceChannelMember(
+                    business_id=str(space_id),
+                    business_type=BusinessTypeEnum.SPACE,
+                    user_id=user_id,
+                    user_role=UserRoleEnum.MEMBER,
+                    status=status,
+                )
+            member = SpaceChannelMember(
+                business_id=str(space_id),
+                business_type=BusinessTypeEnum.SPACE,
+                user_id=user_id,
+                user_role=UserRoleEnum.MEMBER,
+                status=status,
+            )
+            session.add(member)
+            await session.commit()
+            await session.refresh(member)
+            return member
+
+    @classmethod
+    async def async_find_member(cls, space_id: int, user_id: int) -> SpaceChannelMember | None:
+        """Async: Find an existing membership record for a user in a space (regardless of status)"""
 
         statement = select(SpaceChannelMember).where(
             SpaceChannelMember.business_id == str(space_id),
@@ -244,21 +312,23 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def find_space_members_paginated(
-        cls, space_id: int, user_ids: Optional[List[int]] = None, page: int = 1, page_size: int = 20
-    ) -> List[SpaceChannelMember]:
-        """ Async: Paginate active members for a space, creators and admins first """
+        cls, space_id: int, user_ids: list[int] | None = None, page: int = 1, page_size: int = 20
+    ) -> list[SpaceChannelMember]:
+        """Async: Paginate active members for a space, creators and admins first"""
         role_order = case(
             (SpaceChannelMember.user_role == UserRoleEnum.CREATOR, 0),
             (SpaceChannelMember.user_role == UserRoleEnum.ADMIN, 1),
-            else_=2
+            else_=2,
         )
 
-        query = select(SpaceChannelMember).join(
-            User, SpaceChannelMember.user_id == User.user_id
-        ).where(
-            SpaceChannelMember.business_id == str(space_id),
-            SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
+        query = (
+            select(SpaceChannelMember)
+            .join(User, SpaceChannelMember.user_id == User.user_id)
+            .where(
+                SpaceChannelMember.business_id == str(space_id),
+                SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
+            )
         )
 
         if user_ids is not None:
@@ -273,15 +343,14 @@ class SpaceChannelMemberDao:
             return result.all()
 
     @classmethod
-    async def count_space_members_with_keyword(
-        cls, space_id: int, user_ids: Optional[List[int]] = None
-    ) -> int:
-        """ Async: Count active members for a space, filtered by user_ids, for pagination """
+    async def count_space_members_with_keyword(cls, space_id: int, user_ids: list[int] | None = None) -> int:
+        """Async: Count active members for a space, filtered by user_ids, for pagination"""
         from sqlalchemy import func
+
         statement = select(func.count()).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
+            SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
         )
         if user_ids is not None:
             if not user_ids:
@@ -292,8 +361,8 @@ class SpaceChannelMemberDao:
             return await session.scalar(statement)
 
     @classmethod
-    async def async_get_active_member_role(cls, space_id: int, user_id: int) -> Optional[UserRoleEnum]:
-        """ Async: Return the role of an ACTIVE member, or None if not an active member """
+    async def async_get_active_member_role(cls, space_id: int, user_id: int) -> UserRoleEnum | None:
+        """Async: Return the role of an ACTIVE member, or None if not an active member"""
 
         statement = select(SpaceChannelMember.user_role).where(
             SpaceChannelMember.business_id == str(space_id),
@@ -307,24 +376,27 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def async_count_user_space_subscriptions(cls, user_id: int) -> int:
-        """ Async: Count how many spaces the user has actively subscribed to (non-creator) """
+        """Async: Count how many spaces the user has actively subscribed to (non-creator)"""
 
         from sqlmodel import func
+
         statement = select(func.count()).where(
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.user_id == user_id,
             SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
-            SpaceChannelMember.status.in_([
-                MembershipStatusEnum.ACTIVE,
-                MembershipStatusEnum.PENDING,
-            ]),
+            SpaceChannelMember.status.in_(
+                [
+                    MembershipStatusEnum.ACTIVE,
+                    MembershipStatusEnum.PENDING,
+                ]
+            ),
         )
         async with get_async_db_session() as session:
             return await session.scalar(statement)
 
     @classmethod
     async def async_count_space_members(cls, space_id: int) -> int:
-        """ Async: Count how many spaces the user has active (non-creator) """
+        """Async: Count how many spaces the user has active (non-creator)"""
         statement = select(func.count()).where(
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.business_id == str(space_id),
@@ -334,7 +406,7 @@ class SpaceChannelMemberDao:
             return await session.scalar(statement)
 
     @classmethod
-    async def async_count_members_batch(cls, space_ids: List[str]) -> dict:
+    async def async_count_members_batch(cls, space_ids: list[str]) -> dict:
         """Async: Batch count active (non-creator) members for multiple spaces.
 
         Returns a dict mapping space_id (str) -> subscriber count.
@@ -342,7 +414,7 @@ class SpaceChannelMemberDao:
         if not space_ids:
             return {}
         statement = (
-            select(SpaceChannelMember.business_id, func.count().label('cnt'))
+            select(SpaceChannelMember.business_id, func.count().label("cnt"))
             .where(
                 SpaceChannelMember.business_id.in_(space_ids),
                 SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
@@ -355,44 +427,47 @@ class SpaceChannelMemberDao:
         return {row[0]: row[1] for row in rows}
 
     @classmethod
-    async def async_get_members_by_space(cls, space_id: int, order_by: str = 'user_id',
-                                         user_roles: List[UserRoleEnum] = None,
-                                         status: MembershipStatusEnum = MembershipStatusEnum.ACTIVE) -> List[
-        SpaceChannelMember]:
-        """ Async: Get all active members of a space """
+    async def async_get_members_by_space(
+        cls,
+        space_id: int,
+        order_by: str = "user_id",
+        user_roles: list[UserRoleEnum] = None,
+        status: MembershipStatusEnum = MembershipStatusEnum.ACTIVE,
+    ) -> list[SpaceChannelMember]:
+        """Async: Get all active members of a space"""
 
         statement = select(SpaceChannelMember).where(
             SpaceChannelMember.business_id == str(space_id),
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-            SpaceChannelMember.status == status
+            SpaceChannelMember.status == status,
         )
 
         if user_roles:
             statement = statement.where(SpaceChannelMember.user_role.in_(user_roles))
-        if order_by == 'user_id':
+        if order_by == "user_id":
             statement = statement.order_by(SpaceChannelMember.user_id.asc())
-        elif order_by == 'create_time':
+        elif order_by == "create_time":
             statement = statement.order_by(SpaceChannelMember.create_time.desc())
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    async def async_get_user_followed_space_ids(cls, user_id: int) -> List[str]:
-        """ Async: Get list of space_ids the user follows (not as creator) """
+    async def async_get_user_followed_space_ids(cls, user_id: int) -> list[str]:
+        """Async: Get list of space_ids the user follows (not as creator)"""
 
         statement = select(SpaceChannelMember.business_id).where(
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.user_id == user_id,
             SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
-            SpaceChannelMember.user_role != UserRoleEnum.CREATOR
+            SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
         )
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    async def async_get_user_followed_members(cls, user_id: int) -> List[SpaceChannelMember]:
+    async def async_get_user_followed_members(cls, user_id: int) -> list[SpaceChannelMember]:
         """
         Async: Get all active followed space membership records for a user (non-creator),
         ordered by is_pinned DESC then create_time DESC so pinned spaces appear first.
@@ -416,7 +491,7 @@ class SpaceChannelMemberDao:
             return result.all()
 
     @classmethod
-    async def async_get_user_created_members(cls, user_id: int) -> List[SpaceChannelMember]:
+    async def async_get_user_created_members(cls, user_id: int) -> list[SpaceChannelMember]:
         """
         Async: Get all active created space membership records for a user
         (creator only), ordered by is_pinned DESC then create_time DESC.
@@ -440,7 +515,7 @@ class SpaceChannelMemberDao:
             return result.all()
 
     @classmethod
-    async def async_get_user_space_members(cls, user_id: int) -> List[SpaceChannelMember]:
+    async def async_get_user_space_members(cls, user_id: int) -> list[SpaceChannelMember]:
         """Async: Get all active space membership rows for a user."""
 
         statement = (
@@ -460,7 +535,7 @@ class SpaceChannelMemberDao:
             return result.all()
 
     @classmethod
-    async def async_get_user_managed_members(cls, user_id: int) -> List[SpaceChannelMember]:
+    async def async_get_user_managed_members(cls, user_id: int) -> list[SpaceChannelMember]:
         """
         Async: Get all active managed space membership records for a user
         (admin and creator), ordered by is_pinned DESC then create_time DESC.
@@ -484,9 +559,10 @@ class SpaceChannelMemberDao:
             return result.all()
 
     @classmethod
-    async def async_get_followed_members_for_spaces(cls, user_id: int, space_ids: List[str]) -> List[
-        SpaceChannelMember]:
-        """ Async: Get ACTIVE follow-status members for a batch of space IDs and a given user """
+    async def async_get_followed_members_for_spaces(
+        cls, user_id: int, space_ids: list[str]
+    ) -> list[SpaceChannelMember]:
+        """Async: Get ACTIVE follow-status members for a batch of space IDs and a given user"""
 
         if not space_ids:
             return []
@@ -495,14 +571,14 @@ class SpaceChannelMemberDao:
             SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
             SpaceChannelMember.user_id == user_id,
             SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
-            SpaceChannelMember.user_role != UserRoleEnum.CREATOR
+            SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
         )
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    async def async_get_all_members_for_spaces(cls, user_id: int, space_ids: List[str]) -> List[SpaceChannelMember]:
+    async def async_get_all_members_for_spaces(cls, user_id: int, space_ids: list[str]) -> list[SpaceChannelMember]:
         """
         Async: Get ALL membership records (active AND pending) for a user across a batch of spaces.
         Used by the Knowledge Square to detect whether a user has already joined or applied.
@@ -521,14 +597,14 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def async_delete_non_creator_members(cls, space_id: int):
-        """ Async: Remove all non-creator members from a space """
+        """Async: Remove all non-creator members from a space"""
 
         async with get_async_db_session() as session:
             await session.exec(
                 delete(SpaceChannelMember).where(
                     SpaceChannelMember.business_id == str(space_id),
                     SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-                    SpaceChannelMember.user_role != UserRoleEnum.CREATOR
+                    SpaceChannelMember.user_role != UserRoleEnum.CREATOR,
                 )
             )
             await session.commit()
@@ -549,11 +625,16 @@ class SpaceChannelMemberDao:
 
     @classmethod
     async def pin_space_id(cls, space_id: int, user_id=int, is_pinned: bool = True) -> bool:
-        statement = update(SpaceChannelMember).where(
-            col(SpaceChannelMember.business_id) == str(space_id),
-            col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
-            col(SpaceChannelMember.user_id) == user_id,
-            col(SpaceChannelMember.status) == MembershipStatusEnum.ACTIVE).values(is_pinned=is_pinned)
+        statement = (
+            update(SpaceChannelMember)
+            .where(
+                col(SpaceChannelMember.business_id) == str(space_id),
+                col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
+                col(SpaceChannelMember.user_id) == user_id,
+                col(SpaceChannelMember.status) == MembershipStatusEnum.ACTIVE,
+            )
+            .values(is_pinned=is_pinned)
+        )
         async with get_async_db_session() as session:
             await session.execute(statement)
             await session.commit()
@@ -564,7 +645,7 @@ class SpaceChannelMemberDao:
         statement = delete(SpaceChannelMember).where(
             col(SpaceChannelMember.business_id) == str(space_id),
             col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
-            col(SpaceChannelMember.user_id) == user_id
+            col(SpaceChannelMember.user_id) == user_id,
         )
         async with get_async_db_session() as session:
             await session.execute(statement)
@@ -575,7 +656,7 @@ class SpaceChannelMemberDao:
     async def clean_space_member(cls, space_id: int) -> bool:
         statement = delete(SpaceChannelMember).where(
             col(SpaceChannelMember.business_id) == str(space_id),
-            col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE
+            col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
         )
         async with get_async_db_session() as session:
             await session.execute(statement)
