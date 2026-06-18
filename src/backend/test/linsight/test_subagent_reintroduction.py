@@ -116,6 +116,45 @@ def test_agent_factory_subagent_blacklist_passes_config_tools():
 
 
 # --------------------------------------------------------------------------
+# 2b. system / researcher prompt advertise search_knowledge_base IFF available
+# --------------------------------------------------------------------------
+
+
+def test_system_prompt_drops_kb_tool_when_unavailable():
+    """When no KB / knowledge space is selected, search_knowledge_base is NOT
+    injected (init_linsight_tools returns [] for an empty whitelist). The prompt
+    must NOT advertise it then — otherwise the model calls a tool that isn't
+    bound and trips ``knowledge_id: Field required``.
+    """
+    from bisheng.linsight.domain.services.agent_factory import (
+        _build_linsight_system_prompt,
+        _build_researcher_prompt,
+    )
+
+    for builder in (_build_linsight_system_prompt, _build_researcher_prompt):
+        with_kb = builder(True)
+        without_kb = builder(False)
+        # no leftover template markers in either variant
+        assert "__KB_" not in with_kb
+        assert "__KB_" not in without_kb
+        # lockstep: mentioned IFF the tool is available
+        assert "search_knowledge_base" in with_kb
+        assert "search_knowledge_base" not in without_kb
+
+
+def test_researcher_subagent_prompt_tracks_kb_tool_presence():
+    """_build_researcher_subagent must mention search_knowledge_base only when the
+    filtered subagent tool subset actually contains it (lockstep with the graph)."""
+    # KB tool present -> advertised
+    spec_with = _build_researcher_subagent([_FakeTool("search_knowledge_base"), _FakeTool("my_mcp_tool")])
+    assert "search_knowledge_base" in spec_with["system_prompt"]
+
+    # KB tool absent -> not advertised
+    spec_without = _build_researcher_subagent([_FakeTool("my_mcp_tool")])
+    assert "search_knowledge_base" not in spec_without["system_prompt"]
+
+
+# --------------------------------------------------------------------------
 # 3. stream mapper drops a subagent's namespaced write_todos (design §5.2a)
 # --------------------------------------------------------------------------
 
