@@ -20,6 +20,12 @@ export interface ArtifactFile {
      * extension (see getArtifactPreviewKind).
      */
     source?: 'upload' | 'output';
+    /**
+     * F035: an uploaded IMAGE whose original picture is persisted in the workspace
+     * (`original_file_path`). Preview it as the image itself, not its OCR/caption
+     * markdown. Absent on legacy entries → falls back to markdown.
+     */
+    previewAsImage?: boolean;
 }
 
 export type PreviewKind = 'markdown' | 'text' | 'image' | 'unsupported';
@@ -46,6 +52,8 @@ export function getPreviewKind(fileName: string): PreviewKind {
  * even though the display name keeps the original extension (e.g. `report.pdf`).
  */
 export function getArtifactPreviewKind(file: ArtifactFile): PreviewKind {
+    // Image uploads with a persisted original preview as the picture itself.
+    if (file.previewAsImage) return 'image';
     if (file.source === 'upload') return 'markdown';
     return getPreviewKind(file.file_name);
 }
@@ -59,13 +67,21 @@ export function getArtifactPreviewKind(file: ArtifactFile): PreviewKind {
 export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
     return (files || [])
         .filter((f) => f && f.valid !== false && f.markdown_file_path)
-        .map((f) => ({
-            file_id: f.file_id,
-            file_name: f.file_name || f.original_filename || '',
-            file_url: f.markdown_file_path,
-            file_md5: f.file_md5,
-            source: 'upload' as const,
-        }));
+        .map((f) => {
+            const name = f.file_name || f.original_filename || '';
+            // Image uploads preview as the original picture when the backend
+            // persisted it (`original_file_path`); otherwise fall back to the
+            // parsed-markdown wrapper (legacy entries / non-image files).
+            const previewAsImage = IMAGE_EXTS.includes(getFileExtension(name)) && !!f.original_file_path;
+            return {
+                file_id: f.file_id,
+                file_name: name,
+                file_url: previewAsImage ? f.original_file_path : f.markdown_file_path,
+                file_md5: f.file_md5,
+                source: 'upload' as const,
+                previewAsImage,
+            };
+        });
 }
 
 /** Resolve a MinIO share url into a same-origin fetchable path. */

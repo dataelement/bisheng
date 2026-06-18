@@ -51,6 +51,23 @@ interface AiMessageBubbleProps {
     onPreviewFile?: (file: ArtifactFile) => void;
 }
 
+/**
+ * Prefix an image/file path with the app base path (/workspace) so it resolves
+ * through the dev proxy / deployment sub-path. Idempotent; handles:
+ * - absolute http(s) URLs -> swap the origin for the base path
+ * - data:/blob: URIs       -> left untouched
+ * - already-prefixed paths -> returned as-is
+ * - bare relative paths    -> base path prepended (the 404 case: `/x.jpg`)
+ */
+function withWorkspaceBase(p?: string): string | undefined {
+    if (!p) return p;
+    if (/^(data:|blob:)/.test(p)) return p;
+    const base = __APP_ENV__.BASE_URL || '';
+    if (/^https?:\/\//.test(p)) return p.replace(/^https?:\/\/[^\/]+/, base);
+    if (base && (p === base || p.startsWith(`${base}/`))) return p;
+    return `${base}${p.startsWith('/') ? '' : '/'}${p}`;
+}
+
 // --- Copy button with feedback ---
 function CopyButton({ text }: { text: string }) {
     const [copied, setCopied] = useState(false);
@@ -321,7 +338,10 @@ function UserBubble({
                             const fileName = file.name || file.file_name || "File";
                             const fileType = getFileTypebyFileName(fileName);
                             const isImage = ["jpg", "jpeg", "png", "bmp", "gif", "webp"].includes(fileType);
-                            const fileUrl = file.filepath || file.file_url;
+                            // Prefix with the app base path (/workspace) so the URL resolves
+                            // through the dev proxy / deployment sub-path. The raw filepath is
+                            // a bare relative path (e.g. /xxx.jpg) and 404s without it.
+                            const fileUrl = withWorkspaceBase(file.filepath || file.file_url);
 
                             if (isImage && fileUrl) {
                                 return (

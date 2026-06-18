@@ -24,6 +24,8 @@ single-sourced.
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,6 +47,30 @@ _MAX_OUTPUT_CHARS = 8000
 # Tool names whose ExecStep should render as a "knowledge" step_type
 # (design §3.3 step_type variants; §5.2 knowledge RAG).
 _KNOWLEDGE_TOOL_HINTS = ("search_knowledge", "knowledge_base", "knowledge_search")
+
+# A reasoning model occasionally *writes* a tool call as plain text at the tail of
+# its reasoning (e.g. ``play_search\n{"search_query": ...}``) instead of emitting a
+# real function call. That leaks into the thinking row as raw text. Match a trailing
+# ``<identifier>\n<json-object>`` block so we can strip only genuine pseudo-calls.
+_PSEUDO_TOOL_TAIL = re.compile(r"\n[ \t]*[A-Za-z_][A-Za-z0-9_]*[ \t]*\n[ \t]*(\{.*\})[ \t]*$", re.DOTALL)
+
+
+def _strip_pseudo_tool_call(text: str) -> str:
+    """Drop a trailing ``toolname\\n{json}`` block a model wrote into its reasoning.
+
+    Conservative: only strips when the tail's braces parse as JSON, so normal
+    thinking that merely ends with prose (or unbalanced braces) is left intact.
+    """
+    if not text:
+        return text
+    match = _PSEUDO_TOOL_TAIL.search(text)
+    if not match:
+        return text
+    try:
+        json.loads(match.group(1))
+    except (ValueError, TypeError):
+        return text
+    return text[: match.start()].rstrip()
 
 
 def _stable_task_id(svid: str, content: str) -> str:
@@ -482,16 +508,19 @@ class StreamEventMapper:
         return "|".join(str(n) for n in namespace) if len(namespace) > 1 else str(namespace[0])
 
     def _infer_step_type(self, name: str, ns: str | None) -> str:
-        # LIVE branch (design #1): the `task` tool is re-enabled and the
-        # "general-purpose" researcher subagent runs again, so subgraph events DO
-        # carry a namespace. A namespaced tool-call step therefore renders as
-        # step_type="subagent" (with extra_info.namespace) for frontend grouping
-        # under its parent task. Subagent *todos* are filtered upstream in
-        # _handle_updates (§5.2a); only the subagent's execution-trace tool calls
-        # reach here and surface as subagent steps.
-        if ns:
-            return "subagent"
+        # The deepagents `task` tool IS the delegation boundary — it spawns the
+        # "general-purpose" researcher subagent. ONLY that call renders as a
+        # subagent delegation row.
+        #
+        # Everything a subagent then runs *inside* its subgraph carries a namespace
+        # (subgraphs=True), but those are ordinary tool/knowledge calls — NOT
+        # delegations. Tagging each one step_type="subagent" made the UI render a
+        # bogus "委派 1 个 ls/glob 子智能体" row per internal tool. Keep their real
+        # type instead; the namespace still rides in extra_info so the frontend can
+        # attribute them to their owning subagent.
         lowered = (name or "").lower()
+        if lowered == "task":
+            return "subagent"
         if any(hint in lowered for hint in _KNOWLEDGE_TOOL_HINTS):
             return "knowledge"
         return "tool"
@@ -501,7 +530,9 @@ class StreamEventMapper:
         # DeepSeek-R1 style
         kwargs = getattr(message, "additional_kwargs", None)
         if isinstance(kwargs, dict) and kwargs.get("reasoning_content"):
-            return str(kwargs["reasoning_content"])
+            # Filter out a pseudo tool-call the model may have written into its
+            # reasoning text (偶现) so it doesn't show as a raw blob in the thinking row.
+            return _strip_pseudo_tool_call(str(kwargs["reasoning_content"]))
         # Anthropic thinking blocks in content list
         content = getattr(message, "content", None)
         if isinstance(content, list):

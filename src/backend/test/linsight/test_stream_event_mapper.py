@@ -388,3 +388,60 @@ class TestStreamContext:
         assert ctx.current_in_progress_task_id is None
         assert ctx.open_calls == {}
         assert ctx.orphan_ends == {}
+
+
+# --------------------------------------------------------------------------
+# pseudo tool-call written into reasoning text (偶现) is filtered from thinking
+# --------------------------------------------------------------------------
+
+
+class TestPseudoToolCallFilter:
+    def test_pseudo_tool_call_stripped_from_reasoning(self, mapper: StreamEventMapper):
+        msg = AIMessage(
+            content="",
+            additional_kwargs={
+                "reasoning_content": '让我调用工具检索一下。\nplay_search\n{"search_query": "黄河历史 改道次数", "num_results": 5}'
+            },
+        )
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.step_type == "thinking"
+        assert "让我调用工具检索一下。" in ev.output
+        assert "play_search" not in ev.output
+        assert "search_query" not in ev.output
+
+    def test_normal_reasoning_is_untouched(self, mapper: StreamEventMapper):
+        text = "先分析用户意图，再给出结论。"
+        msg = AIMessage(content="", additional_kwargs={"reasoning_content": text})
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.output == text
+
+    def test_pseudo_like_tail_with_invalid_json_is_kept(self, mapper: StreamEventMapper):
+        # identifier + braces at the tail, but the body is not valid JSON -> keep it
+        text = "思考过程\nfoo\n{bar baz}"
+        msg = AIMessage(content="", additional_kwargs={"reasoning_content": text})
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.output == text
+
+
+# --------------------------------------------------------------------------
+# subagent delegation: only the `task` tool is a delegation; namespaced
+# internal tools keep their real type (regression: ls/glob shown as 子智能体)
+# --------------------------------------------------------------------------
+
+
+class TestSubagentDelegation:
+    def test_task_tool_is_subagent(self, mapper: StreamEventMapper):
+        msg = AIMessage(content="", tool_calls=[{"id": "c1", "name": "task", "args": {"description": "调研"}}])
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.step_type == "subagent"
+
+    def test_namespaced_internal_tool_is_not_subagent(self, mapper: StreamEventMapper):
+        msg = AIMessage(content="", tool_calls=[{"id": "c2", "name": "glob", "args": {"pattern": "*.md"}}])
+        events = [
+            e
+            for e in mapper.normalize("messages", (msg, {}), namespace=("general-purpose:0",))
+            if isinstance(e, ExecStep)
+        ]
+        assert events[0].step_type == "tool"
+        # namespace still rides along so the UI can attribute it to its owner
+        assert events[0].extra_info.get("namespace") == "general-purpose:0"
