@@ -21,7 +21,7 @@
  * next daily turn (new SV under decision A). HITL clarify stays on the linsight
  * WS (sendInput).
  */
-import { CircleAlert, OctagonX } from 'lucide-react';
+import { OctagonX } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
@@ -36,6 +36,7 @@ import { QueueCard } from './QueueCard';
 import { IntentRow } from './IntentRow';
 import { PlanningRow } from './PlanningRow';
 import { StepList } from './StepList';
+import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
 import { isTaskStarted, splitSessionPseudoTask } from './stepUtils';
@@ -69,7 +70,7 @@ function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[])
 
 export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
     const localize = useLocalize();
-    const { getLinsight, switchAndUpdateLinsight } = useLinsightManager();
+    const { getLinsight, switchAndUpdateLinsight, continueConversation } = useLinsightManager();
     // WS pump — self-guards on status===Running, so mounting it for a completed
     // historical turn is a no-op (no connection opened).
     const { sendInput, stop } = useLinsightWebSocket(versionId);
@@ -185,10 +186,16 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
 
             {/* error / terminated banners */}
             {linsight.taskError && (
-                <div className="my-2 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50/60 p-3 text-sm text-red-600">
-                    <CircleAlert size={16} className="mt-0.5 shrink-0" />
-                    <span className="whitespace-pre-wrap break-words">{linsight.taskError}</span>
-                </div>
+                <TaskErrorCard
+                    errorType={linsight.taskErrorInfo?.error_type}
+                    detail={linsight.taskErrorInfo?.detail}
+                    fallbackMessage={linsight.taskError}
+                    onRetry={
+                        readOnly || !linsight.question
+                            ? undefined
+                            : () => continueConversation(versionId, linsight.question)
+                    }
+                />
             )}
             {stopped && !linsight.taskError && (
                 <div className="my-2 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500">

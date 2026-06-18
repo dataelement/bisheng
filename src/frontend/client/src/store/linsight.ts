@@ -73,6 +73,18 @@ export type LinsightInfo = {
         children: any[]
     }[],
     taskError: string;
+    /**
+     * Structured failure classification from the backend error_message event
+     * (灵思LLM容错). Drives the friendly, localized error card: `error_type`
+     * selects the copy (content_filter / quota_exhausted / network_timeout …),
+     * `detail` is the raw provider text shown under "view details". Absent for
+     * legacy/unclassified failures — the card falls back to a generic message.
+     */
+    taskErrorInfo?: {
+        error_code?: number;
+        error_type?: string;
+        detail?: string;
+    };
     summary: string;
     file_list: any[];
     queueCount: number;

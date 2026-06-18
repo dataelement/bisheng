@@ -7,7 +7,7 @@
  * WS hook (task-message-stream) is mounted here so the event pump stays alive
  * after the old TaskFlow stops rendering.
  */
-import { CircleAlert, OctagonX } from 'lucide-react';
+import { OctagonX } from 'lucide-react';
 import { useMemo, useRef } from 'react';
 import { SopStatus } from '~/store/linsight';
 import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
@@ -29,6 +29,7 @@ import { PlanningRow } from './PlanningRow';
 import { QueueCard } from './QueueCard';
 import { StepList } from './StepList';
 import { TaskPanel } from './TaskPanel';
+import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import { isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
@@ -194,10 +195,16 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
 
                     {/* error / terminated banners */}
                     {linsight?.taskError && (
-                        <div className="my-2 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50/60 p-3 text-sm text-red-600">
-                            <CircleAlert size={16} className="mt-0.5 shrink-0" />
-                            <span className="whitespace-pre-wrap break-words">{linsight.taskError}</span>
-                        </div>
+                        <TaskErrorCard
+                            errorType={linsight.taskErrorInfo?.error_type}
+                            detail={linsight.taskErrorInfo?.detail}
+                            fallbackMessage={linsight.taskError}
+                            onRetry={
+                                isSharePage || readOnly || !linsight.question
+                                    ? undefined
+                                    : () => continueConversation(versionId, linsight.question)
+                            }
+                        />
                     )}
                     {stopped && !linsight?.taskError && (
                         <div className="my-2 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500">
@@ -248,6 +255,11 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 : linsight?.session_id || 'new'
                         }
                         disabled={running || !!pendingInput}
+                        // While running, the disabled input's action button morphs into
+                        // a Stop button — the only stop affordance once the task leaves
+                        // the queue. `stop` (WS hook) terminates the live session.
+                        running={running}
+                        onStop={stop}
                         // F035 multi-turn: a send here continues THIS conversation
                         // (same session_version + agent thread) instead of starting
                         // a new session. versionId is the live session_version id.

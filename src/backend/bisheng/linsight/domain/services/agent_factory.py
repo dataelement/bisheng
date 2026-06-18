@@ -28,6 +28,7 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.types import interrupt
 
 from bisheng.common.services.config_service import settings
+from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
 from bisheng.llm.domain.services import LLMService
 
 # --- Subagent (researcher) tool blacklist (design #1 §4.3 / §5.1, decision 4) ---
@@ -273,7 +274,14 @@ async def create_linsight_agent(
     # the over-delegation + HITL-bubbling root causes are now defused by
     # construction, not by removing the tool — see _build_researcher_subagent
     # (subagent has no interrupt source) and the delegation-budget prompt section.
-    middlewares: list = []
+    #
+    # LLM resilience (灵思LLM容错): wrap the (bind_tools'd) model handler so a
+    # transient model failure retries with backoff and a content-filter / other
+    # non-retryable hit fails cleanly here on the MAIN graph (a no-tool-call
+    # synthetic message would only end the loop mid-reasoning). The subagent gets
+    # its OWN instance (is_subagent=True) that DEGRADES instead — see below.
+    linsight_conf = settings.get_linsight_conf()
+    middlewares: list = [build_resilience_middleware(linsight_conf, is_subagent=False)]
 
     # No custom history-compression middleware: deepagents already ships a
     # built-in summarization middleware (deepagents.middleware.summarization),
@@ -297,12 +305,19 @@ async def create_linsight_agent(
     from bisheng.tool.domain.langchain.linsight_export import init_linsight_export_tools
 
     export_tools = init_linsight_export_tools(backend)
+    # The researcher subagent is a separate subgraph: the main-graph middleware
+    # above does NOT wrap its internal model calls, so it carries its OWN
+    # resilience instance (is_subagent=True) which DEGRADES a content-filter /
+    # exhausted-transient step to a synthetic reply — letting the parent task
+    # continue with the remaining steps (Layer B partial-result win).
+    researcher = _build_researcher_subagent(tools)
+    researcher["middleware"] = [build_resilience_middleware(linsight_conf, is_subagent=True)]
     return create_deep_agent(
         model=model,
         tools=[*tools, ask_user, *export_tools],
         system_prompt=LINSIGHT_SYSTEM_PROMPT_ZH,
         middleware=middlewares,
-        subagents=[_build_researcher_subagent(tools)],
+        subagents=[researcher],
         backend=backend,
         checkpointer=checkpointer,
         store=None,
