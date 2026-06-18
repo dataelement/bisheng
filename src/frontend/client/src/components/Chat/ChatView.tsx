@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useUnactivate } from 'react-activation';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
@@ -369,30 +370,53 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // F035: enter/exit animation for the fullscreen workspace overlay. The overlay
   // is a separate instance from the docked panel (PreviewBody isn't cached, so we
   // never mount both at once). It's portaled to document.body + position:fixed so
-  // it can cover the whole window — including the sidebar conversation list, which
-  // lives outside chatContainer. `fsMounted` keeps it in the DOM across the
-  // collapse transition; `fsExpanded` drives the geometry between the docked card's
-  // measured viewport rect and full-bleed. Entering: capture the docked rect (still
-  // mounted this render), mount collapsed, then expand on the next frame. Exiting:
-  // collapse back to that rect, then unmount on transitionEnd.
+  // it can escape chatContainer and cover the sidebar conversation list. It expands
+  // to fill the rounded content card (the white panel inside <main>'s p-2 gutter
+  // that holds the sidebar + chat) — NOT the whole window — so the icon rail and the
+  // card's surrounding gap + radius are preserved. `fsMounted` keeps it in the DOM
+  // across the collapse transition; `fsExpanded` drives the geometry between the
+  // docked card's box and the content card's box, both measured in viewport-inset
+  // form on enter (still mounted that render). Exiting: collapse, unmount on end.
   const dockedCardRef = useRef<HTMLDivElement>(null);
   const [fsMounted, setFsMounted] = useState(false);
   const [fsExpanded, setFsExpanded] = useState(false);
-  // Collapsed box as inset offsets (distance from each viewport edge), so the
-  // overlay can animate to a clean inset:0 full-bleed without a 100vw scrollbar.
-  const [fsRect, setFsRect] = useState<{ top: number; left: number; right: number; bottom: number } | null>(null);
+  type FsInset = { top: number; left: number; right: number; bottom: number };
+  const [fsBox, setFsBox] = useState<{ collapsed: FsInset; expanded: FsInset } | null>(null);
   useEffect(() => {
     if (taskArtifacts.fullscreen) {
-      // Measure the docked card in viewport coords for the collapsed box. It's
-      // still mounted on this render (gated on !fsMounted, flipped just below).
-      const el = dockedCardRef.current;
-      if (el) {
-        const r = el.getBoundingClientRect();
-        setFsRect({
-          top: r.top,
-          left: r.left,
-          right: window.innerWidth - r.right,
-          bottom: window.innerHeight - r.bottom,
+      // Measure the docked card (collapsed) and <main> (expanded) in viewport-inset
+      // coords. Both are still in the DOM this render (card gated on !fsMounted,
+      // flipped just below). Inset form lets us animate to <main>'s edges cleanly.
+      const card = dockedCardRef.current;
+      // Climb to the OUTERMOST <main>: Presentation wraps ChatView in its own
+      // <main> (chat content only), but MainLayout's outer <main> is the one that
+      // also contains the sidebar conversation list — that's the box to fill.
+      let main = card?.closest('main') ?? chatContainerRef.current?.closest('main') ?? null;
+      for (let p = main?.parentElement?.closest('main'); p; p = p.parentElement?.closest('main')) {
+        main = p;
+      }
+      if (card && main) {
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+        const c = card.getBoundingClientRect();
+        const m = main.getBoundingClientRect();
+        // Collapsed = the docked panel's measured box (it keeps its 4px p-1 margin),
+        // overlay padding 0. Expanded grows the BOX outward by 4px on top/right/
+        // bottom (border reaches the card edge) and left to the card's left
+        // (main.left + 8px p-2 gutter), while the overlay's padding goes 0 → 4px.
+        // Net: the inner content (toolbar buttons) stays at the exact docked
+        // position the whole time — only the gray border slides out to the card edge
+        // and the left edge fills the card. No button shift, smooth border, uniform
+        // #FBFBFB fill (the 4px is overlay bg, not a white ring).
+        const collapsed = { top: c.top, left: c.left, right: W - c.right, bottom: H - c.bottom };
+        setFsBox({
+          collapsed,
+          expanded: {
+            top: collapsed.top - 4,
+            right: collapsed.right - 4,
+            bottom: collapsed.bottom - 4,
+            left: m.left + 8,
+          },
         });
       }
       setFsMounted(true);
@@ -414,6 +438,16 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     const t = setTimeout(() => setFsMounted(false), 360);
     return () => clearTimeout(t);
   }, [taskArtifacts.fullscreen]);
+
+  // KeepAlive freezes (but doesn't unmount) ChatView when the user switches to
+  // another sidebar section, so the <body>-portaled fullscreen overlay would keep
+  // floating over the new page. Collapse the workspace + force-unmount the overlay
+  // on deactivate so the new section is shown unobstructed.
+  useUnactivate(() => {
+    taskArtifacts.closeWorkspace();
+    setFsExpanded(false);
+    setFsMounted(false);
+  });
 
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
@@ -505,7 +539,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           isStreaming={isStreaming}
                           shareToken={shareToken}
                           knowledgeChatLayout
-                          contentWidthClassName="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full"
+                          contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
@@ -542,7 +576,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             />
                           </div>
                         ) : (
-                          <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
+                          <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full shrink-0 pb-3">
                             {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
                             <AiChatInput
                               disabled={!bsConfig?.models?.length || !!shareToken}
@@ -651,8 +685,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                       {/* Input area for landing page */}
                       {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto px-3 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
+                        <div className="w-full max-w-[800px] mx-auto px-4 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
                           <AiChatInput
+                            elevated
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             sendDisabled={taskRunning}
                             isStreaming={isStreaming}
@@ -702,19 +737,19 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           })()}
 
           {/* F035: fullscreen workspace preview — portaled to <body> + fixed so it
-              covers the WHOLE window (incl. the sidebar conversation list, which is
-              outside chatContainer). Separate instance from the inline panel above
-              (only one is ever mounted, so the preview never double fetches).
-              Animates its viewport rect between the docked card's measured box
-              (fsRect) and full bleed, so expanding grows out of the docked card and
-              collapsing retracts back onto it — a geometric slide, not a fade.
-              Unmounts on transitionEnd after the collapse. */}
-          {latestTaskVersionId && fsMounted && fsRect && createPortal(
+              escapes chatContainer and can cover the sidebar conversation list.
+              Separate instance from the inline panel above (only one is ever
+              mounted, so the preview never double fetches). The box animates between
+              the docked panel's measured box (padding 0) and the content card's box
+              (padding 4px): the gray border slides out from the docked 4px margin to
+              the card edge while the inner content — and the toolbar buttons — stay
+              fixed (box grows +4px exactly as padding grows +4px). Fills the card
+              edge-to-edge in #FBFBFB (the 4px is overlay bg, not a white ring) with
+              the border on the outermost ring. Unmounts on transitionEnd. */}
+          {latestTaskVersionId && fsMounted && fsBox && createPortal(
             <div
-              className="fixed z-[100] overflow-hidden bg-[#FBFBFB] transition-[top,left,right,bottom,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
-              style={fsExpanded
-                ? { top: 0, left: 0, right: 0, bottom: 0, borderRadius: 0 }
-                : { top: fsRect.top, left: fsRect.left, right: fsRect.right, bottom: fsRect.bottom, borderRadius: 12 }}
+              className="fixed z-[100] overflow-hidden border border-[#ECECEC] bg-[#FBFBFB] transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+              style={{ ...(fsExpanded ? fsBox.expanded : fsBox.collapsed), padding: fsExpanded ? 4 : 0, borderRadius: 12 }}
               onTransitionEnd={(e) => {
                 // Unmount only after the collapse finishes (ignore the expand end
                 // and bubbled child transitions).

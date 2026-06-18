@@ -20,34 +20,69 @@ import {
     resolveArtifactUrl,
 } from './artifactUtils';
 
+// Module-level cache of resolved previews. Toggling fullscreen remounts a second
+// WorkspacePanel instance, which would otherwise re-fetch and flash a spinner every
+// time. Artifacts are immutable per version, so versionId+url is a safe key — a hit
+// lets the new instance render instantly with no spinner and no network round-trip.
+const previewCache = new Map<string, { text?: string; imageUrl?: string }>();
+const previewCacheKey = (file: ArtifactFile, versionId: string) => `${versionId}::${file.file_url}`;
+
 /** Resolve + load the preview source (text content or same-origin image url). */
 export function usePreviewSource(file: ArtifactFile | null, versionId: string) {
-    const [loading, setLoading] = useState(false);
+    const cached = file ? previewCache.get(previewCacheKey(file, versionId)) : undefined;
+    // Seed from cache so the first paint already shows content; only show the spinner
+    // when there's a renderable file we haven't fetched yet.
+    const [loading, setLoading] = useState(
+        !!file && !cached && getArtifactPreviewKind(file) !== 'unsupported',
+    );
     const [error, setError] = useState(false);
-    const [text, setText] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
+    const [text, setText] = useState(cached?.text ?? '');
+    const [imageUrl, setImageUrl] = useState(cached?.imageUrl ?? '');
 
     useEffect(() => {
-        setText('');
-        setImageUrl('');
         setError(false);
-        if (!file) return undefined;
+        if (!file) {
+            setText('');
+            setImageUrl('');
+            setLoading(false);
+            return undefined;
+        }
         const kind = getArtifactPreviewKind(file);
-        if (kind === 'unsupported') return undefined;
+        if (kind === 'unsupported') {
+            setText('');
+            setImageUrl('');
+            setLoading(false);
+            return undefined;
+        }
+
+        const key = previewCacheKey(file, versionId);
+        const hit = previewCache.get(key);
+        if (hit) {
+            // Already fetched — render immediately, no spinner, no refetch.
+            setText(hit.text ?? '');
+            setImageUrl(hit.imageUrl ?? '');
+            setLoading(false);
+            return undefined;
+        }
 
         let cancelled = false;
+        setText('');
+        setImageUrl('');
         setLoading(true);
         (async () => {
             try {
                 const url = await resolveArtifactUrl(file.file_url, versionId);
                 if (cancelled) return;
                 if (kind === 'image') {
+                    previewCache.set(key, { imageUrl: url });
                     setImageUrl(url);
                 } else {
                     const response = await fetch(url);
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     const content = await response.text();
-                    if (!cancelled) setText(content);
+                    if (cancelled) return;
+                    previewCache.set(key, { text: content });
+                    setText(content);
                 }
             } catch (e) {
                 console.error('artifact preview failed:', e);
@@ -101,9 +136,16 @@ export function PreviewBody({ file, versionId }: PreviewBodyProps) {
         );
     }
     if (loading) {
+        // Match the task workbench loading (SopLoading): the linsi-load image inside
+        // the rotating-border box, instead of the generic spinner.
         return (
             <div className="flex h-full items-center justify-center">
-                <img className="size-6 animate-spin" src={`${__APP_ENV__.BASE_URL}/assets/load.webp`} alt="" />
+                <div className="lingsi-border-box">
+                    <div
+                        className="h-[102px] w-[194px] rounded-md bg-white bg-no-repeat"
+                        style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/linsi-load.png)` }}
+                    />
+                </div>
             </div>
         );
     }

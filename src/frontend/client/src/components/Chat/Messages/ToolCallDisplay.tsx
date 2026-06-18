@@ -225,13 +225,13 @@ function normaliseKnowledgeResults(
 
 const variantStyles = {
     knowledge: {
-        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#C9CDD4]" />,
+        icon: <Outlined.BookOpenText size={16} className="shrink-0 text-[#999999]" />,
     },
     web: {
-        icon: <Outlined.Earth size={16} className="shrink-0 text-[#C9CDD4]" />,
+        icon: <Outlined.Earth size={16} className="shrink-0 text-[#999999]" />,
     },
     tool: {
-        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#C9CDD4]" />,
+        icon: <Outlined.Hammer size={16} className="shrink-0 text-[#999999]" />,
     },
 } as const;
 
@@ -308,7 +308,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
 
     return (
         <div className="flex w-full min-w-0 gap-1.5">
-            <div className="flex shrink-0 flex-col items-center gap-0.5 self-stretch pt-[3px]">
+            <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
                 {railIcon}
                 {/* Rail line: keep the timeline continuous to the next node, and
                     always flank this node's own expanded content. */}

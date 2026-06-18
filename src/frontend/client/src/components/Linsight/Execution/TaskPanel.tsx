@@ -31,7 +31,7 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
     const showRunningInline = !open && !allDone && !!runningName;
 
     return (
-        <div className="w-full rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="w-full rounded-xl border border-[#ECECEC] bg-white">
             {/* header */}
             <button
                 type="button"
@@ -47,7 +47,7 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                     {allDone ? localize('com_linsight_task_panel_done') : localize('com_linsight_task_panel')}
                 </span>
                 {showRunningInline && (
-                    <span className="min-w-0 flex-1 truncate bg-[linear-gradient(90deg,#c8c8c8_0%,#7a7a7a_50%,#c8c8c8_100%)] bg-[length:200%_100%] bg-clip-text text-[14px] text-transparent animate-text-shimmer">
+                    <span className="min-w-0 flex-1 truncate bg-[linear-gradient(90deg,#cccccc_0%,#6b6b6b_50%,#cccccc_100%)] bg-[length:200%_100%] bg-clip-text text-[14px] text-transparent animate-text-shimmer">
                         {runningName}
                     </span>
                 )}

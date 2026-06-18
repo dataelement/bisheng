@@ -50,7 +50,7 @@ function formatKbTagLabel(name: string): string {
 const KbTag = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
     const label = formatKbTagLabel(kb.name ?? "");
     return (
-        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-[#f0f1f3]">
             {kb.type === 'space' ? (
                 <BookOpen className="mr-1 size-4 shrink-0 text-[#999]" />
             ) : (
@@ -94,7 +94,7 @@ const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
     };
 
     return (
-        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-[#f0f1f3]">
             <CitationFileTypeIcon fileType={resolveFileType(file)} className="mr-1 size-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
                 {file.name}
@@ -116,7 +116,7 @@ const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
 const SkillTag = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) => {
     const label = skill?.display_name || skill?.name || "";
     return (
-        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50">
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-[#f0f1f3]">
             <Sparkles className="mr-1 size-4 shrink-0 text-[#165DFF]" />
             <span className="min-w-0 flex-1 truncate text-left" title={label}>
                 {label}
@@ -137,7 +137,7 @@ const SkillTag = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) =>
 
 const UploadingFileTag = ({ name }: { name: string }) => {
     return (
-        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700">
+        <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700">
             <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
             <span className="min-w-0 flex-1 truncate text-left" title={name}>
                 {name}
@@ -181,6 +181,12 @@ interface AiChatInputProps {
     modelOptions?: any[];
     modelValue?: any;
     hasMessages?: boolean;
+    /**
+     * Landing-page only: render the soft drop shadow (Figma 12669:66966).
+     * In-conversation inputs sit flush above the message list, so they keep
+     * the border but drop the shadow.
+     */
+    elevated?: boolean;
     onModelChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
@@ -221,6 +227,7 @@ const AiChatInput = memo(
         modelValue,
         placeholder = '',
         hasMessages,
+        elevated = false,
         onModelChange,
         onSend,
         onStop,
@@ -408,10 +415,14 @@ const AiChatInput = memo(
 
                 <div
                     className={cn(
-                        "relative flex w-full flex-col items-start gap-0 overflow-hidden bg-surface-tertiary p-3 touch-mobile:bg-[#f4f5f7]",
+                        // Figma 12669:66966 — white surface, 12px radius, hairline
+                        // border (replaces the legacy gray fill).
+                        "relative flex w-full flex-col items-start gap-0 overflow-hidden rounded-xl border border-[#ECECEC] bg-white p-3",
+                        // Soft drop shadow only on the landing page; in-conversation
+                        // inputs stay flat against the message list.
+                        elevated && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
                         // 有「附件 / 知识」标签时收紧顶部，避免 0 高度的 InputFiles 占位 + gap + pt 叠出一大块空区（移动端尤明显）
                         hasSelectionTags && "touch-mobile:pt-1.5",
-                        size === "mini" ? "rounded-xl" : "rounded-3xl touch-mobile:rounded-2xl"
                     )}
                 >
                     {/* File upload area: file list only. Upload entry lives in the
@@ -511,8 +522,7 @@ const AiChatInput = memo(
                         rows={1}
                         style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
-                            "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0",
-                            hasSelectionTags ? "pt-0" : "pt-1.5",
+                            "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pt-0",
                             "placeholder-black/50 dark:placeholder-white/50",
                             "max-h-[240px] scrollbar-gutter-stable",
                             size === 'mini' ? 'min-h-0' : 'min-h-12',

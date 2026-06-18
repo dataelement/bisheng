@@ -63,7 +63,9 @@ function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, o
         </NavLink>
       </TooltipTrigger>
       {!showLabel ? (
-        <TooltipContent side="right" sideOffset={8}>
+        // z-[110]: sit above the workspace fullscreen overlay (z-[100]) so the rail
+        // tooltip isn't clipped behind it when the preview is expanded.
+        <TooltipContent side="right" sideOffset={8} className="z-[110]">
           {label}
         </TooltipContent>
       ) : null}

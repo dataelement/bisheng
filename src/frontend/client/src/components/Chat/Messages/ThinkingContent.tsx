@@ -33,8 +33,8 @@ const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning, showConnect
 
     return (
         <div className="flex w-full min-w-0 gap-1.5 animate-thinking-appear">
-            <div className="flex shrink-0 flex-col items-center gap-0.5 self-stretch pt-[3px]">
-                <Outlined.CheckCircle size={16} className="shrink-0 text-[#C9CDD4]" />
+            <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
+                <Outlined.CheckCircle size={16} className="shrink-0 text-[#999999]" />
                 {/* Rail line: keep the timeline continuous to the next node, and
                     always flank this node's own expanded content. */}
                 {(showConnector || isExpanded) && (

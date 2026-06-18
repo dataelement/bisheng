@@ -28,11 +28,11 @@ export function PinnedTaskPanel({ versionId }: { versionId: string }) {
     const status = linsight?.status;
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
 
-    // Design (Figma 12221-40080/40081): the card is inset 24px each side relative
-    // to the input box, with a 12px gap above it. Spacing lives here (not in the
-    // reusable TaskPanel) so the empty/no-task state leaves no gap above the input.
+    // The card aligns flush with the input box width (no horizontal inset) and
+    // keeps a gap below it. Spacing lives here (not in the reusable TaskPanel)
+    // so the empty/no-task state leaves no gap above the input.
     return (
-        <div className="px-6 pb-3">
+        <div className="pb-3">
             <TaskPanel tasks={tasks} completed={completed} />
         </div>
     );

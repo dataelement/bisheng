@@ -114,7 +114,7 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-8 min-w-0 max-w-[min(52vw,220px)] border-none bg-transparent shadow-none hover:bg-white px-2 text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
+          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
           isActive && "border border-primary",
         )}
       >

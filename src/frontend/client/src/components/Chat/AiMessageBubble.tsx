@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { memo, useCallback, useMemo, useState } from "react";
-import Thinking from "~/components/Artifacts/Thinking";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
+import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
 import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
 import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
@@ -571,13 +571,6 @@ function AssistantBubble({
                     <div className="model-name select-none font-semibold text-base">{modelName}</div>
                 </div>
 
-                {/* Pre-stream "正在思考" indicator — pulsing black dot. */}
-                {showWaiting && (
-                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
-                        <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
-                    </div>
-                )}
-
                 {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
                 {isAgentNative ? (
                     <div className="mb-3 w-full min-w-0">
@@ -590,11 +583,26 @@ function AssistantBubble({
                     </div>
                 ) : (
                     <>
-                        {/* Legacy :::thinking::: reuse Thinking component */}
-                        {thinkingContent && <Thinking>{thinkingContent}</Thinking>}
+                        {/* Legacy :::thinking::: — render with the same "思考内容" block as the
+                            agent-native timeline (Messages/ThinkingContent) so reasoning looks
+                            identical across the homepage chat and the knowledge/file/article docks. */}
+                        {thinkingContent && (
+                            <div className="mb-3 w-full min-w-0">
+                                <ThinkingContent reasoning={thinkingContent} />
+                            </div>
+                        )}
                         {/* Legacy :::web::: → SearchWebUrls */}
                         {webContent.length > 0 && <SearchWebUrls webs={webContent} />}
                     </>
+                )}
+
+                {/* Pre-stream "正在思考" indicator — pulsing black dot. Rendered AFTER the
+                    thinking block so that once "思考内容" appears it sits below that node
+                    (answer-pending), not above it. */}
+                {showWaiting && (
+                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                        <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
+                    </div>
                 )}
 
                 {/* Error state */}
@@ -663,7 +671,9 @@ function AssistantBubble({
                             actionButtons={
                                 <>
                                     <CopyButton text={regularContent} />
-                                    {message.conversationId && message.messageId && (
+                                    {/* Export is only offered in the full homepage chat — the lightweight
+                                        knowledge/file/article docks (knowledgeChatLayout) hide it. */}
+                                    {!knowledgeChatLayout && message.conversationId && message.messageId && (
                                         <ExportSelectionButton
                                             chatId={message.conversationId}
                                             messageId={message.messageId}
