@@ -586,8 +586,7 @@ class Settings(BaseModel):
             match = re.search(pattern, value)
             if match:
                 password = match.group(0)
-                #new_password = decrypt_token(password)
-                new_password = password
+                new_password = decrypt_token(password)
                 new_mysql_url = re.sub(pattern, f'{new_password}', value)
                 value = new_mysql_url
 
