@@ -1661,6 +1661,8 @@
     "upload_file": "Upload file",
     "upload_folder": "Upload folder",
     "uploading_status": "Uploading",
+    "uploading_status_with_progress": "Uploading {{0}}%",
+    "registering_status": "Registering",
     "users_count": "users",
     "window_too_narrow_ai": "Window width is insufficient to open AI Assistant",
     "yes": "Yes",

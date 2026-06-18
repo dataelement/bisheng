@@ -39,6 +39,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq, UpdateKnowledgeMetadataFieldsReq,
     ModifyKnowledgeFileMetaDataReq, UpdateFileTagsReq, BatchAddFileTagsReq)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
@@ -84,6 +85,7 @@ async def upload_knowledge_file(*,
 
     try:
         file_name = file.filename
+        validate_knowledge_upload_file_size(file_name, file.size)
 
         # Save the uploaded file
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)

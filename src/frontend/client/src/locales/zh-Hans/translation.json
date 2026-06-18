@@ -1585,6 +1585,8 @@
     "upload_file": "上传文件",
     "upload_folder": "上传文件夹",
     "uploading_status": "上传中",
+    "uploading_status_with_progress": "上传中 {{0}}%",
+    "registering_status": "注册中",
     "users_count": "用户",
     "window_too_narrow_ai": "窗口宽度不足，无法打开 AI 助手",
     "yes": "是",

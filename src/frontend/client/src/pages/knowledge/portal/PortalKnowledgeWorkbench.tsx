@@ -43,7 +43,7 @@ import { usePrefersMobileLayout } from "~/hooks";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
-import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, triggerUrlDownload } from "../knowledgeUtils";
+import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, resolveUploadSizeLimits, triggerUrlDownload, type UploadSizeEnvConfig } from "../knowledgeUtils";
 import { submitKnowledgeSpaceCreate } from "../createKnowledgeSpaceApproval";
 import { TREE_PAGE_SIZE } from "./constants";
 import type {
@@ -646,7 +646,11 @@ export default function PortalKnowledgeWorkbench() {
         () => normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types),
         [bsConfig],
     );
-    const portalMaxFileSizeMB = (bsConfig as any)?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
+    const portalUploadSizeLimits = useMemo(
+        () => resolveUploadSizeLimits((bsConfig as UploadSizeEnvConfig | null) ?? undefined),
+        [bsConfig],
+    );
+    const portalMaxFileSizeMB = portalUploadSizeLimits.defaultMaxMB;
     const portalEnableEtl4lm = (bsConfig as any)?.enable_etl4lm ?? true;
     const fileEncodingPrefix = useMemo(() => {
         const prefix = (bsConfig as any)?.shougang?.prefix;
@@ -681,6 +685,7 @@ export default function PortalKnowledgeWorkbench() {
         uploadReviewRows,
         uploadFolderOptions,
         duplicateFiles,
+        duplicateOverwriting,
         fileCategoryCode,
         fileCategoryOptions: resolvedFileCategoryOptions,
         businessDomainCode,
@@ -720,6 +725,7 @@ export default function PortalKnowledgeWorkbench() {
         statusFilterNumbers,
         fileCategoryOptions,
         enableEtl4lm: portalEnableEtl4lm,
+        uploadSizeLimits: portalUploadSizeLimits,
         maxFileSizeMB: portalMaxFileSizeMB,
         reloadFiles,
         onUploaded: () => {
@@ -1908,6 +1914,7 @@ export default function PortalKnowledgeWorkbench() {
                     onStartUploadImport: () => void handleStartUploadImport(),
                 }}
                 duplicateFiles={duplicateFiles}
+                duplicateOverwriting={duplicateOverwriting}
                 onDuplicateSkip={handleDuplicateSkip}
                 onDuplicateOverwrite={handleDuplicateOverwrite}
             />
@@ -1928,7 +1935,14 @@ export default function PortalKnowledgeWorkbench() {
                     <DialogHeader>
                         <DialogTitle>网页链接</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
+                    <form
+                        className="space-y-4"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            if (webLinkSubmitting) return;
+                            void handleImportWebLink();
+                        }}
+                    >
                         <label className="block space-y-2 text-sm text-[#1d2129]">
                             <span className="font-medium">链接地址</span>
                             <Input
@@ -1947,19 +1961,20 @@ export default function PortalKnowledgeWorkbench() {
                                 disabled={webLinkSubmitting}
                             />
                         </label>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => setWebLinkDialogOpen(false)}
-                            disabled={webLinkSubmitting}
-                        >
-                            取消
-                        </Button>
-                        <Button onClick={() => void handleImportWebLink()} disabled={webLinkSubmitting}>
-                            {webLinkSubmitting ? "导入中..." : "导入"}
-                        </Button>
-                    </DialogFooter>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setWebLinkDialogOpen(false)}
+                                disabled={webLinkSubmitting}
+                            >
+                                取消
+                            </Button>
+                            <Button type="submit" disabled={webLinkSubmitting}>
+                                {webLinkSubmitting ? "导入中..." : "导入"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
         </div>

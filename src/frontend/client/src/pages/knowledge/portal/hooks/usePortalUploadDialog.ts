@@ -19,12 +19,16 @@ import {
 import { NotificationSeverity } from "~/common";
 import {
     DEFAULT_MAX_FILE_SIZE_MB,
+    DEFAULT_MEDIA_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
     filterFolderUploadFiles,
     getAllowedExtensions,
     getFileInputAccept,
+    getMaxFileSizeBytesForFile,
+    getMaxFileSizeMBForFile,
     getRootFolderName,
     isHiddenName,
+    type UploadSizeLimits,
 } from "../../knowledgeUtils";
 import { DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS } from "../constants";
 import type {
@@ -64,6 +68,8 @@ interface UsePortalUploadDialogParams {
     statusFilterNumbers: number[];
     fileCategoryOptions?: PortalFileCategoryOption[];
     enableEtl4lm?: boolean;
+    uploadSizeLimits?: UploadSizeLimits;
+    /** @deprecated Use uploadSizeLimits */
     maxFileSizeMB?: number;
     reloadFiles: () => Promise<void>;
     onUploaded?: () => void;
@@ -78,6 +84,7 @@ export function usePortalUploadDialog({
     statusFilterNumbers,
     fileCategoryOptions = DEFAULT_PORTAL_FILE_CATEGORY_OPTIONS,
     enableEtl4lm = true,
+    uploadSizeLimits,
     maxFileSizeMB = DEFAULT_MAX_FILE_SIZE_MB,
     reloadFiles,
     onUploaded,
@@ -98,6 +105,7 @@ export function usePortalUploadDialog({
     const [uploadImporting, setUploadImporting] = useState(false);
     const [uploadReviewRows, setUploadReviewRows] = useState<PortalUploadReviewRow[]>([]);
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
+    const [duplicateOverwriting, setDuplicateOverwriting] = useState(false);
     const [duplicateFileCategoryCode, setDuplicateFileCategoryCode] = useState<string | undefined>();
     const [duplicateUploadMetadataPayload, setDuplicateUploadMetadataPayload] = useState<PortalUploadMetadataPayload>({});
     const [fileCategoryCode, setFileCategoryCode] = useState("");
@@ -108,7 +116,14 @@ export function usePortalUploadDialog({
     const allowedExtensions = useMemo(() => getAllowedExtensions(enableEtl4lm), [enableEtl4lm]);
     const fileInputAccept = useMemo(() => getFileInputAccept(enableEtl4lm), [enableEtl4lm]);
     const supportedFormatsLabel = useMemo(() => allowedExtensions.join("、"), [allowedExtensions]);
-    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    const resolvedUploadSizeLimits = useMemo(
+        () => uploadSizeLimits ?? {
+            defaultMaxMB: maxFileSizeMB,
+            mediaMaxMB: DEFAULT_MEDIA_MAX_FILE_SIZE_MB,
+        },
+        [uploadSizeLimits, maxFileSizeMB],
+    );
+    const displayMaxFileSizeMB = resolvedUploadSizeLimits.defaultMaxMB;
 
     const uploadFolderOptions = useMemo(
         () => {
@@ -225,7 +240,7 @@ export function usePortalUploadDialog({
         const unsupportedFiles: string[] = [];
         const oversizedFiles: string[] = [];
         const validFiles = files.filter((file) => {
-            if (file.size > maxFileSizeBytes) {
+            if (file.size > getMaxFileSizeBytesForFile(file.name, resolvedUploadSizeLimits)) {
                 oversizedFiles.push(file.name);
                 return false;
             }
@@ -245,12 +260,12 @@ export function usePortalUploadDialog({
         }
         if (oversizedFiles.length) {
             showToast({
-                message: `文件大小超过 ${maxFileSizeMB}MB：${oversizedFiles.join("、")}`,
+                message: `文件大小超过 ${displayMaxFileSizeMB}MB：${oversizedFiles.join("、")}`,
                 severity: NotificationSeverity.WARNING,
             });
         }
         return validFiles;
-    }, [allowedExtensions, maxFileSizeBytes, maxFileSizeMB, showToast]);
+    }, [allowedExtensions, resolvedUploadSizeLimits, displayMaxFileSizeMB, showToast]);
 
     const handleAddUploadFiles = useCallback((files?: FileList | File[]) => {
         const nextFiles = Array.from(files ?? []);
@@ -302,7 +317,7 @@ export function usePortalUploadDialog({
         const filesInRoot = allFiles.filter((file) => getRootFolderName(file.webkitRelativePath || "") === rootName);
         const validFiles = filterFolderUploadFiles(filesInRoot, {
             allowedExtensions,
-            maxSizeMB: maxFileSizeMB,
+            limits: resolvedUploadSizeLimits,
         });
         if (!validFiles.length) {
             showToast({ message: "文件夹根目录下没有可上传的支持文件", severity: NotificationSeverity.WARNING });
@@ -317,7 +332,7 @@ export function usePortalUploadDialog({
         })));
         setUploadStep("select");
         setUploadReviewRows([]);
-    }, [allowedExtensions, maxFileSizeMB, showToast]);
+    }, [allowedExtensions, resolvedUploadSizeLimits, showToast]);
 
     const handleRemoveUploadFile = useCallback((fileId: string) => {
         setUploadFiles((prev) => {
@@ -670,19 +685,27 @@ export function usePortalUploadDialog({
     }, []);
 
     const handleDuplicateOverwrite = useCallback(async () => {
-        if (!activeSpace || duplicateFiles.length === 0) return;
+        if (!activeSpace || duplicateFiles.length === 0 || duplicateOverwriting) return;
         const fileObjs = duplicateFiles.map((file) => file.rawObj).filter(Boolean);
+        if (fileObjs.length === 0) {
+            showToast({ message: "文件覆盖失败：缺少重复文件信息", severity: NotificationSeverity.ERROR });
+            return;
+        }
         const retryMetadata = Object.keys(duplicateUploadMetadataPayload).length
             ? duplicateUploadMetadataPayload
             : (duplicateFileCategoryCode ? { file_category_code: duplicateFileCategoryCode } : undefined);
+        setDuplicateOverwriting(true);
         try {
             await retryDuplicateFilesApi(activeSpace.id, fileObjs, retryMetadata);
-            await reloadFiles();
             resetUploadDialog();
+            await reloadFiles();
+            showToast({ message: "覆盖成功，文件已进入解析队列", severity: NotificationSeverity.SUCCESS });
         } catch {
             showToast({ message: "文件覆盖失败", severity: NotificationSeverity.ERROR });
+        } finally {
+            setDuplicateOverwriting(false);
         }
-    }, [activeSpace, duplicateFileCategoryCode, duplicateFiles, duplicateUploadMetadataPayload, reloadFiles, resetUploadDialog, showToast]);
+    }, [activeSpace, duplicateFileCategoryCode, duplicateFiles, duplicateOverwriting, duplicateUploadMetadataPayload, reloadFiles, resetUploadDialog, showToast]);
 
     const handleStartUploadImport = useCallback(async () => {
         const rows = uploadReviewRows.filter((row) => row.selected);
@@ -728,6 +751,7 @@ export function usePortalUploadDialog({
         uploadReviewRows,
         uploadFolderOptions,
         duplicateFiles,
+        duplicateOverwriting,
         fileCategoryCode,
         fileCategoryOptions,
         businessDomainCode,

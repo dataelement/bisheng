@@ -433,4 +433,21 @@ describe("mapChild", () => {
 
     expect(file.summary).toBe("数据库优化摘要");
   });
+
+  it("prefers web link file_name stem over fetched web_title", () => {
+    const file = mapChild(
+      {
+        id: 1003,
+        file_name: "首钢官网.md",
+        file_type: 1,
+        file_source: "web_link",
+        user_metadata: {
+          web_title: "192.168.106.171:3002",
+        },
+      },
+      "88",
+    );
+
+    expect(file.name).toBe("首钢官网");
+  });
 });

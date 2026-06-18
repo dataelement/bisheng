@@ -22,11 +22,13 @@ import {
 } from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import {
-    DEFAULT_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
     MAX_UPLOAD_COUNT,
     getAllowedExtensions,
     getFileInputAccept,
+    getMaxFileSizeBytesForFile,
+    getMaxFileSizeMBForFile,
+    resolveUploadSizeLimits,
     triggerUrlDownload,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
@@ -71,7 +73,7 @@ interface KnowledgeSpaceContentProps {
     onUploadFile: (files?: FileList | File[]) => void;
     onUploadFolder: (
         files: FileList | File[],
-        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+        options: { allowedExtensions: readonly string[]; limits: import("../knowledgeUtils").UploadSizeLimits },
     ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
@@ -163,9 +165,14 @@ export function KnowledgeSpaceContent({
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
     ].filter((file) => isCurrentSpaceFile(file) && isCurrentFolderTransientFile(file));
+    const uploadingNames = new Set(
+        transientFiles
+            .filter((file) => file.status === FileStatus.UPLOADING)
+            .map((file) => file.name),
+    );
     const displayFiles = [
         ...transientFiles,
-        ...files.filter(isCurrentSpaceFile),
+        ...files.filter((file) => isCurrentSpaceFile(file) && !uploadingNames.has(file.name)),
     ];
 
     const [searchQuery, setSearchQuery] = useState("");
@@ -632,8 +639,10 @@ export function KnowledgeSpaceContent({
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
-    const maxFileSizeMB = bishengConfig?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
-    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    const uploadSizeLimits = useMemo(
+        () => resolveUploadSizeLimits(bishengConfig ?? undefined),
+        [bishengConfig],
+    );
     const enableEtl4lm = bishengConfig?.enable_etl4lm ?? false;
     const allowedExtensions = getAllowedExtensions(enableEtl4lm);
     const fileInputAccept = getFileInputAccept(enableEtl4lm);
@@ -760,8 +769,14 @@ export function KnowledgeSpaceContent({
             }
 
             for (let f of filesList) {
-                if (f.size > maxFileSizeBytes) {
-                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: maxFileSizeMB }), status: "error" });
+                if (f.size > getMaxFileSizeBytesForFile(f.name, uploadSizeLimits)) {
+                    showToast({
+                        message: localize("com_knowledge.file_exceeds_limit", {
+                            name: f.name,
+                            size: getMaxFileSizeMBForFile(f.name, uploadSizeLimits),
+                        }),
+                        status: "error",
+                    });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
@@ -787,7 +802,7 @@ export function KnowledgeSpaceContent({
         if (filesList && filesList.length > 0 && canUploadFile) {
             onUploadFolder(filesList, {
                 allowedExtensions,
-                maxSizeMB: maxFileSizeMB,
+                limits: uploadSizeLimits,
             });
         }
         if (folderInputRef.current) folderInputRef.current.value = "";
@@ -797,7 +812,7 @@ export function KnowledgeSpaceContent({
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
         onUploadFile: canUploadFile ? onUploadFile : () => undefined,
-        maxFileSizeMB,
+        uploadSizeLimits,
         enableEtl4lm,
     });
 
@@ -1418,7 +1433,14 @@ export function KnowledgeSpaceContent({
                     <DialogHeader>
                         <DialogTitle>网页链接</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
+                    <form
+                        className="space-y-4"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            if (webLinkSubmitting) return;
+                            void handleSubmitWebLink();
+                        }}
+                    >
                         <label className="block space-y-2 text-sm text-[#1d2129]">
                             <span className="font-medium">链接地址</span>
                             <Input
@@ -1437,19 +1459,20 @@ export function KnowledgeSpaceContent({
                                 disabled={webLinkSubmitting}
                             />
                         </label>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => setWebLinkDialogOpen(false)}
-                            disabled={webLinkSubmitting}
-                        >
-                            {localize("com_knowledge.cancel")}
-                        </Button>
-                        <Button onClick={handleSubmitWebLink} disabled={webLinkSubmitting}>
-                            {webLinkSubmitting ? "导入中..." : "导入"}
-                        </Button>
-                    </DialogFooter>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setWebLinkDialogOpen(false)}
+                                disabled={webLinkSubmitting}
+                            >
+                                {localize("com_knowledge.cancel")}
+                            </Button>
+                            <Button type="submit" disabled={webLinkSubmitting}>
+                                {webLinkSubmitting ? "导入中..." : "导入"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
 

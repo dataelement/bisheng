@@ -1584,6 +1584,8 @@
     "upload_file": "ファイルのアップロード",
     "upload_folder": "フォルダーをアップロード",
     "uploading_status": "アップロード中",
+    "uploading_status_with_progress": "アップロード中 {{0}}%",
+    "registering_status": "登録中",
     "users_count": "ユーザー",
     "window_too_narrow_ai": "ウィンドウの幅が狭すぎるため、AI アシスタントを開けません",
     "yes": "はい",

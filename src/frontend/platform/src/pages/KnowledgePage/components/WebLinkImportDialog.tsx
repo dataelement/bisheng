@@ -95,6 +95,7 @@ export default function WebLinkImportDialog({
                         onOpenChange(false);
                     },
                     onOk: async (close) => {
+                        close();
                         onOpenChange(false);
                         try {
                             await importWebLink(normalizedUrl, true);
@@ -105,8 +106,6 @@ export default function WebLinkImportDialog({
                                     defaultValue: "网页链接覆盖失败",
                                 }),
                             });
-                        } finally {
-                            close();
                         }
                     },
                 });
@@ -129,7 +128,14 @@ export default function WebLinkImportDialog({
                 <DialogHeader>
                     <DialogTitle>{t("webLink", { defaultValue: "网页链接" })}</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
+                <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        if (webLinkLoading) return;
+                        void handleImportWebLink();
+                    }}
+                >
                     <label className="block space-y-2 text-sm text-[#1d2129]">
                         <span className="font-medium">{t("webLinkUrl", { defaultValue: "链接地址" })}</span>
                         <Input
@@ -150,17 +156,17 @@ export default function WebLinkImportDialog({
                             disabled={webLinkLoading}
                         />
                     </label>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={webLinkLoading}>
-                        {t("cancel", { defaultValue: "取消" })}
-                    </Button>
-                    <Button onClick={handleImportWebLink} disabled={webLinkLoading}>
-                        {webLinkLoading
-                            ? t("importing", { defaultValue: "导入中..." })
-                            : t("import", { defaultValue: "导入" })}
-                    </Button>
-                </DialogFooter>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={webLinkLoading}>
+                            {t("cancel", { defaultValue: "取消" })}
+                        </Button>
+                        <Button type="submit" disabled={webLinkLoading}>
+                            {webLinkLoading
+                                ? t("importing", { defaultValue: "导入中..." })
+                                : t("import", { defaultValue: "导入" })}
+                        </Button>
+                    </DialogFooter>
+                </form>
             </DialogContent>
         </Dialog>
     );

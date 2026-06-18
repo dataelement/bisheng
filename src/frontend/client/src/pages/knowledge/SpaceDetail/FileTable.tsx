@@ -35,7 +35,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -246,6 +246,20 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
             >
                 <span className={cn("size-1.5 shrink-0 rounded-full", rejected ? "bg-[#f53f3f]" : "bg-[#165dff]")} />
                 {approvalStatusLabel}
+            </div>
+        );
+    }
+    if (status === FileStatus.UPLOADING && file) {
+        const label = getUploadTransientStatusLabel(file, localize);
+        return wrapWithReason(
+            <div
+                className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
+                    "bg-[#e8f3ff] text-[#165dff]"
+                )}
+            >
+                <span className="size-1.5 shrink-0 rounded-full bg-[#165dff]" />
+                {label}
             </div>
         );
     }

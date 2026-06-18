@@ -6344,6 +6344,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             split_rule_dict[self.file_category_code_key] = normalized_file_category_code
 
         imported_at = datetime.now().isoformat(timespec="seconds")
+        web_link_display_title = self._web_link_display_title(file_name)
         if overwrite_file:
             return await self._overwrite_web_link_file(
                 db_file=overwrite_file,
@@ -6377,7 +6378,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "source_type": "web_link",
                 "source_url": url,
                 "final_url": result.final_url,
-                "web_title": result.title,
+                "web_title": web_link_display_title,
                 "imported_at": imported_at,
             },
         )
@@ -6498,7 +6499,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "source_type": "web_link",
             "source_url": url,
             "final_url": result.final_url,
-            "web_title": result.title,
+            "web_title": self._web_link_display_title(file_name),
             "imported_at": imported_at,
             **({"html_snapshot_object_name": html_snapshot_object_name} if html_snapshot_object_name else {}),
         }
@@ -6525,6 +6526,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(db_file.knowledge_id)
         return db_file
+
+    @staticmethod
+    def _web_link_display_title(file_name: str) -> str:
+        if file_name.lower().endswith(".md"):
+            return file_name[:-3]
+        return file_name
+
+    @staticmethod
+    def _normalize_web_link_file_name(name: str) -> str:
+        cleaned = (name or "").strip()
+        if not cleaned:
+            return cleaned
+        if cleaned.lower().endswith(".md"):
+            return cleaned
+        return f"{cleaned}.md"
 
     @staticmethod
     def _build_web_link_file_name(title: str, url: str) -> str:
@@ -6769,6 +6785,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "rename_file")
 
+        if file_record.file_source == FileSource.WEB_LINK.value:
+            new_name = self._normalize_web_link_file_name(new_name)
+
         old_suffix = file_record.file_name.rsplit(".", 1)[-1] if "." in file_record.file_name else ""
         new_suffix = new_name.rsplit(".", 1)[-1] if "." in new_name else ""
         if old_suffix != new_suffix:
@@ -6778,6 +6797,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFileNameDuplicateError()
 
         file_record.file_name = new_name
+        if file_record.file_source == FileSource.WEB_LINK.value:
+            metadata = dict(file_record.user_metadata or {})
+            metadata["web_title"] = self._web_link_display_title(new_name)
+            file_record.user_metadata = metadata
         updated_file = await KnowledgeFileDao.async_update(file_record)
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
 

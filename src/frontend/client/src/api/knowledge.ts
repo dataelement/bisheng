@@ -309,6 +309,10 @@ export interface KnowledgeFile {
     user_name?: string;           // mapped from user_name — original uploader of this file
     // Transient UI-only fields
     isCreating?: boolean;
+    /** 0–100 upload progress for in-flight uploads */
+    uploadProgress?: number;
+    /** Distinguishes byte upload vs backend registration for large files */
+    uploadPhase?: "uploading" | "registering";
 }
 
 export interface UploadedFileRecord extends KnowledgeFile {
@@ -701,6 +705,28 @@ export function extractKnowledgeFileSensitiveCheck(raw: any): KnowledgeFileSensi
     }
 }
 
+/** Display title for imported web links — align with Platform (file_name stem). */
+export function resolveWebLinkDisplayName(
+    fileName: string,
+    userMetadata?: Record<string, unknown>,
+): string {
+    const stem = fileName.replace(/\.md$/i, "").trim();
+    if (stem) return stem;
+    const webTitle = typeof userMetadata?.web_title === "string" ? userMetadata.web_title.trim() : "";
+    return webTitle || "web-link";
+}
+
+/** Normalize user-entered web link display name to persisted file_name. */
+export function toWebLinkFileName(displayName: string): string {
+    const trimmed = displayName.trim();
+    if (!trimmed) return trimmed;
+    return trimmed.toLowerCase().endsWith(".md") ? trimmed : `${trimmed}.md`;
+}
+
+export function isWebLinkKnowledgeFile(file: Pick<KnowledgeFile, "fileSource" | "type">): boolean {
+    return file.fileSource === "web_link" || file.type === FileType.WEB;
+}
+
 /** Map a raw space child (file/folder) to the frontend KnowledgeFile model */
 export function mapChild(raw: any, spaceId: string): KnowledgeFile {
     // Backend keys in children response usually look like:
@@ -710,7 +736,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
     const rawName = raw?.name ?? raw?.file_name ?? raw?.object_name ?? raw?.file_name ?? raw?.path ?? "";
     const userMetadata = raw?.user_metadata ?? raw?.userMetadata ?? {};
     const nameVal = raw?.file_source === "web_link"
-        ? (userMetadata?.web_title || String(rawName).replace(/\.md$/i, ""))
+        ? resolveWebLinkDisplayName(String(rawName), userMetadata)
         : rawName;
 
     const tags: FileTag[] = Array.isArray(raw?.tags)
@@ -1738,10 +1764,22 @@ export async function uploadFileToServerApi(
      * as the multipart filename, which the backend persists verbatim.
      */
     filename?: string,
+    options?: {
+        onProgress?: (percent: number) => void;
+    },
 ): Promise<UploadFileResponse> {
     const formData = new FormData();
     formData.append("file", file, filename ?? file.name);
-    const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
+    const res = await request.postMultiPart(`/api/v1/knowledge/upload/${space_id}`, formData, {
+        onUploadProgress: (progressEvent) => {
+            const total = progressEvent.total ?? file.size;
+            if (!total || !options?.onProgress) {
+                return;
+            }
+            const percent = Math.min(99, Math.round((progressEvent.loaded * 100) / total));
+            options.onProgress(percent);
+        },
+    }) as ApiResponse<UploadFileResponse> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
         // Preserve status_code and data so the caller can render the localized
         // backend message via i18n (e.g. api_errors.19403 with used_gb/quota_gb)

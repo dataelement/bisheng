@@ -2,15 +2,21 @@ import { useRef, useCallback, useMemo } from "react";
 import {
     MAX_UPLOAD_COUNT,
     DEFAULT_MAX_FILE_SIZE_MB,
+    DEFAULT_MEDIA_MAX_FILE_SIZE_MB,
     getAllowedMimeTypes,
     getAllowedExtensions,
+    getMaxFileSizeBytesForFile,
+    getMaxFileSizeMBForFile,
+    type UploadSizeLimits,
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 
 interface UseFileDragDropOptions {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     onUploadFile: (files?: FileList | File[]) => void;
-    /** Maximum single file size in MB (from env config). Falls back to DEFAULT_MAX_FILE_SIZE_MB. */
+    /** Per-type upload limits (document vs media). */
+    uploadSizeLimits?: UploadSizeLimits;
+    /** @deprecated Use uploadSizeLimits.defaultMaxMB */
     maxFileSizeMB?: number;
     /** Whether ETL4LM service is deployed; controls which extensions/MIME types are accepted. */
     enableEtl4lm?: boolean;
@@ -23,13 +29,16 @@ interface UseFileDragDropOptions {
 export function useFileDragDrop({
     onDragStateChange,
     onUploadFile,
+    uploadSizeLimits,
     maxFileSizeMB,
     enableEtl4lm = false,
 }: UseFileDragDropOptions) {
     const localize = useLocalize();
     const dragCounter = useRef(0);
-    const limitMB = maxFileSizeMB ?? DEFAULT_MAX_FILE_SIZE_MB;
-    const limitBytes = limitMB * 1024 * 1024;
+    const limits = uploadSizeLimits ?? {
+        defaultMaxMB: maxFileSizeMB ?? DEFAULT_MAX_FILE_SIZE_MB,
+        mediaMaxMB: DEFAULT_MEDIA_MAX_FILE_SIZE_MB,
+    };
     const allowedMime = useMemo(() => getAllowedMimeTypes(enableEtl4lm), [enableEtl4lm]);
     const allowedExt = useMemo(() => getAllowedExtensions(enableEtl4lm), [enableEtl4lm]);
 
@@ -100,8 +109,14 @@ export function useFileDragDrop({
                 }
 
                 for (const f of filesList) {
-                    if (f.size > limitBytes) {
-                        onDragStateChange?.(true, localize("com_knowledge.file_exceeds_limit", { name: f.name, size: limitMB }));
+                    if (f.size > getMaxFileSizeBytesForFile(f.name, limits)) {
+                        onDragStateChange?.(
+                            true,
+                            localize("com_knowledge.file_exceeds_limit", {
+                                name: f.name,
+                                size: getMaxFileSizeMBForFile(f.name, limits),
+                            }),
+                        );
                         setTimeout(() => onDragStateChange?.(false), 2000);
                         return;
                     }
@@ -119,7 +134,7 @@ export function useFileDragDrop({
                 onDragStateChange?.(false);
             }
         },
-        [onDragStateChange, onUploadFile, limitBytes, limitMB, allowedExt, localize]
+        [onDragStateChange, onUploadFile, limits, allowedExt, localize]
     );
 
     return {
