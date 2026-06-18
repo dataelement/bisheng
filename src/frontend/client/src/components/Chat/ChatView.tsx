@@ -363,7 +363,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // generated deliverables. The drawer only opens on the header button — no
   // auto-expand (the entry icon appearing is enough).
   const { getLinsight, updateLinsight } = useLinsightManager();
-  const taskArtifacts = useWorkspacePanel();
+  const taskArtifacts = useWorkspacePanel(latestTaskVersionId);
 
   // F035: enter/exit animation for the fullscreen workspace overlay. The overlay
   // is a separate instance from the docked panel (PreviewBody isn't cached, so we
