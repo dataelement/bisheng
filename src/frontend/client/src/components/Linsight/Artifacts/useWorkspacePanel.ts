@@ -10,13 +10,24 @@
  *  - open && !previewFile      → file-list view (fig. workspace)
  *  - open && previewFile       → in-place preview view (fig. preview)
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
 
 export function useWorkspacePanel(versionId: string) {
     const [open, setOpen] = useState(false);
     const [previewFile, setPreviewFile] = useState<ArtifactFile | null>(null);
     const [fullscreen, setFullscreen] = useState(false);
+
+    // The panel is bound to ChatView's latest task turn (versionId). ChatView is
+    // KeepAlive-cached, so switching conversations / new task / new chat never
+    // unmounts this hook — it only changes versionId. Reset the panel whenever the
+    // bound version changes, otherwise the file opened in the previous conversation
+    // stays docked on the right of the new one (F035 stale-preview bug).
+    useEffect(() => {
+        setPreviewFile(null);
+        setFullscreen(false);
+        setOpen(false);
+    }, [versionId]);
 
     /** Open the panel on the file list (entry button). */
     const openWorkspace = () => {
