@@ -2,9 +2,10 @@
  * F035 Track H (P3): intent-clarification / follow-up card (spec §2,
  * user_input event). One question per page (‹ 1/N ›): single-select /
  * multi-select / free text, with a trailing "type your own" option. Bottom
- * right "skip" skips the current question; top-right × skips the rest and
- * submits whatever was collected. All answers are merged into one structured
- * text and submitted through the existing user-input API in a single shot.
+ * right "skip →" skips the current question to the next one (shown on every page
+ * except the last — the last page only offers 确定/finish); top-right × skips the
+ * rest and submits whatever was collected. All answers are merged into one
+ * structured text and submitted through the existing user-input API in a single shot.
  * Unparseable payloads degrade to a plain textarea (legacy UserInput shape).
  */
 import { ArrowRight, Check, ChevronLeft, ChevronRight, CornerDownLeft, X } from 'lucide-react';
@@ -121,6 +122,12 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
     const hasAnswer = q
         ? selected.some((v) => v !== CUSTOM_KEY) || (customSelected && !!customText[q.id]?.trim())
         : !!freeText.trim();
+    // On the last page the only meaningful action is "finish": there is no next
+    // question for "skip →" to advance to, and the top-right × already covers
+    // skip-and-submit. So the last page shows a single always-clickable 确定
+    // (finish) and hides 跳过; finishing with nothing selected submits the last
+    // question as skipped (composeClarifyAnswer maps empty answers to skipText).
+    const isLast = page >= questions.length - 1;
 
     return (
         <div
@@ -275,30 +282,35 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                 />
             )}
 
-            {/* Footer: Confirm (when answered) + Skip. pr-4 matches the custom-answer
-                box's px-4 so 跳过 / 确定 line up with the inline 确定 inside it. */}
+            {/* Footer: pr-4 matches the custom-answer box's px-4 so 跳过 / 确定 line
+                up with the inline 确定 inside it.
+                - Last page: only 确定 (always shown + clickable = finish; 跳过 hidden).
+                - Earlier pages: 确定/下一步 once answered (multi-select / free-text;
+                  single-select auto-advances on pick) + 跳过 → to skip to the next. */}
             <div className="mt-6 flex items-center justify-end gap-4 pr-4">
-                {hasAnswer && (q?.multiple || !q) && (
+                {(isLast || (hasAnswer && (q?.multiple || !q))) && (
                     <Button
                         size="sm"
                         disabled={disabled || submitted}
                         onClick={handleConfirm}
                         className="h-8 rounded-lg bg-[#335CFF] text-white hover:bg-[#1E4DFF] px-4 text-xs font-semibold shadow-[0_2px_8px_rgba(51,92,255,0.2)] transition-all duration-200"
                     >
-                        {page < questions.length - 1
-                            ? localize('com_linsight_clarify_next')
-                            : localize('com_linsight_clarify_submit')}
+                        {isLast
+                            ? localize('com_linsight_clarify_submit')
+                            : localize('com_linsight_clarify_next')}
                     </Button>
                 )}
-                <button
-                    type="button"
-                    disabled={disabled || submitted}
-                    onClick={handleSkipCurrent}
-                    className="flex items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
-                >
-                    {localize('com_linsight_clarify_skip')}
-                    <ArrowRight size={14} className="ml-1 shrink-0" />
-                </button>
+                {!isLast && (
+                    <button
+                        type="button"
+                        disabled={disabled || submitted}
+                        onClick={handleSkipCurrent}
+                        className="flex items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
+                    >
+                        {localize('com_linsight_clarify_skip')}
+                        <ArrowRight size={14} className="ml-1 shrink-0" />
+                    </button>
+                )}
             </div>
         </div>
     );
