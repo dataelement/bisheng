@@ -10,7 +10,9 @@ GP). Two root causes must stay defused *by construction*:
 - Plan pollution: a subagent's own ``write_todos`` arrives namespaced; the
   stream mapper drops namespaced todos so they cannot mint bogus
   GenerateSubTask/TaskStart/TaskEnd on the main plan. Only namespaced *tool-call*
-  steps surface, rendered as ``step_type="subagent"`` for frontend grouping.
+  steps surface, keeping their REAL step_type (tool/knowledge) while carrying
+  ``extra_info.namespace`` so the frontend can group them under their owning
+  subagent (B1: namespace drives grouping, not step_type rewriting).
 
 These tests assert against the extracted pure helpers (``_subagent_tools`` /
 ``_build_researcher_subagent``) and the pure stream mapper, deliberately NOT
@@ -201,38 +203,115 @@ def test_stream_mapper_ignores_subagent_todos():
 
 
 # --------------------------------------------------------------------------
-# 4. namespaced tool-call step surfaces as step_type="subagent" (design §5.2c)
+# 4. namespaced internal tool keeps its REAL step_type + carries ns (B1)
 # --------------------------------------------------------------------------
 
 
-def test_stream_mapper_emits_subagent_step_type():
-    """A namespaced messages/tool-start chunk must yield an ExecStep with
-    step_type='subagent' and extra_info['namespace'] set, so the frontend can
-    fold subagent steps under their parent task step.
+def test_stream_mapper_namespaced_tool_keeps_real_step_type():
+    """B1: a namespaced (subagent-internal) tool-call must surface as its REAL
+    step_type (knowledge here), NOT step_type='subagent'.
+
+    Tagging every namespaced internal call as 'subagent' made the UI render a
+    bogus "委派 N 个 search_knowledge_base 子智能体" row per tool. The fix: the
+    namespace only rides in extra_info for grouping; step_type stays the
+    name-inferred real type. The SAME tool with ns=None is identical (knowledge).
+    """
+    from langchain_core.messages import AIMessage
+
+    mapper = StreamEventMapper(svid=SVID)
+    # tools:<uuid> is the real flat subgraph namespace form deepagents emits
+    sub_ns = ("tools:9c3a0a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",)
+    msg = AIMessage(
+        content="",
+        tool_calls=[{"id": "call_sub_1", "name": "search_knowledge_base", "args": {"q": "竞品"}}],
+    )
+
+    events = [e for e in mapper.normalize("messages", (msg, {}), namespace=sub_ns) if isinstance(e, ExecStep)]
+
+    assert events, "a namespaced tool-call must still surface as an ExecStep"
+    step = events[0]
+    # B1: namespace no longer rewrites step_type — knowledge inference wins
+    assert step.step_type == "knowledge"
+    assert step.extra_info.get("namespace") == sub_ns[0]
+    assert step.call_id == "call_sub_1"
+
+    # sanity contrast: the SAME tool with ns=None is the same (knowledge) step
+    main_mapper = StreamEventMapper(svid=SVID)
+    main_events = [e for e in main_mapper.normalize("messages", (msg, {}), namespace=None) if isinstance(e, ExecStep)]
+    assert main_events and main_events[0].step_type == "knowledge"
+    assert "namespace" not in main_events[0].extra_info
+
+
+# --------------------------------------------------------------------------
+# 5. main-graph `task` tool IS the single delegation point (B2)
+# --------------------------------------------------------------------------
+
+
+def test_stream_mapper_main_task_is_subagent_delegation():
+    """B2: the main-graph (ns=None) ``task`` tool call is the ONLY delegation
+    boundary. It must surface as step_type='subagent', with name reshaped to the
+    delegated subagent_type (default 'general-purpose') and the delegation goal
+    (description) carried into both call_reason and extra_info['delegate_goal'].
+
+    A plain main-graph tool row keeps an empty call_reason (no delegate_goal).
     """
     from langchain_core.messages import AIMessage
 
     mapper = StreamEventMapper(svid=SVID)
     msg = AIMessage(
         content="",
-        tool_calls=[{"id": "call_sub_1", "name": "search_knowledge_base", "args": {"q": "竞品"}}],
+        tool_calls=[
+            {
+                "id": "call_task_1",
+                "name": "task",
+                "args": {"description": "对标三家同行 2024Q3 毛利率"},
+            }
+        ],
     )
 
-    events = [
-        e
-        for e in mapper.normalize("messages", (msg, {}), namespace=("research_subagent:0",))
-        if isinstance(e, ExecStep)
-    ]
-
-    assert events, "a namespaced tool-call must still surface as an ExecStep"
+    events = [e for e in mapper.normalize("messages", (msg, {}), namespace=None) if isinstance(e, ExecStep)]
+    assert events
     step = events[0]
-    # namespace wins over knowledge inference: a subagent step is grouped by ns
     assert step.step_type == "subagent"
-    assert step.extra_info.get("namespace") == "research_subagent:0"
-    assert step.call_id == "call_sub_1"
+    # subagent_type omitted -> default general-purpose; literal "task" is replaced
+    assert step.name == "general-purpose"
+    assert step.call_reason == "对标三家同行 2024Q3 毛利率"
+    assert step.extra_info.get("delegate_goal") == "对标三家同行 2024Q3 毛利率"
+    # delegation point is the MAIN graph -> no namespace on the row itself
+    assert "namespace" not in step.extra_info
 
-    # sanity contrast: the SAME tool with ns=None is a normal (knowledge) step
-    main_mapper = StreamEventMapper(svid=SVID)
-    main_events = [e for e in main_mapper.normalize("messages", (msg, {}), namespace=None) if isinstance(e, ExecStep)]
-    assert main_events and main_events[0].step_type != "subagent"
-    assert "namespace" not in main_events[0].extra_info
+
+def test_stream_mapper_task_uses_explicit_subagent_type():
+    """When the model passes an explicit subagent_type, the row name uses it."""
+    from langchain_core.messages import AIMessage
+
+    mapper = StreamEventMapper(svid=SVID)
+    msg = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "call_task_2",
+                "name": "task",
+                "args": {"subagent_type": "research-agent", "description": "调研框架 A"},
+            }
+        ],
+    )
+    step = next(e for e in mapper.normalize("messages", (msg, {}), namespace=None) if isinstance(e, ExecStep))
+    assert step.step_type == "subagent"
+    assert step.name == "research-agent"
+    assert step.call_reason == "调研框架 A"
+
+
+def test_stream_mapper_plain_main_tool_has_no_delegate_goal():
+    """A non-task main-graph tool keeps call_reason empty and no delegate_goal."""
+    from langchain_core.messages import AIMessage
+
+    mapper = StreamEventMapper(svid=SVID)
+    msg = AIMessage(
+        content="",
+        tool_calls=[{"id": "call_tool_1", "name": "write_file", "args": {"path": "output/x.md"}}],
+    )
+    step = next(e for e in mapper.normalize("messages", (msg, {}), namespace=None) if isinstance(e, ExecStep))
+    assert step.step_type == "tool"
+    assert step.call_reason == ""
+    assert "delegate_goal" not in step.extra_info
