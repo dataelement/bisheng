@@ -40,10 +40,16 @@ module.exports = {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(400%)' },
         },
+        // diagonal glint sweeping continuously across the subagent card
+        'sheen-sweep': {
+          '0%': { transform: 'translateX(-130%)' },
+          '100%': { transform: 'translateX(130%)' },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out forwards',
         'crawl-slide': 'crawl-slide 1.4s linear infinite',
+        'sheen-sweep': 'sheen-sweep 2s linear infinite',
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-scale': 'pulse-scale 1s ease-in-out infinite',

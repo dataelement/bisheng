@@ -131,7 +131,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
 
     return (
         <div
-            className="my-3 w-full rounded-2xl border border-[#EEF2F6] bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
+            className="my-3 w-full rounded-2xl border border-[#EEF2F6] bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
             style={{
                 backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'5\' height=\'5\'%3E%3Ccircle cx=\'0.5\' cy=\'0.5\' r=\'0.5\' fill=\'%23EAEEFF\'/%3E%3C/svg%3E")',
                 backgroundSize: '5px 5px',
@@ -145,7 +145,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                 <button
                     type="button"
                     onClick={handleClose}
-                    className="shrink-0 rounded-full p-1 text-[#8C8C8C] hover:bg-gray-100 transition-colors"
+                    className="shrink-0 rounded-md p-1 text-[#8C8C8C] hover:bg-gray-100 transition-colors"
                     aria-label="close"
                 >
                     <X size={16} />
@@ -154,7 +154,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
 
             {/* Body: Current question */}
             {q ? (
-                <div className="mt-4">
+                <div className="mt-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <span className="text-[14px] font-bold text-[#1A1A1A]">{q.question}</span>
@@ -174,7 +174,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                     type="button"
                                     disabled={page === 0}
                                     onClick={() => setPage(page - 1)}
-                                    className="rounded-full p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
+                                    className="rounded-md p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
                                 >
                                     <ChevronLeft size={16} />
                                 </button>
@@ -185,14 +185,14 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                     type="button"
                                     disabled={page === questions.length - 1}
                                     onClick={() => setPage(page + 1)}
-                                    className="rounded-full p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
+                                    className="rounded-md p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
                                 >
                                     <ChevronRight size={16} />
                                 </button>
                             </div>
                         )}
                     </div>
-                    <ul className="mt-4 space-y-3">
+                    <ul className="mt-4 space-y-2">
                         {q.options.map((option, i) => {
                             const active = selected.includes(option);
                             const { title: optTitle, desc: optDesc } = parseOption(option);
@@ -203,9 +203,9 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         disabled={disabled || submitted}
                                         onClick={() => handleSelect(q, option)}
                                         className={cn(
-                                            'flex w-full items-start gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all duration-200 select-none border-0',
+                                            'flex h-9 w-full items-center gap-2 rounded-lg px-4 text-left text-sm transition-all duration-200 select-none border-0',
                                             active
-                                                ? 'bg-[#EDF2FF] text-[#335CFF] font-medium shadow-[0_2px_8px_rgba(51,92,255,0.08)]'
+                                                ? 'bg-[#EEE] text-[#212121] font-medium'
                                                 : 'text-[#1A1A1A] hover:bg-gray-50/80',
                                         )}
                                     >
@@ -213,12 +213,12 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         <div className="flex-1 min-w-0">
                                             <span className={cn(active ? 'text-[#335CFF]' : 'text-[#1A1A1A]')}>{optTitle}</span>
                                             {optDesc && (
-                                                <span className={cn('ml-1 text-[13px] font-normal', active ? 'text-[#335CFF]/80' : 'text-[#8C8C8C]')}>
+                                                <span className="ml-1 text-[13px] font-normal text-[#8C8C8C]">
                                                     {optDesc}
                                                 </span>
                                             )}
                                         </div>
-                                        {active && <Check size={16} className="shrink-0 text-[#335CFF] self-center" />}
+                                        {active && <Check size={16} className="shrink-0 text-[#212121] self-center" />}
                                     </button>
                                 </li>
                             );
@@ -226,7 +226,12 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                         {/* Trailing "type your own" entry: inline input */}
                         <li>
                             <div
-                                className="flex items-center gap-2 rounded-xl bg-[#F5F7FA] px-4 py-2.5 transition-all duration-200"
+                                className={cn(
+                                    'flex h-9 items-center gap-2 rounded-lg px-4 transition-all duration-200',
+                                    // No box by default (matches the other options); the
+                                    // input-box background only appears once it's active.
+                                    customSelected ? 'bg-[#EEE]' : 'hover:bg-gray-50/80',
+                                )}
                             >
                                 <span className="shrink-0 text-sm font-medium text-[#8C8C8C]">
                                     {q.options.length + 1}.

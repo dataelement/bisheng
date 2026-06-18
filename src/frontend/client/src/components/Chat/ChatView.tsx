@@ -364,6 +364,33 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // auto-expand (the entry icon appearing is enough).
   const { getLinsight, updateLinsight } = useLinsightManager();
   const taskArtifacts = useWorkspacePanel();
+
+  // F035: enter/exit animation for the fullscreen workspace overlay. The overlay
+  // is a separate instance from the docked panel (PreviewBody isn't cached, so we
+  // never mount both at once). `fsMounted` keeps it in the DOM across the collapse
+  // transition; `fsExpanded` drives the scale/opacity. Entering: mount collapsed,
+  // then expand on the next frame so the transition runs. Exiting: collapse, then
+  // unmount on transitionEnd.
+  const [fsMounted, setFsMounted] = useState(false);
+  const [fsExpanded, setFsExpanded] = useState(false);
+  useEffect(() => {
+    if (taskArtifacts.fullscreen) {
+      setFsMounted(true);
+      // Double rAF: let the collapsed state paint before flipping to expanded,
+      // otherwise React can batch both and the enter transition is skipped.
+      let r2 = 0;
+      const r1 = requestAnimationFrame(() => {
+        r2 = requestAnimationFrame(() => setFsExpanded(true));
+      });
+      return () => {
+        cancelAnimationFrame(r1);
+        cancelAnimationFrame(r2);
+      };
+    }
+    setFsExpanded(false);
+    return undefined;
+  }, [taskArtifacts.fullscreen]);
+
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
     const uploaded = toUploadedArtifacts(taskLinsight?.files as any[]);
@@ -454,7 +481,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           isStreaming={isStreaming}
                           shareToken={shareToken}
                           knowledgeChatLayout
-                          contentWidthClassName="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full"
+                          contentWidthClassName="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full"
                           onRegenerate={regenerate}
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
@@ -531,19 +558,36 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {/* F035: inline workspace panel docked to the right of the chat
                         main for the latest task turn. Opens from the header entry
                         button; the file preview renders in place. Fullscreen is a
-                        separate overlay (below) covering the whole route viewport. */}
-                    {latestTaskVersionId && taskArtifacts.open && !taskArtifacts.fullscreen && (
-                      <div className="min-h-0 shrink-0 p-1 w-[46%] min-w-[440px] max-w-[720px]">
-                        <WorkspacePanel
-                          files={taskWorkspaceFiles}
-                          versionId={latestTaskVersionId}
-                          previewFile={taskArtifacts.previewFile}
-                          fullscreen={false}
-                          onPreview={taskArtifacts.openPreview}
-                          onBack={taskArtifacts.backToList}
-                          onClose={taskArtifacts.closeWorkspace}
-                          onToggleFullscreen={taskArtifacts.toggleFullscreen}
-                        />
+                        separate overlay (below) covering the whole route viewport.
+
+                        Kept mounted whenever a task turn exists (gated only on
+                        !fullscreen) so open/close animates the wrapper's width +
+                        opacity instead of hard mount/unmount. Width uses an inline
+                        clamp() (not min/max-w classes) so it interpolates smoothly
+                        0px → 46% — min-width doesn't transition and would otherwise
+                        snap to 440px on the first frame. The inner box keeps a
+                        min-width so the panel content slides/clips rather than
+                        reflowing while it collapses. */}
+                    {latestTaskVersionId && !taskArtifacts.fullscreen && (
+                      <div
+                        className={cn(
+                          'min-h-0 shrink-0 overflow-hidden transition-[width,opacity,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                          taskArtifacts.open ? 'p-1 opacity-100' : 'pointer-events-none p-0 opacity-0',
+                        )}
+                        style={{ width: taskArtifacts.open ? 'clamp(440px, 46%, 720px)' : '0px' }}
+                      >
+                        <div className="h-full min-w-[420px]">
+                          <WorkspacePanel
+                            files={taskWorkspaceFiles}
+                            versionId={latestTaskVersionId}
+                            previewFile={taskArtifacts.previewFile}
+                            fullscreen={false}
+                            onPreview={taskArtifacts.openPreview}
+                            onBack={taskArtifacts.backToList}
+                            onClose={taskArtifacts.closeWorkspace}
+                            onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                          />
+                        </div>
                       </div>
                     )}
 
@@ -628,9 +672,25 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               viewport (chatContainerRef is relative + un-clipped), flush to the
               edges with no padding. Covers the chat (incl. its header) but not the
               browser, so the global nav stays. Separate instance from the inline
-              panel above (toggling fullscreen remounts the preview). */}
-          {latestTaskVersionId && taskArtifacts.open && taskArtifacts.fullscreen && (
-            <div className="absolute inset-0 z-50 bg-white">
+              panel above (only one is ever mounted, so the preview never double
+              fetches). Scale + opacity transition from the right (where the docked
+              panel sits) so expanding/collapsing fullscreen animates smoothly
+              instead of hard mount/unmount; unmounts on transitionEnd after the
+              collapse so the exit plays too. */}
+          {latestTaskVersionId && fsMounted && (
+            <div
+              className={cn(
+                'absolute inset-0 z-50 origin-right bg-white transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                fsExpanded ? 'scale-100 opacity-100' : 'scale-[0.96] opacity-0',
+              )}
+              onTransitionEnd={(e) => {
+                // Unmount only after the collapse finishes (ignore the expand end
+                // and bubbled child transitions).
+                if (e.target === e.currentTarget && e.propertyName === 'transform' && !taskArtifacts.fullscreen) {
+                  setFsMounted(false);
+                }
+              }}
+            >
               <WorkspacePanel
                 files={taskWorkspaceFiles}
                 versionId={latestTaskVersionId}

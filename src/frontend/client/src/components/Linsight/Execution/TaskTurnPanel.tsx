@@ -204,13 +204,6 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 </div>
             )}
 
-            {/* waiting-for-input hint */}
-            {pendingInput && (
-                <div className="mb-2 mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-800">
-                    <span className="size-1.5 animate-pulse-scale rounded-full bg-gray-700" />
-                    {localize('com_linsight_waiting_your_input')}
-                </div>
-            )}
 
             {/* task checklist progress is rendered by <PinnedTaskPanel> pinned
                 above the input (ChatView) — not inline in the message stream. */}
@@ -221,8 +214,8 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 synthesizes get_final_result_file / the report), so the user does
                 not mistake an in-progress task for a finished one. */}
             {running && !queueing && !planning && !pendingInput && (
-                <div className="mb-2 mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-800">
-                    <span className="size-1.5 animate-pulse-scale rounded-full bg-gray-700" />
+                <div className="mb-2 mt-2 flex items-center gap-2 rounded-lg py-1.5 text-xs text-gray-800">
+                    <span className="inline-block size-3 animate-pulse-scale rounded-full bg-black" />
                     {localize('com_linsight_generating')}
                 </div>
             )}
