@@ -1,7 +1,7 @@
 /**
  * F035 Track H (P3): top-level task row (spec §3) — check/spinner/title;
- * expanded: the sub-step flow of that task (tool/knowledge/thinking/subagent/
- * ui_card rows, grouped by the event's task_id) plus answered clarify rows.
+ * expanded: the sub-step flow of that task (tool/knowledge/thinking/subagent
+ * rows, grouped by the event's task_id) plus answered clarify rows.
  */
 import { Circle, XCircle } from 'lucide-react';
 import { useMemo } from 'react';

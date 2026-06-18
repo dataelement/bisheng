@@ -20,6 +20,7 @@ import { useMemo, useState, type FC, type ReactNode } from 'react';
 import { useRecoilValue } from 'recoil';
 import { useLocalize } from '~/hooks';
 import store from '~/store';
+import { useCollapseState } from '~/store/linsightCollapse';
 import { cn } from '~/utils';
 import CollapsibleTimelineItem from './CollapsibleTimelineItem';
 import ToolRowLite from './ToolRowLite';
@@ -88,9 +89,13 @@ const ThinkingPassage: FC<{ text: string; running: boolean }> = ({ text, running
 
 const DeepStepGroup: FC<DeepStepGroupProps> = ({ group }) => {
     const localize = useLocalize();
-    // Group-level fold: ONE stable open state, default-open and NOT bound to
-    // running — live appends only push into `children`, the shell never toggles.
-    const [open, setOpen] = useState<boolean>(true);
+    // Group-level fold (F7): ONE stable open state per group, persisted to
+    // sessionStorage so a manual toggle survives refresh / session switch.
+    // Default = running (expanded while live to watch progress; collapsed once
+    // done to a single summary line for history review). Live appends only push
+    // into `children` — the shell never auto-toggles on an end frame.
+    const persistKey = group.steps[0]?.callId ?? '';
+    const [open, setOpen] = useCollapseState(persistKey, group.running);
 
     // Timestamps on MergedStep are second-level ints (BaseEvent.timestamp); the
     // ticker math is in milliseconds, so scale up here.
@@ -125,7 +130,7 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group }) => {
         <div className="flex w-full min-w-0 flex-col gap-3">
             <button
                 type="button"
-                onClick={() => setOpen((v) => !v)}
+                onClick={() => setOpen(!open)}
                 className={cn(HEADER_BASE, group.running && 'animate-pulse')}
             >
                 <span>{label}</span>

@@ -75,11 +75,19 @@ export const useLinsightManager = () => {
             history: [
                 ...(prev.history || []),
                 {
+                    // Stable id for React keys: position-derived but never reused
+                    // (history is append-only, so the length is monotonic).
+                    roundId: `${versionId}_round_${(prev.history || []).length}`,
                     question: prev.question,
                     tasks: prev.tasks || [],
                     sessionSteps: prev.sessionSteps || [],
                     output_result: prev.output_result,
                     file_list: prev.file_list || [],
+                    // Carry the finished round's terminal state so ConversationRound
+                    // can render its own stopped/error banner in history.
+                    status: prev.status,
+                    taskError: prev.taskError,
+                    taskErrorInfo: prev.taskErrorInfo,
                 },
             ],
             question,

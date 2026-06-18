@@ -7,10 +7,11 @@
  * "Dispatched N subagents to research (M s)"; each agent is rendered as a
  * collapsible <SubagentTrack> so its real internal trail can be drilled into.
  *
- * Group-level collapse (per §5.4): default expanded via useState(true), NOT
- * bound to running — the shell stays stably open while children stream in
- * (inc-1 SubagentRow bound open to running and collapsed on completion, which
- * caused the whole group to snap shut on the last end frame).
+ * Group-level collapse (per §5.4 / F7): default = running (expanded while live,
+ * collapsed once done to a summary line), persisted to sessionStorage so a
+ * manual toggle survives refresh / session switch. The shell never auto-toggles
+ * after a user choice (inc-1 SubagentRow bound open to running and collapsed on
+ * completion, which caused the whole group to snap shut on the last end frame).
  *
  * Parallel expression (§5.4): wide containers (>= 560px) lay the tracks out
  * side-by-side in equal-width flex columns (flex-1 min-w-0); narrow surfaces
@@ -23,6 +24,7 @@
 import { Outlined } from 'bisheng-icons';
 import { memo, useLayoutEffect, useRef, useState, type FC } from 'react';
 import { useLocalize } from '~/hooks';
+import { useCollapseState } from '~/store/linsightCollapse';
 import { cn } from '~/utils';
 import SubagentTrack from './SubagentTrack';
 import TimelineRail from './TimelineRail';
@@ -87,11 +89,17 @@ function useContainerWidth(): [React.RefObject<HTMLDivElement>, number] {
 
 export const SubagentTeamGroup: FC<SubagentTeamGroupProps> = memo(({ group }) => {
     const localize = useLocalize();
-    // Group-level collapse: default expanded, NOT bound to running (§5.4).
-    const [open, setOpen] = useState(true);
 
     const running = group.agents.some((a) => a.step.running || a.children.some((c) => c.running));
     const count = String(group.agents.length);
+
+    // Group-level collapse (F7): persisted to sessionStorage keyed by the first
+    // agent's callId; default = running (expanded while live to watch the team,
+    // collapsed once done to the "已派出 N 个子智能体（用时 M 秒）" summary line).
+    // NOT auto-bound to running after a user toggle — the shell never snaps shut
+    // on the last end frame.
+    const persistKey = group.agents[0]?.step.callId ?? '';
+    const [open, setOpen] = useCollapseState(persistKey, running);
 
     const startMs = groupStartMs(group);
     const endMs = groupEndMs(group);

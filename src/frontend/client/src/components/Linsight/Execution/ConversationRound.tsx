@@ -4,13 +4,19 @@
  * this renders each snapshot in `linsight.history` above it so the whole
  * conversation reads top-to-bottom as Q → steps/tasks → answer, repeated per
  * round. No live wiring (no pendingInput / planning / WS) — these rounds are
- * finished.
+ * finished, but they DO surface their own terminal banner (stopped / error)
+ * the same way the active round does.
  */
+import { OctagonX } from 'lucide-react';
+import { SopStatus } from '~/store/linsight';
 import type { LinsightRoundSnapshot } from '~/store/linsight';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
+import { useLocalize } from '~/hooks';
 import { IntentRow } from './IntentRow';
 import { ExecutionTimeline } from './ExecutionTimeline';
+import { ResultPanel } from './ResultPanel';
+import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
 import { isTaskStarted } from './stepUtils';
@@ -22,12 +28,14 @@ interface ConversationRoundProps {
 }
 
 export function ConversationRound({ round, versionId, onPreview }: ConversationRoundProps) {
+    const localize = useLocalize();
     const sessionSteps: ExecStepEventData[] = round.sessionSteps || [];
     const tasks: ExecTask[] = (round.tasks as any) || [];
     const answeredInputs = sessionSteps.filter(
         (s) => s?.step_type === 'call_user_input' && (s as any)?.is_completed,
     );
     const files: ArtifactFile[] = (round.file_list as ArtifactFile[]) || [];
+    const stopped = round.status === SopStatus.Stoped;
 
     return (
         <div className="border-b border-dashed border-gray-200 pb-4 mb-4">
@@ -50,15 +58,31 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
                 <TaskStepRow key={task.id} task={task} />
             ))}
 
+            {/* terminal banners — mirror the active round (no retry: history is
+                read-only and the next round already moved on) */}
+            {round.taskError && (
+                <TaskErrorCard
+                    errorType={round.taskErrorInfo?.error_type}
+                    detail={round.taskErrorInfo?.detail}
+                    fallbackMessage={round.taskError}
+                />
+            )}
+            {stopped && !round.taskError && (
+                <div className="my-2 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500">
+                    <OctagonX size={16} className="shrink-0" />
+                    {localize('com_linsight_task_terminated')}
+                </div>
+            )}
+
             {round.output_result?.answer && (
-                <div className="mt-4">
+                <ResultPanel>
                     <ResultSection
                         answer={round.output_result.answer}
                         files={files}
                         versionId={versionId}
                         onPreview={onPreview}
                     />
-                </div>
+                </ResultPanel>
             )}
         </div>
     );

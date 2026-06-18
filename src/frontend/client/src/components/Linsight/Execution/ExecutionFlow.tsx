@@ -21,13 +21,14 @@ import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLocalize } from '~/hooks';
+import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { ConversationRound } from './ConversationRound';
 import { IntentRow } from './IntentRow';
 import { LegacySopRow } from './LegacySopRow';
-import { PlanningRow } from './PlanningRow';
 import { QueueCard } from './QueueCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
+import { ResultPanel } from './ResultPanel';
 import { TaskPanel } from './TaskPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
@@ -119,10 +120,12 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
 
     // planning row: running, todo list not generated yet, nothing else pending
     const planning = running && !queueing && !pendingInput && !realTasks.length;
-    // working row: todos exist but no task is actively streaming a spinner right
-    // now (gap before the first task starts, between tasks, or wrap-up after the
-    // last one). Without this the run looks frozen in those windows.
-    const executing =
+    // generating row: todos exist but no task is actively streaming a spinner
+    // right now — bridges the gaps before the first task, between tasks, AND the
+    // final report-generation phase (status stays Running with no step events
+    // while the backend synthesizes the deliverable). Without this the run looks
+    // frozen in those windows. Mirrors TaskTurnPanel's catch-all live indicator.
+    const generating =
         running && !queueing && !pendingInput && realTasks.length > 0 && !realTasks.some((t: any) => isTaskRunning(t.status));
 
     const handleClarifySubmit = (taskId: string, answer: string) => {
@@ -130,7 +133,14 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     };
 
     const scrollRef = useRef<HTMLDivElement>(null);
-    useAutoScroll(scrollRef, [tasks, sessionSteps, status]);
+    // Streaming-tuned auto-scroll (F6): instant follow (no per-frame smooth
+    // jitter), a tight 64px stick threshold, and release-on-scroll-up so a
+    // manual scroll-up detaches the follow until the user returns to bottom.
+    useAutoScroll(scrollRef, [tasks, sessionSteps, status], {
+        scrollBehavior: 'auto',
+        threshold: 64,
+        releaseOnScrollUp: true,
+    });
 
     return (
         <div className="relative flex h-full w-full flex-col">
@@ -141,7 +151,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         active round so the conversation reads top-to-bottom. */}
                     {(linsight?.history || []).map((round, i) => (
                         <ConversationRound
-                            key={`round_${i}`}
+                            key={round.roundId || `round_${i}`}
                             round={round}
                             versionId={versionId}
                             onPreview={(file) => artifactsPanel.openPreview(file)}
@@ -174,7 +184,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             <ExecutionTimeline history={sessionSteps} />
 
                             {/* planning breathing row */}
-                            {planning && <PlanningRow />}
+                            {planning && <BreathingRow state="planning" />}
 
                             {/* task rows with nested sub-step flows — only tasks
                                 execution has reached; not-started ones stay in TaskPanel. */}
@@ -182,9 +192,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 <TaskStepRow key={task.id} task={task} />
                             ))}
 
-                            {/* working breathing row — bridges the gaps between
-                                tasks / wrap-up so the run never looks frozen */}
-                            {executing && <PlanningRow label={localize('com_linsight_executing')} />}
+                            {/* generating breathing row — bridges the gaps between
+                                tasks / wrap-up + the final report phase so the run
+                                never looks frozen */}
+                            {generating && <BreathingRow state="generating" />}
 
                             {/* active clarify / follow-up card */}
                             {pendingInput && (
@@ -213,16 +224,17 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         </div>
                     )}
 
-                    {/* ── artifacts area (P4): report link / answer markdown / file card ── */}
+                    {/* ── artifacts area (P4): report link / answer markdown / file
+                        card — lifted into the terminal ResultPanel (peak-end). ── */}
                     {completed && (
-                        <div data-slot="execution-artifacts" className="mt-4">
+                        <ResultPanel>
                             <ResultSection
                                 answer={linsight?.output_result?.answer}
                                 files={fileList}
                                 versionId={versionId}
                                 onPreview={(file) => artifactsPanel.openPreview(file)}
                             />
-                        </div>
+                        </ResultPanel>
                     )}
                 </div>
             </div>

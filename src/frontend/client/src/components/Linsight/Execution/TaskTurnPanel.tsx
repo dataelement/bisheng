@@ -27,15 +27,17 @@ import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsig
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLocalize } from '~/hooks';
+import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { SopStatus } from '~/store/linsight';
+import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { QueueCard } from './QueueCard';
 import { IntentRow } from './IntentRow';
-import { PlanningRow } from './PlanningRow';
 import { ExecutionTimeline } from './ExecutionTimeline';
+import { ResultPanel } from './ResultPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
@@ -141,6 +143,29 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
         sendInput({ task_id: taskId || versionId, user_input: ans, files: [] });
     };
 
+    // Auto-scroll (F6): this panel is embedded in the daily message stream and
+    // owns no scroll container of its own (the message list does), and the daily
+    // list only auto-scrolls on `messages` changes — NOT on this turn's internal
+    // streaming (which mutates the Recoil store). So we follow new content here:
+    // resolve the nearest scrollable ancestor of the panel root, then drive
+    // useAutoScroll on it with the same streaming-tuned params as ExecutionFlow.
+    const rootRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLElement | null>(null);
+    useEffect(() => {
+        let el: HTMLElement | null = rootRef.current?.parentElement || null;
+        while (el) {
+            const overflowY = getComputedStyle(el).overflowY;
+            if (overflowY === 'auto' || overflowY === 'scroll') break;
+            el = el.parentElement;
+        }
+        scrollRef.current = el;
+    }, []);
+    useAutoScroll(scrollRef, [tasks, sessionSteps, status], {
+        scrollBehavior: 'auto',
+        threshold: 64,
+        releaseOnScrollUp: true,
+    });
+
     // Not hydrated yet — show the answer text fallback (or a thin loading hint).
     if (!linsight) {
         if (loadFailed) {
@@ -158,7 +183,7 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     }
 
     return (
-        <div className="w-full">
+        <div ref={rootRef} className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
             {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
 
@@ -171,7 +196,7 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
             <ExecutionTimeline history={sessionSteps} />
 
             {/* planning breathing row */}
-            {planning && <PlanningRow />}
+            {planning && <BreathingRow state="planning" />}
 
             {/* task rows with nested sub-step flows — only show tasks execution has
                 actually reached; not-started ones live in the pinned TaskPanel only. */}
@@ -220,25 +245,20 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 (status stays Running with no step events while the backend
                 synthesizes get_final_result_file / the report), so the user does
                 not mistake an in-progress task for a finished one. */}
-            {running && !queueing && !planning && !pendingInput && (
-                <div className="mb-2 mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-800">
-                    <span className="size-1.5 animate-pulse-scale rounded-full bg-gray-700" />
-                    {localize('com_linsight_generating')}
-                </div>
-            )}
+            {running && !queueing && !planning && !pendingInput && <BreathingRow state="generating" />}
 
             {/* artifacts: report link / answer markdown / file card. Clicking a
                 document link opens it directly in ChatView's inline workspace
                 panel (preview), replacing the legacy right-side drawer. */}
             {completed && (
-                <div data-slot="execution-artifacts" className="mt-4">
+                <ResultPanel>
                     <ResultSection
                         answer={linsight.output_result?.answer}
                         files={fileList}
                         versionId={versionId}
                         onPreview={(file) => onPreviewFile?.(file)}
                     />
-                </div>
+                </ResultPanel>
             )}
         </div>
     );

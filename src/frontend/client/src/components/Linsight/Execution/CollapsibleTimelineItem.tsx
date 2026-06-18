@@ -30,6 +30,14 @@ export interface CollapsibleTimelineItemProps {
     open: boolean;
     /** Toggle handler; receives the next open state. */
     onToggle: (next: boolean) => void;
+    /**
+     * Optional stable id of the group this item represents (F7). Persistence
+     * lives in the PARENT (via `useCollapseState`), keeping this component
+     * purely controlled; `persistKey` is an auxiliary marker only — it is
+     * surfaced as a `data-persist-key` attribute for debugging/testing and does
+     * NOT alter the controlled `open`/`onToggle` contract.
+     */
+    persistKey?: string;
     /** Body revealed when open; the grid animates its height. */
     children: ReactNode;
     className?: string;
@@ -44,6 +52,7 @@ const CollapsibleTimelineItem: FC<CollapsibleTimelineItemProps> = ({
     onToggle,
     children,
     className,
+    persistKey,
 }) => {
     const handleClick = useCallback(
         (e: MouseEvent<HTMLButtonElement>) => {
@@ -54,7 +63,10 @@ const CollapsibleTimelineItem: FC<CollapsibleTimelineItemProps> = ({
     );
 
     return (
-        <div className={cn('flex w-full min-w-0 gap-1.5 animate-thinking-appear', className)}>
+        <div
+            className={cn('flex w-full min-w-0 gap-1.5 animate-thinking-appear', className)}
+            data-persist-key={persistKey}
+        >
             {/* Rail connector flanks the body only while open (per-node spine,
                 mirroring the daily "思考内容" rail). */}
             <TimelineRail icon={icon} showConnector={open} />

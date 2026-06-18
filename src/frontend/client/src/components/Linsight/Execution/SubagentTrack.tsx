@@ -18,8 +18,9 @@
  * touch any Chat/Messages component — the shared primitives carry the tokens).
  */
 import { Outlined } from 'bisheng-icons';
-import { memo, useMemo, useState, type FC } from 'react';
+import { memo, useMemo, type FC } from 'react';
 import { useLocalize } from '~/hooks';
+import { useCollapseState } from '~/store/linsightCollapse';
 import CollapsibleTimelineItem from './CollapsibleTimelineItem';
 import DeepStepGroup from './DeepStepGroup';
 import { KnowledgeRow } from './KnowledgeRow';
@@ -39,9 +40,13 @@ function agentSteps(agent: SubagentAgent): MergedStep[] {
 
 const SubagentTrack: FC<SubagentTrackProps> = memo(({ agent }) => {
     const localize = useLocalize();
-    // L3 default-collapsed: a subagent's inner trail is the deepest tier, so it
-    // stays folded until the user drills in (organizing the team side-by-side).
-    const [open, setOpen] = useState(false);
+    // L3 default-collapsed (F7): a subagent's inner trail is the deepest tier,
+    // so it stays folded until the user drills in. Persisted to sessionStorage
+    // keyed by the subagent's namespace (its real identity) so a manual expand
+    // survives refresh / session switch; falls back to the anchor callId when no
+    // namespace is present.
+    const persistKey = agent.step.namespace || agent.step.callId || '';
+    const [open, setOpen] = useCollapseState(persistKey, false);
 
     const steps = agentSteps(agent);
     // Counting fix carried from inc-1: tools = non-thinking steps, thoughts =
@@ -88,6 +93,7 @@ const SubagentTrack: FC<SubagentTrackProps> = memo(({ agent }) => {
             streaming={running}
             open={open}
             onToggle={setOpen}
+            persistKey={persistKey}
         >
             {/* Subagent's real internal research trail (the Wave2 drilldown). */}
             <div className="flex flex-col gap-3">
