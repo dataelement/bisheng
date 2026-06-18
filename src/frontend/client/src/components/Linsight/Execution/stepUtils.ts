@@ -203,7 +203,9 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
  * counts as same) into one rendered thinking step. The backend persists thinking
  * as many tiny token-delta frames (technical debt; see §7 open decision 1) — the
  * render layer stitches the adjacent ones back into a single passage:
- * - output joined with a blank line ("\n\n")
+ * - output concatenated SEAMLESSLY ("") — each delta already carries its own
+ *   leading space and the model's own newlines, so a "\n\n" separator would
+ *   shatter one continuous reasoning into a blank-line-per-token "poem".
  * - startedAt = earliest, endedAt = latest, running = last item's running
  * - callId taken from the first item (stable react key)
  * Thinking across different namespaces is NOT merged (avoid cross-subagent
@@ -221,7 +223,7 @@ export function mergeAdjacentThinking(steps: MergedStep[]): MergedStep[] {
         ) {
             // fold into prev — clone first so we never mutate the input array
             const merged: MergedStep = out[out.length - 1] === prev ? { ...prev } : prev;
-            merged.output = [merged.output, step.output].filter(Boolean).join('\n\n');
+            merged.output = [merged.output, step.output].filter(Boolean).join('');
             if (step.startedAt !== undefined) {
                 merged.startedAt =
                     merged.startedAt === undefined ? step.startedAt : Math.min(merged.startedAt, step.startedAt);

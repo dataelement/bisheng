@@ -42,9 +42,12 @@ type Segment =
 
 /**
  * Walk the ordered steps, folding each run of consecutive thinking steps into one
- * passage (joined with a blank line, North Star phrasing) while keeping tool /
- * knowledge steps in place. mergeAdjacentThinking already collapsed same-ns
- * neighbours upstream; this second pass is defensive and order-preserving.
+ * passage while keeping tool / knowledge steps in place. The deltas are stitched
+ * SEAMLESSLY ("") — each thinking chunk already carries its own leading space and
+ * the model's own newlines, so a "\n\n" separator would break one continuous
+ * reasoning into a blank-line-per-token "poem". mergeAdjacentThinking already
+ * collapsed same-ns neighbours upstream; this second pass is defensive and
+ * order-preserving.
  */
 function buildSegments(steps: MergedStep[]): Segment[] {
     const out: Segment[] = [];
@@ -52,7 +55,7 @@ function buildSegments(steps: MergedStep[]): Segment[] {
         if (step.stepType === 'thinking') {
             const prev = out[out.length - 1];
             if (prev && prev.kind === 'thinking') {
-                prev.text = [prev.text, step.output].filter(Boolean).join('\n\n');
+                prev.text = [prev.text, step.output].filter(Boolean).join('');
                 prev.running = step.running;
                 continue;
             }

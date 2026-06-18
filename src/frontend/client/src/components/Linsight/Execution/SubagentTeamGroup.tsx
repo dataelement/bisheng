@@ -13,16 +13,17 @@
  * after a user choice (inc-1 SubagentRow bound open to running and collapsed on
  * completion, which caused the whole group to snap shut on the last end frame).
  *
- * Parallel expression (§5.4): wide containers (>= 560px) lay the tracks out
- * side-by-side in equal-width flex columns (flex-1 min-w-0); narrow surfaces
- * (the TaskTurnPanel 80% bubble < 560px) degrade to a vertical stack. The
- * breakpoint is the container's own width (ResizeObserver), not the viewport —
- * the bubble can be narrow even on a wide screen.
+ * Parallel expression (§5.4): the tracks lay out in a CSS grid with
+ * `auto-fill, minmax(180px, 1fr)` — wide containers fit 3-4 cards per row (the
+ * parallel signal), narrow surfaces (the TaskTurnPanel 80% bubble) reflow to a
+ * single column. Pure CSS, no JS measurement, no first-paint stacked flash.
+ * Expanding a card lets it span the full row (gridColumn '1 / -1', set inside
+ * SubagentTrack) so its drilldown reads at full content width.
  *
  * Token-for-token copy of the daily /c timeline tokens (no Chat/Messages import).
  */
 import { Outlined } from 'bisheng-icons';
-import { memo, useLayoutEffect, useRef, useState, type FC } from 'react';
+import { memo, type FC } from 'react';
 import { useLocalize } from '~/hooks';
 import { useCollapseState } from '~/store/linsightCollapse';
 import { cn } from '~/utils';
@@ -34,10 +35,6 @@ import type { MergedStep, SubagentAgent, SubagentGroup } from './stepUtils';
 export interface SubagentTeamGroupProps {
     group: SubagentGroup;
 }
-
-/** Side-by-side breakpoint: at or above this container width (px) the tracks
- *  lay out in equal columns; below it they stack vertically. */
-const SIDE_BY_SIDE_MIN = 560;
 
 /** All steps belonging to one agent = its anchor step + later same-ns children. */
 function agentSteps(agent: SubagentAgent): MergedStep[] {
@@ -67,26 +64,6 @@ function groupEndMs(group: SubagentGroup): number | undefined {
     return max === undefined ? undefined : max * 1000;
 }
 
-/** Observe the container width so the side-by-side ↔ stacked switch is driven by
- *  the group's own box, not the viewport (the bubble may be narrow on a wide
- *  screen). Returns a ref to attach and the latest measured width. */
-function useContainerWidth(): [React.RefObject<HTMLDivElement>, number] {
-    const ref = useRef<HTMLDivElement>(null);
-    const [width, setWidth] = useState(0);
-    useLayoutEffect(() => {
-        const el = ref.current;
-        if (!el) return;
-        // Seed synchronously so the first paint already picks the right layout.
-        setWidth(el.getBoundingClientRect().width);
-        const ro = new ResizeObserver((entries) => {
-            for (const entry of entries) setWidth(entry.contentRect.width);
-        });
-        ro.observe(el);
-        return () => ro.disconnect();
-    }, []);
-    return [ref, width];
-}
-
 export const SubagentTeamGroup: FC<SubagentTeamGroupProps> = memo(({ group }) => {
     const localize = useLocalize();
 
@@ -105,11 +82,6 @@ export const SubagentTeamGroup: FC<SubagentTeamGroupProps> = memo(({ group }) =>
     const endMs = groupEndMs(group);
     const { elapsedMs } = useElapsedTicker(startMs, endMs, running);
     const seconds = formatSeconds(elapsedMs);
-
-    const [containerRef, containerWidth] = useContainerWidth();
-    // Before the first measurement (width === 0) default to side-by-side so a
-    // wide layout doesn't flash a stacked column on mount.
-    const sideBySide = containerWidth === 0 || containerWidth >= SIDE_BY_SIDE_MIN;
 
     const handleToggle = (next: boolean) => setOpen(next);
 
@@ -151,17 +123,18 @@ export const SubagentTeamGroup: FC<SubagentTeamGroupProps> = memo(({ group }) =>
                     style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
                 >
                     <div className="min-h-0 overflow-hidden">
-                        {/* Parallel layout: equal-width columns when wide, stacked
-                            when the container is narrow. No connector between
-                            columns (§5.4 "卡片间无连接线"). */}
+                        {/* Parallel layout: a CSS grid auto-fill of minmax(180px,
+                            1fr) cards (no JS measurement). Wide → 3-4 cards/row;
+                            narrow bubble → single column. Each SubagentTrack is the
+                            grid item; an expanded one spans the full row via its own
+                            gridColumn '1 / -1'. No connector between cards (§5.4
+                            "卡片间无连接线"). */}
                         <div
-                            ref={containerRef}
-                            className={cn('flex gap-x-4', sideBySide ? 'flex-row items-start' : 'flex-col')}
+                            className="grid gap-2.5"
+                            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}
                         >
                             {group.agents.map((agent) => (
-                                <div key={agent.step.callId} className={cn(sideBySide && 'min-w-0 flex-1')}>
-                                    <SubagentTrack agent={agent} />
-                                </div>
+                                <SubagentTrack key={agent.step.callId} agent={agent} />
                             ))}
                         </div>
                     </div>

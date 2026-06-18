@@ -118,7 +118,7 @@ describe('stepUtils — subagent grouping by distinct namespace (D)', () => {
 });
 
 describe('stepUtils — adjacent thinking merge (C)', () => {
-    it('merges consecutive same-namespace thinking into one passage (joined by blank line)', () => {
+    it('merges consecutive same-namespace thinking into one passage (joined seamlessly — deltas carry their own spacing)', () => {
         const history: ExecStepEventData[] = [
             frame({ call_id: 't_a', name: 'thinking', step_type: 'thinking', output: '第一段', timestamp: 1 }),
             frame({ call_id: 't_b', name: 'thinking', step_type: 'thinking', output: '第二段', timestamp: 2 }),
@@ -127,7 +127,7 @@ describe('stepUtils — adjacent thinking merge (C)', () => {
         expect(nodes).toHaveLength(1);
         expect(nodes[0].kind).toBe('step');
         const step = nodes[0].kind === 'step' ? nodes[0].step : null;
-        expect(step!.output).toBe('第一段\n\n第二段');
+        expect(step!.output).toBe('第一段第二段');
         // earliest start, latest end, first item's callId
         expect(step!.startedAt).toBe(1);
         expect(step!.endedAt).toBe(2);
