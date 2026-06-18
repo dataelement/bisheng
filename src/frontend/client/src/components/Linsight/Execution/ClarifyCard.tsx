@@ -42,8 +42,15 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
     const { questions } = request;
 
     const [page, setPage] = useState(0);
-    /** question.id -> selected option texts; CUSTOM_KEY entry = free input flag */
-    const [answers, setAnswers] = useState<Record<string, string[]>>({});
+    /** question.id -> selected option texts; CUSTOM_KEY entry = free input flag.
+     *  Pre-seeded with each question's is_default option(s): single-select takes
+     *  the first default, multi-select takes all. This is the fallback answer when
+     *  the user doesn't change it (★-badged in the option list). */
+    const [answers, setAnswers] = useState<Record<string, string[]>>(() =>
+        Object.fromEntries(
+            questions.map((qq) => [qq.id, qq.multiple ? [...qq.defaultOptions] : qq.defaultOptions.slice(0, 1)]),
+        ),
+    );
     const [customText, setCustomText] = useState<Record<string, string>>({});
     const [freeText, setFreeText] = useState('');
     const [submitted, setSubmitted] = useState(false);
@@ -187,6 +194,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                     <ul className="mt-4 space-y-3">
                         {q.options.map((option, i) => {
                             const active = selected.includes(option);
+                            const isDefault = q.defaultOptions.includes(option);
                             const { title: optTitle, desc: optDesc } = parseOption(option);
                             return (
                                 <li key={i}>
@@ -204,6 +212,9 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         <span className="shrink-0 font-medium text-[#8C8C8C]">{i + 1}.</span>
                                         <div className="flex-1 min-w-0">
                                             <span className={cn(active ? 'text-[#335CFF]' : 'text-[#1A1A1A]')}>{optTitle}</span>
+                                            {isDefault && (
+                                                <span className="ml-1 text-[#F5A623]" title={localize('com_linsight_clarify_default')}>★</span>
+                                            )}
                                             {optDesc && (
                                                 <span className={cn('ml-1 text-[13px] font-normal', active ? 'text-[#335CFF]/80' : 'text-[#8C8C8C]')}>
                                                     {optDesc}
@@ -274,8 +285,9 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                 />
             )}
 
-            {/* Footer: Confirm (when answered) + Skip */}
-            <div className="mt-6 flex items-center justify-end gap-4">
+            {/* Footer: Confirm (when answered) + Skip. pr-4 matches the custom-answer
+                box's px-4 so 跳过 / 确定 line up with the inline 确定 inside it. */}
+            <div className="mt-6 flex items-center justify-end gap-4 pr-4">
                 {hasAnswer && (q?.multiple || !q) && (
                     <Button
                         size="sm"

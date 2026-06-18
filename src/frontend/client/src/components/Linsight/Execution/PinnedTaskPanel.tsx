@@ -17,7 +17,12 @@ export function PinnedTaskPanel({ versionId }: { versionId: string }) {
     const { getLinsight } = useLinsightManager();
     const linsight = getLinsight(versionId);
 
-    const tasks: ExecTask[] = (linsight?.tasks as any) || [];
+    // Exclude the "执行准备" session pseudo-task (task_data.is_session_global) —
+    // it's a persistence container for session-level steps, not a real checklist
+    // item (see splitSessionPseudoTask).
+    const tasks: ExecTask[] = ((linsight?.tasks as any) || []).filter(
+        (t: any) => !t?.task_data?.is_session_global,
+    );
     if (!tasks.length) return null;
 
     const status = linsight?.status;

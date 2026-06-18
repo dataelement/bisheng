@@ -59,7 +59,7 @@ interface CategoryGroup {
 
 /** Local selection: a space root (folderId=null) or a folder inside it. */
 interface Selection {
-    spaceId: string;
+    spaceId: string | null;
     folderId: string | null;
     folderName?: string;
 }
@@ -75,6 +75,15 @@ const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
 function fileGlyph(name: string) {
     const ext = name.split(".").pop()?.toLowerCase() || "";
     return IMAGE_EXTENSIONS.includes(ext) ? Outlined.FileImage : Outlined.File;
+}
+
+function findSpaceInCategories(categories: CategoryGroup[], spaceId: string | null) {
+    if (!spaceId) return undefined;
+    for (const category of categories) {
+        const space = category.spaces.find((item) => item.id === spaceId);
+        if (space) return space;
+    }
+    return undefined;
 }
 
 // ─── Space row (left tree, 1st level) ─────────────────────────────────────────
@@ -175,8 +184,8 @@ export function MoveToDialog({
 }: MoveToDialogProps) {
     const localize = useLocalize();
     const [search, setSearch] = useState("");
-    const [selection, setSelection] = useState<Selection>({ spaceId: currentSpaceId, folderId: null });
-    const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(() => new Set([currentSpaceId]));
+    const [selection, setSelection] = useState<Selection>({ spaceId: null, folderId: null });
+    const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(() => new Set());
     const [collapsedCategories, setCollapsedCategories] = useState<Set<CategoryKey>>(() => new Set());
 
     // Scroll-following ellipsis for the tree names (mirrors the sidebar): names
@@ -186,14 +195,14 @@ export function MoveToDialog({
     // Re-attach when the dialog opens — Radix only mounts the container then.
     useDynamicEllipsis(treeScrollRef, [open]);
 
-    const crossSpace = selection.spaceId !== currentSpaceId;
+    const crossSpace = selection.spaceId != null && selection.spaceId !== currentSpaceId;
 
-    // Reset to the source space root on every open.
+    // Reset on every open; the permission-filtered tree selects the first valid space below.
     useEffect(() => {
         if (open) {
             setSearch("");
-            setSelection({ spaceId: currentSpaceId, folderId: null });
-            setExpandedSpaces(new Set([currentSpaceId]));
+            setSelection({ spaceId: null, folderId: null });
+            setExpandedSpaces(new Set());
             setCollapsedCategories(new Set());
         }
     }, [open, currentSpaceId]);
@@ -241,27 +250,55 @@ export function MoveToDialog({
         ].filter((c) => c.spaces.length > 0);
     }, [uploadable, departmentSpaces, createdSpaces, joinedSpaces, search, localize]);
 
+    useEffect(() => {
+        if (!open) return;
+
+        const selectedSpace = findSpaceInCategories(categories, selection.spaceId);
+        if (selectedSpace) return;
+
+        const defaultSpace = findSpaceInCategories(categories, currentSpaceId) ?? categories[0]?.spaces[0];
+        if (!defaultSpace) {
+            if (selection.spaceId !== null || selection.folderId !== null) {
+                setSelection({ spaceId: null, folderId: null });
+            }
+            return;
+        }
+
+        setSelection({ spaceId: defaultSpace.id, folderId: null });
+        setExpandedSpaces((prev) => {
+            const next = new Set(prev);
+            next.add(defaultSpace.id);
+            return next;
+        });
+    }, [open, categories, currentSpaceId, selection.spaceId, selection.folderId]);
+
     // Flat lookup for selected-space metadata (role/name).
     const spaceById = useMemo(() => {
         const map = new Map<string, KnowledgeSpace>();
         for (const s of [...departmentSpaces, ...createdSpaces, ...joinedSpaces]) map.set(s.id, s);
         return map;
     }, [departmentSpaces, createdSpaces, joinedSpaces]);
-    const selectedSpace = spaceById.get(selection.spaceId);
+    const selectedSpaceId = selection.spaceId;
+    const selectedSpace = selectedSpaceId ? spaceById.get(selectedSpaceId) : undefined;
 
     // Right panel: contents (folders + files) of the selected location.
     const { data: children, isLoading } = useQuery({
-        queryKey: ["move-children", selection.spaceId, selection.folderId],
-        queryFn: () =>
-            getSpaceChildrenApi({
-                space_id: selection.spaceId,
+        queryKey: ["move-children", selectedSpaceId, selection.folderId],
+        queryFn: () => {
+            if (!selectedSpaceId) {
+                return Promise.resolve({ data: [], page_size: 200, has_more: false, next_cursor: null });
+            }
+            return getSpaceChildrenApi({
+                space_id: selectedSpaceId,
                 parent_id: selection.folderId ?? undefined,
                 page_size: 200,
                 file_status: statusFilterFor(selectedSpace),
-            }),
-        enabled: open && !!selection.spaceId,
+            });
+        },
+        enabled: open && !!selectedSpaceId,
     });
     const items: KnowledgeFile[] = children?.data ?? [];
+    const loadingChildren = !!selectedSpaceId && isLoading;
     const folders = items.filter((it) => it.type === FileType.FOLDER);
     const files = items.filter((it) => it.type !== FileType.FOLDER);
 
@@ -283,10 +320,14 @@ export function MoveToDialog({
 
     // Right-panel folder click drills into that folder (same space).
     const handleEnterFolder = (folder: KnowledgeFile) => {
-        setSelection((prev) => ({ spaceId: prev.spaceId, folderId: folder.id, folderName: folder.name }));
+        setSelection((prev) => {
+            if (!prev.spaceId) return prev;
+            return { spaceId: prev.spaceId, folderId: folder.id, folderName: folder.name };
+        });
     };
 
     const handleConfirm = () => {
+        if (!selection.spaceId) return;
         // Close the picker BEFORE running the move. executeMove shows its own
         // feedback (cross-space confirm, partial "move the rest" dialog, toasts);
         // if this Radix Dialog were still open it would aria-hide / disable those
@@ -381,7 +422,7 @@ export function MoveToDialog({
                         {/* Row metrics mirror the left tree items: 28px (h-7) rows, 12px text,
                             16px icon in a 20px slot, p-2 container padding. */}
                         <div className="scrollbar-os flex-1 overflow-y-auto p-2">
-                            {isLoading ? (
+                            {loadingChildren ? (
                                 <div className="flex h-full items-center justify-center text-[#86909C]">
                                     <Loader2 className="size-5 animate-spin" />
                                 </div>
@@ -430,7 +471,9 @@ export function MoveToDialog({
                     <Button variant="outline" className="h-8 !rounded-md" onClick={() => onOpenChange(false)}>
                         {localize("cancel")}
                     </Button>
-                    <Button className="h-8 !rounded-md" onClick={handleConfirm}>{localize("com_knowledge.move_here")}</Button>
+                    <Button className="h-8 !rounded-md" onClick={handleConfirm} disabled={!selection.spaceId}>
+                        {localize("com_knowledge.move_here")}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

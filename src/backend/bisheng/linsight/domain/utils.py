@@ -22,17 +22,6 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.utils import util
-from bisheng_langchain.linsight.event import ExecStep
-
-# The corresponding file parameter name of the Inscription file processing tool
-local_file_tool_dict = {"add_text_to_file": "file_path", "replace_file_lines": "file_path"}
-
-# Step event extra processing tool corresponding to parameter name,
-step_event_extra_tool_dict = {
-    "add_text_to_file": "file_path",
-    "replace_file_lines": "file_path",
-    "read_text_file": "file_path",
-}
 
 
 # Get all manipulated files in a task
@@ -229,73 +218,6 @@ async def build_fallback_report_file(session_model: LinsightSessionVersion, answ
     except Exception as e:
         logger.warning(f"fallback report generation failed: {e}")
         return []
-
-
-# Additional Handling of Step Events
-async def handle_step_event_extra(event: ExecStep, task_exec_obj) -> ExecStep:
-    """
-    Additional logic for handling step events
-    :param task_exec_obj:
-    :param event: Event Object
-    """
-    logger.debug(
-        f"extra processing of step events,call_id: {event.call_id}, name: {event.name}, status: {event.status}"
-    )
-    try:
-        if event.status == "end" and event.name in step_event_extra_tool_dict.keys():
-            file_path = event.params.get(step_event_extra_tool_dict[event.name], "")
-            if not file_path:
-                return event
-
-            file_name = os.path.basename(file_path)
-            logger.debug(f"Step event extra processing, filename: {file_name}")
-
-            # File path processing
-            if not os.path.isabs(file_path):
-                # relative paths, converting to absolute paths
-                file_path = os.path.join(task_exec_obj.file_dir, file_path)
-                file_path = os.path.normpath(file_path)
-
-            logger.debug(f"Step event extra processing, converted file path: {file_path}")
-
-            if not os.path.exists(file_path):
-                logger.error(f"Step event extra processing, file does not exist: {file_path}")
-                return event
-
-            file_md5 = await util.async_calculate_md5(file_path)
-
-            # Determine if the document has already been uploaded
-            step_event_extra_files = task_exec_obj.step_event_extra_files
-            if step_event_extra_files:
-                existing_file = next((f for f in step_event_extra_files if f["file_md5"] == file_md5), None)
-                if existing_file:
-                    logger.debug(
-                        f"Step event extra processing, file already exists: {existing_file['file_name']}, file_md5: {file_md5}"
-                    )
-                    event.extra_info["file_info"] = {
-                        "file_name": file_name,
-                        "file_md5": existing_file["file_md5"],
-                        "file_url": existing_file["file_url"],
-                    }
-                    return event
-
-            object_name = f"linsight/step_event/{task_exec_obj.session_version_id}/{uuid.uuid4().hex[:8]}.{file_name.split('.')[-1]}"
-            logger.debug(f"Extra processing of step events, uploading files toMinIO: {object_name}")
-
-            minio_client = await get_minio_storage()
-            # Upload files toMinIO
-            await minio_client.put_object(bucket_name=minio_client.bucket, object_name=object_name, file=file_path)
-
-            event.extra_info["file_info"] = {"file_name": file_name, "file_md5": file_md5, "file_url": object_name}
-
-            # Add to Step Event Extra File List
-            task_exec_obj.step_event_extra_files.append(event.extra_info["file_info"])
-
-    except Exception as e:
-        logger.error(f"Step event extra handling exception: {e}")
-        # When an exception occurs, return to the original event without modification
-
-    return event
 
 
 # Initiateworkerwhen checking for incomplete tasks and terminating
@@ -495,7 +417,10 @@ async def build_prior_conversation_summary(chat_id: str, max_chars: int = 8000) 
     input) forms no pair and is excluded, so it is never duplicated.
 
     ``max_chars`` caps the injected context (design §3.8 — long histories must not
-    blow the window): the MOST RECENT pairs are kept, oldest dropped first.
+    blow the window). Retention is deterministic head+tail: the FIRST turn (the
+    user's original requirements) is ALWAYS kept, the remaining budget holds the
+    most-recent turns, and any elided middle turns are flagged. This is truncation,
+    not a semantic summary — a true LLM summary is a separate follow-up.
     Returns "" if there is no prior completed Q/A.
     """
     messages = await ChatMessageDao.aget_messages_by_chat_id(chat_id=chat_id, limit=1000)
@@ -511,13 +436,26 @@ async def build_prior_conversation_summary(chat_id: str, max_chars: int = 8000) 
     if not pairs:
         return ""
 
-    # Keep most recent pairs within the char budget (walk newest -> oldest).
-    kept: list[str] = []
-    used = 0
-    for block in reversed(pairs):
-        if kept and used + len(block) > max_chars:
+    # Deterministic head+tail retention (NOT an LLM summary): always keep the
+    # FIRST turn — it usually carries the user's original requirements, which a
+    # naive "keep most recent" truncation silently drops on long histories,
+    # letting the deliverable drift from the founding ask. Fill the rest of the
+    # budget with the most-recent turns (newest first); flag any elided middle.
+    first = pairs[0]
+    rest = pairs[1:]
+    kept_tail: list[str] = []
+    used = len(first)
+    for block in reversed(rest):
+        # Always keep at least the most-recent turn; then respect the budget.
+        if kept_tail and used + len(block) > max_chars:
             break
-        kept.append(block)
+        kept_tail.append(block)
         used += len(block)
-    kept.reverse()
-    return "# 前情回顾(本会话此前的对话)\n" + "\n".join(kept)
+    kept_tail.reverse()
+
+    dropped = len(rest) - len(kept_tail)
+    blocks = [first]
+    if dropped > 0:
+        blocks.append(f"(...此处省略中间 {dropped} 轮较早对话...)")
+    blocks.extend(kept_tail)
+    return "# 前情回顾(本会话此前的对话)\n" + "\n".join(blocks)

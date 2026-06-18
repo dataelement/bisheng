@@ -1394,24 +1394,11 @@ class KnowledgeService(KnowledgeUtils):
             if res
             else {}
         )
-        timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
-            # Parsing more than one day, setting status to failed
-            if (
-                one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value]
-                and (datetime.now() - one.update_time).total_seconds() > 86400
-            ):
-                timeout_files.append(one.id)
-                continue
+
             finally_res[index].title = file_title_map.get(str(one.id), "")
             finally_res[index].tags = file_tags_map.get(str(one.id), [])
-        if timeout_files:
-            KnowledgeFileDao.update_file_status(
-                timeout_files,
-                KnowledgeFileStatus.TIMEOUT,
-                KnowledgeFileFailedError(data={"exception": "Parsing time exceeds 24 hours"}).to_json_str(),
-            )
 
         return (
             finally_res,
@@ -1513,23 +1500,12 @@ class KnowledgeService(KnowledgeUtils):
         )
 
         finally_res = []
-        timeout_files = []
         for index, one in enumerate(res):
             finally_res.append(KnowledgeFileResp(**one.model_dump()))
-            if (
-                one.status in [KnowledgeFileStatus.PROCESSING.value, KnowledgeFileStatus.WAITING.value]
-                and (datetime.now() - one.update_time).total_seconds() > 86400
-            ):
-                timeout_files.append(one.id)
-                continue
+
             finally_res[index].title = file_title_map.get(str(one.id), "")
             finally_res[index].tags = file_tags_map.get(str(one.id), [])
-        if timeout_files:
-            await KnowledgeFileDao.aupdate_file_status(
-                timeout_files,
-                KnowledgeFileStatus.TIMEOUT,
-                KnowledgeFileFailedError(data={"exception": "Parsing time exceeds 24 hours"}).to_json_str(),
-            )
+
         return finally_res
 
     @classmethod

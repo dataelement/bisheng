@@ -7,11 +7,11 @@ import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appCha
 import AiChatInput from '~/components/Chat/AiChatInput';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
-import { WorkspaceDrawer } from '~/components/Linsight/Artifacts/WorkspaceDrawer';
-import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
-import { useArtifactsPanel } from '~/components/Linsight/Artifacts/useArtifactsPanel';
+import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
+import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
 import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
+import { userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus } from '~/store/linsight';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
@@ -285,6 +285,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
+  // Landing layout: measure the welcome+input block via callback ref so the
+  // recommended-apps section can sit exactly 40px below it while the block
+  // itself stays pinned at viewport vertical center via absolute positioning.
+  // A callback ref re-attaches the ResizeObserver whenever the landing branch
+  // is (re)mounted, which a useEffect with stale deps would miss.
+  const landingResizeObserverRef = useRef<ResizeObserver | null>(null);
+  const [landingBlockHeight, setLandingBlockHeight] = useState(0);
+  const landingBlockRef = useCallback((el: HTMLDivElement | null) => {
+    if (landingResizeObserverRef.current) {
+      landingResizeObserverRef.current.disconnect();
+      landingResizeObserverRef.current = null;
+    }
+    if (!el) return;
+    const update = () => setLandingBlockHeight(el.offsetHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    landingResizeObserverRef.current = ro;
+  }, []);
+
   // F035: task mode is a ROLE permission. The backend folds each role's
   // menu_ids into web_menu → client `user.plugins`; `linsight_task_mode` is the
   // workbench-home sub-capability toggled per role in the admin console. When
@@ -303,10 +323,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     // submission pipeline. The turn stays in this daily conversation; the
     // backend hands off the linsight SV and the inline task bubble renders it.
     //
-    // NOTE (TJ-6, tools/files/skills temporarily degraded): the unified entry
-    // does not yet thread linsight-native tool/file/skill selection (backend
-    // _to_linsight_submit leaves them empty). Task turns currently carry only
-    // question + knowledge-base selection. Restore once the backend threads them.
+    // The unified entry now threads question + knowledge-base selection +
+    // tools + uploaded files (backend _to_linsight_submit maps them onto the
+    // linsight submit schema; daily-bucket files are parsed on-the-fly into the
+    // task workspace). Skills are still resolved separately.
     if (taskMode && canUseTaskMode) {
       const trimmed = text.trim();
       if (!trimmed && !(files || []).length) return;
@@ -342,8 +362,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // shared header) and bound to the LATEST task turn. Shows uploaded sources +
   // generated deliverables. The drawer only opens on the header button — no
   // auto-expand (the entry icon appearing is enough).
-  const { getLinsight } = useLinsightManager();
-  const taskArtifacts = useArtifactsPanel();
+  const { getLinsight, updateLinsight } = useLinsightManager();
+  const taskArtifacts = useWorkspacePanel();
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
     const uploaded = toUploadedArtifacts(taskLinsight?.files as any[]);
@@ -364,6 +384,28 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     );
   }, [taskLinsight]);
 
+  // Stop button handler. A task round runs via the linsight worker/WS AFTER the
+  // handoff SSE stream closed, so `isStreaming` is already false — route the stop
+  // to terminate-execute in that case; otherwise abort the daily SSE stream.
+  const handleStop = useCallback(() => {
+    if (taskRunning && latestTaskVersionId) {
+      userStopLinsightEvent(latestTaskVersionId).catch(() => { /* best-effort: WS task_terminated reconciles */ });
+      updateLinsight(latestTaskVersionId, (prev) => ({
+        ...prev,
+        status: SopStatus.Stoped,
+        tasks: (prev.tasks || []).map((tk: any) => ({
+          ...tk,
+          status: tk.status === 'in_progress' ? 'terminated' : tk.status,
+          children: tk.children
+            ? tk.children.map((c: any) => ({ ...c, status: c.status === 'in_progress' ? 'terminated' : c.status }))
+            : tk.children,
+        })),
+      }));
+      return;
+    }
+    stopGenerating();
+  }, [taskRunning, latestTaskVersionId, updateLinsight, stopGenerating]);
+
   return (
     <Presentation isLingsi={false}>
       <div className={cn('h-full')}>
@@ -379,7 +421,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             const loadingExistingConvo = isLoading && conversationId !== 'new';
             // Keep input pinned to bottom as soon as a send starts (before first token lands),
             // otherwise mobile can briefly fall back to the centered landing layout.
-            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming;
+            // An EXISTING conversation (id !== 'new') always uses the detail layout,
+            // even with zero messages — opening an empty conversation must show the
+            // conversation view, not the welcome/landing page (landing is /c/new only).
+            const useMessagesLayout = hasMessages || loadingExistingConvo || isStreaming || !isNew;
             return (
               <div className={cn(
                 'flex flex-col relative',
@@ -390,9 +435,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                   <div className="flex h-screen items-center justify-center">
                     <Spinner className="opacity-0" />
                   </div>
-                ) : hasMessages ? (
+                ) : (hasMessages || !isNew) ? (
                   <div className="flex min-h-0 flex-1 overflow-hidden">
-                    {/* Left: Chat Main (Messages + Input) */}
+                    {/* Left: Chat Main (Messages + Input). */}
                     <div className="relative flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
                       <div className="relative flex min-h-0 flex-1 overflow-hidden">
                         <AiChatMessages
@@ -408,7 +453,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                           onOpenCitationPanel={onOpenCitationPanel}
                           activeCitationMessageId={activeCitationMessageId}
                           onOpenWorkspace={taskArtifacts.openWorkspace}
-                          hasWorkspaceFiles={taskWorkspaceFiles.length > 0}
+                          // Show the workspace entry whenever this is a task
+                          // conversation (regardless of whether files exist yet);
+                          // it's hidden only while the panel itself is open.
+                          hasWorkspaceFiles={!!latestTaskVersionId}
+                          workspaceOpen={taskArtifacts.open}
+                          onPreviewFile={taskArtifacts.openPreview}
+                          hideEmptyState
                           flatMode
                         />
                         {/* Soft translucent fade so the scrolling step flow
@@ -434,8 +485,90 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             />
                           </div>
                         ) : (
-                        <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
-                          {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
+                          <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
+                            {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
+                            <AiChatInput
+                              disabled={!bsConfig?.models?.length || !!shareToken}
+                              sendDisabled={taskRunning}
+                              isStreaming={isStreaming}
+                              taskRunning={taskRunning}
+                              features={{ taskModeEntry: canUseTaskMode, taskMode: (taskMode || taskRunning) && canUseTaskMode }}
+                              onToggleTaskMode={() => setTaskMode((v) => !v)}
+                              placeholder={taskMode
+                                ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
+                                : undefined}
+                              onScrollToBottom={() => { }}
+                              modelOptions={bsConfig?.models}
+                              modelValue={chatModel.id}
+                              onModelChange={(val) => {
+                                const model = bsConfig?.models?.find((m) => m.id === val);
+                                setChatModel({
+                                  id: Number(val),
+                                  name: model?.displayName || '',
+                                });
+                              }}
+                              onSend={handleSend}
+                              onStop={handleStop}
+                              value={inputText}
+                              onChange={setInputText}
+                              bsConfig={bsConfig}
+                              selectedOrgKbs={selectedOrgKbs}
+                              onSelectedOrgKbsChange={setSelectedOrgKbs}
+                              searchType={searchType}
+                              onSearchTypeChange={setSearchType}
+                            />
+                          </div>
+                        )
+                      )}
+                    </div>
+
+                    {/* F035: inline workspace panel docked to the right of the chat
+                        main for the latest task turn. Opens from the header entry
+                        button; the file preview renders in place. Fullscreen is a
+                        separate overlay (below) covering the whole route viewport. */}
+                    {latestTaskVersionId && taskArtifacts.open && !taskArtifacts.fullscreen && (
+                      <div className="min-h-0 shrink-0 p-1 w-[46%] min-w-[440px] max-w-[720px]">
+                        <WorkspacePanel
+                          files={taskWorkspaceFiles}
+                          versionId={latestTaskVersionId}
+                          previewFile={taskArtifacts.previewFile}
+                          fullscreen={false}
+                          onPreview={taskArtifacts.openPreview}
+                          onBack={taskArtifacts.backToList}
+                          onClose={taskArtifacts.closeWorkspace}
+                          onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                        />
+                      </div>
+                    )}
+
+                    {citationPanelElement}
+                  </div>
+                ) : (
+                  /* Landing page branch — welcome + input are pinned to viewport
+                     vertical center via absolute positioning (top:50% + translateY).
+                     Recommended apps sit exactly 40px below the input by using
+                     `paddingTop: calc(50vh + landingHalfHeight + 40px)`, where
+                     `landingBlockHeight` is measured live with a ResizeObserver.
+                     When total content exceeds viewport, the parent's
+                     overflow-y-auto handles scrolling — the centered block scrolls
+                     up with the document as expected. */
+                  <div className="relative min-h-full">
+                    {/* Centered: welcome message + input. `top: 50vh` (viewport
+                        height), NOT `top: 50%` — the parent's effective height
+                        gets stretched by the apps' paddingTop below, so a
+                        percentage would resolve to a non-viewport midpoint. */}
+                    <div
+                      ref={landingBlockRef}
+                      className="absolute inset-x-0 top-[45vh] -translate-y-1/2"
+                    >
+                      {/* F035 Track H (P5): daily/task mode switch removed —
+                          task mode is reached via the sidebar "new task" entry
+                          and the input-bar task-mode button. */}
+                      <Landing isNew={isNew} />
+
+                      {/* Input area for landing page */}
+                      {!shareToken && (
+                        <div className="w-full max-w-[800px] mx-auto px-3 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
                           <AiChatInput
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             sendDisabled={taskRunning}
@@ -466,67 +599,44 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             onSearchTypeChange={setSearchType}
                           />
                         </div>
-                        )
                       )}
                     </div>
 
-                    {citationPanelElement}
-                  </div>
-                ) : (
-                  /* Landing page branch — Landing+input are pinned at ~25vh
-                     from the viewport top via padding-top (independent of how
-                     tall DailyFeaturedApps below becomes), so the welcome
-                     block stays in roughly the same screen position whether
-                     apps are absent or fill multiple rows. Apps follow
-                     directly after the input with only their own mt-4 gap. */
-                  <div className="flex flex-col min-h-[calc(100vh-200px)] touch-mobile:min-h-[calc(100dvh-240px)] pt-[25vh] touch-mobile:pt-[8vh]">
-                    <div className="shrink-0">
-                      {/* F035 Track H (P5): daily/task mode switch removed —
-                          task mode is reached via the sidebar "new task" entry
-                          and the input-bar task-mode button. */}
-                      <Landing isNew={isNew} />
+                    {/* Recommended apps: 40px below the centered block. The
+                        paddingTop pushes apps to (viewport midpoint) + (landing
+                        half-height) + 40px = (landing block bottom) + 40px. */}
+                    <div
+                      style={{
+                        paddingTop: `calc(45vh + ${landingBlockHeight / 2 + 40}px)`,
+                      }}
+                    >
+                      <DailyFeaturedApps t={t} />
                     </div>
-
-                    {/* Input area for landing page */}
-                    {!shareToken && (
-                      <div className="w-full max-w-[800px] mx-auto px-3 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full shrink-0 pb-3">
-                        <AiChatInput
-                          disabled={!bsConfig?.models?.length || !!shareToken}
-                          sendDisabled={taskRunning}
-                          isStreaming={isStreaming}
-                          features={{ taskModeEntry: canUseTaskMode, taskMode: taskMode && canUseTaskMode }}
-                          onToggleTaskMode={() => setTaskMode((v) => !v)}
-                          placeholder={taskMode
-                            ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
-                            : undefined}
-                          onScrollToBottom={() => { }}
-                          modelOptions={bsConfig?.models}
-                          modelValue={chatModel.id}
-                          onModelChange={(val) => {
-                            const model = bsConfig?.models?.find((m) => m.id === val);
-                            setChatModel({
-                              id: Number(val),
-                              name: model?.displayName || '',
-                            });
-                          }}
-                          onSend={handleSend}
-                          onStop={stopGenerating}
-                          value={inputText}
-                          onChange={setInputText}
-                          bsConfig={bsConfig}
-                          selectedOrgKbs={selectedOrgKbs}
-                          onSelectedOrgKbsChange={setSelectedOrgKbs}
-                          searchType={searchType}
-                          onSearchTypeChange={setSearchType}
-                        />
-                      </div>
-                    )}
-                    <DailyFeaturedApps t={t} />
                   </div>
                 )}
               </div>
             );
           })()}
+
+          {/* F035: fullscreen workspace preview — overlays the whole route
+              viewport (chatContainerRef is relative + un-clipped), flush to the
+              edges with no padding. Covers the chat (incl. its header) but not the
+              browser, so the global nav stays. Separate instance from the inline
+              panel above (toggling fullscreen remounts the preview). */}
+          {latestTaskVersionId && taskArtifacts.open && taskArtifacts.fullscreen && (
+            <div className="absolute inset-0 z-50 bg-white">
+              <WorkspacePanel
+                files={taskWorkspaceFiles}
+                versionId={latestTaskVersionId}
+                previewFile={taskArtifacts.previewFile}
+                fullscreen={true}
+                onPreview={taskArtifacts.openPreview}
+                onBack={taskArtifacts.backToList}
+                onClose={taskArtifacts.closeWorkspace}
+                onToggleFullscreen={taskArtifacts.toggleFullscreen}
+              />
+            </div>
+          )}
         </div>
 
         {/* F028: portal-style sheets/modals (the floating toolbar lives next to the input) */}
@@ -548,25 +658,6 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
           </>
         )}
 
-        {/* F035: task-mode workspace drawer / file preview for the latest task turn,
-            opened from the header button (HeaderTitle -> onOpenWorkspace). */}
-        {latestTaskVersionId && (
-          <>
-            <WorkspaceDrawer
-              open={taskArtifacts.workspaceOpen}
-              onOpenChange={taskArtifacts.setWorkspaceOpen}
-              files={taskWorkspaceFiles}
-              onPreview={(file) => taskArtifacts.openPreview(file, true)}
-            />
-            <FilePreviewPanel
-              open={!!taskArtifacts.previewFile}
-              onOpenChange={(open) => !open && taskArtifacts.closePreview()}
-              file={taskArtifacts.previewFile}
-              versionId={latestTaskVersionId}
-              onBack={taskArtifacts.fromWorkspace ? taskArtifacts.backToWorkspace : undefined}
-            />
-          </>
-        )}
       </div>
     </Presentation>
   );
@@ -625,7 +716,7 @@ const DailyFeaturedApps = ({ t }: { t: (k: string) => string }) => {
 
 
   return (
-    <div className="relative z-10 w-full mt-4 pb-24">
+    <div className="relative z-10 w-full pb-24">
       <div className="flex justify-between items-center mb-3 text-sm text-gray-500 max-w-[800px] mx-auto px-4">
         <h2 className="text-sm text-gray-400">推荐应用</h2>
       </div>

@@ -53,8 +53,8 @@ const FILE_ROW_ACTION_BTN_CLASS =
 const COLUMN_CONFIG = {
     checkbox: { minWidth: 48, initialWidth: 48 },
     name: { minWidth: 140, initialWidth: 280 },
-    fileType: { minWidth: 100, initialWidth: 120 },
-    size: { minWidth: 120, initialWidth: 120 },
+    fileType: { minWidth: 140, initialWidth: 140 },
+    size: { minWidth: 140, initialWidth: 140 },
     tags: { minWidth: 140, initialWidth: 200 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
     updateTime: { minWidth: 140, initialWidth: 180 },
@@ -69,7 +69,8 @@ type ColumnKey = keyof typeof COLUMN_CONFIG;
 // the table's right edge, which counts toward scrollWidth and produces a
 // permanent 4px horizontal scroll. Excluding `updateTime` (the last data
 // column in every mode) removes its handle and the 4px overflow.
-const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox", "updateTime"];
+// fileType / size are pinned to a fixed 100px and not user-resizable.
+const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox", "updateTime", "fileType", "size"];
 // 左侧固定列
 const STICKY_COLUMNS: ColumnKey[] = ["checkbox", "name"];
 

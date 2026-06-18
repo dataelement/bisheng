@@ -206,6 +206,19 @@ class StreamEventMapper:
                 continue
             todos = node_output.get("todos")
             if todos is not None:
+                # design #1 §5.2(a): a subagent carries its OWN write_todos
+                # (TodoListMiddleware). Its todos arrive namespaced (ns set) and
+                # would otherwise be merged into the main graph's single
+                # ``ctx.todos`` via _diff_todos, polluting the main plan with
+                # bogus GenerateSubTask/TaskStart/TaskEnd. Only the main graph
+                # (ns is None) may drive the plan. Dropping namespaced updates is
+                # also safe re: __interrupt__: subagents have NO interrupt source
+                # by construction (design §3.1), so no __interrupt__ ever surfaces
+                # under a namespace — only subagent *tool-call* steps do (those
+                # are routed via the messages stream and still surface). This keeps
+                # main-graph behavior identical.
+                if ns:
+                    continue
                 events.extend(self._diff_todos(todos))
         return events
 
@@ -469,6 +482,13 @@ class StreamEventMapper:
         return "|".join(str(n) for n in namespace) if len(namespace) > 1 else str(namespace[0])
 
     def _infer_step_type(self, name: str, ns: str | None) -> str:
+        # LIVE branch (design #1): the `task` tool is re-enabled and the
+        # "general-purpose" researcher subagent runs again, so subgraph events DO
+        # carry a namespace. A namespaced tool-call step therefore renders as
+        # step_type="subagent" (with extra_info.namespace) for frontend grouping
+        # under its parent task. Subagent *todos* are filtered upstream in
+        # _handle_updates (§5.2a); only the subagent's execution-trace tool calls
+        # reach here and surface as subagent steps.
         if ns:
             return "subagent"
         lowered = (name or "").lower()

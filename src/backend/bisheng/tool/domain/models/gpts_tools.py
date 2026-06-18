@@ -1,106 +1,140 @@
 import json
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from pydantic import model_validator
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, text, func
-from bisheng.core.database.dialect_helpers import JsonType, LargeText, UPDATE_TIME_SERVER_DEFAULT
-from sqlmodel import Field, or_, select, Text, update, col
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint, func, text
+from sqlmodel import Field, Text, col, or_, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
-from bisheng.utils import md5_hash, generate_uuid
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, LargeText
+from bisheng.utils import generate_uuid, md5_hash
 from bisheng.utils.mask_data import JsonFieldMasker
+
 from ..const import AuthType, ToolPresetType
+
 
 class GptsToolsBase(SQLModelSerializable):
     name: str = Field(sa_column=Column(String(length=125), index=True))
-    logo: Optional[str] = Field(default=None, sa_column=Column(String(length=512), index=False))
-    desc: Optional[str] = Field(default=None, sa_column=Column(LargeText, index=False))
+    logo: str | None = Field(default=None, sa_column=Column(String(length=512), index=False))
+    desc: str | None = Field(default=None, sa_column=Column(LargeText, index=False))
     tool_key: str = Field(sa_column=Column(String(length=125), index=False))
-    type: int = Field(default=0, description='of the category to which they belongID')
-    is_preset: int = Field(default=ToolPresetType.API.value,
-                           description="The category of the tool, the historical reason field is not renamed")
-    is_delete: int = Field(default=0, description='1 Indicates logical deletion')
-    api_params: Optional[List[Dict]] = Field(default=None, sa_column=Column(JsonType),
-                                             description='Used to storeapiParameter and other information')
-    user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
-    tenant_id: Optional[int] = Field(
-        default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+    type: int = Field(default=0, description="of the category to which they belongID")
+    is_preset: int = Field(
+        default=ToolPresetType.API.value,
+        description="The category of the tool, the historical reason field is not renamed",
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    is_delete: int = Field(default=0, description="1 Indicates logical deletion")
+    api_params: list[dict] | None = Field(
+        default=None, sa_column=Column(JsonType), description="Used to storeapiParameter and other information"
+    )
+    user_id: int | None = Field(
+        default=None, index=True, description="Create UserID， nullIndicates system creation"
+    )
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
+    )
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
+
 
 class GptsToolsTypeBase(SQLModelSerializable):
-    id: Optional[int] = Field(default=None, index=True, primary_key=True)
-    name: str = Field(default='', sa_column=Column(String(length=1024)), description="Tool Category Name")
-    logo: Optional[str] = Field(default='', description="of the tool categorylogoFile URL")
-    extra: Optional[str] = Field(default='{}', sa_column=Column(Text),
-                                 description="Configuration information for the tool category to store the configuration information required for the tool category")
-    description: str = Field(default='', description="Description of the tool category")
-    server_host: Optional[str] = Field(default='',
-                                       description="The access root address of the custom tool, which must behttporhttpsWhat/the beginning?")
-    auth_method: Optional[int] = Field(default=0, description="Authentication method of tool category")
-    api_key: Optional[str] = Field(default='', description="Tool Authenticationapi_key",
-                                   sa_column=Column(String(length=2048)),
-                                   max_length=1000)
-    auth_type: Optional[str] = Field(default=AuthType.BASIC.value,
-                                     description="Authentication method of tool authentication")
-    is_preset: Optional[int] = Field(default=ToolPresetType.API.value,
-                                     description="The category of the tool, the historical reason field is not renamed")
-    user_id: Optional[int] = Field(default=None, index=True, description='Create UserID， nullIndicates system creation')
-    is_delete: int = Field(default=0, description='1 Indicates logical deletion')
+    id: int | None = Field(default=None, index=True, primary_key=True)
+    name: str = Field(default="", sa_column=Column(String(length=1024)), description="Tool Category Name")
+    logo: str | None = Field(default="", description="of the tool categorylogoFile URL")
+    extra: str | None = Field(
+        default="{}",
+        sa_column=Column(Text),
+        description="Configuration information for the tool category to store the configuration information required for the tool category",
+    )
+    description: str = Field(default="", description="Description of the tool category")
+    server_host: str | None = Field(
+        default="",
+        description="The access root address of the custom tool, which must behttporhttpsWhat/the beginning?",
+    )
+    auth_method: int | None = Field(default=0, description="Authentication method of tool category")
+    api_key: str | None = Field(
+        default="", description="Tool Authenticationapi_key", sa_column=Column(String(length=2048)), max_length=1000
+    )
+    auth_type: str | None = Field(
+        default=AuthType.BASIC.value, description="Authentication method of tool authentication"
+    )
+    is_preset: int | None = Field(
+        default=ToolPresetType.API.value,
+        description="The category of the tool, the historical reason field is not renamed",
+    )
+    user_id: int | None = Field(
+        default=None, index=True, description="Create UserID， nullIndicates system creation"
+    )
+    is_delete: int = Field(default=0, description="1 Indicates logical deletion")
     is_shared: bool = Field(
         default=False,
         sa_column=Column(
-            Boolean, nullable=False, server_default=text('0'),
-            comment='F017: Root tool type shared to all children (mirrors FGA shared_with tuples)',
+            Boolean,
+            nullable=False,
+            server_default=text("0"),
+            comment="F017: Root tool type shared to all children (mirrors FGA shared_with tuples)",
         ),
     )
-    tenant_id: Optional[int] = Field(
+    tenant_id: int | None = Field(
         default=None,
-        sa_column=Column(Integer, nullable=False, server_default=text('1'),
-                         index=True, comment='Tenant ID'),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
+
 
 class GptsTools(GptsToolsBase, table=True):
-    __tablename__ = 't_gpts_tools'
-    extra: Optional[str | dict] = Field(default=None, sa_column=Column(Text, index=False),
-                                        description='Used to store additional information, such as parameter requirements, including &initdb_conf_key Data field'
-                                                    'Indicates that the configuration information is obtained from the system configuration,For multi-level use.with ')
-    id: Optional[int] = Field(default=None, primary_key=True)
+    __tablename__ = "t_gpts_tools"
+    __table_args__ = (UniqueConstraint("tool_key", "tenant_id", name="uk_gpts_tools_key_tenant"),)
+    extra: str | dict | None = Field(
+        default=None,
+        sa_column=Column(Text, index=False),
+        description="Used to store additional information, such as parameter requirements, including &initdb_conf_key Data field"
+        "Indicates that the configuration information is obtained from the system configuration,For multi-level use.with ",
+    )
+    id: int | None = Field(default=None, primary_key=True)
+
 
 class GptsToolsType(GptsToolsTypeBase, table=True):
-    __tablename__ = 't_gpts_tools_type'
-    openapi_schema: str = Field(default="", sa_column=Column(Text),
-                                description="of the tool categoryschemaContent, complies withopenapiSpecified Data")
+    __tablename__ = "t_gpts_tools_type"
+    openapi_schema: str = Field(
+        default="",
+        sa_column=Column(Text),
+        description="of the tool categoryschemaContent, complies withopenapiSpecified Data",
+    )
+
 
 class GptsToolsTypeRead(GptsToolsTypeBase):
-    openapi_schema: Optional[str] = Field(default="",
-                                          description="of the tool categoryschemaContent, complies withopenapiSpecified Data")
-    children: Optional[List[GptsTools]] = Field(default_factory=list,
-                                                description="List of tools under the Tools category")
-    parameter_name: Optional[str] = Field(default="", description="Custom request header parameter name")
-    api_location: Optional[str] = Field(default="",
-                                        description="Custom Request Header Parameter Position header or query")
-    write: Optional[bool] = Field(default=False, description="Do you have write access")
-    delete: Optional[bool] = Field(default=False, description="Do you have delete access")
+    openapi_schema: str | None = Field(
+        default="", description="of the tool categoryschemaContent, complies withopenapiSpecified Data"
+    )
+    children: list[GptsTools] | None = Field(
+        default_factory=list, description="List of tools under the Tools category"
+    )
+    parameter_name: str | None = Field(default="", description="Custom request header parameter name")
+    api_location: str | None = Field(
+        default="", description="Custom Request Header Parameter Position header or query"
+    )
+    write: bool | None = Field(default=False, description="Do you have write access")
+    delete: bool | None = Field(default=False, description="Do you have delete access")
 
     @model_validator(mode="after")
     def validate(self):
         # Needs to be populated when echoingapi_locationAndparameter_nameData field
         if self.extra and not self.api_location:
             result = json.loads(self.extra)
-            self.api_location = result.get('api_location')
-            self.parameter_name = result.get('parameter_name')
+            self.api_location = result.get("api_location")
+            self.parameter_name = result.get("parameter_name")
 
     def mask_sensitive_data(self):
         json_masker = JsonFieldMasker()
@@ -111,11 +145,12 @@ class GptsToolsTypeRead(GptsToolsTypeBase):
             self.extra = json.dumps(extra_json, ensure_ascii=False)
         return self
 
+
 class GptsToolsRead(GptsToolsBase):
     id: int
 
-class GptsToolsDao(GptsToolsBase):
 
+class GptsToolsDao(GptsToolsBase):
     @classmethod
     def insert(cls, obj: GptsTools):
         with get_sync_db_session() as session:
@@ -125,9 +160,9 @@ class GptsToolsDao(GptsToolsBase):
             return obj
 
     @classmethod
-    def query_by_name(cls, name: str) -> List[GptsTools]:
+    def query_by_name(cls, name: str) -> list[GptsTools]:
         with get_sync_db_session() as session:
-            statement = select(GptsTools).where(GptsTools.name.like(f'%{name}%'))
+            statement = select(GptsTools).where(GptsTools.name.like(f"%{name}%"))
             return session.exec(statement).all()
 
     @classmethod
@@ -139,7 +174,7 @@ class GptsToolsDao(GptsToolsBase):
             return data
 
     @classmethod
-    def update_tool_list(cls, data: List[GptsTools]) -> List[GptsTools]:
+    def update_tool_list(cls, data: list[GptsTools]) -> list[GptsTools]:
         with get_sync_db_session() as session:
             for one in data:
                 session.add(one)
@@ -152,7 +187,7 @@ class GptsToolsDao(GptsToolsBase):
         return cls.update_tools(data)
 
     @classmethod
-    def delete_tool_by_ids(cls, tool_ids: List[int]) -> None:
+    def delete_tool_by_ids(cls, tool_ids: list[int]) -> None:
         with get_sync_db_session() as session:
             statement = update(GptsTools).where(GptsTools.id.in_(tool_ids)).values(is_delete=1)
             session.exec(statement)
@@ -172,27 +207,29 @@ class GptsToolsDao(GptsToolsBase):
             return result.first()
 
     @classmethod
-    def get_list_by_ids(cls, tool_ids: List[int]) -> List[GptsTools]:
+    def get_list_by_ids(cls, tool_ids: list[int]) -> list[GptsTools]:
         statement = select(GptsTools).where(col(GptsTools.id).in_(tool_ids)).where(GptsTools.is_delete == 0)
         with get_sync_db_session() as session:
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_list_by_ids(cls, tool_ids: List[int]) -> List[GptsTools]:
+    async def aget_list_by_ids(cls, tool_ids: list[int]) -> list[GptsTools]:
         statement = select(GptsTools).where(col(GptsTools.id).in_(tool_ids)).where(GptsTools.is_delete == 0)
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    def get_list_by_user(cls, user_id: int, page: int = 0, page_size: int = 0) -> List[GptsTools]:
+    def get_list_by_user(cls, user_id: int, page: int = 0, page_size: int = 0) -> list[GptsTools]:
         """
         Get all the tools available to your users
         """
         with get_sync_db_session() as session:
-            statement = select(GptsTools).where(
-                or_(GptsTools.user_id == user_id,
-                    GptsTools.is_preset == ToolPresetType.PRESET.value)).where(GptsTools.is_delete == 0)
+            statement = (
+                select(GptsTools)
+                .where(or_(GptsTools.user_id == user_id, GptsTools.is_preset == ToolPresetType.PRESET.value))
+                .where(GptsTools.is_delete == 0)
+            )
             if page and page_size:
                 statement = statement.offset((page - 1) * page_size).limit(page_size)
             statement = statement.order_by(GptsTools.create_time.desc())
@@ -200,88 +237,93 @@ class GptsToolsDao(GptsToolsBase):
             return list_tools
 
     @classmethod
-    def get_list_by_type(cls, tool_type_ids: List[int]) -> List[GptsTools]:
+    def get_list_by_type(cls, tool_type_ids: list[int]) -> list[GptsTools]:
         """
         Get all the tools under the Tools category
         """
         with get_sync_db_session() as session:
-            statement = select(GptsTools).where(
-                GptsTools.type.in_(tool_type_ids)).where(
-                GptsTools.is_delete == 0).order_by(GptsTools.create_time.desc())
-            return session.exec(statement).all()
-
-    @classmethod
-    async def aget_list_by_type(cls, tool_type_ids: List[int]) -> List[GptsTools]:
-        """
-        Get all the tools under the Tools category asynchronously
-        """
-        statement = select(GptsTools).where(
-            GptsTools.type.in_(tool_type_ids)).where(
-            GptsTools.is_delete == 0).order_by(GptsTools.create_time.desc())
-        async with get_async_db_session() as session:
-            result = await session.exec(statement)
-            return result.all()
-
-    @classmethod
-    def get_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
-        """
-        Get all tool categories
-        """
-        with get_sync_db_session() as session:
-            statement = select(GptsToolsType).filter(
-                GptsToolsType.is_delete == 0,
-                GptsToolsType.id.in_(tool_type_ids)
+            statement = (
+                select(GptsTools)
+                .where(GptsTools.type.in_(tool_type_ids))
+                .where(GptsTools.is_delete == 0)
+                .order_by(GptsTools.create_time.desc())
             )
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_all_tool_type(cls, tool_type_ids: List[int]) -> List[GptsToolsType]:
-        """ get tool types by tool ids """
-        statement = select(GptsToolsType).filter(
-            col(GptsToolsType.is_delete) == 0,
-            col(GptsToolsType.id).in_(tool_type_ids)
+    async def aget_list_by_type(cls, tool_type_ids: list[int]) -> list[GptsTools]:
+        """
+        Get all the tools under the Tools category asynchronously
+        """
+        statement = (
+            select(GptsTools)
+            .where(GptsTools.type.in_(tool_type_ids))
+            .where(GptsTools.is_delete == 0)
+            .order_by(GptsTools.create_time.desc())
         )
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    def get_preset_tool_type(cls) -> List[GptsToolsType]:
+    def get_all_tool_type(cls, tool_type_ids: list[int]) -> list[GptsToolsType]:
+        """
+        Get all tool categories
+        """
+        with get_sync_db_session() as session:
+            statement = select(GptsToolsType).filter(GptsToolsType.is_delete == 0, GptsToolsType.id.in_(tool_type_ids))
+            return session.exec(statement).all()
+
+    @classmethod
+    async def aget_all_tool_type(cls, tool_type_ids: list[int]) -> list[GptsToolsType]:
+        """get tool types by tool ids"""
+        statement = select(GptsToolsType).filter(
+            col(GptsToolsType.is_delete) == 0, col(GptsToolsType.id).in_(tool_type_ids)
+        )
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
+    def get_preset_tool_type(cls) -> list[GptsToolsType]:
         """
         Get all preset tool categories
         """
         with get_sync_db_session() as session:
-            statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
-                                                    GptsToolsType.is_delete == 0)
+            statement = select(GptsToolsType).where(
+                GptsToolsType.is_preset == ToolPresetType.PRESET.value, GptsToolsType.is_delete == 0
+            )
             statement = statement.order_by(GptsToolsType.update_time.desc())
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_preset_tool_type(cls) -> List[GptsToolsType]:
+    async def aget_preset_tool_type(cls) -> list[GptsToolsType]:
         """
         Get all preset tool categories asynchronously
         """
-        statement = select(GptsToolsType).where(GptsToolsType.is_preset == ToolPresetType.PRESET.value,
-                                                GptsToolsType.is_delete == 0)
+        statement = select(GptsToolsType).where(
+            GptsToolsType.is_preset == ToolPresetType.PRESET.value, GptsToolsType.is_delete == 0
+        )
         statement = statement.order_by(GptsToolsType.update_time.desc())
         async with get_async_db_session() as session:
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
-    def _get_user_tool_type_statement(cls, user_id: int, extra_tool_type_ids: List[int] = None,
-                                      include_preset: bool = True,
-                                      is_preset: ToolPresetType = None):
+    def _get_user_tool_type_statement(
+        cls,
+        user_id: int,
+        extra_tool_type_ids: list[int] = None,
+        include_preset: bool = True,
+        is_preset: ToolPresetType = None,
+    ):
         """
         Get the value of all tool categories visible to the userstatement
         """
         statement = select(GptsToolsType).where(GptsToolsType.is_delete == 0)
         filters = []
         if extra_tool_type_ids:
-            filters.append(or_(
-                GptsToolsType.id.in_(extra_tool_type_ids),
-                GptsToolsType.user_id == user_id
-            ))
+            filters.append(or_(GptsToolsType.id.in_(extra_tool_type_ids), GptsToolsType.user_id == user_id))
         else:
             filters.append(GptsToolsType.user_id == user_id)
         if include_preset:
@@ -289,14 +331,19 @@ class GptsToolsDao(GptsToolsBase):
         if is_preset is not None:
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         statement = statement.where(or_(*filters))
-        statement = statement.order_by(func.field(GptsToolsType.is_preset,
-                                                  ToolPresetType.PRESET.value).desc(),
-                                       GptsToolsType.update_time.desc())
+        statement = statement.order_by(
+            func.field(GptsToolsType.is_preset, ToolPresetType.PRESET.value).desc(), GptsToolsType.update_time.desc()
+        )
         return statement
 
     @classmethod
-    def get_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
-                           is_preset: ToolPresetType = None) -> List[GptsToolsType]:
+    def get_user_tool_type(
+        cls,
+        user_id: int,
+        extra_tool_type_ids: list[int] = None,
+        include_preset: bool = True,
+        is_preset: ToolPresetType = None,
+    ) -> list[GptsToolsType]:
         """
         Get all tool categories visible to the user
         """
@@ -305,8 +352,13 @@ class GptsToolsDao(GptsToolsBase):
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_user_tool_type(cls, user_id: int, extra_tool_type_ids: List[int] = None, include_preset: bool = True,
-                                  is_preset: ToolPresetType = None) -> List[GptsToolsType]:
+    async def aget_user_tool_type(
+        cls,
+        user_id: int,
+        extra_tool_type_ids: list[int] = None,
+        include_preset: bool = True,
+        is_preset: ToolPresetType = None,
+    ) -> list[GptsToolsType]:
         """
         Get all tool categories visible to the user
         """
@@ -321,7 +373,7 @@ class GptsToolsDao(GptsToolsBase):
         tenant_id: int,
         include_preset: bool = True,
         is_preset: ToolPresetType = None,
-    ) -> List[GptsToolsType]:
+    ) -> list[GptsToolsType]:
         """Get all tool categories under the current tenant.
 
         Used by admin-scope management views where a global super admin needs
@@ -345,8 +397,14 @@ class GptsToolsDao(GptsToolsBase):
             return result.all()
 
     @classmethod
-    def filter_tool_types_by_ids(cls, tool_type_ids: List[int], keyword: Optional[str] = None, page: int = 0,
-                                 limit: int = 0, include_preset: bool = False) -> (List[GptsToolsType], int):
+    def filter_tool_types_by_ids(
+        cls,
+        tool_type_ids: list[int],
+        keyword: str | None = None,
+        page: int = 0,
+        limit: int = 0,
+        include_preset: bool = False,
+    ) -> (list[GptsToolsType], int):
         """
         By Tool CategoryidFilter Category
         """
@@ -360,19 +418,15 @@ class GptsToolsDao(GptsToolsBase):
             statement = statement.where(GptsToolsType.id.in_(tool_type_ids))
             count_statement = count_statement.where(GptsToolsType.id.in_(tool_type_ids))
         if keyword:
-            statement = statement.where(or_(
-                GptsToolsType.name.like(f'%{keyword}%'),
-                GptsToolsType.description.like(f'%{keyword}%')
-            ))
-            count_statement = count_statement.where(or_(
-                GptsToolsType.name.like(f'%{keyword}%'),
-                GptsToolsType.description.like(f'%{keyword}%')
-            ))
+            statement = statement.where(
+                or_(GptsToolsType.name.like(f"%{keyword}%"), GptsToolsType.description.like(f"%{keyword}%"))
+            )
+            count_statement = count_statement.where(
+                or_(GptsToolsType.name.like(f"%{keyword}%"), GptsToolsType.description.like(f"%{keyword}%"))
+            )
 
         if limit and page:
-            statement = statement.offset(
-                (page - 1) * limit
-            ).limit(limit).order_by(GptsToolsType.update_time.desc())
+            statement = statement.offset((page - 1) * limit).limit(limit).order_by(GptsToolsType.update_time.desc())
         with get_sync_db_session() as session:
             return session.exec(statement).all(), session.scalar(count_statement)
 
@@ -403,7 +457,7 @@ class GptsToolsDao(GptsToolsBase):
         statement = select(GptsToolsType).filter(
             col(GptsToolsType.name) == tool_type_name,
             col(GptsToolsType.user_id) == user_id,
-            col(GptsToolsType.is_delete) == 0
+            col(GptsToolsType.is_delete) == 0,
         )
         async with get_async_db_session() as session:
             result = await session.exec(statement)
@@ -415,7 +469,7 @@ class GptsToolsDao(GptsToolsBase):
         Add Tool Category and the corresponding list of tools
         """
         children = data.children
-        gpts_tool_type = GptsToolsType(**data.model_dump(exclude={'children'}))
+        gpts_tool_type = GptsToolsType(**data.model_dump(exclude={"children"}))
         # Insert Tool Category
         async with get_async_db_session() as session:
             session.add(gpts_tool_type)
@@ -432,10 +486,13 @@ class GptsToolsDao(GptsToolsBase):
         return res
 
     @classmethod
-    async def update_tool_type(cls, data: GptsToolsType,
-                               del_tool_ids: List[int],
-                               add_tool_list: List[GptsTools],
-                               update_tool_list: List[GptsTools]):
+    async def update_tool_type(
+        cls,
+        data: GptsToolsType,
+        del_tool_ids: list[int],
+        add_tool_list: list[GptsTools],
+        update_tool_list: list[GptsTools],
+    ):
         """
         Update Tool Category Information
         param data: GptsToolsType
@@ -479,12 +536,16 @@ class GptsToolsDao(GptsToolsBase):
         """
         Delete Tool Category
         """
-        statement = update(GptsToolsType).where(col(GptsToolsType.id) == tool_type_id,
-                                                col(GptsToolsType.is_preset) != ToolPresetType.PRESET.value).values(
-            is_delete=1)
-        tool_statement = update(GptsTools).where(col(GptsTools.type) == tool_type_id,
-                                                 col(GptsTools.is_preset) != ToolPresetType.PRESET.value).values(
-            is_delete=1)
+        statement = (
+            update(GptsToolsType)
+            .where(col(GptsToolsType.id) == tool_type_id, col(GptsToolsType.is_preset) != ToolPresetType.PRESET.value)
+            .values(is_delete=1)
+        )
+        tool_statement = (
+            update(GptsTools)
+            .where(col(GptsTools.type) == tool_type_id, col(GptsTools.is_preset) != ToolPresetType.PRESET.value)
+            .values(is_delete=1)
+        )
         async with get_async_db_session() as session:
             await session.exec(statement)
             await session.exec(tool_statement)
@@ -504,7 +565,7 @@ class GptsToolsDao(GptsToolsBase):
         async with get_async_db_session() as session:
             statement = update(GptsToolsType).where(col(GptsToolsType.id) == tool_type_id).values(extra=extra)
             await session.exec(statement)
-            statement = update(GptsTools).where(col(GptsTools.type) == tool_type_id).values(extra=text('NULL'))
+            statement = update(GptsTools).where(col(GptsTools.type) == tool_type_id).values(extra=text("NULL"))
             await session.exec(statement)
             await session.commit()
             return True

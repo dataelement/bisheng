@@ -137,9 +137,7 @@ export function ChannelActionsMenu({
                 {canManageMembers && onManageMembers ? (
                     <DropdownMenuItem className={itemCls} onClick={() => onManageMembers(liveChannel)}>
                         <Outlined.PeopleSafe className={iconCls} />
-                        {isMobile
-                            ? localize("com_subscription.permission_management")
-                            : localize("com_subscription.member_management")}
+                        {localize("com_subscription.permission_management")}
                     </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem

@@ -18,6 +18,7 @@ import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import CitationReferencesDrawer, { type CitationReferencesDesktopPayload } from "~/components/Chat/Messages/Content/CitationReferencesDrawer";
 import SearchWebUrls from "~/components/Chat/Messages/Content/SearchWebUrls";
 import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
+import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -45,6 +46,9 @@ interface AiMessageBubbleProps {
     knowledgeChatLayout?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
+    /** F035: preview a task-turn document in the inline workspace panel (ChatView
+        owns it) — a conversation doc link opens the file directly, no drawer. */
+    onPreviewFile?: (file: ArtifactFile) => void;
 }
 
 // --- Copy button with feedback ---
@@ -235,6 +239,7 @@ const AiMessageBubble = memo(
         knowledgeChatLayout,
         onOpenCitationPanel,
         activeCitationMessageId,
+        onPreviewFile,
     }: AiMessageBubbleProps) => {
         const isUser = message.isCreatedByUser;
 
@@ -261,6 +266,7 @@ const AiMessageBubble = memo(
                 knowledgeChatLayout={knowledgeChatLayout}
                 onOpenCitationPanel={onOpenCitationPanel}
                 activeCitationMessageId={activeCitationMessageId}
+                onPreviewFile={onPreviewFile}
             />
         );
     }
@@ -409,6 +415,7 @@ function AssistantBubble({
     knowledgeChatLayout,
     onOpenCitationPanel,
     activeCitationMessageId,
+    onPreviewFile,
 }: {
     message: ChatMessage;
     isLatest?: boolean;
@@ -420,6 +427,7 @@ function AssistantBubble({
     knowledgeChatLayout?: boolean;
     onOpenCitationPanel?: (payload: CitationReferencesDesktopPayload) => void;
     activeCitationMessageId?: string | null;
+    onPreviewFile?: (file: ArtifactFile) => void;
 }) {
     // v2.5 Agent-native detection — when a message has structured fields set
     // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
@@ -517,6 +525,7 @@ function AssistantBubble({
                         versionId={message.linsightSessionVersionId || ""}
                         conversationId={message.conversationId}
                         answer={message.text}
+                        onPreviewFile={onPreviewFile}
                     />
                 </div>
             </div>

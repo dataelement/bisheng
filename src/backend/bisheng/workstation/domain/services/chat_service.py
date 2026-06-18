@@ -1696,6 +1696,10 @@ async def _agent_stream_chat_completion(
         }
         yield f"data: {json.dumps(final_payload, ensure_ascii=False)}\n\n"
 
+        # Title generation runs in the background (fire-and-forget) so it survives
+        # the frontend closing this stream on `final`. The client then reads the
+        # title via the gen_title poll endpoint, which waits until the background
+        # task has persisted a real name (slow models take >5s).
         if is_new_conv or (conversation.name in (None, "", "New Chat")):
             asyncio.create_task(
                 gen_title(data.text or "", final_msg, bisheng_llm, conversation_id, login_user, request)
@@ -1747,6 +1751,11 @@ async def stream_chat_completion(
     return await _agent_stream_chat_completion(request, data, login_user)
 
 
+# Upper bound for in-stream title generation (task mode). Matches the gen_title
+# poll endpoint deadline so a hung LLM can't hold the handoff stream open forever.
+_TITLE_GEN_TIMEOUT_S = 30.0
+
+
 async def _task_mode_stream_completion(request: Request, data: APIChatCompletion, login_user: UserPayload):
     """F035 Track J: task-mode entry — create the linsight session inside the
     current conversation and hand off to the existing task stream.
@@ -1761,7 +1770,29 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
 
     submit_obj = _to_linsight_submit(data)
-    _session, session_version = await LinsightWorkbenchImpl.submit_user_question(submit_obj, login_user)
+    # Pass the original daily-shape files (filepath/type/file_id) so the user
+    # question turn persists its attachments and they render after a refresh
+    # (the submit schema's SubmitFileSchema drops the display fields).
+    _session, session_version = await LinsightWorkbenchImpl.submit_user_question(
+        submit_obj, login_user, display_files=data.files
+    )
+
+    # Generate the conversation title straight from the user's question (task
+    # mode has no "round complete" moment to hang it on). Reuse the daily-mode
+    # title helper with the daily chat model (data.model) rather than the
+    # linsight default model — task-mode title generation must not depend on the
+    # linsight model being configured.
+    logger.info(
+        f"[TASK_TITLE] entry chat_id={session_version.session_id} model={data.model!r} "
+        f"question={(submit_obj.question or '')[:40]!r}"
+    )
+    title_llm = await LLMService.get_bisheng_llm(
+        model_id=data.model,
+        app_id=ApplicationTypeEnum.DAILY_CHAT.value,
+        app_name=ApplicationTypeEnum.DAILY_CHAT.value,
+        app_type=ApplicationTypeEnum.DAILY_CHAT,
+        user_id=login_user.user_id,
+    )
 
     async def _handoff_event():
         payload = {
@@ -1772,6 +1803,43 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
             },
         }
         yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        # Persist the title AFTER the handoff is emitted (so the task panel isn't
+        # blocked on the LLM) but WITHIN this generator — a fire-and-forget
+        # asyncio task would be garbage-collected once this short-lived request
+        # returns, before the LLM call completes, leaving the name as "New Chat".
+        # Task mode has no `final` event, so the stream stays open until this
+        # completes. The client reads the title via the gen_title poll endpoint,
+        # which waits until a real name is persisted (slow models take >5s).
+        #
+        # Bounded by a timeout: a hung LLM would otherwise hold this stream open
+        # forever, leaving the frontend's send button stuck in the streaming
+        # state (onEnd only fires when the server closes the stream). On timeout
+        # we just close — the name keeps its "New Chat" default.
+        try:
+            await asyncio.wait_for(
+                gen_title(
+                    submit_obj.question or "",
+                    "",
+                    title_llm,
+                    session_version.session_id,
+                    login_user,
+                    request,
+                ),
+                timeout=_TITLE_GEN_TIMEOUT_S,
+            )
+            persisted = await MessageSessionDao.async_get_one(session_version.session_id)
+            logger.info(
+                f"[TASK_TITLE] done chat_id={session_version.session_id} "
+                f"persisted_name={(persisted.name if persisted else None)!r}"
+            )
+        except TimeoutError:
+            logger.warning(
+                f"[TASK_TITLE] timed out after {_TITLE_GEN_TIMEOUT_S}s "
+                f"chat_id={session_version.session_id}; keeping default name"
+            )
+        except Exception as exc:
+            logger.exception(f"[TASK_TITLE] failed chat_id={session_version.session_id}: {exc}")
 
     return StreamingResponse(_handoff_event(), media_type="text/event-stream")
 
@@ -1841,20 +1909,22 @@ def _to_linsight_submit(data: APIChatCompletion):
             )
         submit_files = submit_files or None
 
-    # Knowledge (coarse, unified-resource): the daily picker selects specific KB
-    # ids (org) + knowledge-space ids; linsight's model is two coarse booleans.
-    # Map org-KB selection -> org (NORMAL) enabled, knowledge-space selection ->
-    # personal (PRIVATE) enabled. The task agent then gets ALL the user's KBs of
-    # the enabled type injected at execution (coarse: not filtered to the exact
-    # ids — honoring the specific selection would need a per-SV id column).
-    personal_enabled = bool(ukb and (ukb.knowledge_space_ids or ukb.personal_knowledge_enabled))
-    org_enabled = bool(ukb and ukb.organization_knowledge_ids)
+    # Knowledge (unified-resource): thread the daily picker's EXACT selection so
+    # the task agent searches precisely the chosen KBs — organization (NORMAL) KB
+    # ids + knowledge-space (SPACE) ids — instead of every KB of a coarse type.
+    # The booleans are still set for storage/back-compat but no longer drive
+    # injection (task_exec resolves from the id lists).
+    org_ids = list(ukb.organization_knowledge_ids or []) if ukb else []
+    space_ids = list(ukb.knowledge_space_ids or []) if ukb else []
+    personal_enabled = bool(ukb and ukb.personal_knowledge_enabled)
 
     return LinsightQuestionSubmitSchema(
         question=data.text or "",
         session_id=data.conversationId,
         personal_knowledge_enabled=personal_enabled,
-        org_knowledge_enabled=org_enabled,
+        org_knowledge_enabled=bool(org_ids),
+        organization_knowledge_ids=org_ids or None,
+        knowledge_space_ids=space_ids or None,
         model=data.model or None,
         files=submit_files,
         tools=submit_tools,

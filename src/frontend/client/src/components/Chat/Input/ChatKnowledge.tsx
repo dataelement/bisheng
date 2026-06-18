@@ -542,7 +542,7 @@ export const ChatKnowledge = ({
                         WebkitMaskSize: 'contain', maskSize: 'contain',
                       }}
                     />
-                    {value.length > 0 && (
+                    {selectedKnowledgeSpaces.length > 0 && (
                       <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                     )}
                   </div>

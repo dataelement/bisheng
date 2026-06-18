@@ -151,7 +151,7 @@ def _get_zhipu_params(params: dict, server_config: dict, model_config: dict) -> 
 
     user_kwargs = _get_user_kwargs(model_config)
     user_kwargs.update(params)
-    return params
+    return user_kwargs
 
 
 def _get_spark_params(params: dict, server_config: dict, model_config: dict) -> dict:
@@ -272,7 +272,7 @@ class BishengLLM(BishengBase, BaseChatModel):
         else:
             user_kwargs = _get_user_kwargs(model_config)
             if user_kwargs.get('streaming', None) is None:
-                default_params['streaming'] = True
+                default_params['streaming'] = self.server_info.type != LLMServerType.ZHIPU.value
             else:
                 default_params['streaming'] = user_kwargs.get('streaming', None)
 

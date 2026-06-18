@@ -38,45 +38,44 @@ and only requires deleting the line.
 
 import ast
 import os
-from typing import List, Set, Tuple
 
 _BISHENG_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'bisheng'),
+    os.path.join(os.path.dirname(__file__), "..", "..", "bisheng"),
 )
 _SKIP_DIR_FRAGMENTS = (
-    f'{os.sep}test{os.sep}',
-    f'{os.sep}scripts{os.sep}',
-    f'{os.sep}alembic{os.sep}',
-    f'{os.sep}migrations{os.sep}',
-    f'{os.sep}.venv{os.sep}',
+    f"{os.sep}test{os.sep}",
+    f"{os.sep}scripts{os.sep}",
+    f"{os.sep}alembic{os.sep}",
+    f"{os.sep}migrations{os.sep}",
+    f"{os.sep}.venv{os.sep}",
 )
 
 # Hardcoded so the guard runs without importing the ORM (third-party deps may
 # not be installed). Sourced from ``grep -rn "tenant_id" .../models`` plus the
 # v2.5 audit. Update when adding a new tenant-aware table.
-TENANT_AWARE_MODELS: Set[str] = {
-    'Role',
-    'Knowledge',
-    'KnowledgeFile',
-    'Flow',
-    'FlowVersion',
-    'Group',
-    'GroupResource',
-    'Department',
-    'Assistant',
-    'Message',
-    'ChatMessage',
-    'MessageSession',
-    'LLMServer',
-    'LLMServerModel',
-    'LLMCallLog',
-    'LLMTokenLog',
-    'FailedTuple',
-    'AuditLog',
-    'DepartmentKnowledgeSpace',
-    'ApprovalRequest',
-    'OrgSyncConfig',
-    'OrgSyncLog',
+TENANT_AWARE_MODELS: set[str] = {
+    "Role",
+    "Knowledge",
+    "KnowledgeFile",
+    "Flow",
+    "FlowVersion",
+    "Group",
+    "GroupResource",
+    "Department",
+    "Assistant",
+    "Message",
+    "ChatMessage",
+    "MessageSession",
+    "LLMServer",
+    "LLMServerModel",
+    "LLMCallLog",
+    "LLMTokenLog",
+    "FailedTuple",
+    "AuditLog",
+    "DepartmentKnowledgeSpace",
+    "ApprovalRequest",
+    "OrgSyncConfig",
+    "OrgSyncLog",
 }
 
 # Allowlist of (relative_filename_suffix, lineno_of_with). Each entry needs
@@ -87,7 +86,7 @@ TENANT_AWARE_MODELS: Set[str] = {
 # see in the failure message, so reproducing it is a pure copy-paste, and a
 # stable lineno is enough to localize the call (file moves are rare and
 # would re-trigger the guard, which is the right outcome).
-ALLOWLIST: Set[Tuple[str, int]] = {
+ALLOWLIST: set[tuple[str, int]] = {
     # ``_resource_ids_by_creator_user_ids`` deliberately walks resources
     # across tenants — it is a ReBAC reverse-lookup helper ("which resources
     # did these users create?"). The two callers (``_finalize_accessible_ids``
@@ -95,7 +94,7 @@ ALLOWLIST: Set[Tuple[str, int]] = {
     # into ``_filter_ids_by_tenant_gate``, which re-applies the tenant
     # boundary. The helper itself must stay cross-tenant; tightening it
     # would break dept-admin and child-tenant-admin scope union semantics.
-    ('permission/domain/services/permission_service.py', 997),
+    ("permission/domain/services/permission_service.py", 1010),
 }
 
 
@@ -104,8 +103,8 @@ def _qualname(node: ast.expr) -> str:
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute):
-        return f'{_qualname(node.value)}.{node.attr}'
-    return ''
+        return f"{_qualname(node.value)}.{node.attr}"
+    return ""
 
 
 def _is_bypass_with(node: ast.With) -> bool:
@@ -116,16 +115,16 @@ def _is_bypass_with(node: ast.With) -> bool:
         # ``with bypass_tenant_filter(), strict_tenant_filter():`` is a tuple of items
         if isinstance(ctx, ast.Call):
             name = _qualname(ctx.func)
-            if name.endswith('bypass_tenant_filter'):
+            if name.endswith("bypass_tenant_filter"):
                 return True
         elif isinstance(ctx, (ast.Name, ast.Attribute)):
             name = _qualname(ctx)
-            if name.endswith('bypass_tenant_filter'):
+            if name.endswith("bypass_tenant_filter"):
                 return True
     return False
 
 
-def _select_argument_names(call: ast.Call) -> List[str]:
+def _select_argument_names(call: ast.Call) -> list[str]:
     """For ``select(<expr>, ...)`` return identifier roots of each positional arg.
 
     Examples:
@@ -133,7 +132,7 @@ def _select_argument_names(call: ast.Call) -> List[str]:
         select(Role.id, Role.name) → ['Role', 'Role']
         select(func.count(Role.id)) → ['Role']  (recurses)
     """
-    names: List[str] = []
+    names: list[str] = []
     for arg in call.args:
         for sub in ast.walk(arg):
             if isinstance(sub, ast.Name):
@@ -147,17 +146,17 @@ def _select_argument_names(call: ast.Call) -> List[str]:
     return names
 
 
-def _block_source(src_lines: List[str], block: ast.With) -> str:
+def _block_source(src_lines: list[str], block: ast.With) -> str:
     """Return the source text covered by this ``with`` block, inclusive of body."""
     start = block.lineno - 1
     end = block.end_lineno or block.lineno
-    return '\n'.join(src_lines[start:end])
+    return "\n".join(src_lines[start:end])
 
 
-def _scan_file(path: str) -> List[Tuple[str, int, str]]:
+def _scan_file(path: str) -> list[tuple[str, int, str]]:
     """Return list of (rel_path, lineno, summary) offender tuples for one file."""
     try:
-        with open(path, 'r', encoding='utf-8') as fh:
+        with open(path, encoding="utf-8") as fh:
             src = fh.read()
     except (OSError, UnicodeDecodeError):
         return []
@@ -167,7 +166,7 @@ def _scan_file(path: str) -> List[Tuple[str, int, str]]:
         return []
     src_lines = src.splitlines()
 
-    offenders: List[Tuple[str, int, str]] = []
+    offenders: list[tuple[str, int, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.With):
             continue
@@ -175,12 +174,12 @@ def _scan_file(path: str) -> List[Tuple[str, int, str]]:
             continue
 
         # Walk the body for select(<TenantAware>) calls.
-        tenant_aware_hits: List[str] = []
+        tenant_aware_hits: list[str] = []
         for sub in ast.walk(node):
             if not isinstance(sub, ast.Call):
                 continue
             func_name = _qualname(sub.func)
-            if not (func_name == 'select' or func_name.endswith('.select')):
+            if not (func_name == "select" or func_name.endswith(".select")):
                 continue
             for n in _select_argument_names(sub):
                 if n in TENANT_AWARE_MODELS:
@@ -191,57 +190,56 @@ def _scan_file(path: str) -> List[Tuple[str, int, str]]:
 
         # Block source must mention the literal token tenant_id somewhere.
         block_src = _block_source(src_lines, node)
-        if 'tenant_id' in block_src:
+        if "tenant_id" in block_src:
             continue
 
         rel = os.path.relpath(path, _BISHENG_ROOT)
-        offenders.append((
-            rel,
-            node.lineno,
-            f'select({"/".join(sorted(set(tenant_aware_hits)))}) inside '
-            f'bypass_tenant_filter without any tenant_id predicate',
-        ))
+        offenders.append(
+            (
+                rel,
+                node.lineno,
+                f"select({'/'.join(sorted(set(tenant_aware_hits)))}) inside "
+                f"bypass_tenant_filter without any tenant_id predicate",
+            )
+        )
     return offenders
 
 
 def test_bypass_tenant_filter_must_carry_tenant_id_predicate():
     """Naked ``select(<TenantAware>)`` inside ``bypass_tenant_filter`` blocks."""
-    offenders: List[Tuple[str, int, str]] = []
+    offenders: list[tuple[str, int, str]] = []
     for root, dirs, files in os.walk(_BISHENG_ROOT):
         if any(frag in (root + os.sep) for frag in _SKIP_DIR_FRAGMENTS):
             dirs[:] = []
             continue
         for fname in files:
-            if not fname.endswith('.py'):
+            if not fname.endswith(".py"):
                 continue
             offenders.extend(_scan_file(os.path.join(root, fname)))
 
     # Convert to a set of (file_suffix, lineno) for allowlist comparison.
-    actual = {(o[0].replace(os.sep, '/'), o[1]) for o in offenders}
-    allowed = {(f.replace(os.sep, '/'), ln) for f, ln in ALLOWLIST}
+    actual = {(o[0].replace(os.sep, "/"), o[1]) for o in offenders}
+    allowed = {(f.replace(os.sep, "/"), ln) for f, ln in ALLOWLIST}
 
     new_violations = sorted(actual - allowed)
     stale_allowlist = sorted(allowed - actual)
 
     msgs = []
     if new_violations:
-        lookup = {(o[0].replace(os.sep, '/'), o[1]): o[2] for o in offenders}
+        lookup = {(o[0].replace(os.sep, "/"), o[1]): o[2] for o in offenders}
         msgs.append(
-            'New bypass_tenant_filter blocks select tenant-aware tables '
-            'without a tenant_id predicate. Add ``tenant_id`` to the WHERE '
-            'clause, or — if the cross-tenant read is intentional — append '
-            'an ALLOWLIST entry in this file with a one-line reason.\n\n'
-            'New violations:\n' + '\n'.join(
-                f'  - bisheng/{path}:{ln} — {lookup[(path, ln)]}'
-                for path, ln in new_violations
-            )
+            "New bypass_tenant_filter blocks select tenant-aware tables "
+            "without a tenant_id predicate. Add ``tenant_id`` to the WHERE "
+            "clause, or — if the cross-tenant read is intentional — append "
+            "an ALLOWLIST entry in this file with a one-line reason.\n\n"
+            "New violations:\n"
+            + "\n".join(f"  - bisheng/{path}:{ln} — {lookup[(path, ln)]}" for path, ln in new_violations)
         )
     if stale_allowlist:
         msgs.append(
-            'ALLOWLIST entries no longer match any offender (the call site '
-            'was likely fixed or moved). Remove these entries:\n' + '\n'.join(
-                f'  - {path}:{ln}' for path, ln in stale_allowlist
-            )
+            "ALLOWLIST entries no longer match any offender (the call site "
+            "was likely fixed or moved). Remove these entries:\n"
+            + "\n".join(f"  - {path}:{ln}" for path, ln in stale_allowlist)
         )
 
-    assert not msgs, '\n\n'.join(msgs)
+    assert not msgs, "\n\n".join(msgs)

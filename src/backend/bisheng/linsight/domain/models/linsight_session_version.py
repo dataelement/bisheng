@@ -31,6 +31,13 @@ class SessionVersionStatusEnum(str, Enum):
     SOP_GENERATION_FAILED = "sop_generation_failed"
     # TERMINATION
     TERMINATED = "terminated"
+    # Parked on an ask_user interrupt, waiting for the user's answer
+    # (park-and-release). A dedicated state — NOT IN_PROGRESS — so the
+    # worker-startup crash sweep (check_and_terminate_incomplete_tasks, which
+    # terminates IN_PROGRESS tasks whose Redis owner key is gone) does not
+    # mistake a legitimately parked task for a crashed one. Resume flips it back
+    # to IN_PROGRESS.
+    WAITING_FOR_USER_INPUT = "waiting_for_user_input"
 
 
 class LinsightSessionVersionBase(SQLModelSerializable):
@@ -57,6 +64,17 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     org_knowledge_enabled: bool = Field(
         False, description="Whether to enable organization knowledge base", sa_type=Boolean
     )
+    # Exact knowledge selection threaded from the daily picker (unified entry,
+    # use_knowledge_base). These are the SPECIFIC ids the user chose, so the task
+    # agent searches exactly those — not all KBs of a coarse type. organization =
+    # NORMAL-type KB ids; knowledge_space = SPACE-type KB ids. Nullable for
+    # backward compatibility with sessions created before this column existed.
+    organization_knowledge_ids: list[int] | None = Field(
+        None, description="Selected organization knowledge base ids", sa_column=Column(JsonType, nullable=True)
+    )
+    knowledge_space_ids: list[int] | None = Field(
+        None, description="Selected knowledge space ids", sa_column=Column(JsonType, nullable=True)
+    )
     files: list[dict] | None = Field(
         None, description="Uploaded files list:", sa_column=Column(JsonType, nullable=True)
     )
@@ -68,7 +86,14 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     status: SessionVersionStatusEnum = Field(
         default=SessionVersionStatusEnum.NOT_STARTED,
         description="Session Version Status",
-        sa_column=Column(SQLEnum(SessionVersionStatusEnum), nullable=False),
+        # Plain VARCHAR (no native ENUM / CHECK): a native ENUM created at table
+        # time freezes the allowed set, so a newly-added status like
+        # WAITING_FOR_USER_INPUT is rejected with "Data truncated" on upgraded
+        # DBs. Storage stays the enum NAME (back-compatible with existing rows).
+        sa_column=Column(
+            SQLEnum(SessionVersionStatusEnum, native_enum=False, length=50, create_constraint=False),
+            nullable=False,
+        ),
     )
     score: int | None = Field(None, description="Session Score", ge=1, le=5, nullable=True)
     # Execution Result Feedback Information
@@ -160,28 +185,6 @@ class LinsightSessionVersionDao:
             )
 
             return (await session.exec(statement)).all()
-
-    @staticmethod
-    async def modify_sop_content(linsight_session_version_id: str, sop_content: str):
-        """
-        Modify Inspiration Conversation Version ofSOPContents
-        :param linsight_session_version_id:
-        :param sop_content:
-        :return:
-        """
-
-        async with get_async_db_session() as session:
-            stmt = (
-                update(LinsightSessionVersion)
-                .where(col(LinsightSessionVersion.id) == str(linsight_session_version_id))  # Explicit Transfer str
-                .values(sop=sop_content)
-            )
-
-            result = await session.exec(stmt)
-            if result.rowcount == 0:
-                logger.warning(f"No session version found with ID: {linsight_session_version_id}")
-
-            await session.commit()
 
     @staticmethod
     async def get_session_version_by_file_id(file_id: str) -> LinsightSessionVersion | None:

@@ -69,7 +69,9 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
         // IntentRow — not a normal tool step. Its tool-call frame emits a `start`
         // but never an `end` (interrupt() halts the graph), so rendering it as a
         // ToolRow would spin forever. Drop it.
-        if (frame.name === 'ask_user') return;
+        // `ls` is the agent's internal workspace exploration (typically empty at
+        // the start of a no-upload task) — display noise, not a deliverable step.
+        if (frame.name === 'ask_user' || frame.name === 'ls') return;
         const callId = frame.call_id || `__step_${idx}`;
         const existing = byId.get(callId);
         if (!existing) {
@@ -82,7 +84,11 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
                 callReason: frame.call_reason || '',
                 params: frame.params || null,
                 output: frame.output || '',
-                namespace: frame.namespace ?? null,
+                // The backend ships the subgraph namespace nested in
+                // extra_info.namespace (ExecStep has no top-level `namespace`
+                // field — see stream_event_mapper). Read it from there; keep the
+                // top-level `frame.namespace` as a legacy fallback for fixtures.
+                namespace: frame.extra_info?.namespace ?? frame.namespace ?? null,
                 extraInfo: frame.extra_info || {},
                 raw: frame,
             });
@@ -173,6 +179,9 @@ export interface ClarifyQuestion {
     id: string;
     question: string;
     options: string[];
+    /** option texts marked is_default=true — drives pre-selection + ★ badge only,
+     *  never part of the submitted answer (the answer value is the option text). */
+    defaultOptions: string[];
     multiple: boolean;
 }
 
@@ -198,18 +207,32 @@ export function parseClarifyRequest(data: ExecStepEventData): ClarifyRequest {
         const args = tc?.args || {};
         const question = typeof args.question === 'string' ? args.question : typeof args.title === 'string' ? args.title : '';
         if (!question) return;
-        const options = Array.isArray(args.options) ? args.options.filter((o: any) => typeof o === 'string') : [];
+        // Options may be plain strings (legacy / replayed checkpoints) or
+        // {text, is_default} objects (current backend). Extract the text as both
+        // display + answer value; collect is_default texts separately for pre-select.
+        const rawOptions = Array.isArray(args.options) ? args.options : [];
+        const options: string[] = [];
+        const defaultOptions: string[] = [];
+        rawOptions.forEach((o: any) => {
+            if (typeof o === 'string') {
+                options.push(o);
+            } else if (o && typeof o === 'object' && typeof o.text === 'string') {
+                options.push(o.text);
+                if (o.is_default) defaultOptions.push(o.text);
+            }
+        });
         questions.push({
             id: String(tc?.id || `q_${idx}`),
             question,
             options,
+            defaultOptions,
             multiple: !!(args.multiple || args.multi_select || args.type === 'multi'),
         });
     });
 
     // legacy interrupt shape (params.call_title / call_content) => single free-text question
     if (!questions.length && data.params?.call_content) {
-        questions.push({ id: 'q_legacy', question: String(data.params.call_content), options: [], multiple: false });
+        questions.push({ id: 'q_legacy', question: String(data.params.call_content), options: [], defaultOptions: [], multiple: false });
     }
 
     return { taskId: data.task_id || '', callReason, questions, raw: data };
@@ -253,4 +276,30 @@ export function isTaskRunning(status?: string): boolean {
  */
 export function isTaskStarted(status?: string): boolean {
     return isTaskRunning(status) || isTaskDone(status) || TASK_ERROR_STATUSES.includes(status || '');
+}
+
+/**
+ * F035 (live vs refresh parity): the backend persists all session-level steps
+ * (planning / thinking / write_todos / ask_user) inside a single "执行准备"
+ * pseudo-task (``task_data.is_session_global``) so they survive a refresh — see
+ * task_exec._ensure_session_pseudo_task. The LIVE flow instead keeps them in a
+ * separate inline ``sessionSteps`` bucket and renders the answered clarify as an
+ * "已经明确用户意图" IntentRow.
+ *
+ * To make the reloaded view match the live one, lift the pseudo-task's steps
+ * back out: drop it from the rendered task list and expose its ``history`` as
+ * the session steps (so they render inline + the clarify becomes an IntentRow).
+ * Live steps win when present (active turn); the persisted history is used only
+ * on reload. A no-op for sessions without the pseudo-task.
+ */
+export function splitSessionPseudoTask<T extends { task_data?: any; history?: ExecStepEventData[] }>(
+    rawTasks: T[],
+    liveSessionSteps: ExecStepEventData[],
+): { tasks: T[]; sessionSteps: ExecStepEventData[] } {
+    const pseudo = rawTasks.find((t) => t?.task_data?.is_session_global);
+    if (!pseudo) return { tasks: rawTasks, sessionSteps: liveSessionSteps };
+    return {
+        tasks: rawTasks.filter((t) => t !== pseudo),
+        sessionSteps: liveSessionSteps.length ? liveSessionSteps : pseudo.history || [],
+    };
 }

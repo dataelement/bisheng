@@ -1,4 +1,5 @@
-import { Bell, Check, ChevronRight, FileCheck2, Globe, LogOut } from "lucide-react";
+import { Bell, Check, ChevronRight, Globe, LogOut } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
 import { AccountInfoDialog } from "~/components/AccountInfoDialog";
@@ -174,7 +175,7 @@ function UserPopMenuDrawer() {
                         onClick={() => openApprovalCenter({ tab: "my_tasks" })}
                     >
                         <div className="flex items-center gap-3">
-                            <FileCheck2 className="size-[18px] text-gray-600" />
+                            <Outlined.Seal className="size-[18px] text-gray-600" />
                             <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_approval_center_title")}</span>
                         </div>
                     </button>
@@ -443,7 +444,7 @@ function UserPopMenuRail() {
                             className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
                             onSelect={runMenuItemSelect(() => openApprovalCenter({ tab: "my_tasks" }))}
                         >
-                            <FileCheck2 className="size-[18px] text-gray-600" />
+                            <Outlined.Seal className="size-[18px] text-gray-600" />
                             <span className="text-[14px] font-normal text-gray-700">{localize("com_approval_center_title")}</span>
                         </DropdownMenuItem>
 

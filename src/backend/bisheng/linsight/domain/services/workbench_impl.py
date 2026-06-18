@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 import uuid
-from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
@@ -17,42 +16,34 @@ from bisheng.api.services.workstation import WorkStationService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.linsight import LinsightBishengLLMError, LinsightGenerateSopError, LinsightToolInitError
 from bisheng.common.schemas.telemetry.event_data_schema import NewMessageSessionEventData
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client
-from bisheng.core.cache.utils import CACHE_DIR, save_file_to_folder
+from bisheng.core.cache.utils import save_file_to_folder
 from bisheng.core.logger import trace_id_var
 from bisheng.core.prompts.manager import get_prompt_manager
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.flow import FlowType
 from bisheng.database.models.session import MessageSession, MessageSessionDao
-from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import KnowledgeRead, KnowledgeTypeEnum
 from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import LinsightExecuteTaskDao
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersion,
     LinsightSessionVersionDao,
-    SessionVersionStatusEnum,
 )
-from bisheng.linsight.domain.models.linsight_sop import LinsightSOPRecord
 from bisheng.linsight.domain.schemas.linsight_schema import (
     DownloadFilesSchema,
     LinsightQuestionSubmitSchema,
     SubmitFileSchema,
 )
-from bisheng.linsight.domain.services.sop_manage import SOPManageService
 from bisheng.llm.domain.llm import BishengLLM
 from bisheng.llm.domain.services import LLMService
 from bisheng.tool.domain.models.gpts_tools import GptsToolsDao
 from bisheng.tool.domain.services.executor import ToolExecutor
-from bisheng.tool.domain.services.tool import ToolServices
 from bisheng.utils import util
 from bisheng.utils.util import async_calculate_md5
-from bisheng_langchain.linsight.const import ExecConfig
 
 
 @dataclass
@@ -77,7 +68,6 @@ class LinsightWorkbenchImpl:
     """LinsightWorkbench Implementation Class"""
 
     # Class Constant
-    COLLECTION_NAME_PREFIX = "col_linsight_file_"
     FILE_INFO_REDIS_KEY_PREFIX = "linsight_file:"
     CACHE_EXPIRATION_HOURS = 24
 
@@ -142,7 +132,10 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def submit_user_question(
-        cls, submit_obj: LinsightQuestionSubmitSchema, login_user: UserPayload
+        cls,
+        submit_obj: LinsightQuestionSubmitSchema,
+        login_user: UserPayload,
+        display_files: list[dict] | None = None,
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -150,6 +143,11 @@ class LinsightWorkbenchImpl:
         Args:
             submit_obj: Submitted Question Objects
             login_user: Logged in user information
+            display_files: Original daily-shape attachment dicts (filepath/type/
+                file_id) for the unified entry. Persisted on the user-question
+                ChatMessage so the uploaded attachments render after a refresh,
+                mirroring the daily-chat question envelope. ``None`` for the
+                legacy /linsight entry (it renders attachments its own way).
 
         Returns:
             tuple: (Message Session Model, Inspiration Conversation Version Model)
@@ -221,6 +219,8 @@ class LinsightWorkbenchImpl:
                 tools=submit_obj.tools,
                 org_knowledge_enabled=submit_obj.org_knowledge_enabled,
                 personal_knowledge_enabled=submit_obj.personal_knowledge_enabled,
+                organization_knowledge_ids=submit_obj.organization_knowledge_ids,
+                knowledge_space_ids=submit_obj.knowledge_space_ids,
                 files=processed_files,
                 model=submit_obj.model,
             )
@@ -229,8 +229,13 @@ class LinsightWorkbenchImpl:
             # F035 Track J: land the user question in the unified conversation
             # stream so the round reads as one Q→A pair regardless of task mode.
             # (The bot answer turn is written at completion in task_exec.)
+            # Annotate the persisted attachments with each file's parse result so
+            # the attachment chip can show a "parse failed" state after a refresh.
             await linsight_execute_utils.persist_task_user_turn(
-                chat_id=chat_id, user_id=login_user.user_id, question=submit_obj.question
+                chat_id=chat_id,
+                user_id=login_user.user_id,
+                question=submit_obj.question,
+                files=cls._annotate_display_files(display_files, processed_files),
             )
 
             return message_session, linsight_session_version
@@ -238,6 +243,35 @@ class LinsightWorkbenchImpl:
         except Exception as e:
             logger.error(f"Failed to submit user question: {e!s}")
             raise cls.LinsightError(f"Failed to submit user question: {e!s}")
+
+    @staticmethod
+    def _annotate_display_files(display_files: list[dict] | None, processed_files: list | None) -> list[dict] | None:
+        """Stamp each persisted attachment with its parse result (by file_id).
+
+        ``display_files`` are the daily-shape dicts the frontend renders; the
+        ingestion result (``processed_files``) carries ``valid`` /
+        ``parsing_status`` per file. Merging them lets the attachment chip show a
+        "parse failed" state on reload instead of a normal-looking attachment the
+        model can't actually use.
+        """
+        if not display_files:
+            return display_files
+        status_by_id: dict[str, dict] = {}
+        for p in processed_files or []:
+            if isinstance(p, dict) and p.get("file_id") is not None:
+                status_by_id[str(p["file_id"])] = p
+        annotated: list[dict] = []
+        for f in display_files:
+            item = dict(f)
+            fid = str(f.get("file_id") or f.get("id") or "")
+            p = status_by_id.get(fid)
+            if p is not None:
+                item["valid"] = p.get("valid", True)
+                item["parsing_status"] = p.get("parsing_status") or item.get("parsing_status")
+                if p.get("error_message"):
+                    item["error_message"] = p["error_message"]
+            annotated.append(item)
+        return annotated
 
     @classmethod
     async def _get_redis(cls):
@@ -257,7 +291,7 @@ class LinsightWorkbenchImpl:
           2. Copy temp -> formal bucket only on first processing (skipped when a
              formal product already exists).
           3. Write the parsed markdown into the session **workspace**
-             (``workspace/{chat_id}/uploads/<name>/index.md``) so deepagents file
+             (``workspace/{chat_id}/uploads/<name>.md``) so deepagents file
              tools and E2B copy-in/out read it as the single truth (design §9.3.2).
           4. Attach pointer-block metadata (``workspace_path`` / ``line_count`` /
              ``image_count``) for ``prepare_file_list`` (zero body in prompt).
@@ -292,35 +326,70 @@ class LinsightWorkbenchImpl:
         minio_client = await get_minio_storage()
 
         processed_files: list[dict] = []
+        # Track workspace filenames used in THIS submission so distinct files with
+        # the same base name don't collide at the same uploads/<name> key.
+        used_names: set[str] = set()
         for submit_file in files:
             if submit_file.file_url:
-                entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id)
+                entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id, used_names)
             else:
                 entry = await cls._ingest_one_file(
-                    submit_file, temp_by_id.get(submit_file.file_id), chat_id, minio_client
+                    submit_file, temp_by_id.get(submit_file.file_id), chat_id, minio_client, used_names
                 )
             processed_files.append(entry)
 
         return processed_files
 
     @classmethod
-    async def _ingest_daily_file(cls, submit_file: SubmitFileSchema, chat_id: str, minio_client, user_id: int) -> dict:
+    async def _ingest_daily_file(
+        cls,
+        submit_file: SubmitFileSchema,
+        chat_id: str,
+        minio_client,
+        user_id: int,
+        used_names: set[str] | None = None,
+    ) -> dict:
         """Ingest a DAILY-bucket file into the linsight workspace (unified-resource).
 
         The daily upload only stores the raw file (no parse). We reuse the same
         parser the daily chat uses (``TempFilePipeline``): download the raw file,
         extract its text/markdown, write that to the formal bucket, then drop it
-        into the workspace as ``uploads/<name>/index.md`` so the offload-first
+        into the workspace as ``uploads/<original-name>.md`` so the offload-first
         file tools (read_file) + ``prepare_file_list`` pointer block see it like
         any linsight-uploaded attachment.
+
+        Graceful degradation (never abort the task):
+          - download fails -> nothing to fall back to: skip, mark ``valid=False``.
+          - parse fails (raw downloaded) -> keep the ORIGINAL file in the
+            workspace (``uploads/<original-name>.<ext>``) so the agent's ``ls``
+            still shows it (user decision); mark ``valid=False`` for the chip.
         """
         from bisheng.api.v1.schemas import FileProcessBase
         from bisheng.core.cache.utils import async_file_download
         from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
 
+        # 1) Download the raw daily-bucket file. A download failure can't be
+        # recovered (no bytes for a fallback) — log the full traceback and skip.
         try:
             local_path, dl_name = await async_file_download(submit_file.file_url)
-            file_name = submit_file.file_name or dl_name
+        except Exception as e:
+            logger.exception(
+                f"daily file download failed (name={submit_file.file_name!r} "
+                f"url={submit_file.file_url!r} chat_id={chat_id})"
+            )
+            return {
+                "file_id": submit_file.file_id,
+                "original_filename": submit_file.file_name,
+                "parsing_status": "failed",
+                "valid": False,
+                "error_message": f"file download failed: {e}",
+            }
+
+        file_name = submit_file.file_name or dl_name
+
+        # 2) Parse to markdown. On failure we still have the raw bytes, so keep the
+        # original file in the workspace instead of dropping it.
+        try:
             file_rule = FileProcessBase(
                 knowledge_id=0,
                 separator=["\n\n", "\n"],
@@ -337,14 +406,12 @@ class LinsightWorkbenchImpl:
             result = await pipeline.arun()
             markdown = "\n\n".join(doc.page_content for doc in (result.documents or []) if doc.page_content)
         except Exception as e:
-            logger.warning(f"daily file ingest failed ({submit_file.file_name}): {e}")
-            return {
-                "file_id": submit_file.file_id,
-                "original_filename": submit_file.file_name,
-                "parsing_status": "expired",
-                "valid": False,
-                "error_message": "file parse failed, please re-upload",
-            }
+            logger.exception(
+                f"daily file parse failed; keeping original in workspace (name={file_name!r} chat_id={chat_id})"
+            )
+            return await cls._keep_original_in_workspace(
+                submit_file, file_name, chat_id, minio_client, local_path, e, used_names
+            )
 
         formal_object = cls._formal_markdown_object(submit_file.file_id, chat_id)
         await minio_client.put_object(
@@ -353,18 +420,61 @@ class LinsightWorkbenchImpl:
 
         entry: dict = {
             "file_id": submit_file.file_id,
-            "original_filename": submit_file.file_name,
+            "original_filename": file_name,
             "parsing_status": "completed",
             "valid": True,
             "markdown_file_path": formal_object,
-            "markdown_filename": f"{cls._sanitize_name(submit_file.file_name)}.md",
         }
-        await cls._write_attachment_to_workspace(entry, chat_id, minio_client)
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
+        return entry
+
+    @classmethod
+    async def _keep_original_in_workspace(
+        cls,
+        submit_file: SubmitFileSchema,
+        file_name: str,
+        chat_id: str,
+        minio_client,
+        local_path: str,
+        error: Exception,
+        used_names: set[str] | None,
+    ) -> dict:
+        """Parse-failure fallback: copy the raw original into the workspace.
+
+        Keeps the user-attached file visible to the agent (``ls``) under its real
+        name + extension (``uploads/<name>.<ext>``) even though it couldn't be
+        converted to markdown. Marked ``valid=False`` so the attachment chip shows
+        a failed state.
+        """
+
+        def _read_bytes(path: str) -> bytes:
+            with open(path, "rb") as fh:
+                return fh.read()
+
+        raw = await asyncio.to_thread(_read_bytes, local_path)
+        ext = os.path.splitext(file_name)[1]
+        formal_object = f"linsight/{chat_id}/{submit_file.file_id}{ext}"
+        await minio_client.put_object(bucket_name=minio_client.bucket, object_name=formal_object, file=raw)
+
+        entry: dict = {
+            "file_id": submit_file.file_id,
+            "original_filename": file_name,
+            "parsing_status": "failed",
+            "valid": False,
+            "error_message": f"file parse failed, original kept: {error}",
+            "markdown_file_path": formal_object,
+        }
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, as_markdown=False, used_names=used_names)
         return entry
 
     @classmethod
     async def _ingest_one_file(
-        cls, submit_file: SubmitFileSchema, temp_info: dict | None, chat_id: str, minio_client
+        cls,
+        submit_file: SubmitFileSchema,
+        temp_info: dict | None,
+        chat_id: str,
+        minio_client,
+        used_names: set[str] | None = None,
     ) -> dict:
         """Ingest a single submitted file into the session workspace.
 
@@ -405,10 +515,9 @@ class LinsightWorkbenchImpl:
         entry["parsing_status"] = "completed"
         entry["valid"] = True
         entry["markdown_file_path"] = formal_object
-        entry["markdown_filename"] = f"{cls._sanitize_name(entry['original_filename'])}.md"
 
-        # Write parsed markdown into the workspace (uploads/<name>/index.md).
-        await cls._write_attachment_to_workspace(entry, chat_id, minio_client)
+        # Write parsed markdown into the workspace (uploads/<name>.md).
+        await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
         return entry
 
     @staticmethod
@@ -421,50 +530,97 @@ class LinsightWorkbenchImpl:
         return f"linsight/{chat_id}/{file_id}.md"
 
     @staticmethod
-    def _sanitize_name(original_filename: str) -> str:
-        """Normalize an original filename to a safe workspace ``<name>``.
+    def _safe_basename(original_filename: str) -> str:
+        """Path-safe filename that PRESERVES the original (incl. non-ASCII) name.
 
-        Lowercased, illegal characters normalized to '-', traversal-safe.
-        (Same naming discipline as Skill names, design §9.3.2.)
+        Only directory separators, traversal, and control characters are
+        neutralized — the human-readable name (e.g. ``委托书.pdf``) is kept so
+        ``ls`` shows a recognizable per-file entry instead of a generic
+        ``file/index.md``. Returns ``"file"`` only if nothing usable remains.
         """
         import re
 
-        stem = original_filename.rsplit(".", 1)[0] if "." in original_filename else original_filename
-        stem = stem.strip().lower()
-        stem = re.sub(r"[^a-z0-9._-]+", "-", stem).strip("-._")
-        return stem or "file"
+        base = (original_filename or "").strip()
+        base = re.sub(r"[\x00-\x1f]+", "", base)  # control characters
+        base = re.sub(r"[/\\]+", "_", base)  # path separators
+        base = base.replace("..", "_").strip()  # path traversal
+        return base or "file"
+
+    @staticmethod
+    def _dedupe_workspace_name(filename: str, used_names: set[str] | None) -> str:
+        """Make ``filename`` unique within one submission (append ``-2``, ``-3`` …).
+
+        Without this, two distinct files sharing a base name would map to the same
+        ``uploads/<name>`` key and the second would overwrite the first.
+        """
+        if used_names is None:
+            return filename
+        if filename not in used_names:
+            used_names.add(filename)
+            return filename
+        stem, dot, ext = filename.rpartition(".")
+        base = stem if dot else filename
+        suffix = f".{ext}" if dot else ""
+        i = 2
+        while f"{base}-{i}{suffix}" in used_names:
+            i += 1
+        unique = f"{base}-{i}{suffix}"
+        used_names.add(unique)
+        return unique
 
     @classmethod
-    async def _write_attachment_to_workspace(cls, entry: dict, chat_id: str, minio_client) -> None:
-        """Write parsed markdown into the session workspace and set pointer metadata.
+    async def _write_attachment_to_workspace(
+        cls,
+        entry: dict,
+        chat_id: str,
+        minio_client,
+        *,
+        as_markdown: bool = True,
+        used_names: set[str] | None = None,
+    ) -> None:
+        """Write an attachment into the session workspace under its real filename.
 
-        Workspace layout (design §9.3.2):
-            workspace/{chat_id}/uploads/<name>/index.md
-        Sets ``workspace_path`` / ``line_count`` / ``image_count`` on ``entry``
-        for the zero-body pointer block (``prepare_file_list``).
+        Workspace layout (design §9.3.2): ``workspace/{chat_id}/uploads/<name>``
+          - parsed markdown   -> ``uploads/<original-stem>.md`` (as_markdown=True)
+          - unconverted original -> ``uploads/<original-name>.<ext>`` (False)
+
+        The original filename (incl. non-ASCII) is preserved so ``ls`` shows a
+        recognizable per-file name; same-name collisions are de-duplicated. Sets
+        ``workspace_path`` / ``markdown_filename`` / ``line_count`` /
+        ``image_count`` on ``entry`` for the pointer block + local prefetch.
         """
         from bisheng.linsight.domain.services.workspace_backend import WORKSPACE_PREFIX
 
-        name = cls._sanitize_name(entry["original_filename"])
-        rel_path = f"uploads/{name}/index.md"
+        safe = cls._safe_basename(entry["original_filename"])
+        if as_markdown:
+            stem = safe.rsplit(".", 1)[0] if "." in safe else safe
+            filename = f"{stem}.md"
+        else:
+            filename = safe
+        filename = cls._dedupe_workspace_name(filename, used_names)
+        rel_path = f"uploads/{filename}"
         object_key = f"{WORKSPACE_PREFIX}/{chat_id}/{rel_path}"
 
-        # Read the parsed markdown (formal bucket) and write it into the workspace.
-        markdown_bytes = await minio_client.get_object(
+        # Read the stored product (formal bucket) and write it into the workspace.
+        file_bytes = await minio_client.get_object(
             bucket_name=minio_client.bucket, object_name=entry["markdown_file_path"]
         )
-        if markdown_bytes is None:
-            markdown_bytes = b""
+        if file_bytes is None:
+            file_bytes = b""
         await minio_client.put_object(
             bucket_name=minio_client.bucket,
             object_name=object_key,
-            file=markdown_bytes,
-            content_type="text/markdown",
+            file=file_bytes,
+            content_type="text/markdown" if as_markdown else "application/octet-stream",
         )
 
-        text = markdown_bytes.decode("utf-8", errors="replace")
         entry["workspace_path"] = f"/{rel_path}"
-        entry["line_count"] = entry.get("line_count") or (text.count("\n") + 1 if text else 0)
+        entry["markdown_filename"] = filename
+        if as_markdown:
+            text = file_bytes.decode("utf-8", errors="replace")
+            entry["line_count"] = entry.get("line_count") or (text.count("\n") + 1 if text else 0)
+        else:
+            entry.setdefault("line_count", 0)
         entry["image_count"] = entry.get("image_count", 0)
 
     @classmethod
@@ -539,147 +695,6 @@ class LinsightWorkbenchImpl:
         return await LinsightSessionVersionDao.get_session_versions_by_session_id(session_id)
 
     @classmethod
-    async def modify_sop(cls, linsight_session_version_id: str, sop_content: str) -> dict:
-        """
-        Modify Inspiration Conversation Version ofSOPContents
-
-        Args:
-            linsight_session_version_id: Session VersionID
-            sop_content: SOPContents
-
-        Returns:
-            Operating result
-        """
-        try:
-            await LinsightSessionVersionDao.modify_sop_content(
-                linsight_session_version_id=linsight_session_version_id, sop_content=sop_content
-            )
-            return {"success": True, "message": "modify sop content successfully"}
-        except Exception as e:
-            logger.error(f"ChangeSOPContent failed: {e!s}")
-            raise cls.LinsightError(str(e))
-
-    @classmethod
-    async def generate_sop(
-        cls,
-        linsight_session_version_id: str,
-        previous_session_version_id: str | None = None,
-        feedback_content: str | None = None,
-        reexecute: bool = False,
-        login_user: UserPayload | None = None,
-        knowledge_list: list[KnowledgeRead] = None,
-        example_sop: str | None = None,
-    ) -> AsyncGenerator[dict, None]:
-        """
-        BuatSOPContents
-
-        Args:
-            linsight_session_version_id: Current Session VersionID
-            previous_session_version_id: Previous Session VersionID
-            feedback_content: Content of feedback
-            reexecute: Whether to re-execute
-            login_user: Logged in user information
-            knowledge_list: Knowledge Base Columns
-            example_sop: Ref.sop, incoming when doing the same modelsopContents
-
-        Yields:
-            Date GeneratedSOPContent Events
-        """
-        error_message = None
-        try:
-            # Get workbench configuration and session version
-            session_version = await cls._get_session_version(linsight_session_version_id)
-
-            if login_user.user_id != session_version.user_id:
-                yield UnAuthorizedError().to_sse_event_instance()
-                return
-            try:
-                # BuatLLMand tools
-                llm, workbench_conf = await cls._get_llm(session_version.user_id)
-            except Exception as e:
-                logger.error(f"BuatSOPContent failed: session_version_id={linsight_session_version_id}, error={e!s}")
-                raise cls.BishengLLMError(str(e))
-            tools = await cls._prepare_tools(session_version, llm)
-
-            # Preparation History Summary
-            history_summary = await cls._prepare_history_summary(reexecute, previous_session_version_id)
-
-            # Create proxy and generateSOP
-            agent = await cls._create_linsight_agent(session_version, llm, tools, workbench_conf)
-
-            if previous_session_version_id:
-                session_version = await LinsightSessionVersionDao.get_by_id(previous_session_version_id)
-
-            content = ""
-            async for res in cls._generate_sop_content(
-                agent,
-                session_version,
-                feedback_content,
-                history_summary,
-                knowledge_list,
-                example_sop=example_sop,
-                login_user=login_user,
-            ):
-                if isinstance(res, cls.SearchSOPError):
-                    yield res.error_class.to_sse_event(event="search_sop_error")
-                    continue
-
-                content += res.content
-                yield {"event": "generate_sop_content", "data": res.model_dump_json()}
-
-            # Update session version status and sop content
-            await LinsightSessionVersionDao.modify_sop_content(
-                linsight_session_version_id=linsight_session_version_id, sop_content=content
-            )
-
-            logger.info(f"BuatSOPContent Success: session_version_id={linsight_session_version_id}")
-
-        except cls.ToolsInitializationError as e:
-            logger.exception(
-                f"Failed to initialize the Inspiration Workbench tool: session_version_id={linsight_session_version_id}, error={e!s}"
-            )
-            error_message = LinsightToolInitError(exception=e)
-        except cls.BishengLLMError as e:
-            logger.exception(f"Bisheng LLMError-free: session_version_id={linsight_session_version_id}, error={e!s}")
-            error_message = LinsightBishengLLMError(exception=e)
-        except Exception as e:
-            logger.exception(f"BuatSOPContent failed: session_version_id={linsight_session_version_id}, error={e!s}")
-            error_message = LinsightGenerateSopError(exception=e)
-
-        finally:
-            if error_message:
-                session_version = await LinsightSessionVersionDao.get_by_id(linsight_session_version_id)
-                if session_version:
-                    session_version.sop = f"{error_message.Msg}: {error_message.exception!s}"
-                    session_version.status = SessionVersionStatusEnum.SOP_GENERATION_FAILED
-                    await LinsightSessionVersionDao.insert_one(session_version)
-                yield error_message.to_sse_event_instance()
-
-    @classmethod
-    async def _get_session_version(cls, session_version_id: str) -> LinsightSessionVersion:
-        """Get session version"""
-        session_version = await LinsightSessionVersionDao.get_by_id(session_version_id)
-        if not session_version:
-            raise cls.LinsightError("Inspiration session version does not exist")
-        return session_version
-
-    @classmethod
-    async def _prepare_tools(cls, session_version: LinsightSessionVersion, llm: BishengLLM) -> list[BaseTool]:
-        """Preparation Tools List"""
-        try:
-            tools = await cls.init_linsight_config_tools(session_version, llm)
-
-            root_path = os.path.join(CACHE_DIR, "linsight", session_version.id)
-            os.makedirs(root_path, exist_ok=True)
-
-            linsight_tools = await ToolServices.init_linsight_tools(root_path=root_path)
-            tools.extend(linsight_tools)
-
-            return tools
-        except Exception as e:
-            raise cls.ToolsInitializationError(str(e))
-
-    @classmethod
     async def prepare_file_list(cls, session_version: LinsightSessionVersion) -> list[str]:
         """Prepare the zero-body ``<uploaded_files>`` pointer block (design §9.3.3).
 
@@ -719,100 +734,20 @@ class LinsightWorkbenchImpl:
 
     @classmethod
     async def prepare_knowledge_list(cls, knowledge_list: list[KnowledgeRead]) -> list[str]:
+        """Render each available KB as a clean, readable prompt line that clearly
+        exposes its ``knowledge_id`` so the agent's ``search_knowledge_base`` tool
+        can target a real id. One item per KB: name + id (+ optional description).
+        Private KBs use a generic name to avoid leaking their titles."""
         res = []
         if not knowledge_list:
             return res
-        # Check if there is a personal knowledge base
-        template_str = (
-            """@{name}Stored information for:{{'The knowledge base is stored in a semantic repositoryid':'{id}'}}@"""
-        )
         for one in knowledge_list:
-            if one.type == KnowledgeTypeEnum.PRIVATE.value:
-                res.append(template_str.format(name="Personal Knowledge Base", id=one.id))
-            else:
-                knowledge_str = template_str.format(name=one.name, id=one.id)
-                if one.description:
-                    knowledge_str += f"，{one.name}is described as{one.description}"
-                res.append(knowledge_str)
+            name = "个人知识库" if one.type == KnowledgeTypeEnum.PRIVATE.value else one.name
+            line = f"- {name} (knowledge_id: {one.id})"
+            if one.type != KnowledgeTypeEnum.PRIVATE.value and one.description:
+                line += f": {one.description}"
+            res.append(line)
         return res
-
-    @classmethod
-    async def _prepare_history_summary(cls, reexecute: bool, previous_session_version_id: str) -> list[str]:
-        """Preparation History Summary"""
-        history_summary = []
-
-        if reexecute and previous_session_version_id:
-            execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(previous_session_version_id)
-
-            for task in execute_tasks:
-                if task.result:
-                    answer = task.result.get("answer", "")
-                    if answer:
-                        history_summary.append(answer)
-
-        return history_summary
-
-    @classmethod
-    async def _create_linsight_agent(
-        cls, session_version: LinsightSessionVersion, llm: BishengLLM, tools: list[BaseTool], workbench_conf
-    ):
-        """BuatLinsightAgent"""
-        from bisheng_langchain.linsight.agent import LinsightAgent
-
-        root_path = os.path.join(CACHE_DIR, "linsight", session_version.id[:8])
-        linsight_conf = settings.get_linsight_conf()
-        exec_config = ExecConfig(**linsight_conf.model_dump(), debug_id=session_version.id)
-        return LinsightAgent(
-            file_dir=root_path,
-            query=session_version.question,
-            llm=llm,
-            tools=tools,
-            exec_config=exec_config,
-        )
-
-    @classmethod
-    async def _generate_sop_content(
-        cls,
-        agent,
-        session_version: LinsightSessionVersion,
-        feedback_content: str | None,
-        history_summary: list[str],
-        knowledge_list: list[KnowledgeRead] = None,
-        example_sop: str = None,
-        login_user: UserPayload | None = None,
-    ) -> AsyncGenerator:
-        """BuatSOPContents"""
-        file_list = await cls.prepare_file_list(session_version)
-        knowledge_list = await cls.prepare_knowledge_list(knowledge_list)
-        if example_sop:
-            async for res in agent.generate_sop(sop=example_sop, file_list=file_list, knowledge_list=knowledge_list):
-                yield res
-        elif feedback_content is None:
-            # RetrieveSOPTemplates
-            sop_template, search_sop_error = await SOPManageService.search_sop(
-                invoke_user_id=login_user.user_id, query=session_version.question, k=3
-            )
-
-            if search_sop_error:
-                search_sop_error: BaseErrorCode
-                logger.error(f"RetrieveSOPTemplate failed: {search_sop_error.Msg}")
-                yield cls.SearchSOPError(error_class=search_sop_error)
-
-            sop_template = "\n\n".join([f"Examples:\n\n{sop.page_content}" for sop in sop_template if sop.page_content])
-
-            async for res in agent.generate_sop(sop=sop_template, file_list=file_list, knowledge_list=knowledge_list):
-                yield res
-        else:
-            sop_template = session_version.sop if session_version.sop else ""
-
-            async for res in agent.feedback_sop(
-                sop=sop_template,
-                feedback=feedback_content,
-                history_summary=history_summary if history_summary else None,
-                file_list=file_list,
-                knowledge_list=knowledge_list,
-            ):
-                yield res
 
     @classmethod
     async def get_execute_task_detail(cls, session_version_id: str, login_user: UserPayload | None = None):
@@ -828,6 +763,16 @@ class LinsightWorkbenchImpl:
         """
         execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id)
 
+        if not execute_tasks:
+            return []
+
+        # F035 problem 2: the session-level pseudo task (task_data.is_session_global)
+        # carries planning/wrap-up/direct-answer steps. Drop it when it captured no
+        # steps so we never render an empty "执行准备" node.
+        def _is_session_global(task: Any) -> bool:
+            return bool((task.task_data or {}).get("is_session_global"))
+
+        execute_tasks = [t for t in execute_tasks if not (_is_session_global(t) and not t.history)]
         if not execute_tasks:
             return []
 
@@ -873,6 +818,9 @@ class LinsightWorkbenchImpl:
 
         # Sort first level tasks
         sorted_root_tasks = sort_tasks_by_chain(root_tasks)
+        # Surface the session-global pseudo task first (planning precedes the
+        # planned sub-tasks). Stable sort keeps the rest of the chain order.
+        sorted_root_tasks = sorted(sorted_root_tasks, key=lambda t: 0 if _is_session_global(t) else 1)
 
         # 3. Build task tree Use parent_task_id Associate subtasks with parent tasks
         def build_task_tree(parent_tasks: list[Any], all_tasks: list[Any]) -> list[TaskNode]:
@@ -975,14 +923,8 @@ class LinsightWorkbenchImpl:
         original_filename = upload_result["original_filename"]
         file_path = upload_result["file_path"]
         try:
-            # Get workbench configuration
-            workbench_conf = await cls._get_workbench_config()
-            collection_name = f"{cls.COLLECTION_NAME_PREFIX}{workbench_conf.embedding_model.id}"
-
             # Asynchronous execution of file parsing
-            parse_result = await cls._parse_file(
-                invoke_user_id, file_id, file_path, original_filename, collection_name, workbench_conf
-            )
+            parse_result = await cls._parse_file(invoke_user_id, file_id, file_path, original_filename)
 
             # Cache Result
             await cls._cache_parse_result(file_id, parse_result)
@@ -1007,18 +949,19 @@ class LinsightWorkbenchImpl:
         file_id: str,
         file_path: str,
         original_filename: str,
-        collection_name: str,
-        workbench_conf,
     ) -> dict:
         """
         Synchronize parsed files
+
+        Parses the upload into markdown and uploads that markdown to MinIO so the
+        execution agent can read it from its workspace (``read_file``). The file is
+        intentionally NOT vectorised into milvus/es: task execution reads the full
+        markdown directly, so the old ``col_linsight_file_*`` vectors are unused.
 
         Args:
             file_id: Doc.ID
             file_path: FilePath
             original_filename: Original Filename
-            collection_name: Set Name
-            workbench_conf: Workbench configuration
 
         Returns:
             Parsing results
@@ -1055,9 +998,6 @@ class LinsightWorkbenchImpl:
             await minio_client.put_object_tmp(markdown_filename, markdown_bytes)
             markdown_md5 = await async_calculate_md5(markdown_bytes)
 
-            # Process vector storage
-            await cls._process_vector_storage(invoke_user_id, texts, file_id, collection_name, workbench_conf)
-
             return {
                 "file_id": file_id,
                 "original_filename": original_filename,
@@ -1066,8 +1006,6 @@ class LinsightWorkbenchImpl:
                 "markdown_filename": markdown_filename,
                 "markdown_file_path": markdown_filename,
                 "markdown_file_md5": markdown_md5,
-                "embedding_model_id": workbench_conf.embedding_model.id,
-                "collection_name": collection_name,
             }
         except Exception as e:
             logger.error(f"File parsing failed: file_id={file_id}, error={e!s}")
@@ -1077,25 +1015,6 @@ class LinsightWorkbenchImpl:
                 "parsing_status": "failed",
                 "error_message": str(e),
             }
-
-    @classmethod
-    async def _process_vector_storage(
-        cls, invoke_user_id: int, texts: list[str], file_id: str, collection_name: str, workbench_conf
-    ) -> None:
-        """Process vector storage"""
-        # Buatembeddings
-        embeddings = await LLMService.get_bisheng_linsight_embedding(
-            model_id=workbench_conf.embedding_model.id, invoke_user_id=invoke_user_id
-        )
-
-        # Create Vector Store
-        vector_client = KnowledgeRag.init_milvus_vectorstore(collection_name=collection_name, embeddings=embeddings)
-        es_client = KnowledgeRag.init_es_vectorstore(collection_name)
-
-        # Adding Text to Vector Storage
-        metadatas = [{"file_id": file_id} for _ in texts]
-        await vector_client.aadd_texts(texts, metadatas=metadatas)
-        await es_client.aadd_texts(texts, metadatas=metadatas)
 
     @classmethod
     async def _cache_parse_result(cls, file_id: str, parse_result: dict) -> None:
@@ -1232,72 +1151,6 @@ class LinsightWorkbenchImpl:
             if children:
                 tool_ids.extend(int(child.get("id")) for child in children if child.get("id"))
         return tool_ids
-
-    @classmethod
-    async def feedback_regenerate_sop_task(cls, session_version_model: LinsightSessionVersion, feedback: str) -> None:
-        """
-        Regenerate from feedbackSOPTask
-
-        Args:
-            session_version_model: Inspiration Conversation Version Model
-            feedback: Content of feedback
-        """
-        try:
-            file_list = await cls.prepare_file_list(session_version_model)
-
-            # BuatLLMand tools
-            llm, workbench_conf = await cls._get_llm(session_version_model.user_id)
-            tools = await cls._prepare_tools(session_version_model, llm)
-
-            # Get a summary of your history
-            history_summary = await cls._get_history_summary(session_version_model.id)
-
-            # Create proxy and generateSOP
-            agent = await cls._create_linsight_agent(session_version_model, llm, tools, workbench_conf)
-
-            sop_content = ""
-            sop_template = session_version_model.sop or ""
-
-            async for res in agent.feedback_sop(
-                sop=sop_template,
-                feedback=feedback,
-                history_summary=history_summary if history_summary else None,
-                file_list=file_list,
-            ):
-                sop_content += res.content
-
-            # sopWrite it down on the record sheet, thissopThere is no need to associate sessions because there is no need to update scores
-            await SOPManageService.add_sop_record(
-                LinsightSOPRecord(
-                    name=session_version_model.title,
-                    description=None,
-                    user_id=session_version_model.user_id,
-                    content=sop_content,
-                )
-            )
-        except cls.ToolsInitializationError as e:
-            logger.exception(
-                f"Failed to initialize the Inspiration Workbench tool: session_version_id={session_version_model.id}, error={e!s}"
-            )
-
-        except Exception as e:
-            logger.exception(
-                f"Feedback regenerationSOPMisi Gagal: session_version_id={session_version_model.id}, error={e!s}"
-            )
-
-    @classmethod
-    async def _get_history_summary(cls, session_version_id: str) -> list[str]:
-        """Get a summary of your history"""
-        history_summary = []
-        execute_tasks = await LinsightExecuteTaskDao.get_by_session_version_id(session_version_id)
-
-        for task in execute_tasks:
-            if task.result:
-                answer = task.result.get("answer", "")
-                if answer:
-                    history_summary.append(answer)
-
-        return history_summary
 
     @classmethod
     async def download_file(cls, file_info: DownloadFilesSchema) -> tuple[str, bytes]:

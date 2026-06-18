@@ -18,6 +18,7 @@ import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Ar
 import { TaskModeInput } from '~/components/Linsight/Input/TaskModeInput';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { useLinsightWebSocket } from '~/hooks/Websocket';
+import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLocalize } from '~/hooks';
 import { ClarifyCard } from './ClarifyCard';
@@ -29,7 +30,7 @@ import { QueueCard } from './QueueCard';
 import { StepList } from './StepList';
 import { TaskPanel } from './TaskPanel';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
-import { isTaskStarted } from './stepUtils';
+import { isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
 
 interface ExecutionFlowProps {
@@ -67,13 +68,24 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     const { stop, sendInput } = useLinsightWebSocket(versionId);
 
     const linsight = getLinsight(versionId);
-    const tasks: ExecTask[] = (linsight?.tasks as any) || [];
-    const sessionSteps: ExecStepEventData[] = (linsight as any)?.sessionSteps || [];
+    // On reload, session-level steps come back inside the "执行准备" pseudo-task;
+    // lift them out so the rebuilt view matches the live one (inline + IntentRow).
+    const { tasks, sessionSteps } = splitSessionPseudoTask<ExecTask>(
+        (linsight?.tasks as any) || [],
+        ((linsight as any)?.sessionSteps as ExecStepEventData[]) || [],
+    );
     const status = linsight?.status;
     const running = status === SopStatus.Running;
     const completed = status === SopStatus.completed || status === SopStatus.FeedbackCompleted;
     const stopped = status === SopStatus.Stoped;
-    const queueing = running && (linsight?.queueCount || 0) > 0;
+    // Poll queue-status while queued (running but no execution output yet); the
+    // badge clears when the worker picks us up (index → 0) or steps arrive.
+    const noProgressYet = !tasks.length && !sessionSteps.length;
+    useLinsightQueuePolling(versionId, running && noProgressYet);
+    // Gate on noProgressYet too: once steps/tasks arrive polling stops and the
+    // last-polled queueCount may stay stale >0, so this prevents the queue card
+    // from lingering next to real task rows.
+    const queueing = running && noProgressYet && (linsight?.queueCount || 0) > 0;
 
     // P4 artifacts: output files + the shared right-side panel (workspace/preview)
     const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
@@ -98,8 +110,19 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
         [sessionSteps],
     );
 
+    // The session-global pseudo task (id == versionId) carries planning/wrap-up
+    // steps; exclude it so it doesn't count as a "real" planned todo in the
+    // loading-state flags (on reload it arrives inside `tasks`; live it lives in
+    // sessionSteps).
+    const realTasks = useMemo(() => tasks.filter((t: any) => t.id !== versionId), [tasks, versionId]);
+
     // planning row: running, todo list not generated yet, nothing else pending
-    const planning = running && !queueing && !tasks.length && !pendingInput;
+    const planning = running && !queueing && !pendingInput && !realTasks.length;
+    // working row: todos exist but no task is actively streaming a spinner right
+    // now (gap before the first task starts, between tasks, or wrap-up after the
+    // last one). Without this the run looks frozen in those windows.
+    const executing =
+        running && !queueing && !pendingInput && realTasks.length > 0 && !realTasks.some((t: any) => isTaskRunning(t.status));
 
     const handleClarifySubmit = (taskId: string, answer: string) => {
         sendInput({ task_id: taskId || versionId, user_input: answer, files: [] });
@@ -157,6 +180,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             {tasks.filter((task) => isTaskStarted(task.status)).map((task) => (
                                 <TaskStepRow key={task.id} task={task} />
                             ))}
+
+                            {/* working breathing row — bridges the gaps between
+                                tasks / wrap-up so the run never looks frozen */}
+                            {executing && <PlanningRow label={localize('com_linsight_executing')} />}
 
                             {/* active clarify / follow-up card */}
                             {pendingInput && (

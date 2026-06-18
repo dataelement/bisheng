@@ -51,26 +51,23 @@ async def track_b() -> None:
     thread_id = _svid()
     config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
     cp = empty_checkpoint()
-    try:
-        next_config = await saver.aput(config, cp, {"source": "e2e", "step": 1}, {})
-        tup = await saver.aget_tuple(next_config)
-        record(
-            "B/AC-5 checkpoint round-trip (real Redis)",
-            tup is not None and tup.checkpoint["id"] == cp["id"] and tup.metadata.get("source") == "e2e",
-            f"id={tup.checkpoint['id'][:8] if tup else None}",
-        )
+    # The test thread's keys expire via the 120s TTL set on the saver above; the
+    # old adelete_thread purge (and its AC-5 assertion) was removed together with
+    # that dead checkpointer method.
+    next_config = await saver.aput(config, cp, {"source": "e2e", "step": 1}, {})
+    tup = await saver.aget_tuple(next_config)
+    record(
+        "B/AC-5 checkpoint round-trip (real Redis)",
+        tup is not None and tup.checkpoint["id"] == cp["id"] and tup.metadata.get("source") == "e2e",
+        f"id={tup.checkpoint['id'][:8] if tup else None}",
+    )
 
-        listed = [t async for t in saver.alist(config)]
-        record("B/AC-5 alist chronological index", any(t.checkpoint["id"] == cp["id"] for t in listed))
+    listed = [t async for t in saver.alist(config)]
+    record("B/AC-5 alist chronological index", any(t.checkpoint["id"] == cp["id"] for t in listed))
 
-        await saver.aput_writes(next_config, [("messages", {"resume": "the answer"})], task_id="task-e2e")
-        tup2 = await saver.aget_tuple(next_config)
-        record("B/AC-5 pending_writes round-trip (resume payload)", bool(tup2 and tup2.pending_writes))
-
-        await saver.adelete_thread(thread_id)
-        record("B/AC-5 adelete_thread purges (park-terminate)", (await saver.aget_tuple(next_config)) is None)
-    finally:
-        await saver.adelete_thread(thread_id)
+    await saver.aput_writes(next_config, [("messages", {"resume": "the answer"})], task_id="task-e2e")
+    tup2 = await saver.aget_tuple(next_config)
+    record("B/AC-5 pending_writes round-trip (resume payload)", bool(tup2 and tup2.pending_writes))
 
 
 # ---------------------------------------------------------------------------

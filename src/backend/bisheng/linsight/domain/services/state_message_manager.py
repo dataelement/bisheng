@@ -18,6 +18,16 @@ from bisheng.linsight.domain.schemas.linsight_schema import UserInputEventSchema
 from bisheng.utils.util import retry_async
 from bisheng_langchain.linsight.event import BaseEvent
 
+# Cap a single tool param/output value in the troubleshooting log so a tool that
+# passes large content (e.g. write_file body) doesn't flood the log.
+_PREVIEW_LIMIT = 1000
+
+
+def _preview(value: Any) -> str:
+    """Repr a tool param/output value, truncated for log safety."""
+    text = repr(value)
+    return text if len(text) <= _PREVIEW_LIMIT else f"{text[:_PREVIEW_LIMIT]}…(+{len(text) - _PREVIEW_LIMIT} chars)"
+
 
 class MessageEventType(str, Enum):
     """
@@ -268,6 +278,14 @@ class LinsightStateMessageManager:
             if user_input_event is None or user_input_event.get("step_type") != "call_user_input":
                 raise ValueError(f"Task with ID {task_id} does not support user input.")
 
+            # Idempotency: this method is @retry_async and the /workbench/user-input
+            # endpoint may be hit twice. If the latest clarify is already answered
+            # with the same input, treat it as a duplicate and no-op — otherwise the
+            # clarify_answers append below would record the answer twice.
+            if user_input_event.get("is_completed") and user_input_event.get("user_input") == user_input:
+                self._logger.info(f"User input for task {task_id} already recorded; skipping duplicate")
+                return
+
             user_input_event = UserInputEventSchema.model_validate(user_input_event)
 
             user_input_event.user_input = user_input
@@ -277,6 +295,18 @@ class LinsightStateMessageManager:
 
             task_model.status = ExecuteTaskStatusEnum.USER_INPUT_COMPLETED
 
+            # F035 reload parity: the stamp above lives in `history`, which a HITL
+            # resume re-streams and can overwrite (dropping is_completed/user_input)
+            # — so a refreshed turn loses the answered "已明确用户意图" row. Keep an
+            # authoritative, append-only copy of each answer in task_data (a field
+            # resume never rewrites) and re-apply it onto the history call_user_input
+            # entries at the end of every resume (see restamp_clarify_answers). The
+            # pairing is positional: answers append in answer order, call_user_input
+            # entries sit in history in raise order.
+            clarify_answers = list((task_model.task_data or {}).get("clarify_answers") or [])
+            clarify_answers.append(user_input)
+            task_model.task_data = {**(task_model.task_data or {}), "clarify_answers": clarify_answers}
+
             # Using Transactions to Ensure Data Consistency
             async with self._redis_client.async_pipeline() as pipe:
                 await pipe.set(task_key, pickle.dumps(task_model.model_dump()), ex=self.DEFAULT_EXPIRATION)
@@ -284,7 +314,10 @@ class LinsightStateMessageManager:
 
             # Database updating
             await LinsightExecuteTaskDao.update_by_id(
-                task_id, status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED, history=task_model.history
+                task_id,
+                status=ExecuteTaskStatusEnum.USER_INPUT_COMPLETED,
+                history=task_model.history,
+                task_data=task_model.task_data,
             )
 
             self._logger.info(f"Set user input for task {task_id}")
@@ -292,6 +325,57 @@ class LinsightStateMessageManager:
         except Exception as e:
             self._logger.error(f"Failed to set user input for task {task_id}: {e}")
             raise ServerError.http_exception()
+
+    async def restamp_clarify_answers(self, task_id: str) -> None:
+        """Re-apply persisted clarify answers onto the task's history (F035).
+
+        A HITL resume re-streams the agent and can rewrite a task's `history`,
+        dropping the is_completed/user_input stamp that set_user_input wrote on
+        each answered call_user_input step. That makes a refreshed turn lose the
+        answered "已明确用户意图" rows even though the questions survive.
+
+        ``task_data["clarify_answers"]`` is the authoritative, append-only record
+        of each answer (resume never rewrites task_data). Calling this at the end
+        of every resume re-stamps the history call_user_input entries from it, so
+        whatever the resume did to `history`, the final persisted state carries
+        the answers again. Positional pairing: the i-th answer belongs to the i-th
+        call_user_input (raise order == answer order); a still-pending clarify with
+        no answer yet is left untouched. Best-effort and idempotent.
+        """
+        try:
+            task_model = await self.get_execution_task(task_id)
+            if not task_model or not task_model.history:
+                return
+            answers = (task_model.task_data or {}).get("clarify_answers") or []
+            if not answers:
+                return
+
+            answer_idx = 0
+            changed = False
+            for entry in task_model.history:
+                if not (isinstance(entry, dict) and entry.get("step_type") == "call_user_input"):
+                    continue
+                if answer_idx >= len(answers):
+                    break
+                answer = answers[answer_idx]
+                answer_idx += 1
+                if entry.get("is_completed") and entry.get("user_input") == answer:
+                    continue
+                entry["is_completed"] = True
+                entry["user_input"] = answer
+                changed = True
+
+            if not changed:
+                return
+
+            task_key = f"{self._keys['execution_tasks']}{task_id}"
+            await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)
+            await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
+            self._logger.info(f"Re-stamped {answer_idx} clarify answer(s) onto task {task_id} history")
+        except Exception as e:
+            # Non-critical: live rendering is unaffected; only the refreshed view
+            # of an answered clarify degrades. Don't fail the resumed turn for it.
+            self._logger.warning(f"Failed to re-stamp clarify answers for task {task_id}: {e}")
 
     @retry_async(num_retries=DEFAULT_RETRY_ATTEMPTS, delay=DEFAULT_RETRY_DELAY)
     async def get_execution_task(self, task_id: str) -> LinsightExecuteTask | None:
@@ -354,15 +438,49 @@ class LinsightStateMessageManager:
             if task_model.history is None:
                 task_model.history = []
 
-            # Adding new Steps
-            task_model.history.append(step.model_dump())
+            # Upsert by call_id so a streamed step is stored as ONE history entry
+            # instead of one-per-token / one-per-frame (F035 problem 1,
+            # design-增量-步骤持久化修复.md):
+            #   - thinking: deltas accumulate (concatenate output text)
+            #   - tool/knowledge/subagent: the end frame supersedes the start
+            #     frame (same call_id; end carries params + output)
+            #   - no call_id (NeedUserInput call_user_input step): append, so
+            #     set_user_input can still read history[-1].
+            step_dump = step.model_dump()
+            call_id = step_dump.get("call_id")
+            merged = False
+            if call_id:
+                for i in range(len(task_model.history) - 1, -1, -1):
+                    prev = task_model.history[i]
+                    if isinstance(prev, dict) and prev.get("call_id") == call_id:
+                        if step_dump.get("step_type") == "thinking":
+                            step_dump["output"] = (prev.get("output") or "") + (step_dump.get("output") or "")
+                        task_model.history[i] = step_dump
+                        merged = True
+                        break
+            if not merged:
+                task_model.history.append(step_dump)
 
             # Update Redis and database
             await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)
 
             await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
 
-            self._logger.info(f"Added step to task {task_id}")
+            # Tool-call steps carry the model's chosen input params (e.g. the
+            # knowledge_id / query passed to search_knowledge_base) + result. The
+            # params already live in `history`, but log them explicitly here so a
+            # later investigation (e.g. "why was this knowledge base searched?")
+            # is greppable from the backend log without dumping the history JSON.
+            # Thinking deltas merge per-token, so they are left to the bland line.
+            step_type = step_dump.get("step_type")
+            if step_type in ("tool_call", "knowledge", "subagent", "call_user_input"):
+                self._logger.info(
+                    f"Tool step persisted task={task_id} call_id={step_dump.get('call_id')!r} "
+                    f"name={step_dump.get('name')!r} step_type={step_type} status={step_dump.get('status')!r} "
+                    f"params={_preview(step_dump.get('params'))} output={_preview(step_dump.get('output'))}"
+                )
+            else:
+                self._logger.info(f"Added step to task {task_id}")
 
         except Exception as e:
             self._logger.error(f"Failed to add step to task {task_id}: {e}")

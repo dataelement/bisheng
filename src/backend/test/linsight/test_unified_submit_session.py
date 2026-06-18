@@ -74,3 +74,33 @@ async def test_submit_persists_user_question_turn(patch_submit_io):
     assert len(user_turns) == 1
     assert user_turns[0].is_bot is False
     assert "帮我写个周报" in user_turns[0].message
+
+
+async def test_submit_persists_display_files_on_user_turn(patch_submit_io):
+    """The user question turn carries the uploaded attachments (daily display
+    shape) so they survive a refresh — mirrors daily-chat question envelope."""
+    import json
+
+    login_user = MagicMock()
+    login_user.user_id = 1
+    submit_obj = LinsightQuestionSubmitSchema(question="总结下文件内容", session_id=None)
+    display_files = [
+        {
+            "file_id": "d1",
+            "filepath": "/tmp-dir/abc.pdf?X-Amz-Algorithm=AWS4",
+            "type": "application/pdf",
+            "filename": "abc.pdf",
+            "file_name": "abc.pdf",
+        }
+    ]
+
+    await LinsightWorkbenchImpl.submit_user_question(submit_obj, login_user, display_files=display_files)
+
+    user_turns = [m for m in patch_submit_io["messages"] if m.category == "question"]
+    assert len(user_turns) == 1
+    # files column populated for reload rendering
+    assert user_turns[0].files is not None
+    assert "abc.pdf" in user_turns[0].files
+    # and embedded in the {"query","files"} envelope the client reads
+    envelope = json.loads(user_turns[0].message)
+    assert envelope["files"] and envelope["files"][0]["file_id"] == "d1"
