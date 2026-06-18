@@ -5,8 +5,14 @@
  */
 import { Outlined } from 'bisheng-icons';
 import { Wrench } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { cn } from '~/utils';
+
+/** Step-row nesting depth. Top-level rows (depth 0 — the outer flow / big tasks)
+ *  render NO connector line; only nested sub-steps (depth ≥ 1, rendered inside an
+ *  expanded parent) get the rail. Provided automatically by each StepRow around
+ *  its children, so no prop-plumbing through the row components is needed. */
+const StepDepthContext = createContext(0);
 
 /** Shared spinner glyph for in-progress steps. */
 export function RunningSpinner() {
@@ -14,16 +20,16 @@ export function RunningSpinner() {
 }
 
 /** Map a step/tool name to its leading icon (completed state). */
-export function stepTypeIcon(name?: string) {
+export function stepTypeIcon(name?: string, size = 16) {
     const n = (name || '').toLowerCase();
     const cls = 'text-[#333]';
-    if (/agent|subagent/.test(n)) return <Outlined.PeopleRound size={16} className={cls} />;
-    if (/knowledge|knowledge_base|space|retrieval|recall|检索|知识/.test(n)) return <Outlined.BookOpenText size={16} className={cls} />;
-    if (/think|reason|思考/.test(n)) return <Outlined.Bulb size={16} className={cls} />;
-    if (/research|调研/.test(n)) return <Outlined.Dashboard size={16} className={cls} />;
-    if (/web[_\s-]?search|websearch|联网|网页|网络搜索/.test(n)) return <Outlined.Earth size={16} className={cls} />;
-    if (/write|edit|撰写|编写|写入/.test(n)) return <Outlined.Write size={16} className={cls} />;
-    return <Wrench size={16} className={cls} />; // default
+    if (/agent|subagent/.test(n)) return <Outlined.PeopleRound size={size} className={cls} />;
+    if (/knowledge|knowledge_base|space|retrieval|recall|检索|知识/.test(n)) return <Outlined.BookOpenText size={size} className={cls} />;
+    if (/think|reason|思考/.test(n)) return <Outlined.Bulb size={size} className={cls} />;
+    if (/research|调研/.test(n)) return <Outlined.Dashboard size={size} className={cls} />;
+    if (/web[_\s-]?search|websearch|联网|网页|网络搜索/.test(n)) return <Outlined.Earth size={size} className={cls} />;
+    if (/write|edit|撰写|编写|写入/.test(n)) return <Outlined.Write size={size} className={cls} />;
+    return <Wrench size={size} className={cls} />; // default
 }
 
 /** Shared style for expanded detail text blocks. */
@@ -64,21 +70,26 @@ interface StepRowProps {
 
 export function StepRow({ icon, title, children, running = false, defaultOpen, rightExtra, className, titleClassName }: StepRowProps) {
     // null = follow auto rule (open while running); boolean = manual override
+    const depth = useContext(StepDepthContext);
     const [manualOpen, setManualOpen] = useState<boolean | null>(null);
     const collapsible = children != null;
     const open = collapsible && (manualOpen ?? defaultOpen ?? running);
+    // Connector only for nested sub-steps; the outer/top-level rows show none.
+    const showConnector = open && depth > 0;
     const renderedIcon = typeof icon === 'function' ? icon(open) : icon;
     const renderedTitle = typeof title === 'function' ? title(open) : title;
 
     return (
-        <div className={cn('flex w-full min-w-0 gap-2 mb-6', className)}>
+        <div className={cn('flex w-full min-w-0 gap-2 mb-6 last:mb-0', className)}>
             {/* Left rail: status icon + a connector that renders ONLY while THIS
                 node is expanded, so the timeline is per-node (one segment beside
                 an open node) rather than a single continuous spine — mirrors the
                 daily "思考内容" rail. flex-1 makes the segment span the node's body. */}
-            <div className="flex shrink-0 flex-col items-center gap-1 self-stretch pt-[3px]">
-                <span className="flex size-4 shrink-0 items-center justify-center">{renderedIcon}</span>
-                {open && <div aria-hidden className="w-px flex-1 bg-[#E0E0E0]" />}
+            <div className="flex shrink-0 flex-col items-center gap-1 self-stretch">
+                {/* icon box height == title line-height (text-sm → 20px) so the icon
+                    is centered on the first text line instead of a hand-tuned offset. */}
+                <span className="flex h-5 w-4 shrink-0 items-center justify-center">{renderedIcon}</span>
+                {showConnector && <div aria-hidden className="w-px flex-1 bg-[#E0E0E0]" />}
             </div>
             <div className="flex min-w-0 flex-1 flex-col">
                 <button
@@ -116,7 +127,9 @@ export function StepRow({ icon, title, children, running = false, defaultOpen, r
                         style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
                     >
                         <div className="min-h-0 overflow-hidden">
-                            <div className="mt-2 space-y-2 pb-1 text-xs">{children}</div>
+                            <StepDepthContext.Provider value={depth + 1}>
+                                <div className="mt-4 space-y-2 pb-1 text-xs">{children}</div>
+                            </StepDepthContext.Provider>
                         </div>
                     </div>
                 )}

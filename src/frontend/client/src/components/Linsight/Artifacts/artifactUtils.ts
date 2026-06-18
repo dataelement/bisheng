@@ -91,6 +91,22 @@ export async function resolveArtifactUrl(fileUrl: string, versionId: string): Pr
     return `${__APP_ENV__.BASE_URL}${res.data.file_path}`;
 }
 
+/**
+ * Open an HTML artifact in the standalone sandboxed viewer tab (`/html`).
+ *
+ * `file.file_url` is a MinIO OBJECT KEY (e.g. `linsight/final_result/<svid>/x.html`),
+ * not a directly servable URL — it must be resolved into a presigned share link
+ * via the file_download API (see resolveArtifactUrl). The viewer therefore needs
+ * the session_version_id to resolve it, so we pass it as `vid`. Building the query
+ * with URLSearchParams also fixes the old bug where the raw key was concatenated
+ * straight onto BASE_URL (`/workspace` + `linsight/...` → `/workspacelinsight/...`,
+ * a missing-slash 404).
+ */
+export function openHtmlArtifactViewer(file: ArtifactFile, versionId: string): void {
+    const params = new URLSearchParams({ url: file.file_url, vid: versionId || '' });
+    window.open(`${__APP_ENV__.BASE_URL}/html?${params.toString()}`, '_blank');
+}
+
 /** Download the original artifact file ("save as" action). */
 export async function downloadArtifactFile(file: ArtifactFile, versionId: string): Promise<void> {
     const url = await resolveArtifactUrl(file.file_url, versionId);

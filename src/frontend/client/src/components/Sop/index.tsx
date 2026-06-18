@@ -23,7 +23,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
     const { loading, versionId, setVersionId, switchVersion, versions, setVersions } = useLinsightData({ conversationId, sopId, vid, shareToken });
     const [isLoading, error] = useLinsightSubmit(versionId, setVersionId, setVersions)
     const { getLinsight } = useLinsightManager()
-    const artifactsPanel = useArtifactsPanel();
+    const artifactsPanel = useArtifactsPanel(versionId);
 
     return (
         <div className='relative h-full bg-white'>

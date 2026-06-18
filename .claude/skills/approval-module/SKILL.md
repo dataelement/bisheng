@@ -144,6 +144,7 @@ ApprovalCenterService.decide_task()
 - **Handler**：`KnowledgeSpaceSubscribeScenarioHandler`
 - 通过 / ACTIVE 路径调 `sync_direct_space_user_permissions()` 写 ReBAC 关系
 - PENDING 时调 `_send_space_approval_notification()` 通知审批人
+- **不变量：先过网关、再落 membership。** `subscribe_space` 对 APPROVAL 空间必须先 `await gate.request_or_pass()`，按 gate 结果（pass→ACTIVE / pending·exception→PENDING）才通过 `_persist_space_member()` 写 `space_channel_member`。**严禁在调网关前预写 PENDING membership**——否则场景未配置/未启用时网关 `raise ApprovalScenarioDisabledError`，但 PENDING 行已落库，下次点"关注"会被 `subscribe_space` 顶部"已 PENDING 直接返回 pending"的早退分支短路，掩盖错误（首次报错、二次假成功）。无场景时每次点击都应一致报错。
 
 ---
 

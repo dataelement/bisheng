@@ -1,14 +1,14 @@
 # 开发指南
 
-本文档面向 BiSheng 项目的开发者，涵盖环境搭建、服务启动、新模块开发约定、工作流节点扩展、API 端点添加、测试和代码风格规范。后端使用 Python 3.10.14 + uv 管理依赖（2.4.0 版本已从 Poetry 迁移到 uv），前端使用 React + TypeScript + Vite。
+本文档面向 BiSheng 项目的开发者，涵盖环境搭建、服务启动、新模块开发约定、工作流节点扩展、API 端点添加、测试和代码风格规范。后端使用 Python 3.11（pyproject `requires-python >=3.11`）+ uv 管理依赖（2.4.0 版本已从 Poetry 迁移到 uv），前端使用 React + TypeScript + Vite。
 
 ## 环境搭建
 
 ### 后端环境
 
 ```bash
-# 1. 创建 Python 3.10.14 虚拟环境（必须使用此版本）
-conda create --name BiShengVENV python==3.10.14
+# 1. 创建 Python 3.11 虚拟环境（pyproject 要求 requires-python >=3.11）
+conda create --name BiShengVENV python==3.11
 conda activate BiShengVENV
 
 # 2. 安装后端依赖（使用 uv，lockfile 为 uv.lock）

@@ -200,9 +200,6 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
         setTotal(files.length + (hasMore ? 1 : 0));
     }, [files.length, hasMore]);
 
-    // Track which initialFolderId has been consumed (value, not boolean)
-    // so re-navigation to a different folder deep link works correctly.
-    const consumedFolderIdRef = useRef<string | undefined>(undefined);
     // Bumped on space switch to guarantee the filter effect fires even when
     // search state was already empty (no dep change otherwise).
     const [reloadToken, setReloadToken] = useState(0);
@@ -215,9 +212,12 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             setSearchTagIds([]);
             setStatusFilter([]);
 
-            // If there's an unconsumed initial folder from URL, navigate there
-            if (initialFolderId && consumedFolderIdRef.current !== initialFolderId) {
-                consumedFolderIdRef.current = initialFolderId;
+            // The URL folder id is the single source of truth — sync the content
+            // pane to it on every change. A previous "consumed" guard skipped
+            // re-entering an already-visited folder (its id was still marked
+            // consumed), which left the URL on /folder/<id> while the pane reset
+            // to the space root — folders became un-enterable from the sidebar tree.
+            if (initialFolderId) {
                 setCurrentFolderId(initialFolderId);
                 // Fetch the breadcrumb path for the URL folder. The API now
                 // includes the folder itself as the leaf (with its real name),

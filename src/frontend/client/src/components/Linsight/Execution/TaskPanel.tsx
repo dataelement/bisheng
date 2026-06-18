@@ -38,12 +38,18 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                 onClick={() => setOpen(!open)}
                 className="flex w-full items-center gap-2 px-4 py-3 text-left"
             >
-                <Outlined.ListSuccess size={16} className="shrink-0 text-[#212121]" />
+                {runningTask ? (
+                    <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
+                ) : (
+                    <Outlined.ListSuccess size={16} className="shrink-0 text-[#212121]" />
+                )}
                 <span className="shrink-0 text-[16px] font-medium text-[#212121]">
                     {allDone ? localize('com_linsight_task_panel_done') : localize('com_linsight_task_panel')}
                 </span>
                 {showRunningInline && (
-                    <span className="min-w-0 flex-1 truncate text-[14px] text-[#999]">{runningName}</span>
+                    <span className="min-w-0 flex-1 truncate bg-[linear-gradient(90deg,#c8c8c8_0%,#7a7a7a_50%,#c8c8c8_100%)] bg-[length:200%_100%] bg-clip-text text-[14px] text-transparent animate-text-shimmer">
+                        {runningName}
+                    </span>
                 )}
                 <span className={cn('shrink-0 text-[14px] text-[#999]', showRunningInline ? 'ml-2' : 'ml-1')}>
                     {doneCount}/{tasks.length}
