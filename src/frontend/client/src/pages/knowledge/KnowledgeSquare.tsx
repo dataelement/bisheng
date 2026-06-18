@@ -47,12 +47,19 @@ export default function KnowledgeSquare({
     const [loadingMore, setLoadingMore] = useState(false);
     const [loading, setLoading] = useState(false);
     const [spaces, setSpaces] = useState<KnowledgeSpace[]>([]);
-    const [joiningId, setJoiningId] = useState<string | null>(null);
+    // In-flight join requests keyed by space id, so concurrent joins to
+    // different spaces (e.g. clicking quickly across pages) don't block each
+    // other — a single shared id used to silently drop them (see handleJoin).
+    const [joiningIds, setJoiningIds] = useState<Set<string>>(() => new Set());
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const scrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const searchImeComposingRef = useRef(false);
-    const PAGE_SIZE = 20;
+    // Larger page reduces the "subscribe reorders rows mid-pagination" issue:
+    // the not-subscribed-first sort moves a space to the back the moment it's
+    // joined, which with offset pagination skips/duplicates rows across pages.
+    // Fitting more per page keeps most spaces on one page.
+    const PAGE_SIZE = 60;
 
     const MAX_SEARCH_LEN = 40;
 
@@ -157,15 +164,13 @@ export default function KnowledgeSquare({
             statusOverride?.[String(space.id)] ??
             ((space.squareStatus as SquareSpaceStatus) || "join");
         if (currentStatus !== "join" && currentStatus !== "rejected") return;
-        if (joiningId) return;
+        // Per-space guard only: block double-submitting the SAME space, never
+        // others. A single shared in-flight id silently dropped concurrent joins
+        // to different spaces — clicking quickly across pages left some requests
+        // unsent, so those spaces stayed "join" after a refresh.
+        if (joiningIds.has(space.id)) return;
 
-        const prevSpaces = spaces;
-        setJoiningId(space.id);
-
-        const rollback = () => {
-            setSpaces(prevSpaces);
-            setJoiningId(null);
-        };
+        setJoiningIds((prev) => new Set(prev).add(space.id));
 
         // No client-side cap: the join limit is role-configurable on the backend
         // (F005 quota knowledge_space_subscribe, default 100) and enforced there;
@@ -193,7 +198,9 @@ export default function KnowledgeSquare({
                 showToast({ message: `${tJoinPrefix}`, severity: NotificationSeverity.SUCCESS });
             }
         } catch (e) {
-            rollback();
+            // No optimistic space-list change to undo (status is set only on
+            // success, via a per-space functional update), so just surface the
+            // error; `finally` clears the in-flight flag for this space.
             const code = (e as any)?.status_code;
             const rawMessage =
                 (e as any)?.message ||
@@ -210,7 +217,11 @@ export default function KnowledgeSquare({
                 showToast({ message, severity: NotificationSeverity.ERROR });
             }
         } finally {
-            setJoiningId(null);
+            setJoiningIds((prev) => {
+                const next = new Set(prev);
+                next.delete(space.id);
+                return next;
+            });
         }
     };
 
@@ -286,7 +297,7 @@ export default function KnowledgeSquare({
                                             statusOverride?.[String(space.id)] ??
                                             ((space.squareStatus as SquareSpaceStatus) || "join")
                                         }
-                                        isActing={joiningId === space.id}
+                                        isActing={joiningIds.has(space.id)}
                                         onPreview={() => onPreviewSpace?.(space)}
                                         onAction={() => handleJoin(space)}
                                     />

@@ -4283,19 +4283,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         existing = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
-        logger.info(
-            f"[SUB_DBG] space={space_id} user={self.login_user.user_id} auth={space.auth_type} "
-            f"existing={'(' + str(existing.user_role) + ',' + str(existing.status) + ',id=' + str(existing.id) + ')' if existing else None}"
-        )
         if existing is not None:
             if existing.user_role != UserRoleEnum.MEMBER:
-                logger.info(f"[SUB_DBG] space={space_id} EARLY_RETURN role={existing.user_role}")
                 return {
                     "status": "subscribed",
                     "space_id": space_id,
                 }
             if existing.status == MembershipStatusEnum.ACTIVE:
-                logger.info(f"[SUB_DBG] space={space_id} EARLY_RETURN active")
                 return {
                     "status": "subscribed",
                     "space_id": space_id,
@@ -4420,17 +4414,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         membership to silently not persist). The DAO UPSERTs by natural key
         (UPDATE; INSERT only if no row was actually affected).
         """
-        member = await SpaceChannelMemberDao.async_upsert_space_member_status(
+        return await SpaceChannelMemberDao.async_upsert_space_member_status(
             space_id=space_id,
             user_id=self.login_user.user_id,
             status=status,
         )
-        verify = await SpaceChannelMemberDao.async_find_member(space_id, self.login_user.user_id)
-        logger.info(
-            f"[SUB_DBG] space={space_id} PERSISTED member_id={getattr(member, 'id', None)} "
-            f"status={getattr(member, 'status', None)} reread={'id=' + str(verify.id) if verify else None}"
-        )
-        return member
 
     def _build_space_approval_gate(self) -> ApprovalGate:
         registry = ApprovalRegistry.with_default_presets()
