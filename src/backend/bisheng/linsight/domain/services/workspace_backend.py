@@ -133,6 +133,67 @@ def normalize_workspace_path(path: str) -> str:
     return "/".join(parts)
 
 
+async def seed_workspace_from_previous(
+    minio,
+    src_svid: str,
+    dst_svid: str,
+    zones: tuple[str, ...] = (OUTPUT_DIR, UPLOADS_DIR),
+) -> int:
+    """Cross-turn continuity: server-side copy a prior session-version's
+    deliverables (``output/``) and sources (``uploads/``) into a new version's
+    workspace, so a follow-up turn (e.g. "convert the report to HTML") can read
+    and build on the previous turn's output.
+
+    Each version's workspace is cumulative (a turn seeds from its immediate
+    predecessor, which already inherited *its* predecessor), so copying just the
+    one prior turn carries the whole conversation forward. ``scratch/`` is
+    intentionally skipped (intermediate state, not a deliverable). The copy is
+    server-side (no bytes through the app). Best-effort: it no-ops when the
+    destination already has content (idempotent on re-runs) and a per-object
+    failure is logged and skipped so a partial prior workspace never blocks the
+    new turn. Returns the number of objects copied.
+    """
+    if not src_svid or not dst_svid or src_svid == dst_svid:
+        return 0
+
+    def _copy() -> int:
+        bucket = minio.bucket
+        src_root = f"{WORKSPACE_PREFIX}/{src_svid}/"
+        dst_root = f"{WORKSPACE_PREFIX}/{dst_svid}/"
+
+        # Idempotency: skip if the new turn's workspace already has any object
+        # (already seeded, or the turn has started writing).
+        for _ in minio.minio_client_sync.list_objects(bucket, prefix=dst_root, recursive=True):
+            return 0
+
+        src_keys: list[str] = []
+        for zone in zones:
+            prefix = f"{WORKSPACE_PREFIX}/{src_svid}/{zone}/"
+            for obj in minio.minio_client_sync.list_objects(bucket, prefix=prefix, recursive=True):
+                src_keys.append(obj.object_name)
+        # manifest.json is a top-level pointer file (not under a zone).
+        src_keys.append(f"{WORKSPACE_PREFIX}/{src_svid}/{MANIFEST_NAME}")
+
+        copied = 0
+        for src_key in src_keys:
+            dst_key = dst_root + src_key[len(src_root) :]
+            try:
+                minio.copy_object_sync(
+                    source_bucket=bucket, source_object=src_key, dest_bucket=bucket, dest_object=dst_key
+                )
+                copied += 1
+            except S3Error as e:
+                # A missing manifest/object is expected (NoSuchKey) — skip quietly;
+                # surface anything else but keep going (best-effort seeding).
+                if not _is_missing_key(e):
+                    logger.warning(f"workspace seed: copy failed for {src_key}: {e}")
+            except Exception as e:
+                logger.warning(f"workspace seed: copy failed for {src_key}: {e}")
+        return copied
+
+    return await asyncio.to_thread(_copy)
+
+
 class WorkspaceBackend(FilesystemBackend):
     """MinIO-truth + write-through-cache backend for one linsight session.
 

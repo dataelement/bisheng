@@ -417,6 +417,12 @@ class LinsightWorkflowTask:
         # by SV from the linsight detail endpoints on reload.
         await linsight_execute_utils.persist_task_turn_message(session_model)
 
+        # Cross-turn continuity: seed this turn's workspace from the previous turn
+        # so a follow-up (e.g. "convert the report to HTML") can read and build on
+        # the prior turn's deliverables. New-turn path only (resume reuses the same
+        # svid workspace). Best-effort — never blocks the turn.
+        await self._seed_workspace_from_previous(session_model)
+
         # Initialization Execution Component
         self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
@@ -600,6 +606,38 @@ class LinsightWorkflowTask:
             checkpointer=checkpointer,
             backend=backend,
         )
+
+    async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:
+        """Cross-turn continuity: copy the previous turn's deliverables/sources
+        into this turn's workspace (跨轮工作区延续).
+
+        A follow-up turn runs under a fresh ``session_version_id`` with an empty
+        ``workspace/{svid}/`` prefix, so it cannot see a prior turn's output
+        (e.g. ``output/report.md``) — ``read_file`` on it would otherwise fail.
+        Server-side copy the immediately-previous version's ``output/`` +
+        ``uploads/`` into this turn's prefix so ``read_file``/``ls`` transparently
+        surface them. Best-effort — a failure never blocks the turn; the first
+        turn (no predecessor) no-ops.
+        """
+        try:
+            from bisheng.linsight.domain.services.workspace_backend import seed_workspace_from_previous
+
+            versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(session_model.session_id)
+            # Ordered by version DESC. The most recent OTHER version is the
+            # immediately-previous turn; its workspace is cumulative (it inherited
+            # its own predecessor), so one copy carries the whole conversation.
+            prev = next((v for v in versions if v.id != session_model.id), None)
+            if prev is None:
+                return
+            minio = await get_minio_storage()
+            copied = await seed_workspace_from_previous(minio, src_svid=prev.id, dst_svid=session_model.id)
+            if copied:
+                logger.info(
+                    f"Seeded {copied} file(s) from previous turn {prev.id[:8]} into "
+                    f"{session_model.id[:8]} (cross-turn continuity)"
+                )
+        except Exception as e:
+            logger.warning(f"workspace seed-from-previous skipped (non-fatal): {e}")
 
     # ==================== Mission Execution ====================
 
