@@ -330,7 +330,8 @@ export default function AiChatMessages({
                     hideShare={hideShare}
                     conversation={{ title: headerTitleText, flowId: "", conversationId, flowType: 15 }}
                     onOpenWorkspace={onOpenWorkspace}
-                    hasWorkspaceFiles={hasWorkspaceFiles && !workspaceOpen}
+                    hasWorkspaceFiles={hasWorkspaceFiles}
+                    workspaceOpen={workspaceOpen}
                 />
             )}
             <div

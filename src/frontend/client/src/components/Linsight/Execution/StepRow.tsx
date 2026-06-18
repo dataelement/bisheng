@@ -14,16 +14,16 @@ export function RunningSpinner() {
 }
 
 /** Map a step/tool name to its leading icon (completed state). */
-export function stepTypeIcon(name?: string) {
+export function stepTypeIcon(name?: string, size = 16) {
     const n = (name || '').toLowerCase();
     const cls = 'text-[#333]';
-    if (/agent|subagent/.test(n)) return <Outlined.PeopleRound size={16} className={cls} />;
-    if (/knowledge|knowledge_base|space|retrieval|recall|检索|知识/.test(n)) return <Outlined.BookOpenText size={16} className={cls} />;
-    if (/think|reason|思考/.test(n)) return <Outlined.Bulb size={16} className={cls} />;
-    if (/research|调研/.test(n)) return <Outlined.Dashboard size={16} className={cls} />;
-    if (/web[_\s-]?search|websearch|联网|网页|网络搜索/.test(n)) return <Outlined.Earth size={16} className={cls} />;
-    if (/write|edit|撰写|编写|写入/.test(n)) return <Outlined.Write size={16} className={cls} />;
-    return <Wrench size={16} className={cls} />; // default
+    if (/agent|subagent/.test(n)) return <Outlined.PeopleRound size={size} className={cls} />;
+    if (/knowledge|knowledge_base|space|retrieval|recall|检索|知识/.test(n)) return <Outlined.BookOpenText size={size} className={cls} />;
+    if (/think|reason|思考/.test(n)) return <Outlined.Bulb size={size} className={cls} />;
+    if (/research|调研/.test(n)) return <Outlined.Dashboard size={size} className={cls} />;
+    if (/web[_\s-]?search|websearch|联网|网页|网络搜索/.test(n)) return <Outlined.Earth size={size} className={cls} />;
+    if (/write|edit|撰写|编写|写入/.test(n)) return <Outlined.Write size={size} className={cls} />;
+    return <Wrench size={size} className={cls} />; // default
 }
 
 /** Shared style for expanded detail text blocks. */

@@ -28,7 +28,7 @@ interface WorkspacePanelProps {
 }
 
 const iconBtn =
-    'flex h-7 w-7 items-center justify-center rounded-md text-[#8C8C8C] transition-colors hover:bg-gray-100 hover:text-[#335CFF]';
+    'flex h-7 w-7 items-center justify-center rounded-lg text-[#8C8C8C] transition-colors hover:bg-gray-100';
 
 export function WorkspacePanel({
     files,
@@ -47,7 +47,7 @@ export function WorkspacePanel({
             key={file.file_id || file.file_url}
             role="button"
             tabIndex={0}
-            className="group flex cursor-pointer items-center gap-2.5 rounded-lg py-2 hover:bg-[#F7F7F7]"
+            className="group flex cursor-pointer items-center gap-2.5 rounded-lg px-1 py-2 hover:bg-[#F7F7F7]"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
@@ -81,7 +81,7 @@ export function WorkspacePanel({
             {previewFile ? (
                 <>
                     {/* preview toolbar */}
-                    <div className="flex h-[52px] shrink-0 items-center gap-2 px-3">
+                    <div className="flex h-12 shrink-0 items-center gap-2 px-3">
                         <button type="button" aria-label={localize('com_linsight_back_to_workspace')} className={iconBtn} onClick={onBack}>
                             <Outlined.ArrowLeft className="size-4" />
                         </button>
@@ -115,18 +115,18 @@ export function WorkspacePanel({
             ) : (
                 <>
                     {/* list header */}
-                    <div className="flex h-[52px] shrink-0 items-center justify-between px-4">
+                    <div className="flex h-12 shrink-0 items-center justify-between px-4">
                         <span className="text-sm font-medium text-[#212121]">{localize('com_linsight_workspace')}</span>
                         <button type="button" aria-label={localize('com_ui_close')} className={iconBtn} onClick={onClose}>
                             <Outlined.Close className="size-4" />
                         </button>
                     </div>
-                    {/* list body — overall padding 16px, 16px between rows */}
-                    <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os p-4">
+                    {/* list body — 4px top, 16px bottom, 12px left/right; 16px between rows */}
+                    <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os px-3 pt-1 pb-4">
                         {files.length ? (
                             <div className="flex flex-col gap-4">{files.map(renderRow)}</div>
                         ) : (
-                            <div className="py-10 text-center text-sm text-gray-400">
+                            <div className="flex h-full items-center justify-center text-center text-sm font-normal text-gray-400">
                                 {localize('com_linsight_workspace_empty')}
                             </div>
                         )}
