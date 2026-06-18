@@ -243,12 +243,19 @@ class ChatMessageDao(MessageBase):
         first few turns and dropped the freshest context — breaking history
         passed to the LLM. We now select DESC LIMIT N and reverse in Python so
         callers always get the latest window in time-ascending order.
+
+        ``id`` is the secondary sort key: ``create_time`` is second-precision, so
+        a question and its task/answer turn inserted in the same second tie on
+        ``create_time`` alone, and the reverse() flips their order — rendering the
+        reply above the question after a refresh. Ordering by ``id`` (monotonic
+        insertion order) DESC then reversing keeps each turn's question before its
+        reply regardless of clock granularity.
         """
         async with get_async_db_session() as session:
             statement = select(ChatMessage).where(ChatMessage.chat_id == chat_id)
             if category_list:
                 statement = statement.where(ChatMessage.category.in_(category_list))
-            statement = statement.order_by(ChatMessage.create_time.desc()).limit(limit)
+            statement = statement.order_by(ChatMessage.create_time.desc(), ChatMessage.id.desc()).limit(limit)
             result = await session.exec(statement)
             rows = list(result.all())
             rows.reverse()
