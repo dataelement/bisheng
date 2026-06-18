@@ -1,5 +1,5 @@
-import { buildFlowNodes, firstLine, mergeStepFrames } from './stepUtils';
-import type { ExecStepEventData, SubagentGroup } from './stepUtils';
+import { buildFlowNodes, buildTimelineGroups, firstLine, mergeStepFrames } from './stepUtils';
+import type { DeepStepGroup, ExecStepEventData, SubagentGroup } from './stepUtils';
 
 // These frames mirror the REAL persisted history contract (ExecStep.model_dump()):
 // the subgraph namespace lives in extra_info.namespace and a second-level int
@@ -188,6 +188,107 @@ describe('stepUtils — top-level steps stay inline alongside team groups', () =
         expect(nodes.some((n) => n.kind === 'step' && n.step.callId === 'call_tool_01')).toBe(true);
         const group = nodes.find((n): n is SubagentGroup => n.kind === 'subagent_group')!;
         expect(group.agents).toHaveLength(1);
+    });
+});
+
+describe('stepUtils — buildTimelineGroups (Wave2 deep_step_group aggregation)', () => {
+    it('wraps a continuous top-level thinking+tool run into ONE deep_step_group (ordered, both kinds)', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'p_think1', name: 'thinking', step_type: 'thinking', output: '先拆解问题', timestamp: 10 }),
+            frame({ call_id: 'p_todos', name: 'write_todos', step_type: 'tool', output: '已写清单', timestamp: 12 }),
+            frame({ call_id: 'p_know', name: 'search_knowledge_base', step_type: 'knowledge', output: '查到背景', timestamp: 14 }),
+        ];
+        const nodes = buildTimelineGroups(mergeStepFrames(history));
+        expect(nodes).toHaveLength(1);
+        expect(nodes[0].kind).toBe('deep_step_group');
+        const grp = nodes[0] as DeepStepGroup;
+        // steps preserved in order, carrying both thinking and tool/knowledge kinds
+        expect(grp.steps.map((s) => s.callId)).toEqual(['p_think1', 'p_todos', 'p_know']);
+        expect(grp.steps.map((s) => s.stepType)).toEqual(['thinking', 'tool', 'knowledge']);
+    });
+
+    it('a subagent_group breaks the top-level run and passes through verbatim (22→3 preserved)', () => {
+        const history: ExecStepEventData[] = [
+            // top-level planning run
+            frame({ call_id: 'p_think', name: 'thinking', step_type: 'thinking', output: '规划', timestamp: 10 }),
+            frame({ call_id: 'p_todos', name: 'write_todos', step_type: 'tool', output: '清单', timestamp: 11 }),
+            // delegation + 3 distinct subagents
+            delegation,
+            nsStep(NS_A, { call_id: 'a_tool', name: 'web_search', step_type: 'tool', output: 'a', timestamp: 101 }),
+            nsStep(NS_B, { call_id: 'b_tool', name: 'web_search', step_type: 'tool', output: 'b', timestamp: 102 }),
+            nsStep(NS_C, { call_id: 'c_tool', name: 'web_search', step_type: 'tool', output: 'c', timestamp: 103 }),
+        ];
+        const nodes = buildTimelineGroups(mergeStepFrames(history));
+        // [deep_step_group(planning), subagent_group(3 agents)]
+        expect(nodes.map((n) => n.kind)).toEqual(['deep_step_group', 'subagent_group']);
+        const team = nodes[1] as SubagentGroup;
+        expect(team.agents).toHaveLength(3);
+        // the leading planning run aggregated into one episode
+        const planning = nodes[0] as DeepStepGroup;
+        expect(planning.steps.map((s) => s.callId)).toEqual(['p_think', 'p_todos']);
+    });
+
+    it('keeps top-level runs on BOTH sides of a subagent_group as separate deep_step_groups', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'pre', name: 'thinking', step_type: 'thinking', output: '前', timestamp: 10 }),
+            delegation,
+            nsStep(NS_A, { call_id: 'a_tool', name: 'web_search', step_type: 'tool', output: 'a', timestamp: 20 }),
+            // a top-level step after the burst closes the group and opens a new run
+            frame({ call_id: 'post', name: 'thinking', step_type: 'thinking', output: '汇总结果', timestamp: 30 }),
+        ];
+        const nodes = buildTimelineGroups(mergeStepFrames(history));
+        expect(nodes.map((n) => n.kind)).toEqual(['deep_step_group', 'subagent_group', 'deep_step_group']);
+        expect((nodes[0] as DeepStepGroup).steps.map((s) => s.callId)).toEqual(['pre']);
+        expect((nodes[2] as DeepStepGroup).steps.map((s) => s.callId)).toEqual(['post']);
+    });
+
+    it('deep_step_group startedAt/endedAt span the whole episode range, running = any step running', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 's1', name: 'thinking', step_type: 'thinking', status: 'end', output: 'a', timestamp: 5 }),
+            frame({ call_id: 's2', name: 'web_search', step_type: 'tool', status: 'start', output: 'b', timestamp: 8 }),
+        ];
+        const [grp] = buildTimelineGroups(mergeStepFrames(history)) as DeepStepGroup[];
+        expect(grp.kind).toBe('deep_step_group');
+        expect(grp.startedAt).toBe(5);
+        expect(grp.endedAt).toBe(8);
+        // s2 has no end frame -> still running -> group is running
+        expect(grp.running).toBe(true);
+    });
+
+    it('a lone top-level step is still wrapped in a deep_step_group (uniform render)', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'only', name: 'thinking', step_type: 'thinking', output: '一句话', timestamp: 1 }),
+        ];
+        const nodes = buildTimelineGroups(mergeStepFrames(history));
+        expect(nodes).toHaveLength(1);
+        expect(nodes[0].kind).toBe('deep_step_group');
+        expect((nodes[0] as DeepStepGroup).steps).toHaveLength(1);
+    });
+
+    it('drill-down: a subagent\'s pure thinking+tool children aggregate into deep_step_groups', () => {
+        // SubagentTrack feeds one agent's children (no delegation frame, namespaced
+        // tool/thinking) back into buildTimelineGroups for the L3 view.
+        const history: ExecStepEventData[] = [
+            delegation,
+            nsStep(NS_A, { call_id: 'c_think', name: 'thinking', step_type: 'thinking', output: '子代理思路', timestamp: 50 }),
+            nsStep(NS_A, { call_id: 'c_tool', name: 'web_search', step_type: 'tool', output: '搜到了', timestamp: 51 }),
+            nsStep(NS_A, { call_id: 'c_write', name: 'write_file', step_type: 'tool', output: '写好了', timestamp: 52 }),
+        ];
+        const group = buildFlowNodes(mergeStepFrames(history)).find(
+            (n): n is SubagentGroup => n.kind === 'subagent_group',
+        )!;
+        const agent = group.agents[0];
+        // the agent's own anchor step + its children form the full child timeline
+        const childSteps = [agent.step, ...agent.children];
+        const nodes = buildTimelineGroups(childSteps);
+        // no subagent_group inside (children carry namespace but no delegation
+        // opened this run -> orphan inline -> all wrapped into one deep_step_group)
+        expect(nodes).toHaveLength(1);
+        expect(nodes[0].kind).toBe('deep_step_group');
+        const grp = nodes[0] as DeepStepGroup;
+        expect(grp.steps.map((s) => s.callId)).toEqual(['c_think', 'c_tool', 'c_write']);
+        expect(grp.steps.some((s) => s.stepType === 'thinking')).toBe(true);
+        expect(grp.steps.some((s) => s.stepType === 'tool')).toBe(true);
     });
 });
 

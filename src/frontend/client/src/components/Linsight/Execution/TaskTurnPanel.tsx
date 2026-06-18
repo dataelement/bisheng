@@ -4,8 +4,8 @@
  * Renders ONE task turn's execution detail embedded in the daily message
  * stream (not the full-page /linsight view). A task turn is a bot ChatMessage
  * with `category==='task'` + `linsightSessionVersionId`; this panel reuses the
- * leaf execution components (StepList / TaskStepRow / ClarifyCard / ResultSection
- * / TaskPanel) keyed by that SV.
+ * leaf execution components (ExecutionTimeline / TaskStepRow / ClarifyCard /
+ * ResultSection / TaskPanel) keyed by that SV.
  *
  * Two hydration paths:
  *  - LIVE (just submitted this session): `linsightMapState[svid]` is already
@@ -35,7 +35,7 @@ import { ClarifyCard } from './ClarifyCard';
 import { QueueCard } from './QueueCard';
 import { IntentRow } from './IntentRow';
 import { PlanningRow } from './PlanningRow';
-import { StepList } from './StepList';
+import { ExecutionTimeline } from './ExecutionTimeline';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
@@ -168,7 +168,7 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
             ))}
 
             {/* session-level steps (planning-stage tools etc.) */}
-            <StepList history={sessionSteps} />
+            <ExecutionTimeline history={sessionSteps} />
 
             {/* planning breathing row */}
             {planning && <PlanningRow />}

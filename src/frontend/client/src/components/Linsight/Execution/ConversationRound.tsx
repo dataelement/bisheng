@@ -10,7 +10,7 @@ import type { LinsightRoundSnapshot } from '~/store/linsight';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import { IntentRow } from './IntentRow';
-import { StepList } from './StepList';
+import { ExecutionTimeline } from './ExecutionTimeline';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
 import { isTaskStarted } from './stepUtils';
@@ -44,7 +44,7 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
                 <IntentRow key={`h_intent_${i}`} data={entry} />
             ))}
 
-            <StepList history={sessionSteps} />
+            <ExecutionTimeline history={sessionSteps} />
 
             {tasks.filter((task) => isTaskStarted(task.status)).map((task) => (
                 <TaskStepRow key={task.id} task={task} />

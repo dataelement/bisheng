@@ -13,7 +13,10 @@ import { isTaskDone, isTaskRunning } from './stepUtils';
 
 export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: boolean }) {
     const localize = useLocalize();
-    const [open, setOpen] = useState(false);
+    // Default expanded (user decision, Wave2): the checklist opens by default so
+    // the per-task progress is visible without an extra click; position unchanged
+    // (still pinned above the input).
+    const [open, setOpen] = useState(true);
 
     if (!tasks.length) return null;
 

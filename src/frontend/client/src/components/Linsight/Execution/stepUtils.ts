@@ -87,6 +87,36 @@ export interface SubagentGroup {
 export type FlowNode = { kind: 'step'; step: MergedStep } | SubagentGroup;
 
 /**
+ * (Wave2) A "deep thinking" episode: one continuous run of top-level (non
+ * subagent_group, non-orphan) steps — thinking + tool + knowledge — aggregated
+ * into a single collapsible group, isomorphic to the daily-chat DeepThinkingGroup.
+ * The inner thinking passages are joined with a blank line at render time; here
+ * we only carry the ordered steps plus the group-level time range.
+ */
+export interface DeepStepGroup {
+    kind: 'deep_step_group';
+    /** ordered steps in this episode (thinking + tool + knowledge), as built */
+    steps: MergedStep[];
+    /** earliest startedAt across the steps (group clock start) */
+    startedAt?: number;
+    /** latest endedAt across the steps (group clock end) */
+    endedAt?: number;
+    /** true while ANY step in the episode is still running */
+    running: boolean;
+}
+
+/**
+ * The Wave2 timeline node union consumed by ExecutionTimeline / SubagentTrack.
+ * A `subagent_group` is the same shape buildFlowNodes already emits (preserved
+ * verbatim, so the 22→3 grouping is untouched); a `deep_step_group` wraps a run
+ * of consecutive top-level steps. The `step` member is kept in the union for
+ * type-compat / defensive callers, but buildTimelineGroups never emits a bare
+ * `step` — every top-level step is wrapped in a deep_step_group for uniform
+ * rendering (decision pinned in stepUtils.test.ts).
+ */
+export type TimelineNode = DeepStepGroup | SubagentGroup | { kind: 'step'; step: MergedStep };
+
+/**
  * (A) Distil a one-line fingerprint from a step's output: first sentence / line,
  * newlines stripped, trimmed, truncated to ~24 chars with an ellipsis. Empty
  * input returns an empty string (caller falls back to a localized label).
@@ -302,6 +332,67 @@ export function buildFlowNodes(steps: MergedStep[]): FlowNode[] {
     }
 
     return nodes;
+}
+
+/**
+ * (Wave2 / F2b) Aggregate the flow nodes ONE level higher, so the task-mode
+ * timeline reads like the daily-chat "deep thinking" surface:
+ * - run buildFlowNodes (keeps the 22→3 subagent_group grouping untouched);
+ * - wrap each maximal run of consecutive `{ kind: 'step' }` nodes into a single
+ *   `deep_step_group` (thinking + tool + knowledge in one collapsible episode);
+ * - a `subagent_group` breaks the run and passes through verbatim.
+ *
+ * A lone top-level step is ALSO wrapped in a deep_step_group (uniform rendering
+ * — ExecutionTimeline only has to dispatch two node kinds). buildTimelineGroups
+ * accepts ANY MergedStep[]: when SubagentTrack drills into a single subagent's
+ * `children` (pure thinking + tool, no delegation frame, no namespace flip) the
+ * whole input collapses to deep_step_groups, giving the same render primitive
+ * for the L3 drill-down.
+ */
+export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
+    const flow = buildFlowNodes(steps);
+    const out: TimelineNode[] = [];
+    // open episode being accumulated; flushed when a subagent_group breaks the
+    // run or the input ends.
+    let episode: MergedStep[] = [];
+
+    const flush = () => {
+        if (!episode.length) return;
+        let startedAt: number | undefined;
+        let endedAt: number | undefined;
+        let running = false;
+        for (const s of episode) {
+            if (s.startedAt !== undefined) {
+                startedAt = startedAt === undefined ? s.startedAt : Math.min(startedAt, s.startedAt);
+            }
+            if (s.endedAt !== undefined) {
+                endedAt = endedAt === undefined ? s.endedAt : Math.max(endedAt, s.endedAt);
+            }
+            if (s.running) running = true;
+        }
+        out.push({ kind: 'deep_step_group', steps: episode, startedAt, endedAt, running });
+        episode = [];
+    };
+
+    for (const node of flow) {
+        if (node.kind === 'step') {
+            episode.push(node.step);
+            continue;
+        }
+        // subagent_group: close the current episode, then pass the group through.
+        flush();
+        out.push(node);
+    }
+    flush();
+
+    return out;
+}
+
+/** True if a timeline node is still running (any agent / any step / the step). */
+export function isTimelineNodeRunning(node: TimelineNode): boolean {
+    if (node.kind === 'subagent_group') return node.agents.some((a) => a.step.running);
+    if (node.kind === 'deep_step_group') return node.running;
+    return node.step.running;
 }
 
 /** True if a flow node is still running (any agent for a group; the step otherwise). */

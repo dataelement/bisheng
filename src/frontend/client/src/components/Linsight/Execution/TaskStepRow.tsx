@@ -9,7 +9,7 @@ import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import { RunningSpinner, StepRow } from './StepRow';
-import { StepList } from './StepList';
+import { ExecutionTimeline } from './ExecutionTimeline';
 import { IntentRow } from './IntentRow';
 import type { ExecStepEventData, FlowNode, SubagentGroup } from './stepUtils';
 import { activeFlowNode, firstLine, isTaskDone, isTaskRunning, isTaskStarted, TASK_ERROR_STATUSES } from './stepUtils';
@@ -73,8 +73,8 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
     };
     const taskName = task.name || task.task_data?.name;
     // F3 perf: activeFlowNode rebuilds the node tree (merge + group) every render.
-    // Same in-place WS mutation caveat as StepList — key the memo on a composite
-    // signature of the history (length + last frame status / call_id).
+    // Same in-place WS mutation caveat as ExecutionTimeline — key the memo on a
+    // composite signature of the history (length + last frame status / call_id).
     const history = task.history || [];
     const lastFrame = history[history.length - 1];
     const historySig = `${history.length}:${lastFrame?.status ?? ''}:${lastFrame?.call_id ?? ''}`;
@@ -114,7 +114,7 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
                     {answeredInputs.map((entry, i) => (
                         <IntentRow key={`input_${i}`} data={entry} />
                     ))}
-                    <StepList history={task.history} />
+                    <ExecutionTimeline history={task.history} />
                     {/* legacy two-level tasks: render children as nested task rows —
                         same rule, only show children execution has reached */}
                     {(task.children || []).filter((child) => isTaskStarted(child.status)).map((child) => (

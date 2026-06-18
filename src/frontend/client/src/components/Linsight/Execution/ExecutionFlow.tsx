@@ -27,7 +27,7 @@ import { IntentRow } from './IntentRow';
 import { LegacySopRow } from './LegacySopRow';
 import { PlanningRow } from './PlanningRow';
 import { QueueCard } from './QueueCard';
-import { StepList } from './StepList';
+import { ExecutionTimeline } from './ExecutionTimeline';
 import { TaskPanel } from './TaskPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
@@ -171,7 +171,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             ))}
 
                             {/* session-level steps (task_id == svid pseudo task, e.g. planning-stage tools) */}
-                            <StepList history={sessionSteps} />
+                            <ExecutionTimeline history={sessionSteps} />
 
                             {/* planning breathing row */}
                             {planning && <PlanningRow />}
