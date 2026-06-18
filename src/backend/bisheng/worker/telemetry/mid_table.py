@@ -1,11 +1,10 @@
 from datetime import datetime, timedelta
-from typing import List
 
 from loguru import logger
 
 from bisheng.api.services.workflow import WorkFlowService
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
-from bisheng.common.schemas.telemetry.base_telemetry_schema import UserGroupInfo, UserRoleInfo, UserDepartmentInfo
+from bisheng.common.schemas.telemetry.base_telemetry_schema import UserDepartmentInfo, UserGroupInfo, UserRoleInfo
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowType
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -19,8 +18,9 @@ from bisheng.utils import generate_uuid
 from bisheng.worker.main import bisheng_celery
 
 
-def get_yesterday_date_range(mid_table: BaseMidTable, start_date: str = None, end_date: str = None) -> (datetime,
-                                                                                                        datetime):
+def get_yesterday_date_range(
+    mid_table: BaseMidTable, start_date: str = None, end_date: str = None
+) -> (datetime, datetime):
     if start_date is None or end_date is None:
         # default to yesterday's date
         now = datetime.now()
@@ -48,7 +48,29 @@ def convert_flow_type(flow_type: int) -> ApplicationTypeEnum:
     return flow_type_mapping.get(flow_type, ApplicationTypeEnum.UNKNOWN)
 
 
+def _cross_tenant(func):
+    """Run a mid-table sync task with tenant filtering bypassed.
+
+    These tasks aggregate metrics across *every* tenant. Beat schedules them
+    once with no tenant context, so ``task_prerun`` falls back to tenant 1
+    (see ``worker/tenant_context.py``); without bypassing, every DB read would
+    be filtered to ``tenant_id = 1`` and non-default tenants would be silently
+    dropped from the stats. Bypassing makes a single run cover all tenants.
+    """
+    from functools import wraps
+
+    from bisheng.core.context.tenant import bypass_tenant_filter
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        with bypass_tenant_filter():
+            return func(*args, **kwargs)
+
+    return wrapper
+
+
 @bisheng_celery.task()
+@_cross_tenant
 def sync_mid_user_increment(start_date: str = None, end_date: str = None):
     trace_id_var.set(f"sync_mid_user_increment_task_{generate_uuid()}")
     mid_table = UserIncrement()
@@ -61,32 +83,40 @@ def sync_mid_user_increment(start_date: str = None, end_date: str = None):
     page, page_size = 1, 1000
 
     while True:
-        user_list = UserService.get_user_all_info(start_time=start_date, end_time=end_date,
-                                                  page=page, page_size=page_size)
+        user_list = UserService.get_user_all_info(
+            start_time=start_date, end_time=end_date, page=page, page_size=page_size
+        )
         page += 1
         if not user_list:
             break
         records = []
         for user in user_list:
-            records.append(UserIncrementRecord(
-                es_id=f"user_{user.user_id}",
-                user_id=user.user_id,
-                user_name=user.user_name,
-                user_group_infos=[UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
-                                  for group in user.groups],
-                user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
-                                 for role in user.roles],
-                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-                                       for dept in getattr(user, 'departments', []) or []],
-                timestamp=int(user.create_time.timestamp())
-            ))
+            records.append(
+                UserIncrementRecord(
+                    es_id=f"user_{user.user_id}",
+                    user_id=user.user_id,
+                    user_name=user.user_name,
+                    user_group_infos=[
+                        UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups
+                    ],
+                    user_role_infos=[
+                        UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
+                        for role in user.roles
+                    ],
+                    user_department_infos=[
+                        UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                        for dept in getattr(user, "departments", []) or []
+                    ],
+                    timestamp=int(user.create_time.timestamp()),
+                )
+            )
         mid_table.insert_records_sync(records)
 
     # This is a placeholder for the actual data synchronization logic
     logger.info(f"Successfully synced mid_user_increment from {start_date} to {end_date}")
 
 
-def get_user_from_ids_with_cache(user_ids: List[int], user_map: dict):
+def get_user_from_ids_with_cache(user_ids: list[int], user_map: dict):
     if user_ids:
         user_list = UserService.get_user_all_info(user_ids=user_ids, page=0, page_size=0)
         user_map.update({user.user_id: user for user in user_list})
@@ -94,6 +124,7 @@ def get_user_from_ids_with_cache(user_ids: List[int], user_map: dict):
 
 
 @bisheng_celery.task()
+@_cross_tenant
 def sync_mid_app_increment(start_date: str = None, end_date: str = None):
     # Placeholder for syncing mid_app_increment table
     trace_id_var.set(f"sync_mid_app_increment_task_{generate_uuid()}")
@@ -109,35 +140,49 @@ def sync_mid_app_increment(start_date: str = None, end_date: str = None):
     page, page_size = 1, 1000
     user_map = {}
     while True:
-        app_list = WorkFlowService.get_all_apps_by_time_range_sync(start_time=start_date, end_time=end_date, page=page,
-                                                                   page_size=page_size)
+        app_list = WorkFlowService.get_all_apps_by_time_range_sync(
+            start_time=start_date, end_time=end_date, page=page, page_size=page_size
+        )
         page += 1
         if not app_list:
             break
         records = []
         user_ids = set()
         for app in app_list:
-            if app['user_id'] not in user_map:
-                user_ids.add(app['user_id'])
+            if app["user_id"] not in user_map:
+                user_ids.add(app["user_id"])
         user_map = get_user_from_ids_with_cache(list(user_ids), user_map)
 
         for app in app_list:
-            user = user_map.get(app['user_id'], None)
-            records.append(AppIncrementRecord(
-                es_id=f"app_{app['id']}",
-                user_id=app['user_id'],
-                user_name=user.user_name if user else "",
-                user_group_infos=[UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
-                                  for group in user.groups] if user else [],
-                user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
-                                 for role in user.roles] if user else [],
-                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-                                       for dept in getattr(user, 'departments', []) or []] if user else [],
-                app_id=app['id'],
-                app_name=app['name'],
-                app_type=convert_flow_type(app['flow_type']),
-                timestamp=int(app['create_time'].timestamp())
-            ))
+            user = user_map.get(app["user_id"], None)
+            records.append(
+                AppIncrementRecord(
+                    es_id=f"app_{app['id']}",
+                    user_id=app["user_id"],
+                    user_name=user.user_name if user else "",
+                    user_group_infos=[
+                        UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups
+                    ]
+                    if user
+                    else [],
+                    user_role_infos=[
+                        UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
+                        for role in user.roles
+                    ]
+                    if user
+                    else [],
+                    user_department_infos=[
+                        UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                        for dept in getattr(user, "departments", []) or []
+                    ]
+                    if user
+                    else [],
+                    app_id=app["id"],
+                    app_name=app["name"],
+                    app_type=convert_flow_type(app["flow_type"]),
+                    timestamp=int(app["create_time"].timestamp()),
+                )
+            )
         mid_table.insert_records_sync(records)
 
     # Implement the actual logic here
@@ -145,6 +190,7 @@ def sync_mid_app_increment(start_date: str = None, end_date: str = None):
 
 
 @bisheng_celery.task()
+@_cross_tenant
 def sync_mid_knowledge_increment(start_date: str = None, end_date: str = None):
     # Placeholder for syncing mid_knowledge_increment table
     trace_id_var.set(f"sync_mid_knowledge_increment_task_{generate_uuid()}")
@@ -158,8 +204,9 @@ def sync_mid_knowledge_increment(start_date: str = None, end_date: str = None):
     page, page_size = 1, 1000
     user_map = {}
     while True:
-        knowledge_list = KnowledgeService.get_all_knowledge_by_time_range(start_date, end_date, page=page,
-                                                                          page_size=page_size)
+        knowledge_list = KnowledgeService.get_all_knowledge_by_time_range(
+            start_date, end_date, page=page, page_size=page_size
+        )
         page += 1
         if not knowledge_list:
             break
@@ -172,21 +219,34 @@ def sync_mid_knowledge_increment(start_date: str = None, end_date: str = None):
         records = []
         for knowledge in knowledge_list:
             user = user_map.get(knowledge.user_id, None)
-            records.append(KnowledgeIncrementRecord(
-                es_id=f"knowledge_{knowledge.id}",
-                user_id=knowledge.user_id,
-                user_name=user.user_name if user else "",
-                user_group_infos=[UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
-                                  for group in user.groups] if user else [],
-                user_role_infos=[UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
-                                 for role in user.roles] if user else [],
-                user_department_infos=[UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-                                       for dept in getattr(user, 'departments', []) or []] if user else [],
-                knowledge_id=knowledge.id,
-                knowledge_name=knowledge.name,
-                knowledge_type=knowledge.type,
-                timestamp=int(knowledge.create_time.timestamp())
-            ))
+            records.append(
+                KnowledgeIncrementRecord(
+                    es_id=f"knowledge_{knowledge.id}",
+                    user_id=knowledge.user_id,
+                    user_name=user.user_name if user else "",
+                    user_group_infos=[
+                        UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name) for group in user.groups
+                    ]
+                    if user
+                    else [],
+                    user_role_infos=[
+                        UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
+                        for role in user.roles
+                    ]
+                    if user
+                    else [],
+                    user_department_infos=[
+                        UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                        for dept in getattr(user, "departments", []) or []
+                    ]
+                    if user
+                    else [],
+                    knowledge_id=knowledge.id,
+                    knowledge_name=knowledge.name,
+                    knowledge_type=knowledge.type,
+                    timestamp=int(knowledge.create_time.timestamp()),
+                )
+            )
         mid_table.insert_records_sync(records)
     # Implement the actual logic here
     logger.info("Successfully synced mid_knowledge_increment table.")
@@ -204,39 +264,43 @@ def sync_mid_user_interact_dtl(start_date: str = None, end_date: str = None):
 
     page, page_size = 1, 1000
     while True:
-        result = mid_table.get_records_by_time_range_sync(start_time=int(start_date.timestamp()),
-                                                          end_time=int(end_date.timestamp()),
-                                                          page=page,
-                                                          page_size=page_size)
+        result = mid_table.get_records_by_time_range_sync(
+            start_time=int(start_date.timestamp()), end_time=int(end_date.timestamp()), page=page, page_size=page_size
+        )
         page += 1
         if not result:
             break
         records = []
         for record in result:
-            es_id = record['_id']
-            record = record['_source']
-            records.append(UserInteractRecord(
-                es_id=es_id,
-                user_id=record['user_context']['user_id'],
-                user_name=record['user_context']['user_name'],
-                user_group_infos=[UserGroupInfo(user_group_id=group['user_group_id'],
-                                                user_group_name=group['user_group_name'])
-                                  for group in record['user_context'].get('user_group_infos', [])],
-                user_role_infos=[UserRoleInfo(role_id=role['role_id'],
-                                              role_name=role['role_name'],
-                                              group_id=role.get('group_id', 0))
-                                 for role in record['user_context'].get('user_role_infos', [])],
-                user_department_infos=[UserDepartmentInfo(department_id=d['department_id'],
-                                                          department_name=d['department_name'])
-                                       for d in record['user_context'].get('user_department_infos', [])],
-                event_id=record['event_id'],
-                timestamp=record['timestamp'],
-
-                message_id=record['event_data']['message_feedback_message_id'],
-                interact_type=record['event_data']['message_feedback_operation_type'],
-                app_id=record['event_data']['message_feedback_app_id'],
-                app_name=record['event_data']['message_feedback_app_name'],
-            ))
+            es_id = record["_id"]
+            record = record["_source"]
+            records.append(
+                UserInteractRecord(
+                    es_id=es_id,
+                    user_id=record["user_context"]["user_id"],
+                    user_name=record["user_context"]["user_name"],
+                    user_group_infos=[
+                        UserGroupInfo(user_group_id=group["user_group_id"], user_group_name=group["user_group_name"])
+                        for group in record["user_context"].get("user_group_infos", [])
+                    ],
+                    user_role_infos=[
+                        UserRoleInfo(
+                            role_id=role["role_id"], role_name=role["role_name"], group_id=role.get("group_id", 0)
+                        )
+                        for role in record["user_context"].get("user_role_infos", [])
+                    ],
+                    user_department_infos=[
+                        UserDepartmentInfo(department_id=d["department_id"], department_name=d["department_name"])
+                        for d in record["user_context"].get("user_department_infos", [])
+                    ],
+                    event_id=record["event_id"],
+                    timestamp=record["timestamp"],
+                    message_id=record["event_data"]["message_feedback_message_id"],
+                    interact_type=record["event_data"]["message_feedback_operation_type"],
+                    app_id=record["event_data"]["message_feedback_app_id"],
+                    app_name=record["event_data"]["message_feedback_app_name"],
+                )
+            )
         mid_table.insert_records_sync(records)
     # Implement the actual logic here
     logger.info("Successfully synced mid_user_interact_dtl table.")

@@ -1,12 +1,17 @@
 from datetime import datetime
+
+from loguru import logger
+
 from bisheng.api.services.workflow import WorkFlowService
+from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.user.domain.services.user import UserService
 from bisheng.worker import sync_mid_user_interact_dtl
-from bisheng.worker.telemetry.mid_table import sync_mid_user_increment, sync_mid_knowledge_increment, \
-    sync_mid_app_increment
-
-from loguru import logger
+from bisheng.worker.telemetry.mid_table import (
+    sync_mid_app_increment,
+    sync_mid_knowledge_increment,
+    sync_mid_user_increment,
+)
 
 
 def sync_user_increment_table_all():
@@ -49,7 +54,7 @@ def sync_app_increment_table_all():
     if not first_app:
         print("No apps found, skipping app increment table sync.")
         return
-    start_date = first_app['create_time'].isoformat()
+    start_date = first_app["create_time"].isoformat()
     end_date = datetime.now().isoformat()
     sync_mid_app_increment(start_date, end_date)
 
@@ -60,8 +65,14 @@ def sync_user_interact_dtl_all():
     sync_mid_user_interact_dtl(first_date, end_date)
 
 
-if __name__ == '__main__':
-    sync_user_increment_table_all()
-    sync_knowledge_increment_table_all()
-    sync_app_increment_table_all()
-    sync_user_interact_dtl_all()
+if __name__ == "__main__":
+    # This script runs outside the FastAPI/Celery-Beat lifecycle, so no tenant
+    # context ContextVar is set. The mid-table sync intentionally aggregates
+    # across every tenant, so bypass the tenant filter for all cross-tenant
+    # reads (otherwise tenant-scoped queries raise NoTenantContextError when
+    # multi_tenant.enabled=True). See scripts/CLAUDE.md §7.
+    with bypass_tenant_filter():
+        sync_user_increment_table_all()
+        sync_knowledge_increment_table_all()
+        sync_app_increment_table_all()
+        sync_user_interact_dtl_all()
