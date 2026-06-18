@@ -515,6 +515,45 @@ export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
     }
     flush();
 
+    // Duration repair for zero-span deep_step_groups. A single-frame thinking
+    // passage is persisted as ONE row carrying ONE second-level timestamp, so its
+    // startedAt === endedAt → a span of 0 → a misleading "用时 0.0 秒" for a whole
+    // paragraph of reasoning. The real time the model spent on that episode is the
+    // wall-clock until the NEXT node began (it was reasoning across that gap), so
+    // estimate endedAt = the next node's start. Guarded by next > start so the
+    // out-of-order subgraph timestamps (subagent-internal frames predate the
+    // main-graph task frames) can never produce a negative span; an unrepairable
+    // tail group keeps span 0 and the renderer drops its 用时 clause. Running
+    // groups are left to the live ticker.
+    const nodeStart = (n: TimelineNode): number | undefined => {
+        if (n.kind === 'subagent_group') {
+            let min: number | undefined;
+            for (const a of n.agents) {
+                for (const s of [a.step, ...a.children]) {
+                    if (s.startedAt !== undefined) {
+                        min = min === undefined ? s.startedAt : Math.min(min, s.startedAt);
+                    }
+                }
+            }
+            return min;
+        }
+        if (n.kind === 'deep_step_group') return n.startedAt;
+        return n.step.startedAt;
+    };
+    for (let i = 0; i < out.length; i++) {
+        const n = out[i];
+        if (n.kind !== 'deep_step_group' || n.running) continue;
+        if (n.startedAt === undefined) continue;
+        if (n.endedAt !== undefined && n.endedAt > n.startedAt) continue; // already a real span
+        for (let j = i + 1; j < out.length; j++) {
+            const s = nodeStart(out[j]);
+            if (s !== undefined) {
+                if (s > n.startedAt) n.endedAt = s;
+                break;
+            }
+        }
+    }
+
     return out;
 }
 
