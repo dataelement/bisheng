@@ -384,9 +384,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     );
   }, [taskLinsight]);
 
-  // Stop button handler. A task round runs via the linsight worker/WS AFTER the
-  // handoff SSE stream closed, so `isStreaming` is already false — route the stop
-  // to terminate-execute in that case; otherwise abort the daily SSE stream.
+  // Stop button handler. A task round runs via the linsight worker/WS, normally
+  // AFTER the handoff SSE stream closed — route the stop to terminate-execute.
   const handleStop = useCallback(() => {
     if (taskRunning && latestTaskVersionId) {
       userStopLinsightEvent(latestTaskVersionId).catch(() => { /* best-effort: WS task_terminated reconciles */ });
@@ -401,6 +400,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             : tk.children,
         })),
       }));
+      // The handoff SSE may still be open when the user stops quickly (esp. while
+      // queued): isStreaming would then keep the input's stop button lit after the
+      // terminate, since the button gates on `isStreaming || taskRunning` and only
+      // taskRunning flipped here. Abort the (now-useless) handoff stream + clear
+      // isStreaming so the input syncs to the stopped state immediately instead of
+      // lingering until the stream drops on its own. (QA: stop-while-queued.)
+      stopGenerating();
       return;
     }
     stopGenerating();

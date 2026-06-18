@@ -436,16 +436,47 @@ def _build_user_content(
     return final_content
 
 
+def _json_safe(obj):
+    """Recursively coerce a value into a JSON-serialisable structure.
+
+    Tool outputs occasionally carry non-serialisable leaves — most commonly raw
+    LangChain ``Document`` objects from a retriever tool whose ``on_tool_end``
+    output is the bare return value. Left untouched they make the persist-time
+    ``json.dumps({"msg", "events"})`` raise ``TypeError`` and abort the SSE
+    stream *after* the answer was already streamed, so the assistant turn is
+    lost and the client sees an ``IncompleteRead``.
+
+    Native JSON types pass through; pydantic models (Document → page_content +
+    metadata, ToolMessage, schemas) are expanded via ``model_dump`` / ``dict``;
+    containers recurse; anything else degrades to ``str``.
+    """
+    if obj is None or isinstance(obj, (bool, int, float, str)):
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_json_safe(v) for v in obj]
+    for attr in ("model_dump", "dict"):
+        method = getattr(obj, attr, None)
+        if callable(method):
+            try:
+                return _json_safe(method())
+            except Exception:
+                break
+    return str(obj)
+
+
 def _parse_tool_results(raw_output, tool_name: str):
     """Best-effort parse a tool's raw output into a JSON-serialisable list/dict.
 
-    Covers strings (try json.loads), lists/dicts (pass through), LangChain
+    Covers strings (try json.loads), lists/dicts (deep-sanitised so embedded
+    ``Document``/model objects can't break persistence), LangChain
     ToolMessage-like objects with `.content`, and fallback to str().
     """
     if raw_output is None:
         return []
     if isinstance(raw_output, (list, dict)):
-        return raw_output
+        return _json_safe(raw_output)
     if isinstance(raw_output, str):
         s = raw_output.strip()
         if not s:
@@ -1655,7 +1686,11 @@ async def _agent_stream_chat_completion(
                 flow_id="",
                 type="end",
                 is_bot=True,
-                message=json.dumps(db_content, ensure_ascii=False),
+                # `default` is a last-resort net: tool results are already
+                # sanitised by _parse_tool_results, but a serialisation crash
+                # here would abort the stream and lose the whole turn, so never
+                # let an unexpected object type get that far.
+                message=json.dumps(db_content, ensure_ascii=False, default=str),
                 category="agent_answer",
                 sender=model_info.displayName,
                 extra=json.dumps({"error": True, "error_msg": error_msg}) if error_flag else "{}",

@@ -32,6 +32,7 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
+from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
@@ -442,6 +443,18 @@ async def terminate_execute(
     state_message_manager = LinsightStateMessageManager(session_version_id=linsight_session_version_id)
 
     await state_message_manager.set_session_version_info(session_version_model)
+
+    # Persist the bot task turn so the terminated state survives a refresh. A task
+    # cancelled while still queued never reached _execute_workflow, so no
+    # category="task" row was written yet — without this, a refresh shows only the
+    # user question and the "task terminated" banner is lost. Upsert is idempotent:
+    # a task terminated mid-execution already has the placeholder row.
+    try:
+        await linsight_execute_utils.persist_task_turn_message(session_version_model)
+    except Exception:
+        # Best-effort: the termination itself (status flip + WS push) already
+        # succeeded; only the reload-time banner is affected if this fails.
+        logger.exception("Failed to persist terminated task turn message")
 
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_model.id)
     # Push termination message
