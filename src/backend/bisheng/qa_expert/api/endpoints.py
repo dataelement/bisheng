@@ -3,9 +3,14 @@ Expert QA API Endpoints - HTTP 路由处理层
 """
 
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile, status, Query
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bisheng.api.v1.schemas import UploadFileResponse
+from bisheng.common.errcode.http_error import ServerError
+from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200, resp_500
 
@@ -38,16 +43,64 @@ async def get_expert_service() -> ExpertService:
 
 @router.get("/experts", response_model=list[ExpertResponse])
 async def list_experts(
-    page: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    user: UserPayload = Depends(UserPayload.get_login_user),
-  
+
+    keyword: Optional[str] = Query(None, description="搜索关键词"),
+    page: int = Query(0, ge=1, description="页码"),
+    limit: int = Query(20, ge=1, le=500, description="每页数量"),
+    service: ExpertService = Depends(get_expert_service)
 ):
     """列表查询专家"""
-    expert_groups= await UserGroupService.alist_groups(page, limit, "专家", user)
-    first_item = expert_groups['data'][0] if expert_groups['data'] else None
-    data = await UserGroupService.aget_members(first_item['id'], 1, 1000, "", user) if first_item else None
-    return resp_200(data=data)
+    skip = (page - 1) * limit
+    experts, total = await service.list_experts(
+        keyword=keyword,
+        skip=skip,
+        limit=limit
+    )
+    return resp_200(data={"experts": experts, "total": total})
+
+
+# ==================== 专家管理 Endpoints (补全) ====================
+
+@router.post("/experts", response_model=ExpertResponse)
+async def create_expert(
+    request: ExpertCreateRequest,
+    service: ExpertService = Depends(get_expert_service)
+):
+    """创建专家（管理员操作）"""
+    try:
+        expert = await service.create_expert(request)
+        return resp_200(data=expert)
+    except Exception as e:
+        return resp_500(code=500, msg=str(e))
+
+@router.put("/experts/{expert_id}", response_model=ExpertResponse)
+async def update_expert(
+    expert_id: int,
+    request: ExpertUpdateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service)
+):
+    """更新专家信息"""
+    try:
+        expert = await service.update_expert(expert_id, request)
+        return resp_200(data=expert)
+    except Exception as e:
+        return resp_500(code=500, msg=str(e))
+
+@router.delete("/experts/{expert_id}")
+async def delete_expert(
+    expert_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service)
+):
+    """删除专家"""
+    try:
+        success = await service.delete_expert(expert_id)
+        if not success:
+            return resp_500(code=500, msg="Failed to delete expert")
+        return resp_200(data={"message": "Expert deleted successfully"})
+    except Exception as e:
+        return resp_500(code=500, msg=str(e))
 
 
 
@@ -80,10 +133,11 @@ async def list_questions(
     service: QuestionService = Depends(get_question_service)
 ):
     """问题列表"""
+    
     user_id = user.user_id if query.my_questions else None
     
     questions, total = await service.list_questions(
-        business_domain=query.business_domain,
+        business_domain=query.domain,
         status=query.status,
         sort_by=query.sort_by,
         user_id=user_id,
@@ -105,11 +159,9 @@ async def get_question_detail(
     service: QuestionService = Depends(get_question_service)
 ):
     """获取问题详情"""
-    try:
-        question = await service.get_question_detail(question_id, user.user_id)
-        return resp_200(data=question)
-    except Exception as e:
-        return resp_500(code=500, msg=str(e))
+    question = await service.get_question_detail(question_id, user.user_id)
+    return resp_200(data=question)
+  
 
 
 @router.post("/questions/{question_id}/adopt", response_model=QuestionDetailResponse)
@@ -155,15 +207,13 @@ async def create_answer(
     return resp_200(data=answer)
   
 
-
-
-@router.get("/questions/{question_id}/answers", response_model=list[AnswerDetailResponse])
+#根据问题id获取回答数据
+@router.get("/answers/{question_id}", response_model=list[AnswerDetailResponse])
 async def get_answers(
-    question_id: int,
-    page: int = Query(0, ge=0),
+    question_id: int = Path(..., ge=1),
+    page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
     user: UserPayload = Depends(UserPayload.get_login_user),
-   
     service: AnswerService = Depends(get_answer_service)
 ):
     """获取问题的所有回答"""
@@ -243,7 +293,7 @@ async def create_comment(
 @router.get("/answers/{answer_id}/comments", response_model=list[CommentDetailResponse])
 async def get_comments(
     answer_id: int,
-    page: int = Query(0, ge=0),
+    page: int = Query(1, ge=1),
     page_size: int = Query(100, ge=1, le=1000),
     user: UserPayload = Depends(UserPayload.get_login_user),
 
@@ -394,4 +444,25 @@ async def delete_draft(
 
     return resp_200(data={"success": success})
 
+# ==================== 公共方法 ====================
 
+@router.post('/upload')
+async def upload_file(*, file: UploadFile = File(...)):
+    try:
+        file_name = file.filename
+
+        uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
+
+        file_path = await save_uploaded_file(file, 'bisheng', uuid_file_name)
+
+        if not isinstance(file_path, str):
+            file_path = str(file_path)
+
+        return resp_200(UploadFileResponse(file_path=file_path))
+
+    except Exception as e:
+        logger.error(f'File upload failed: {e}')
+        raise ServerError(msg=f'File upload failed: {e}')
+
+    finally:
+        await file.close()

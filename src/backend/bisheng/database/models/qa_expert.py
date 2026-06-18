@@ -20,24 +20,17 @@ class Expert(SQLModel, table=True):
     __tablename__ = "qa_expert"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True, foreign_key="user.id")
+    user_id: int = Field(index=True)
     expert_name: str = Field(index=True)
     introduction: Optional[str] = None
-    level: str = Field(default="junior")  # senior, intermediate, junior
-    business_domains: dict = Field(
-        default={},
-        sa_column=Column(JsonType),
-        description="所属业务域，JSON 格式"
+    depart_ment: Optional[str] = Field(
+        default=None,
+        description="所属部门，JSON 格式"
     )
-    
     # 统计字段
     answer_count: int = Field(default=0)
     adoption_count: int = Field(default=0)
-    helpful_count: int = Field(default=0)
-    verified: bool = Field(default=False, index=True)
-    
-    # 多租户字段
-    tenant_id: int = Field(default=1, index=True)
+    vote_count: int = Field(default=0)
     
     # 时间戳
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
@@ -90,28 +83,28 @@ class Answer(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     question_id: int = Field(index=True)
     expert_id: Optional[int] = Field(default=None, index=True)
+    expert_name: Optional[str] = Field(default=None, description="回答者名称（专家可选）")
     content: str
     status: int = Field(default=1, index=True)  # 1: normal, 2: adopted, 3: deleted
     # 附件和关联文档
     attachments: Optional[str] = Field(
         default=None,
-        sa_column=Column(JsonType),
         description="附件列表"
     )
     related_docs: Optional[str] = Field(
         default=None,
-        sa_column=Column(JsonType),
+    
         description="关联文档 ID 列表"
     )
     images_url: Optional[str] = Field(
         default=None,
-        sa_column=Column(JsonType),
+       
         description="图片URL列表"
     )
     # 统计字段
     vote_count: int = Field(default=0)
     comment_count: int = Field(default=0)
-
+    adopted: Optional[bool] = Field(default=False, index=True)  # 是否被采纳  
     # 时间戳
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -138,8 +131,6 @@ class Comment(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     
 
-
-
 # ==================== 投票表 ====================
 
 class QuestionVote(SQLModel, table=True):
@@ -164,7 +155,6 @@ class AnswerVote(SQLModel, table=True):
     user_id: int = Field(index=True)
     answer_id: int = Field(index=True)
     vote_type: str = Field(default="helpful")  # helpful 有用，support 支持
-    
     # 时间戳
     created_at: datetime = Field(default_factory=datetime.utcnow)
     

@@ -15,7 +15,9 @@ router = APIRouter(prefix="/qa_experts", tags=["Expert QA"])
 # 注册端点
 # 专家管理
 router.add_api_route("/experts", endpoints.list_experts, methods=["GET"])
-
+router.add_api_route("/experts", endpoints.create_expert, methods=["POST"])
+router.add_api_route("/experts/{expert_id}", endpoints.update_expert, methods=["PUT"])
+router.add_api_route("/experts/{expert_id}", endpoints.delete_expert, methods=["DELETE"])
 
 # 问题管理
 router.add_api_route("/questions", endpoints.create_question, methods=["POST"])
@@ -45,3 +47,7 @@ router.add_api_route("/notifications/{notification_id}/read", endpoints.mark_not
 router.add_api_route("/drafts", endpoints.save_draft, methods=["POST"])
 router.add_api_route("/drafts", endpoints.get_draft, methods=["GET"])
 router.add_api_route("/drafts", endpoints.delete_draft, methods=["DELETE"])
+
+
+#图片上传
+router.add_api_route("/upload", endpoints.upload_file, methods=["POST"])

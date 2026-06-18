@@ -73,25 +73,19 @@ class ExpertService:
 
     async def create_expert(
         self,
-        request: ExpertCreateRequest,
-        tenant_id: int = 1
+        request: ExpertCreateRequest
     ) -> Expert:
         """创建专家（后台管理员操作）"""
         # 检查是否已是专家
-        existing = await self.repository.get_by_user_id(request.user_id)
+        existing = await self.repository.get_by_user_name(request.expert_name)
         if existing:
-            raise InvalidInvitationError(message=f"User {request.user_id} is already an expert")
+            raise InvalidInvitationError(message=f"Expert {request.expert_name} is already exists")
         
         expert = Expert(
-            user_id=request.user_id,
             expert_name=request.expert_name,
             introduction=request.introduction,
-            level=request.level,
-            business_domains={
-                "domains": request.business_domains
-            },
-            verified=True,  # 后台指定的即为认证专家
-            tenant_id=tenant_id
+            depart_ment=request.depart_ment,
+            user_id=request.user_id
         )
         return await self.repository.create(expert)
 
@@ -110,16 +104,12 @@ class ExpertService:
 
     async def list_experts(
         self,
-        business_domain: Optional[str] = None,
-        level: Optional[str] = None,
         keyword: Optional[str] = None,
         skip: int = 0,
         limit: int = 20
     ) -> tuple[List[Expert], int]:
         """列表查询专家"""
         return await self.repository.list_all(
-            business_domain=business_domain,
-            level=level,
             keyword=keyword,
             skip=skip,
             limit=limit
@@ -300,6 +290,7 @@ class AnswerService:
         self.expert_repo = ExpertRepository()
         self.notification_repo = NotificationRepository()
 
+
     async def create_answer(
         self,
         user_id: int,
@@ -311,15 +302,18 @@ class AnswerService:
             raise QuestionNotFoundError()
         
         # 检查是否为专家
-        #expert = await self.expert_repo.get_by_user_id(user_id)
-        
+        expert = await self.expert_repo.get_by_user_id(user_id)
+        if not expert:
+            raise ExpertNotFoundError(message="Only verified experts can answer questions")
+    
         answer = Answer(
             question_id=request.question_id,
-            expert_id=user_id,  # 如果是专家回答，则记录专家ID
+            expert_id=expert.id, 
             content=request.content,
             attachments=request.attachments,
             related_docs=request.related_docs,
-            image_url=request.image_url
+            image_url=request.image_url,
+            expert_name=expert.expert_name
         )
         
         answer = await self.repository.create(answer)
@@ -328,12 +322,15 @@ class AnswerService:
         question.answer_count += 1
         await self.question_repo.update(request.question_id, answer_count=question.answer_count)
         
+        
+        await self.expert_repo.increment_answer_count(expert.id, count=1)
+        
         # 发送回答通知给提问者
-        await self._send_answer_notification(
-            question.id,
-            user_id,
-            question.user_id,
-        )
+        # await self._send_answer_notification(
+        #     question.id,
+        #     user_id,
+        #     question.user_id,
+        # )
         
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
         return answer
@@ -366,7 +363,7 @@ class AnswerService:
         
         update_data = {}
         if content is not None:
-            update_man["content"] = content
+            update_data["content"] = content
         if attachments is not None:
             update_data["attachments"] = attachments
         if related_docs is not None:
@@ -482,6 +479,7 @@ class VoteService:
         self.repository = VoteRepository()
         self.question_repo = QuestionRepository()
         self.answer_repo = AnswerRepository()
+        self.expert_repo = ExpertRepository()
 
     async def vote_question(
         self,
@@ -514,5 +512,9 @@ class VoteService:
         if vote:
             answer.vote_count += 1
             await self.answer_repo.update(answer_id, vote_count=answer.vote_count)
+            
+            await self.expert_repo.increment_vote_count(answer.expert_id, count=1)
+            
+            
             return True
         return False

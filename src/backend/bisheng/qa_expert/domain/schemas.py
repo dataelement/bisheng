@@ -11,19 +11,19 @@ from pydantic import BaseModel, Field, field_validator
 
 class ExpertCreateRequest(BaseModel):
     """创建专家 - 请求"""
-    user_id: int = Field(..., description="用户ID")
     expert_name: str = Field(..., description="专家名称")
     introduction: Optional[str] = Field(None, description="专家介绍")
-    level: str = Field(default="junior", description="专家等级: senior/intermediate/junior")
-    business_domains: List[str] = Field(default=[], description="所属业务域")
+    depart_ment: Optional[str] = Field(default=[], description="所属业务域")
+    user_id: Optional[int] = Field(None, description="关联用户ID（可选）")
+    
 
 
 class ExpertUpdateRequest(BaseModel):
     """更新专家 - 请求"""
     expert_name: Optional[str] = None
     introduction: Optional[str] = None
-    level: Optional[str] = None
-    business_domains: Optional[List[str]] = None
+    depart_ment: Optional[str]  = None
+
 
 
 class ExpertResponse(BaseModel):
@@ -48,8 +48,8 @@ class ExpertResponse(BaseModel):
 
 class QuestionCreateRequest(BaseModel):
     """发起提问 - 请求"""
-    title: str = Field(..., min_length=10, max_length=100, description="问题标题")
-    description: str = Field(..., min_length=20, description="问题描述")
+    title: str = Field(..., min_length=0, max_length=100, description="问题标题")
+    description: str = Field(..., min_length=0, description="问题描述")
     business_domain: str = Field(..., description="所属业务域")
     
     attachments: Optional[str] = Field(default=None, description="附件列表")
@@ -147,6 +147,7 @@ class AnswerCreateRequest(BaseModel):
     attachments: Optional[str] = Field(default=None, description="附件列表")
     related_docs:Optional[str] = Field(default=None, description="关联文档ID")
     image_url:Optional[str] = Field(default=None, description="图片URL")
+    
 
 class AnswerUpdateRequest(BaseModel):
     """更新回答 - 请求"""
@@ -238,7 +239,7 @@ class QANotificationResponse(BaseModel):
 
 class QuestionListQuery(BaseModel):
     """问题列表查询条件"""
-    business_domain: Optional[str] = Field(None, description="业务域")
+    domain: Optional[str] = Field(None, description="业务域")
     status: Optional[str] = Field(None, description="状态: unsolved/solved/closed")
     sort_by: str = Field(default="latest", description="排序: latest/hottest/unanswered")
     page: int = Field(default=1, ge=1)
