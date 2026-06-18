@@ -308,6 +308,13 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                     maxLength={10000}
                     placeholder={localize('com_linsight_clarify_input_placeholder')}
                     onChange={(e) => setFreeText(e.target.value)}
+                    onKeyDown={(e) => {
+                        // Enter submits; Shift+Enter inserts a newline.
+                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            handleConfirm();
+                        }
+                    }}
                     className="mt-4 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-[#8C8C8C] focus-visible:ring-0 focus-visible:outline-none"
                 />
             )}
@@ -327,7 +334,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                             'flex items-center gap-1 text-sm font-medium disabled:opacity-50 transition-colors',
                             // Last question: highlight 确定 as the final submit CTA.
                             isLast
-                                ? 'text-[#335CFF] hover:text-[#1E4DFF]'
+                                ? 'text-[#3a3a3a] hover:text-black'
                                 : 'text-[#8C8C8C] hover:text-[#212121]',
                         )}
                     >

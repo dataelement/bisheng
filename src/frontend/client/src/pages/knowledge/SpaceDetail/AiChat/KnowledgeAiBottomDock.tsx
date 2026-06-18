@@ -302,7 +302,7 @@ export function KnowledgeAiBottomDock({
                     className={cn(
                         "relative mx-auto flex w-full max-w-[800px] flex-col",
                         open &&
-                            "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-gradient-to-b from-white/80 to-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)] backdrop-blur-[16px]",
+                            "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
                     {/* Floating expand button — appears only after a conversation exists. */}

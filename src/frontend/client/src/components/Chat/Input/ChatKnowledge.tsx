@@ -526,7 +526,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-white",
+                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
@@ -555,7 +555,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-white transition-colors outline-none",
+                    "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-[#f8f8f8] transition-colors outline-none",
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
                   aria-label={localize('com_knowledge_add_file')}
@@ -579,6 +579,7 @@ export const ChatKnowledge = ({
         side={isMobile ? mobileMenuSide : 'bottom'}
         collisionPadding={isMobile ? MOBILE_MENU_COLLISION : BOTTOM_GAP}
         sticky={isMobile ? 'partial' : undefined}
+        onCloseAutoFocus={(e) => e.preventDefault()}
         className={cn(
           'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list

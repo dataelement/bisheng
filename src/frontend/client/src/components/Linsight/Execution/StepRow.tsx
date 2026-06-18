@@ -80,7 +80,10 @@ export function StepRow({ icon, title, children, running = false, defaultOpen, r
     const renderedTitle = typeof title === 'function' ? title(open) : title;
 
     return (
-        <div className={cn('flex w-full min-w-0 gap-2 mb-6 last:mb-0', className)}>
+        /* last:mb-0 only for nested sub-steps (depth > 0) — drops the trailing
+           gap inside an expanded task. Flow-level rows (depth 0) keep mb-6 so the
+           last session step doesn't collide with the task list that follows. */
+        <div className={cn('flex w-full min-w-0 gap-2 mb-6', depth > 0 && 'last:mb-0', className)}>
             {/* Left rail: status icon + a connector that renders ONLY while THIS
                 node is expanded, so the timeline is per-node (one segment beside
                 an open node) rather than a single continuous spine — mirrors the
