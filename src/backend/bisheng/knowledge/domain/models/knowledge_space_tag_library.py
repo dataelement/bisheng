@@ -47,6 +47,16 @@ class KnowledgeSpaceTagLibraryBase(SQLModelSerializable):
             Integer, nullable=False, server_default=text("0"), comment="标签数量"
         ),
     )
+    ai_tags: List[str] = Field(
+        default_factory=list,
+        sa_column=Column(JsonType, nullable=False, comment="AI生成的标签列表"),
+    )
+    ai_tag_count: int = Field(
+        default=0,
+        sa_column=Column(
+            Integer, nullable=False, server_default=text("0"), comment="AI生成的标签数量"
+        ),
+    )
     is_builtin: bool = Field(
         default=False,
         sa_column=Column(

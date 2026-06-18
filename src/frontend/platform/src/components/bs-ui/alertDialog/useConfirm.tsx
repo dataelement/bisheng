@@ -15,6 +15,8 @@ interface ConfirmParams {
     onClose?: () => void
     onCancel?: () => void
     onOk?: (next) => void
+    okDisabled?: boolean
+    okHidden?: boolean
 }
 
 let openFn = (_: ConfirmParams) => { }
@@ -46,7 +48,7 @@ function ConfirmWrapper() {
     }
 
     if (!paramRef.current) return null
-    const { title, desc, okTxt, canelTxt, showClose = true } = paramRef.current
+    const { title, desc, okTxt, canelTxt, showClose = true, okDisabled = false, okHidden = false } = paramRef.current
 
     return (
         <AlertDialog open={open} onOpenChange={setOpen}>
@@ -61,7 +63,7 @@ function ConfirmWrapper() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel onClick={handleCancelClick} className="px-11">{canelTxt}</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleOkClick} className="px-11">{okTxt}</AlertDialogAction>
+                    {!okHidden && <AlertDialogAction onClick={handleOkClick} disabled={okDisabled} className="px-11">{okTxt}</AlertDialogAction>}
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>

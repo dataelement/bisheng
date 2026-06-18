@@ -8,6 +8,53 @@ export interface KnowledgeSpaceTagLibraryListItem {
   is_builtin: boolean
 }
 
+export interface KnowledgeSpaceTagListItem {
+  tag_name: string
+  resource_type: string
+  resource_count: number
+}
+
+export interface KnowledgeSpaceTagDetail extends KnowledgeSpaceTagListItem {
+  tags: string[]
+}
+
+export interface KnowledgeSpaceTagPage {
+  data: KnowledgeSpaceTagListItem[]
+  status_code: number
+  status_message: string
+}
+
+export async function getKnowledgeSpaceTagListApi(params?: {
+  keyword?: string
+}): Promise<KnowledgeSpaceTagListItem[]> {
+  return await axios.get("/api/v1/workstation/tags/list", { params })
+}
+
+export async function deleteKnowledgeSpaceTagApi(
+  data:{
+    tag_name: string,
+    resource_type: string
+  }): Promise<boolean> {
+  return await axios.post(`/api/v1/workstation/tags/delete`, data)
+}
+
+export async function createKnowledgeSpaceTagApi(data: {
+  tag_name: string
+  resource_type: string
+}): Promise<KnowledgeSpaceTagDetail> {
+  return await axios.post("/api/v1/workstation/tags/create", data)
+}
+
+export async function updateKnowledgeSpaceTagApi(
+  data: {
+    original_tag_name: string
+    tag_name: string
+    resource_type: string
+  },
+): Promise<KnowledgeSpaceTagDetail> {
+  return await axios.post(`/api/v1/workstation/tags/update`, data)
+}
+
 export interface KnowledgeSpaceTagLibraryDetail extends KnowledgeSpaceTagLibraryListItem {
   tags: string[]
 }
@@ -55,4 +102,44 @@ export async function deleteKnowledgeSpaceTagLibraryApi(id: number): Promise<boo
 
 export async function getKnowledgeSpaceTagLibraryUsageApi(id: number): Promise<{ count: number }> {
   return await axios.get(`/api/v1/knowledge/space/tag-libraries/${id}/usage`)
+}
+
+// Review tag APIs
+export interface ReviewTagResourceItem {
+  file_source?: string
+  file_name?: string
+  submit_time?: string
+  [key: string]: any
+}
+
+export interface ReviewTagItem {
+  tag_name: string
+  tags_total: number
+  resource_files: ReviewTagResourceItem[]
+}
+
+export interface ReviewTagPage {
+  data: ReviewTagItem[]
+  total: number
+}
+
+export async function getKnowledgeSpaceReviewTagListApi(params: {
+  page: number
+  page_size: number
+}): Promise<ReviewTagPage> {
+  return await axios.post("/api/v1/workstation/tags/list_review", params)
+}
+
+export async function approveOrRejectReviewTagApi(data: {
+  tag_name: string
+  status: number
+  reject_reason?: string
+}): Promise<boolean> {
+  return await axios.post("/api/v1/workstation/tags/approve_or_reject", data)
+}
+
+export async function deleteReviewTagApi(data: {
+  tag_name: string
+}): Promise<boolean> {
+  return await axios.post("/api/v1/workstation/tags/delete_review", data)
 }

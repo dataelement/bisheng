@@ -479,6 +479,10 @@ class KnowledgeSpaceConfig(BaseModel):
         default=True,
         description='Whether the knowledge-space auto-tag UI is visible to users in this tenant',
     )
+    review_tag_visible: Optional[bool] = Field(
+        default=True,
+        description='Whether the knowledge-space pending review-tag UI is visible to users in this tenant',
+    )
 
 
 class ExcelRule(BaseModel):

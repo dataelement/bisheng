@@ -55,6 +55,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
 )
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import Metadata, QAKnowledgeMetadata
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import KnowledgeSpaceAutoTagService
+from bisheng.knowledge.domain.services.knowledge_space_review_tag_service import KnowledgeSpaceReviewTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.utils import is_pdf_damaged
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
@@ -334,6 +335,16 @@ def addEmbedding(
 
             if enable_auto_tags:
                 KnowledgeSpaceAutoTagService.apply_after_upload_parse(
+                    knowledge=knowledge_info,
+                    db_file=db_file,
+                    documents=pipeline_result.documents,
+                )
+            from bisheng.api.services.workstation import WorkStationService
+            cfg, inherited, source_tenant_id, has_override = WorkStationService.query_knowledge_space_config_with_meta()
+            enable_pending_review_tags = bool(getattr(cfg, "review_tag_visible", True)) if cfg else True
+
+            if enable_pending_review_tags:
+                KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(
                     knowledge=knowledge_info,
                     db_file=db_file,
                     documents=pipeline_result.documents,

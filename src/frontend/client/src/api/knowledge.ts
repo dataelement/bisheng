@@ -239,6 +239,7 @@ export interface SubscribeSpaceResult {
 export interface SpaceTag {
     id: number;
     name: string;
+    resource_type?: string;
 }
 
 /** Space member entity used by member-management dialog */

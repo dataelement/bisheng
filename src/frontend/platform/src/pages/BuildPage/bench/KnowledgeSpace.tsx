@@ -24,7 +24,8 @@ import {
     KnowledgeSpaceSensitivePolicy,
     type KnowledgeSpaceSensitivePolicyHandle,
 } from "./KnowledgeSpaceSensitivePolicy";
-import KnowledgeSpaceTagLibrarySection from "./KnowledgeSpaceTagLibrarySection";
+import KnowledgeSpaceTagSection from "./KnowledgeSpaceTagLibrarySection";
+import KnowledgeSpaceReviewTagSection from "./KnowledgeSpaceReviewTagSection";
 
 interface KnowledgeConfigForm {
     /** 系统提示词，对应接口 system_prompt */
@@ -35,6 +36,8 @@ interface KnowledgeConfigForm {
     maxChunkSize: number;
     /** 租户级"自动生成标签"功能可见性，对应接口 auto_tag_visible */
     autoTagVisible: boolean;
+    /** 租户级"待审核标签"功能可见性，对应接口 review_tag_visible */
+    reviewTagVisible: boolean;
 }
 
 export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: number }) {
@@ -167,10 +170,17 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
 
                             </div>
 
-                            <KnowledgeSpaceTagLibrarySection
+                            <KnowledgeSpaceTagSection
                                 visible={formData.autoTagVisible}
                                 onToggle={(checked) =>
                                     setFormData((prev) => ({ ...prev, autoTagVisible: checked }))
+                                }
+                            />
+
+                            <KnowledgeSpaceReviewTagSection
+                                visible={formData.reviewTagVisible}
+                                onToggle={(checked) =>
+                                    setFormData((prev) => ({ ...prev, reviewTagVisible: checked }))
                                 }
                             />
 
@@ -278,6 +288,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         userPrompt: '',
         maxChunkSize: 15000,
         autoTagVisible: false,
+        reviewTagVisible: false,
     });
 
     const [errors, setErrors] = useState<{ systemPrompt: string; userPrompt: string }>({
@@ -297,6 +308,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
             const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
             const autoTagVisibleFromRes = cfg?.auto_tag_visible ?? cfg?.autoTagVisible;
+            const reviewTagVisibleFromRes = cfg?.review_tag_visible ?? cfg?.reviewTagVisible;
             // When backend returns no saved value, seed the textarea with the
             // localized default template so it is editable as a real value.
             const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
@@ -307,6 +319,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
                 userPrompt: resolvedUserPrompt || t('chatConfig.retrievedAndQuestion'),
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
                 autoTagVisible: Boolean(autoTagVisibleFromRes),
+                reviewTagVisible: Boolean(reviewTagVisibleFromRes),
             }));
         });
     }, [scopeVersion, t]);
@@ -350,6 +363,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             user_prompt: finalUserPrompt,
             max_chunk_size: formData.maxChunkSize,
             auto_tag_visible: formData.autoTagVisible,
+            review_tag_visible: formData.reviewTagVisible,
         };
 
         const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi(dataToSave));

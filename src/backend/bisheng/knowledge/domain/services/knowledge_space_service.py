@@ -76,7 +76,7 @@ from bisheng.database.models.group import GroupDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
-from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
+from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag, TagResourceTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -4112,7 +4112,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             summary=str(item.get("abstract") or ""),
             source=str(item.get("knowledge_name") or item.get("space_name") or space_id),
             updated_at=self._serialize_datetime(item.get("update_time")),
-            tags=[str(tag.get("name")) for tag in item.get("tags") or [] if isinstance(tag, dict) and tag.get("name")],
+            tags=[{"tag_name": tag.get("name"), "resource_type": tag.get("resource_type")} for tag in item.get("tags") or [] if isinstance(tag, dict) and tag.get("name")],
             file_ext=self._get_file_ext(file_name),
             file_size=str(item.get("file_size") or ""),
             file_encoding=str(
@@ -5213,7 +5213,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 [str(fid) for fid in file_ids],
             )
             for fid_str, tags in tag_dict.items():
-                file_tags[int(fid_str)] = [{"id": t.id, "name": t.name} for t in tags]
+                file_tags[int(fid_str)] = [{"id": t.id, "name": t.name, "resource_type": t.resource_type} for t in tags]
 
         result = []
         for one in res:
@@ -6499,6 +6499,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id=self.login_user.user_id,
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
             business_id=str(space_id),
+            resource_type=TagResourceTypeEnum.MANUAL_TAG,
         )
         return await TagDao.ainsert_tag(new_tag)
 
