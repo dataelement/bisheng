@@ -509,15 +509,20 @@ async def get_linsight_session_version_list(
     linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
 
     if linsight_session_version_models and login_user.user_id != linsight_session_version_models[0].user_id:
-        # Access by sharing a link
+        # Access by sharing a link. Two share shapes are valid:
+        #  - workbench_chat share: resource_id IS this session id (whole-conversation
+        #    share, like the daily /chat/history endpoint) — meta_data carries no
+        #    versionId.
+        #  - linsight_session share: meta_data.versionId points at one of this
+        #    session's versions.
         session_version_ids = [model.id for model in linsight_session_version_models]
-
-        # Access by sharing a link
-        if (
-            share_link is None
-            or share_link.meta_data is None
-            or share_link.meta_data.get("versionId") not in session_version_ids
-        ):
+        shared_to_session = share_link is not None and share_link.resource_id == session_id
+        shared_to_version = (
+            share_link is not None
+            and share_link.meta_data is not None
+            and share_link.meta_data.get("versionId") in session_version_ids
+        )
+        if not (shared_to_session or shared_to_version):
             return UnAuthorizedError.return_resp()
 
         # Only return to the shared version of the Inspiration session
@@ -551,12 +556,18 @@ async def get_execute_task_detail(
     linsight_session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
 
     if login_user.user_id != linsight_session_version_model.user_id:
-        # Access by sharing a link
-        if (
-            share_link is None
-            or share_link.meta_data is None
-            or share_link.meta_data.get("versionId") != session_version_id
-        ):
+        # Access by sharing a link. workbench_chat share: resource_id is this
+        # version's session (whole-conversation share, no versionId in meta_data);
+        # linsight_session share: meta_data.versionId is this version. Either grants.
+        shared_to_session = (
+            share_link is not None and share_link.resource_id == linsight_session_version_model.session_id
+        )
+        shared_to_version = (
+            share_link is not None
+            and share_link.meta_data is not None
+            and share_link.meta_data.get("versionId") == session_version_id
+        )
+        if not (shared_to_session or shared_to_version):
             return UnAuthorizedError.return_resp()
 
     return resp_200(execute_task_models)
