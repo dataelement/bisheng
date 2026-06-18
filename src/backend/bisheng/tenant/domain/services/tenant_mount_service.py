@@ -14,7 +14,10 @@ Implements spec AC-02, AC-03, AC-04a/b/c/d, AC-07:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Set
+import time
+from typing import Any
+
+from sqlalchemy import update as sa_update
 
 from bisheng.common.errcode.tenant_tree import (
     TenantTreeMigrateConflictError,
@@ -24,23 +27,20 @@ from bisheng.common.errcode.tenant_tree import (
     TenantTreeNestingForbiddenError,
     TenantTreeRootDeptMountError,
 )
-import time
-
-from sqlalchemy import update as sa_update
-
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant, TenantDao
 from bisheng.tenant.domain.constants import TenantAuditAction, UserTenantSyncTrigger
+from bisheng.tool.domain.const import ToolPresetType
 
 # When a Child is unmounted we keep the row for audit (status=archived) but
 # free up ``tenant_code`` so the same code can be remounted. Renaming with a
 # deterministic, unique-by-timestamp suffix preserves the link from audit_log
 # to the tenant id while side-stepping the UNIQUE index. Format chosen so the
 # original code is trivially recoverable (split on ``ARCHIVED_CODE_SEPARATOR``).
-ARCHIVED_CODE_SEPARATOR = '#archived#'
+ARCHIVED_CODE_SEPARATOR = "#archived#"
 
 
 def archived_tenant_code(original_code: str) -> str:
@@ -51,7 +51,7 @@ def archived_tenant_code(original_code: str) -> str:
     """
     if ARCHIVED_CODE_SEPARATOR in original_code:
         return original_code
-    return f'{original_code}{ARCHIVED_CODE_SEPARATOR}{int(time.time())}'
+    return f"{original_code}{ARCHIVED_CODE_SEPARATOR}{int(time.time())}"
 
 
 def display_tenant_code(stored_code: str) -> str:
@@ -75,7 +75,7 @@ def default_tenant_code(dept_id: int) -> str:
     future remount of the same dept regenerates the same value without
     colliding on the UNIQUE index.
     """
-    return f't{dept_id}'
+    return f"t{dept_id}"
 
 
 logger = logging.getLogger(__name__)
@@ -83,27 +83,56 @@ logger = logging.getLogger(__name__)
 # Root-owned resources that may be sunk into a Child via AC-04d. The
 # resource_type string doubles as the table name — adding a type here
 # requires the table to share the ``id`` / ``tenant_id`` shape.
-_MIGRATABLE_RESOURCE_TABLES: Set[str] = {
-    'knowledge', 'flow', 'assistant', 'channel', 't_gpts_tools',
+_MIGRATABLE_RESOURCE_TABLES: set[str] = {
+    "knowledge",
+    "flow",
+    "assistant",
+    "channel",
+    "t_gpts_tools",
 }
 
 # Business tables migrated out of the Child on policy-A unmount. Subset of
 # F001 ``TENANT_TABLES`` — every entry must carry an ``id`` / ``tenant_id``
 # column and have a production ORM owned by this codebase today.
-_UNMOUNT_MIGRATE_TABLES: List[str] = [
-    'flow', 'flowversion',
-    'assistant', 'assistantlink',
-    'knowledge', 'knowledgefile', 'qaknowledge',
-    'channel', 'channel_info_source', 'channel_article_read',
-    't_gpts_tools', 't_gpts_tools_type',
-    'chatmessage', 'message_session',
-    'tag', 'taglink',
-    'evaluation', 'dataset',
-    'marktask', 'markrecord', 'markappuser',
-    'invitecode',
-    'linsight_sop', 'linsight_sop_record',
-    'linsight_session_version', 'linsight_execute_task',
+_UNMOUNT_MIGRATE_TABLES: list[str] = [
+    "flow",
+    "flowversion",
+    "assistant",
+    "assistantlink",
+    "knowledge",
+    "knowledgefile",
+    "qaknowledge",
+    "channel",
+    "channel_info_source",
+    "channel_article_read",
+    "t_gpts_tools",
+    "t_gpts_tools_type",
+    "chatmessage",
+    "message_session",
+    "tag",
+    "taglink",
+    "evaluation",
+    "dataset",
+    "marktask",
+    "markrecord",
+    "markappuser",
+    "invitecode",
+    "linsight_sop",
+    "linsight_sop_record",
+    "linsight_session_version",
+    "linsight_execute_task",
 ]
+
+# Preset tools/tool-types are *copied* into every Child on creation
+# (WorkStationService.acopy_root_builtin_tools_to_tenant), so Root already
+# owns its own preset rows. Migrating the Child's preset copies back to Root
+# on unmount would duplicate them, so restrict the migration of these two
+# tables to non-preset (user-authored) rows. Values come from an application
+# enum, never user input -- safe to inline into the WHERE clause.
+_UNMOUNT_MIGRATE_ROW_FILTERS: dict[str, str] = {
+    "t_gpts_tools": f"is_preset != {ToolPresetType.PRESET.value}",
+    "t_gpts_tools_type": f"is_preset != {ToolPresetType.PRESET.value}",
+}
 
 
 async def _require_super(operator) -> None:
@@ -114,7 +143,7 @@ async def _require_super(operator) -> None:
     tuple + RBAC AdminRole fallback). Kept ``async`` so existing call
     sites that ``await`` it stay unchanged.
     """
-    if not getattr(operator, 'is_global_super', False):
+    if not getattr(operator, "is_global_super", False):
         raise TenantTreeMigratePermissionError()
 
 
@@ -129,7 +158,7 @@ class TenantMountService:
     async def mount_child(
         cls,
         dept_id: int,
-        tenant_code: Optional[str],
+        tenant_code: str | None,
         tenant_name: str,
         operator,
         auto_distribute: bool = True,
@@ -157,7 +186,7 @@ class TenantMountService:
         if dept.parent_id is None:
             # Root department — never a mount point (AC-03).
             raise TenantTreeRootDeptMountError()
-        if getattr(dept, 'is_tenant_root', 0) == 1:
+        if getattr(dept, "is_tenant_root", 0) == 1:
             raise TenantTreeMountConflictError()
         ancestor = await DepartmentDao.aget_ancestors_with_mount(dept_id)
         if ancestor is not None:
@@ -186,7 +215,7 @@ class TenantMountService:
                 tenant_code=tenant_code,
                 tenant_name=tenant_name,
                 parent_tenant_id=ROOT_TENANT_ID,
-                status='active',
+                status="active",
                 root_dept_id=dept_id,
             )
             session.add(new_tenant)
@@ -200,6 +229,7 @@ class TenantMountService:
             await session.refresh(new_tenant)
 
         from bisheng.workstation.domain.services import WorkStationService
+
         await WorkStationService.acopy_root_builtin_tools_to_tenant(new_tenant.id)
 
         # F017 hook: fan out the Root ``shared_to`` relation + snapshot the
@@ -207,7 +237,8 @@ class TenantMountService:
         # mount idempotent — the FGA write is retryable via failed_tuples
         # (F013 compensator) and the DB row is already committed.
         distributed_resources = await cls._on_child_mounted(
-            new_tenant.id, auto_distribute=auto_distribute,
+            new_tenant.id,
+            auto_distribute=auto_distribute,
         )
 
         # Backfill user_tenant for primary-dept members under the subtree so
@@ -215,35 +246,37 @@ class TenantMountService:
         # filling in opportunistically on each user's next login. Failures
         # are swallowed — login-time lazy sync remains the long-term fallback.
         sync_result = await _safe_sync_subtree(
-            getattr(dept, 'path', None),
+            getattr(dept, "path", None),
             UserTenantSyncTrigger.MOUNT_BACKFILL,
         )
 
         await _safe_audit(
             tenant_id=new_tenant.id,
-            operator_id=getattr(operator, 'user_id', 0),
+            operator_id=getattr(operator, "user_id", 0),
             operator_tenant_id=ROOT_TENANT_ID,
             action=TenantAuditAction.MOUNT.value,
-            target_type='tenant',
+            target_type="tenant",
             target_id=str(new_tenant.id),
             metadata={
-                'dept_id': dept_id,
-                'dept_path': getattr(dept, 'path', None),
-                'tenant_code': tenant_code,
+                "dept_id": dept_id,
+                "dept_path": getattr(dept, "path", None),
+                "tenant_code": tenant_code,
                 # F017 AC-13: always record the auto_distribute flag + the
                 # snapshot of distributed resource ids (empty when False).
-                'auto_distribute': auto_distribute,
-                'distributed_resources': distributed_resources,
-                'synced_user_count': len(sync_result['synced']),
-                'failed_user_count': len(sync_result['failed']),
+                "auto_distribute": auto_distribute,
+                "distributed_resources": distributed_resources,
+                "synced_user_count": len(sync_result["synced"]),
+                "failed_user_count": len(sync_result["failed"]),
             },
         )
         return new_tenant
 
     @classmethod
     async def _on_child_mounted(
-        cls, new_child_id: int, auto_distribute: bool,
-    ) -> List[Dict[str, Any]]:
+        cls,
+        new_child_id: int,
+        auto_distribute: bool,
+    ) -> list[dict[str, Any]]:
         """F017 AC-02 / AC-13: on new Child mount, write the Tenant-level
         ``shared_to`` tuple and return a snapshot of shared Root resources.
 
@@ -255,13 +288,16 @@ class TenantMountService:
             return []
         try:
             from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+
             await ResourceShareService.distribute_to_child(
-                new_child_id, root_tenant_id=ROOT_TENANT_ID,
+                new_child_id,
+                root_tenant_id=ROOT_TENANT_ID,
             )
         except Exception as e:  # pragma: no cover — compensator handles retry
             logger.warning(
-                '[F017] distribute_to_child failed for child %s: %s',
-                new_child_id, e,
+                "[F017] distribute_to_child failed for child %s: %s",
+                new_child_id,
+                e,
             )
 
         # LLM uses resource-level shared_with (different mechanism from the
@@ -282,33 +318,45 @@ class TenantMountService:
             from bisheng.database.models.tenant import TenantDao
 
             root_tenant = await TenantDao.aget_by_id(ROOT_TENANT_ID)
-            share_default = bool(getattr(
-                root_tenant, 'share_default_to_children', True,
-            )) if root_tenant else True
+            share_default = (
+                bool(
+                    getattr(
+                        root_tenant,
+                        "share_default_to_children",
+                        True,
+                    )
+                )
+                if root_tenant
+                else True
+            )
             fga = get_fga_client()
             if share_default and fga is not None:
                 async with get_async_db_session() as session:
-                    res = await session.exec(sa_text(
-                        'SELECT id FROM llm_server WHERE tenant_id = :t'
-                    ).bindparams(t=ROOT_TENANT_ID))
+                    res = await session.exec(
+                        sa_text("SELECT id FROM llm_server WHERE tenant_id = :t").bindparams(t=ROOT_TENANT_ID)
+                    )
                     server_ids = [r[0] for r in res.all()]
                 if server_ids:
-                    writes = [{
-                        'user': f'tenant:{new_child_id}',
-                        'relation': 'shared_with',
-                        'object': f'llm_server:{sid}',
-                    } for sid in server_ids]
+                    writes = [
+                        {
+                            "user": f"tenant:{new_child_id}",
+                            "relation": "shared_with",
+                            "object": f"llm_server:{sid}",
+                        }
+                        for sid in server_ids
+                    ]
                     await fga.write_tuples(writes=writes)
         except Exception as e:  # pragma: no cover — compensator handles retry
             logger.warning(
-                '[F029] llm_server fanout to child %s failed: %s',
-                new_child_id, e,
+                "[F029] llm_server fanout to child %s failed: %s",
+                new_child_id,
+                e,
             )
 
         try:
             return await cls._list_root_shared_resources()
         except Exception as e:  # pragma: no cover
-            logger.warning('[F017] _list_root_shared_resources failed: %s', e)
+            logger.warning("[F017] _list_root_shared_resources failed: %s", e)
             return []
 
     @classmethod
@@ -332,13 +380,16 @@ class TenantMountService:
         """
         try:
             from bisheng.tenant.domain.services.resource_share_service import ResourceShareService
+
             await ResourceShareService.revoke_from_child(
-                child_tenant_id, root_tenant_id=ROOT_TENANT_ID,
+                child_tenant_id,
+                root_tenant_id=ROOT_TENANT_ID,
             )
         except Exception as e:  # pragma: no cover — compensator handles retry
             logger.warning(
-                '[F017] revoke_from_child failed for child %s: %s',
-                child_tenant_id, e,
+                "[F017] revoke_from_child failed for child %s: %s",
+                child_tenant_id,
+                e,
             )
 
         try:
@@ -354,22 +405,23 @@ class TenantMountService:
             # tenant-level relation, then batch-delete them. We restrict to
             # ``object=tenant:{child}`` / ``user=tenant:{child}`` shapes so
             # we never touch resource-level rows by mistake.
-            obj_tuples = await fga.read_tuples(object=f'tenant:{child_tenant_id}')
-            user_tuples = await fga.read_tuples(user=f'tenant:{child_tenant_id}')
+            obj_tuples = await fga.read_tuples(object=f"tenant:{child_tenant_id}")
+            user_tuples = await fga.read_tuples(user=f"tenant:{child_tenant_id}")
             seen: set = set()
-            deletes: List[Dict[str, str]] = []
+            deletes: list[dict[str, str]] = []
             for t in list(obj_tuples) + list(user_tuples):
-                key = (t.get('user'), t.get('relation'), t.get('object'))
+                key = (t.get("user"), t.get("relation"), t.get("object"))
                 if None in key or key in seen:
                     continue
                 seen.add(key)
-                deletes.append({'user': key[0], 'relation': key[1], 'object': key[2]})
+                deletes.append({"user": key[0], "relation": key[1], "object": key[2]})
             if deletes:
                 await fga.write_tuples(deletes=deletes)
         except Exception as e:  # pragma: no cover
             logger.warning(
-                '[F017] tenant-level tuple cleanup failed for child %s: %s',
-                child_tenant_id, e,
+                "[F017] tenant-level tuple cleanup failed for child %s: %s",
+                child_tenant_id,
+                e,
             )
 
     # Cap on audit_log.metadata.distributed_resources — bounds both the
@@ -380,7 +432,7 @@ class TenantMountService:
     _SHARED_RESOURCES_SNAPSHOT_CAP: int = 500
 
     @classmethod
-    async def _list_root_shared_resources(cls) -> List[Dict[str, Any]]:
+    async def _list_root_shared_resources(cls) -> list[dict[str, Any]]:
         """Return a capped snapshot ``[{'type': <5-type>, 'id': <str>}]`` of
         every Root row currently carrying ``is_shared=True``. Used as
         audit_log metadata on Child mount.
@@ -394,32 +446,34 @@ class TenantMountService:
         from bisheng.core.database import get_async_db_session
 
         sql = sa_text(
-            'SELECT * FROM ('
+            "SELECT * FROM ("
             "    SELECT 'knowledge_space' AS type, CAST(id AS CHAR) AS id FROM knowledge WHERE tenant_id = :t AND is_shared = 1"
             "    UNION ALL SELECT 'workflow',    CAST(id AS CHAR) FROM flow              WHERE tenant_id = :t AND is_shared = 1"
             "    UNION ALL SELECT 'assistant',   CAST(id AS CHAR) FROM assistant         WHERE tenant_id = :t AND is_shared = 1"
             "    UNION ALL SELECT 'channel',     CAST(id AS CHAR) FROM channel           WHERE tenant_id = :t AND is_shared = 1"
             "    UNION ALL SELECT 'tool',        CAST(id AS CHAR) FROM t_gpts_tools_type WHERE tenant_id = :t AND is_shared = 1"
-            ') u LIMIT :lim'
+            ") u LIMIT :lim"
         )
 
-        snapshot: List[Dict[str, Any]] = []
+        snapshot: list[dict[str, Any]] = []
         try:
             async with get_async_db_session() as session:
-                res = await session.exec(sql.bindparams(
-                    t=ROOT_TENANT_ID,
-                    lim=cls._SHARED_RESOURCES_SNAPSHOT_CAP + 1,
-                ))
+                res = await session.exec(
+                    sql.bindparams(
+                        t=ROOT_TENANT_ID,
+                        lim=cls._SHARED_RESOURCES_SNAPSHOT_CAP + 1,
+                    )
+                )
                 for row in res.all():
-                    snapshot.append({'type': row[0], 'id': row[1]})
+                    snapshot.append({"type": row[0], "id": row[1]})
         except Exception as e:
-            logger.warning('[F017] _list_root_shared_resources query failed: %s', e)
+            logger.warning("[F017] _list_root_shared_resources query failed: %s", e)
             return []
 
         # Truncation marker so operators know more rows exist beyond the cap.
         if len(snapshot) > cls._SHARED_RESOURCES_SNAPSHOT_CAP:
-            snapshot = snapshot[:cls._SHARED_RESOURCES_SNAPSHOT_CAP]
-            snapshot.append({'type': '_truncated', 'id': 'see shared resource tables'})
+            snapshot = snapshot[: cls._SHARED_RESOURCES_SNAPSHOT_CAP]
+            snapshot.append({"type": "_truncated", "id": "see shared resource tables"})
         return snapshot
 
     # -----------------------------------------------------------------------
@@ -431,7 +485,7 @@ class TenantMountService:
         cls,
         dept_id: int,
         operator,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Reverse a mount.
 
         v2.5.1 收窄到唯一路径：资源整体迁回 Root + Child 归档（PRD §5.2.2）。
@@ -449,27 +503,27 @@ class TenantMountService:
         if dept is None:
             raise TenantTreeMountConflictError()
 
-        child_tenant_id: Optional[int] = getattr(dept, 'mounted_tenant_id', None)
+        child_tenant_id: int | None = getattr(dept, "mounted_tenant_id", None)
         if not child_tenant_id:
-            if getattr(dept, 'is_tenant_root', 0) == 1:
+            if getattr(dept, "is_tenant_root", 0) == 1:
                 await DepartmentDao.aunset_mount(dept_id)
                 await _safe_audit(
                     tenant_id=ROOT_TENANT_ID,
-                    operator_id=getattr(operator, 'user_id', 0),
+                    operator_id=getattr(operator, "user_id", 0),
                     operator_tenant_id=ROOT_TENANT_ID,
                     action=TenantAuditAction.UNMOUNT.value,
-                    target_type='department',
+                    target_type="department",
                     target_id=str(dept_id),
                     metadata={
-                        'dept_id': dept_id,
-                        'stale_flag_cleared': True,
-                        'migrated_counts': {},
+                        "dept_id": dept_id,
+                        "stale_flag_cleared": True,
+                        "migrated_counts": {},
                     },
                 )
                 return {
-                    'tenant_id': None,
-                    'migrated_counts': {},
-                    'stale_flag_cleared': True,
+                    "tenant_id": None,
+                    "migrated_counts": {},
+                    "stale_flag_cleared": True,
                 }
             raise TenantTreeMountConflictError()
 
@@ -487,11 +541,7 @@ class TenantMountService:
         # code on a future remount without 1062 — UNIQUE on tenant_code stays
         # intact while the audit row is preserved with id unchanged.
         existing_tenant = await TenantDao.aget_by_id(child_tenant_id)
-        new_archived_code = (
-            archived_tenant_code(existing_tenant.tenant_code)
-            if existing_tenant is not None
-            else None
-        )
+        new_archived_code = archived_tenant_code(existing_tenant.tenant_code) if existing_tenant is not None else None
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 if new_archived_code is not None:
@@ -499,7 +549,7 @@ class TenantMountService:
                         sa_update(Tenant)
                         .where(Tenant.id == child_tenant_id)
                         .values(
-                            status='archived',
+                            status="archived",
                             tenant_code=new_archived_code,
                         )
                     )
@@ -522,77 +572,75 @@ class TenantMountService:
         # to the now-archived Child. With the flag cleared, sync_user lands
         # them on the nearest surviving ancestor mount (typically Root).
         sync_result = await _safe_sync_subtree(
-            getattr(dept, 'path', None),
+            getattr(dept, "path", None),
             UserTenantSyncTrigger.UNMOUNT_REDERIVE,
         )
 
         await _safe_audit(
             tenant_id=child_tenant_id,
-            operator_id=getattr(operator, 'user_id', 0),
+            operator_id=getattr(operator, "user_id", 0),
             operator_tenant_id=ROOT_TENANT_ID,
             action=TenantAuditAction.UNMOUNT.value,
-            target_type='tenant',
+            target_type="tenant",
             target_id=str(child_tenant_id),
             metadata={
-                'dept_id': dept_id,
-                'migrated_counts': migrated_counts,
-                'synced_user_count': len(sync_result['synced']),
-                'failed_user_count': len(sync_result['failed']),
+                "dept_id": dept_id,
+                "migrated_counts": migrated_counts,
+                "synced_user_count": len(sync_result["synced"]),
+                "failed_user_count": len(sync_result["failed"]),
             },
         )
         return {
-            'tenant_id': child_tenant_id,
-            'migrated_counts': migrated_counts,
+            "tenant_id": child_tenant_id,
+            "migrated_counts": migrated_counts,
         }
 
     @classmethod
     async def _migrate_child_resources_to_root(
-        cls, child_tenant_id: int,
-    ) -> Dict[str, int]:
+        cls,
+        child_tenant_id: int,
+    ) -> dict[str, int]:
         """Move every tenant-aware row from Child → Root via TenantDao.
 
         Thin delegate over ``TenantDao.abulk_update_tenant_id`` so the
         service layer does not own raw SQL — kept only as a semantic
         wrapper (fixed table whitelist, fixed from=child / to=Root).
 
-        Skips tables that are not present in the current deployment's
-        schema (deployments that haven't run later alembic migrations may
-        be missing ``dataset`` / ``linsight_*`` etc).
+        Tables whose model is not defined in the codebase are skipped: a
+        whitelist entry with no live SQLModel mapping is a stale/retired
+        table that no longer needs migrating. Preset tool rows are excluded
+        via ``_UNMOUNT_MIGRATE_ROW_FILTERS`` (per-tenant copies, not
+        Child-owned resources).
         """
-        existing = await cls._filter_existing_tables(_UNMOUNT_MIGRATE_TABLES)
+        tables = cls._filter_known_tables(_UNMOUNT_MIGRATE_TABLES)
+        row_filters = {t: f for t, f in _UNMOUNT_MIGRATE_ROW_FILTERS.items() if t in tables}
         return await TenantDao.abulk_update_tenant_id(
-            tables=existing,
+            tables=tables,
             from_tenant_id=child_tenant_id,
             to_tenant_id=ROOT_TENANT_ID,
+            table_row_filters=row_filters,
         )
 
-    @classmethod
-    async def _filter_existing_tables(cls, candidate: List[str]) -> List[str]:
-        """Return only the tables that currently exist in the live schema.
+    @staticmethod
+    def _filter_known_tables(candidate: list[str]) -> list[str]:
+        """Keep only whitelist tables that map to a live SQLModel table.
 
-        Queries ``information_schema.tables`` directly — works on MySQL and
-        PostgreSQL without needing a sync inspector. Some 114-style dev
-        deployments are missing tables from later alembic migrations
-        (``dataset``, ``linsight_*`` etc); skipping silently keeps the
-        unmount transaction whole.
+        Replaces the old MySQL-only system-catalog probe (which raised
+        "Invalid schema name" on DaMeng, an Oracle-compatible engine with no
+        such catalog nor a current-database function) with a dialect-agnostic,
+        no-IO check against the ORM's registered metadata. A whitelist entry
+        with no mapped table -- e.g. ``dataset``, which has no model and no
+        ``tenant_id`` column -- is a retired entry and is skipped rather than
+        migrated.
         """
-        from sqlalchemy import text as sa_text
+        from sqlmodel import SQLModel
 
-        from bisheng.core.database import get_async_db_session
-
-        async with get_async_db_session() as session:
-            res = await session.execute(
-                sa_text(
-                    'SELECT table_name FROM information_schema.tables '
-                    'WHERE table_schema = DATABASE()'
-                )
-            )
-            present = {row[0] for row in res.fetchall()}
-        kept = [t for t in candidate if t in present]
-        missing = [t for t in candidate if t not in present]
+        registered = set(SQLModel.metadata.tables.keys())
+        kept = [t for t in candidate if t in registered]
+        missing = [t for t in candidate if t not in registered]
         if missing:
             logger.warning(
-                'unmount migrate skipping missing tables: %s',
+                "unmount migrate skipping tables with no live model: %s",
                 missing,
             )
         return kept
@@ -606,10 +654,10 @@ class TenantMountService:
         cls,
         child_id: int,
         resource_type: str,
-        resource_ids: List[int],
+        resource_ids: list[int],
         operator,
-        new_owner_user_id: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        new_owner_user_id: int | None = None,
+    ) -> dict[str, Any]:
         """Sink Root-owned resources into a Child Tenant.
 
         Enforces:
@@ -625,64 +673,73 @@ class TenantMountService:
             # 22006 distinguishes "unknown resource_type" from 22002 "mount conflict".
             raise TenantTreeMigrateConflictError()
         if not resource_ids:
-            return {'migrated': 0, 'failed': []}
+            return {"migrated": 0, "failed": []}
         table = resource_type
 
         tenant_ids_by_resource = await cls._fetch_resource_tenant_ids(
-            table, resource_ids,
+            table,
+            resource_ids,
         )
 
-        passable: List[int] = []
-        failed: List[Dict[str, Any]] = []
+        passable: list[int] = []
+        failed: list[dict[str, Any]] = []
         for rid in resource_ids:
             current = tenant_ids_by_resource.get(rid)
             if current == ROOT_TENANT_ID:
                 passable.append(rid)
             else:
-                failed.append({
-                    'resource_id': rid,
-                    'reason': (
-                        f'{TenantTreeMigrateSourceError.Code}: '
-                        f'expected tenant_id=1 (Root), got {current!r}'
-                    ),
-                })
+                failed.append(
+                    {
+                        "resource_id": rid,
+                        "reason": (
+                            f"{TenantTreeMigrateSourceError.Code}: expected tenant_id=1 (Root), got {current!r}"
+                        ),
+                    }
+                )
 
         if passable:
             await cls._update_resource_tenant_id(table, passable, child_id)
 
         await _safe_audit(
             tenant_id=child_id,
-            operator_id=getattr(operator, 'user_id', 0),
+            operator_id=getattr(operator, "user_id", 0),
             operator_tenant_id=ROOT_TENANT_ID,
             action=TenantAuditAction.RESOURCE_MIGRATE.value,
-            target_type='resource_batch',
+            target_type="resource_batch",
             target_id=resource_type,
             metadata={
-                'from_tenant_id': ROOT_TENANT_ID,
-                'to_tenant_id': child_id,
-                'resource_type': resource_type,
-                'count': len(passable),
-                'resource_ids': passable,
-                'failed_count': len(failed),
-                'new_owner_user_id': new_owner_user_id,
+                "from_tenant_id": ROOT_TENANT_ID,
+                "to_tenant_id": child_id,
+                "resource_type": resource_type,
+                "count": len(passable),
+                "resource_ids": passable,
+                "failed_count": len(failed),
+                "new_owner_user_id": new_owner_user_id,
             },
         )
-        return {'migrated': len(passable), 'failed': failed}
+        return {"migrated": len(passable), "failed": failed}
 
     @classmethod
     async def _fetch_resource_tenant_ids(
-        cls, table: str, resource_ids: List[int],
-    ) -> Dict[int, int]:
+        cls,
+        table: str,
+        resource_ids: list[int],
+    ) -> dict[int, int]:
         """Delegate to ``TenantDao.afetch_resource_tenant_ids``."""
         return await TenantDao.afetch_resource_tenant_ids(table, resource_ids)
 
     @classmethod
     async def _update_resource_tenant_id(
-        cls, table: str, resource_ids: List[int], new_tenant_id: int,
+        cls,
+        table: str,
+        resource_ids: list[int],
+        new_tenant_id: int,
     ) -> None:
         """Delegate to ``TenantDao.aupdate_resource_tenant_ids``."""
         await TenantDao.aupdate_resource_tenant_ids(
-            table, resource_ids, new_tenant_id,
+            table,
+            resource_ids,
+            new_tenant_id,
         )
 
 
@@ -692,19 +749,22 @@ class TenantMountService:
 # itself fails. spec §5.4 calls this "fail-open with logger.error".
 # ---------------------------------------------------------------------------
 
+
 async def _safe_audit(**kwargs: Any) -> None:
     try:
         await AuditLogDao.ainsert_v2(**kwargs)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error(
-            'audit_log insert failed for action=%s: %s',
-            kwargs.get('action'), exc,
+            "audit_log insert failed for action=%s: %s",
+            kwargs.get("action"),
+            exc,
         )
 
 
 async def _safe_sync_subtree(
-    dept_path: Optional[str], trigger: 'UserTenantSyncTrigger',
-) -> Dict[str, list]:
+    dept_path: str | None,
+    trigger: UserTenantSyncTrigger,
+) -> dict[str, list]:
     """Best-effort wrapper around ``UserTenantSyncService.sync_subtree_primary_users``.
 
     Returns the ``{synced, failed}`` shape always — on any unhandled error
@@ -715,17 +775,21 @@ async def _safe_sync_subtree(
     cycle off the top-level import graph.
     """
     if not dept_path:
-        return {'synced': [], 'failed': []}
+        return {"synced": [], "failed": []}
     try:
         from bisheng.tenant.domain.services.user_tenant_sync_service import (
             UserTenantSyncService,
         )
+
         return await UserTenantSyncService.sync_subtree_primary_users(
-            dept_path=dept_path, trigger=trigger,
+            dept_path=dept_path,
+            trigger=trigger,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
-            'sync_subtree_primary_users dispatch failed for path=%s trigger=%s: %s',
-            dept_path, getattr(trigger, 'value', trigger), exc,
+            "sync_subtree_primary_users dispatch failed for path=%s trigger=%s: %s",
+            dept_path,
+            getattr(trigger, "value", trigger),
+            exc,
         )
-        return {'synced': [], 'failed': []}
+        return {"synced": [], "failed": []}
