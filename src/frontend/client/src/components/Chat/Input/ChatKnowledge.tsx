@@ -357,12 +357,11 @@ export const ChatKnowledge = ({
     }
   }, []);
 
-  useEffect(() => {
-    loadSpaces();
-  }, [loadSpaces]);
-
-  // Track root dropdown open so we can refresh spaces when it's reopened
-  // (new spaces created outside this component won't appear otherwise).
+  // Spaces are only shown inside the open picker, so load them lazily on first
+  // open (and refresh on each reopen) instead of eagerly on mount. The eager
+  // mount-fetch fired knowledge/space/{mine,joined} every time the input box
+  // re-mounted (e.g. the send-triggered welcome→messages layout flip), causing
+  // duplicate requests on send.
   const [rootOpen, setRootOpen] = useState(false);
   useEffect(() => {
     if (rootOpen) loadSpaces();

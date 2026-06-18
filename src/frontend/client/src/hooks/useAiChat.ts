@@ -313,6 +313,17 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                 onTaskHandoff: ({ session_version_id: svid, chat_id }) => {
                     if (!svid) return;
 
+                    // The handoff is the daily SSE's last act: the task now runs via
+                    // the linsight worker/WS, so the daily stream is done. Clear
+                    // isStreaming NOW instead of waiting for the stream to drop on
+                    // its own (which can lag) — otherwise the input's stop button,
+                    // gated on `isStreaming || taskRunning`, stays lit after a task
+                    // is terminated (incl. from the QueueCard) until the stale stream
+                    // finally closes. With this, taskRunning alone drives the button,
+                    // so every terminate path syncs the input immediately. (QA: stop
+                    // /cancel while queued.)
+                    setIsStreaming(false);
+
                     // Bind this conversation (new convo: chat_id was just minted
                     // server-side as a flow_type=15 daily session). Guard the load
                     // effect from refetching (and clobbering) the optimistic task
