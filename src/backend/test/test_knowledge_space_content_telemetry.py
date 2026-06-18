@@ -20,7 +20,12 @@ class _FakeAsyncIndexClient:
 class _FakeSyncIndexClient:
     def __init__(self):
         self.deleted_queries = []
-        self.indices = SimpleNamespace(exists=lambda **kwargs: True)
+        self.refreshed_indices = []
+        self.indices = SimpleNamespace(exists=lambda **kwargs: True, refresh=self.refresh_index)
+
+    def refresh_index(self, **kwargs):
+        self.refreshed_indices.append(kwargs)
+        return {"_shards": {"successful": 1}}
 
     def delete_by_query(self, **kwargs):
         self.deleted_queries.append(kwargs)
@@ -167,9 +172,11 @@ def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monk
     deleted = module.KnowledgeSpaceContentStat().delete_stale_file_records_sync("run-1")
 
     assert deleted == 3
+    assert fake_client.refreshed_indices == [{"index": "mid_knowledge_space_content_stat"}]
     call = fake_client.deleted_queries[0]
     assert call["index"] == "mid_knowledge_space_content_stat"
     assert call["refresh"] is True
+    assert call["conflicts"] == "proceed"
     assert call["body"]["query"]["bool"]["filter"] == [{"term": {"record_type": "file"}}]
     assert call["body"]["query"]["bool"]["must_not"] == [{"term": {"sync_run_id": "run-1"}}]
 
@@ -202,9 +209,7 @@ def test_knowledge_space_content_pop_pending_file_ids_caps_batch_size(monkeypatc
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
 
     fake_redis = _FakeRedisSetClient()
-    fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY] = {
-        str(idx) for idx in range(600)
-    }
+    fake_redis.sets[module.KnowledgeSpaceContentStat.FILE_PENDING_KEY] = {str(idx) for idx in range(600)}
     monkeypatch.setattr(module, "get_redis_client_sync", lambda: fake_redis, raising=False)
 
     file_ids = module.KnowledgeSpaceContentStat.pop_pending_file_ids_sync()
@@ -215,7 +220,7 @@ def test_knowledge_space_content_pop_pending_file_ids_caps_batch_size(monkeypatc
 
 def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monkeypatch):
     from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
-    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
     worker_module = _import_worker_mid_table()
     stat_cls = worker_module.KnowledgeSpaceContentStat
 
@@ -256,8 +261,12 @@ def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monk
     monkeypatch.setattr(stat_cls, "pop_pending_space_delete_ids_sync", lambda: [], raising=False)
     monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
     monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
-    monkeypatch.setattr(stat_cls, "delete_file_records_sync", lambda self, file_ids: deleted.extend(file_ids), raising=False)
-    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient())
+    monkeypatch.setattr(
+        stat_cls, "delete_file_records_sync", lambda self, file_ids: deleted.extend(file_ids), raising=False
+    )
+    monkeypatch.setattr(
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient()
+    )
     monkeypatch.setattr(
         worker_module,
         "_get_knowledge_space_content_rows_by_file_ids",
@@ -273,7 +282,6 @@ def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monk
 
 
 def test_sync_pending_knowledge_space_content_stat_handles_space_rename_and_delete(monkeypatch):
-    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
     worker_module = _import_worker_mid_table()
     stat_cls = worker_module.KnowledgeSpaceContentStat
 
@@ -305,7 +313,9 @@ def test_sync_pending_knowledge_space_content_stat_handles_space_rename_and_dele
         lambda self, space_ids: deleted_spaces.extend(space_ids),
         raising=False,
     )
-    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient())
+    monkeypatch.setattr(
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient()
+    )
     monkeypatch.setattr(
         worker_module,
         "_get_success_space_file_rows_by_space_id",

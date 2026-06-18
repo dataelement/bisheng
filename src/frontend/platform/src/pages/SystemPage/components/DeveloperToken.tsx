@@ -38,8 +38,18 @@ import {
 } from "@/controllers/API/developerToken"
 import { userContext } from "@/contexts/userContext"
 import { formatIsoDateTime } from "@/util/utils"
+import type { ClipboardEvent, CompositionEvent, FormEvent, KeyboardEvent } from "react"
 import { useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import {
+  findInvalidIpWhitelistRule,
+  formatLimitInput,
+  isRateLimitControlKey,
+  isRateLimitInputAllowed,
+  isRateLimitValueValid,
+  parseLimit,
+  sanitizeRateLimitInput,
+} from "./developerTokenValidation"
 
 const PAGE_SIZE = 20
 
@@ -72,17 +82,10 @@ function toForm(row?: DeveloperTokenRecord): TokenFormState {
     override_ip_whitelist: row?.override_ip_whitelist ?? false,
     ip_whitelist: row?.ip_whitelist || "",
     override_rate_limit: row?.override_rate_limit ?? false,
-    rate_limit_per_minute: row?.rate_limit_per_minute
+    rate_limit_per_minute: row?.rate_limit_per_minute != null
       ? String(row.rate_limit_per_minute)
       : "",
   }
-}
-
-function parseLimit(value: string): number | null {
-  const clean = value.trim()
-  if (!clean) return null
-  const parsed = Number(clean)
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
 function asPayload(form: TokenFormState): DeveloperTokenPayload {
@@ -128,6 +131,7 @@ export default function DeveloperToken() {
   const [keyword, setKeyword] = useState("")
   const [loading, setLoading] = useState(false)
   const [config, setConfig] = useState<DeveloperTokenGlobalConfig>(emptyConfig)
+  const [globalRateLimit, setGlobalRateLimit] = useState("")
   const [configSaving, setConfigSaving] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<TokenFormState>(() => toForm())
@@ -157,6 +161,7 @@ export default function DeveloperToken() {
     if (!isSuperAdmin) return
     const result = await getDeveloperTokenGlobalConfigApi()
     setConfig(result)
+    setGlobalRateLimit(formatLimitInput(result.rate_limit_per_minute))
   }
 
   useEffect(() => {
@@ -175,6 +180,67 @@ export default function DeveloperToken() {
     setFormOpen(true)
   }
 
+  const showRateLimitError = () => {
+    toast({
+      title: t("prompt"),
+      variant: "error",
+      description: t("system.developerToken.rateLimitIntegerError"),
+    })
+  }
+
+  const showIpWhitelistError = (rule: string) => {
+    toast({
+      title: t("prompt"),
+      variant: "error",
+      description: t("system.developerToken.ipWhitelistInvalidError", { rule }),
+    })
+  }
+
+  const handleRateLimitChange = (value: string, onAccepted: (nextValue: string) => void) => {
+    if (!isRateLimitInputAllowed(value)) {
+      onAccepted(sanitizeRateLimitInput(value))
+      showRateLimitError()
+      return
+    }
+    onAccepted(value)
+  }
+
+  const handleRateLimitKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (isRateLimitControlKey(event.key) || event.metaKey || event.ctrlKey || event.altKey) {
+      return
+    }
+    if (!/^\d$/.test(event.key)) {
+      event.preventDefault()
+    }
+  }
+
+  const handleRateLimitBeforeInput = (event: FormEvent<HTMLInputElement>) => {
+    const nativeEvent = event.nativeEvent as InputEvent
+    if (nativeEvent.data && !isRateLimitInputAllowed(nativeEvent.data)) {
+      event.preventDefault()
+    }
+  }
+
+  const handleRateLimitPaste = (event: ClipboardEvent<HTMLInputElement>) => {
+    const value = event.clipboardData.getData("text")
+    if (!isRateLimitInputAllowed(value)) {
+      event.preventDefault()
+      showRateLimitError()
+    }
+  }
+
+  const handleRateLimitCompositionEnd = (
+    event: CompositionEvent<HTMLInputElement>,
+    onAccepted: (nextValue: string) => void
+  ) => {
+    const value = event.currentTarget.value
+    if (isRateLimitInputAllowed(value)) return
+    const sanitized = sanitizeRateLimitInput(value)
+    event.currentTarget.value = sanitized
+    onAccepted(sanitized)
+    showRateLimitError()
+  }
+
   const handleSave = async () => {
     const needsBindingContext = !form.id || form.binding_changed
     if (!form.name.trim() || form.user.length === 0 || (needsBindingContext && !hasSelectedBindingContext(form))) {
@@ -183,6 +249,15 @@ export default function DeveloperToken() {
         variant: "error",
         description: t("system.developerToken.requiredError"),
       })
+      return
+    }
+    if (!isRateLimitValueValid(form.rate_limit_per_minute)) {
+      showRateLimitError()
+      return
+    }
+    const invalidIpRule = findInvalidIpWhitelistRule(form.ip_whitelist)
+    if (invalidIpRule) {
+      showIpWhitelistError(invalidIpRule)
       return
     }
     setSaving(true)
@@ -217,26 +292,30 @@ export default function DeveloperToken() {
     })
   }
 
-  const handleViewSecret = (row: DeveloperTokenRecord) => {
-    bsConfirm({
-      desc: t("system.developerToken.secretConfirm", { prefix: row.token_prefix }),
-      onOk: async (close) => {
-        const result = await viewDeveloperTokenSecretApi(row.id)
-        setSecret(result.plaintext_token)
-        setSecretOpen(true)
-        close()
-      },
-    })
+  const handleViewSecret = async (row: DeveloperTokenRecord) => {
+    const result = await viewDeveloperTokenSecretApi(row.id)
+    setSecret(result.plaintext_token)
+    setSecretOpen(true)
   }
 
   const handleSaveConfig = async () => {
+    const invalidIpRule = findInvalidIpWhitelistRule(config.ip_whitelist)
+    if (invalidIpRule) {
+      showIpWhitelistError(invalidIpRule)
+      return
+    }
+    if (!isRateLimitValueValid(globalRateLimit)) {
+      showRateLimitError()
+      return
+    }
     setConfigSaving(true)
     try {
       const result = await updateDeveloperTokenGlobalConfigApi({
         ip_whitelist: config.ip_whitelist || "",
-        rate_limit_per_minute: config.rate_limit_per_minute || null,
+        rate_limit_per_minute: parseLimit(globalRateLimit),
       })
       setConfig(result)
+      setGlobalRateLimit(formatLimitInput(result.rate_limit_per_minute))
       toast({
         title: t("prompt"),
         variant: "success",
@@ -267,13 +346,16 @@ export default function DeveloperToken() {
             <label className="space-y-1 text-sm">
               <span>{t("system.developerToken.globalRateLimit")}</span>
               <Input
-                type="number"
-                min={0}
-                value={config.rate_limit_per_minute ?? ""}
-                onChange={(event) => setConfig({
-                  ...config,
-                  rate_limit_per_minute: parseLimit(event.target.value),
-                })}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder={t("system.developerToken.globalRateLimitPlaceholder")}
+                value={globalRateLimit}
+                onBeforeInput={handleRateLimitBeforeInput}
+                onKeyDown={handleRateLimitKeyDown}
+                onPaste={handleRateLimitPaste}
+                onCompositionEnd={(event) => handleRateLimitCompositionEnd(event, setGlobalRateLimit)}
+                onChange={(event) => handleRateLimitChange(event.target.value, setGlobalRateLimit)}
               />
             </label>
             <div className="flex items-end">
@@ -291,6 +373,7 @@ export default function DeveloperToken() {
             <SearchIcon className="absolute left-2 top-2 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-8"
+              placeholder={t("system.developerToken.searchPlaceholder")}
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
               onKeyDown={(event) => {
@@ -415,7 +498,7 @@ export default function DeveloperToken() {
           <div className="grid gap-3 md:grid-cols-2">
             <label className="space-y-1 text-sm">
               <span>{t("system.developerToken.fields.name")}</span>
-              <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
+              <Input value={form.name} placeholder={t("system.developerToken.namePlaceholder")} onChange={(event) => setForm({ ...form, name: event.target.value })} />
             </label>
             <div className="space-y-1 text-sm">
               <span>{t("system.developerToken.fields.user")}</span>
@@ -463,10 +546,22 @@ export default function DeveloperToken() {
             <label className="space-y-1 text-sm">
               <span>{t("system.developerToken.fields.rateLimit")}</span>
               <Input
-                type="number"
-                min={0}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder={t("system.developerToken.rateLimitPlaceholder")}
                 value={form.rate_limit_per_minute}
-                onChange={(event) => setForm({ ...form, rate_limit_per_minute: event.target.value })}
+                onBeforeInput={handleRateLimitBeforeInput}
+                onKeyDown={handleRateLimitKeyDown}
+                onPaste={handleRateLimitPaste}
+                onCompositionEnd={(event) => handleRateLimitCompositionEnd(
+                  event,
+                  (value) => setForm({ ...form, rate_limit_per_minute: value })
+                )}
+                onChange={(event) => handleRateLimitChange(
+                  event.target.value,
+                  (value) => setForm({ ...form, rate_limit_per_minute: value })
+                )}
               />
             </label>
           </div>

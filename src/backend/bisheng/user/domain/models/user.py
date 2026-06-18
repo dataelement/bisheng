@@ -41,6 +41,13 @@ class UserBase(SQLModelSerializable):
             comment='External employee ID for sync',
         ),
     )
+    guid: Optional[str] = Field(
+        default=None,
+        sa_column=Column(
+            String(64), nullable=True, index=True,
+            comment='SSO account GUID',
+        ),
+    )
     delete: int = Field(default=0, index=False)
     disable_source: Optional[str] = Field(
         default=None,
@@ -468,6 +475,14 @@ class UserDao(UserBase):
         """Get user by external_id globally (cross-source)."""
         async with get_async_db_session() as session:
             statement = select(User).where(User.external_id == external_id)
+            result = await session.exec(statement)
+            return result.first()
+
+    @classmethod
+    async def aget_by_guid(cls, guid: str) -> Optional['User']:
+        """Get user by SSO guid globally."""
+        async with get_async_db_session() as session:
+            statement = select(User).where(User.guid == guid)
             result = await session.exec(statement)
             return result.first()
 

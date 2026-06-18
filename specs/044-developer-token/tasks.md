@@ -155,7 +155,7 @@ Every implementation task includes:
   - _Boundary: `src/frontend/platform/src/controllers/API/developerToken.ts` only._
 
 - [x] T017 Implement Developer Token Platform UI component
-  - Done when: Developer Token component renders global config panel, token table, create/edit dialog, delete confirmation, secret view confirmation/dialog, form validation hooks, loading/empty states, and error display via existing Platform patterns.
+  - Done when: Developer Token component renders global config panel, token table, create/edit dialog, delete confirmation, direct secret view dialog, form validation hooks, loading/empty states, and error display via existing Platform patterns.
   - _Requirements: REQ-001, REQ-002, REQ-003, REQ-007, REQ-008_
   - _Acceptance: AC-REQ-001-05, AC-REQ-002-01, AC-REQ-002-02, AC-REQ-002-03, AC-REQ-002-04, AC-REQ-002-05, AC-REQ-003-07, AC-REQ-007-02, AC-REQ-007-03, AC-REQ-007-04, AC-REQ-007-05, AC-REQ-007-06, AC-REQ-007-07_
   - _Verification: Manual Platform checklist; frontend typecheck/build if available.
@@ -181,9 +181,9 @@ Every implementation task includes:
   - _Boundary: Verification only; no new behavior implementation._
 
 - [ ] T020 Run Platform manual verification checklist
-  - Done when: manual evidence covers tab visibility, global config visibility/editing, tenant admin restrictions, token create/edit/delete/list, secret view, invalid whitelist error, and disabled token authentication rejection.
+  - Done when: manual evidence covers tab visibility, global config visibility/editing, tenant admin restrictions, token create/edit/delete/list, secret view, invalid whitelist error, integer-only rate-limit input, and disabled token authentication rejection.
   - _Requirements: REQ-007_
-  - _Acceptance: AC-REQ-007-01, AC-REQ-007-02, AC-REQ-007-03, AC-REQ-007-04, AC-REQ-007-05, AC-REQ-007-06, AC-REQ-007-07_
+  - _Acceptance: AC-REQ-007-01, AC-REQ-007-02, AC-REQ-007-03, AC-REQ-007-04, AC-REQ-007-05, AC-REQ-007-06, AC-REQ-007-07, AC-REQ-007-10_
   - _Verification: Manual notes/screenshots or `verification.md` entries after implementation._
   - _Depends: T018, T019_
   - _Boundary: Manual verification only; no new behavior implementation._
@@ -191,7 +191,7 @@ Every implementation task includes:
 - [x] T021 Run frontend static verification
   - Done when: Platform build/typecheck/lint command chosen by the project succeeds, or failures unrelated to this feature are documented with evidence.
   - _Requirements: REQ-007_
-  - _Acceptance: AC-REQ-007-01, AC-REQ-007-02, AC-REQ-007-03, AC-REQ-007-04, AC-REQ-007-05, AC-REQ-007-06, AC-REQ-007-07_
+  - _Acceptance: AC-REQ-007-01, AC-REQ-007-02, AC-REQ-007-03, AC-REQ-007-04, AC-REQ-007-05, AC-REQ-007-06, AC-REQ-007-07, AC-REQ-007-10_
   - _Verification: Example target `cd src/frontend/platform && npm run build` or project-approved equivalent._
   - _Depends: T018_
   - _Boundary: Verification only; no dependency installation unless separately approved._
@@ -261,6 +261,106 @@ Every implementation task includes:
   - _Depends: T025, T026, T027, T028_
   - _Boundary: Verification artifact only._
 
+## Phase 8: Rate Limit Input Regression
+
+- [x] T030 Update SDD artifacts for integer-only rate-limit input
+  - Done when: requirements/design/tasks record the bug where global and token-level rate-limit fields allow decimals and can trigger unclear HTTP 422 failures.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-10_
+  - _Verification: Review `requirements.md`, `design.md`, and `tasks.md` traceability._
+  - _Boundary: `specs/044-developer-token/` only._
+
+- [x] T031 Fix Platform rate-limit integer validation
+  - Done when: Developer Token global config and create/edit dialog rate-limit inputs reject non-digit values locally, keep empty/`0` as no-limit, and show a clear toast instead of allowing an unclear 422 path.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-10_
+  - _Verification: `cd src/frontend/platform && npm run build`; code review of `DeveloperToken.tsx` input and save paths._
+  - _Depends: T030_
+  - _Boundary: `src/frontend/platform/src/pages/SystemPage/components/DeveloperToken.tsx` and locale keys only._
+
+- [x] T032 Refresh verification after rate-limit input regression fix
+  - Done when: `verification.md` records frontend build, locale JSON validation, architecture guard, and remaining manual UI requirements for global and token-level integer-only rate-limit input.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-10_
+  - _Verification: `specs/044-developer-token/verification.md` evidence entries._
+  - _Depends: T031_
+  - _Boundary: Verification artifact only._
+
+## Phase 9: IP Whitelist Input Regression
+
+- [x] T033 Update SDD artifacts for IP whitelist validation feedback
+  - Done when: requirements/design/tasks record the bug where global and token-level whitelist inputs can save invalid IP/CIDR values without clear page-level feedback.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-07_
+  - _Verification: Review `requirements.md`, `design.md`, and `tasks.md` traceability._
+  - _Boundary: `specs/044-developer-token/` only._
+
+- [x] T034 Fix Platform IP whitelist validation feedback
+  - Done when: global config and token create/edit save paths reject invalid single-IP/CIDR whitelist rules locally, preserve empty allow-all semantics, and localize backend `19809` fallback errors.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-07_
+  - _Verification: `cd src/frontend/platform && npm run test -- developerTokenValidation.test.ts`; `cd src/frontend/platform && npm run build`; locale JSON validation._
+  - _Depends: T033_
+  - _Boundary: `src/frontend/platform/src/pages/SystemPage/components/DeveloperToken.tsx`, `src/frontend/platform/src/pages/SystemPage/components/developerTokenValidation.ts`, `src/frontend/platform/src/test/developerTokenValidation.test.ts`, and locale keys only._
+
+- [x] T035 Refresh verification after IP whitelist validation feedback fix
+  - Done when: `verification.md` records frontend unit test, build, locale JSON validation, architecture guard, line-count check, and remaining manual UI requirements for invalid whitelist feedback.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-07_
+  - _Verification: `specs/044-developer-token/verification.md` evidence entries._
+  - _Depends: T034_
+  - _Boundary: Verification artifact only._
+
+## Phase 10: Secret View Confirmation Removal
+
+- [x] T036 Update SDD artifacts for direct secret view action
+  - Done when: requirements/design/tasks record that the Developer Token "view secret" action opens the plaintext token dialog directly without a frontend confirmation prompt.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-06_
+  - _Verification: Review `requirements.md`, `design.md`, and `tasks.md` traceability._
+  - _Boundary: `specs/044-developer-token/` only._
+
+- [x] T037 Remove Platform secret view confirmation prompt
+  - Done when: clicking "view secret" directly calls the secret API and opens the existing plaintext token dialog, while delete confirmation and backend audit behavior are unchanged.
+  - _Requirements: REQ-007, REQ-008_
+  - _Acceptance: AC-REQ-007-06, AC-REQ-008-01_
+  - _Verification: `cd src/frontend/platform && npm run build`; static search confirms `secretConfirm` is no longer referenced._
+  - _Depends: T036_
+  - _Boundary: `src/frontend/platform/src/pages/SystemPage/components/DeveloperToken.tsx` and locale keys only._
+
+- [x] T038 Refresh verification after secret view confirmation removal
+  - Done when: `verification.md` records frontend build, locale JSON validation, architecture guard, line-count check, and remaining manual UI requirements for direct secret view.
+  - _Requirements: REQ-007, REQ-008_
+  - _Acceptance: AC-REQ-007-06, AC-REQ-008-01_
+  - _Verification: `specs/044-developer-token/verification.md` evidence entries._
+  - _Depends: T037_
+  - _Boundary: Verification artifact only._
+
+## Phase 11: Input Placeholder Coverage
+
+- [x] T039 Update SDD artifacts for Developer Token input placeholders
+  - Done when: requirements/design/tasks record that every Developer Token text input must have a localized placeholder matching its field purpose.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-11_
+  - _Verification: Review `requirements.md`, `design.md`, and `tasks.md` traceability._
+  - _Boundary: `specs/044-developer-token/` only._
+
+- [x] T040 Add missing Platform Developer Token placeholders
+  - Done when: list search, token name, global rate-limit, and token rate-limit inputs have localized placeholders, while existing IP whitelist and user picker placeholders remain intact.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-11_
+  - _Verification: `cd src/frontend/platform && npm run build`; locale JSON validation; static placeholder search._
+  - _Depends: T039_
+  - _Boundary: `src/frontend/platform/src/pages/SystemPage/components/DeveloperToken.tsx` and locale keys only._
+
+- [x] T041 Refresh verification after input placeholder coverage
+  - Done when: `verification.md` records frontend build, locale JSON validation, architecture guard, line-count check, and remaining manual UI requirements for placeholder coverage.
+  - _Requirements: REQ-007_
+  - _Acceptance: AC-REQ-007-11_
+  - _Verification: `specs/044-developer-token/verification.md` evidence entries._
+  - _Depends: T040_
+  - _Boundary: Verification artifact only._
+
 ## Coverage Matrix
 | Requirement | Acceptance Criteria | Tasks | Verification |
 |---|---|---|---|
@@ -270,8 +370,8 @@ Every implementation task includes:
 | REQ-004 | AC-REQ-004-01..09 | T011, T013, T019, T022, T023 | Backend dependency tests, regression review |
 | REQ-005 | AC-REQ-005-01..06 | T012, T013, T019, T022, T023 | Backend dependency/limiter tests |
 | REQ-006 | AC-REQ-006-01..06 | T001, T002, T003, T004, T005, T006, T007, T014, T015, T019, T022, T023, T027, T029 | Migration/code review, backend tests, arch review |
-| REQ-007 | AC-REQ-007-01..09 | T016, T017, T018, T020, T021, T023, T024, T025, T026, T028, T029 | Platform manual checklist, frontend static verification |
-| REQ-008 | AC-REQ-008-01..04 | T008, T010, T014, T015, T019, T022, T023 | Backend API/service tests, audit/log review |
+| REQ-007 | AC-REQ-007-01..11 | T016, T017, T018, T020, T021, T023, T024, T025, T026, T028, T029, T030, T031, T032, T033, T034, T035, T036, T037, T038, T039, T040, T041 | Platform manual checklist, frontend unit/static verification |
+| REQ-008 | AC-REQ-008-01..04 | T008, T010, T014, T015, T019, T022, T023, T037, T038 | Backend API/service tests, audit/log review |
 
 ## Task Quality Gate
 - [x] Every task references at least one requirement ID.

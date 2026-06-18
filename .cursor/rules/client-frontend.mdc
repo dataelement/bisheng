@@ -1,0 +1,34 @@
+---
+description: Client 前端开发规则 (src/frontend/client)
+globs: src/frontend/client/**
+alwaysApply: false
+---
+
+# Client Frontend (src/frontend/client/)
+
+## Tech Stack
+
+Vite + React 18 + TypeScript + TailwindCSS 3 + Radix UI (shadcn/ui) + Recoil + react-i18next + react-router-dom v6 + lucide-react
+
+## Mandatory Rules
+
+- TypeScript only (`.ts` / `.tsx`); functional components only
+- Path alias: `~/` (or `@/`) → `src/`
+- HTTP: `~/api/request.ts` only — never import axios directly
+- State: Recoil (`~/store/`) only — no new state libraries
+- UI: `~/components/ui/` (shadcn) — no new UI libraries
+- Single file ≤ 600 lines
+- Toast: `showToast?.({ message, severity: 'error'|'success' })`
+- i18n: `useLocalize()` → `localize()`. Locales: `src/locales/{en,zh-Hans,ja}/translation.json`
+
+## Coding Style
+
+- `interface` for Props; `type` for internal types
+- `handleXxx` internal; `onXxx` for props
+- Named exports, no default exports for components
+- Comments in English
+
+## Pitfalls
+
+- 403: handled by interceptor with redirection — no manual handling in business code
+- i18n keys: nested namespace format (see `/i18n-localizer` skill)

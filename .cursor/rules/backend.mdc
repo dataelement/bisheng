@@ -1,0 +1,33 @@
+---
+description: BiSheng 后端开发规则 — DDD、错误处理、命令
+globs: src/backend/**
+alwaysApply: false
+---
+
+# Backend Development Rules
+
+Full reference: `src/backend/AGENTS.md`. P0 rules in root `AGENTS.md`.
+
+## Error Handling
+
+Never silently swallow exceptions. Use `logger.exception(...)` and re-raise or raise `BaseErrorCode` subclass. Don't launder exceptions through `resp_500(message=str(e))`.
+
+## Key Conventions
+
+- Repository interfaces: `domain/repositories/interfaces/` extend `BaseRepository`
+- Implementations: `domain/repositories/implementations/` extend `BaseRepositoryImpl`
+- Schema changes: Alembic migrations in `bisheng/core/database/alembic/versions`
+- Business errors: `bisheng/common/errcode/` as `BaseErrorCode` subclasses
+- Sessions: dependency injection or `@db_session` — no ad-hoc sessions
+
+## Commands (cwd: `src/backend/`)
+
+```bash
+uv sync --frozen
+uv run pytest test/<module>/test_xxx.py -v
+uv run ruff format <file> && uv run ruff check --fix <file>
+export config=config.yaml && uv run uvicorn bisheng.main:app --host 0.0.0.0 --port 7860
+uv run alembic upgrade head
+```
+
+New tests under `test/<module>/`, not `test/` root. `asyncio_mode=auto`.

@@ -912,6 +912,7 @@ class WorkStationService(BaseService):
         use_knowledge_param: UseKnowledgeBaseParam,
         max_token: int,
         login_user: UserPayload,
+        file_ids_by_space: Optional[dict[int, list[int]]] = None,
     ) -> tuple[list[str], Optional[list[dict]], list[dict]]:
         """Query relevant knowledge blocks from the database.
 
@@ -952,6 +953,10 @@ class WorkStationService(BaseService):
             for kb_id, vectorstore_info in knowledge_vector_list.items():
                 if len(finally_docs) >= max_total_docs:
                     break
+                allowed_file_ids = cls._get_allowed_file_ids_for_space(file_ids_by_space, kb_id)
+                if allowed_file_ids == []:
+                    logger.info(f'[queryChunksFromDB] kb={kb_id} empty file filter, skip')
+                    continue
                 milvus_vectorstore = vectorstore_info.get('milvus')
                 es_vectorstore = vectorstore_info.get('es')
                 kb_row = vectorstore_info.get('knowledge')
@@ -968,10 +973,15 @@ class WorkStationService(BaseService):
                     continue
 
                 try:
+                    milvus_search_kwargs = {'k': 100, 'param': {'ef': 110}}
+                    es_search_kwargs = {'k': 100}
+                    if allowed_file_ids is not None:
+                        milvus_search_kwargs['expr'] = f'document_id in {allowed_file_ids}'
+                        es_search_kwargs['filter'] = [{'terms': {'metadata.document_id': allowed_file_ids}}]
                     per_kb_milvus = (
                         MultiRetriever(
                             vectors=[milvus_vectorstore],
-                            search_kwargs=[{'k': 100, 'param': {'ef': 110}}],
+                            search_kwargs=[milvus_search_kwargs],
                             finally_k=100,
                         )
                         if milvus_vectorstore is not None else None
@@ -979,7 +989,7 @@ class WorkStationService(BaseService):
                     per_kb_es = (
                         MultiRetriever(
                             vectors=[es_vectorstore],
-                            search_kwargs=[{'k': 100}],
+                            search_kwargs=[es_search_kwargs],
                             finally_k=100,
                         )
                         if es_vectorstore is not None else None
@@ -992,6 +1002,13 @@ class WorkStationService(BaseService):
                         sort_by_source_and_index=True,
                     )
                     kb_docs = await per_kb_tool.ainvoke({'query': question})
+                    if allowed_file_ids is not None and kb_docs:
+                        allowed_set = set(allowed_file_ids)
+                        kb_docs = [
+                            doc
+                            for doc in kb_docs
+                            if cls._doc_matches_file_filter(doc, int(kb_id), allowed_set)
+                        ]
                     docs_count = len(kb_docs) if kb_docs else 0
                     if kb_docs:
                         finally_docs.extend(kb_docs)
@@ -1036,6 +1053,52 @@ class WorkStationService(BaseService):
         except Exception as exc:
             logger.exception(f'queryChunksFromDB error: {exc}')
             return [], None, failures
+
+    @classmethod
+    def _get_allowed_file_ids_for_space(
+        cls,
+        file_ids_by_space: Optional[dict[int, list[int]]],
+        kb_id: Any,
+    ) -> Optional[list[int]]:
+        if file_ids_by_space is None:
+            return None
+        try:
+            space_id = int(kb_id)
+        except (TypeError, ValueError):
+            return []
+        try:
+            raw_file_ids = file_ids_by_space[space_id]
+        except KeyError:
+            return []
+        normalized: list[int] = []
+        seen: set[int] = set()
+        for raw_file_id in raw_file_ids or []:
+            try:
+                file_id = int(raw_file_id)
+            except (TypeError, ValueError):
+                continue
+            if file_id <= 0 or file_id in seen:
+                continue
+            normalized.append(file_id)
+            seen.add(file_id)
+        return normalized
+
+    @classmethod
+    def _doc_matches_file_filter(cls, doc: Any, kb_id: int, allowed_file_ids: set[int]) -> bool:
+        metadata = getattr(doc, 'metadata', {}) or {}
+        raw_kb_id = metadata.get('knowledge_id') or metadata.get('kb_id')
+        if raw_kb_id not in (None, ''):
+            try:
+                if int(raw_kb_id) != int(kb_id):
+                    return False
+            except (TypeError, ValueError):
+                return False
+        raw_file_id = metadata.get('document_id') or metadata.get('file_id')
+        try:
+            file_id = int(raw_file_id)
+        except (TypeError, ValueError):
+            return False
+        return file_id in allowed_file_ids
 
     @classmethod
     async def _split_retrieval_knowledge_ids_by_type(

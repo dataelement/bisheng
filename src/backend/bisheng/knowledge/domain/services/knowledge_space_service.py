@@ -130,6 +130,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileItemResp,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
+    ShougangPortalQaFileSearchReq,
     ShougangPortalPersonalSpaceItemResp,
     ShougangPortalShareLinkAccessResp,
     ShougangPortalShareLinkCreateReq,
@@ -3066,6 +3067,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 pass
             _portal_search_perf_var.reset(perf_token)
 
+    async def search_shougang_portal_qa_files_by_name(self, req: ShougangPortalQaFileSearchReq) -> Dict:
+        keyword = (req.q or "").strip()
+        if not keyword:
+            return self._build_shougang_portal_search_response([])
+        spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, None)
+        if not spaces:
+            return self._build_shougang_portal_search_response([])
+
+        space_ids = [int(space.id) for space in spaces]
+        files = await KnowledgeFileDao.aget_file_by_space_filters(
+            knowledge_ids=space_ids,
+            file_name=keyword,
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            order_by="update_time",
+            order_sort="desc",
+        )
+        if not files:
+            return self._build_shougang_portal_search_response([])
+
+        visible_files = await self._filter_shougang_portal_visible_files(files, spaces=spaces)
+        if not visible_files:
+            return self._build_shougang_portal_search_response([])
+
+        space_name_map = {int(space.id): str(space.name or space.id) for space in spaces}
+        enriched_items = await self._handle_file_folder_extra_info(visible_files)
+        folder_path_map, source_path_map = await self._resolve_shougang_portal_source_paths(enriched_items)
+        items: List[ShougangPortalFileItemResp] = []
+        for item in enriched_items:
+            space_id = int(item.get("knowledge_id") or 0)
+            item_id = int(item.get("id") or 0)
+            item["knowledge_name"] = space_name_map.get(space_id, str(space_id))
+            item["folder_path"] = folder_path_map.get(item_id, "")
+            item["source_path"] = source_path_map.get(item_id, "")
+            if self._is_shougang_portal_file_item(item, None):
+                items.append(self._map_shougang_portal_file_item(space_id, item))
+
+        sorted_items = self._sort_shougang_portal_file_items(items, "relevance", keyword)
+        start = (req.page - 1) * req.page_size
+        page_items = sorted_items[start:start + req.page_size]
+        return {
+            "data": [item.model_dump(mode='json') for item in page_items],
+            "total": len(sorted_items),
+            "page": req.page,
+            "page_size": req.page_size,
+        }
+
     async def _search_shougang_portal_files_impl(self, req: ShougangPortalFileSearchReq) -> Dict:
         _set_portal_search_stage("resolve_spaces")
         spaces = await self._get_shougang_portal_visible_search_spaces(req.space_ids, req.space_level)
@@ -5195,9 +5242,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     total = sum(r[1] for r in rows)
                     success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
                     processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
+                    visible_success = await self._count_visible_success_files_under_folder(folder, prefix)
                     folder_counts[folder.id] = {
                         "file_num": total,
                         "success_file_num": success,
+                        "visible_success_file_num": visible_success,
                         "processing_file_num": processing,
                     }
 
@@ -5236,6 +5285,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.append(item)
 
         return result
+
+    async def _count_visible_success_files_under_folder(self, folder: KnowledgeFile, prefix: str) -> int:
+        children = await SpaceFileDao.get_children_by_prefix(
+            folder.knowledge_id,
+            prefix,
+            file_status=KnowledgeFileStatus.SUCCESS,
+        )
+        files = [
+            item
+            for item in children or []
+            if self._is_qa_scope_file(item, int(folder.knowledge_id))
+        ]
+        if not files:
+            return 0
+        visible_files = await self._filter_visible_child_items(files, space_id=int(folder.knowledge_id))
+        return len(visible_files)
 
     async def _filter_visible_child_items(
         self,
@@ -5422,6 +5487,100 @@ class KnowledgeSpaceService(KnowledgeUtils):
             has_more=has_more,
             next_cursor=next_cursor,
         )
+
+    async def resolve_qa_scope_file_ids(
+        self,
+        *,
+        folder_refs: list,
+        file_refs: list,
+        max_files: int = 20,
+    ) -> Dict[int, List[int]]:
+        resolved: Dict[int, List[int]] = {}
+        seen: set[tuple[int, int]] = set()
+
+        async def add_file(space_id: int, file_id: int) -> None:
+            key = (space_id, file_id)
+            if key in seen:
+                return
+            seen.add(key)
+            resolved.setdefault(space_id, []).append(file_id)
+            if len(seen) > max_files:
+                raise ValueError("一次最多可选择20个文件进行问答。")
+
+        for ref in file_refs or []:
+            space_id = self._scope_ref_int(ref, "knowledge_space_id")
+            file_id = self._scope_ref_int(ref, "file_id")
+            if space_id <= 0 or file_id <= 0:
+                continue
+            await self._require_read_permission(space_id)
+            file_record = await KnowledgeFileDao.query_by_id(file_id)
+            if not self._is_qa_scope_file(file_record, space_id):
+                continue
+            await self._require_permission_id("knowledge_file", file_id, "view_file", space_id=space_id)
+            await add_file(space_id, file_id)
+
+        for ref in folder_refs or []:
+            space_id = self._scope_ref_int(ref, "knowledge_space_id")
+            folder_id = self._scope_ref_int(ref, "folder_id")
+            if space_id <= 0 or folder_id <= 0:
+                continue
+            await self._require_read_permission(space_id)
+            folder = await KnowledgeFileDao.query_by_id(folder_id)
+            if not self._is_qa_scope_folder(folder, space_id):
+                continue
+            await self._require_permission_id("folder", folder_id, "view_folder", space_id=space_id)
+            prefix = f"{getattr(folder, 'file_level_path', '') or ''}/{folder.id}"
+            children = await SpaceFileDao.get_children_by_prefix(
+                space_id,
+                prefix,
+                file_status=KnowledgeFileStatus.SUCCESS,
+            )
+            files = [
+                item
+                for item in children or []
+                if self._is_qa_scope_file(item, space_id)
+            ]
+            visible_files = await self._filter_visible_child_items(files, space_id=space_id)
+            for item in visible_files:
+                await add_file(space_id, int(item.id))
+
+        if not seen:
+            raise ValueError("请选择可用于问答的文件。")
+        return {space_id: ids for space_id, ids in sorted(resolved.items())}
+
+    @staticmethod
+    def _scope_ref_int(ref: Any, field_name: str) -> int:
+        value = ref.get(field_name) if isinstance(ref, dict) else getattr(ref, field_name, 0)
+        try:
+            return int(value or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _is_qa_scope_file(file_record: Any, space_id: int) -> bool:
+        if file_record is None:
+            return False
+        return (
+            KnowledgeSpaceService._coerce_int(getattr(file_record, "knowledge_id", 0), 0) == int(space_id)
+            and KnowledgeSpaceService._coerce_int(getattr(file_record, "file_type", -1), -1) == FileType.FILE.value
+            and KnowledgeSpaceService._coerce_int(getattr(file_record, "status", -1), -1) == KnowledgeFileStatus.SUCCESS.value
+        )
+
+    @staticmethod
+    def _is_qa_scope_folder(file_record: Any, space_id: int) -> bool:
+        if file_record is None:
+            return False
+        return (
+            KnowledgeSpaceService._coerce_int(getattr(file_record, "knowledge_id", 0), 0) == int(space_id)
+            and KnowledgeSpaceService._coerce_int(getattr(file_record, "file_type", -1), -1) == FileType.DIR.value
+        )
+
+    @staticmethod
+    def _coerce_int(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
 
     async def search_space_children(
         self,

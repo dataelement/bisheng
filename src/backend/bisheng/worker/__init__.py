@@ -14,6 +14,15 @@ from bisheng.worker.org_sync.reconcile_tasks import (
 from bisheng.worker.org_sync.tasks import execute_org_sync, check_org_sync_schedules
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
 from bisheng.worker.tenant_reconcile.tasks import reconcile_user_tenant_assignments
+from bisheng.worker.telemetry.derived_mid_table import (
+    sync_mid_active_user,
+    sync_mid_doc_parse_dtl,
+    sync_mid_knowledge_file_increment,
+    sync_mid_model_call_dtl,
+    sync_mid_session_run_dtl,
+    sync_mid_sessions_increment,
+    sync_mid_tool_call_dtl,
+)
 from bisheng.worker.telemetry.mid_table import sync_mid_user_increment, sync_mid_knowledge_increment, \
     sync_mid_app_increment, sync_mid_user_interact_dtl, sync_mid_knowledge_space_content_stat, \
     sync_pending_knowledge_space_content_stat

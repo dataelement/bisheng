@@ -1,5 +1,6 @@
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, ClassVar, Dict, Iterable, List, Optional
+from typing import Any, ClassVar
 
 from elasticsearch import helpers
 from loguru import logger
@@ -17,7 +18,7 @@ from bisheng.utils import generate_uuid
 
 class KnowledgeSpaceContentRecord(BaseRecord):
     record_type: str
-    sync_run_id: Optional[str] = None
+    sync_run_id: str | None = None
 
     space_id: int
     space_name: str
@@ -27,12 +28,12 @@ class KnowledgeSpaceContentRecord(BaseRecord):
 
     uploader_user_id: int
     uploader_user_name: str
-    uploader_department_infos: List[UserDepartmentInfo] = Field(default_factory=list)
+    uploader_department_infos: list[UserDepartmentInfo] = Field(default_factory=list)
 
-    event_id: Optional[str] = None
-    viewer_user_id: Optional[int] = None
-    viewer_user_name: Optional[str] = None
-    action_result: Optional[str] = None
+    event_id: str | None = None
+    viewer_user_id: int | None = None
+    viewer_user_name: str | None = None
+    action_result: str | None = None
 
 
 class KnowledgeSpaceContentStat(BaseMidTable):
@@ -46,7 +47,7 @@ class KnowledgeSpaceContentStat(BaseMidTable):
     SCHEDULE_TTL_SECONDS: ClassVar[int] = 10
     LOCK_TTL_SECONDS: ClassVar[int] = 60
     FILE_BATCH_SIZE: ClassVar[int] = 500
-    _mappings: Dict[str, Any] = {
+    _mappings: dict[str, Any] = {
         "record_type": {"type": "keyword"},
         "sync_run_id": {"type": "keyword"},
         "space_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
@@ -82,8 +83,8 @@ class KnowledgeSpaceContentStat(BaseMidTable):
     }
 
     @staticmethod
-    def _normalize_ids(ids: Iterable[int]) -> List[int]:
-        normalized: List[int] = []
+    def _normalize_ids(ids: Iterable[int]) -> list[int]:
+        normalized: list[int] = []
         seen = set()
         for raw_id in ids or []:
             if raw_id is None:
@@ -115,7 +116,7 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         await redis_client.async_connection.sadd(key, *values)
 
     @staticmethod
-    def _decode_redis_member(value) -> Optional[int]:
+    def _decode_redis_member(value) -> int | None:
         if value is None:
             return None
         if isinstance(value, bytes):
@@ -126,7 +127,7 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             return None
 
     @classmethod
-    def _spop_ids_sync(cls, redis_client, key: str, count: Optional[int] = None) -> List[int]:
+    def _spop_ids_sync(cls, redis_client, key: str, count: int | None = None) -> list[int]:
         redis_client.cluster_nodes(key)
         if count is None:
             raw_values = redis_client.connection.spop(key)
@@ -215,17 +216,17 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             logger.exception("Failed to enqueue knowledge space content space delete telemetry sync.")
 
     @classmethod
-    def pop_pending_file_ids_sync(cls, batch_size: int = FILE_BATCH_SIZE) -> List[int]:
+    def pop_pending_file_ids_sync(cls, batch_size: int = FILE_BATCH_SIZE) -> list[int]:
         return cls._spop_ids_sync(get_redis_client_sync(), cls.FILE_PENDING_KEY, batch_size)
 
     @classmethod
-    def pop_pending_space_rename_ids_sync(cls) -> List[int]:
+    def pop_pending_space_rename_ids_sync(cls) -> list[int]:
         redis_client = get_redis_client_sync()
         count = cls._scard_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY)
         return cls._spop_ids_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY, count) if count else []
 
     @classmethod
-    def pop_pending_space_delete_ids_sync(cls) -> List[int]:
+    def pop_pending_space_delete_ids_sync(cls) -> list[int]:
         redis_client = get_redis_client_sync()
         count = cls._scard_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY)
         return cls._spop_ids_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY, count) if count else []
@@ -281,16 +282,18 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         file_record: KnowledgeFile,
         space: Knowledge,
         uploader=None,
-        sync_run_id: Optional[str] = None,
+        sync_run_id: str | None = None,
     ) -> KnowledgeSpaceContentRecord:
         uploader_user_id = int(file_record.user_id or 0)
-        uploader_user_name = file_record.user_name or (
-            uploader.user_name if uploader else str(uploader_user_id or "")
+        uploader_user_name = file_record.user_name or (uploader.user_name if uploader else str(uploader_user_id or ""))
+        uploader_departments = (
+            [
+                UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
+                for dept in getattr(uploader, "departments", []) or []
+            ]
+            if uploader
+            else []
         )
-        uploader_departments = [
-            UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-            for dept in getattr(uploader, "departments", []) or []
-        ] if uploader else []
         return KnowledgeSpaceContentRecord(
             es_id=f"file_{file_record.id}",
             record_type="file",
@@ -300,11 +303,15 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             user_group_infos=[
                 UserGroupInfo(user_group_id=group.id, user_group_name=group.group_name)
                 for group in getattr(uploader, "groups", []) or []
-            ] if uploader else [],
+            ]
+            if uploader
+            else [],
             user_role_infos=[
                 UserRoleInfo(role_id=role.id, role_name=role.role_name, group_id=role.group_id)
                 for role in getattr(uploader, "roles", []) or []
-            ] if uploader else [],
+            ]
+            if uploader
+            else [],
             user_department_infos=uploader_departments,
             timestamp=int((file_record.create_time or datetime.now()).timestamp()),
             space_id=int(space.id),
@@ -318,7 +325,7 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         )
 
     @staticmethod
-    async def _get_user_departments(user_id: Optional[int]) -> List[UserDepartmentInfo]:
+    async def _get_user_departments(user_id: int | None) -> list[UserDepartmentInfo]:
         if not user_id:
             return []
         async with get_async_db_session() as session:
@@ -401,6 +408,8 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         return int(result.get("deleted", 0) or 0)
 
     def delete_stale_file_records_sync(self, sync_run_id: str) -> int:
+        self.ensure_index_exists_sync()
+        self._es_client_sync.indices.refresh(index=self._index_name)
         result = self.delete_by_query_sync(
             {
                 "bool": {
@@ -409,5 +418,6 @@ class KnowledgeSpaceContentStat(BaseMidTable):
                 }
             },
             refresh=True,
+            conflicts="proceed",
         )
         return int(result.get("deleted", 0) or 0)

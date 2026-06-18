@@ -64,7 +64,7 @@ GET /api/v2/filelib/
 | `type` | integer | 否 | `0` | 知识资源类型。 |
 | `name` | string | 否 | `null` | 知识资源名称，模糊匹配。 |
 | `page_size` | integer | 否 | `10` | 每页数量。 |
-| `page_num` | integer | 否 | `1` | 页码，从 `1` 开始。 |
+| `cursor` | string | 否 | `null` | 游标分页令牌。首次请求不传；下一页传上次响应的 `next_cursor`。 |
 
 `type` 枚举：
 
@@ -78,7 +78,7 @@ GET /api/v2/filelib/
 ### 2.3 请求示例
 
 ```bash
-curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10&page_num=1' \
+curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10' \
   -H 'X-Developer-Token: bst_xxx'
 ```
 
@@ -111,7 +111,9 @@ curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10&page_num=
         "update_time": "2026-06-07T15:32:00"
       }
     ],
-    "total": 1
+    "page_size": 10,
+    "has_more": false,
+    "next_cursor": null
   }
 }
 ```
@@ -121,7 +123,9 @@ curl -X GET 'http://127.0.0.1:7860/api/v2/filelib/?type=3&page_size=10&page_num=
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `data.data` | array | 知识资源列表。 |
-| `data.total` | integer | 知识资源总数。 |
+| `data.page_size` | integer | 每页数量。 |
+| `data.has_more` | boolean | 是否还有下一页。 |
+| `data.next_cursor` | string / null | 下一页游标。`has_more=false` 时为 `null`。 |
 
 `data.data[]`：
 

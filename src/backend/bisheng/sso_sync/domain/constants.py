@@ -8,6 +8,9 @@ SSO_SOURCE = 'sso'
 # Must match org_sync config provider enum (``wecom``).
 WECOM_SOURCE = 'wecom'
 
+# Shougang (首钢) org sync source for dedicated SG callback payloads.
+SG_SOURCE = 'sg'
+
 # Default source used by single-user login-sync and plain departments/sync
 # when the caller does not explicitly specify one. Keep this aligned across
 # endpoints so department upsert and subsequent login bind against the same

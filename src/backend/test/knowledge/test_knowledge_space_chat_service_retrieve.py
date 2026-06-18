@@ -104,6 +104,8 @@ def test_openapi_file_detail_depends_on_developer_token_user():
 def test_openapi_knowledge_list_depends_on_developer_token_user():
     params = signature(filelib_mod.get_knowledge).parameters
     assert params["login_user"].default.dependency is get_developer_token_user
+    assert "cursor" in params
+    assert "page_num" not in params
 
 
 def test_parse_document_type_code_from_file_encoding():
@@ -115,7 +117,13 @@ def test_parse_document_type_code_from_file_encoding():
 async def test_openapi_knowledge_list_uses_developer_token_user(monkeypatch):
     request = MagicMock()
     developer_user = MagicMock()
-    list_knowledge = AsyncMock(return_value=([{"id": 118, "name": "GR00011"}], 1))
+    page_data = SimpleNamespace(
+        data=[{"id": 118, "name": "GR00011"}],
+        page_size=20,
+        has_more=False,
+        next_cursor=None,
+    )
+    list_knowledge = AsyncMock(return_value=page_data)
     monkeypatch.setattr(filelib_mod.KnowledgeService, "get_knowledge", list_knowledge)
 
     response = await filelib_mod.get_knowledge(
@@ -123,7 +131,7 @@ async def test_openapi_knowledge_list_uses_developer_token_user(monkeypatch):
         knowledge_type=filelib_mod.KnowledgeTypeEnum.NORMAL.value,
         name="GR",
         page_size=20,
-        page_num=2,
+        cursor="cursor-1",
         login_user=developer_user,
     )
 
@@ -131,11 +139,11 @@ async def test_openapi_knowledge_list_uses_developer_token_user(monkeypatch):
         request,
         developer_user,
         filelib_mod.KnowledgeTypeEnum.NORMAL,
-        "GR",
-        page=2,
-        limit=20,
+        name="GR",
+        cursor="cursor-1",
+        page_size=20,
     )
-    assert response.data == {"data": [{"id": 118, "name": "GR00011"}], "total": 1}
+    assert response.data is page_data
 
 
 async def test_openapi_file_list_enriches_shougang_fields(monkeypatch):

@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -56,14 +56,34 @@ class ToolPayload(BaseModel):
     type: str = 'tool'
 
 
+class KnowledgeScopeFileRef(BaseModel):
+    knowledge_space_id: int
+    file_id: int
+
+
+class KnowledgeScopeFolderRef(BaseModel):
+    knowledge_space_id: int
+    folder_id: int
+
+
+class KnowledgeScopeParam(BaseModel):
+    mode: Literal['none', 'knowledge_space', 'files'] = 'none'
+    knowledge_space_id: Optional[int] = None
+    folder_refs: Optional[List[KnowledgeScopeFolderRef]] = []
+    file_refs: Optional[List[KnowledgeScopeFileRef]] = []
+
+
 class UseKnowledgeBaseParam(BaseModel):
     personal_knowledge_enabled: Optional[bool] = False
     organization_knowledge_ids: Optional[List[int]] = []
     knowledge_space_ids: Optional[List[int]] = []
+    knowledge_scope: Optional[KnowledgeScopeParam] = None
 
     @field_validator('organization_knowledge_ids', mode='before')
     @classmethod
     def convert_organization_knowledge_ids(cls, v: Any):
+        if v is None:
+            return []
         if len(v) > 50:
             raise ValueError('Can only be used up to 50 organization knowledge base')
 
@@ -72,6 +92,8 @@ class UseKnowledgeBaseParam(BaseModel):
     @field_validator('knowledge_space_ids', mode='before')
     @classmethod
     def convert_knowledge_space_ids(cls, v: Any):
+        if v is None:
+            return []
         if len(v) > 50:
             raise ValueError('Can only be used up to 50 knowledge space')
 

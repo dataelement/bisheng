@@ -1,0 +1,43 @@
+---
+description: Platform 前端开发规则 (src/frontend/platform)
+globs: src/frontend/platform/**
+alwaysApply: false
+---
+
+# Platform Frontend (src/frontend/platform/)
+
+## Tech Stack
+
+Vite + React 18 + TypeScript + TailwindCSS 3 + Radix UI (bs-ui) + Zustand + React Context + react-i18next + react-router-dom v6 + @xyflow/react
+
+## Mandatory Rules
+
+- TypeScript only (`.ts` / `.tsx`); functional components only
+- Path alias: `@/` → `src/`
+- HTTP: `@/controllers/request.ts` only — never import axios directly. API in `@/controllers/API/`
+- State: Zustand (`@/store/`) for cross-page; Context (`@/contexts/`) for UI-scoped
+- UI: `@/components/bs-ui/`; icons from `@/components/bs-icons/`
+- Single file ≤ 600 lines
+- Toast: `toast({ title, variant: 'error'|'success', description })`
+- Confirm: `bsConfirm(...)` from bs-ui
+- i18n: `useTranslation()` → `t()`. Locales: `public/locales/{en-US,zh-Hans,ja}/{ns}.json`
+
+## Coding Style
+
+- `interface` for Props; `type` for internal types
+- `handleXxx` internal; `onXxx` for props
+- Named exports, no default exports for components
+- Comments in English
+
+## API Pattern
+
+```typescript
+import axios from "@/controllers/request"
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
+captureAndAlertRequestErrorHoc(getSomething()).then(res => { ... })
+```
+
+## Pitfalls
+
+- 403: handled by interceptor — no manual handling
+- MinIO images: Vite `fileServiceTarget` must match backend `config.yaml` sharepoint

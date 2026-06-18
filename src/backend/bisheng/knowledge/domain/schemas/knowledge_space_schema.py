@@ -327,6 +327,17 @@ class ShougangPortalFileSearchResp(BaseModel):
     page_size: int = 20
 
 
+class ShougangPortalQaFileSearchReq(BaseModel):
+    q: str = Field(..., min_length=1, description="File name keyword")
+    space_ids: List[int] = Field(default_factory=list, max_length=200, description="Candidate knowledge space IDs")
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+class ShougangPortalQaFileSearchResp(ShougangPortalFileSearchResp):
+    pass
+
+
 class ShougangPortalHomeSectionReq(BaseModel):
     tag: str
     page_size: int = Field(default=6, ge=1, le=100)
