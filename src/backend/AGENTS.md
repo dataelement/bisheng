@@ -60,7 +60,7 @@ Applies to async (`asyncio.gather(..., return_exceptions=True)` results must be 
 ## Commands (cwd: `src/backend/`)
 
 ```bash
-# Dependencies (uv, lockfile = uv.lock, Python must be 3.10.x)
+# Dependencies (uv, lockfile = uv.lock, Python must be 3.11.x — pyproject requires-python >=3.11)
 uv sync --frozen --python uv run python
 
 # Tests
