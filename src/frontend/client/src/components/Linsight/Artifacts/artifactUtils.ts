@@ -115,14 +115,22 @@ export async function downloadArtifactFile(file: ArtifactFile, versionId: string
         throw new Error(`Failed to download file: ${response.status}`);
     }
     const data = await response.blob();
+    // A user-uploaded non-image source is stored as its PARSED MARKDOWN, so the
+    // bytes fetched here are markdown regardless of the original extension —
+    // download it as `<name>.md`. Image uploads and model-generated outputs keep
+    // their real name/content.
+    const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage;
+    const downloadName = isUploadMarkdown
+        ? `${file.file_name.replace(/\.[^./\\]+$/, '')}.md`
+        : file.file_name;
     // CSV needs a UTF-8 BOM so Excel opens it with the right encoding
     const blob =
-        getFileExtension(file.file_name) === 'csv'
+        !isUploadMarkdown && getFileExtension(file.file_name) === 'csv'
             ? new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), data], { type: 'text/csv;charset=utf-8;' })
             : data;
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = file.file_name;
+    link.download = downloadName;
     link.click();
     URL.revokeObjectURL(link.href);
 }

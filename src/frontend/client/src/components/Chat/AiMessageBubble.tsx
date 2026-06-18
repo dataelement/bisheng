@@ -357,7 +357,7 @@ function UserBubble({
                             }
 
                             return (
-                                <div key={i} className="flex items-center gap-2 border bg-white p-2 rounded-xl cursor-pointer hover:bg-gray-50 max-w-sm" onClick={() => fileUrl && window.open(fileUrl, '_blank')}>
+                                <div key={i} className="flex items-center gap-2 border bg-white p-2 rounded-xl max-w-sm">
                                     <FileIcon type={fileType} className="" />
                                     <div className="overflow-hidden">
                                         <div className="truncate text-sm font-bold" title={fileName}>
