@@ -92,7 +92,7 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only; review DM8 compat manually
 ```
 
-**Ruff is the sole authority on formatting.** Every file you touch must pass `ruff format` + `ruff check --fix` before it's considered done — no exceptions. Do **not** hand-format or leave a file un-formatted to keep the diff small: a smaller diff is never a reason to skip formatting. If ruff reflows lines you didn't touch, that reflow is correct and stays in. The PostToolUse hook enforces the same rules, so unformatted code gets flagged regardless — format it yourself first.
+**Ruff is the sole authority on formatting.** The PostToolUse hook runs `ruff format` + `ruff check --fix` on every file you write — let it. You don't need to format by hand; the hook does it. Do **not** work around the hook to keep the diff small — e.g. reaching for a different edit approach, partial writes, or reverting the hook's reflow because it "touched too many lines." If ruff reflows lines you didn't change, that reflow is correct and stays in. A smaller diff is never a reason to bypass formatting.
 
 **Migration vs. script — keep them separate:**
 
