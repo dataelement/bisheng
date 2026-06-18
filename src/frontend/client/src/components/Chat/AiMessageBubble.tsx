@@ -98,7 +98,7 @@ function UploadedFileList({ files }: { files: any[] }) {
             ref={scrollRef}
             onScroll={updateFade}
             style={maskStyle}
-            className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-2 overflow-y-auto"
+            className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
         >
             {files.map((file, i) => {
                 const fileName = file.name || file.file_name || "File";
@@ -106,7 +106,7 @@ function UploadedFileList({ files }: { files: any[] }) {
                 const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
                 return (
                     <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
-                        <FileTypeIcon size={14} className="shrink-0" />
+                        <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
                         <div className="min-w-0 flex-1 overflow-hidden">
                             <div className="truncate text-xs" title={fileName}>
                                 {fileName}

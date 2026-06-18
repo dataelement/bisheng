@@ -4,12 +4,11 @@
  * Used by both the legacy drawer (FilePreviewPanel) and the inline WorkspacePanel
  * so the two surfaces render identical content.
  */
-import { Colored } from 'bisheng-icons';
+import { Colored, Outlined } from 'bisheng-icons';
 import { useEffect, useState } from 'react';
 import { NotificationSeverity } from '~/common';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { Button } from '~/components/ui';
-import FileIcon from '~/components/ui/icon/File';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
 import { useToastContext } from '~/Providers';
@@ -21,8 +20,10 @@ import {
     resolveArtifactUrl,
 } from './artifactUtils';
 
-// Colored placeholder icons (bisheng-icons) for the "can't preview" fallback,
-// by extension. Types without a colored variant (e.g. pdf) fall back to FileIcon.
+// Placeholder icons (bisheng-icons) for the "can't preview" fallback, by extension.
+// Prefer the Colored variant; types without one (pdf / image / unknown) fall back
+// to a 20px Outlined icon (rendered inside an invisible 80×80 box so the footprint
+// matches the colored icons).
 const COLORED_FILE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
     doc: Colored.FileDoc,
     docx: Colored.FileDoc,
@@ -33,6 +34,15 @@ const COLORED_FILE_ICONS: Record<string, React.ComponentType<{ className?: strin
     csv: Colored.FileCsv,
     md: Colored.FileMd,
     txt: Colored.FileTxt,
+};
+const OUTLINED_FILE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+    pdf: Outlined.FilePdf,
+    png: Outlined.FileImage,
+    jpg: Outlined.FileImage,
+    jpeg: Outlined.FileImage,
+    gif: Outlined.FileImage,
+    webp: Outlined.FileImage,
+    bmp: Outlined.FileImage,
 };
 
 // Module-level cache of resolved previews. Toggling fullscreen remounts a second
@@ -138,13 +148,17 @@ export function PreviewBody({ file, versionId }: PreviewBodyProps) {
         // not inline-renderable (docx / pdf / xlsx …) or load failure → download hint
         const ext = (getFileExtension(file.file_name) || '').toLowerCase();
         const ColoredIcon = COLORED_FILE_ICONS[ext];
+        const OutlinedIcon = OUTLINED_FILE_ICONS[ext] ?? Outlined.File;
         return (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
                 {ColoredIcon ? (
                     <ColoredIcon className="h-20 w-20" />
                 ) : (
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union
-                    <FileIcon type={ext as any} className="h-20 w-20" />
+                    // No colored variant: 20px outlined icon centered in an invisible
+                    // 80×80 box so the footprint matches the colored icons above.
+                    <div className="flex h-20 w-20 items-center justify-center">
+                        <OutlinedIcon className="size-5" />
+                    </div>
                 )}
                 <div className="max-w-[80%] truncate text-base font-medium text-gray-900">{file.file_name}</div>
                 <div className="mb-2 text-sm text-gray-500">
