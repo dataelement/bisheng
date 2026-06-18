@@ -8,7 +8,7 @@
 import { Check, ChevronDown, Loader2, SearchIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getJoinedSpacesApi, getMineSpacesApi } from '~/api/knowledge';
+import { getDepartmentSpacesApi, getJoinedSpacesApi, getMineSpacesApi } from '~/api/knowledge';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -37,14 +37,18 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange }: Know
     const [open, setOpen] = useState(false);
     const [keyword, setKeyword] = useState('');
 
-    // Personal knowledge spaces: mine + joined merged (same as ChatKnowledge).
+    // Personal knowledge spaces: mine + joined + department merged (same as ChatKnowledge).
     const { data: spaces = [], isFetching: spaceFetching } = useQuery({
         queryKey: ['taskModeKnowledgeSpaces'],
         queryFn: async () => {
-            const [mine, joined] = await Promise.all([getMineSpacesApi(), getJoinedSpacesApi()]);
+            const [mine, joined, department] = await Promise.all([
+                getMineSpacesApi(),
+                getJoinedSpacesApi(),
+                getDepartmentSpacesApi(),
+            ]);
             const seen = new Set<string | number>();
             const merged: any[] = [];
-            for (const s of [...mine, ...joined]) {
+            for (const s of [...mine, ...joined, ...department]) {
                 if (seen.has(s.id)) continue;
                 seen.add(s.id);
                 merged.push(s);

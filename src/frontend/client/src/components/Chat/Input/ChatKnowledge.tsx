@@ -10,6 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import {
   getMineSpacesApi,
   getJoinedSpacesApi,
+  getDepartmentSpacesApi,
 } from "~/api/knowledge";
 import {
   DropdownMenu,
@@ -321,15 +322,16 @@ export const ChatKnowledge = ({
   const loadSpaces = useCallback(async () => {
     setSpaceFetching(true);
     try {
-      // Fetch "mine" + "joined" in parallel and merge into a single list
-      const [mine, joined] = await Promise.all([
+      // Fetch "mine" + "joined" + "department" in parallel and merge into a single list
+      const [mine, joined, department] = await Promise.all([
         getMineSpacesApi(),
         getJoinedSpacesApi(),
+        getDepartmentSpacesApi(),
       ]);
-      // Dedupe by id (a space could in principle appear in both lists)
+      // Dedupe by id (a space could in principle appear in more than one list)
       const seen = new Set<string | number>();
       const merged: any[] = [];
-      for (const s of [...mine, ...joined]) {
+      for (const s of [...mine, ...joined, ...department]) {
         if (seen.has(s.id)) continue;
         seen.add(s.id);
         merged.push(s);
