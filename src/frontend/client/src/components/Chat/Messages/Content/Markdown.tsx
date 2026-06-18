@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
+import rehypeSlug from 'rehype-slug';
 import remarkDirective from 'remark-directive';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -147,6 +148,36 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
 
   const { refetch: downloadFile } = useFileDownload(user?.id ?? '', file_id);
   const props: { target?: string; onClick?: React.MouseEventHandler } = { target: '_new' };
+
+  // In-page anchor (e.g. a generated table-of-contents `#heading`, or a gfm
+  // footnote ref). The default `target="_new"` would spawn a blank tab; instead
+  // scroll the matching element into view within the current markdown panel.
+  if (href?.startsWith('#')) {
+    const handleAnchorClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      const raw = href.slice(1);
+      // href may arrive percent-encoded or as raw CJK; tolerate malformed `%`.
+      let id = raw;
+      try {
+        id = decodeURIComponent(raw);
+      } catch {
+        id = raw;
+      }
+      if (!id) {
+        return;
+      }
+      const scope = event.currentTarget.closest('.bs-mkdown') ?? document;
+      const target =
+        (scope.querySelector(`[id="${CSS.escape(id)}"]`) as HTMLElement | null) ??
+        document.getElementById(id);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    return (
+      <a href={href} onClick={handleAnchorClick}>
+        {children}
+      </a>
+    );
+  }
 
   if (!file_id || !filename) {
     return (
@@ -748,6 +779,10 @@ const Markdown = memo(({
 
   const rehypePlugins = useMemo(
     () => [
+      // Add stable `id`s to headings so generated table-of-contents `#anchor`
+      // links have a target to scroll to (github-slugger convention matches the
+      // anchors LLMs emit).
+      rehypeSlug,
       [rehypeKatex, { output: 'mathml' }],
       [
         rehypeHighlight,
