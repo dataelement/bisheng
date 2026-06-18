@@ -430,6 +430,7 @@ const Citation = ({
   data: rawData,
   children,
   initialDetail,
+  initialNotPermitted,
   webContent,
   loadCitationDetail,
   popoverKey,
@@ -442,6 +443,10 @@ const Citation = ({
   data: Partial<CitationDisplayData>;
   children: React.ReactNode;
   initialDetail?: ChatCitation | null;
+  /** Pre-resolved on load: the batch /citations/resolve omitted this citation,
+      i.e. the viewer has no permission. Renders "no permission" + un-clickable
+      from the start, without waiting for a per-marker 404. */
+  initialNotPermitted?: boolean;
   webContent?: any;
   loadCitationDetail: CitationDetailLoader;
   popoverKey: string;
@@ -460,8 +465,10 @@ const Citation = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
   // Backend 404 → viewer lacks permission for this source. Renders "no permission"
-  // and makes the marker un-clickable (product decision).
-  const [notPermitted, setNotPermitted] = useState(false);
+  // and makes the marker un-clickable (product decision). Seeded from the batch
+  // pre-resolve (initialNotPermitted) so the hint shows up-front; the per-marker
+  // 404 path still sets it for citations the batch didn't cover.
+  const [notPermitted, setNotPermitted] = useState(!!initialNotPermitted);
   const closeTimerRef = useRef<number | null>(null);
   const citationClassName = getCitationClassName(data.type);
   const legacyPreview = data.ref?.startsWith('citation:')
@@ -587,6 +594,14 @@ const Citation = ({
       setDetail(initialDetail);
     }
   }, [initialDetail]);
+
+  // The batch pre-resolve resolves AFTER mount, so initialNotPermitted flips from
+  // false → true asynchronously; reflect it (never flip back to clickable).
+  useEffect(() => {
+    if (initialNotPermitted) {
+      setNotPermitted(true);
+    }
+  }, [initialNotPermitted]);
 
   useEffect(() => {
     return () => {
@@ -760,6 +775,10 @@ const Markdown = memo(({
 
   const initialCitationDetailMap = useMemo(() => createCitationDetailMap(citations), [citations]);
   const [citationDetailMap, setCitationDetailMap] = useState<Record<string, ChatCitation>>(() => initialCitationDetailMap);
+  // Citations the batch /citations/resolve was asked for but did NOT return =
+  // the viewer has no permission (the endpoint omits forbidden ones). Markers in
+  // this set render "no permission" + un-clickable from the start.
+  const [forbiddenCitationIds, setForbiddenCitationIds] = useState<Set<string>>(() => new Set());
   const citationDetailCacheRef = useRef<Record<string, ChatCitation>>({});
   const citationRequestCacheRef = useRef<Record<string, Promise<ChatCitation | null>>>({});
   const citationBatchRequestKeyRef = useRef<string>('');
@@ -817,6 +836,15 @@ const Markdown = memo(({
             ...current,
             ...nextMap,
           }));
+        }
+        // Requested but unresolved = the backend omitted them (no permission).
+        const forbidden = citationIds.filter((id) => !citationDetailCacheRef.current[id]);
+        if (forbidden.length) {
+          setForbiddenCitationIds((prev) => {
+            const next = new Set(prev);
+            forbidden.forEach((id) => next.add(id));
+            return next;
+          });
         }
       })
       .catch((error) => {
@@ -982,6 +1010,7 @@ const Markdown = memo(({
                               key={`rag-legacy-${citationData.ref}-${matchIndex}`}
                               data={citationData}
                               initialDetail={citationDetailMap[citationData.citationId] ?? citationDetail}
+                              initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
                               loadCitationDetail={loadCitationDetail}
                               popoverKey={`rag-legacy-${citationData.ref}-${matchIndex}`}
                               activePopoverKey={activeCitationPopoverKey}
@@ -1003,6 +1032,7 @@ const Markdown = memo(({
                             key={`private-${privateRef}-${matchIndex}`}
                             data={citationData}
                             initialDetail={citationDetailMap[citationData.citationId]}
+                            initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
                             loadCitationDetail={loadCitationDetail}
                             popoverKey={`private-${privateRef}-${matchIndex}`}
                             activePopoverKey={activeCitationPopoverKey}
