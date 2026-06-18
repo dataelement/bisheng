@@ -106,7 +106,7 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
 
     // Disabled when tts_model is not configured
     const { data: modelData } = useGetWorkbenchModelsQuery()
-    if (!modelData?.tts_model.id) return null
+    if (!modelData?.tts_model?.id) return null
 
     return (
         <button
