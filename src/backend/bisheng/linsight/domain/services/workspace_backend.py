@@ -42,6 +42,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from loguru import logger
+from minio.error import S3Error
+
+
+def _is_missing_key(exc: S3Error) -> bool:
+    """True when an S3 error means the object simply isn't there (NoSuchKey).
+
+    MinIO raises ``S3Error`` (a frozen dataclass) on a missing object instead of
+    returning empty. Workspace reads treat a missing object as a recoverable
+    "file not found", so callers map this to ``None`` rather than letting the
+    (frozen) exception escape and crash the task.
+    """
+    return getattr(exc, "code", None) == "NoSuchKey"
+
 
 try:
     from deepagents.backends.filesystem import FilesystemBackend
@@ -167,7 +180,13 @@ class WorkspaceBackend(FilesystemBackend):
         cp.write_bytes(data)
 
     def _minio_get_sync(self, rel_path: str) -> bytes | None:
-        return self.minio.get_object_sync(bucket_name=self._bucket(), object_name=self._object_key(rel_path))
+        try:
+            return self.minio.get_object_sync(bucket_name=self._bucket(), object_name=self._object_key(rel_path))
+        except S3Error as e:
+            # Missing object -> "not found" (None), not a task-fatal error.
+            if _is_missing_key(e):
+                return None
+            raise
 
     def _minio_put_sync(self, rel_path: str, data: bytes) -> None:
         self.minio.put_object_sync(
@@ -369,7 +388,20 @@ class WorkspaceBackend(FilesystemBackend):
         rel = normalize_workspace_path(file_path)
         data = await asyncio.to_thread(self._cache_read, rel)
         if data is None:
-            data = await self.minio.get_object(bucket_name=self._bucket(), object_name=self._object_key(rel))
+            try:
+                data = await self.minio.get_object(bucket_name=self._bucket(), object_name=self._object_key(rel))
+            except S3Error as e:
+                # The agent asked for a file the workspace doesn't have (e.g. a URL
+                # mistaken for a path, or a prior-turn deliverable under a different
+                # session prefix). MinIO raises a *frozen-dataclass* S3Error on a
+                # missing key; left unhandled it escapes the read tool, fails the
+                # whole task, and on the resume path gets masked by langgraph's
+                # traceback-trim as "cannot assign to field '__traceback__'". Treat
+                # NoSuchKey as "not found" so deepagents returns a recoverable tool
+                # error and the agent can re-plan instead of crashing.
+                if not _is_missing_key(e):
+                    raise
+                data = None
             if data is not None:
                 await asyncio.to_thread(self._cache_write, rel, data)
         if data is None:

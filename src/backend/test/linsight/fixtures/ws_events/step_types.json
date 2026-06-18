@@ -1,7 +1,7 @@
 {
   "_meta": {
     "contract": "C1 · task_execute_step.step_type 变体覆盖",
-    "note": "step_type ∈ {tool, thinking, knowledge, subagent, ui_card, call_user_input}. knowledge/call_user_input 见 event_samples.json；此处补 tool/thinking/subagent/ui_card。subagent 及其子步骤带非空 namespace（子图前缀），前端按层级缩进渲染。⚠️ namespace 嵌在 extra_info.namespace 内（ExecStep 模型无顶层 namespace 字段，见 stream_event_mapper：mapper 把 ns 写进 extra_info），不是顶层 data 字段。start/end 两帧按 call_id 合并。"
+    "note": "step_type ∈ {tool, thinking, knowledge, subagent, ui_card, call_user_input}. knowledge/call_user_input 见 event_samples.json；此处补 tool/thinking/subagent/ui_card。⚠️ B1+B2 契约：『委派』唯一来源是主图 task 工具帧——step_type=subagent、ns=None（无 namespace 字段）、name=被委派子代理名（取 tc.args.subagent_type，缺省 general-purpose）、call_reason 与 extra_info.delegate_goal=委派目标（tc.args.description/instruction）。子代理内部工具/知识帧 step_type 按 name 推断真实类型（tool/knowledge），并带 extra_info.namespace=ns（形如 tools:<uuid> 平面形态，无多层），namespace 仅用于前端归组、不再改写 step_type。委派帧 ns=None 与子代理内部帧 ns=tools:<uuid> 无共享字符串（不做精确 1:1 关联），前端『子代理身份』由 distinct 子图 namespace 决定。⚠️ namespace 嵌在 extra_info.namespace 内（ExecStep 模型无顶层 namespace 字段，见 stream_event_mapper：mapper 把 ns 写进 extra_info），不是顶层 data 字段。start/end 两帧按 call_id 合并。"
   },
   "steps": [
     {
@@ -38,10 +38,10 @@
     {
       "event_type": "task_execute_step",
       "data": {
-        "call_id": "call_sub_01", "task_id": "e5f6a7b8", "name": "research_subagent",
-        "step_type": "subagent", "status": "start", "call_reason": "派生子智能体做竞品对标",
-        "params": {"instruction": "对标三家同行 2024Q3 毛利率"},
-        "output": null, "extra_info": {"truncated": false, "namespace": "research_subagent:0"}
+        "call_id": "call_sub_01", "task_id": "e5f6a7b8", "name": "general-purpose",
+        "step_type": "subagent", "status": "start", "call_reason": "对标三家同行 2024Q3 毛利率",
+        "params": {"subagent_type": "general-purpose", "description": "对标三家同行 2024Q3 毛利率"},
+        "output": null, "extra_info": {"truncated": false, "delegate_goal": "对标三家同行 2024Q3 毛利率"}
       },
       "timestamp": 14.0
     },
@@ -49,10 +49,10 @@
       "event_type": "task_execute_step",
       "data": {
         "call_id": "call_sub_inner_01", "task_id": "e5f6a7b8", "name": "search_knowledge_base",
-        "step_type": "knowledge", "status": "end", "call_reason": "子智能体内检索竞品财报",
+        "step_type": "knowledge", "status": "end", "call_reason": "",
         "params": {"query": "同行 2024Q3 毛利率"},
         "output": "竞品 A 毛利率 32%，竞品 B 29% ...",
-        "extra_info": {"truncated": false, "namespace": "research_subagent:0"}
+        "extra_info": {"truncated": false, "namespace": "tools:9c3a0a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b"}
       },
       "timestamp": 15.0
     },

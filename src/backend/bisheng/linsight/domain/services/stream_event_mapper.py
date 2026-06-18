@@ -106,6 +106,9 @@ class _OpenCall:
     step_type: str
     call_reason: str | None
     namespace: str | None
+    # B2: delegation goal of a main-graph ``task`` call, carried so the merged
+    # end frame keeps the same extra_info["delegate_goal"] as its start frame.
+    delegate_goal: str | None = None
 
 
 @dataclass
@@ -393,9 +396,30 @@ class StreamEventMapper:
             args = tc.get("args")
             step_type = self._infer_step_type(name, ns)
             # call_reason is no longer model-injected — deepagents' native output
-            # carries no per-step title, so we leave it empty and let the
-            # frontend fall back to the tool display name (the tool ``name``).
+            # carries no per-step title, so for ordinary tool rows we leave it
+            # empty and let the frontend fall back to the tool display name.
             call_reason = ""
+
+            # B2: the main-graph (ns is None) ``task`` tool IS the delegation
+            # boundary. Re-shape that single row into a subagent delegation:
+            # surface the delegated subagent name (subagent_type, default
+            # "general-purpose") instead of the literal "task", and carry the
+            # delegation goal (description/instruction) into both call_reason and
+            # extra_info["delegate_goal"] so the frontend can label the team
+            # group header. This is NOT a precise goal<->subgraph-ns binding
+            # (deepagents bursts parallel delegations with no shared id); it is
+            # only the per-row delegation goal of THIS task call.
+            extra_info: dict[str, Any] = {"truncated": False}
+            delegate_goal: str | None = None
+            if ns is None and (name or "").lower() == "task":
+                args_dict = args if isinstance(args, dict) else {}
+                subagent_type = args_dict.get("subagent_type") or "general-purpose"
+                # deepagents' TaskToolSchema uses "description"; tolerate the
+                # legacy "instruction" key as a safe fallback.
+                delegate_goal = args_dict.get("description") or args_dict.get("instruction") or ""
+                name = str(subagent_type)
+                call_reason = delegate_goal
+                extra_info["delegate_goal"] = delegate_goal
 
             open_call = _OpenCall(
                 call_id=call_id,
@@ -405,10 +429,10 @@ class StreamEventMapper:
                 step_type=step_type,
                 call_reason=call_reason,
                 namespace=ns,
+                delegate_goal=delegate_goal,
             )
             self.ctx.open_calls[call_id] = open_call
 
-            extra_info = {"truncated": False}
             if ns:
                 extra_info["namespace"] = ns
 
@@ -446,6 +470,8 @@ class StreamEventMapper:
     def _build_end_step(self, open_call: _OpenCall, payload: dict[str, Any]) -> ExecStep:
         output, truncated = _truncate(payload.get("output"))
         extra_info: dict[str, Any] = {"truncated": truncated}
+        if open_call.delegate_goal is not None:
+            extra_info["delegate_goal"] = open_call.delegate_goal
         if open_call.namespace:
             extra_info["namespace"] = open_call.namespace
         return ExecStep(

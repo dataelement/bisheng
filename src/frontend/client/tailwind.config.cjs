@@ -40,6 +40,11 @@ module.exports = {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(400%)' },
         },
+        // Linsight thinking line entrance: fade in + slide up slightly.
+        'thinking-appear': {
+          '0%': { opacity: '0', transform: 'translateY(4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
         // diagonal glint sweeping continuously across the subagent card
         'sheen-sweep': {
           '0%': { transform: 'translateX(-130%)' },
@@ -61,6 +66,7 @@ module.exports = {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-scale': 'pulse-scale 1s ease-in-out infinite',
+        'thinking-appear': 'thinking-appear 0.25s ease-out',
       },
       colors: {
         gray: {
