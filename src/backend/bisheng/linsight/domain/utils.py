@@ -55,7 +55,12 @@ async def get_all_files_from_session(
         """Upload files toMinIOand returns file information"""
         try:
             minio_client = await get_minio_storage()
-            object_name = f"linsight/session_files/{execution_tasks[0].session_version_id}/{file_info['file_name']}"
+            # ASCII-only object key (file_id + ext). A non-ASCII key breaks presigned
+            # URL signatures on some S3-compatible backends (e.g. Huawei OBS → 403
+            # SignatureDoesNotMatch). The original name stays on file_info["file_name"]
+            # for display/download — the object key never needs to be human-readable.
+            ext = os.path.splitext(file_info["file_name"])[1]
+            object_name = f"linsight/session_files/{execution_tasks[0].session_version_id}/{file_info['file_id']}{ext}"
             # Use async upload if available, otherwise wrap sync call
             await minio_client.put_object(
                 bucket_name=minio_client.bucket, object_name=object_name, file=file_info["file_path"]
@@ -144,7 +149,11 @@ async def get_final_result_file(session_model: LinsightSessionVersion, file_deta
     async def upload_file_to_minio(final_file_info: dict) -> dict | None:
         """Upload files toMinIOand returns file information"""
         try:
-            object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_name']}"
+            # ASCII-only object key (file_id + ext) — non-ASCII keys break presigned
+            # signatures on some S3-compatible backends (Huawei OBS → 403). Display
+            # name stays on final_file_info["file_name"].
+            ext = os.path.splitext(final_file_info["file_name"])[1]
+            object_name = f"linsight/final_result/{session_model.id}/{final_file_info['file_id']}{ext}"
             # Use async upload if available, otherwise wrap sync call
             minio_client = await get_minio_storage()
             await minio_client.put_object(
@@ -202,7 +211,13 @@ async def build_fallback_report_file(session_model: LinsightSessionVersion, answ
             f.write(answer)
         file_md5 = await util.async_calculate_md5(local_path)
 
-        object_name = f"linsight/final_result/{session_model.id}/{FALLBACK_REPORT_NAME}"
+        # ASCII-only object key (file_id + ext): FALLBACK_REPORT_NAME is Chinese
+        # ("报告.md"), and a non-ASCII key breaks presigned signatures on some
+        # S3-compatible backends (Huawei OBS → 403). The Chinese name is kept as the
+        # display/download file_name.
+        file_id = uuid.uuid4().hex[:8]
+        ext = os.path.splitext(FALLBACK_REPORT_NAME)[1]
+        object_name = f"linsight/final_result/{session_model.id}/{file_id}{ext}"
         minio_client = await get_minio_storage()
         await minio_client.put_object(bucket_name=minio_client.bucket, object_name=object_name, file=local_path)
         logger.info("Fallback report synthesized from answer (no output/ deliverable was produced)")
@@ -211,7 +226,7 @@ async def build_fallback_report_file(session_model: LinsightSessionVersion, answ
                 "file_name": FALLBACK_REPORT_NAME,
                 "file_path": local_path,
                 "file_md5": file_md5,
-                "file_id": uuid.uuid4().hex[:8],
+                "file_id": file_id,
                 "file_url": object_name,
             }
         ]
