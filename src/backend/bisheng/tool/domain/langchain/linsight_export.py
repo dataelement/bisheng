@@ -1,12 +1,19 @@
 """Linsight task-mode export tools (design #1-followup, output-format delivery).
 
 Agent-callable tools that convert a workspace markdown deliverable into a Word
-(.docx) or PDF file, reusing the SAME converters as the frontend download API
-(``common/utils/markdown_cmpnt``): ``md_to_pdf_bytes`` (Playwright) and
-``MarkDocx``. Both are synchronous/blocking, so they are wrapped with
-``util.sync_func_to_async`` (run in a thread-pool executor) — identical to the
-download endpoint — otherwise ``sync_playwright`` inside the worker's asyncio
-loop thread raises.
+(.docx) or PDF file.
+
+- **docx**: ``MarkDocx`` (python-docx, pure Python — no external binary).
+- **pdf**: ``markdown -> docx (MarkDocx) -> pdf (LibreOffice headless)``. The
+  legacy ``md_to_pdf_bytes`` path rendered HTML with Playwright/Chromium, which
+  is absent on stripped customer images (and cannot be installed there without
+  shell access). LibreOffice's ``soffice --convert-to pdf`` is already shipped in
+  the bisheng-backend image (knowledge-base Office parsing depends on it) and
+  needs no browser — reusing ``convert_docx_to_pdf`` from the RAG loader utils.
+
+Both converters are synchronous/blocking (python-docx + a ``soffice``
+subprocess), so they run via ``util.sync_func_to_async`` (a thread-pool
+executor) to avoid blocking the worker's asyncio loop thread.
 
 The session ``WorkspaceBackend`` is **closure-injected** via the factory below:
 deepagents tools cannot reach the FilesystemMiddleware backend through
@@ -21,6 +28,8 @@ contract as ``linsight_knowledge.SearchKnowledgeBase``).
 from __future__ import annotations
 
 import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from langchain_core.tools import BaseTool
@@ -38,6 +47,39 @@ class _ExportInput(BaseModel):
 def _swap_ext(path: str, new_ext: str) -> str:
     base, _ = os.path.splitext(path)
     return base + new_ext
+
+
+def _md_to_docx_bytes(md: str) -> bytes:
+    """markdown -> docx bytes (pure Python via MarkDocx).
+
+    ``MarkDocx.__call__`` returns ``(BytesIO.getbuffer(), title)`` — a memoryview,
+    NOT bytes — so we copy it to bytes explicitly here. (The workspace backend
+    also coerces memoryview now, but keeping the conversion at the source makes
+    the contract obvious and engine-independent.) Late import keeps test
+    monkeypatching of ``MarkDocx`` working.
+    """
+    from bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx import MarkDocx
+
+    return bytes(MarkDocx()(md)[0])
+
+
+def _md_to_pdf_bytes_via_libreoffice(md: str) -> bytes:
+    """markdown -> docx -> pdf via LibreOffice headless (no browser).
+
+    Reuses ``convert_docx_to_pdf`` (``soffice --headless --convert-to pdf``),
+    already shipped in the image. Raises on failure (soffice missing / errored);
+    the caller turns the raise into a soft string return.
+    """
+    from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import convert_docx_to_pdf
+
+    docx_bytes = _md_to_docx_bytes(md)
+    with tempfile.TemporaryDirectory(prefix="linsight_pdf_") as tmpdir:
+        docx_path = os.path.join(tmpdir, "doc.docx")
+        Path(docx_path).write_bytes(docx_bytes)
+        pdf_path = convert_docx_to_pdf(docx_path, output_dir=tmpdir)
+        if not pdf_path or not os.path.exists(pdf_path):
+            raise RuntimeError("LibreOffice docx->pdf 转换失败 (soffice 缺失或出错)")
+        return Path(pdf_path).read_bytes()
 
 
 class _ExportToolBase(BaseTool):
@@ -86,9 +128,7 @@ class ExportDocxTool(_ExportToolBase):
         if md is None:
             return f"导出失败: 源文件 {source_path} 不存在或不可读, 请先用 write_file 写好 markdown。"
         try:
-            from bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx import MarkDocx
-
-            docx_bytes, _ = await util.sync_func_to_async(MarkDocx())(md)
+            docx_bytes = await util.sync_func_to_async(_md_to_docx_bytes)(md)
         except Exception as e:
             logger.exception("export_docx convert failed")
             return f"导出失败: markdown 转 docx 出错: {e}"
@@ -111,9 +151,7 @@ class ExportPdfTool(_ExportToolBase):
         if md is None:
             return f"导出失败: 源文件 {source_path} 不存在或不可读, 请先用 write_file 写好 markdown。"
         try:
-            from bisheng.common.utils.markdown_cmpnt.md_to_pdf import md_to_pdf_bytes
-
-            pdf_bytes = await util.sync_func_to_async(md_to_pdf_bytes)(md)
+            pdf_bytes = await util.sync_func_to_async(_md_to_pdf_bytes_via_libreoffice)(md)
         except Exception as e:
             logger.exception("export_pdf convert failed")
             return f"导出失败: markdown 转 pdf 出错(可能是 PDF 渲染环境缺失): {e}"

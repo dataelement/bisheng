@@ -128,6 +128,38 @@ def test_write_caches_and_writes_through(fake_minio, file_dir):
 
 
 # ---------------------------------------------------------------------------
+# 1b. binary writes: memoryview / bytearray must land as real bytes
+# ---------------------------------------------------------------------------
+def test_to_bytes_handles_binary_views():
+    """``_to_bytes`` must copy memoryview/bytearray to bytes, NOT stringify them.
+
+    Regression for the unopenable-.docx bug: MarkDocx returns a memoryview
+    (BytesIO.getbuffer()); the old code fell through to ``str(content).encode()``
+    and wrote the literal text ``<memory at 0x...>``.
+    """
+    assert WorkspaceBackend._to_bytes(b"raw") == b"raw"
+    assert WorkspaceBackend._to_bytes(memoryview(b"PK\x03\x04zip")) == b"PK\x03\x04zip"
+    assert WorkspaceBackend._to_bytes(bytearray(b"PK\x03\x04zip")) == b"PK\x03\x04zip"
+    # text writes (markdown) still UTF-8 encode
+    assert WorkspaceBackend._to_bytes("中文") == "中文".encode()
+
+
+def test_write_memoryview_lands_real_bytes(fake_minio, file_dir):
+    """End-to-end: writing a memoryview (as export_docx does) stores valid bytes,
+    never the ``<memory at 0x...>`` repr."""
+    import io
+
+    be = make_backend("sv1", fake_minio, file_dir)
+    docx_like = io.BytesIO(b"PK\x03\x04realdocxbytes").getbuffer()  # memoryview
+    be.write("/output/report.docx", docx_like)
+
+    key = f"{WORKSPACE_PREFIX}/sv1/output/report.docx"
+    stored = fake_minio.store[(fake_minio.bucket, key)]
+    assert stored == b"PK\x03\x04realdocxbytes"
+    assert not stored.startswith(b"<memory")
+
+
+# ---------------------------------------------------------------------------
 # 2a. read cache-hit
 # ---------------------------------------------------------------------------
 def test_read_cache_hit(fake_minio, file_dir):
