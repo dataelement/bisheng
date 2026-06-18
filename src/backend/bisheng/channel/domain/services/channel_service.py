@@ -1754,8 +1754,20 @@ class ChannelService:
                         {"id": sid, "source_name": "Unknown", "source_icon": "", "source_type": "", "description": ""}
                     )
 
-        # Determine subscription status
-        subscription_status = self._resolve_membership_subscription_status(current_membership)
+        # Determine subscription status. ``current_membership`` is ACTIVE-only (it
+        # gates permissions), but the subscribe button must also reflect PENDING /
+        # REJECTED applications — the same states the channel square shows. When the
+        # user has no active membership, fall back to an include_inactive lookup so a
+        # pending application reads as "applying" instead of "not subscribed".
+        status_membership = current_membership
+        if status_membership is None:
+            status_membership = await self.space_channel_member_repository.find_membership(
+                business_id=channel_id,
+                business_type=BusinessTypeEnum.CHANNEL,
+                user_id=login_user.user_id,
+                include_inactive=True,
+            )
+        subscription_status = self._resolve_membership_subscription_status(status_membership)
 
         # Knowledge-sync config — only returned for the channel creator since
         # the feature is creator-only (Module D). Members don't need to see it.
