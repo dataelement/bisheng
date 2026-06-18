@@ -12,6 +12,7 @@
  *  - researching → com_linsight_executing  ("Working")
  *  - generating  → com_linsight_generating ("Generating results, please wait…")
  */
+import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
 
 type BreathingState = 'planning' | 'researching' | 'generating';
@@ -31,9 +32,13 @@ interface BreathingRowProps {
 export function BreathingRow({ state }: BreathingRowProps) {
     const localize = useLocalize();
     return (
-        <div className="flex items-center gap-2 py-1.5 text-sm text-[#999999]">
-            <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-[#999999]" />
-            <span>{localize(STATE_I18N[state])}</span>
+        // Match the task panel's "working" treatment: blue spinning loader +
+        // shimmer text (same gradient as the panel's running task name).
+        <div className="flex items-center gap-2 py-1.5 text-sm">
+            <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
+            <span className="bg-[linear-gradient(90deg,#cccccc_0%,#6b6b6b_50%,#cccccc_100%)] bg-[length:200%_100%] bg-clip-text text-transparent animate-text-shimmer">
+                {localize(STATE_I18N[state])}
+            </span>
         </div>
     );
 }
