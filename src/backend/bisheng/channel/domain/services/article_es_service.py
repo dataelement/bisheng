@@ -370,8 +370,12 @@ emit(false);
 
             keyword_queries = []
             for kw in keywords:
-                keyword_queries.append({"match_phrase": {"title": {"query": kw}}})
-                keyword_queries.append({"match_phrase": {"content": {"query": kw}}})
+                # Same ngram constraint as keyword search: use operator=and instead of
+                # match_phrase so rule keywords correctly match anywhere in the token run
+                # (e.g. "美团" inside "5.22美团直播"), aligning ES matching with the
+                # substring semantics of the runtime-script path (_build_source_contains_*).
+                keyword_queries.append({"match": {"title": {"query": kw, "operator": "and"}}})
+                keyword_queries.append({"match": {"content": {"query": kw, "operator": "and"}}})
             return {"bool": {"should": keyword_queries, "minimum_should_match": 1}}, rule.get("rule_type")
 
     @staticmethod
@@ -674,8 +678,15 @@ emit(false);
                 {
                     "bool": {
                         "should": [
-                            {"match_phrase": {"title": {"query": keyword, "boost": 3}}},
-                            {"match_phrase": {"content": {"query": keyword}}},
+                            # title/content use the ngram tokenizer (min_gram=1, max_gram=3).
+                            # match_phrase is unusable on it: variable-length ngrams break token
+                            # position alignment, so a phrase only matches when the keyword sits at
+                            # the tail of a token run (e.g. "美团" matches "携手美团" but not
+                            # "5.22美团直播"). Use operator=and so ALL query ngrams must be present,
+                            # which yields correct Chinese substring matching without reindexing.
+                            {"match": {"title": {"query": keyword, "operator": "and", "boost": 3}}},
+                            {"match": {"content": {"query": keyword, "operator": "and"}}},
+                            # source_id is a keyword field (not analyzed) — keep exact matching.
                             {"match_phrase": {"source_id": {"query": keyword}}},
                         ],
                         "minimum_should_match": 1,
@@ -712,8 +723,11 @@ emit(false);
             highlight_query = {
                 "bool": {
                     "should": [
-                        {"match_phrase": {"title": {"query": keyword}}},
-                        {"match_phrase": {"content": {"query": keyword}}},
+                        # Keep consistent with the main keyword query (operator=and on the
+                        # ngram fields); match_phrase would fail to highlight keywords that the
+                        # main query matched, e.g. "美团" inside "5.22美团直播".
+                        {"match": {"title": {"query": keyword, "operator": "and"}}},
+                        {"match": {"content": {"query": keyword, "operator": "and"}}},
                     ],
                     "minimum_should_match": 1,
                 }

@@ -66,16 +66,19 @@ def test_sub_channel_rules_use_runtime_source_filter():
     assert "match_phrase" not in query_json
 
 
-def test_main_channel_rules_keep_match_phrase_without_runtime_mapping():
+def test_main_channel_rules_use_match_and_without_runtime_mapping():
     svc = ArticleEsService()
 
     query_parts = svc._build_count_query_parts(source_ids=["s1"], filter_rules=[_rule_group("main")])
     query_json = json.dumps(query_parts.query, ensure_ascii=False)
 
+    # The ngram-tokenized title/content fields must NOT use match_phrase (variable-length
+    # ngrams break phrase position alignment). Rule keywords use match + operator=and so they
+    # match anywhere in a token run, e.g. "美团" inside "5.22美团直播".
     assert query_parts.runtime_mappings == {}
-    assert '"match_phrase"' in query_json
-    assert '"title": {"query": "北大"}' in query_json
-    assert '"content": {"query": "北大"}' in query_json
+    assert '"match_phrase"' not in query_json
+    assert '"title": {"query": "北大", "operator": "and"}' in query_json
+    assert '"content": {"query": "北大", "operator": "and"}' in query_json
 
 
 def test_sub_channel_and_excludes_use_independent_must_not_clauses():
@@ -222,6 +225,31 @@ async def test_search_articles_carries_runtime_mapping_only_for_sub_rules():
     search_body = client.search.await_args.kwargs["body"]
     assert search_body["runtime_mappings"]
     assert "match_phrase" not in json.dumps(search_body["query"], ensure_ascii=False)
+
+
+@pytest.mark.asyncio
+async def test_search_articles_keyword_uses_match_and_on_text_fields():
+    """Regression: keyword search must use match+operator=and (not match_phrase) on the
+    ngram-tokenized title/content. With match_phrase, a keyword like "美团" was missed inside
+    "5.22美团直播" because variable-length ngrams break phrase token-position alignment."""
+    svc = ArticleEsService()
+    client = AsyncMock()
+    client.search.return_value = {"hits": {"total": {"value": 0, "relation": "eq"}, "hits": []}}
+    svc._get_client = AsyncMock(return_value=client)
+
+    await svc.search_articles(source_ids=["s1"], keyword="美团", page=1, page_size=20)
+
+    body = client.search.await_args.kwargs["body"]
+    query_json = json.dumps(body["query"], ensure_ascii=False)
+    # title/content go through match+operator=and ...
+    assert '"title": {"query": "美团", "operator": "and", "boost": 3}' in query_json
+    assert '"content": {"query": "美团", "operator": "and"}' in query_json
+    # ... and source_id (a keyword field) keeps exact match_phrase.
+    assert '"match_phrase": {"source_id": {"query": "美团"}}' in query_json
+    # Highlight query must stay consistent with the main query (no match_phrase on text fields).
+    highlight_json = json.dumps(body["highlight"], ensure_ascii=False)
+    assert "match_phrase" not in highlight_json
+    assert '"operator": "and"' in highlight_json
 
 
 @pytest.mark.asyncio
