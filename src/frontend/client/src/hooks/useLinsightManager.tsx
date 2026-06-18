@@ -109,26 +109,7 @@ export const useLinsightManager = () => {
         if (linsight) return updateLinsight(versionId, { inputSop: false }); // 恢复用户未输入状态
 
         const { status, sop, execute_feedback, output_result, tasks, files, ...params } = update
-        let newStatus = ''
-        switch (status) {
-            case 'not_started':
-            case 'sop_generation_failed':
-                newStatus = SopStatus.SopGenerated;
-                break;
-            case 'in_progress':
-                newStatus = SopStatus.Running;
-                break;
-            case 'completed':
-                newStatus = execute_feedback ? SopStatus.FeedbackCompleted : SopStatus.completed;
-                break;
-            case 'terminated':
-            case 'failed':
-                newStatus = SopStatus.Stoped;
-                break;
-            default:
-                newStatus = status; // 或设置默认值
-                break;
-        }
+        const newStatus = mapSessionVersionStatus(status, execute_feedback);
         const data = {
             ...params,
             output_result,
@@ -426,6 +407,45 @@ const convertTools = (tools) => {
     }
 }
 
+
+/**
+ * Map a backend session-version status (SessionVersionStatusEnum) to the
+ * frontend SopStatus used by the store. Centralised so the reload path
+ * (switchAndUpdateLinsight) agrees with the live WS pump on what "running" means.
+ *
+ * `not_started` means the session has been submitted + enqueued but the Linsight
+ * worker has not picked it up yet (it flips to `in_progress` only on dequeue, in
+ * task_exec._execute_workflow) — i.e. it is QUEUED. The F035 client has no manual
+ * "start" affordance, so `not_started` is never a resting SOP state here; it must
+ * map to Running so the queue polling stays enabled and <QueueCard> survives a
+ * refresh / session switch (otherwise `running` is false and the 排队中 badge is
+ * lost). A genuinely non-queued not_started degrades gracefully: queue-status
+ * returns index 0, so no phantom card shows.
+ *
+ * `waiting_for_user_input` is a dedicated backend state (park-and-release HITL):
+ * the run is parked on an ask_user interrupt, not finished. The live flow never
+ * leaves SopStatus.Running while parked (the WS `user_input` event only changes
+ * the task's status, not the session's), so on reload it MUST also map to Running
+ * — otherwise `running` is false, the ClarifyCard / waiting input is gated off,
+ * and the user sees no input prompt after a refresh.
+ */
+export function mapSessionVersionStatus(status: string, executeFeedback?: string | null): string {
+    switch (status) {
+        case 'sop_generation_failed':
+            return SopStatus.SopGenerated;
+        case 'not_started':
+        case 'in_progress':
+        case 'waiting_for_user_input':
+            return SopStatus.Running;
+        case 'completed':
+            return executeFeedback ? SopStatus.FeedbackCompleted : SopStatus.completed;
+        case 'terminated':
+        case 'failed':
+            return SopStatus.Stoped;
+        default:
+            return status; // unknown status passes through unchanged
+    }
+}
 
 function buildTaskTree(tasks) {
     let hasTerminated = false
