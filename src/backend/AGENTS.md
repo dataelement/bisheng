@@ -92,6 +92,8 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "msg"   # autogen reflects MySQL only; review DM8 compat manually
 ```
 
+**Ruff is the sole authority on formatting.** Every file you touch must pass `ruff format` + `ruff check --fix` before it's considered done — no exceptions. Do **not** hand-format or leave a file un-formatted to keep the diff small: a smaller diff is never a reason to skip formatting. If ruff reflows lines you didn't touch, that reflow is correct and stays in. The PostToolUse hook enforces the same rules, so unformatted code gets flagged regardless — format it yourself first.
+
 **Migration vs. script — keep them separate:**
 
 - **Schema changes** (DDL: create/alter/drop table, columns, indexes, constraints) → Alembic revision under `migrations/versions/`. These are versioned and replayed on every environment via `alembic upgrade head`.
