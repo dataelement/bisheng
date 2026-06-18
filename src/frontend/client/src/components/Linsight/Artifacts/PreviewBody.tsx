@@ -4,6 +4,7 @@
  * Used by both the legacy drawer (FilePreviewPanel) and the inline WorkspacePanel
  * so the two surfaces render identical content.
  */
+import { Colored } from 'bisheng-icons';
 import { useEffect, useState } from 'react';
 import { NotificationSeverity } from '~/common';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
@@ -19,6 +20,20 @@ import {
     getFileExtension,
     resolveArtifactUrl,
 } from './artifactUtils';
+
+// Colored placeholder icons (bisheng-icons) for the "can't preview" fallback,
+// by extension. Types without a colored variant (e.g. pdf) fall back to FileIcon.
+const COLORED_FILE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+    doc: Colored.FileDoc,
+    docx: Colored.FileDoc,
+    xls: Colored.FileXls,
+    xlsx: Colored.FileXls,
+    ppt: Colored.FilePptx,
+    pptx: Colored.FilePptx,
+    csv: Colored.FileCsv,
+    md: Colored.FileMd,
+    txt: Colored.FileTxt,
+};
 
 // Module-level cache of resolved previews. Toggling fullscreen remounts a second
 // WorkspacePanel instance, which would otherwise re-fetch and flash a spinner every
@@ -121,15 +136,21 @@ export function PreviewBody({ file, versionId }: PreviewBodyProps) {
 
     if (kind === 'unsupported' || error) {
         // not inline-renderable (docx / pdf / xlsx …) or load failure → download hint
+        const ext = (getFileExtension(file.file_name) || '').toLowerCase();
+        const ColoredIcon = COLORED_FILE_ICONS[ext];
         return (
             <div className="flex h-full flex-col items-center justify-center gap-2 p-6">
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
-                <FileIcon type={getFileExtension(file.file_name) as any} className="h-20 w-20" />
+                {ColoredIcon ? (
+                    <ColoredIcon className="h-20 w-20" />
+                ) : (
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union
+                    <FileIcon type={ext as any} className="h-20 w-20" />
+                )}
                 <div className="max-w-[80%] truncate text-base font-medium text-gray-900">{file.file_name}</div>
                 <div className="mb-2 text-sm text-gray-500">
                     {error ? localize('com_linsight_preview_load_failed') : localize('com_linsight_preview_unsupported')}
                 </div>
-                <Button variant="outline" size="sm" onClick={handleDownloadToView}>
+                <Button variant="outline" size="sm" onClick={handleDownloadToView} className="h-8 rounded-md px-4">
                     {localize('com_linsight_download_to_view')}
                 </Button>
             </div>

@@ -74,7 +74,7 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                 )}
             >
                 <div className="overflow-hidden">
-                    <ul className="max-h-60 overflow-y-auto px-4 pb-2">
+                    <ul className="max-h-60 overflow-y-auto px-4 pb-2 scrollbar-os">
                         {tasks.map((task) => {
                             const done = isTaskDone(task.status);
                             const running = isTaskRunning(task.status);
