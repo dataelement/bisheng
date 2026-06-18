@@ -282,9 +282,9 @@ export function CreateChannelDrawer({
                         ref={knowledgePickerHostRef}
                         className="relative flex min-h-0 flex-1 flex-col"
                     >
-                        <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white pb-4 pt-6 touch-mobile:mx-0">
+                        <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white px-0 pb-4 pt-6 touch-mobile:mx-0">
                             <div className="flex items-center justify-between gap-3">
-                                <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
+                                <SheetTitle className="text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
                                     {isEditMode ? localize("com_subscription.channel_settings") : localize("com_subscription.create_channel")}
                                 </SheetTitle>
                                 <button
@@ -541,10 +541,7 @@ export function CreateChannelDrawer({
                                             <Switch
                                                 checked={form.publishToSquare === "yes"}
                                                 onCheckedChange={(checked) => form.setPublishToSquare(checked ? "yes" : "no")}
-                                                className={cn(
-                                                    "data-[state=checked]:bg-[#165DFF]",
-                                                    "data-[state=unchecked]:bg-[#E5E6EB]"
-                                                )}
+                                                variant="tool"
                                             />
                                         </div>
                                     )}
@@ -563,10 +560,7 @@ export function CreateChannelDrawer({
                                             <Switch
                                                 checked={form.contentFilter}
                                                 onCheckedChange={form.handleContentFilterToggle}
-                                                className={cn(
-                                                    "data-[state=checked]:bg-[#165DFF]",
-                                                    "data-[state=unchecked]:bg-[#E5E6EB]"
-                                                )}
+                                                variant="tool"
                                             />
                                         </div>
                                         {form.contentFilter && (
@@ -594,10 +588,7 @@ export function CreateChannelDrawer({
                                             <Switch
                                                 checked={form.createSubChannel}
                                                 onCheckedChange={form.handleCreateSubChannelToggle}
-                                                className={cn(
-                                                    "data-[state=checked]:bg-[#165DFF]",
-                                                    "data-[state=unchecked]:bg-[#E5E6EB]"
-                                                )}
+                                                variant="tool"
                                             />
                                         </div>
                                         {form.createSubChannel && (

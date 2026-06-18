@@ -387,8 +387,8 @@ export function KnowledgeSpaceSidebar({
                         collapsed ? "flex items-center justify-center h-7" : "",
                         mobileDrawerMode && "hidden"
                     )}>
-                        {!collapsed && !mobileDrawerMode && <div className="flex justify-between items-center text-[16px] font-medium leading-[32px]">
-                            <span className="text-[#1d2129]">{localize("com_knowledge.knowledge_space")}</span>
+                        {!collapsed && !mobileDrawerMode && <div className="flex justify-between items-center pl-3">
+                            <span className="text-base font-bold leading-8 text-[#1A1A1A]">{localize("com_knowledge.knowledge_space")}</span>
                         </div>}
                     </div>
                 </div>

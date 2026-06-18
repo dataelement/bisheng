@@ -342,9 +342,9 @@ export function CreateKnowledgeSpaceDrawer({
                     "flex w-full max-w-[900px] flex-col overflow-hidden bg-white px-20 sm:max-w-[1000px] touch-mobile:px-4"
                 )}
             >
-                <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white pb-4 pt-6 touch-mobile:mx-0">
+                <SheetHeader className="sticky top-0 z-10 mx-6 border-b border-[#E5E6EB] bg-white px-0 pb-4 pt-6 touch-mobile:mx-0">
                     <div className="flex items-center justify-between gap-3">
-                        <SheetTitle className="-ml-4 text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
+                        <SheetTitle className="text-[20px] font-medium text-[#1D2129] touch-desktop:text-[16px]">
                             {mode === "edit" ? localize("com_subscription.edit_knowledge_space") || localize("com_knowledge.edit_space") : localize("com_subscription.create_konwledge_space")}
                         </SheetTitle>
                         <button
@@ -559,12 +559,9 @@ export function CreateKnowledgeSpaceDrawer({
                                         </Label>
                                     </div>
                                     <Switch
+                                        variant="tool"
                                         checked={publishToSquare === "yes"}
                                         onCheckedChange={(checked) => setPublishToSquare(checked ? "yes" : "no")}
-                                        className={cn(
-                                            "data-[state=checked]:bg-[#165DFF]",
-                                            "data-[state=unchecked]:bg-[#E5E6EB]"
-                                        )}
                                     />
                                 </div>
                             )}

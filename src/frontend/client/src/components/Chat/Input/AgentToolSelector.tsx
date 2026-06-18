@@ -5,7 +5,8 @@
  * Backend still dispatches at child level, so each parent's children[] are
  * flattened into leaf-level entries at request time (see useAiChat).
  */
-import { Settings2Icon, GlobeIcon, Hammer, WebhookIcon } from "lucide-react";
+import { Settings2Icon, WebhookIcon } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useEffect } from "react";
 import { useRecoilState } from "recoil";
 import { Switch } from "~/components/ui";
@@ -43,8 +44,8 @@ interface Props {
 
 function iconForGroup(group: AvailableToolGroup) {
   const firstKey = group.children?.[0]?.tool_key;
-  if (firstKey === "web_search") return <GlobeIcon size="16" className="text-[#999]" />;
-  return <Hammer size="16" className="text-[#999]" />;
+  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-[#999]" />;
+  return <Outlined.Hammer className="size-4 text-[#999]" />;
 }
 
 export default function AgentToolSelector({ availableTools, disabled }: Props) {
@@ -133,7 +134,7 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-[8px] w-64 max-h-[320px] overflow-y-auto">
+      <SelectContent className="bg-white rounded-[8px] w-[200px] max-h-[320px] overflow-y-auto">
         {availableTools.map((group) => (
           <div key={group.id} className="flex justify-between items-center px-2 py-[5px]">
             <div className="flex gap-2 items-center min-w-0">
@@ -146,7 +147,8 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
               </span>
             </div>
             <Switch
-              className="data-[state=checked]:bg-blue-600 shrink-0"
+              variant="tool"
+              className="shrink-0"
               disabled={disabled}
               checked={isChecked(group.id)}
               onCheckedChange={() => toggle(group)}
