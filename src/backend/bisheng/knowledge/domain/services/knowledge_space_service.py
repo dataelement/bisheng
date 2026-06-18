@@ -4323,21 +4323,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raise SpaceSubscribeLimitError(quota=effective)
 
         previous_status = existing.status if existing else None
-        if existing:
-            existing.status = target_status
-            existing = await SpaceChannelMemberDao.update(existing)
-            member = existing
-        else:
-            member = SpaceChannelMember(
-                business_id=str(space_id),
-                business_type=BusinessTypeEnum.SPACE,
-                user_id=self.login_user.user_id,
-                user_role=UserRoleEnum.MEMBER,
-                status=target_status,
-            )
-            await SpaceChannelMemberDao.async_insert_member(member)
 
         if space.auth_type == AuthTypeEnum.APPROVAL:
+            # Run the approval gate BEFORE persisting any membership change. If the
+            # scenario is missing/disabled the gate raises ApprovalScenarioDisabledError;
+            # we must not leave a stray PENDING membership behind, otherwise the early
+            # "already pending" return above would short-circuit before the gate on the
+            # next click and mask the error (first click errors, second click silently
+            # "succeeds"). The membership is written only once the gate has decided.
             gate = self.approval_gate or self._build_space_approval_gate()
             primary_dept = await UserDepartmentDao.aget_user_primary_department(self.login_user.user_id)
             gate_result = await gate.request_or_pass(
@@ -4360,12 +4353,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     ip_address=get_request_ip(self.request) if self.request else None,
                 )
             )
+
+            # PASS → activate immediately; PENDING/EXCEPTION → keep as pending member.
+            resolved_status = (
+                MembershipStatusEnum.ACTIVE if gate_result.decision == "pass" else MembershipStatusEnum.PENDING
+            )
+            member = await self._persist_space_member(existing, space_id, resolved_status)
+
             if gate_result.decision == "pass":
-                member.status = MembershipStatusEnum.ACTIVE
-                if existing:
-                    member = await SpaceChannelMemberDao.update(member)
-                else:
-                    member = await SpaceChannelMemberDao.update(member)
                 await self.__class__.sync_direct_space_user_permissions(
                     space_id,
                     member.user_id,
@@ -4376,13 +4371,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "status": "subscribed",
                     "space_id": space_id,
                 }
+
             if gate_result.decision == ApprovalGateDecision.PENDING and gate_result.task_ids and self.message_service:
                 await self._send_space_approval_notification(
                     space=space,
                     instance_id=gate_result.instance_id,
                     task_ids=gate_result.task_ids,
                 )
-        elif previous_status != MembershipStatusEnum.PENDING:
+            return {
+                "status": "pending",
+                "space_id": space_id,
+            }
+
+        # PUBLIC space → activate immediately, no approval gate.
+        member = await self._persist_space_member(existing, space_id, target_status)
+        if previous_status != MembershipStatusEnum.PENDING:
             await self._send_subscription_notification(space)
 
         if member.status == MembershipStatusEnum.ACTIVE:
@@ -4397,6 +4400,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "status": "subscribed" if member.status == MembershipStatusEnum.ACTIVE else "pending",
             "space_id": space_id,
         }
+
+    async def _persist_space_member(self, existing, space_id: int, status: MembershipStatusEnum):
+        """Insert or update the current user's space membership to ``status``.
+
+        Centralizes the insert/update branch so callers can defer persistence
+        until after a decision (e.g. the approval gate) has been made.
+        """
+        if existing:
+            existing.status = status
+            return await SpaceChannelMemberDao.update(existing)
+        member = SpaceChannelMember(
+            business_id=str(space_id),
+            business_type=BusinessTypeEnum.SPACE,
+            user_id=self.login_user.user_id,
+            user_role=UserRoleEnum.MEMBER,
+            status=status,
+        )
+        await SpaceChannelMemberDao.async_insert_member(member)
+        return member
 
     def _build_space_approval_gate(self) -> ApprovalGate:
         registry = ApprovalRegistry.with_default_presets()
