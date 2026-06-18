@@ -308,7 +308,7 @@ task_routers = {
 
 | 技术 | 版本 | 用途 |
 |------|-----|------|
-| Python | 3.10.14 | 运行时 |
+| Python | 3.11+ | 运行时（pyproject `requires-python >=3.11`） |
 | FastAPI | -- | Web 框架 |
 | uvicorn | -- | ASGI 服务器 |
 | SQLModel / SQLAlchemy | -- | ORM |

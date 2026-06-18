@@ -6,9 +6,9 @@
  * so no Recoil atom is needed.
  */
 import { useState } from 'react';
-import type { ArtifactFile } from './artifactUtils';
+import { openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
 
-export function useArtifactsPanel() {
+export function useArtifactsPanel(versionId: string) {
     const [workspaceOpen, setWorkspaceOpen] = useState(false);
     const [previewFile, setPreviewFile] = useState<ArtifactFile | null>(null);
     const [fromWorkspace, setFromWorkspace] = useState(false);
@@ -19,9 +19,11 @@ export function useArtifactsPanel() {
     };
 
     const openPreview = (file: ArtifactFile, viaWorkspace = false) => {
-        // html artifacts open in the standalone viewer tab (same as legacy)
+        // html artifacts open in the standalone sandboxed viewer tab (the side
+        // panel can't render a full HTML document); needs versionId to resolve
+        // the MinIO object key into a presigned link.
         if (file.file_name?.toLowerCase().endsWith('.html')) {
-            window.open(`${__APP_ENV__.BASE_URL}/html?url=${encodeURIComponent(file.file_url)}`, '_blank');
+            openHtmlArtifactViewer(file, versionId);
             return;
         }
         setWorkspaceOpen(false);

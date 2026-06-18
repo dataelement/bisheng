@@ -14,7 +14,8 @@ Covered (per task brief TA-1):
 - todo (write_todos) -> GenerateSubTask / TaskStart / TaskEnd
 - tool call start/end -> ExecStep (call_id idempotent merge)
 - thinking -> ExecStep(step_type="thinking")
-- subagent (subgraphs=True namespace) -> ExecStep(step_type="subagent")
+- subagent: only the main-graph ``task`` tool -> ExecStep(step_type="subagent");
+  namespaced (subagent-internal) tools keep their real type + carry ns (B1)
 - knowledge -> ExecStep(step_type="knowledge")
 - __interrupt__ -> NeedUserInput
 - terminal chunks (error / recursion limit)
@@ -259,18 +260,30 @@ class TestThinking:
 class TestSubagentNamespace:
     def test_namespace_propagates_to_exec_step(self, mapper: StreamEventMapper):
         # subgraphs=True -> chunk is (namespace, mode, chunk); mapper.normalize
-        # receives the namespace via a tuple-aware path.
+        # receives the namespace via a tuple-aware path. ``tools:<uuid>`` is the
+        # real flat subgraph namespace form deepagents emits.
+        sub_ns = ("tools:9c3a0a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",)
         msg = AIMessage(
             content="",
             tool_calls=[{"id": "call_sub", "name": "search_kb", "args": {"q": "竞品"}}],
         )
-        events = [
-            e
-            for e in mapper.normalize("messages", (msg, {}), namespace=("research_subagent:0",))
-            if isinstance(e, ExecStep)
-        ]
+        events = [e for e in mapper.normalize("messages", (msg, {}), namespace=sub_ns) if isinstance(e, ExecStep)]
         assert events
-        assert events[0].extra_info.get("namespace") == "research_subagent:0"
+        # B1: namespace only rides in extra_info for grouping; it does NOT rewrite
+        # step_type to "subagent" — an internal tool keeps its real (tool) type.
+        assert events[0].step_type == "tool"
+        assert events[0].extra_info.get("namespace") == sub_ns[0]
+
+    def test_namespaced_knowledge_keeps_knowledge_type(self, mapper: StreamEventMapper):
+        # A subagent-internal knowledge search keeps step_type="knowledge" (B1).
+        sub_ns = ("tools:9c3a0a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",)
+        msg = AIMessage(
+            content="",
+            tool_calls=[{"id": "call_sub_kb", "name": "search_knowledge_base", "args": {"query": "竞品"}}],
+        )
+        ev = next(e for e in mapper.normalize("messages", (msg, {}), namespace=sub_ns) if isinstance(e, ExecStep))
+        assert ev.step_type == "knowledge"
+        assert ev.extra_info.get("namespace") == sub_ns[0]
 
 
 # --------------------------------------------------------------------------
@@ -388,3 +401,65 @@ class TestStreamContext:
         assert ctx.current_in_progress_task_id is None
         assert ctx.open_calls == {}
         assert ctx.orphan_ends == {}
+
+
+# --------------------------------------------------------------------------
+# pseudo tool-call written into reasoning text (偶现) is filtered from thinking
+# --------------------------------------------------------------------------
+
+
+class TestPseudoToolCallFilter:
+    def test_pseudo_tool_call_stripped_from_reasoning(self, mapper: StreamEventMapper):
+        msg = AIMessage(
+            content="",
+            additional_kwargs={
+                "reasoning_content": '让我调用工具检索一下。\nplay_search\n{"search_query": "黄河历史 改道次数", "num_results": 5}'
+            },
+        )
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.step_type == "thinking"
+        assert "让我调用工具检索一下。" in ev.output
+        assert "play_search" not in ev.output
+        assert "search_query" not in ev.output
+
+    def test_normal_reasoning_is_untouched(self, mapper: StreamEventMapper):
+        text = "先分析用户意图，再给出结论。"
+        msg = AIMessage(content="", additional_kwargs={"reasoning_content": text})
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.output == text
+
+    def test_pseudo_like_tail_with_invalid_json_is_kept(self, mapper: StreamEventMapper):
+        # identifier + braces at the tail, but the body is not valid JSON -> keep it
+        text = "思考过程\nfoo\n{bar baz}"
+        msg = AIMessage(content="", additional_kwargs={"reasoning_content": text})
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.output == text
+
+
+# --------------------------------------------------------------------------
+# subagent delegation: only the `task` tool is a delegation; namespaced
+# internal tools keep their real type (regression: ls/glob shown as 子智能体)
+# --------------------------------------------------------------------------
+
+
+class TestSubagentDelegation:
+    def test_task_tool_is_subagent(self, mapper: StreamEventMapper):
+        msg = AIMessage(content="", tool_calls=[{"id": "c1", "name": "task", "args": {"description": "调研"}}])
+        ev = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)][0]
+        assert ev.step_type == "subagent"
+        # B2: literal "task" is reshaped to the delegated subagent name and the
+        # delegation goal is carried into call_reason + extra_info["delegate_goal"].
+        assert ev.name == "general-purpose"
+        assert ev.call_reason == "调研"
+        assert ev.extra_info.get("delegate_goal") == "调研"
+
+    def test_namespaced_internal_tool_is_not_subagent(self, mapper: StreamEventMapper):
+        msg = AIMessage(content="", tool_calls=[{"id": "c2", "name": "glob", "args": {"pattern": "*.md"}}])
+        events = [
+            e
+            for e in mapper.normalize("messages", (msg, {}), namespace=("general-purpose:0",))
+            if isinstance(e, ExecStep)
+        ]
+        assert events[0].step_type == "tool"
+        # namespace still rides along so the UI can attribute it to its owner
+        assert events[0].extra_info.get("namespace") == "general-purpose:0"

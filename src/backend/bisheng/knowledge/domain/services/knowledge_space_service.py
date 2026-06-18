@@ -4294,11 +4294,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "status": "subscribed",
                     "space_id": space_id,
                 }
-            if existing.status == MembershipStatusEnum.PENDING and target_status == MembershipStatusEnum.PENDING:
-                return {
-                    "status": "pending",
-                    "space_id": space_id,
-                }
+            # NOTE: no early "already pending → return" short-circuit here. That
+            # trusted a possibly-stale async_find_member read (which has returned
+            # phantom PENDING rows on DM under rapid requests), returning success
+            # without writing anything — the membership silently vanished on
+            # refresh. We now always fall through to the (idempotent) approval
+            # gate + an authoritative upsert, so the row is durably written even
+            # when the read lied. The gate dedupes on business_key, so a genuine
+            # re-click creates no duplicate approval instance.
 
         if not existing or existing.status == MembershipStatusEnum.REJECTED:
             # Limit is role-configurable via F005 quota (knowledge_space_subscribe,
@@ -4323,21 +4326,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raise SpaceSubscribeLimitError(quota=effective)
 
         previous_status = existing.status if existing else None
-        if existing:
-            existing.status = target_status
-            existing = await SpaceChannelMemberDao.update(existing)
-            member = existing
-        else:
-            member = SpaceChannelMember(
-                business_id=str(space_id),
-                business_type=BusinessTypeEnum.SPACE,
-                user_id=self.login_user.user_id,
-                user_role=UserRoleEnum.MEMBER,
-                status=target_status,
-            )
-            await SpaceChannelMemberDao.async_insert_member(member)
 
         if space.auth_type == AuthTypeEnum.APPROVAL:
+            # Run the approval gate BEFORE persisting any membership change. If the
+            # scenario is missing/disabled the gate raises ApprovalScenarioDisabledError;
+            # we must not leave a stray PENDING membership behind, otherwise the early
+            # "already pending" return above would short-circuit before the gate on the
+            # next click and mask the error (first click errors, second click silently
+            # "succeeds"). The membership is written only once the gate has decided.
             gate = self.approval_gate or self._build_space_approval_gate()
             primary_dept = await UserDepartmentDao.aget_user_primary_department(self.login_user.user_id)
             gate_result = await gate.request_or_pass(
@@ -4360,12 +4356,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     ip_address=get_request_ip(self.request) if self.request else None,
                 )
             )
+
+            # PASS → activate immediately; PENDING/EXCEPTION → keep as pending member.
+            resolved_status = (
+                MembershipStatusEnum.ACTIVE if gate_result.decision == "pass" else MembershipStatusEnum.PENDING
+            )
+            member = await self._persist_space_member(existing, space_id, resolved_status)
+
             if gate_result.decision == "pass":
-                member.status = MembershipStatusEnum.ACTIVE
-                if existing:
-                    member = await SpaceChannelMemberDao.update(member)
-                else:
-                    member = await SpaceChannelMemberDao.update(member)
                 await self.__class__.sync_direct_space_user_permissions(
                     space_id,
                     member.user_id,
@@ -4376,13 +4374,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "status": "subscribed",
                     "space_id": space_id,
                 }
+
             if gate_result.decision == ApprovalGateDecision.PENDING and gate_result.task_ids and self.message_service:
                 await self._send_space_approval_notification(
                     space=space,
                     instance_id=gate_result.instance_id,
                     task_ids=gate_result.task_ids,
                 )
-        elif previous_status != MembershipStatusEnum.PENDING:
+            return {
+                "status": "pending",
+                "space_id": space_id,
+            }
+
+        # PUBLIC space → activate immediately, no approval gate.
+        member = await self._persist_space_member(existing, space_id, target_status)
+        if previous_status != MembershipStatusEnum.PENDING:
             await self._send_subscription_notification(space)
 
         if member.status == MembershipStatusEnum.ACTIVE:
@@ -4397,6 +4403,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "status": "subscribed" if member.status == MembershipStatusEnum.ACTIVE else "pending",
             "space_id": space_id,
         }
+
+    async def _persist_space_member(self, existing, space_id: int, status: MembershipStatusEnum):
+        """Authoritatively set the current user's space membership to ``status``.
+
+        Centralizes persistence so callers can defer it until after a decision
+        (e.g. the approval gate) has been made. The write is read-independent: it
+        does NOT trust the passed-in ``existing`` (a prior async_find_member read
+        can be stale — phantom rows on DM under rapid requests caused the
+        membership to silently not persist). The DAO UPSERTs by natural key
+        (UPDATE; INSERT only if no row was actually affected).
+        """
+        return await SpaceChannelMemberDao.async_upsert_space_member_status(
+            space_id=space_id,
+            user_id=self.login_user.user_id,
+            status=status,
+        )
 
     def _build_space_approval_gate(self) -> ApprovalGate:
         registry = ApprovalRegistry.with_default_presets()

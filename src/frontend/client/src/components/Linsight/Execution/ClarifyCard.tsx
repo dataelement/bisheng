@@ -2,14 +2,16 @@
  * F035 Track H (P3): intent-clarification / follow-up card (spec §2,
  * user_input event). One question per page (‹ 1/N ›): single-select /
  * multi-select / free text, with a trailing "type your own" option. Bottom
- * right "skip" skips the current question; top-right × skips the rest and
- * submits whatever was collected. All answers are merged into one structured
- * text and submitted through the existing user-input API in a single shot.
+ * right "skip →" skips the current question to the next one (shown on every page
+ * except the last — the last page only offers 确定/finish); top-right × skips the
+ * rest and submits whatever was collected. All answers are merged into one
+ * structured text and submitted through the existing user-input API in a single shot.
  * Unparseable payloads degrade to a plain textarea (legacy UserInput shape).
  */
-import { ArrowRight, Check, ChevronLeft, ChevronRight, CornerDownLeft, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { Button, Textarea } from '~/components/ui';
+import { ArrowRight, Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Textarea } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
@@ -43,14 +45,8 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
 
     const [page, setPage] = useState(0);
     /** question.id -> selected option texts; CUSTOM_KEY entry = free input flag.
-     *  Pre-seeded with each question's is_default option(s): single-select takes
-     *  the first default, multi-select takes all. This is the fallback answer when
-     *  the user doesn't change it (★-badged in the option list). */
-    const [answers, setAnswers] = useState<Record<string, string[]>>(() =>
-        Object.fromEntries(
-            questions.map((qq) => [qq.id, qq.multiple ? [...qq.defaultOptions] : qq.defaultOptions.slice(0, 1)]),
-        ),
-    );
+     *  Nothing is pre-selected — the user picks every answer explicitly. */
+    const [answers, setAnswers] = useState<Record<string, string[]>>({});
     const [customText, setCustomText] = useState<Record<string, string>>({});
     const [freeText, setFreeText] = useState('');
     const [submitted, setSubmitted] = useState(false);
@@ -127,24 +123,54 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
     const hasAnswer = q
         ? selected.some((v) => v !== CUSTOM_KEY) || (customSelected && !!customText[q.id]?.trim())
         : !!freeText.trim();
+    // On the last page the only meaningful action is "finish": there is no next
+    // question for "skip →" to advance to, and the top-right × already covers
+    // skip-and-submit. So the last page shows a single always-clickable 确定
+    // (finish) and hides 跳过; finishing with nothing selected submits the last
+    // question as skipped (composeClarifyAnswer maps empty answers to skipText).
+    const isLast = page >= questions.length - 1;
+
+    // Enter ⏎ confirms (matches the `确定 ↵` hint). The custom-text <input> owns
+    // its own Enter (single-select); this covers multi-select and the last-page
+    // 确定. Skip while typing in any field so the chat box / custom input keep
+    // their native Enter. Held in a ref so the always-on listener sees fresh state.
+    const enterConfirmRef = useRef<() => void>(() => {});
+    enterConfirmRef.current = () => {
+        if (disabled || submitted) return;
+        // only when a confirm action is actually available (mirror the 确定 button)
+        if (!(isLast || (hasAnswer && (q?.multiple || !q)))) return;
+        handleConfirm();
+    };
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+            const el = document.activeElement as HTMLElement | null;
+            const tag = el?.tagName?.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || el?.isContentEditable) return;
+            e.preventDefault();
+            enterConfirmRef.current();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
 
     return (
         <div
-            className="my-3 w-full rounded-2xl border border-[#EEF2F6] bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
+            className="my-3 w-full rounded-2xl border border-[#EEF2F6] bg-white p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
             style={{
                 backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'5\' height=\'5\'%3E%3Ccircle cx=\'0.5\' cy=\'0.5\' r=\'0.5\' fill=\'%23EAEEFF\'/%3E%3C/svg%3E")',
                 backgroundSize: '5px 5px',
             }}
         >
             {/* Header: Guide text + Close button */}
-            <div className="flex items-center justify-between pb-1">
+            <div className="flex items-start justify-between pb-1">
                 <p className="text-[16px] font-semibold text-[#212121]">
                     {request.callReason || localize('com_linsight_clarify_title')}
                 </p>
                 <button
                     type="button"
                     onClick={handleClose}
-                    className="shrink-0 rounded-full p-1 text-[#8C8C8C] hover:bg-gray-100 transition-colors"
+                    className="shrink-0 rounded-md p-1 text-[#8C8C8C] hover:bg-gray-100 transition-colors"
                     aria-label="close"
                 >
                     <X size={16} />
@@ -153,7 +179,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
 
             {/* Body: Current question */}
             {q ? (
-                <div className="mt-4">
+                <div className="mt-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <span className="text-[14px] font-bold text-[#1A1A1A]">{q.question}</span>
@@ -173,7 +199,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                     type="button"
                                     disabled={page === 0}
                                     onClick={() => setPage(page - 1)}
-                                    className="rounded-full p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
+                                    className="rounded-md p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
                                 >
                                     <ChevronLeft size={16} />
                                 </button>
@@ -184,17 +210,16 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                     type="button"
                                     disabled={page === questions.length - 1}
                                     onClick={() => setPage(page + 1)}
-                                    className="rounded-full p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
+                                    className="rounded-md p-1 hover:bg-gray-100/80 disabled:opacity-30 transition-colors"
                                 >
                                     <ChevronRight size={16} />
                                 </button>
                             </div>
                         )}
                     </div>
-                    <ul className="mt-4 space-y-3">
+                    <ul className="mt-4 space-y-2">
                         {q.options.map((option, i) => {
                             const active = selected.includes(option);
-                            const isDefault = q.defaultOptions.includes(option);
                             const { title: optTitle, desc: optDesc } = parseOption(option);
                             return (
                                 <li key={i}>
@@ -203,25 +228,22 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         disabled={disabled || submitted}
                                         onClick={() => handleSelect(q, option)}
                                         className={cn(
-                                            'flex w-full items-start gap-2 rounded-xl px-4 py-2.5 text-left text-sm transition-all duration-200 select-none border-0',
+                                            'flex h-9 w-full items-center gap-2 rounded-lg px-4 text-left text-sm transition-all duration-200 select-none border-0',
                                             active
-                                                ? 'bg-[#EDF2FF] text-[#335CFF] font-medium shadow-[0_2px_8px_rgba(51,92,255,0.08)]'
+                                                ? 'bg-[#EEE] text-[#212121] font-medium'
                                                 : 'text-[#1A1A1A] hover:bg-gray-50/80',
                                         )}
                                     >
                                         <span className="shrink-0 font-medium text-[#8C8C8C]">{i + 1}.</span>
                                         <div className="flex-1 min-w-0">
-                                            <span className={cn(active ? 'text-[#335CFF]' : 'text-[#1A1A1A]')}>{optTitle}</span>
-                                            {isDefault && (
-                                                <span className="ml-1 text-[#F5A623]" title={localize('com_linsight_clarify_default')}>★</span>
-                                            )}
+                                            <span className={cn(active ? 'text-[#212121]' : 'text-[#1A1A1A]')}>{optTitle}</span>
                                             {optDesc && (
-                                                <span className={cn('ml-1 text-[13px] font-normal', active ? 'text-[#335CFF]/80' : 'text-[#8C8C8C]')}>
+                                                <span className="ml-1 text-[13px] font-normal text-[#8C8C8C]">
                                                     {optDesc}
                                                 </span>
                                             )}
                                         </div>
-                                        {active && <Check size={16} className="shrink-0 text-[#335CFF] self-center" />}
+                                        {active && <Check size={16} className="shrink-0 text-[#212121] self-center" />}
                                     </button>
                                 </li>
                             );
@@ -229,7 +251,12 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                         {/* Trailing "type your own" entry: inline input */}
                         <li>
                             <div
-                                className="flex items-center gap-2 rounded-xl bg-[#F5F7FA] px-4 py-2.5 transition-all duration-200"
+                                className={cn(
+                                    'flex h-9 items-center gap-2 rounded-lg px-4 transition-all duration-200',
+                                    // No box by default (matches the other options); the
+                                    // input-box background only appears once it's active.
+                                    customSelected ? 'bg-[#EEE]' : 'hover:bg-gray-50/80',
+                                )}
                             >
                                 <span className="shrink-0 text-sm font-medium text-[#8C8C8C]">
                                     {q.options.length + 1}.
@@ -262,10 +289,10 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         type="button"
                                         disabled={disabled || submitted}
                                         onClick={handleConfirm}
-                                        className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
+                                        className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
                                     >
                                         {localize('com_linsight_clarify_submit')}
-                                        <CornerDownLeft size={14} className="shrink-0" />
+                                        <Outlined.CornerDownLeft size={14} className="shrink-0" />
                                     </button>
                                 )}
                             </div>
@@ -281,34 +308,53 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                     maxLength={10000}
                     placeholder={localize('com_linsight_clarify_input_placeholder')}
                     onChange={(e) => setFreeText(e.target.value)}
+                    onKeyDown={(e) => {
+                        // Enter submits; Shift+Enter inserts a newline.
+                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            handleConfirm();
+                        }
+                    }}
                     className="mt-4 resize-none text-sm rounded-xl border-none shadow-none bg-[#F5F7FA] placeholder:text-[#8C8C8C] focus-visible:ring-0 focus-visible:outline-none"
                 />
             )}
 
-            {/* Footer: Confirm (when answered) + Skip. pr-4 matches the custom-answer
-                box's px-4 so 跳过 / 确定 line up with the inline 确定 inside it. */}
-            <div className="mt-6 flex items-center justify-end gap-4 pr-4">
-                {hasAnswer && (q?.multiple || !q) && (
-                    <Button
-                        size="sm"
+            {/* Footer: pr-4 matches the custom-answer box's px-4 so 跳过 / 确定 line
+                up with the inline 确定 inside it.
+                - Last page: only 确定 (always shown + clickable = finish; 跳过 hidden).
+                - Earlier pages: 确定/下一步 once answered (multi-select / free-text;
+                  single-select auto-advances on pick) + 跳过 → to skip to the next. */}
+            <div className="mt-3 flex items-center justify-end gap-4 pr-4">
+                {(isLast || (hasAnswer && (q?.multiple || !q))) && (
+                    <button
+                        type="button"
                         disabled={disabled || submitted}
                         onClick={handleConfirm}
-                        className="h-8 rounded-lg bg-[#335CFF] text-white hover:bg-[#1E4DFF] px-4 text-xs font-semibold shadow-[0_2px_8px_rgba(51,92,255,0.2)] transition-all duration-200"
+                        className={cn(
+                            'flex items-center gap-1 text-sm font-medium disabled:opacity-50 transition-colors',
+                            // Last question: highlight 确定 as the final submit CTA.
+                            isLast
+                                ? 'text-[#3a3a3a] hover:text-black'
+                                : 'text-[#8C8C8C] hover:text-[#212121]',
+                        )}
                     >
-                        {page < questions.length - 1
-                            ? localize('com_linsight_clarify_next')
-                            : localize('com_linsight_clarify_submit')}
-                    </Button>
+                        {isLast
+                            ? localize('com_linsight_clarify_submit')
+                            : localize('com_linsight_clarify_next')}
+                        <Outlined.CornerDownLeft size={14} className="shrink-0" />
+                    </button>
                 )}
-                <button
-                    type="button"
-                    disabled={disabled || submitted}
-                    onClick={handleSkipCurrent}
-                    className="flex items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
-                >
-                    {localize('com_linsight_clarify_skip')}
-                    <ArrowRight size={14} className="ml-1 shrink-0" />
-                </button>
+                {!isLast && (
+                    <button
+                        type="button"
+                        disabled={disabled || submitted}
+                        onClick={handleSkipCurrent}
+                        className="flex items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
+                    >
+                        {localize('com_linsight_clarify_skip')}
+                        <ArrowRight size={14} className="shrink-0" />
+                    </button>
+                )}
             </div>
         </div>
     );

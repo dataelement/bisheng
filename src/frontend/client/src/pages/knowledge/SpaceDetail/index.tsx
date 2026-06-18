@@ -143,10 +143,16 @@ export function KnowledgeSpaceContent({
     const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
-        // Uploading placeholders are keyed to the space they were started in.
-        // Filter to the active space so an in-progress upload in space A does
-        // not leak into space B's list after switching spaces.
-        ...uploadingFiles.filter((f) => String(f.spaceId) === String(space.id)),
+        // Uploading placeholders are keyed to the space AND folder they were
+        // started in (placeholder.parentId = the folder at upload time). Filter to
+        // the active space + current folder so an in-progress root upload does not
+        // leak into a subfolder's list (and vice versa), and uploads in space A
+        // don't show in space B after switching.
+        ...uploadingFiles.filter(
+            (f) =>
+                String(f.spaceId) === String(space.id) &&
+                String(f.parentId ?? "") === String(currentFolderId ?? ""),
+        ),
         ...files
     ];
 

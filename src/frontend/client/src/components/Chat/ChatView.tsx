@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useUnactivate } from 'react-activation';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
@@ -363,7 +365,90 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // generated deliverables. The drawer only opens on the header button — no
   // auto-expand (the entry icon appearing is enough).
   const { getLinsight, updateLinsight } = useLinsightManager();
-  const taskArtifacts = useWorkspacePanel();
+  const taskArtifacts = useWorkspacePanel(latestTaskVersionId);
+
+  // F035: enter/exit animation for the fullscreen workspace overlay. The overlay
+  // is a separate instance from the docked panel (PreviewBody isn't cached, so we
+  // never mount both at once). It's portaled to document.body + position:fixed so
+  // it can escape chatContainer and cover the sidebar conversation list. It expands
+  // to fill the rounded content card (the white panel inside <main>'s p-2 gutter
+  // that holds the sidebar + chat) — NOT the whole window — so the icon rail and the
+  // card's surrounding gap + radius are preserved. `fsMounted` keeps it in the DOM
+  // across the collapse transition; `fsExpanded` drives the geometry between the
+  // docked card's box and the content card's box, both measured in viewport-inset
+  // form on enter (still mounted that render). Exiting: collapse, unmount on end.
+  const dockedCardRef = useRef<HTMLDivElement>(null);
+  const [fsMounted, setFsMounted] = useState(false);
+  const [fsExpanded, setFsExpanded] = useState(false);
+  type FsInset = { top: number; left: number; right: number; bottom: number };
+  const [fsBox, setFsBox] = useState<{ collapsed: FsInset; expanded: FsInset } | null>(null);
+  useEffect(() => {
+    if (taskArtifacts.fullscreen) {
+      // Measure the docked card (collapsed) and <main> (expanded) in viewport-inset
+      // coords. Both are still in the DOM this render (card gated on !fsMounted,
+      // flipped just below). Inset form lets us animate to <main>'s edges cleanly.
+      const card = dockedCardRef.current;
+      // Climb to the OUTERMOST <main>: Presentation wraps ChatView in its own
+      // <main> (chat content only), but MainLayout's outer <main> is the one that
+      // also contains the sidebar conversation list — that's the box to fill.
+      let main = card?.closest('main') ?? chatContainerRef.current?.closest('main') ?? null;
+      for (let p = main?.parentElement?.closest('main'); p; p = p.parentElement?.closest('main')) {
+        main = p;
+      }
+      if (card && main) {
+        const W = window.innerWidth;
+        const H = window.innerHeight;
+        const c = card.getBoundingClientRect();
+        const m = main.getBoundingClientRect();
+        // Collapsed = the docked panel's measured box (it keeps its 4px p-1 margin),
+        // overlay padding 0. Expanded grows the BOX outward by 4px on top/right/
+        // bottom (border reaches the card edge) and left to the card's left
+        // (main.left + 8px p-2 gutter), while the overlay's padding goes 0 → 4px.
+        // Net: the inner content (toolbar buttons) stays at the exact docked
+        // position the whole time — only the gray border slides out to the card edge
+        // and the left edge fills the card. No button shift, smooth border, uniform
+        // #FBFBFB fill (the 4px is overlay bg, not a white ring).
+        const collapsed = { top: c.top, left: c.left, right: W - c.right, bottom: H - c.bottom };
+        setFsBox({
+          collapsed,
+          expanded: {
+            top: collapsed.top - 4,
+            right: collapsed.right - 4,
+            bottom: collapsed.bottom - 4,
+            left: m.left + 8,
+          },
+        });
+      }
+      setFsMounted(true);
+      // Double rAF: let the collapsed state paint before flipping to expanded,
+      // otherwise React can batch both and the enter transition is skipped.
+      let r2 = 0;
+      const r1 = requestAnimationFrame(() => {
+        r2 = requestAnimationFrame(() => setFsExpanded(true));
+      });
+      return () => {
+        cancelAnimationFrame(r1);
+        cancelAnimationFrame(r2);
+      };
+    }
+    setFsExpanded(false);
+    // Fallback unmount in case transitionEnd never fires (e.g. reduced-motion
+    // disables the transition) — otherwise the overlay would stay mounted and the
+    // docked panel would never re-render. Slightly longer than the 300ms anim.
+    const t = setTimeout(() => setFsMounted(false), 360);
+    return () => clearTimeout(t);
+  }, [taskArtifacts.fullscreen]);
+
+  // KeepAlive freezes (but doesn't unmount) ChatView when the user switches to
+  // another sidebar section, so the <body>-portaled fullscreen overlay would keep
+  // floating over the new page. Collapse the workspace + force-unmount the overlay
+  // on deactivate so the new section is shown unobstructed.
+  useUnactivate(() => {
+    taskArtifacts.closeWorkspace();
+    setFsExpanded(false);
+    setFsMounted(false);
+  });
+
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
     const uploaded = toUploadedArtifacts(taskLinsight?.files as any[]);
@@ -384,9 +469,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     );
   }, [taskLinsight]);
 
-  // Stop button handler. A task round runs via the linsight worker/WS AFTER the
-  // handoff SSE stream closed, so `isStreaming` is already false — route the stop
-  // to terminate-execute in that case; otherwise abort the daily SSE stream.
+  // Stop button handler. A task round runs via the linsight worker/WS, normally
+  // AFTER the handoff SSE stream closed — route the stop to terminate-execute.
   const handleStop = useCallback(() => {
     if (taskRunning && latestTaskVersionId) {
       userStopLinsightEvent(latestTaskVersionId).catch(() => { /* best-effort: WS task_terminated reconciles */ });
@@ -401,6 +485,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             : tk.children,
         })),
       }));
+      // The handoff SSE may still be open when the user stops quickly (esp. while
+      // queued): isStreaming would then keep the input's stop button lit after the
+      // terminate, since the button gates on `isStreaming || taskRunning` and only
+      // taskRunning flipped here. Abort the (now-useless) handoff stream + clear
+      // isStreaming so the input syncs to the stopped state immediately instead of
+      // lingering until the stream drops on its own. (QA: stop-while-queued.)
+      stopGenerating();
       return;
     }
     stopGenerating();
@@ -485,7 +576,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             />
                           </div>
                         ) : (
-                          <div className="w-full max-w-[800px] mx-auto px-3 touch-mobile:max-w-full shrink-0 pb-3">
+                          <div className="w-full max-w-[800px] mx-auto px-4 touch-mobile:max-w-full shrink-0 pb-3">
                             {latestTaskVersionId && <PinnedTaskPanel versionId={latestTaskVersionId} />}
                             <AiChatInput
                               disabled={!bsConfig?.models?.length || !!shareToken}
@@ -525,19 +616,45 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                     {/* F035: inline workspace panel docked to the right of the chat
                         main for the latest task turn. Opens from the header entry
                         button; the file preview renders in place. Fullscreen is a
-                        separate overlay (below) covering the whole route viewport. */}
-                    {latestTaskVersionId && taskArtifacts.open && !taskArtifacts.fullscreen && (
-                      <div className="min-h-0 shrink-0 p-1 w-[46%] min-w-[440px] max-w-[720px]">
-                        <WorkspacePanel
-                          files={taskWorkspaceFiles}
-                          versionId={latestTaskVersionId}
-                          previewFile={taskArtifacts.previewFile}
-                          fullscreen={false}
-                          onPreview={taskArtifacts.openPreview}
-                          onBack={taskArtifacts.backToList}
-                          onClose={taskArtifacts.closeWorkspace}
-                          onToggleFullscreen={taskArtifacts.toggleFullscreen}
-                        />
+                        separate overlay (below) covering the whole route viewport.
+
+                        The wrapper stays mounted whenever a task turn exists so
+                        open/close animates its width + opacity instead of hard
+                        mount/unmount. Width uses an inline clamp() (not min/max-w
+                        classes) so it interpolates smoothly 0px → 46% — min-width
+                        doesn't transition and would otherwise snap to 440px on the
+                        first frame. The inner box keeps a min-width so the panel
+                        content slides/clips rather than reflowing while it collapses.
+
+                        The inner WorkspacePanel renders only while the fullscreen
+                        overlay is NOT mounted (`!fsMounted`): the overlay is its own
+                        instance, so showing both would double the preview fetch and
+                        flash two toolbars during the fullscreen transition. The
+                        wrapper still reserves its docked width throughout (so the
+                        chat column doesn't reflow), it's just emptied — the overlay
+                        collapses back onto exactly this box before unmounting. */}
+                    {latestTaskVersionId && (
+                      <div
+                        className={cn(
+                          'min-h-0 shrink-0 overflow-hidden transition-[width,opacity,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                          taskArtifacts.open ? 'p-1 opacity-100' : 'pointer-events-none p-0 opacity-0',
+                        )}
+                        style={{ width: taskArtifacts.open ? 'clamp(440px, 46%, 720px)' : '0px' }}
+                      >
+                        {!fsMounted && (
+                          <div ref={dockedCardRef} className="h-full min-w-[420px]">
+                            <WorkspacePanel
+                              files={taskWorkspaceFiles}
+                              versionId={latestTaskVersionId}
+                              previewFile={taskArtifacts.previewFile}
+                              fullscreen={false}
+                              onPreview={taskArtifacts.openPreview}
+                              onBack={taskArtifacts.backToList}
+                              onClose={taskArtifacts.closeWorkspace}
+                              onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -568,8 +685,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                       {/* Input area for landing page */}
                       {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto px-3 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
+                        <div className="w-full max-w-[800px] mx-auto px-4 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
                           <AiChatInput
+                            elevated
                             disabled={!bsConfig?.models?.length || !!shareToken}
                             sendDisabled={taskRunning}
                             isStreaming={isStreaming}
@@ -618,13 +736,28 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             );
           })()}
 
-          {/* F035: fullscreen workspace preview — overlays the whole route
-              viewport (chatContainerRef is relative + un-clipped), flush to the
-              edges with no padding. Covers the chat (incl. its header) but not the
-              browser, so the global nav stays. Separate instance from the inline
-              panel above (toggling fullscreen remounts the preview). */}
-          {latestTaskVersionId && taskArtifacts.open && taskArtifacts.fullscreen && (
-            <div className="absolute inset-0 z-50 bg-white">
+          {/* F035: fullscreen workspace preview — portaled to <body> + fixed so it
+              escapes chatContainer and can cover the sidebar conversation list.
+              Separate instance from the inline panel above (only one is ever
+              mounted, so the preview never double fetches). The box animates between
+              the docked panel's measured box (padding 0) and the content card's box
+              (padding 4px): the gray border slides out from the docked 4px margin to
+              the card edge while the inner content — and the toolbar buttons — stay
+              fixed (box grows +4px exactly as padding grows +4px). Fills the card
+              edge-to-edge in #FBFBFB (the 4px is overlay bg, not a white ring) with
+              the border on the outermost ring. Unmounts on transitionEnd. */}
+          {latestTaskVersionId && fsMounted && fsBox && createPortal(
+            <div
+              className="fixed z-[100] overflow-hidden border border-[#ECECEC] bg-[#FBFBFB] transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+              style={{ ...(fsExpanded ? fsBox.expanded : fsBox.collapsed), padding: fsExpanded ? 4 : 0, borderRadius: 12 }}
+              onTransitionEnd={(e) => {
+                // Unmount only after the collapse finishes (ignore the expand end
+                // and bubbled child transitions).
+                if (e.target === e.currentTarget && e.propertyName === 'left' && !taskArtifacts.fullscreen) {
+                  setFsMounted(false);
+                }
+              }}
+            >
               <WorkspacePanel
                 files={taskWorkspaceFiles}
                 versionId={latestTaskVersionId}
@@ -635,7 +768,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 onClose={taskArtifacts.closeWorkspace}
                 onToggleFullscreen={taskArtifacts.toggleFullscreen}
               />
-            </div>
+            </div>,
+            document.body,
           )}
         </div>
 

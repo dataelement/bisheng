@@ -13,7 +13,10 @@ import { isTaskDone, isTaskRunning } from './stepUtils';
 
 export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: boolean }) {
     const localize = useLocalize();
-    const [open, setOpen] = useState(false);
+    // Default expanded (user decision, Wave2): the checklist opens by default so
+    // the per-task progress is visible without an extra click; position unchanged
+    // (still pinned above the input).
+    const [open, setOpen] = useState(true);
 
     if (!tasks.length) return null;
 
@@ -28,19 +31,25 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
     const showRunningInline = !open && !allDone && !!runningName;
 
     return (
-        <div className="w-full rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="w-full rounded-xl border border-[#ECECEC] bg-white">
             {/* header */}
             <button
                 type="button"
                 onClick={() => setOpen(!open)}
                 className="flex w-full items-center gap-2 px-4 py-3 text-left"
             >
-                <Outlined.ListSuccess size={16} className="shrink-0 text-[#212121]" />
+                {runningTask ? (
+                    <Outlined.Loading size={16} className="shrink-0 animate-spin text-primary" />
+                ) : (
+                    <Outlined.ListSuccess size={16} className="shrink-0 text-[#212121]" />
+                )}
                 <span className="shrink-0 text-[16px] font-medium text-[#212121]">
                     {allDone ? localize('com_linsight_task_panel_done') : localize('com_linsight_task_panel')}
                 </span>
                 {showRunningInline && (
-                    <span className="min-w-0 flex-1 truncate text-[14px] text-[#999]">{runningName}</span>
+                    <span className="min-w-0 flex-1 truncate bg-[linear-gradient(90deg,#cccccc_0%,#6b6b6b_50%,#cccccc_100%)] bg-[length:200%_100%] bg-clip-text text-[14px] text-transparent animate-text-shimmer">
+                        {runningName}
+                    </span>
                 )}
                 <span className={cn('shrink-0 text-[14px] text-[#999]', showRunningInline ? 'ml-2' : 'ml-1')}>
                     {doneCount}/{tasks.length}

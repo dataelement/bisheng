@@ -30,6 +30,7 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
+from bisheng.linsight.domain.services.llm_error_classifier import classify_for_event
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
@@ -64,7 +65,10 @@ class TaskAlreadyInProgressError(Exception):
 class LinsightWorkflowTask:
     """Workflow Task Executor - Responsible for managing the entire mission lifecycle"""
 
-    USER_TERMINATION_CHECK_INTERVAL = 2
+    # Poll interval (s) for the background termination monitor. Kept tight so a
+    # stop request is detected promptly: at 2s a task that finishes within the
+    # window escapes the cancel entirely (terminate-vs-complete race, 2026-06-18).
+    USER_TERMINATION_CHECK_INTERVAL = 1
 
     def __init__(self):
         self._state_manager: LinsightStateMessageManager | None = None
@@ -413,6 +417,12 @@ class LinsightWorkflowTask:
         # by SV from the linsight detail endpoints on reload.
         await linsight_execute_utils.persist_task_turn_message(session_model)
 
+        # Cross-turn continuity: seed this turn's workspace from the previous turn
+        # so a follow-up (e.g. "convert the report to HTML") can read and build on
+        # the prior turn's deliverables. New-turn path only (resume reuses the same
+        # svid workspace). Best-effort — never blocks the turn.
+        await self._seed_workspace_from_previous(session_model)
+
         # Initialization Execution Component
         self.llm = await self._get_llm(session_model)
         tools = await self._generate_tools(session_model)
@@ -596,6 +606,38 @@ class LinsightWorkflowTask:
             checkpointer=checkpointer,
             backend=backend,
         )
+
+    async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:
+        """Cross-turn continuity: copy the previous turn's deliverables/sources
+        into this turn's workspace (跨轮工作区延续).
+
+        A follow-up turn runs under a fresh ``session_version_id`` with an empty
+        ``workspace/{svid}/`` prefix, so it cannot see a prior turn's output
+        (e.g. ``output/report.md``) — ``read_file`` on it would otherwise fail.
+        Server-side copy the immediately-previous version's ``output/`` +
+        ``uploads/`` into this turn's prefix so ``read_file``/``ls`` transparently
+        surface them. Best-effort — a failure never blocks the turn; the first
+        turn (no predecessor) no-ops.
+        """
+        try:
+            from bisheng.linsight.domain.services.workspace_backend import seed_workspace_from_previous
+
+            versions = await LinsightSessionVersionDao.get_session_versions_by_session_id(session_model.session_id)
+            # Ordered by version DESC. The most recent OTHER version is the
+            # immediately-previous turn; its workspace is cumulative (it inherited
+            # its own predecessor), so one copy carries the whole conversation.
+            prev = next((v for v in versions if v.id != session_model.id), None)
+            if prev is None:
+                return
+            minio = await get_minio_storage()
+            copied = await seed_workspace_from_previous(minio, src_svid=prev.id, dst_svid=session_model.id)
+            if copied:
+                logger.info(
+                    f"Seeded {copied} file(s) from previous turn {prev.id[:8]} into "
+                    f"{session_model.id[:8]} (cross-turn continuity)"
+                )
+        except Exception as e:
+            logger.warning(f"workspace seed-from-previous skipped (non-fatal): {e}")
 
     # ==================== Mission Execution ====================
 
@@ -809,7 +851,10 @@ class LinsightWorkflowTask:
             return False
         except Exception as e:
             logger.error(f"task_exec_error {traceback.format_exc()}")
-            raise TaskExecutionError(f"Agent task execution failed: {e}")
+            # ``from e`` preserves the original provider exception as __cause__ so
+            # the failure classifier can unwrap it (e.g. an aliyun content-filter
+            # BadRequestError) and emit a precise error_type to the frontend.
+            raise TaskExecutionError(f"Agent task execution failed: {e}") from e
 
     @staticmethod
     def _build_agent_input(
@@ -1133,6 +1178,18 @@ class LinsightWorkflowTask:
 
     async def _handle_task_completion(self, session_model: LinsightSessionVersion):
         """Processing Task Completion"""
+        # Terminate-vs-complete race (2026-06-18): a stop request can land while
+        # the agent is finishing its last step. The periodic monitor may miss a
+        # task that completes inside the poll window, so the agent returns
+        # "success" and this path would overwrite the user's TERMINATED status
+        # with COMPLETED. Re-read the authoritative status (fresh from Redis) and
+        # honor a termination that arrived before completion instead of clobbering
+        # it. Covers the fresh-run, resume, and continue completion entry points.
+        if await self._check_user_termination():
+            logger.info("Termination detected at completion; honoring stop over completion")
+            await self._handle_user_termination(session_model)
+            return
+
         if self._waiting_for_input:
             # An ask_user interrupt parked the task; astream halted with no
             # TaskEnd on purpose. Leave it WAITING — the user-input endpoint
@@ -1286,10 +1343,27 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.warning(f"Error setting task failed: {e}")
 
-    async def _handle_task_failure(self, session_model: LinsightSessionVersion, error_msg: str):
-        """Processing task failed"""
+    async def _handle_task_failure(
+        self, session_model: LinsightSessionVersion, error_msg: str, *, exc: Exception | None = None
+    ):
+        """Processing task failed.
+
+        Classifies the failure (灵思LLM容错) into a stable ``error_type`` (e.g.
+        ``content_filter`` / ``quota_exhausted`` / ``network_timeout``) so the
+        frontend can render a localized, user-friendly card instead of the raw
+        provider message. ``exc`` (the original exception) is preferred for
+        precise classification; without it the message string is classified
+        best-effort. The raw provider text is kept in ``detail`` for the
+        "view details" disclosure. Vendor-agnostic — see ``llm_error_classifier``.
+        """
+        classified = classify_for_event(exc if exc is not None else error_msg)
         session_model.status = SessionVersionStatusEnum.FAILED
-        session_model.output_result = {"error_message": error_msg}
+        session_model.output_result = {
+            "error_message": error_msg,
+            "error_code": classified.error_code,
+            "error_type": classified.error_type,
+            "detail": classified.detail,
+        }
         await self._state_manager.set_session_version_info(session_model)
         # F035 Track J: still land a (failed) task turn in the unified stream so the
         # conversation isn't left with a dangling question; extra points to the SV
@@ -1299,8 +1373,18 @@ class LinsightWorkflowTask:
         # Set all tasks to failed
         await self._set_tasks_failed()
 
+        # error_message event: keep ``error`` for backward compatibility (old
+        # clients display it raw); new fields drive the classified friendly card.
         await self._state_manager.push_message(
-            MessageData(event_type=MessageEventType.ERROR_MESSAGE, data={"error": error_msg})
+            MessageData(
+                event_type=MessageEventType.ERROR_MESSAGE,
+                data={
+                    "error": error_msg,
+                    "error_code": classified.error_code,
+                    "error_type": classified.error_type,
+                    "detail": classified.detail,
+                },
+            )
         )
         system_config = await settings.aget_all_config()
         # DapatkanLinsight_invitation_code
@@ -1312,6 +1396,8 @@ class LinsightWorkflowTask:
         """Processing execution error"""
         try:
             session_model = await LinsightSessionVersionDao.get_by_id(self.session_version_id)
-            await self._handle_task_failure(session_model, str(error))
+            # Pass the exception object (not just str) so the classifier can unwrap
+            # TaskExecutionError -> original provider cause for a precise error_type.
+            await self._handle_task_failure(session_model, str(error), exc=error)
         except Exception as e:
             logger.error(f"Processing execution error failed: session_version_id={self.session_version_id}, error={e}")

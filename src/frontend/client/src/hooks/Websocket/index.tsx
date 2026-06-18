@@ -322,6 +322,13 @@ export const useLinsightWebSocket = (versionId) => {
                     if (id === activeVersionIdRef.current) {
                         updateLinsight(id, {
                             taskError: taskData.data.error,
+                            // 灵思LLM容错: structured classification drives the friendly
+                            // error card; absent on older backends (card falls back).
+                            taskErrorInfo: {
+                                error_code: taskData.data.error_code,
+                                error_type: taskData.data.error_type,
+                                detail: taskData.data.detail,
+                            },
                             status: SopStatus.Stoped
                         })
                         // showToast({ message: taskData.data.error, status: 'error' });

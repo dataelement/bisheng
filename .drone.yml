@@ -279,21 +279,21 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
       - docker build -t $docker_repo:$version .
       - docker push $docker_repo:$version
 
-  - name: ssh deploy backend
-    image: appleboy/drone-ssh
-    pull: if-not-exists
-    settings:
-      host: 192.168.106.105
-      username: root
-      password:
-        from_secret: sshpwd
-      port: 22
-      command_timeout: 10m
-      script: |
-        echo "=======同步 105 backend ======="
-        cd /opt/server/dm/bisheng-dm/docker
-        docker compose pull
-        docker compose up -d
+  # - name: ssh deploy backend
+  #   image: appleboy/drone-ssh
+  #   pull: if-not-exists
+  #   settings:
+  #     host: 192.168.106.105
+  #     username: root
+  #     password:
+  #       from_secret: sshpwd
+  #     port: 22
+  #     command_timeout: 10m
+  #     script: |
+  #       echo "=======同步 105 backend ======="
+  #       cd /opt/server/dm/bisheng-dm/docker
+  #       docker compose pull
+  #       docker compose up -d
 
 trigger:
   branch:

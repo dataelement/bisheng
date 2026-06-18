@@ -32,6 +32,7 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.session import MessageSessionDao
+from bisheng.linsight.domain import utils as linsight_execute_utils
 from bisheng.linsight.domain.models.linsight_execute_task import ExecuteTaskStatusEnum
 from bisheng.linsight.domain.models.linsight_session_version import (
     LinsightSessionVersionDao,
@@ -255,6 +256,21 @@ async def start_execute(
         await InviteCodeService.revoke_invite_code(user_id=login_user.user_id)
         return LinsightStartTaskError.return_resp(data=str(e))
 
+    # Persist the bot task turn at enqueue time so a refresh while the task is
+    # still QUEUED (status stays NOT_STARTED until the worker dequeues it in
+    # _execute_workflow) re-hydrates the task turn from the conversation and keeps
+    # showing the 排队中 QueueCard. Without this the category="task" row is written
+    # only at execution start, so a queued refresh finds just the user question and
+    # the whole task panel (queue badge included) disappears. Upsert is idempotent:
+    # _execute_workflow's start-time call later updates this same row in place.
+    try:
+        await linsight_execute_utils.persist_task_turn_message(session_version_model)
+    except Exception:
+        # Best-effort: enqueue already succeeded and the task will run; only the
+        # reload-while-queued view is affected if this fails (the worker writes
+        # the row at execution start regardless).
+        logger.exception("Failed to persist queued task turn message")
+
     return resp_200(
         data=True, message="Ideas execution task has started, execution results will be returned via message flow"
     )
@@ -443,6 +459,18 @@ async def terminate_execute(
 
     await state_message_manager.set_session_version_info(session_version_model)
 
+    # Persist the bot task turn so the terminated state survives a refresh. A task
+    # cancelled while still queued never reached _execute_workflow, so no
+    # category="task" row was written yet — without this, a refresh shows only the
+    # user question and the "task terminated" banner is lost. Upsert is idempotent:
+    # a task terminated mid-execution already has the placeholder row.
+    try:
+        await linsight_execute_utils.persist_task_turn_message(session_version_model)
+    except Exception:
+        # Best-effort: the termination itself (status flip + WS push) already
+        # succeeded; only the reload-time banner is affected if this fails.
+        logger.exception("Failed to persist terminated task turn message")
+
     state_message_manager = LinsightStateMessageManager(session_version_id=session_version_model.id)
     # Push termination message
     await state_message_manager.push_message(
@@ -481,15 +509,20 @@ async def get_linsight_session_version_list(
     linsight_session_version_models = await LinsightWorkbenchImpl.get_linsight_session_version_list(session_id)
 
     if linsight_session_version_models and login_user.user_id != linsight_session_version_models[0].user_id:
-        # Access by sharing a link
+        # Access by sharing a link. Two share shapes are valid:
+        #  - workbench_chat share: resource_id IS this session id (whole-conversation
+        #    share, like the daily /chat/history endpoint) — meta_data carries no
+        #    versionId.
+        #  - linsight_session share: meta_data.versionId points at one of this
+        #    session's versions.
         session_version_ids = [model.id for model in linsight_session_version_models]
-
-        # Access by sharing a link
-        if (
-            share_link is None
-            or share_link.meta_data is None
-            or share_link.meta_data.get("versionId") not in session_version_ids
-        ):
+        shared_to_session = share_link is not None and share_link.resource_id == session_id
+        shared_to_version = (
+            share_link is not None
+            and share_link.meta_data is not None
+            and share_link.meta_data.get("versionId") in session_version_ids
+        )
+        if not (shared_to_session or shared_to_version):
             return UnAuthorizedError.return_resp()
 
         # Only return to the shared version of the Inspiration session
@@ -523,12 +556,18 @@ async def get_execute_task_detail(
     linsight_session_version_model = await LinsightSessionVersionDao.get_by_id(session_version_id)
 
     if login_user.user_id != linsight_session_version_model.user_id:
-        # Access by sharing a link
-        if (
-            share_link is None
-            or share_link.meta_data is None
-            or share_link.meta_data.get("versionId") != session_version_id
-        ):
+        # Access by sharing a link. workbench_chat share: resource_id is this
+        # version's session (whole-conversation share, no versionId in meta_data);
+        # linsight_session share: meta_data.versionId is this version. Either grants.
+        shared_to_session = (
+            share_link is not None and share_link.resource_id == linsight_session_version_model.session_id
+        )
+        shared_to_version = (
+            share_link is not None
+            and share_link.meta_data is not None
+            and share_link.meta_data.get("versionId") == session_version_id
+        )
+        if not (shared_to_session or shared_to_version):
             return UnAuthorizedError.return_resp()
 
     return resp_200(execute_task_models)

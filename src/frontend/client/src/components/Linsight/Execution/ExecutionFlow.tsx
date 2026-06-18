@@ -7,7 +7,7 @@
  * WS hook (task-message-stream) is mounted here so the event pump stays alive
  * after the old TaskFlow stops rendering.
  */
-import { CircleAlert, OctagonX } from 'lucide-react';
+import { OctagonX } from 'lucide-react';
 import { useMemo, useRef } from 'react';
 import { SopStatus } from '~/store/linsight';
 import { FilePreviewPanel } from '~/components/Linsight/Artifacts/FilePreviewPanel';
@@ -21,14 +21,16 @@ import { useLinsightWebSocket } from '~/hooks/Websocket';
 import { useLinsightQueuePolling } from '~/hooks/useLinsightQueuePolling';
 import { useAutoScroll } from '~/hooks/useAutoScroll';
 import { useLocalize } from '~/hooks';
+import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { ConversationRound } from './ConversationRound';
 import { IntentRow } from './IntentRow';
 import { LegacySopRow } from './LegacySopRow';
-import { PlanningRow } from './PlanningRow';
 import { QueueCard } from './QueueCard';
-import { StepList } from './StepList';
+import { ExecutionTimeline } from './ExecutionTimeline';
+import { ResultPanel } from './ResultPanel';
 import { TaskPanel } from './TaskPanel';
+import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import { isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
@@ -118,10 +120,12 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
 
     // planning row: running, todo list not generated yet, nothing else pending
     const planning = running && !queueing && !pendingInput && !realTasks.length;
-    // working row: todos exist but no task is actively streaming a spinner right
-    // now (gap before the first task starts, between tasks, or wrap-up after the
-    // last one). Without this the run looks frozen in those windows.
-    const executing =
+    // generating row: todos exist but no task is actively streaming a spinner
+    // right now — bridges the gaps before the first task, between tasks, AND the
+    // final report-generation phase (status stays Running with no step events
+    // while the backend synthesizes the deliverable). Without this the run looks
+    // frozen in those windows. Mirrors TaskTurnPanel's catch-all live indicator.
+    const generating =
         running && !queueing && !pendingInput && realTasks.length > 0 && !realTasks.some((t: any) => isTaskRunning(t.status));
 
     const handleClarifySubmit = (taskId: string, answer: string) => {
@@ -129,7 +133,14 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     };
 
     const scrollRef = useRef<HTMLDivElement>(null);
-    useAutoScroll(scrollRef, [tasks, sessionSteps, status]);
+    // Streaming-tuned auto-scroll (F6): instant follow (no per-frame smooth
+    // jitter), a tight 64px stick threshold, and release-on-scroll-up so a
+    // manual scroll-up detaches the follow until the user returns to bottom.
+    useAutoScroll(scrollRef, [tasks, sessionSteps, status], {
+        scrollBehavior: 'auto',
+        threshold: 64,
+        releaseOnScrollUp: true,
+    });
 
     return (
         <div className="relative flex h-full w-full flex-col">
@@ -140,7 +151,7 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         active round so the conversation reads top-to-bottom. */}
                     {(linsight?.history || []).map((round, i) => (
                         <ConversationRound
-                            key={`round_${i}`}
+                            key={round.roundId || `round_${i}`}
                             round={round}
                             versionId={versionId}
                             onPreview={(file) => artifactsPanel.openPreview(file)}
@@ -170,10 +181,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             ))}
 
                             {/* session-level steps (task_id == svid pseudo task, e.g. planning-stage tools) */}
-                            <StepList history={sessionSteps} />
+                            <ExecutionTimeline history={sessionSteps} />
 
                             {/* planning breathing row */}
-                            {planning && <PlanningRow />}
+                            {planning && <BreathingRow state="planning" />}
 
                             {/* task rows with nested sub-step flows — only tasks
                                 execution has reached; not-started ones stay in TaskPanel. */}
@@ -181,9 +192,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 <TaskStepRow key={task.id} task={task} />
                             ))}
 
-                            {/* working breathing row — bridges the gaps between
-                                tasks / wrap-up so the run never looks frozen */}
-                            {executing && <PlanningRow label={localize('com_linsight_executing')} />}
+                            {/* generating breathing row — bridges the gaps between
+                                tasks / wrap-up + the final report phase so the run
+                                never looks frozen */}
+                            {generating && <BreathingRow state="generating" />}
 
                             {/* active clarify / follow-up card */}
                             {pendingInput && (
@@ -194,10 +206,11 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
 
                     {/* error / terminated banners */}
                     {linsight?.taskError && (
-                        <div className="my-2 flex items-start gap-2 rounded-xl border border-red-100 bg-red-50/60 p-3 text-sm text-red-600">
-                            <CircleAlert size={16} className="mt-0.5 shrink-0" />
-                            <span className="whitespace-pre-wrap break-words">{linsight.taskError}</span>
-                        </div>
+                        <TaskErrorCard
+                            errorType={linsight.taskErrorInfo?.error_type}
+                            detail={linsight.taskErrorInfo?.detail}
+                            fallbackMessage={linsight.taskError}
+                        />
                     )}
                     {stopped && !linsight?.taskError && (
                         <div className="my-2 flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-500">
@@ -206,28 +219,23 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                         </div>
                     )}
 
-                    {/* ── artifacts area (P4): report link / answer markdown / file card ── */}
+                    {/* ── artifacts area (P4): report link / answer markdown / file
+                        card — lifted into the terminal ResultPanel (peak-end). ── */}
                     {completed && (
-                        <div data-slot="execution-artifacts" className="mt-4">
+                        <ResultPanel>
                             <ResultSection
                                 answer={linsight?.output_result?.answer}
                                 files={fileList}
                                 versionId={versionId}
                                 onPreview={(file) => artifactsPanel.openPreview(file)}
                             />
-                        </div>
+                        </ResultPanel>
                     )}
                 </div>
             </div>
 
-            {/* ── footer: waiting hint + task panel + unified input ─────────── */}
+            {/* ── footer: task panel + unified input ────────────────────────── */}
             <div className="mx-auto w-full max-w-[800px] shrink-0 px-4 pb-4">
-                {pendingInput && (
-                    <div className="mb-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-800">
-                        <span className="size-1.5 animate-pulse-scale rounded-full bg-gray-700" />
-                        {localize('com_linsight_waiting_your_input')}
-                    </div>
-                )}
                 {/* Design (Figma 12221-40080/40081): card inset 24px each side
                     relative to the input, 12px gap above it. */}
                 <div className="px-6 pb-3">
@@ -248,6 +256,11 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 : linsight?.session_id || 'new'
                         }
                         disabled={running || !!pendingInput}
+                        // While running, the disabled input's action button morphs into
+                        // a Stop button — the only stop affordance once the task leaves
+                        // the queue. `stop` (WS hook) terminates the live session.
+                        running={running}
+                        onStop={stop}
                         // F035 multi-turn: a send here continues THIS conversation
                         // (same session_version + agent thread) instead of starting
                         // a new session. versionId is the live session_version id.

@@ -40,6 +40,13 @@ const iconDangerClassName = cn(iconBaseClassName, "text-[#F53F3F]");
 
 const labelClassName = "min-w-0 truncate text-sm leading-[22px]";
 
+/** Item-row style tokens, exported so non-DropdownMenuItem rows (e.g. a submenu
+ *  trigger or a custom header) can match the same height / radius / typography. */
+export const actionMenuItemClassName = itemRegularClassName;
+export const actionMenuItemDangerClassName = itemDangerClassName;
+export const actionMenuItemIconClassName = iconRegularClassName;
+export const actionMenuLabelClassName = labelClassName;
+
 type DropdownMenuContentProps = React.ComponentPropsWithoutRef<
     typeof DropdownMenuContent
 >;

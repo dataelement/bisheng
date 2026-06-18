@@ -10,6 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import {
   getMineSpacesApi,
   getJoinedSpacesApi,
+  getDepartmentSpacesApi,
 } from "~/api/knowledge";
 import {
   DropdownMenu,
@@ -321,15 +322,16 @@ export const ChatKnowledge = ({
   const loadSpaces = useCallback(async () => {
     setSpaceFetching(true);
     try {
-      // Fetch "mine" + "joined" in parallel and merge into a single list
-      const [mine, joined] = await Promise.all([
+      // Fetch "mine" + "joined" + "department" in parallel and merge into a single list
+      const [mine, joined, department] = await Promise.all([
         getMineSpacesApi(),
         getJoinedSpacesApi(),
+        getDepartmentSpacesApi(),
       ]);
-      // Dedupe by id (a space could in principle appear in both lists)
+      // Dedupe by id (a space could in principle appear in more than one list)
       const seen = new Set<string | number>();
       const merged: any[] = [];
-      for (const s of [...mine, ...joined]) {
+      for (const s of [...mine, ...joined, ...department]) {
         if (seen.has(s.id)) continue;
         seen.add(s.id);
         merged.push(s);
@@ -355,12 +357,11 @@ export const ChatKnowledge = ({
     }
   }, []);
 
-  useEffect(() => {
-    loadSpaces();
-  }, [loadSpaces]);
-
-  // Track root dropdown open so we can refresh spaces when it's reopened
-  // (new spaces created outside this component won't appear otherwise).
+  // Spaces are only shown inside the open picker, so load them lazily on first
+  // open (and refresh on each reopen) instead of eagerly on mount. The eager
+  // mount-fetch fired knowledge/space/{mine,joined} every time the input box
+  // re-mounted (e.g. the send-triggered welcome→messages layout flip), causing
+  // duplicate requests on send.
   const [rootOpen, setRootOpen] = useState(false);
   useEffect(() => {
     if (rootOpen) loadSpaces();
@@ -525,7 +526,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-white",
+                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
@@ -554,7 +555,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-white transition-colors outline-none",
+                    "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-[#f8f8f8] transition-colors outline-none",
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
                   aria-label={localize('com_knowledge_add_file')}
@@ -578,6 +579,7 @@ export const ChatKnowledge = ({
         side={isMobile ? mobileMenuSide : 'bottom'}
         collisionPadding={isMobile ? MOBILE_MENU_COLLISION : BOTTOM_GAP}
         sticky={isMobile ? 'partial' : undefined}
+        onCloseAutoFocus={(e) => e.preventDefault()}
         className={cn(
           'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list

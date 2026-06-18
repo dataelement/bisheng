@@ -1,7 +1,6 @@
 import asyncio
 import json
 from collections import defaultdict
-from typing import Dict, List, Optional, Set
 
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository
 from bisheng.citation.domain.schemas.citation_schema import (
@@ -10,8 +9,8 @@ from bisheng.citation.domain.schemas.citation_schema import (
     RagCitationPayloadSchema,
     WebCitationPayloadSchema,
 )
-from bisheng.citation.domain.services.citation_runtime_cache_service import CitationRuntimeCacheService
 from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
+from bisheng.citation.domain.services.citation_runtime_cache_service import CitationRuntimeCacheService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
@@ -44,8 +43,8 @@ class CitationResolveService:
 
     async def _resolve_rag_space_pairs(
         self,
-        items: List[CitationRegistryItemSchema],
-    ) -> Dict[int, Set[int]]:
+        items: list[CitationRegistryItemSchema],
+    ) -> dict[int, set[int]]:
         """Group RAG citations by knowledge_id and collect their documentIds.
 
         When the persisted payload is missing ``knowledgeId`` it is looked up
@@ -54,7 +53,7 @@ class CitationResolveService:
         for). RAG citations whose file_id is unresolvable are returned
         keyed under ``space_id=0`` so they can later be dropped.
         """
-        grouped: Dict[int, Set[int]] = defaultdict(set)
+        grouped: dict[int, set[int]] = defaultdict(set)
         for item in items:
             if item.type != CitationType.RAG:
                 continue
@@ -64,9 +63,7 @@ class CitationResolveService:
                 continue
             space_id = payload.knowledgeId
             if space_id is None:
-                file_info = await asyncio.to_thread(
-                    KnowledgeFileDao.query_by_id_sync, file_id
-                )
+                file_info = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, file_id)
                 if file_info is None:
                     grouped[0].add(int(file_id))
                     continue
@@ -76,9 +73,9 @@ class CitationResolveService:
 
     async def _filter_visible_rag_items(
         self,
-        items: List[CitationRegistryItemSchema],
-        login_user: Optional[UserPayload],
-    ) -> List[CitationRegistryItemSchema]:
+        items: list[CitationRegistryItemSchema],
+        login_user: UserPayload | None,
+    ) -> list[CitationRegistryItemSchema]:
         """Drop RAG citations whose documentId fails ``view_file``.
 
         Anonymous callers (``login_user is None``) bypass the filter — this
@@ -98,20 +95,16 @@ class CitationResolveService:
             KnowledgeFileVisibilityService,
         )
 
-        visibility = KnowledgeFileVisibilityService(
-            request=None, login_user=login_user
-        )
+        visibility = KnowledgeFileVisibilityService(request=None, login_user=login_user)
 
-        permitted: Dict[int, Set[int]] = {}
+        permitted: dict[int, set[int]] = {}
         for space_id, file_ids in grouped.items():
             if space_id == 0 or not file_ids:
                 permitted[space_id] = set()
                 continue
-            permitted[space_id] = await visibility.post_filter_visible_files(
-                space_id, file_ids
-            )
+            permitted[space_id] = await visibility.post_filter_visible_files(space_id, file_ids)
 
-        filtered: List[CitationRegistryItemSchema] = []
+        filtered: list[CitationRegistryItemSchema] = []
         for item in items:
             if item.type != CitationType.RAG:
                 filtered.append(item)
@@ -122,12 +115,8 @@ class CitationResolveService:
                 continue
             space_id = payload.knowledgeId
             if space_id is None:
-                file_info = await asyncio.to_thread(
-                    KnowledgeFileDao.query_by_id_sync, file_id
-                )
-                space_id = (
-                    int(file_info.knowledge_id) if file_info is not None else 0
-                )
+                file_info = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, file_id)
+                space_id = int(file_info.knowledge_id) if file_info is not None else 0
             if int(file_id) in permitted.get(int(space_id), set()):
                 filtered.append(item)
         return filtered
@@ -137,7 +126,7 @@ class CitationResolveService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    async def _resolve_bbox(file_id: Optional[int], bbox: Optional[str]) -> Optional[str]:
+    async def _resolve_bbox(file_id: int | None, bbox: str | None) -> str | None:
         """Prefer persisted bbox and gracefully fall back to file bbox metadata."""
         if bbox:
             return bbox
@@ -152,7 +141,7 @@ class CitationResolveService:
     async def _enrich_rag_item(
         self,
         item: CitationRegistryItemSchema,
-        login_user: Optional[UserPayload],
+        login_user: UserPayload | None,
     ) -> CitationRegistryItemSchema:
         """Enrich a RAG citation with file share URLs and best-effort bbox details.
 
@@ -166,37 +155,48 @@ class CitationResolveService:
         file_id = payload.documentId
 
         if file_id is not None:
-            file_info = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, file_id)
-            if file_info is not None:
-                payload.documentId = payload.documentId or file_info.id
-                payload.knowledgeId = payload.knowledgeId or file_info.knowledge_id
-                payload.documentName = payload.documentName or file_info.file_name
+            # The file metadata lookups below hit tenant-scoped tables. An
+            # anonymous share-page resolve carries NO tenant context, so without a
+            # bypass these raise "Missing tenant context" (NoTenantContextError) and
+            # every RAG citation comes back empty even though its row exists.
+            # Bypassing is safe here: the citation is already pinned by its unique
+            # id, and visibility was enforced upstream (logged-in) / granted by the
+            # share link (anonymous). asyncio.to_thread copies the context, so the
+            # bypass flag reaches the sync DAO calls.
+            from bisheng.core.context.tenant import bypass_tenant_filter
 
-                download_url, preview_url = await asyncio.to_thread(
-                    KnowledgeService.get_file_share_url,
-                    None,
-                    file_info,
-                )
-                payload.downloadUrl = download_url or payload.downloadUrl
-                payload.previewUrl = preview_url or payload.previewUrl
-                if payload.items:
-                    first_item = payload.items[0]
-                    resolved_bbox = await self._resolve_bbox(file_info.id, first_item.bbox)
-                    payload.items[0] = first_item.model_copy(update={'bbox': resolved_bbox})
+            with bypass_tenant_filter():
+                file_info = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, file_id)
+                if file_info is not None:
+                    payload.documentId = payload.documentId or file_info.id
+                    payload.knowledgeId = payload.knowledgeId or file_info.knowledge_id
+                    payload.documentName = payload.documentName or file_info.file_name
 
-        return item.model_copy(update={'sourcePayload': payload})
+                    download_url, preview_url = await asyncio.to_thread(
+                        KnowledgeService.get_file_share_url,
+                        None,
+                        file_info,
+                    )
+                    payload.downloadUrl = download_url or payload.downloadUrl
+                    payload.previewUrl = preview_url or payload.previewUrl
+                    if payload.items:
+                        first_item = payload.items[0]
+                        resolved_bbox = await self._resolve_bbox(file_info.id, first_item.bbox)
+                        payload.items[0] = first_item.model_copy(update={"bbox": resolved_bbox})
+
+        return item.model_copy(update={"sourcePayload": payload})
 
     @staticmethod
     def _enrich_web_item(item: CitationRegistryItemSchema) -> CitationRegistryItemSchema:
         """Normalize persisted web payload before returning it."""
         payload = WebCitationPayloadSchema.model_validate(item.sourcePayload)
         payload.url = CitationRegistryService.normalize_url(payload.url)
-        return item.model_copy(update={'sourcePayload': payload})
+        return item.model_copy(update={"sourcePayload": payload})
 
     async def _enrich_item(
         self,
         item: CitationRegistryItemSchema,
-        login_user: Optional[UserPayload],
+        login_user: UserPayload | None,
     ) -> CitationRegistryItemSchema:
         """Enrich a citation item based on its type."""
         if item.type == CitationType.RAG:
@@ -210,7 +210,7 @@ class CitationResolveService:
     async def resolve_citation(
         self,
         citation_id: str,
-        login_user: Optional[UserPayload] = None,
+        login_user: UserPayload | None = None,
     ) -> CitationRegistryItemSchema:
         """Resolve one citation item by business ID.
 
@@ -233,9 +233,9 @@ class CitationResolveService:
 
     async def resolve_citations(
         self,
-        citation_ids: List[str],
-        login_user: Optional[UserPayload] = None,
-    ) -> List[CitationRegistryItemSchema]:
+        citation_ids: list[str],
+        login_user: UserPayload | None = None,
+    ) -> list[CitationRegistryItemSchema]:
         """Resolve multiple citation items in one round trip.
 
         For logged-in callers the items are first filtered through
@@ -244,9 +244,7 @@ class CitationResolveService:
         before enrichment runs.
         """
         cached_items = await self.runtime_cache_service.get_citations_by_ids(citation_ids)
-        cached_by_id: Dict[str, CitationRegistryItemSchema] = {
-            item.citationId: item for item in cached_items
-        }
+        cached_by_id: dict[str, CitationRegistryItemSchema] = {item.citationId: item for item in cached_items}
         missing_ids = [citation_id for citation_id in citation_ids if citation_id not in cached_by_id]
         items = cached_items
         if missing_ids:
@@ -255,8 +253,5 @@ class CitationResolveService:
         items = await self._filter_visible_rag_items(items, login_user)
 
         enriched_items = await asyncio.gather(*(self._enrich_item(item, login_user) for item in items))
-        item_map: Dict[str, CitationRegistryItemSchema] = {
-            item.citationId: item
-            for item in enriched_items
-        }
+        item_map: dict[str, CitationRegistryItemSchema] = {item.citationId: item for item in enriched_items}
         return [item_map[citation_id] for citation_id in citation_ids if citation_id in item_map]

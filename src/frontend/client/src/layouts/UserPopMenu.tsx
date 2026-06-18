@@ -1,4 +1,4 @@
-import { Bell, Check, ChevronRight, Globe, LogOut } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
@@ -8,13 +8,20 @@ import { ApprovalCenterDialog } from "~/components/approval/ApprovalCenterDialog
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import {
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
     DropdownMenuTrigger
 } from "~/components/ui/DropdownMenu";
+import {
+    ActionMenuContent,
+    ActionMenuDivider,
+    ActionMenuItem,
+    actionMenuItemClassName,
+    actionMenuItemIconClassName,
+    actionMenuLabelClassName,
+    actionMenuSurfaceClassName,
+} from "~/components/ActionMenu";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useNotificationCount } from "~/hooks/useNotificationCount";
 import { useNotificationsFromUrl } from "~/hooks/useNotificationsFromUrl";
@@ -186,7 +193,7 @@ function UserPopMenuDrawer() {
                         onClick={handleNotificationsClick}
                     >
                         <div className="flex items-center gap-3">
-                            <Bell className="size-[18px] text-gray-600" />
+                            <Outlined.Bell className="size-[18px] text-gray-600" />
                             <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_notifications_title")}</span>
                         </div>
                         {unreadCount > 0 && (
@@ -203,7 +210,7 @@ function UserPopMenuDrawer() {
                             onClick={() => setLangOpen((o) => !o)}
                         >
                             <div className="flex items-center gap-3">
-                                <Globe className="size-[18px] text-gray-600" />
+                                <Outlined.Earth className="size-[18px] text-gray-600" />
                                 <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_nav_language")}</span>
                             </div>
                             <ChevronRight
@@ -251,7 +258,7 @@ function UserPopMenuDrawer() {
                             logout();
                         }}
                     >
-                        <LogOut className="size-[18px]" />
+                        <Outlined.LogOut className="size-[18px]" />
                         <span className="whitespace-nowrap text-[14px] font-medium">{localize("com_nav_log_out")}</span>
                     </button>
                 </div>
@@ -409,18 +416,21 @@ function UserPopMenuRail() {
                     </div>
                 </DropdownMenuTrigger>
 
-                <DropdownMenuContent
+                <ActionMenuContent
                     side="top"
                     align="start"
+                    width={200}
                     alignOffset={menuAlignOffset}
                     sideOffset={menuSideOffset}
                     collisionPadding={8}
                     onCloseAutoFocus={(e) => e.preventDefault()}
-                    className="w-[200px] gap-0 overflow-hidden rounded-2xl border border-[#e5e6eb] bg-white p-0 shadow-[0_4px_20px_rgba(0,0,0,0.08)]"
                 >
-                    {/* 1. 用户头部：默认与菜单白底一致，移入时再与菜单项 hover 同色 */}
-                    <div className="flex cursor-pointer items-center gap-3 rounded-t-2xl bg-transparent px-3 py-2.5 transition-colors hover:bg-[#e8eaed]">
-                        <Avatar className="size-10 border border-gray-100" onClick={runMenuAction(handleAccountInfoClick)}>
+                    {/* User header — opens account info */}
+                    <div
+                        className={cn(actionMenuItemClassName, "py-1.5 hover:bg-[#f2f3f5]")}
+                        onClick={runMenuAction(handleAccountInfoClick)}
+                    >
+                        <Avatar className="size-7 shrink-0 border border-gray-100">
                             {avatarUrl ? (
                                 <AvatarImage src={avatarUrl} alt="User" />
                             ) : user?.avatar ? (
@@ -429,75 +439,60 @@ function UserPopMenuRail() {
                                 <AvatarName name={user?.username} />
                             )}
                         </Avatar>
-                        <div className="flex flex-col justify-center overflow-hidden" onClick={runMenuAction(handleAccountInfoClick)}>
-                            <span className="text-[15px] font-medium text-gray-900 truncate">
-                                {displayName}
-                            </span>
-                        </div>
+                        <span className={cn(actionMenuLabelClassName, "font-medium")}>{displayName}</span>
                     </div>
 
-                    <div className="h-px w-full shrink-0 bg-[#e5e6eb]" />
+                    <ActionMenuDivider />
 
-                    <div className="flex flex-col gap-1 p-2 pt-1.5">
-                        {/* 审批中心：合并原「我的待办 / 我的申请」入口，默认进「我的审批」子 tab */}
-                        <DropdownMenuItem
-                            className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
-                            onSelect={runMenuItemSelect(() => openApprovalCenter({ tab: "my_tasks" }))}
-                        >
-                            <Outlined.Seal className="size-[18px] text-gray-600" />
-                            <span className="text-[14px] font-normal text-gray-700">{localize("com_approval_center_title")}</span>
-                        </DropdownMenuItem>
+                    {/* 审批中心：合并原「我的待办 / 我的申请」入口，默认进「我的审批」子 tab */}
+                    <ActionMenuItem
+                        icon={<Outlined.Seal />}
+                        label={localize("com_approval_center_title")}
+                        onSelect={runMenuItemSelect(() => openApprovalCenter({ tab: "my_tasks" }))}
+                    />
 
-                        <DropdownMenuItem
-                            className="group flex cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]"
-                            onSelect={runMenuItemSelect(handleNotificationsClick)}
-                        >
-                            <div className="flex items-center gap-3">
-                                <Bell className="size-[18px] text-gray-600" />
-                                <span className="text-[14px] font-normal text-gray-700">{localize("com_notifications_title")}</span>
-                            </div >
-                            {unreadCount > 0 && (
-                                <span className="min-w-[24px] rounded-full bg-[#f53f3f] px-2.5 text-center text-[12px] font-normal text-white leading-none tabular-nums flex h-5 items-center justify-center">
-                                    {displayUnreadCount}
-                                </span>
-                            )
-                            }
-                        </DropdownMenuItem >
+                    <ActionMenuItem
+                        icon={<Outlined.Bell />}
+                        onSelect={runMenuItemSelect(handleNotificationsClick)}
+                    >
+                        <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize("com_notifications_title")}</span>
+                        {unreadCount > 0 && (
+                            <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f53f3f] px-1.5 text-[12px] leading-none text-white tabular-nums">
+                                {displayUnreadCount}
+                            </span>
+                        )}
+                    </ActionMenuItem>
 
-                        <DropdownMenuSub>
-                            <DropdownMenuSubTrigger className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] data-[state=open]:bg-[#eceef2] focus:bg-[#e8eaed]">
-                                <div className="flex items-center gap-3">
-                                    <Globe className="size-[18px] text-gray-600" />
-                                    <span className="text-[14px] font-normal text-gray-700">{localize('com_nav_language')}</span>
-                                </div>
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent className="ml-2 rounded-xl border-[#e5e6eb] bg-white p-1 shadow-lg">
-                                <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
-                                    <span className="flex-1 text-sm">中文</span>
-                                    {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-600" />}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('en'))}>
-                                    <span className="flex-1 text-sm">English</span>
-                                    {langcode === 'en' && <Check className="ml-2 size-4 text-blue-600" />}
-                                </DropdownMenuItem>
-                                {!window.APP_CONFIG?.disableJa && (
-                                    <DropdownMenuItem className="rounded-lg px-3 py-2.5 data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed]" onSelect={runMenuItemSelect(() => changeLang('ja'))}>
-                                        <span className="flex-1 text-sm">日本語</span>
-                                        {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-600" />}
-                                    </DropdownMenuItem>
-                                )}
-                            </DropdownMenuSubContent>
-                        </DropdownMenuSub>
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className={cn(actionMenuItemClassName, "data-[state=open]:bg-[#f2f3f5]")}>
+                            <Outlined.Earth className={actionMenuItemIconClassName} />
+                            <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_language')}</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
+                            <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
+                                <span className={cn(actionMenuLabelClassName, "flex-1")}>中文</span>
+                                {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                            </ActionMenuItem>
+                            <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('en'))}>
+                                <span className={cn(actionMenuLabelClassName, "flex-1")}>English</span>
+                                {langcode === 'en' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                            </ActionMenuItem>
+                            {!window.APP_CONFIG?.disableJa && (
+                                <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('ja'))}>
+                                    <span className={cn(actionMenuLabelClassName, "flex-1")}>日本語</span>
+                                    {langcode === 'ja' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                                </ActionMenuItem>
+                            )}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
 
-                        <DropdownMenuItem
-                            onSelect={runMenuItemSelect(logout)}
-                            className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none transition-colors data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed] !text-[#f53f3f] data-[highlighted]:!text-[#f53f3f] focus:!text-[#f53f3f]"
-                        >
-                            <LogOut className="size-[18px]" />
-                            <span className="text-[14px] font-normal">{localize('com_nav_log_out')}</span>
-                        </DropdownMenuItem>
-                    </div >
-                </DropdownMenuContent >
+                    <ActionMenuItem
+                        danger
+                        icon={<Outlined.LogOut />}
+                        label={localize('com_nav_log_out')}
+                        onSelect={runMenuItemSelect(logout)}
+                    />
+                </ActionMenuContent>
             </DropdownMenu >
 
             <AccountInfoDialog

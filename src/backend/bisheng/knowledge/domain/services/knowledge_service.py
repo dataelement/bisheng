@@ -904,7 +904,7 @@ class KnowledgeService(KnowledgeUtils):
         minio_client = await get_minio_storage()
 
         file_share_url = minio_client.clear_minio_share_host(file_path)
-        if file_ext in ["doc", "docx", "wps", "xls", "xlsx", "et", "ppt", "pptx", "dps"]:
+        if file_ext in ["doc", "docx", "wps", "xls", "xlsx", "et", "ppt", "pptx", "dps", "ofd"]:
             new_file_name = KnowledgeUtils.get_tmp_preview_file_object_name(filepath)
             if await minio_client.object_exists(minio_client.tmp_bucket, new_file_name):
                 file_share_url = await minio_client.get_share_link(new_file_name, minio_client.tmp_bucket)

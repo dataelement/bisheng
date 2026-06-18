@@ -88,7 +88,12 @@ export const useGetBsConfig = (
     {
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
-      refetchOnMount: 'always',
+      // Config rarely changes within a session; don't refetch on every new
+      // consumer mount (the send-triggered layout flip mounts several config
+      // consumers and fired workstation/config repeatedly). Cache is shared by
+      // key, so one fetch covers all consumers.
+      refetchOnMount: false,
+      staleTime: 5 * 60 * 1000,
       ...config,
       enabled: (config?.enabled ?? true) === true && queriesEnabled,
     },

@@ -42,6 +42,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from loguru import logger
+from minio.error import S3Error
+
+
+def _is_missing_key(exc: S3Error) -> bool:
+    """True when an S3 error means the object simply isn't there (NoSuchKey).
+
+    MinIO raises ``S3Error`` (a frozen dataclass) on a missing object instead of
+    returning empty. Workspace reads treat a missing object as a recoverable
+    "file not found", so callers map this to ``None`` rather than letting the
+    (frozen) exception escape and crash the task.
+    """
+    return getattr(exc, "code", None) == "NoSuchKey"
+
 
 try:
     from deepagents.backends.filesystem import FilesystemBackend
@@ -120,6 +133,67 @@ def normalize_workspace_path(path: str) -> str:
     return "/".join(parts)
 
 
+async def seed_workspace_from_previous(
+    minio,
+    src_svid: str,
+    dst_svid: str,
+    zones: tuple[str, ...] = (OUTPUT_DIR, UPLOADS_DIR),
+) -> int:
+    """Cross-turn continuity: server-side copy a prior session-version's
+    deliverables (``output/``) and sources (``uploads/``) into a new version's
+    workspace, so a follow-up turn (e.g. "convert the report to HTML") can read
+    and build on the previous turn's output.
+
+    Each version's workspace is cumulative (a turn seeds from its immediate
+    predecessor, which already inherited *its* predecessor), so copying just the
+    one prior turn carries the whole conversation forward. ``scratch/`` is
+    intentionally skipped (intermediate state, not a deliverable). The copy is
+    server-side (no bytes through the app). Best-effort: it no-ops when the
+    destination already has content (idempotent on re-runs) and a per-object
+    failure is logged and skipped so a partial prior workspace never blocks the
+    new turn. Returns the number of objects copied.
+    """
+    if not src_svid or not dst_svid or src_svid == dst_svid:
+        return 0
+
+    def _copy() -> int:
+        bucket = minio.bucket
+        src_root = f"{WORKSPACE_PREFIX}/{src_svid}/"
+        dst_root = f"{WORKSPACE_PREFIX}/{dst_svid}/"
+
+        # Idempotency: skip if the new turn's workspace already has any object
+        # (already seeded, or the turn has started writing).
+        for _ in minio.minio_client_sync.list_objects(bucket, prefix=dst_root, recursive=True):
+            return 0
+
+        src_keys: list[str] = []
+        for zone in zones:
+            prefix = f"{WORKSPACE_PREFIX}/{src_svid}/{zone}/"
+            for obj in minio.minio_client_sync.list_objects(bucket, prefix=prefix, recursive=True):
+                src_keys.append(obj.object_name)
+        # manifest.json is a top-level pointer file (not under a zone).
+        src_keys.append(f"{WORKSPACE_PREFIX}/{src_svid}/{MANIFEST_NAME}")
+
+        copied = 0
+        for src_key in src_keys:
+            dst_key = dst_root + src_key[len(src_root) :]
+            try:
+                minio.copy_object_sync(
+                    source_bucket=bucket, source_object=src_key, dest_bucket=bucket, dest_object=dst_key
+                )
+                copied += 1
+            except S3Error as e:
+                # A missing manifest/object is expected (NoSuchKey) — skip quietly;
+                # surface anything else but keep going (best-effort seeding).
+                if not _is_missing_key(e):
+                    logger.warning(f"workspace seed: copy failed for {src_key}: {e}")
+            except Exception as e:
+                logger.warning(f"workspace seed: copy failed for {src_key}: {e}")
+        return copied
+
+    return await asyncio.to_thread(_copy)
+
+
 class WorkspaceBackend(FilesystemBackend):
     """MinIO-truth + write-through-cache backend for one linsight session.
 
@@ -167,7 +241,13 @@ class WorkspaceBackend(FilesystemBackend):
         cp.write_bytes(data)
 
     def _minio_get_sync(self, rel_path: str) -> bytes | None:
-        return self.minio.get_object_sync(bucket_name=self._bucket(), object_name=self._object_key(rel_path))
+        try:
+            return self.minio.get_object_sync(bucket_name=self._bucket(), object_name=self._object_key(rel_path))
+        except S3Error as e:
+            # Missing object -> "not found" (None), not a task-fatal error.
+            if _is_missing_key(e):
+                return None
+            raise
 
     def _minio_put_sync(self, rel_path: str, data: bytes) -> None:
         self.minio.put_object_sync(
@@ -369,7 +449,20 @@ class WorkspaceBackend(FilesystemBackend):
         rel = normalize_workspace_path(file_path)
         data = await asyncio.to_thread(self._cache_read, rel)
         if data is None:
-            data = await self.minio.get_object(bucket_name=self._bucket(), object_name=self._object_key(rel))
+            try:
+                data = await self.minio.get_object(bucket_name=self._bucket(), object_name=self._object_key(rel))
+            except S3Error as e:
+                # The agent asked for a file the workspace doesn't have (e.g. a URL
+                # mistaken for a path, or a prior-turn deliverable under a different
+                # session prefix). MinIO raises a *frozen-dataclass* S3Error on a
+                # missing key; left unhandled it escapes the read tool, fails the
+                # whole task, and on the resume path gets masked by langgraph's
+                # traceback-trim as "cannot assign to field '__traceback__'". Treat
+                # NoSuchKey as "not found" so deepagents returns a recoverable tool
+                # error and the agent can re-plan instead of crashing.
+                if not _is_missing_key(e):
+                    raise
+                data = None
             if data is not None:
                 await asyncio.to_thread(self._cache_write, rel, data)
         if data is None:

@@ -43,7 +43,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
 
             {/* answer summary, markdown rendered */}
             {answer && (
-                <div className="bs-mkdown rounded-2xl border border-gray-100 bg-white p-4 text-sm leading-6 text-gray-800">
+                <div className="bs-mkdown rounded-2xl border border-gray-100 bg-white p-4 text-sm leading-6 text-gray-800 [&_p:last-child]:mb-0">
                     <Markdown content={answer} isLatestMessage={true} webContent={false} />
                 </div>
             )}

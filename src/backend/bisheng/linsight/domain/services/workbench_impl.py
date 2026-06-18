@@ -70,6 +70,10 @@ class LinsightWorkbenchImpl:
     # Class Constant
     FILE_INFO_REDIS_KEY_PREFIX = "linsight_file:"
     CACHE_EXPIRATION_HOURS = 24
+    # Image uploads preview as the picture itself (not their OCR/caption markdown),
+    # so the original bytes are persisted into the workspace (see _parse_file /
+    # _ingest_one_file / _ingest_daily_file → entry["original_file_path"]).
+    _IMAGE_EXTS = frozenset({"png", "jpg", "jpeg", "gif", "webp", "bmp"})
 
     class LinsightError(Exception):
         """LinsightRelated Errors"""
@@ -425,6 +429,14 @@ class LinsightWorkbenchImpl:
             "valid": True,
             "markdown_file_path": formal_object,
         }
+        # Image uploads preview as the picture itself: persist the original bytes
+        # into the formal workspace bucket and record their key.
+        ext = os.path.splitext(file_name)[1].lower().lstrip(".")
+        if ext in cls._IMAGE_EXTS:
+            formal_original = f"linsight/{chat_id}/{submit_file.file_id}_original.{ext}"
+            raw_bytes = await asyncio.to_thread(lambda p: open(p, "rb").read(), local_path)
+            await minio_client.put_object(bucket_name=minio_client.bucket, object_name=formal_original, file=raw_bytes)
+            entry["original_file_path"] = formal_original
         await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
         return entry
 
@@ -515,6 +527,22 @@ class LinsightWorkbenchImpl:
         entry["parsing_status"] = "completed"
         entry["valid"] = True
         entry["markdown_file_path"] = formal_object
+
+        # Promote the original image (parsed into tmp by _parse_file) to the formal
+        # workspace bucket so the workspace previews the picture directly and
+        # durably. Idempotent on resubmission.
+        original_tmp = temp_info.get("original_file_path") if temp_info else None
+        if original_tmp:
+            ext = os.path.splitext(original_tmp)[1]
+            formal_original = f"linsight/{chat_id}/{submit_file.file_id}_original{ext}"
+            if not await minio_client.object_exists(bucket_name=minio_client.bucket, object_name=formal_original):
+                await minio_client.copy_object(
+                    source_object=original_tmp,
+                    dest_object=formal_original,
+                    source_bucket=minio_client.tmp_bucket,
+                    dest_bucket=minio_client.bucket,
+                )
+            entry["original_file_path"] = formal_original
 
         # Write parsed markdown into the workspace (uploads/<name>.md).
         await cls._write_attachment_to_workspace(entry, chat_id, minio_client, used_names=used_names)
@@ -998,7 +1026,7 @@ class LinsightWorkbenchImpl:
             await minio_client.put_object_tmp(markdown_filename, markdown_bytes)
             markdown_md5 = await async_calculate_md5(markdown_bytes)
 
-            return {
+            result = {
                 "file_id": file_id,
                 "original_filename": original_filename,
                 "parsing_status": "completed",
@@ -1007,6 +1035,19 @@ class LinsightWorkbenchImpl:
                 "markdown_file_path": markdown_filename,
                 "markdown_file_md5": markdown_md5,
             }
+
+            # Image uploads should preview as the picture itself, not the
+            # OCR/caption markdown. The raw original only exists as a transient
+            # local cache file here, so persist it to the tmp bucket now and carry
+            # the key forward; ingest promotes it to the formal workspace bucket.
+            ext = os.path.splitext(original_filename)[1].lower().lstrip(".")
+            if ext in cls._IMAGE_EXTS:
+                original_tmp_key = f"{file_id}_original.{ext}"
+                raw_bytes = await asyncio.to_thread(lambda p: open(p, "rb").read(), file_path)
+                await minio_client.put_object_tmp(original_tmp_key, raw_bytes)
+                result["original_file_path"] = original_tmp_key
+
+            return result
         except Exception as e:
             logger.error(f"File parsing failed: file_id={file_id}, error={e!s}")
             return {

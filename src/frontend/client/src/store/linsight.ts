@@ -73,6 +73,18 @@ export type LinsightInfo = {
         children: any[]
     }[],
     taskError: string;
+    /**
+     * Structured failure classification from the backend error_message event
+     * (灵思LLM容错). Drives the friendly, localized error card: `error_type`
+     * selects the copy (content_filter / quota_exhausted / network_timeout …),
+     * `detail` is the raw provider text shown under "view details". Absent for
+     * legacy/unclassified failures — the card falls back to a generic message.
+     */
+    taskErrorInfo?: {
+        error_code?: number;
+        error_type?: string;
+        detail?: string;
+    };
     summary: string;
     file_list: any[];
     queueCount: number;
@@ -97,11 +109,29 @@ export type LinsightInfo = {
 }
 
 export type LinsightRoundSnapshot = {
+    /**
+     * Stable per-round identity for React keys. All rounds share one
+     * session_version (versionId), so a round needs its own id to key reliably
+     * across re-renders (array index keys break when rounds re-order/append).
+     * Assigned when the round is snapshotted into history.
+     */
+    roundId: string;
     question: string;
     tasks: any[];
     sessionSteps: any[];
     output_result: null | any;
     file_list: any[];
+    /**
+     * Terminal state carried into the snapshot so a finished round can render
+     * its own stopped/error banner in history (not just the active round).
+     */
+    status?: string;
+    taskError?: string;
+    taskErrorInfo?: {
+        error_code?: number;
+        error_type?: string;
+        detail?: string;
+    };
 };
 
 interface ApiTool {

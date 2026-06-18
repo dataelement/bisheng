@@ -1,6 +1,6 @@
 "use client"
 
-import { Loader2, Pause, Volume2 } from "lucide-react"
+import { Outlined } from "bisheng-icons"
 import { textToSpeech } from "~/api"
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider"
 import { useToastContext } from "~/Providers"
@@ -84,24 +84,22 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
     // Render icon based on state
     const renderIcon = () => {
         if (isCurrentLoading) {
-            return <Loader2 size={20} strokeWidth={1.8} className="animate-spin text-gray-400" />
+            return <Outlined.Loading size={14} className="animate-spin text-[#818181]" />
         }
 
         if (isCurrentPlaying) {
             return (
-                <Pause
-                    size={20}
-                    strokeWidth={1.8}
-                    className="text-gray-400 hover:text-primary transition-colors cursor-pointer"
+                <Outlined.PlayerPause
+                    size={14}
+                    className="text-[#818181]"
                 />
             )
         }
 
         return (
-            <Volume2
-                size={20}
-                strokeWidth={1.8}
-                className="text-gray-400 hover:text-primary transition-colors cursor-pointer"
+            <Outlined.VolumeNotice
+                size={14}
+                className="text-[#818181]"
             />
         )
     }

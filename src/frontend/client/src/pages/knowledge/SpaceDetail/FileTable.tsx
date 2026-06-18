@@ -141,12 +141,16 @@ function useResizableColumns() {
 function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
     const [showLeftShadow, setShowLeftShadow] = useState(false);
     const [showRightShadow, setShowRightShadow] = useState(false);
+    // Visible width of the scroll container — lets the file-name column absorb
+    // leftover width so the table fills wide viewports.
+    const [containerWidth, setContainerWidth] = useState(0);
 
     const update = useCallback(() => {
         const el = scrollRef.current;
         if (!el) return;
         setShowLeftShadow(el.scrollLeft > 0);
         setShowRightShadow(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+        setContainerWidth(el.clientWidth);
     }, [scrollRef]);
 
     useEffect(() => {
@@ -166,7 +170,7 @@ function useScrollShadow(scrollRef: React.RefObject<HTMLDivElement | null>) {
         };
     }, [scrollRef, update]);
 
-    return { showLeftShadow, showRightShadow };
+    return { showLeftShadow, showRightShadow, containerWidth };
 }
 
 // ============================================================
@@ -580,16 +584,32 @@ interface FileTableProps {
 }
 
 export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectFile, isAdmin, currentUserRole, onDownload, onEditTags, onRename, onDelete, onRetry, onNavigateFolder, onPreview, onValidateName, onCancelCreate, permissionEntryIds, renameEntryIds, deleteEntryIds, downloadEntryIds, onManagePermission, onMove, canMoveFile = false, canMoveFolder = false, onMoveToFolder, versionManagementEnabled = false, onOpenVersionManagement, onOpenVersionHistory, canManageMembers = false, sortBy, sortDirection, onSort, highlightedTagIds, highlightKeyword, onScroll, bottomSpacing = 0 }: FileTableProps) {
-    const { columnWidths, onResizeStart, totalWidth } = useResizableColumns();
+    const { columnWidths, onResizeStart } = useResizableColumns();
     const scrollRef = useRef<HTMLDivElement>(null);
     const hScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const { showLeftShadow, showRightShadow } = useScrollShadow(scrollRef);
+    const { showLeftShadow, showRightShadow, containerWidth } = useScrollShadow(scrollRef);
     const showStatusColumn = isAdmin || files.some((file) => Boolean(file.approvalStatus));
     const localize = useLocalize();
 
     // Shougang feature gate
     const { data: bsConfig } = useGetBsConfig();
     const shougangEnabled = bsConfig?.shougang?.enabled ?? false;
+
+    // Fill the panel: sum only the columns actually rendered (status is never
+    // shown; fileEncoding is shougang-only), then hand any leftover width to the
+    // file-name column. Fixed columns (fileType/size) keep their exact widths and
+    // the layout engine has no surplus to redistribute across them.
+    const renderedColumnKeys: ColumnKey[] = [
+        "checkbox", "name", "fileType", "size", "tags",
+        ...(shougangEnabled ? (["fileEncoding"] as ColumnKey[]) : []),
+        "updateTime",
+    ];
+    const renderedTotalWidth = renderedColumnKeys.reduce((sum, k) => sum + columnWidths[k], 0);
+    const surplus = Math.max(0, containerWidth - renderedTotalWidth);
+    const effectiveWidths = surplus > 0
+        ? { ...columnWidths, name: columnWidths.name + surplus }
+        : columnWidths;
+    const tableWidth = Math.max(renderedTotalWidth, containerWidth);
     const { showToast } = useToastContext();
 
     const [editingEncodingFile, setEditingEncodingFile] = useState<KnowledgeFile | null>(null);
@@ -659,12 +679,11 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                     className="w-full caption-bottom border-separate border-spacing-0 text-sm"
                     style={{
                         tableLayout: "fixed",
-                        width: totalWidth,
-                        minWidth: "100%",
+                        width: tableWidth,
                     }}
                 >
                     <FileTableHeader
-                        columnWidths={columnWidths}
+                        columnWidths={effectiveWidths}
                         onResizeStart={onResizeStart}
                         showLeftShadow={showLeftShadow}
                         showRightShadow={showRightShadow}
@@ -709,7 +728,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                                 canRename={Boolean(renameEntryIds?.has(file.id))}
                                 canDelete={Boolean(deleteEntryIds?.has(file.id))}
                                 canDownload={Boolean(downloadEntryIds?.has(file.id))}
-                                columnWidths={columnWidths}
+                                columnWidths={effectiveWidths}
                                 showStatusColumn={showStatusColumn}
                                 showLeftShadow={showLeftShadow}
                                 showRightShadow={showRightShadow}

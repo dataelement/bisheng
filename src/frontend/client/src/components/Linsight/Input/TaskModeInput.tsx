@@ -9,7 +9,7 @@
  * per-session Recoil atom and survive exiting task mode; skills are cleared
  * on exit. Exit = navigate back to /c.
  */
-import { ArrowUp, Mic } from 'lucide-react';
+import { ArrowUp, Mic, Square } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
@@ -17,6 +17,16 @@ import { checkFileParseStatus } from '~/api/linsight';
 import { File_Accept, NotificationSeverity } from '~/common';
 import DragDropOverlay from '~/components/Chat/Input/Files/DragDropOverlay';
 import { TextareaAutosize } from '~/components/ui';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '~/components/ui/AlertDialog';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useLocalize } from '~/hooks';
 import { useLinsightSessionManager } from '~/hooks/useLinsightManager';
@@ -50,9 +60,17 @@ interface TaskModeInputProps {
      * new session. Absent on the landing page, where a send starts a new task.
      */
     onFollowUp?: (question: string) => void;
+    /**
+     * Active execution: the task is running (IN_PROGRESS / parked). When true and
+     * onStop is provided, the action button morphs into a Stop button (the only
+     * stop affordance once the task leaves the queue). Absent on the landing page.
+     */
+    running?: boolean;
+    /** Terminate the running task (reuses the WS hook's stop()). */
+    onStop?: () => void;
 }
 
-export function TaskModeInput({ conversationId = 'new', disabled = false, onFollowUp }: TaskModeInputProps) {
+export function TaskModeInput({ conversationId = 'new', disabled = false, onFollowUp, running = false, onStop }: TaskModeInputProps) {
     const localize = useLocalize();
     const navigate = useNavigate();
     const location = useLocation();
@@ -67,6 +85,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
 
     const [text, setText] = useState('');
     const [model, setModel] = useState('');
+    const [confirmStopOpen, setConfirmStopOpen] = useState(false);
     const [fileUploading, setFileUploading] = useState(false);
     const [uploadingFiles, setUploadingFiles] = useState<{ id: string; name: string }[]>([]);
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -345,7 +364,21 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
 
                     <div className="flex shrink-0 items-center gap-1.5">
                         <ModelSelector value={model} disabled={disabled} onChange={setModel} />
-                        {hasText ? (
+                        {running && onStop ? (
+                            // Active execution: the only stop affordance once the
+                            // task leaves the queue. Intentionally NOT gated by
+                            // `disabled` (which greys the textarea while running) —
+                            // the stop button must stay clickable.
+                            <button
+                                type="button"
+                                onClick={() => setConfirmStopOpen(true)}
+                                className="flex size-8 items-center justify-center rounded-full bg-gray-700 text-white transition-all duration-200 hover:bg-gray-800"
+                                aria-label={localize('com_linsight_stop')}
+                                data-testid="stop-button"
+                            >
+                                <Square size={14} className="fill-current" />
+                            </button>
+                        ) : hasText ? (
                             <button
                                 type="button"
                                 onClick={handleSend}
@@ -376,6 +409,32 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                     </div>
                 </div>
             </div>
+
+            {/* Stop confirmation: terminating sets the session TERMINATED and
+                cannot be resumed, so confirm before discarding in-progress work. */}
+            <AlertDialog open={confirmStopOpen} onOpenChange={setConfirmStopOpen}>
+                <AlertDialogContent className="max-w-sm">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="text-[16px]">
+                            {localize('com_linsight_stop_confirm_title')}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {localize('com_linsight_stop_confirm_desc')}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>{localize('com_ui_cancel')}</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => {
+                                setConfirmStopOpen(false);
+                                onStop?.();
+                            }}
+                        >
+                            {localize('com_linsight_stop_confirm_ok')}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

@@ -1,2 +1,2 @@
 export PYTHONPATH="./"
-python bisheng/script/sync_increment_table.py
+python scripts/sync_increment_table.py

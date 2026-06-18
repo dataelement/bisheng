@@ -1,13 +1,14 @@
 from datetime import datetime
-from typing import ClassVar, List, Optional
+from typing import ClassVar, Optional
 
 from pydantic import field_validator
 from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint, and_, func, or_, text, update
 from sqlalchemy.orm import selectinload
-from sqlmodel import Field, select, Relationship, col
+from sqlmodel import Field, Relationship, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
-from bisheng.core.database import get_sync_db_session, get_async_db_session
+from bisheng.core.database import get_async_db_session, get_sync_db_session
+from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
 from bisheng.database.constants import AdminRole, DefaultRole
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.group import Group
@@ -17,58 +18,64 @@ from bisheng.database.models.user_group import UserGroup
 from bisheng.user.domain.models.user_role import UserRole
 
 
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT
-
 class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True)
-    email: Optional[str] = Field(default=None, index=True)
-    phone_number: Optional[str] = Field(default=None, index=True)
-    dept_id: Optional[str] = Field(default=None, index=True)
-    remark: Optional[str] = Field(default=None, index=False)
-    avatar: Optional[str] = Field(default=None, index=False)
+    email: str | None = Field(default=None, index=True)
+    phone_number: str | None = Field(default=None, index=True)
+    dept_id: str | None = Field(default=None, index=True)
+    remark: str | None = Field(default=None, index=False)
+    avatar: str | None = Field(default=None, index=False)
     source: str = Field(
-        default='local',
+        default="local",
         sa_column=Column(
-            String(32), nullable=False,
+            String(32),
+            nullable=False,
             server_default=text("'local'"),
-            comment='Source: local/feishu/wecom/dingtalk/generic_api',
+            comment="Source: local/feishu/wecom/dingtalk/generic_api",
         ),
     )
-    external_id: Optional[str] = Field(
+    external_id: str | None = Field(
         default=None,
         sa_column=Column(
-            String(255), nullable=True,
-            comment='External employee ID for sync',
+            String(255),
+            nullable=True,
+            comment="External employee ID for sync",
         ),
     )
     delete: int = Field(default=0, index=False)
-    disable_source: Optional[str] = Field(
+    disable_source: str | None = Field(
         default=None,
         sa_column=Column(
-            String(32), nullable=True,
+            String(32),
+            nullable=True,
             index=True,
-            comment='Set when delete=1 was forced by org sync/SSO; blocks non-super re-enable',
+            comment="Set when delete=1 was forced by org sync/SSO; blocks non-super re-enable",
         ),
     )
-    create_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')))
-    update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT))
+    create_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
+    )
+    update_time: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT)
+    )
 
-    @field_validator('user_name')
+    @field_validator("user_name")
     @classmethod
     def validate_str(cls, v):
         # dict_keys(['description', 'name', 'id', 'data'])
         if not v:
-            raise ValueError('user_name Tidak boleh kosong.')
+            raise ValueError("user_name Tidak boleh kosong.")
         return v
 
 
 class User(UserBase, table=True):
-    user_id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int | None = Field(default=None, primary_key=True)
     password: str = Field(index=False)
-    password_update_time: Optional[datetime] = Field(default=None, sa_column=Column(
-        DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP')), description='Password Last Modified')
+    password_update_time: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+        description="Password Last Modified",
+    )
     # v2.5.1 F012: JWT invalidation counter — incremented whenever the user's
     # leaf tenant changes (via UserTenantSyncService). The value is embedded in
     # issued JWTs; middleware compares against the current DB value and rejects
@@ -76,52 +83,50 @@ class User(UserBase, table=True):
     token_version: int = Field(
         default=0,
         sa_column=Column(
-            'token_version',
+            "token_version",
             Integer,
             nullable=False,
-            server_default=text('0'),
-            comment='v2.5.1 F012: JWT invalidation counter; +1 on leaf tenant change',
+            server_default=text("0"),
+            comment="v2.5.1 F012: JWT invalidation counter; +1 on leaf tenant change",
         ),
     )
 
     # DefinitiongroupsAndrolesQuery Relationships for
-    groups: List["Group"] = Relationship(link_model=UserGroup)
-    roles: List["Role"] = Relationship(link_model=UserRole)
+    groups: list["Group"] = Relationship(link_model=UserGroup)
+    roles: list["Role"] = Relationship(link_model=UserRole)
 
-    departments: List["Department"] = Relationship(link_model=UserDepartment)
+    departments: list["Department"] = Relationship(link_model=UserDepartment)
 
     __tablename__ = "user"
-    __table_args__ = (
-        UniqueConstraint('source', 'external_id', name='uk_user_source_external_id'),
-    )
+    __table_args__ = (UniqueConstraint("source", "external_id", name="uk_user_source_external_id"),)
 
 
 class UserRead(UserBase):
-    user_id: Optional[int] = None
-    role: Optional[str] = None  # admin；非超管时由服务端序列化（见 /user/info）
-    access_token: Optional[str] = None
-    web_menu: Optional[List[str]] = None
+    user_id: int | None = None
+    role: str | None = None  # admin；非超管时由服务端序列化（见 /user/info）
+    access_token: str | None = None
+    web_menu: list[str] | None = None
     # True if any assigned role sets quota_config.menu_approval_mode (需审批模式)
-    menu_approval_mode: Optional[bool] = None
-    admin_groups: Optional[List[int]] = None  # Managed User GroupsIDVertical
+    menu_approval_mode: bool | None = None
+    admin_groups: list[int] | None = None  # Managed User GroupsIDVertical
     # PRD 3.2.2 用户组管理入口：超管 / 部门管理员
-    can_manage_user_groups: Optional[bool] = None
-    is_department_admin: Optional[bool] = None
+    can_manage_user_groups: bool | None = None
+    is_department_admin: bool | None = None
     # Multi-tenant fields (F010)
-    requires_tenant_selection: Optional[bool] = None
-    tenants: Optional[List[dict]] = None
-    tenant_id: Optional[int] = None
-    tenant_name: Optional[str] = None
+    requires_tenant_selection: bool | None = None
+    tenants: list[dict] | None = None
+    tenant_id: int | None = None
+    tenant_name: str | None = None
     # Tenant-tree admin UI flags. Optional so older clients ignore them.
-    is_global_super: Optional[bool] = None
-    is_child_admin: Optional[bool] = None
-    leaf_tenant_id: Optional[int] = None
-    leaf_tenant_name: Optional[str] = None
+    is_global_super: bool | None = None
+    is_child_admin: bool | None = None
+    leaf_tenant_id: int | None = None
+    leaf_tenant_name: str | None = None
     # Effective WEB_MENU area flags (v2.5 entry routing). Optional for older clients.
-    has_workbench: Optional[bool] = None
-    has_admin_console: Optional[bool] = None
+    has_workbench: bool | None = None
+    has_admin_console: bool | None = None
     # ``platform`` | ``workspace`` — both areas open → platform (管理后台).
-    default_entry: Optional[str] = None
+    default_entry: str | None = None
 
 
 class UserQuery(UserBase):
@@ -131,27 +136,26 @@ class UserQuery(UserBase):
 class UserLogin(UserBase):
     password: str
 
-    captcha_key: Optional[str] = None
-    captcha: Optional[str] = None
+    captcha_key: str | None = None
+    captcha: str | None = None
 
 
 class UserCreate(UserBase):
-    external_id: Optional[str] = Field(default=None, max_length=128)
-    password: Optional[str] = Field(default='')
-    captcha_key: Optional[str] = None
-    captcha: Optional[str] = None
-    default_groupid: Optional[int] = Field(default=None)
-    default_roleid: Optional[int] = Field(default=None)
+    external_id: str | None = Field(default=None, max_length=128)
+    password: str | None = Field(default="")
+    captcha_key: str | None = None
+    captcha: str | None = None
+    default_groupid: int | None = Field(default=None)
+    default_roleid: int | None = Field(default=None)
 
 
 class UserUpdate(SQLModelSerializable):
     user_id: int
-    avatar: Optional[str] = None
-    delete: Optional[int] = 0
+    avatar: str | None = None
+    delete: int | None = 0
 
 
 class UserDao(UserBase):
-
     @classmethod
     def get_user(cls, user_id: int) -> User | None:
         with get_sync_db_session() as session:
@@ -166,13 +170,13 @@ class UserDao(UserBase):
             return result.first()
 
     @classmethod
-    def get_user_by_ids(cls, user_ids: List[int]) -> List[User] | None:
+    def get_user_by_ids(cls, user_ids: list[int]) -> list[User] | None:
         with get_sync_db_session() as session:
             statement = select(User).where(User.user_id.in_(user_ids))
             return session.exec(statement).all()
 
     @classmethod
-    async def aget_user_by_ids(cls, user_ids: List[int]) -> List[User] | None:
+    async def aget_user_by_ids(cls, user_ids: list[int]) -> list[User] | None:
         async with get_async_db_session() as session:
             statement = select(User).where(User.user_id.in_(user_ids))
             result = await session.exec(statement)
@@ -192,7 +196,7 @@ class UserDao(UserBase):
             return result.first()
 
     @classmethod
-    async def aget_users_by_username(cls, username: str) -> List[User]:
+    async def aget_users_by_username(cls, username: str) -> list[User]:
         """同名用户可能多条；用于重名校验等。"""
         async with get_async_db_session() as session:
             statement = select(User).where(User.user_name == username)
@@ -200,9 +204,9 @@ class UserDao(UserBase):
             return list(result.all())
 
     @classmethod
-    async def aget_login_candidates_by_account(cls, account: str) -> List[User]:
+    async def aget_login_candidates_by_account(cls, account: str) -> list[User]:
         """登录账号仅支持 external_id（人员ID），并过滤禁用账号。"""
-        acc = (account or '').strip()
+        acc = (account or "").strip()
         if not acc:
             return []
         async with get_async_db_session() as session:
@@ -220,11 +224,7 @@ class UserDao(UserBase):
         if not acc:
             return False
         async with get_async_db_session() as session:
-            statement = (
-                select(User.user_id)
-                .where(User.delete == 1, User.external_id == acc)
-                .limit(1)
-            )
+            statement = select(User.user_id).where(User.delete == 1, User.external_id == acc).limit(1)
             result = await session.exec(statement)
             return result.first() is not None
 
@@ -251,22 +251,15 @@ class UserDao(UserBase):
             return user
 
     @classmethod
-    def _filter_users_statement(cls,
-                                statement,
-                                user_ids: List[int],
-                                keyword: str = None):
+    def _filter_users_statement(cls, statement, user_ids: list[int], keyword: str = None):
         if user_ids:
             statement = statement.where(User.user_id.in_(user_ids))
         if keyword:
-            statement = statement.where(User.user_name.like(f'%{keyword}%'))
+            statement = statement.where(User.user_name.like(f"%{keyword}%"))
         return statement.order_by(User.user_id.desc())
 
     @classmethod
-    def filter_users(cls,
-                     user_ids: List[int],
-                     keyword: str = None,
-                     page: int = 0,
-                     limit: int = 0) -> (List[User], int):
+    def filter_users(cls, user_ids: list[int], keyword: str = None, page: int = 0, limit: int = 0) -> (list[User], int):
         statement = select(User)
         statement = cls._filter_users_statement(statement, user_ids, keyword)
         count_statement = select(func.count(User.user_id))
@@ -278,11 +271,7 @@ class UserDao(UserBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    async def afilter_users(cls,
-                            user_ids: List[int],
-                            keyword: str = None,
-                            page: int = 0,
-                            limit: int = 0) -> List[User]:
+    async def afilter_users(cls, user_ids: list[int], keyword: str = None, page: int = 0, limit: int = 0) -> list[User]:
         statement = select(User)
         statement = cls._filter_users_statement(statement, user_ids, keyword)
         if page and limit:
@@ -299,9 +288,9 @@ class UserDao(UserBase):
             return session.exec(statement).first()
 
     @classmethod
-    def search_user_by_name(cls, user_name: str) -> List[User] | None:
+    def search_user_by_name(cls, user_name: str) -> list[User] | None:
         with get_sync_db_session() as session:
-            statement = select(User).where(User.user_name.like('%{}%'.format(user_name)))
+            statement = select(User).where(User.user_name.like(f"%{user_name}%"))
             return session.exec(statement).all()
 
     @classmethod
@@ -329,10 +318,8 @@ class UserDao(UserBase):
 
     @classmethod
     async def add_user_and_configured_default_auth(
-        cls,
-        user: User,
-        default_groupid: Optional[int] = None,
-        default_roleid: Optional[int] = None) -> User:
+        cls, user: User, default_groupid: int | None = None, default_roleid: int | None = None
+    ) -> User:
         """
         Add SSO users with a configured role and, optionally, a configured group.
 
@@ -345,16 +332,16 @@ class UserDao(UserBase):
             if default_groupid is not None:
                 group_result = await session.exec(select(Group).where(Group.id == default_groupid))
                 if not group_result.first():
-                    raise ValueError('Configured default_groupid does not exist')
+                    raise ValueError("Configured default_groupid does not exist")
 
             role_result = await session.exec(select(Role).where(Role.id == role_id))
             role = role_result.first()
             if not role:
-                raise ValueError('Configured default_roleid does not exist')
+                raise ValueError("Configured default_roleid does not exist")
             # When a group is explicitly configured, the configured role must belong
             # to it. Without a configured group there is no group binding to validate.
             if default_groupid is not None and role.group_id != default_groupid:
-                raise ValueError('Configured default_roleid does not belong to default_groupid')
+                raise ValueError("Configured default_roleid does not belong to default_groupid")
 
             session.add(user)
             await session.commit()
@@ -365,7 +352,9 @@ class UserDao(UserBase):
 
             if default_groupid is not None:
                 db_user_group = UserGroup(
-                    user_id=user.user_id, group_id=default_groupid, is_group_admin=False,
+                    user_id=user.user_id,
+                    group_id=default_groupid,
+                    is_group_admin=False,
                 )
                 session.add(db_user_group)
 
@@ -389,8 +378,7 @@ class UserDao(UserBase):
             return user
 
     @classmethod
-    def add_user_with_groups_and_roles(cls, user: User, group_ids: List[int],
-                                       role_ids: List[int]) -> User:
+    def add_user_with_groups_and_roles(cls, user: User, group_ids: list[int], role_ids: list[int]) -> User:
         with get_sync_db_session() as session:
             session.add(user)
             session.flush()
@@ -405,7 +393,7 @@ class UserDao(UserBase):
             return user
 
     @classmethod
-    def get_all_users(cls, page: int = 0, limit: int = 0) -> List[User]:
+    def get_all_users(cls, page: int = 0, limit: int = 0) -> list[User]:
         """
         Pagination Get All Users
         """
@@ -416,8 +404,15 @@ class UserDao(UserBase):
             return session.exec(statement).all()
 
     @classmethod
-    def get_user_with_group_role(cls, *, start_time: datetime = None, end_time: datetime = None,
-                                 user_ids: List[int] = None, page: int = 0, page_size: int = 0) -> List[User]:
+    def get_user_with_group_role(
+        cls,
+        *,
+        start_time: datetime = None,
+        end_time: datetime = None,
+        user_ids: list[int] = None,
+        page: int = 0,
+        page_size: int = 0,
+    ) -> list[User]:
         statement = select(User)
         if start_time and end_time:
             statement = statement.where(User.create_time >= start_time, User.create_time < end_time)
@@ -428,27 +423,11 @@ class UserDao(UserBase):
         statement = statement.order_by(User.user_id)
         statement = statement.options(
             selectinload(User.groups),  # type: ignore
-            selectinload(User.roles)  # type: ignore
+            selectinload(User.roles),  # type: ignore
+            selectinload(User.departments),  # type: ignore
         )
         with get_sync_db_session() as session:
             users = session.exec(statement).all()
-
-        # Load department info (UserDepartment lacks FK annotations, so query explicitly)
-        # if users:
-        #     from collections import defaultdict
-        #     from bisheng.database.models.department import (
-        #         Department, DepartmentDao, UserDepartmentDao,
-        #     )
-        #     all_user_ids = [u.user_id for u in users]
-        #     ud_rows = UserDepartmentDao.get_by_user_ids(all_user_ids)
-        #     dept_ids = list({ud.department_id for ud in ud_rows})
-        #     dept_map = {d.id: d for d in DepartmentDao.get_by_ids(dept_ids)}
-        #     user_dept_map = defaultdict(list)
-        #     for ud in ud_rows:
-        #         if ud.department_id in dept_map:
-        #             user_dept_map[ud.user_id].append(dept_map[ud.department_id])
-        #     for user in users:
-        #         user.departments = user_dept_map.get(user.user_id, [])
 
         return users
 
@@ -459,7 +438,7 @@ class UserDao(UserBase):
             return session.exec(statement).first()
 
     @classmethod
-    async def aget_by_source_external_id(cls, source: str, external_id: str) -> Optional['User']:
+    async def aget_by_source_external_id(cls, source: str, external_id: str) -> Optional["User"]:
         """Get user by source + external_id combination (for org sync matching)."""
         async with get_async_db_session() as session:
             statement = select(User).where(
@@ -470,7 +449,7 @@ class UserDao(UserBase):
             return result.first()
 
     @classmethod
-    async def aget_by_external_id(cls, external_id: str) -> Optional['User']:
+    async def aget_by_external_id(cls, external_id: str) -> Optional["User"]:
         """Get user by external_id globally (cross-source)."""
         async with get_async_db_session() as session:
             statement = select(User).where(User.external_id == external_id)
@@ -478,7 +457,7 @@ class UserDao(UserBase):
             return result.first()
 
     @classmethod
-    async def aget_users_by_external_id(cls, external_id: str) -> List['User']:
+    async def aget_users_by_external_id(cls, external_id: str) -> list["User"]:
         """Get all users by external_id globally, including soft-deleted rows."""
         async with get_async_db_session() as session:
             statement = select(User).where(User.external_id == external_id)
@@ -488,7 +467,7 @@ class UserDao(UserBase):
     # ---------------------------------------------------------------
     # v2.5.1 F012: token_version helpers
     # ---------------------------------------------------------------
-    TOKEN_VERSION_CACHE_KEY: ClassVar[str] = 'user:{user_id}:token_version'
+    TOKEN_VERSION_CACHE_KEY: ClassVar[str] = "user:{user_id}:token_version"
     TOKEN_VERSION_CACHE_TTL: ClassVar[int] = 300  # seconds
 
     @classmethod
@@ -512,9 +491,7 @@ class UserDao(UserBase):
             pass
 
         async with get_async_db_session() as session:
-            result = await session.exec(
-                select(User.token_version).where(User.user_id == user_id)
-            )
+            result = await session.exec(select(User.token_version).where(User.user_id == user_id))
             row = result.first()
             if row is None:
                 return 0
@@ -538,16 +515,10 @@ class UserDao(UserBase):
         from bisheng.core.cache.redis_manager import get_redis_client
 
         async with get_async_db_session() as session:
-            await session.exec(
-                update(User)
-                .where(User.user_id == user_id)
-                .values(token_version=User.token_version + 1)
-            )
+            await session.exec(update(User).where(User.user_id == user_id).values(token_version=User.token_version + 1))
             await session.commit()
 
-            result = await session.exec(
-                select(User.token_version).where(User.user_id == user_id)
-            )
+            result = await session.exec(select(User.token_version).where(User.user_id == user_id))
             row = result.first()
             new_version = int(row) if row is not None else 0
 
@@ -556,55 +527,59 @@ class UserDao(UserBase):
             redis = await get_redis_client()
             # Refresh (not just DEL) so the immediate-next aget_token_version
             # hits cache — saves a DB round-trip on the login critical path.
-            await redis.aset(cache_key, new_version,
-                             expiration=cls.TOKEN_VERSION_CACHE_TTL)
+            await redis.aset(cache_key, new_version, expiration=cls.TOKEN_VERSION_CACHE_TTL)
         except Exception:
             pass
         return new_version
 
     @classmethod
-    async def alist_users_paginated(
-        cls, offset: int = 0, limit: int = 500
-    ) -> List['User']:
+    async def alist_users_paginated(cls, offset: int = 0, limit: int = 500) -> list["User"]:
         """Page through active users ordered by user_id — used by the F012
         Celery 6h reconcile task so it can walk the whole user table in
         bounded batches without loading everything into memory.
         """
         async with get_async_db_session() as session:
-            statement = (
-                select(User)
-                .where(User.delete == 0)
-                .order_by(User.user_id.asc())
-                .offset(offset)
-                .limit(limit)
-            )
+            statement = select(User).where(User.delete == 0).order_by(User.user_id.asc()).offset(offset).limit(limit)
             result = await session.exec(statement)
             return list(result.all())
 
     @classmethod
-    async def aget_by_source(cls, source: str, tenant_id: int) -> List['User']:
+    async def aget_by_source(cls, source: str, tenant_id: int) -> list["User"]:
         """Get all users from a given source within a tenant (for reconcile)."""
         async with get_async_db_session() as session:
-            statement = select(User).distinct().outerjoin(
-                UserTenant, User.user_id == UserTenant.user_id,
-            ).outerjoin(
-                UserDepartment, User.user_id == UserDepartment.user_id,
-            ).outerjoin(
-                Department, UserDepartment.department_id == Department.id,
-            ).where(
-                User.source == source,
-                or_(
-                    UserTenant.tenant_id == tenant_id,
-                    Department.tenant_id == tenant_id,
-                ),
+            statement = (
+                select(User)
+                .distinct()
+                .outerjoin(
+                    UserTenant,
+                    User.user_id == UserTenant.user_id,
+                )
+                .outerjoin(
+                    UserDepartment,
+                    User.user_id == UserDepartment.user_id,
+                )
+                .outerjoin(
+                    Department,
+                    UserDepartment.department_id == Department.id,
+                )
+                .where(
+                    User.source == source,
+                    or_(
+                        UserTenant.tenant_id == tenant_id,
+                        Department.tenant_id == tenant_id,
+                    ),
+                )
             )
             result = await session.exec(statement)
             return result.all()
 
     @classmethod
     async def aget_by_source_or_local_external_ids(
-        cls, source: str, tenant_id: int, external_ids: List[str],
-    ) -> List['User']:
+        cls,
+        source: str,
+        tenant_id: int,
+        external_ids: list[str],
+    ) -> list["User"]:
         """Get provider users plus local rows claimable by external_id.
 
         Org sync can adopt local accounts when the upstream employee ID matches
@@ -632,20 +607,30 @@ class UserDao(UserBase):
                     User.external_id.in_(clean_external_ids),
                 ),
                 and_(
-                    User.source == 'local',
+                    User.source == "local",
                     User.external_id.in_(clean_external_ids),
                     tenant_scope,
                 ),
             )
         async with get_async_db_session() as session:
-            statement = select(User).distinct().outerjoin(
-                UserTenant, User.user_id == UserTenant.user_id,
-            ).outerjoin(
-                UserDepartment, User.user_id == UserDepartment.user_id,
-            ).outerjoin(
-                Department, UserDepartment.department_id == Department.id,
-            ).where(
-                source_clause,
+            statement = (
+                select(User)
+                .distinct()
+                .outerjoin(
+                    UserTenant,
+                    User.user_id == UserTenant.user_id,
+                )
+                .outerjoin(
+                    UserDepartment,
+                    User.user_id == UserDepartment.user_id,
+                )
+                .outerjoin(
+                    Department,
+                    UserDepartment.department_id == Department.id,
+                )
+                .where(
+                    source_clause,
+                )
             )
             result = await session.exec(statement)
             return result.all()

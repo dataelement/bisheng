@@ -382,6 +382,11 @@ class LinsightConf(BaseModel):
     retry_sleep: int = Field(
         default=5, description="Interval between retries of model calls during execution of Invisible Tasks (seconds)"
     )
+    max_degrade: int = Field(
+        default=3,
+        description="Max number of model-call steps that may be gracefully skipped (content-filter / "
+        "exhausted-transient) within a single task before it fails cleanly. Bounds runaway degradation.",
+    )
     max_file_num: int = Field(
         default=5, description="BuatSOPJampromptThe number of user-uploaded file information placed in the"
     )

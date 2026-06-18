@@ -301,6 +301,15 @@ export async function getCitationDetail(citationId: string): Promise<ChatCitatio
     }
 
     const res = await http.get<any>(API.citationDetail(citationId));
+    // 404 = the citation is not found OR the viewer lacks view_file permission for
+    // the underlying RAG document (admins/owners see it, others don't). Surface it
+    // as a typed error so the marker shows "no permission" and stays un-clickable
+    // instead of the generic "no source detail".
+    if (res?.status_code === 404 || res?.data?.status_code === 404) {
+        const err: any = new Error('citation forbidden');
+        err.citationForbidden = true;
+        throw err;
+    }
     const detail = res?.data ?? res;
     if (detail?.citationId) {
         citationDetailMemoryCache[detail.citationId] = detail;

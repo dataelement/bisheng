@@ -160,7 +160,7 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                     className="grid transition-all duration-300 ease-out"
                     style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
                 >
-                    <div className="overflow-hidden">
+                    <div className="overflow-hidden flex flex-col gap-2">
                         <ThinkingContent
                             reasoning={reasoning}
                             showConnector={!!reasoning && toolCalls.length > 0}

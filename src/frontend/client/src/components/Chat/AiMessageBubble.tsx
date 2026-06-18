@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { memo, useCallback, useMemo, useState } from "react";
-import Thinking from "~/components/Artifacts/Thinking";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
+import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
 import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
 import ToolCallDisplay from "~/components/Chat/Messages/ToolCallDisplay";
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
@@ -49,6 +49,23 @@ interface AiMessageBubbleProps {
     /** F035: preview a task-turn document in the inline workspace panel (ChatView
         owns it) — a conversation doc link opens the file directly, no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
+}
+
+/**
+ * Prefix an image/file path with the app base path (/workspace) so it resolves
+ * through the dev proxy / deployment sub-path. Idempotent; handles:
+ * - absolute http(s) URLs -> swap the origin for the base path
+ * - data:/blob: URIs       -> left untouched
+ * - already-prefixed paths -> returned as-is
+ * - bare relative paths    -> base path prepended (the 404 case: `/x.jpg`)
+ */
+function withWorkspaceBase(p?: string): string | undefined {
+    if (!p) return p;
+    if (/^(data:|blob:)/.test(p)) return p;
+    const base = __APP_ENV__.BASE_URL || '';
+    if (/^https?:\/\//.test(p)) return p.replace(/^https?:\/\/[^\/]+/, base);
+    if (base && (p === base || p.startsWith(`${base}/`))) return p;
+    return `${base}${p.startsWith('/') ? '' : '/'}${p}`;
 }
 
 // --- Copy button with feedback ---
@@ -321,7 +338,10 @@ function UserBubble({
                             const fileName = file.name || file.file_name || "File";
                             const fileType = getFileTypebyFileName(fileName);
                             const isImage = ["jpg", "jpeg", "png", "bmp", "gif", "webp"].includes(fileType);
-                            const fileUrl = file.filepath || file.file_url;
+                            // Prefix with the app base path (/workspace) so the URL resolves
+                            // through the dev proxy / deployment sub-path. The raw filepath is
+                            // a bare relative path (e.g. /xxx.jpg) and 404s without it.
+                            const fileUrl = withWorkspaceBase(file.filepath || file.file_url);
 
                             if (isImage && fileUrl) {
                                 return (
@@ -337,7 +357,7 @@ function UserBubble({
                             }
 
                             return (
-                                <div key={i} className="flex items-center gap-2 border bg-white p-2 rounded-xl cursor-pointer hover:bg-gray-50 max-w-sm" onClick={() => fileUrl && window.open(fileUrl, '_blank')}>
+                                <div key={i} className="flex items-center gap-2 border bg-white p-2 rounded-xl max-w-sm">
                                     <FileIcon type={fileType} className="" />
                                     <div className="overflow-hidden">
                                         <div className="truncate text-sm font-bold" title={fileName}>
@@ -551,13 +571,6 @@ function AssistantBubble({
                     <div className="model-name select-none font-semibold text-base">{modelName}</div>
                 </div>
 
-                {/* Pre-stream "正在思考" indicator — pulsing black dot. */}
-                {showWaiting && (
-                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
-                        <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
-                    </div>
-                )}
-
                 {/* v2.5 Agent-native rendering: ordered events (thinking + tool calls) */}
                 {isAgentNative ? (
                     <div className="mb-3 w-full min-w-0">
@@ -570,11 +583,26 @@ function AssistantBubble({
                     </div>
                 ) : (
                     <>
-                        {/* Legacy :::thinking::: reuse Thinking component */}
-                        {thinkingContent && <Thinking>{thinkingContent}</Thinking>}
+                        {/* Legacy :::thinking::: — render with the same "思考内容" block as the
+                            agent-native timeline (Messages/ThinkingContent) so reasoning looks
+                            identical across the homepage chat and the knowledge/file/article docks. */}
+                        {thinkingContent && (
+                            <div className="mb-3 w-full min-w-0">
+                                <ThinkingContent reasoning={thinkingContent} />
+                            </div>
+                        )}
                         {/* Legacy :::web::: → SearchWebUrls */}
                         {webContent.length > 0 && <SearchWebUrls webs={webContent} />}
                     </>
+                )}
+
+                {/* Pre-stream "正在思考" indicator — pulsing black dot. Rendered AFTER the
+                    thinking block so that once "思考内容" appears it sits below that node
+                    (answer-pending), not above it. */}
+                {showWaiting && (
+                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                        <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
+                    </div>
                 )}
 
                 {/* Error state */}
@@ -643,7 +671,9 @@ function AssistantBubble({
                             actionButtons={
                                 <>
                                     <CopyButton text={regularContent} />
-                                    {message.conversationId && message.messageId && (
+                                    {/* Export is only offered in the full homepage chat — the lightweight
+                                        knowledge/file/article docks (knowledgeChatLayout) hide it. */}
+                                    {!knowledgeChatLayout && message.conversationId && message.messageId && (
                                         <ExportSelectionButton
                                             chatId={message.conversationId}
                                             messageId={message.messageId}
