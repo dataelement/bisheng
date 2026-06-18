@@ -23,6 +23,7 @@
  */
 import { OctagonX } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
@@ -79,6 +80,11 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
 
     const linsight = getLinsight(versionId);
     const [loadFailed, setLoadFailed] = useState(false);
+    // On a share page (/workspace/share/:token) the lazy-load hits the same
+    // workbench list/detail endpoints, which 403 a non-owner unless the share-token
+    // header is sent. Pull it from the route so the backend's header_share_token_parser
+    // authorizes the recipient (empty on normal chat routes → no header, as before).
+    const { token: shareToken } = useParams<{ token?: string }>();
 
     // HISTORY hydration: no store entry yet → lazy-load this SV's detail.
     const loadedRef = useRef(false);
@@ -88,13 +94,13 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
         loadedRef.current = true;
         (async () => {
             try {
-                const versions = await getLinsightSessionVersionList(conversationId, '');
+                const versions = await getLinsightSessionVersionList(conversationId, shareToken || '');
                 const item = (versions || []).find((v: any) => v.id === versionId);
                 if (!item) {
                     setLoadFailed(true);
                     return;
                 }
-                const tasks = await getLinsightTaskList(versionId, item, '');
+                const tasks = await getLinsightTaskList(versionId, item, shareToken || '');
                 switchAndUpdateLinsight(versionId, { ...item, tasks });
             } catch (e) {
                 console.error('[TaskTurnPanel] failed to load task detail:', e);
