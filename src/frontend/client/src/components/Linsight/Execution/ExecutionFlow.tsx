@@ -210,11 +210,6 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                             errorType={linsight.taskErrorInfo?.error_type}
                             detail={linsight.taskErrorInfo?.detail}
                             fallbackMessage={linsight.taskError}
-                            onRetry={
-                                isSharePage || readOnly || !linsight.question
-                                    ? undefined
-                                    : () => continueConversation(versionId, linsight.question)
-                            }
                         />
                     )}
                     {stopped && !linsight?.taskError && (
