@@ -43,14 +43,8 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
 
     const [page, setPage] = useState(0);
     /** question.id -> selected option texts; CUSTOM_KEY entry = free input flag.
-     *  Pre-seeded with each question's is_default option(s): single-select takes
-     *  the first default, multi-select takes all. This is the fallback answer when
-     *  the user doesn't change it (★-badged in the option list). */
-    const [answers, setAnswers] = useState<Record<string, string[]>>(() =>
-        Object.fromEntries(
-            questions.map((qq) => [qq.id, qq.multiple ? [...qq.defaultOptions] : qq.defaultOptions.slice(0, 1)]),
-        ),
-    );
+     *  Nothing is pre-selected — the user picks every answer explicitly. */
+    const [answers, setAnswers] = useState<Record<string, string[]>>({});
     const [customText, setCustomText] = useState<Record<string, string>>({});
     const [freeText, setFreeText] = useState('');
     const [submitted, setSubmitted] = useState(false);
@@ -194,7 +188,6 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                     <ul className="mt-4 space-y-3">
                         {q.options.map((option, i) => {
                             const active = selected.includes(option);
-                            const isDefault = q.defaultOptions.includes(option);
                             const { title: optTitle, desc: optDesc } = parseOption(option);
                             return (
                                 <li key={i}>
@@ -212,9 +205,6 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         <span className="shrink-0 font-medium text-[#8C8C8C]">{i + 1}.</span>
                                         <div className="flex-1 min-w-0">
                                             <span className={cn(active ? 'text-[#335CFF]' : 'text-[#1A1A1A]')}>{optTitle}</span>
-                                            {isDefault && (
-                                                <span className="ml-1 text-[#F5A623]" title={localize('com_linsight_clarify_default')}>★</span>
-                                            )}
                                             {optDesc && (
                                                 <span className={cn('ml-1 text-[13px] font-normal', active ? 'text-[#335CFF]/80' : 'text-[#8C8C8C]')}>
                                                     {optDesc}

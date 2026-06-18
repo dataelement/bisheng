@@ -179,9 +179,6 @@ export interface ClarifyQuestion {
     id: string;
     question: string;
     options: string[];
-    /** option texts marked is_default=true — drives pre-selection + ★ badge only,
-     *  never part of the submitted answer (the answer value is the option text). */
-    defaultOptions: string[];
     multiple: boolean;
 }
 
@@ -207,32 +204,29 @@ export function parseClarifyRequest(data: ExecStepEventData): ClarifyRequest {
         const args = tc?.args || {};
         const question = typeof args.question === 'string' ? args.question : typeof args.title === 'string' ? args.title : '';
         if (!question) return;
-        // Options may be plain strings (legacy / replayed checkpoints) or
-        // {text, is_default} objects (current backend). Extract the text as both
-        // display + answer value; collect is_default texts separately for pre-select.
+        // Options are plain strings. Checkpoints parked before the is_default
+        // feature was removed may still carry {text, ...} objects, so extract the
+        // text defensively; the text is both the display label and answer value.
         const rawOptions = Array.isArray(args.options) ? args.options : [];
         const options: string[] = [];
-        const defaultOptions: string[] = [];
         rawOptions.forEach((o: any) => {
             if (typeof o === 'string') {
                 options.push(o);
             } else if (o && typeof o === 'object' && typeof o.text === 'string') {
                 options.push(o.text);
-                if (o.is_default) defaultOptions.push(o.text);
             }
         });
         questions.push({
             id: String(tc?.id || `q_${idx}`),
             question,
             options,
-            defaultOptions,
             multiple: !!(args.multiple || args.multi_select || args.type === 'multi'),
         });
     });
 
     // legacy interrupt shape (params.call_title / call_content) => single free-text question
     if (!questions.length && data.params?.call_content) {
-        questions.push({ id: 'q_legacy', question: String(data.params.call_content), options: [], defaultOptions: [], multiple: false });
+        questions.push({ id: 'q_legacy', question: String(data.params.call_content), options: [], multiple: false });
     }
 
     return { taskId: data.task_id || '', callReason, questions, raw: data };
