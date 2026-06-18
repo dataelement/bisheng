@@ -8,7 +8,8 @@
  * structured text and submitted through the existing user-input API in a single shot.
  * Unparseable payloads degrade to a plain textarea (legacy UserInput shape).
  */
-import { ArrowRight, Check, ChevronLeft, ChevronRight, CornerDownLeft, X } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useMemo, useState } from 'react';
 import { Button, Textarea } from '~/components/ui';
 import { useLocalize } from '~/hooks';
@@ -138,7 +139,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
             }}
         >
             {/* Header: Guide text + Close button */}
-            <div className="flex items-center justify-between pb-1">
+            <div className="flex items-start justify-between pb-1">
                 <p className="text-[16px] font-semibold text-[#212121]">
                     {request.callReason || localize('com_linsight_clarify_title')}
                 </p>
@@ -211,7 +212,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                     >
                                         <span className="shrink-0 font-medium text-[#8C8C8C]">{i + 1}.</span>
                                         <div className="flex-1 min-w-0">
-                                            <span className={cn(active ? 'text-[#335CFF]' : 'text-[#1A1A1A]')}>{optTitle}</span>
+                                            <span className={cn(active ? 'text-[#212121]' : 'text-[#1A1A1A]')}>{optTitle}</span>
                                             {optDesc && (
                                                 <span className="ml-1 text-[13px] font-normal text-[#8C8C8C]">
                                                     {optDesc}
@@ -267,7 +268,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
                                     >
                                         {localize('com_linsight_clarify_submit')}
-                                        <CornerDownLeft size={14} className="shrink-0" />
+                                        <Outlined.CornerDownLeft size={14} className="shrink-0" />
                                     </button>
                                 )}
                             </div>
@@ -292,7 +293,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                 - Last page: only 确定 (always shown + clickable = finish; 跳过 hidden).
                 - Earlier pages: 确定/下一步 once answered (multi-select / free-text;
                   single-select auto-advances on pick) + 跳过 → to skip to the next. */}
-            <div className="mt-6 flex items-center justify-end gap-4 pr-4">
+            <div className="mt-3 flex items-center justify-end gap-4 pr-4">
                 {(isLast || (hasAnswer && (q?.multiple || !q))) && (
                     <Button
                         size="sm"

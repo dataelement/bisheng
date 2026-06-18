@@ -1,4 +1,4 @@
-import { Bell, Check, ChevronRight, Globe, LogOut } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
@@ -186,7 +186,7 @@ function UserPopMenuDrawer() {
                         onClick={handleNotificationsClick}
                     >
                         <div className="flex items-center gap-3">
-                            <Bell className="size-[18px] text-gray-600" />
+                            <Outlined.Bell className="size-[18px] text-gray-600" />
                             <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_notifications_title")}</span>
                         </div>
                         {unreadCount > 0 && (
@@ -203,7 +203,7 @@ function UserPopMenuDrawer() {
                             onClick={() => setLangOpen((o) => !o)}
                         >
                             <div className="flex items-center gap-3">
-                                <Globe className="size-[18px] text-gray-600" />
+                                <Outlined.Earth className="size-[18px] text-gray-600" />
                                 <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_nav_language")}</span>
                             </div>
                             <ChevronRight
@@ -251,7 +251,7 @@ function UserPopMenuDrawer() {
                             logout();
                         }}
                     >
-                        <LogOut className="size-[18px]" />
+                        <Outlined.LogOut className="size-[18px]" />
                         <span className="whitespace-nowrap text-[14px] font-medium">{localize("com_nav_log_out")}</span>
                     </button>
                 </div>
@@ -453,7 +453,7 @@ function UserPopMenuRail() {
                             onSelect={runMenuItemSelect(handleNotificationsClick)}
                         >
                             <div className="flex items-center gap-3">
-                                <Bell className="size-[18px] text-gray-600" />
+                                <Outlined.Bell className="size-[18px] text-gray-600" />
                                 <span className="text-[14px] font-normal text-gray-700">{localize("com_notifications_title")}</span>
                             </div >
                             {unreadCount > 0 && (
@@ -467,7 +467,7 @@ function UserPopMenuRail() {
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger className="flex cursor-pointer items-center justify-between rounded-xl px-3 py-1.5 font-normal outline-none data-[highlighted]:bg-[#e8eaed] data-[state=open]:bg-[#eceef2] focus:bg-[#e8eaed]">
                                 <div className="flex items-center gap-3">
-                                    <Globe className="size-[18px] text-gray-600" />
+                                    <Outlined.Earth className="size-[18px] text-gray-600" />
                                     <span className="text-[14px] font-normal text-gray-700">{localize('com_nav_language')}</span>
                                 </div>
                             </DropdownMenuSubTrigger>
@@ -493,7 +493,7 @@ function UserPopMenuRail() {
                             onSelect={runMenuItemSelect(logout)}
                             className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-1.5 font-normal outline-none transition-colors data-[highlighted]:bg-[#e8eaed] focus:bg-[#e8eaed] !text-[#f53f3f] data-[highlighted]:!text-[#f53f3f] focus:!text-[#f53f3f]"
                         >
-                            <LogOut className="size-[18px]" />
+                            <Outlined.LogOut className="size-[18px]" />
                             <span className="text-[14px] font-normal">{localize('com_nav_log_out')}</span>
                         </DropdownMenuItem>
                     </div >
