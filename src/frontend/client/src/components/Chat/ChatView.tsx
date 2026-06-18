@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
@@ -367,14 +368,33 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   // F035: enter/exit animation for the fullscreen workspace overlay. The overlay
   // is a separate instance from the docked panel (PreviewBody isn't cached, so we
-  // never mount both at once). `fsMounted` keeps it in the DOM across the collapse
-  // transition; `fsExpanded` drives the scale/opacity. Entering: mount collapsed,
-  // then expand on the next frame so the transition runs. Exiting: collapse, then
-  // unmount on transitionEnd.
+  // never mount both at once). It's portaled to document.body + position:fixed so
+  // it can cover the whole window — including the sidebar conversation list, which
+  // lives outside chatContainer. `fsMounted` keeps it in the DOM across the
+  // collapse transition; `fsExpanded` drives the geometry between the docked card's
+  // measured viewport rect and full-bleed. Entering: capture the docked rect (still
+  // mounted this render), mount collapsed, then expand on the next frame. Exiting:
+  // collapse back to that rect, then unmount on transitionEnd.
+  const dockedCardRef = useRef<HTMLDivElement>(null);
   const [fsMounted, setFsMounted] = useState(false);
   const [fsExpanded, setFsExpanded] = useState(false);
+  // Collapsed box as inset offsets (distance from each viewport edge), so the
+  // overlay can animate to a clean inset:0 full-bleed without a 100vw scrollbar.
+  const [fsRect, setFsRect] = useState<{ top: number; left: number; right: number; bottom: number } | null>(null);
   useEffect(() => {
     if (taskArtifacts.fullscreen) {
+      // Measure the docked card in viewport coords for the collapsed box. It's
+      // still mounted on this render (gated on !fsMounted, flipped just below).
+      const el = dockedCardRef.current;
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setFsRect({
+          top: r.top,
+          left: r.left,
+          right: window.innerWidth - r.right,
+          bottom: window.innerHeight - r.bottom,
+        });
+      }
       setFsMounted(true);
       // Double rAF: let the collapsed state paint before flipping to expanded,
       // otherwise React can batch both and the enter transition is skipped.
@@ -388,7 +408,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       };
     }
     setFsExpanded(false);
-    return undefined;
+    // Fallback unmount in case transitionEnd never fires (e.g. reduced-motion
+    // disables the transition) — otherwise the overlay would stay mounted and the
+    // docked panel would never re-render. Slightly longer than the 300ms anim.
+    const t = setTimeout(() => setFsMounted(false), 360);
+    return () => clearTimeout(t);
   }, [taskArtifacts.fullscreen]);
 
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
@@ -560,15 +584,22 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         button; the file preview renders in place. Fullscreen is a
                         separate overlay (below) covering the whole route viewport.
 
-                        Kept mounted whenever a task turn exists (gated only on
-                        !fullscreen) so open/close animates the wrapper's width +
-                        opacity instead of hard mount/unmount. Width uses an inline
-                        clamp() (not min/max-w classes) so it interpolates smoothly
-                        0px → 46% — min-width doesn't transition and would otherwise
-                        snap to 440px on the first frame. The inner box keeps a
-                        min-width so the panel content slides/clips rather than
-                        reflowing while it collapses. */}
-                    {latestTaskVersionId && !taskArtifacts.fullscreen && (
+                        The wrapper stays mounted whenever a task turn exists so
+                        open/close animates its width + opacity instead of hard
+                        mount/unmount. Width uses an inline clamp() (not min/max-w
+                        classes) so it interpolates smoothly 0px → 46% — min-width
+                        doesn't transition and would otherwise snap to 440px on the
+                        first frame. The inner box keeps a min-width so the panel
+                        content slides/clips rather than reflowing while it collapses.
+
+                        The inner WorkspacePanel renders only while the fullscreen
+                        overlay is NOT mounted (`!fsMounted`): the overlay is its own
+                        instance, so showing both would double the preview fetch and
+                        flash two toolbars during the fullscreen transition. The
+                        wrapper still reserves its docked width throughout (so the
+                        chat column doesn't reflow), it's just emptied — the overlay
+                        collapses back onto exactly this box before unmounting. */}
+                    {latestTaskVersionId && (
                       <div
                         className={cn(
                           'min-h-0 shrink-0 overflow-hidden transition-[width,opacity,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
@@ -576,18 +607,20 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         )}
                         style={{ width: taskArtifacts.open ? 'clamp(440px, 46%, 720px)' : '0px' }}
                       >
-                        <div className="h-full min-w-[420px]">
-                          <WorkspacePanel
-                            files={taskWorkspaceFiles}
-                            versionId={latestTaskVersionId}
-                            previewFile={taskArtifacts.previewFile}
-                            fullscreen={false}
-                            onPreview={taskArtifacts.openPreview}
-                            onBack={taskArtifacts.backToList}
-                            onClose={taskArtifacts.closeWorkspace}
-                            onToggleFullscreen={taskArtifacts.toggleFullscreen}
-                          />
-                        </div>
+                        {!fsMounted && (
+                          <div ref={dockedCardRef} className="h-full min-w-[420px]">
+                            <WorkspacePanel
+                              files={taskWorkspaceFiles}
+                              versionId={latestTaskVersionId}
+                              previewFile={taskArtifacts.previewFile}
+                              fullscreen={false}
+                              onPreview={taskArtifacts.openPreview}
+                              onBack={taskArtifacts.backToList}
+                              onClose={taskArtifacts.closeWorkspace}
+                              onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                            />
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -668,25 +701,24 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             );
           })()}
 
-          {/* F035: fullscreen workspace preview — overlays the whole route
-              viewport (chatContainerRef is relative + un-clipped), flush to the
-              edges with no padding. Covers the chat (incl. its header) but not the
-              browser, so the global nav stays. Separate instance from the inline
-              panel above (only one is ever mounted, so the preview never double
-              fetches). Scale + opacity transition from the right (where the docked
-              panel sits) so expanding/collapsing fullscreen animates smoothly
-              instead of hard mount/unmount; unmounts on transitionEnd after the
-              collapse so the exit plays too. */}
-          {latestTaskVersionId && fsMounted && (
+          {/* F035: fullscreen workspace preview — portaled to <body> + fixed so it
+              covers the WHOLE window (incl. the sidebar conversation list, which is
+              outside chatContainer). Separate instance from the inline panel above
+              (only one is ever mounted, so the preview never double fetches).
+              Animates its viewport rect between the docked card's measured box
+              (fsRect) and full bleed, so expanding grows out of the docked card and
+              collapsing retracts back onto it — a geometric slide, not a fade.
+              Unmounts on transitionEnd after the collapse. */}
+          {latestTaskVersionId && fsMounted && fsRect && createPortal(
             <div
-              className={cn(
-                'absolute inset-0 z-50 origin-right bg-white transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
-                fsExpanded ? 'scale-100 opacity-100' : 'scale-[0.96] opacity-0',
-              )}
+              className="fixed z-[100] overflow-hidden bg-[#FBFBFB] transition-[top,left,right,bottom,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
+              style={fsExpanded
+                ? { top: 0, left: 0, right: 0, bottom: 0, borderRadius: 0 }
+                : { top: fsRect.top, left: fsRect.left, right: fsRect.right, bottom: fsRect.bottom, borderRadius: 12 }}
               onTransitionEnd={(e) => {
                 // Unmount only after the collapse finishes (ignore the expand end
                 // and bubbled child transitions).
-                if (e.target === e.currentTarget && e.propertyName === 'transform' && !taskArtifacts.fullscreen) {
+                if (e.target === e.currentTarget && e.propertyName === 'left' && !taskArtifacts.fullscreen) {
                   setFsMounted(false);
                 }
               }}
@@ -701,7 +733,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                 onClose={taskArtifacts.closeWorkspace}
                 onToggleFullscreen={taskArtifacts.toggleFullscreen}
               />
-            </div>
+            </div>,
+            document.body,
           )}
         </div>
 

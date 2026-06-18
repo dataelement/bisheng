@@ -5,10 +5,8 @@
  * called inside that agent's namespace; a finished card shows "called N tools".
  */
 import { Outlined } from 'bisheng-icons';
-import { Check } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useLocalize } from '~/hooks';
-import { cn } from '~/utils';
 import { StepRow, stepTypeIcon } from './StepRow';
 import type { SubagentGroup } from './stepUtils';
 
@@ -69,12 +67,12 @@ function SubagentCard({ agent }: { agent: SubagentGroup['agents'][number] }) {
             <div className="relative flex max-w-full items-center gap-2 text-xs leading-5 text-[#999]">
                 {step.running ? (
                     <>
-                        <span className="size-2 shrink-0 animate-pulse rounded-full bg-[#212121]" />
+                        <span className="size-2 shrink-0 animate-pulse-scale rounded-full bg-black" />
                         <span className="truncate">{currentTool?.name || localize('com_linsight_subagent_running')}</span>
                     </>
                 ) : (
                     <>
-                        <Check size={12} className="shrink-0 text-green-500" />
+                        <Outlined.DoubleCheck size={12} className="shrink-0 text-[#333]" />
                         <span className="truncate">
                             {localize('com_linsight_subagent_tools_called', { 0: String(calledCount) })}
                         </span>
@@ -93,7 +91,7 @@ export function SubagentRow({ group }: { group: SubagentGroup }) {
 
     return (
         <StepRow
-            icon={<Outlined.PeopleRound size={16} className={cn(running ? 'text-primary' : 'text-[#333]')} />}
+            icon={<Outlined.PeopleRound size={16} className="text-[#333]" />}
             title={
                 <span>
                     {localize('com_linsight_subagent_delegate', {

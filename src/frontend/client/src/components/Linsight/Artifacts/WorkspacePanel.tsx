@@ -121,10 +121,10 @@ export function WorkspacePanel({
                             <Outlined.Close className="size-4" />
                         </button>
                     </div>
-                    {/* list body — 4px top, 16px bottom, 12px left/right; 16px between rows */}
+                    {/* list body — 4px top, 16px bottom, 12px left/right; 8px between rows */}
                     <div className="min-h-0 flex-1 overflow-y-auto scrollbar-os px-3 pt-1 pb-4">
                         {files.length ? (
-                            <div className="flex flex-col gap-4">{files.map(renderRow)}</div>
+                            <div className="flex flex-col gap-2">{files.map(renderRow)}</div>
                         ) : (
                             <div className="flex h-full items-center justify-center text-center text-sm font-normal text-gray-400">
                                 {localize('com_linsight_workspace_empty')}

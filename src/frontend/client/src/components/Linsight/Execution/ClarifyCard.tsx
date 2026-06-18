@@ -10,8 +10,8 @@
  */
 import { ArrowRight, Check, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
-import { useMemo, useState } from 'react';
-import { Button, Textarea } from '~/components/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Textarea } from '~/components/ui';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
@@ -129,6 +129,30 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
     // (finish) and hides 跳过; finishing with nothing selected submits the last
     // question as skipped (composeClarifyAnswer maps empty answers to skipText).
     const isLast = page >= questions.length - 1;
+
+    // Enter ⏎ confirms (matches the `确定 ↵` hint). The custom-text <input> owns
+    // its own Enter (single-select); this covers multi-select and the last-page
+    // 确定. Skip while typing in any field so the chat box / custom input keep
+    // their native Enter. Held in a ref so the always-on listener sees fresh state.
+    const enterConfirmRef = useRef<() => void>(() => {});
+    enterConfirmRef.current = () => {
+        if (disabled || submitted) return;
+        // only when a confirm action is actually available (mirror the 确定 button)
+        if (!(isLast || (hasAnswer && (q?.multiple || !q)))) return;
+        handleConfirm();
+    };
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+            const el = document.activeElement as HTMLElement | null;
+            const tag = el?.tagName?.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || el?.isContentEditable) return;
+            e.preventDefault();
+            enterConfirmRef.current();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
 
     return (
         <div
@@ -265,7 +289,7 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                                         type="button"
                                         disabled={disabled || submitted}
                                         onClick={handleConfirm}
-                                        className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
+                                        className="flex shrink-0 items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
                                     >
                                         {localize('com_linsight_clarify_submit')}
                                         <Outlined.CornerDownLeft size={14} className="shrink-0" />
@@ -295,26 +319,33 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                   single-select auto-advances on pick) + 跳过 → to skip to the next. */}
             <div className="mt-3 flex items-center justify-end gap-4 pr-4">
                 {(isLast || (hasAnswer && (q?.multiple || !q))) && (
-                    <Button
-                        size="sm"
+                    <button
+                        type="button"
                         disabled={disabled || submitted}
                         onClick={handleConfirm}
-                        className="h-8 rounded-lg bg-[#335CFF] text-white hover:bg-[#1E4DFF] px-4 text-xs font-semibold shadow-[0_2px_8px_rgba(51,92,255,0.2)] transition-all duration-200"
+                        className={cn(
+                            'flex items-center gap-1 text-sm font-medium disabled:opacity-50 transition-colors',
+                            // Last question: highlight 确定 as the final submit CTA.
+                            isLast
+                                ? 'text-[#335CFF] hover:text-[#1E4DFF]'
+                                : 'text-[#8C8C8C] hover:text-[#212121]',
+                        )}
                     >
                         {isLast
                             ? localize('com_linsight_clarify_submit')
                             : localize('com_linsight_clarify_next')}
-                    </Button>
+                        <Outlined.CornerDownLeft size={14} className="shrink-0" />
+                    </button>
                 )}
                 {!isLast && (
                     <button
                         type="button"
                         disabled={disabled || submitted}
                         onClick={handleSkipCurrent}
-                        className="flex items-center gap-1 text-sm font-medium text-[#1A1A1A] hover:text-[#335CFF] disabled:opacity-50 transition-colors"
+                        className="flex items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
                     >
                         {localize('com_linsight_clarify_skip')}
-                        <ArrowRight size={14} className="ml-1 shrink-0" />
+                        <ArrowRight size={14} className="shrink-0" />
                     </button>
                 )}
             </div>

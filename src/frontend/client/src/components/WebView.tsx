@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { resolveArtifactUrl } from "~/components/Linsight/Artifacts/artifactUtils";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
+
+// The SPA index.html is returned as a fallback when the artifact file does not
+// exist (dev server / gateway SPA-fallback). Rendering it inside the iframe
+// would nest the whole app shell — including its loading spinner. Detect it so
+// we keep our own centered loading state instead.
+const isAppShellFallback = (html: string) =>
+    html.includes('id="loading-container"') || html.includes('brandEntry.jsx');
 
 export default function WebView() {
     const [searchParams] = useSearchParams();
@@ -11,6 +19,7 @@ export default function WebView() {
     const vid = searchParams.get('vid');
 
     const [content, setContent] = useState('');
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fileUrl = decodeURIComponent(url || '');
@@ -18,6 +27,7 @@ export default function WebView() {
 
         let cancelled = false;
         const fetchTextFile = async () => {
+            setLoading(true);
             try {
                 // With a vid, resolve the object key -> presigned link (same path
                 // the side preview panel uses). Without it, fall back to a plain
@@ -32,10 +42,12 @@ export default function WebView() {
                     throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
                 }
                 const text = await response.text();
-                if (!cancelled) setContent(text);
+                if (!cancelled) setContent(isAppShellFallback(text) ? '' : text);
             } catch (err) {
                 console.error('WebView failed to load html artifact:', err);
                 if (!cancelled) setContent('');
+            } finally {
+                if (!cancelled) setLoading(false);
             }
         };
 
@@ -45,5 +57,21 @@ export default function WebView() {
         };
     }, [url, vid]);
 
-    return <iframe srcDoc={content} sandbox="allow-scripts" width="100%" height="100%" style={{ border: "none" }}></iframe>;
+    return (
+        <div className="fixed inset-0">
+            {(loading || !content) && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background">
+                    <LoadingIcon className="size-20 text-primary" />
+                </div>
+            )}
+            {content && (
+                <iframe
+                    srcDoc={content}
+                    sandbox="allow-scripts"
+                    className="size-full"
+                    style={{ border: "none" }}
+                ></iframe>
+            )}
+        </div>
+    );
 };

@@ -45,11 +45,19 @@ module.exports = {
           '0%': { transform: 'translateX(-130%)' },
           '100%': { transform: 'translateX(130%)' },
         },
+        // highlight sweeping through a running label (gradient clipped to text).
+        // Travel = exactly one tile (200%, matching bg-[length:200%_100%]) so the
+        // highlight crosses ONCE per cycle and the loop is seamless.
+        'text-shimmer': {
+          '0%': { backgroundPosition: '200% 0' },
+          '100%': { backgroundPosition: '0% 0' },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out forwards',
         'crawl-slide': 'crawl-slide 1.4s linear infinite',
         'sheen-sweep': 'sheen-sweep 2s linear infinite',
+        'text-shimmer': 'text-shimmer 3.2s linear infinite',
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-scale': 'pulse-scale 1s ease-in-out infinite',
