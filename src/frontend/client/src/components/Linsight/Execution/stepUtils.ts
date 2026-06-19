@@ -179,7 +179,7 @@ export type TimelineNode = DeepStepGroup | SubagentGroup | { kind: 'step'; step:
  * input returns an empty string (caller falls back to a localized label).
  */
 const FIRST_LINE_MAX = 24;
-export function firstLine(text: string | null | undefined): string {
+export function firstLine(text: string | null | undefined, max: number = FIRST_LINE_MAX): string {
     if (!text) return '';
     // collapse all whitespace runs (incl. newlines) to single spaces, then trim
     const flat = text.replace(/\s+/g, ' ').trim();
@@ -187,9 +187,9 @@ export function firstLine(text: string | null | undefined): string {
     // prefer the first sentence boundary (CJK 。！？ or ASCII .!?) when it lands
     // inside the budget, otherwise hard-truncate
     const sentence = flat.match(/^.*?[。！？.!?]/);
-    const head = sentence && sentence[0].length <= FIRST_LINE_MAX ? sentence[0] : flat;
-    if (head.length <= FIRST_LINE_MAX) return head;
-    return head.slice(0, FIRST_LINE_MAX) + '…';
+    const head = sentence && sentence[0].length <= max ? sentence[0] : flat;
+    if (head.length <= max) return head;
+    return head.slice(0, max) + '…';
 }
 
 /**
@@ -268,42 +268,62 @@ export function summarizeActivity(steps: MergedStep[] | null | undefined): Activ
 
 /**
  * (Narration §3) Extract a one-line natural-language narration (旁白) from a
- * thinking passage. Strips markdown emphasis / inline code / fenced code blocks,
- * then takes the last COMPLETE sentence (one ending in `。！？.!?`). A trailing
- * un-terminated fragment is IGNORED — this is the key streaming fix: while a
- * sentence is still being typed it has no terminator, so the narration holds the
- * previous complete sentence instead of churning through half-words. If the last
- * complete sentence is too short (<4 chars — e.g. a lone "好。") it falls back to
- * the previous one. No complete sentence yet → '' (caller shows nothing). The
- * expanded thinking body is unaffected — this only feeds the collapsed hero.
+ * thinking passage. How "one sentence" is judged:
+ *  - Split into UNITS on both sentence terminators (。！？.!?…) AND newlines — the
+ *    model separates thoughts line-by-line as well as by punctuation, so a newline
+ *    is a real boundary (we do NOT collapse newlines away first).
+ *  - Keep only COMPLETE units (terminator- or newline-bounded); a trailing
+ *    un-terminated fragment (mid-stream) is dropped, so streaming never shows a
+ *    half-typed line.
+ *  - Prefer the LAST unit that reads as a natural aside: within a sane length
+ *    window (4–56 chars) and — when the passage is Chinese — actually CONTAINING
+ *    CJK. This skips lone English tails (e.g. "to the main agent.") and over-long
+ *    instruction sentences, falling back to the last complete unit if none qualify.
+ * No complete unit yet → '' (caller shows nothing). The expanded thinking body is
+ * unaffected — this only feeds the collapsed hero line.
  */
 const NARRATION_MIN_LEN = 4;
+// A narration aside longer than this is almost certainly an instruction / list,
+// not a natural "colleague reporting" line — skip it for a shorter sentence.
+const NARRATION_MAX_LEN = 56;
+
+/** Does the text contain any CJK ideograph? (used to skip lone non-CJK tails). */
+function hasCJK(s: string): boolean {
+    return /[一-鿿]/.test(s);
+}
+
 export function extractNarration(text: string | null | undefined): string {
     if (!text) return '';
-    let cleaned = text
+    const cleaned = text
         // drop fenced code blocks entirely (```...```)
         .replace(/```[\s\S]*?```/g, ' ')
         // inline code `x` -> its inner text
         .replace(/`([^`]*)`/g, '$1')
         // markdown emphasis / heading / list / quote markers
         .replace(/[*_#>~]/g, ' ');
-    // collapse whitespace runs (incl. newlines) to single spaces
-    cleaned = cleaned.replace(/\s+/g, ' ').trim();
-    if (!cleaned) return '';
-    // Split on sentence terminators and keep ONLY COMPLETE sentences (ending in a
-    // terminator); a trailing un-terminated fragment (mid-stream) is dropped.
-    const sentences = cleaned
-        .split(/(?<=[。！？.!?])/)
-        .map((s) => s.trim())
-        .filter((s) => /[。！？.!?]$/.test(s));
-    if (!sentences.length) return '';
-    const last = sentences[sentences.length - 1];
-    // count chars without the trailing terminator for the short-sentence check
-    const bare = last.replace(/[。！？.!?]+$/, '').trim();
-    if (bare.length < NARRATION_MIN_LEN && sentences.length >= 2) {
-        return sentences[sentences.length - 2];
+    // Split into thought units on sentence terminators OR newlines (do NOT collapse
+    // newlines first — they are real thought boundaries).
+    const rawUnits = cleaned.split(/(?<=[。！？.!?…])|\n+/);
+    // A trailing unit is INCOMPLETE only when the text ends mid-sentence (no
+    // terminator and no trailing newline) — drop it.
+    const endsClean = /[。！？.!?…]\s*$/.test(cleaned) || /\n\s*$/.test(cleaned);
+    const units = rawUnits.map((u) => u.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    if (!units.length) return '';
+    const complete = endsClean ? units : units.slice(0, -1);
+    if (!complete.length) return '';
+
+    const cjk = hasCJK(cleaned);
+    const isNatural = (u: string): boolean => {
+        const bare = u.replace(/[。！？.!?…]+$/, '').trim();
+        if (bare.length < NARRATION_MIN_LEN || bare.length > NARRATION_MAX_LEN) return false;
+        if (cjk && !hasCJK(u)) return false; // skip lone English tails in a Chinese passage
+        return true;
+    };
+    for (let i = complete.length - 1; i >= 0; i--) {
+        if (isNatural(complete[i])) return complete[i];
     }
-    return last;
+    // Fallback: the last complete unit (a long/odd line still beats nothing).
+    return complete[complete.length - 1];
 }
 
 /**

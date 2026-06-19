@@ -76,6 +76,21 @@ describe('stepUtils — firstLine (A)', () => {
     it('prefers the first sentence when it fits the budget', () => {
         expect(firstLine('对齐口径。然后再算同比。')).toBe('对齐口径。');
     });
+
+    it('honors a custom budget — returns the first sentence intact when it fits (subagent title)', () => {
+        // The subagent card passes a widened budget (~48) so a typical delegation
+        // goal's first sentence survives instead of being chopped at 24.
+        const goal = '调研中际旭创（股票代码：300308）的公司基本信息与业务概况。请检索并返回以下内容的蒸馏摘要。';
+        // first sentence (≤ 48) → returned whole, the trailing detail sentence dropped
+        expect(firstLine(goal, 48)).toBe('调研中际旭创（股票代码：300308）的公司基本信息与业务概况。');
+    });
+
+    it('honors a custom budget — hard-truncates a first sentence that exceeds it', () => {
+        const long = 'a'.repeat(60) + '。';
+        const out = firstLine(long, 48);
+        expect(out.endsWith('…')).toBe(true);
+        expect(out.length).toBe(49); // 48 chars + ellipsis
+    });
 });
 
 describe('stepUtils — timestamp -> startedAt/endedAt (B)', () => {
@@ -577,6 +592,23 @@ describe('stepUtils — extractNarration (§3 narration 旁白)', () => {
         expect(extractNarration('. module competitive landscape and major vendors. I will keep going')).toBe(
             'module competitive landscape and major vendors.',
         );
+    });
+
+    it('skips a trailing non-CJK fragment in a Chinese passage', () => {
+        expect(extractNarration('我要调研这家公司的行业前景与风险。Now returning to the main agent.')).toBe(
+            '我要调研这家公司的行业前景与风险。',
+        );
+    });
+
+    it('treats a newline as a sentence boundary (a completed line counts)', () => {
+        expect(extractNarration('先列大纲\n现在开始检索资料\n')).toBe('现在开始检索资料');
+    });
+
+    it('skips an over-long instruction sentence in favor of a shorter one', () => {
+        const text =
+            '先摸清已有材料。' +
+            '请检索并返回以下内容的蒸馏摘要需注明信息来源时间数据口径并将蒸馏后的结果完整回传给主智能体不要省略任何关键事实和数据点确保可追溯。';
+        expect(extractNarration(text)).toBe('先摸清已有材料。');
     });
 });
 
