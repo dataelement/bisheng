@@ -178,17 +178,49 @@ export type TimelineNode = DeepStepGroup | SubagentGroup | { kind: 'step'; step:
  * newlines stripped, trimmed, truncated to ~24 chars with an ellipsis. Empty
  * input returns an empty string (caller falls back to a localized label).
  */
+// Strip markdown NOISE markers shared by every one-line distiller (firstLine /
+// extractNarration): fenced code blocks, inline code (kept as inner text), and
+// emphasis / heading / quote / strike markers. Newlines are preserved (callers that
+// treat a line as a thought boundary rely on them). Does NOT touch list bullets —
+// firstLine wants to CUT at a list (keep the lead-in) while extractNarration wants to
+// KEEP the item text (drop only the marker), so each handles bullets its own way.
+function stripMarkdownMarkers(text: string): string {
+    return text
+        .replace(/```[\s\S]*?```/g, ' ') // fenced code blocks
+        .replace(/`([^`]*)`/g, '$1') // inline code -> inner text
+        .replace(/[*_#>~]/g, ' '); // emphasis / heading / quote / strike markers
+}
+
 const FIRST_LINE_MAX = 24;
+// A structured-enumeration goal ("<lead-in>：1. … 2. …") — the lead-in instruction
+// IS the gist; the numbered list is detail. Cut at the first list ordinal so the
+// title reads "研究首尔美食探店攻略，请搜索并整理以下信息" instead of trailing a dangling
+// "1.". A list ordinal = a short number + "." / ")" at a list position (preceded by
+// a colon / comma / whitespace) whose marker is followed by whitespace/end — so a
+// decimal ("3.5", marker not space-followed) or a mid-token ("601138.SH") never trips it.
+const ENUM_ORDINAL = /[：:，,\s]\d{1,3}[.)](?=\s|$)/;
 export function firstLine(text: string | null | undefined, max: number = FIRST_LINE_MAX): string {
     if (!text) return '';
-    // collapse all whitespace runs (incl. newlines) to single spaces, then trim
-    const flat = text.replace(/\s+/g, ' ').trim();
+    // strip markdown markers FIRST (so a goal/thinking that opens with `code`, **bold**,
+    // ## heading … shows prose, not raw markup), then collapse whitespace and trim.
+    let flat = stripMarkdownMarkers(text).replace(/\s+/g, ' ').trim();
     if (!flat) return '';
+    // drop a single LEADING list marker the text opens with ("1. …", "- …", "• …") so a
+    // goal that starts straight into a list shows the first item, not the bare marker.
+    flat = flat.replace(/^(?:[-•‣◦]|\d{1,3}[.)])\s+/, '');
+    // drop a TRAILING numbered enumeration, keeping the lead-in (only when there IS
+    // lead-in text before the first ordinal — a goal that is purely a list falls
+    // through to normal truncation).
+    const enumStart = flat.search(ENUM_ORDINAL);
+    if (enumStart > 0) {
+        const lead = flat.slice(0, enumStart).replace(/[：:，,\s]+$/, '').trim();
+        if (lead) flat = lead;
+    }
     // prefer the first sentence boundary when it lands inside the budget, otherwise
-    // hard-truncate. CJK 。！？… always terminate; an ASCII .!? only does when it is
-    // followed by whitespace or end-of-string — so a mid-token dot in a ticker /
-    // decimal / abbreviation ("601138.SH", "3.5", "U.S.") is NOT a false boundary.
-    const sentence = flat.match(/^.*?(?:[。！？…]|[.!?](?=\s|$))/);
+    // hard-truncate. CJK 。！？… always terminate; ASCII ! ? terminate when followed by
+    // whitespace/end; an ASCII "." does too BUT NOT when preceded by a digit — so a
+    // ticker / decimal / list ordinal ("601138.SH", "3.5", "1.") is not a false boundary.
+    const sentence = flat.match(/^.*?(?:[。！？…]|[!?](?=\s|$)|(?<!\d)\.(?=\s|$))/);
     const head = sentence && sentence[0].length <= max ? sentence[0] : flat;
     if (head.length <= max) return head;
     return head.slice(0, max) + '…';
@@ -352,15 +384,10 @@ function isStrictProse(bare: string, cjk: boolean): boolean {
  */
 export function extractNarration(text: string | null | undefined): string {
     if (!text) return '';
-    const cleaned = text
-        // drop fenced code blocks entirely (```...```)
-        .replace(/```[\s\S]*?```/g, ' ')
-        // inline code `x` -> its inner text
-        .replace(/`([^`]*)`/g, '$1')
-        // markdown emphasis / heading / quote / strike markers
-        .replace(/[*_#>~]/g, ' ')
-        // leading list bullets ("- ", "* ", "1. ", "1)", "(1)") — require trailing
-        // whitespace so "-5%" / "3.5" are untouched
+    const cleaned = stripMarkdownMarkers(text)
+        // leading list bullets on EVERY line ("- ", "* ", "1. ", "1)", "(1)") — keep
+        // the item text as a candidate sentence; require trailing whitespace so "-5%" /
+        // "3.5" are untouched
         .replace(/^[ \t]*(?:[-*•‣◦]|\d+[.)]|[（(]\d+[）)])[ \t]+/gm, '');
     // A trailing unit is INCOMPLETE only when the text ends mid-sentence (no
     // terminator and no trailing newline) — drop it.
