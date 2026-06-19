@@ -17,8 +17,10 @@
  * Single-level fold: the expanded body lays out the thinking passages directly as
  * Body-colored text (no inner "思考内容" collapsible) interleaved with tool /
  * knowledge rows in original timeline order. The group shell owns the only
- * open/close state, persisted via useCollapseState (running → open, done →
- * collapsed).
+ * open/close state, persisted via useCollapseState. The default fold tracks the
+ * `active` prop (the live tail episode → open; superseded / done → collapsed) —
+ * deliberately NOT the per-tool group.running, which toggles on every tool call
+ * and used to make the whole group flicker open/closed mid-episode.
  *
  * It does NOT import or modify any Chat/Messages (daily /c) component — all
  * tokens come from execTokens, the timer math from useElapsedTicker.
@@ -35,7 +37,6 @@ import { ACCENT, ACTIVITY_I18N, BODY, INK } from './execTokens';
 // the single Accent (blue) highlight; the chevron is muted and darkens on hover;
 // the title + narration sit lighter as quiet meta.
 const NODE_TEXT = '#999999';
-import { useExecutionLive } from './executionLive';
 import { KnowledgeRow } from './KnowledgeRow';
 import { NarrationTicker } from './NarrationTicker';
 import ToolRowLite from './ToolRowLite';
@@ -59,6 +60,24 @@ export interface DeepStepGroupProps {
      * legible at a glance even after the team grouping is dissolved.
      */
     subagent?: { goal: string; idx: number };
+    /**
+     * Whether this group is the ACTIVE (live tail) episode of a running container.
+     * It is the single source of truth for every live-vs-done UI facet — the
+     * open/collapse default, the 正在/已 label, the header pulse, the accent color,
+     * the elapsed ticker, and the narration mode.
+     *
+     * It deliberately REPLACES the old `group.running && live` driver. `group.running`
+     * is "any step in this episode currently mid-flight", which toggles true↔false
+     * MANY times within one live episode: thinking frames ship as `status:'end'`
+     * (never running), and a tool step is running only between its start and end
+     * frames — so binding the fold to it made the whole group expand on every tool
+     * call and collapse again the instant it finished ("上下反复跳跃"). `active` is
+     * stable for the episode's whole lifetime: the parent (ExecutionTimeline) sets
+     * it true for the last node while the container is live, so the group stays
+     * steadily expanded and collapses exactly once when a newer episode supersedes
+     * it. Default false ⇒ a done / historical group (collapsed summary, frozen clock).
+     */
+    active?: boolean;
 }
 
 /**
@@ -100,18 +119,20 @@ function buildSegments(steps: MergedStep[]): Segment[] {
     return out;
 }
 
-const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagent }) => {
+const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagent, active = false }) => {
     const localize = useLocalize();
-    // Gate "running" on the turn being live: a completed/stopped turn means
-    // nothing is actually running, so a dangling step (e.g. a safety-blocked
-    // subagent that never got its end frame) can't keep this group ticking in a
-    // "正在深度思考…" state. Non-live → done label + frozen clock + default collapse.
-    const live = useExecutionLive();
-    const running = group.running && live;
+    // `active` (the live tail episode) — NOT the volatile per-tool group.running —
+    // is the live-vs-done signal for the entire group. Binding everything to active
+    // keeps the fold/label/clock stable for the episode's whole lifetime instead of
+    // flickering open/closed on each tool call (see the `active` prop doc). A
+    // completed / stopped / historical container passes active=false, so a dangling
+    // step that never got its end frame can no longer keep the group ticking
+    // "正在深度思考…".
+    const running = active;
     // Group-level fold: ONE stable open state per group, persisted to
     // sessionStorage so a manual toggle survives refresh / session switch.
-    // Default = running (expanded while live to watch progress; collapsed once
-    // done to a single summary line for history review).
+    // Default = active (the live tail episode stays expanded to watch progress;
+    // collapsed to a single summary line once superseded / for history review).
     const persistKey = group.steps[0]?.callId ?? '';
     const [open, setOpen] = useCollapseState(persistKey, running);
 

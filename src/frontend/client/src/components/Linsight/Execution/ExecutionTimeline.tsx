@@ -13,6 +13,7 @@
  */
 import { useMemo } from 'react';
 import { DeepStepGroup } from './DeepStepGroup';
+import { useExecutionLive } from './executionLive';
 import { KnowledgeRow } from './KnowledgeRow';
 import { ToolRowLite } from './ToolRowLite';
 import type { ExecStepEventData } from './stepUtils';
@@ -33,18 +34,27 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
     const sig = `${frames.length}:${last?.status ?? ''}:${last?.call_id ?? ''}`;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional composite key over the in-place-mutated history array
     const nodes = useMemo(() => buildTimelineGroups(mergeStepFrames(history)), [sig]);
+    // Container liveness (session turn / running task), provided by the carrier via
+    // ExecutionLiveContext. The ACTIVE episode is the LAST node while the container
+    // is live — that one stays steadily expanded (正在 label, ticking clock); every
+    // earlier node is done (collapsed summary). Passing this `active` down (instead
+    // of letting each group read the volatile per-tool group.running) is what stops
+    // a group from flickering open/closed on every tool call within one episode.
+    const live = useExecutionLive();
     if (!nodes.length) return null;
+    const lastIdx = nodes.length - 1;
 
     return (
         // Group spacing aligns with the daily /c stack (gap-3 between groups).
         <div className="flex flex-col gap-3">
             {nodes.map((node, idx) => {
+                const active = live && idx === lastIdx;
                 if (node.kind === 'deep_step_group') {
                     // Stable key: first step's callId; fall back to index when an
                     // episode somehow has no steps (defensive — flush() never emits
                     // an empty episode, so this is a belt-and-braces guard).
                     const key = node.steps[0]?.callId ?? `deep_${idx}`;
-                    return <DeepStepGroup key={key} group={node} />;
+                    return <DeepStepGroup key={key} group={node} active={active} />;
                 }
                 if (node.kind === 'subagent_group') {
                     // buildFlowNodes materializes a group only once a real subagent
@@ -56,6 +66,9 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
                     // DeepStepGroup, headed by its delegation goal + activity summary
                     // and a distinct agent rail icon. (Trade-off accepted in §1.3:
                     // the explicit "N parallel subagents" grouping signal is dropped.)
+                    // While this team is the live tail (active), all its parallel
+                    // segments are in-progress, so each gets active=true (expanded);
+                    // once superseded they all collapse together.
                     return explodeSubagentGroup(node).map((seg, sIdx) => (
                         <DeepStepGroup
                             key={seg.steps[0]?.callId ?? `sub_${idx}_${sIdx}`}
@@ -67,6 +80,7 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
                                 running: seg.running,
                             }}
                             subagent={{ goal: seg.goal, idx: seg.idx }}
+                            active={active}
                         />
                     ));
                 }

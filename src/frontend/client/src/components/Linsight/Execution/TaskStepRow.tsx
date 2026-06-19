@@ -15,10 +15,11 @@
  * tool rows), plus any answered clarify (IntentRow), nested started children, and
  * a terminal error. A task with no real execution renders nothing.
  */
+import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { IntentRow } from './IntentRow';
 import type { ExecStepEventData } from './stepUtils';
-import { isTaskStarted, TASK_ERROR_STATUSES } from './stepUtils';
+import { isTaskRunning, isTaskStarted, TASK_ERROR_STATUSES } from './stepUtils';
 
 export interface ExecTask {
     id: string;
@@ -48,7 +49,13 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
             {answeredInputs.map((entry, i) => (
                 <IntentRow key={`input_${i}`} data={entry} />
             ))}
-            <ExecutionTimeline history={task.history} />
+            {/* Scope liveness to THIS task: only a running task's tail episode is
+                "active" (expanded). A completed task — even though the session is
+                still live — passes false so its last episode collapses to a summary
+                instead of staying stuck open. */}
+            <ExecutionLiveContext.Provider value={isTaskRunning(task.status)}>
+                <ExecutionTimeline history={task.history} />
+            </ExecutionLiveContext.Provider>
             {startedChildren.map((child) => (
                 <TaskStepRow key={child.id} task={child} />
             ))}
