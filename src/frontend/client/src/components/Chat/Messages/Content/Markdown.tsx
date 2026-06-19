@@ -388,7 +388,7 @@ function CitationPreviewCard({
         {renderWebTitle()}
       </div>
       <div className="px-4 pb-0">
-        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#1D2129]">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#4E5969]">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
             {preview.snippet || '暂无内容摘要'}
           </div>
@@ -397,7 +397,7 @@ function CitationPreviewCard({
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
-            {formattedSourceMeta && <span className="shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
+            {formattedSourceMeta && <span className="ml-auto shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
           </div>
         </div>
       </div>
@@ -408,7 +408,7 @@ function CitationPreviewCard({
     <>
       {renderRagTitle()}
       <div className="px-4 pb-0">
-        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#1D2129]">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#4E5969]">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
             {preview.snippet || '暂无内容摘要'}
           </div>
