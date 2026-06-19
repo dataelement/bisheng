@@ -134,19 +134,22 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
     const label = useMemo<string>(() => {
         const seconds = formatSeconds(elapsedMs);
         const noDuration = compact || elapsedMs <= 0;
-        // R3 完全拆平: a subagent segment reads "{goal} · {activity}" (falling back
-        // to "子智能体 N" when the burst carried no per-agent goal), + 用时 suffix.
+        // R3 完全拆平: a subagent segment is headed by its delegation GOAL + 用时.
         if (subagent) {
-            // Show only the GIST of the delegation goal — its first sentence/clause,
-            // hard-capped to ~one line — so a long multi-sentence instruction
-            // ("调研…。请检索并返回…。") doesn't read as a run-on title chopped mid-word
-            // by `truncate`. firstLine prefers the first sentence when it fits the
-            // budget and otherwise hard-truncates; the full goal is dropped on purpose
-            // (no hover), the summary alone identifies the agent.
+            // The goal is the subagent's identity, so it OWNS the header line. Show
+            // only its GIST — the first sentence/clause, hard-capped to ~one line via
+            // firstLine — so a long multi-sentence instruction doesn't read as a
+            // run-on chopped mid-word by `truncate`.
+            //
+            // The activity summary (联网搜索 N 次 · 编辑 M 文件) is intentionally NOT
+            // appended here: it is process detail that competes with the goal for
+            // width (and collides with a truncated goal's open paren), and it is
+            // already visible when the card is expanded. It is kept only as a
+            // FALLBACK label for a goal-less (degraded) subagent — there it is more
+            // informative than a bare "子智能体 N".
             const goalGist = firstLine(subagent.goal, SUBAGENT_GOAL_TITLE_MAX);
             const core =
-                [goalGist, activityText].filter(Boolean).join(' · ') ||
-                localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
+                goalGist || activityText || localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
             return noDuration ? core : localize('com_linsight_act_summary', { 0: core, 1: seconds });
         }
         // R1: activity-summary header (verbs + counts), the primary case.
