@@ -4,16 +4,22 @@
  *
  * The model's reasoning streams token-by-token, which made the old narration line
  * churn through half-words and run-ons. This component shows ONE complete sentence
- * at a time and only advances when a genuinely new sentence arrives (empty / equal
- * updates are ignored, so it never flickers blank between thinking passages). When
- * it does advance, the outgoing sentence rolls up + fades out while the incoming one
- * rolls up into place + fades in — a quiet vertical crossfade that reads as discrete
- * thoughts instead of a stream. Honors prefers-reduced-motion (instant swap).
+ * at a time. Two mechanisms keep it calm when a lot of content streams at once:
  *
- * It is intentionally quiet (Muted, single line, clamped height) so it sits under a
- * timeline group header as an aside, matching the surrounding restraint.
+ *  1. Single-flight + coalescing: only ONE crossfade runs at a time. If several
+ *     sentences complete during a transition, the ticker jumps straight to the
+ *     LATEST one when the current transition ends — intermediate sentences are
+ *     skipped (the full reasoning lives in the expandable body), so the line never
+ *     blurs through a stack of overlapping animations ("虚影").
+ *  2. A dwell after each transition keeps every shown sentence readable instead of
+ *     flickering past.
+ *
+ * The crossfade itself (narration-in / narration-out keyframes) staggers opacity so
+ * the outgoing and incoming lines are never both visible — no ghost frame. Honors
+ * prefers-reduced-motion (instant swap, still paced by the dwell). Quiet (Muted,
+ * single clamped line) so it sits under a group header as an aside.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MUTED } from './execTokens';
 
 interface NarrationTickerProps {
@@ -21,38 +27,59 @@ interface NarrationTickerProps {
     text: string;
 }
 
-// Slightly longer than the CSS animation (0.42s) so the leaving line is removed
-// only after it has finished fading out.
-const EXIT_MS = 460;
+// Keep in sync with the narration-in/out keyframe duration in tailwind.config.cjs.
+const ANIM_MS = 500;
+// Minimum time a sentence stays fully shown before the next transition may start,
+// so a burst of completed sentences reads one-at-a-time instead of blurring past.
+const DWELL_MS = 900;
 
 export function NarrationTicker({ text }: NarrationTickerProps) {
-    // `current` is the line in place; `leaving` is the previous line animating out.
-    const [current, setCurrent] = useState(text);
+    const [displayed, setDisplayed] = useState('');
     const [leaving, setLeaving] = useState('');
-    // Monotonic key so two identical consecutive sentences still re-trigger the
-    // entrance animation (key change forces a remount → CSS animation replays).
+    // Monotonic key so each transition remounts the spans → the CSS animation
+    // replays even when text is structurally similar.
     const [cycle, setCycle] = useState(0);
-    const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const targetRef = useRef(''); // latest complete sentence from props
+    const displayedRef = useRef(''); // what is currently settled on screen
+    const busyRef = useRef(false); // a transition + dwell is in flight
+    const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+    // Run ONE transition toward the latest target, then (after dwell) re-check for a
+    // newer target accumulated meanwhile. No-op when idle target == displayed.
+    const pump = useCallback(() => {
+        if (busyRef.current) return;
+        const target = targetRef.current;
+        const cur = displayedRef.current;
+        if (!target || target === cur) return;
+
+        busyRef.current = true;
+        if (cur) setLeaving(cur); // animate the prior sentence out (none for the first)
+        displayedRef.current = target;
+        setDisplayed(target);
+        setCycle((c) => c + 1);
+
+        const t1 = setTimeout(() => setLeaving(''), ANIM_MS);
+        const t2 = setTimeout(() => {
+            busyRef.current = false;
+            pump(); // jump to whatever the latest target is now (coalesced)
+        }, ANIM_MS + DWELL_MS);
+        timersRef.current.push(t1, t2);
+    }, []);
 
     useEffect(() => {
-        // Hold the last complete sentence: ignore empty (a new thinking passage
-        // that hasn't finished its first sentence) and no-op updates so the ticker
-        // never blanks out mid-run.
-        if (!text || text === current) return;
-        setCurrent((prevCurrent) => {
-            setLeaving(prevCurrent);
-            return text;
-        });
-        setCycle((c) => c + 1);
-        if (exitTimer.current) clearTimeout(exitTimer.current);
-        exitTimer.current = setTimeout(() => setLeaving(''), EXIT_MS);
-        return () => {
-            if (exitTimer.current) clearTimeout(exitTimer.current);
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- advance only on a new `text`
-    }, [text]);
+        // Hold the last complete sentence: ignore empty (a new thinking passage that
+        // hasn't finished its first sentence) so the ticker never blanks mid-run.
+        if (text) targetRef.current = text;
+        pump();
+    }, [text, pump]);
 
-    if (!current && !leaving) return null;
+    useEffect(() => {
+        const timers = timersRef.current;
+        return () => timers.forEach(clearTimeout);
+    }, []);
+
+    if (!displayed && !leaving) return null;
 
     return (
         // Fixed one-line height + overflow-hidden so the rolling text is clipped to
@@ -67,13 +94,13 @@ export function NarrationTicker({ text }: NarrationTickerProps) {
                     {leaving}
                 </span>
             )}
-            {current && (
+            {displayed && (
                 <span
                     key={`in-${cycle}`}
                     className="block animate-narration-in truncate text-xs leading-5 motion-reduce:animate-none"
                     style={{ color: MUTED }}
                 >
-                    {current}
+                    {displayed}
                 </span>
             )}
         </div>

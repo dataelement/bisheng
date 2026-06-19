@@ -46,16 +46,19 @@ module.exports = {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         // Linsight narration ticker (R2): the incoming complete sentence rolls up
-        // from below into place + fades in...
+        // into place, but stays INVISIBLE for the first half so it never overlaps
+        // the outgoing one (no ghost / double-image during the slide).
         'narration-in': {
-          '0%': { opacity: '0', transform: 'translateY(0.5em)' },
+          '0%': { opacity: '0', transform: 'translateY(55%)' },
+          '50%': { opacity: '0', transform: 'translateY(28%)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        // ...while the outgoing sentence rolls further up + fades out (a vertical
-        // departure-board crossfade between discrete thoughts).
+        // The outgoing sentence fades FULLY by the midpoint, then keeps sliding up
+        // (already invisible) — so there is no frame where both lines are visible.
         'narration-out': {
           '0%': { opacity: '1', transform: 'translateY(0)' },
-          '100%': { opacity: '0', transform: 'translateY(-0.5em)' },
+          '50%': { opacity: '0', transform: 'translateY(-28%)' },
+          '100%': { opacity: '0', transform: 'translateY(-55%)' },
         },
         // diagonal glint sweeping continuously across the subagent card
         'sheen-sweep': {
@@ -79,9 +82,9 @@ module.exports = {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-scale': 'pulse-scale 1s ease-in-out infinite',
         'thinking-appear': 'thinking-appear 0.25s ease-out',
-        // easeOutExpo-ish entrance; sharper exit so the old line clears quickly.
-        'narration-in': 'narration-in 0.42s cubic-bezier(0.22, 1, 0.36, 1)',
-        'narration-out': 'narration-out 0.42s cubic-bezier(0.4, 0, 1, 1) forwards',
+        // Slower, calmer handoff; staggered opacity keyframes do the no-overlap work.
+        'narration-in': 'narration-in 0.5s ease-out',
+        'narration-out': 'narration-out 0.5s ease-in forwards',
       },
       colors: {
         gray: {
