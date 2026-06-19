@@ -136,9 +136,14 @@ class StreamContext:
     # tool_call_chunks delta `index` -> call_id (the id is only present on the
     # FIRST delta of each call; later deltas carry only the index).
     tool_arg_index_to_id: dict[int, str] = field(default_factory=dict)
-    # call_id shared by the deltas of the current contiguous thinking stream;
-    # None means "no open thinking segment" (closed by any non-thinking chunk).
-    current_thinking_call_id: str | None = None
+    # call_id of the OPEN thinking segment, keyed by namespace ("" == main graph,
+    # ns None). A contiguous thinking stream within ONE namespace shares a call_id;
+    # the segment is closed by any non-thinking chunk IN THAT namespace. Parallel
+    # subagents (subgraphs=True) interleave their token streams, so a single shared
+    # id folded every subagent's reasoning into one row, producing the char-level
+    # interleaved garble ("The user用户 wants要求..."). Keyed by namespace so each
+    # subagent's (and the main graph's) thinking accumulates in its own row.
+    thinking_call_ids: dict[str, str] = field(default_factory=dict)
     # monotonic counter giving each thinking segment a distinct, stable call_id
     thinking_seq: int = 0
     # terminal收口 dedup: first terminal wins, later ones dropped (§3.7)
@@ -189,15 +194,21 @@ class StreamEventMapper:
 
         # A contiguous thinking stream keeps one call_id; any other chunk
         # (tool call, answer text, todo update, …) closes the segment so the
-        # next thinking block starts a fresh row. Thinking chunks emit exactly
-        # one thinking ExecStep and must not reset their own segment.
+        # next thinking block starts a fresh row. Close ONLY the segment of the
+        # chunk's own namespace — parallel subagents interleave, and closing a
+        # peer's open segment would re-merge their reasoning. Thinking chunks emit
+        # a thinking ExecStep and must not reset their own segment.
         if not self._is_thinking_continuation(result):
-            self.ctx.current_thinking_call_id = None
+            self.ctx.thinking_call_ids.pop(ns or "", None)
         return result
 
     @staticmethod
     def _is_thinking_continuation(events: list[BaseEvent]) -> bool:
-        return len(events) == 1 and isinstance(events[0], ExecStep) and events[0].step_type == "thinking"
+        # A chunk that produced a thinking step continues its segment, even when a
+        # refreshed delegation start frame (enriched) rides ahead of it in the same
+        # result. A single chunk never yields both a thinking and a tool/knowledge
+        # step, so presence of a thinking step is a sufficient signal.
+        return any(isinstance(e, ExecStep) and e.step_type == "thinking" for e in events)
 
     def terminate(self, error: str | None = None, reason: str | None = None) -> list[tuple[str, dict[str, Any]]]:
         """Produce the terminal收口 pair (design §3.5).
@@ -610,13 +621,16 @@ class StreamEventMapper:
         # thinking has no tool call_id. ``messages`` mode streams it token-by-token,
         # so hashing the per-chunk delta would mint a new id every frame and the
         # frontend (merge-by-call_id) would render one row per token. Instead keep
-        # a single id for the whole contiguous thinking stream; ``normalize`` resets
-        # it once any non-thinking chunk closes the segment, so a thinking block that
-        # resumes after a tool call still gets a fresh row.
-        if self.ctx.current_thinking_call_id is None:
+        # a single id for the whole contiguous thinking stream of THIS namespace;
+        # ``normalize`` resets that namespace's segment once a non-thinking chunk
+        # closes it, so a thinking block resuming after a tool call gets a fresh
+        # row, and parallel subagents never share an id (no interleaved garble).
+        key = ns or ""
+        call_id = self.ctx.thinking_call_ids.get(key)
+        if call_id is None:
             self.ctx.thinking_seq += 1
-            self.ctx.current_thinking_call_id = f"thinking:{task_id}:{self.ctx.thinking_seq}"
-        call_id = self.ctx.current_thinking_call_id
+            call_id = f"thinking:{task_id}:{self.ctx.thinking_seq}"
+            self.ctx.thinking_call_ids[key] = call_id
         return ExecStep(
             task_id=task_id,
             call_id=call_id,

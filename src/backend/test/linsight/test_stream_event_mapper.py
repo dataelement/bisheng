@@ -281,6 +281,51 @@ class TestThinking:
 
         assert id_a != id_b
 
+    def test_parallel_thinking_streams_do_not_interleave(self, mapper: StreamEventMapper):
+        # Parallel subagents (subgraphs=True) interleave their token streams. With a
+        # single shared thinking call_id every subagent's reasoning collapsed into one
+        # row, so the frontend (merge-by-call_id) concatenated them in ARRIVAL order
+        # producing char-level garble ("The user用户 wants要求..."). The segment must
+        # be keyed by namespace: each namespace accumulates in its own call_id and a
+        # peer's delta never reuses it.
+        ns_a = ("tools:aaaaaaaa-0000-0000-0000-000000000000",)
+        ns_b = ("tools:bbbbbbbb-1111-1111-1111-111111111111",)
+        # Interleave A/B deltas exactly as a burst-parallel stream would arrive.
+        script = [
+            (ns_a, "The user"),
+            (ns_b, "用户"),
+            (ns_a, " wants"),
+            (ns_b, "要求"),
+            (ns_a, " to research"),
+            (ns_b, "调研"),
+        ]
+        by_call_id: dict[str, str] = {}
+        ns_to_call_id: dict[str, str] = {}
+        for ns, delta in script:
+            chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": delta})
+            step = [e for e in mapper.normalize("messages", (chunk, {}), namespace=ns) if isinstance(e, ExecStep)][0]
+            by_call_id[step.call_id] = by_call_id.get(step.call_id, "") + (step.output or "")
+            ns_to_call_id.setdefault(ns[0], step.call_id)
+
+        # Each namespace owns a DISTINCT, STABLE call_id...
+        assert ns_to_call_id[ns_a[0]] != ns_to_call_id[ns_b[0]]
+        assert len(by_call_id) == 2
+        # ...and each row's text is coherent (in-order), with NO cross-contamination.
+        assert by_call_id[ns_to_call_id[ns_a[0]]] == "The user wants to research"
+        assert by_call_id[ns_to_call_id[ns_b[0]]] == "用户要求调研"
+
+    def test_main_graph_thinking_isolated_from_subagent(self, mapper: StreamEventMapper):
+        # Main-graph thinking (ns None) must not share a segment with a subagent's
+        # interleaved thinking either — same root cause, the ns=None ("") key.
+        sub_ns = ("tools:cccccccc-2222-2222-2222-222222222222",)
+        main = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "主图思考"})
+        main_id = [e for e in mapper.normalize("messages", (main, {})) if isinstance(e, ExecStep)][0].call_id
+        sub = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "子代理思考"})
+        sub_id = [e for e in mapper.normalize("messages", (sub, {}), namespace=sub_ns) if isinstance(e, ExecStep)][
+            0
+        ].call_id
+        assert main_id != sub_id
+
 
 # --------------------------------------------------------------------------
 # subagent namespace归并 (design §3.7, subgraphs=True)
