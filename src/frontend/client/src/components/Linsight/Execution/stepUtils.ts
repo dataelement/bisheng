@@ -320,6 +320,11 @@ const CONNECTIVE_HEAD = /^(and|but|or|so|because|which|that|then|also|however|mo
 // noise, never a user-facing aside. Suppressed by default (decision 2026-06).
 const INTERNAL_TOOL = /\b(ask_user|write_todos|search_knowledge_base|read_file|write_file|code_interpreter)\b/i;
 const INTERNAL_TOOL_PHRASE = /(调用|call)\s*(ask[_ ]?user|write[_ ]?todos|search[_ ]?knowledge)/i;
+// Internal virtual-filesystem plumbing ("notes are in scratch/.") — the agent's
+// private scratchpad is never user-facing. Match the PATH form (slash) or an explicit
+// "scratch dir/folder/pad" so the English idiom "from scratch" (no slash) is untouched.
+// `output/` is intentionally NOT here — it is the deliverable location, user-facing.
+const INTERNAL_PATH = /\bscratch\/|\bscratch(?:pad\b|\s+(?:dir|directory|folder|file|space|workspace)\b)/i;
 
 /** Does the text contain any CJK ideograph? (used to skip lone non-CJK tails). */
 function hasCJK(s: string): boolean {
@@ -341,7 +346,8 @@ function splitIntoUnits(cleaned: string): string[] {
  * Base prose gate — rejects what is STRUCTURALLY never a one-line aside, in EVERY
  * scan pass: out-of-window length, a lone non-CJK tail in a Chinese passage, a bare
  * parenthetical enumeration "(a, b, c)", a colon-led 顿号/comma list "风险：a、b、c",
- * or a leaked internal tool name. `bare` is the unit with trailing terminators removed.
+ * or a leaked internal tool name / virtual-FS path. `bare` is the unit with trailing
+ * terminators removed.
  */
 function isBaseProse(bare: string, cjk: boolean): boolean {
     if (bare.length < NARRATION_MIN_LEN || bare.length > NARRATION_MAX_LEN) return false;
@@ -349,7 +355,9 @@ function isBaseProse(bare: string, cjk: boolean): boolean {
     const t = bare.trim();
     if (/^[(（[【]/.test(t) && /[)）\]】]$/.test(t)) return false; // bare parenthetical enumeration
     if (/[:：].*[、,].*[、,]/.test(bare)) return false; // colon + ≥2 separators = a list, not a sentence
-    if (INTERNAL_TOOL.test(bare) || INTERNAL_TOOL_PHRASE.test(bare)) return false;
+    if (INTERNAL_TOOL.test(bare) || INTERNAL_TOOL_PHRASE.test(bare) || INTERNAL_PATH.test(bare)) {
+        return false; // leaked internal tool name or virtual-FS scratchpad path
+    }
     return true;
 }
 
