@@ -246,7 +246,6 @@ type TContentProps = {
 function CitationPreviewCard({
   preview,
   detail,
-  label,
   isLoading,
   error,
   notPermitted,
@@ -255,7 +254,6 @@ function CitationPreviewCard({
 }: {
   preview: CitationPreview | null;
   detail?: ChatCitation | null;
-  label?: number;
   isLoading: boolean;
   error: boolean;
   notPermitted?: boolean;
@@ -292,7 +290,7 @@ function CitationPreviewCard({
   const isWeb = preview.type === 'web';
   const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
   const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]';
-  const titleContainerClassName = 'border-b border-[#F2F3F5] bg-[#F7F7F7] px-4 py-3';
+  const titleContainerClassName = 'bg-white p-3';
   const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#024DE3]`;
   const ragTitleClassName = 'min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#1D2129]';
   const formatSourceMeta = (value?: string) => {
@@ -347,21 +345,6 @@ function CitationPreviewCard({
     </svg>
   );
 
-  const typeLabel = isWeb ? '网页' : '文档';
-  const showCitationIndex =
-    typeof label === 'number' && Number.isFinite(label);
-  const footerTagText = showCitationIndex ? `[${label}] - ${typeLabel}` : typeLabel;
-
-  const renderLabelTag = () => (
-    <div
-      className={`absolute bottom-0 right-0 z-[1] flex h-6 max-w-[calc(100%-8px)] whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[12px] font-normal leading-5 ${isWeb
-        ? 'bg-[#F7F3FF] text-[#8537F5]'
-        : 'bg-[#F5F8FF] text-[#024DE3]'
-        }`}
-    >
-      <span className="truncate">{footerTagText}</span>
-    </div>
-  );
   const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : '';
   const ragTitleParts = splitRagTitle(preview.title);
 
@@ -381,7 +364,7 @@ function CitationPreviewCard({
   };
 
   const renderRagTitle = () => (
-    <div className="flex h-[38px] items-center gap-2 bg-[#F7F7F7] px-3 py-2">
+    <div className="flex items-center gap-2 bg-white p-3">
       <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
       <div className="flex min-w-0 flex-1 items-center gap-1">
         <span
@@ -404,13 +387,13 @@ function CitationPreviewCard({
       <div className={titleContainerClassName}>
         {renderWebTitle()}
       </div>
-      <div className="px-4 py-3 pb-0">
-        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[14px] leading-6 text-[#1D2129]">
+      <div className="px-4 pb-0">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#1D2129]">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
             {preview.snippet || '暂无内容摘要'}
           </div>
         </div>
-        <div className={`mt-3 min-h-6 text-[#999999] ${showCitationIndex ? 'pr-[118px]' : 'pr-[95px]'}`}>
+        <div className="mt-3 min-h-6 text-[#999999]">
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
@@ -424,13 +407,13 @@ function CitationPreviewCard({
   const renderRagPreview = () => (
     <>
       {renderRagTitle()}
-      <div className="px-4 py-3 pb-0">
-        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[14px] leading-6 text-[#1D2129]">
+      <div className="px-4 pb-0">
+        <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#1D2129]">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
             {preview.snippet || '暂无内容摘要'}
           </div>
         </div>
-        <div className={`mt-3 min-h-6 text-[#999999] ${showCitationIndex ? 'pr-[118px]' : 'pr-[95px]'}`}>
+        <div className="mt-3 min-h-6 text-[#999999]">
           <div className="flex min-w-0 items-center gap-2 pb-0">
             <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" clipAsCircle={false} />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
@@ -444,7 +427,6 @@ function CitationPreviewCard({
   return (
     <div className={cardClassName} onClick={onCardClick}>
       {isWeb ? renderWebPreview() : renderRagPreview()}
-      {renderLabelTag()}
     </div>
   );
 }
@@ -691,7 +673,6 @@ const Citation = ({
           <CitationPreviewCard
             preview={preview}
             detail={detail}
-            label={data.label}
             isLoading={isLoading}
             error={error}
             notPermitted={notPermitted}
