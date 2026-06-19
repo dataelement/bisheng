@@ -170,6 +170,28 @@ def test_delegation_restates_kb_ids_only_when_kb_present():
     assert "自包含" in without_kb
 
 
+def test_prompts_constrain_thinking_language():
+    """Regression: 中文输入→英文 thinking.
+
+    The language rule must explicitly cover the reasoning process (not just
+    deliverables / final reply), in BOTH the main prompt and the researcher
+    subagent prompt, for both KB variants — otherwise the model is free to think
+    in English while delivering in Chinese (and the large English system prompt
+    deepagents appends pulls it that way).
+    """
+    from bisheng.linsight.domain.services.agent_factory import (
+        _build_linsight_system_prompt,
+        _build_researcher_prompt,
+    )
+
+    for builder in (_build_linsight_system_prompt, _build_researcher_prompt):
+        for has_kb in (True, False):
+            p = builder(has_kb)
+            # the language rule must name the reasoning process, not only output
+            assert "思考" in p or "推理" in p
+            assert "语言" in p
+
+
 def test_researcher_subagent_prompt_tracks_kb_tool_presence():
     """_build_researcher_subagent must mention search_knowledge_base only when the
     filtered subagent tool subset actually contains it (lockstep with the graph)."""
