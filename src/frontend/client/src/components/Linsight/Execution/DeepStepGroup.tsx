@@ -35,7 +35,7 @@ import { NarrationTicker } from './NarrationTicker';
 import TimelineRail from './TimelineRail';
 import ToolRowLite from './ToolRowLite';
 import { useElapsedTicker } from './useElapsedTicker';
-import { narrationFromSteps, summarizeActivity } from './stepUtils';
+import { firstLine, narrationFromSteps, summarizeActivity } from './stepUtils';
 import type { DeepStepGroup as DeepStepGroupData, MergedStep } from './stepUtils';
 
 export interface DeepStepGroupProps {
@@ -55,6 +55,14 @@ export interface DeepStepGroupProps {
      */
     subagent?: { goal: string; idx: number };
 }
+
+/**
+ * Subagent header budget: the delegation goal is the `task` tool's `description`
+ * arg, which the model writes as a long multi-sentence instruction. The header
+ * renders only its first sentence/clause (firstLine), widened to ~one line's worth
+ * so a typical goal stays intact instead of being chopped mid-word by `truncate`.
+ */
+const SUBAGENT_GOAL_TITLE_MAX = 48;
 
 /** A render segment: a stitched thinking passage, or a single tool/knowledge step. */
 type Segment =
@@ -129,8 +137,15 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
         // R3 完全拆平: a subagent segment reads "{goal} · {activity}" (falling back
         // to "子智能体 N" when the burst carried no per-agent goal), + 用时 suffix.
         if (subagent) {
+            // Show only the GIST of the delegation goal — its first sentence/clause,
+            // hard-capped to ~one line — so a long multi-sentence instruction
+            // ("调研…。请检索并返回…。") doesn't read as a run-on title chopped mid-word
+            // by `truncate`. firstLine prefers the first sentence when it fits the
+            // budget and otherwise hard-truncates; the full goal is dropped on purpose
+            // (no hover), the summary alone identifies the agent.
+            const goalGist = firstLine(subagent.goal, SUBAGENT_GOAL_TITLE_MAX);
             const core =
-                [subagent.goal, activityText].filter(Boolean).join(' · ') ||
+                [goalGist, activityText].filter(Boolean).join(' · ') ||
                 localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
             return noDuration ? core : localize('com_linsight_act_summary', { 0: core, 1: seconds });
         }
