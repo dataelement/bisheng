@@ -7,7 +7,7 @@
  * Star tokens — it does NOT import or modify any Chat/Messages component.
  *
  * Rail anatomy (from ThinkingContent):
- *   flex shrink-0 flex-col items-center gap-0.5 self-stretch pt-[3px]
+ *   flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]
  *     ├─ size-4 icon slot (centered)
  *     └─ w-px flex-1 connector in HAIRLINE (rendered when showConnector)
  */
@@ -29,7 +29,8 @@ export interface TimelineRailProps {
 const connectorStyle: CSSProperties = { backgroundColor: HAIRLINE };
 
 const TimelineRail: FC<TimelineRailProps> = ({ icon, showConnector = false }) => (
-    <div className="flex shrink-0 flex-col items-center gap-0.5 self-stretch pt-[3px]">
+    // gap-2 (8px) between the icon slot and the connector line below it.
+    <div className="flex shrink-0 flex-col items-center gap-2 self-stretch pt-[3px]">
         <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
         {showConnector && <div className="w-px flex-1" style={connectorStyle} aria-hidden="true" />}
     </div>

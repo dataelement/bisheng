@@ -86,11 +86,13 @@ const CollapsibleTimelineItem: FC<CollapsibleTimelineItemProps> = ({
                     onMouseLeave={(e) => { e.currentTarget.style.color = MUTED; }}
                 >
                     <span className="min-w-0 truncate">{label}</span>
+                    {/* Single chevron rotates right→down (collapsed → expanded),
+                        matching the StepRow / DeepStepGroup toggle instead of down→up. */}
                     <Outlined.Down
                         size={16}
                         className={cn(
                             'shrink-0 transform-gpu transition-transform duration-200',
-                            open && 'rotate-180',
+                            !open && '-rotate-90',
                         )}
                     />
                     {summary != null && (

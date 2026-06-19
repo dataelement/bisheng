@@ -347,6 +347,12 @@ function CitationPreviewCard({
 
   const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : '';
   const ragTitleParts = splitRagTitle(preview.title);
+  // RAG snippets come from Markdown and often carry blank lines that waste the
+  // line-clamp budget. Drop whitespace-only lines so more real text fits.
+  const ragSnippetText = String(preview.snippet || '')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .join('\n');
 
   const renderWebTitle = () => {
     const titleContent = (
@@ -410,7 +416,7 @@ function CitationPreviewCard({
       <div className="px-4 pb-0">
         <div className="border-l-2 border-[#E5E6EB] pl-3 text-[12px] leading-6 text-[#4E5969]">
           <div className="line-clamp-4 whitespace-pre-wrap break-words">
-            {preview.snippet || '暂无内容摘要'}
+            {ragSnippetText || '暂无内容摘要'}
           </div>
         </div>
         <div className="mt-3 min-h-6 text-[#999999]">

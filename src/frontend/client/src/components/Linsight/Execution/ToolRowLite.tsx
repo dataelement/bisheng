@@ -41,11 +41,12 @@ const TOOL_VERB_I18N: Record<string, string> = {
 const DETAIL_TEXT = 'whitespace-pre-wrap break-words text-xs leading-5';
 
 /**
- * Recolor stepTypeIcon's glyph to the Muted token (§1.3 — single color by state,
- * not by icon). stepTypeIcon hardcodes text-[#333]; this arbitrary descendant
- * selector overrides the inner svg color without editing StepRow.
+ * Recolor stepTypeIcon's glyph to Ink (#1D2129) so the sub-task leading icon
+ * matches the top-level DeepStepGroup / blue-box StepRow glyph. stepTypeIcon
+ * hardcodes text-[#333]; this arbitrary descendant selector overrides the inner
+ * svg color without editing StepRow.
  */
-const MUTED_GLYPH = '[&>svg]:text-[#8A8A8A]';
+const INK_GLYPH = '[&>svg]:text-[#1D2129]';
 
 /** Resolve the running / finished verb-phrase title for a tool step. */
 function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>): string {
@@ -76,10 +77,10 @@ const ToolRowLite: FC<ToolRowLiteProps> = ({ step }) => {
 
     const title = resolveTitle(step, localize);
     // Unified icon system (§1.3): running → Accent Loading spinner; done →
-    // stepTypeIcon recolored to Muted via the descendant selector.
+    // stepTypeIcon recolored to Ink via the descendant selector.
     const icon = step.running
         ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
-        : <span className={cn('flex', MUTED_GLYPH)}>{stepTypeIcon(step.name)}</span>;
+        : <span className={cn('flex', INK_GLYPH)}>{stepTypeIcon(step.name)}</span>;
 
     return (
         <CollapsibleTimelineItem

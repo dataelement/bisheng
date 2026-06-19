@@ -341,7 +341,7 @@ const ToolCallDisplay: FC<ToolCallDisplayProps> = memo(({ toolCall, showConnecto
                             size={16}
                             className={cn(
                                 "shrink-0 transform-gpu transition-transform duration-200",
-                                expanded && "rotate-180",
+                                !expanded && "-rotate-90",
                             )}
                         />
                     )}
