@@ -7,9 +7,9 @@
  *
  * Stable-label scheme (reverted from the narration experiment): the header is the
  * plain duration label — predictable and quiet — fronted by a consistent rail
- * icon so EVERY timeline node carries one (fixing "only the subagent group has an
- * icon"). The rail + icon + gap exactly mirror SubagentTeamGroup, so all
- * top-level nodes share one left spine (no more ragged left edge).
+ * icon so EVERY timeline node carries one. The rail + icon + gap give every
+ * top-level node one consistent left spine — main-graph segments and exploded
+ * per-subagent segments alike (no more ragged left edge).
  *
  * Icon color regime (§1.3): running → Accent (the single live highlight) + the
  * header pulses; done → Muted. The old invisible #C9CDD4 grey is gone.
