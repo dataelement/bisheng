@@ -4,9 +4,9 @@
  * extra_info.file_info / output; plain output text as fallback.
  */
 import { Outlined } from 'bisheng-icons';
-import { FileText } from 'lucide-react';
 import { cn } from '~/utils';
-import { detailTextCls, RunningSpinner, StepRow } from './StepRow';
+import { ACCENT, BODY, MUTED } from './execTokens';
+import { detailTextCls, StepRow } from './StepRow';
 import type { MergedStep } from './stepUtils';
 
 /** Best-effort hit list: extra_info.file_info entry + JSON-parseable output items. */
@@ -30,25 +30,27 @@ function knowledgeHits(step: MergedStep): { title: string }[] {
 
 export function KnowledgeRow({ step }: { step: MergedStep }) {
     const hits = knowledgeHits(step);
+    // Unified icon system (§1.3): running → Accent Loading spinner; done → Muted
+    // BookOpenText. Hit-list glyph is the Outlined.File equivalent (lucide
+    // FileText removed), 16px Muted — no more blue one-off icon.
+    const icon = step.running
+        ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
+        : <Outlined.BookOpenText size={16} style={{ color: MUTED }} />;
     return (
-        <StepRow
-            icon={step.running ? <RunningSpinner /> : <Outlined.BookOpenText size={16} className="text-[#333]" />}
-            title={step.name}
-            running={step.running}
-        >
-            {step.callReason && <p className={cn(detailTextCls, 'text-gray-600')}>{step.callReason}</p>}
-            {step.params?.query != null && <p className={detailTextCls}>{String(step.params.query)}</p>}
+        <StepRow icon={icon} title={step.name} running={step.running}>
+            {step.callReason && <p className={detailTextCls} style={{ color: BODY }}>{step.callReason}</p>}
+            {step.params?.query != null && <p className={detailTextCls} style={{ color: BODY }}>{String(step.params.query)}</p>}
             {hits.length > 0 && (
                 <ul className="mt-1 space-y-1">
                     {hits.map((hit, i) => (
-                        <li key={i} className="flex items-center gap-1.5 text-xs text-gray-600">
-                            <FileText size={12} className="shrink-0 text-blue-400" />
+                        <li key={i} className="flex items-center gap-1.5 text-xs" style={{ color: BODY }}>
+                            <Outlined.File size={16} className="shrink-0" style={{ color: MUTED }} />
                             <span className="truncate">{hit.title}</span>
                         </li>
                     ))}
                 </ul>
             )}
-            {step.output && <p className={cn(detailTextCls, 'mt-1 max-h-40 overflow-y-auto')}>{step.output}</p>}
+            {step.output && <p className={cn(detailTextCls, 'mt-1 max-h-40 overflow-y-auto')} style={{ color: BODY }}>{step.output}</p>}
         </StepRow>
     );
 }

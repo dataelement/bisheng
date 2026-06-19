@@ -251,7 +251,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
             >
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full gap-3 text-[#86909c]">
-                        <LoadingIcon className="size-16 text-primary" />
+                        <LoadingIcon className="size-20 text-primary" />
                     </div>
                 ) : channelDetail ? (
                     <>

@@ -228,10 +228,58 @@ async def test_direct_answer_greeting_skips_report_despite_pseudo_task(monkeypat
 
     await exec_task._handle_direct_answer_completion(session)
 
-    # No report synthesized for a greeting, even though the pseudo task exists.
-    assert called["final"] is False
+    # Deliverable collection always runs now (harmless: empty output/ -> []), but
+    # NO fallback report is synthesized for a greeting that planned no todo.
     assert called["fallback"] is False
     assert session.output_result["final_files"] == []
+
+
+async def test_direct_answer_collects_output_deliverables_without_planned_todos(monkeypatch):
+    """A 'convert to docx/pdf' turn writes output/ files via export tools but plans
+    no todo. The direct-answer completion must still collect those deliverables —
+    regression for the empty result panel ('暂无产物文件') despite files existing.
+    """
+    from bisheng.linsight.domain import task_exec as te
+
+    exec_task = te.LinsightWorkflowTask()
+    exec_task.session_version_id = "svid"
+    exec_task._last_assistant_text = "已完成。output/trump_report.docx 等三个文件已生成。"
+    exec_task.file_dir = "/tmp/nonexistent-linsight"
+
+    sm = MagicMock()
+    sm.set_session_version_info = AsyncMock()
+    # No planned todos — only the always-present session-global pseudo task.
+    sm.get_execution_tasks = AsyncMock(return_value=[_pseudo([])])
+    sm.update_execution_task_status = AsyncMock()
+    sm.push_message = AsyncMock()
+    exec_task._state_manager = sm
+
+    deliverables = [
+        {"file_name": "trump_report.docx", "file_path": "/x/output/trump_report.docx", "file_md5": "m", "file_id": "i"}
+    ]
+    called = {"fallback": False}
+
+    async def _final(*a, **k):
+        return deliverables  # get_final_result_file picks output/ files
+
+    async def _fallback(*a, **k):
+        called["fallback"] = True
+        return [{"f": 1}]
+
+    monkeypatch.setattr(te.linsight_execute_utils, "get_final_result_file", _final)
+    monkeypatch.setattr(te.linsight_execute_utils, "build_fallback_report_file", _fallback)
+    monkeypatch.setattr(te.linsight_execute_utils, "read_file_directory", AsyncMock(return_value=deliverables))
+    monkeypatch.setattr(te.linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+
+    session = MagicMock()
+    session.id = "svid"
+    session.model_dump = MagicMock(return_value={})
+
+    await exec_task._handle_direct_answer_completion(session)
+
+    # Deliverables collected even without planned todos; no fallback needed.
+    assert session.output_result["final_files"] == deliverables
+    assert called["fallback"] is False
 
 
 def _pseudo(history):

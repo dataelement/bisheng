@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { useRecoilValue } from 'recoil';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeKatex from 'rehype-katex';
+import rehypeSlug from 'rehype-slug';
 import remarkDirective from 'remark-directive';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -148,6 +149,36 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
   const { refetch: downloadFile } = useFileDownload(user?.id ?? '', file_id);
   const props: { target?: string; onClick?: React.MouseEventHandler } = { target: '_new' };
 
+  // In-page anchor (e.g. a generated table-of-contents `#heading`, or a gfm
+  // footnote ref). The default `target="_new"` would spawn a blank tab; instead
+  // scroll the matching element into view within the current markdown panel.
+  if (href?.startsWith('#')) {
+    const handleAnchorClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      const raw = href.slice(1);
+      // href may arrive percent-encoded or as raw CJK; tolerate malformed `%`.
+      let id = raw;
+      try {
+        id = decodeURIComponent(raw);
+      } catch {
+        id = raw;
+      }
+      if (!id) {
+        return;
+      }
+      const scope = event.currentTarget.closest('.bs-mkdown') ?? document;
+      const target =
+        (scope.querySelector(`[id="${CSS.escape(id)}"]`) as HTMLElement | null) ??
+        document.getElementById(id);
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    return (
+      <a href={href} onClick={handleAnchorClick}>
+        {children}
+      </a>
+    );
+  }
+
   if (!file_id || !filename) {
     return (
       <a href={href} {...props}>
@@ -233,7 +264,7 @@ function CitationPreviewCard({
 }) {
   if (isLoading) {
     return (
-      <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="flex min-h-[120px] w-[320px] max-w-[calc(100vw-32px)] items-center justify-center rounded-lg bg-white text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         <Loader2 className="mr-2 size-4 animate-spin" />
         加载溯源详情...
       </div>
@@ -244,7 +275,7 @@ function CitationPreviewCard({
   // longer exists). Product decision: show "no permission", not "no source detail".
   if (notPermitted) {
     return (
-      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         暂无权限
       </div>
     );
@@ -252,14 +283,14 @@ function CitationPreviewCard({
 
   if (error || !preview) {
     return (
-      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg border border-[#ECECEC] bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
+      <div className="w-[320px] max-w-[calc(100vw-32px)] rounded-lg bg-white p-4 text-sm text-[#86909C] shadow-[0_4px_19px_rgba(34,34,34,0.07)]">
         暂无溯源详情
       </div>
     );
   }
 
   const isWeb = preview.type === 'web';
-  const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg border border-[#ECECEC] bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
+  const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
   const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]';
   const titleContainerClassName = 'border-b border-[#F2F3F5] bg-[#F7F7F7] px-4 py-3';
   const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#024DE3]`;
@@ -321,19 +352,11 @@ function CitationPreviewCard({
     typeof label === 'number' && Number.isFinite(label);
   const footerTagText = showCitationIndex ? `[${label}] - ${typeLabel}` : typeLabel;
 
-  const footerTagMinWidth = showCitationIndex
-    ? isWeb
-      ? 'min-w-[104px]'
-      : 'min-w-[92px]'
-    : isWeb
-      ? 'min-w-[79px]'
-      : 'min-w-[76px]';
-
   const renderLabelTag = () => (
     <div
-      className={`absolute bottom-0 right-0 z-[1] flex h-6 max-w-[calc(100%-8px)] whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[14px] font-normal leading-5 ${isWeb
-        ? `bg-[#F7F3FF] text-[#8537F5] ${footerTagMinWidth}`
-        : `bg-[#F5F8FF] text-[#024DE3] ${footerTagMinWidth}`
+      className={`absolute bottom-0 right-0 z-[1] flex h-6 max-w-[calc(100%-8px)] whitespace-nowrap items-center justify-center gap-1 rounded-tl-xl rounded-tr-none rounded-br-lg rounded-bl-none px-2 py-0.5 text-[12px] font-normal leading-5 ${isWeb
+        ? 'bg-[#F7F3FF] text-[#8537F5]'
+        : 'bg-[#F5F8FF] text-[#024DE3]'
         }`}
     >
       <span className="truncate">{footerTagText}</span>
@@ -409,7 +432,7 @@ function CitationPreviewCard({
         </div>
         <div className={`mt-3 min-h-6 text-[#999999] ${showCitationIndex ? 'pr-[118px]' : 'pr-[95px]'}`}>
           <div className="flex min-w-0 items-center gap-2 pb-0">
-            <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" />
+            <CitationSourceIcon detail={detail} preview={preview} type={preview.type} ragIconVariant="knowledge" clipAsCircle={false} />
             <span className="w-[90px] min-w-0 truncate text-[12px] font-medium leading-5">{preview.sourceName}</span>
             {formattedSourceMeta && <span className="shrink-0 text-[12px] font-normal leading-5">{formattedSourceMeta}</span>}
           </div>
@@ -748,6 +771,10 @@ const Markdown = memo(({
 
   const rehypePlugins = useMemo(
     () => [
+      // Add stable `id`s to headings so generated table-of-contents `#anchor`
+      // links have a target to scroll to (github-slugger convention matches the
+      // anchors LLMs emit).
+      rehypeSlug,
       [rehypeKatex, { output: 'mathml' }],
       [
         rehypeHighlight,

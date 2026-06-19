@@ -15,14 +15,16 @@
 import { Outlined } from 'bisheng-icons';
 import { useCallback, type FC, type MouseEvent, type ReactNode } from 'react';
 import { cn } from '~/utils';
+import { INK, MUTED } from './execTokens';
 import TimelineRail from './TimelineRail';
 
 export interface CollapsibleTimelineItemProps {
     /** Leading glyph for the rail (16px), e.g. an Outlined status icon. */
     icon: ReactNode;
-    /** Trigger title. `#999999` by default, hover→`#212121`. */
+    /** Trigger title. Muted (#8A8A8A) by default, hover→Ink (#1D2129). */
     label: ReactNode;
-    /** Optional trailing summary (e.g. "3 工具 · 2 思考"), muted gray. */
+    /** Optional trailing summary (e.g. the readable "联网搜索 3 次 · 用时 12 秒"
+     *  activity meta from summarizeActivity), muted gray. */
     summary?: ReactNode;
     /** Pulse the trigger title while the node is active/streaming. */
     streaming?: boolean;
@@ -74,10 +76,14 @@ const CollapsibleTimelineItem: FC<CollapsibleTimelineItemProps> = ({
                 <button
                     type="button"
                     onClick={handleClick}
+                    style={{ color: MUTED }}
                     className={cn(
-                        'group flex w-fit max-w-full items-center gap-1 text-sm leading-[22px] text-[#999999] transition-colors hover:text-[#212121]',
+                        // Muted base, Ink on hover (token-ized; was #999999/#212121).
+                        'group flex w-fit max-w-full items-center gap-1 text-sm leading-[22px] transition-colors',
                         streaming && 'animate-pulse',
                     )}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = INK; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = MUTED; }}
                 >
                     <span className="min-w-0 truncate">{label}</span>
                     <Outlined.Down
@@ -88,7 +94,7 @@ const CollapsibleTimelineItem: FC<CollapsibleTimelineItemProps> = ({
                         )}
                     />
                     {summary != null && (
-                        <span className="shrink-0 text-gray-400">{summary}</span>
+                        <span className="shrink-0" style={{ color: MUTED }}>{summary}</span>
                     )}
                 </button>
                 <div

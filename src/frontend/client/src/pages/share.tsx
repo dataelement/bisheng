@@ -77,8 +77,13 @@ export default function Share() {
         }
     })();
 
+    // Definite viewport height (NOT min-h, and NOT flex-1/basis-0 — basis-0 would
+    // override the height to 0 in a flex parent) + overflow-hidden, so the share
+    // page never scrolls at the document level. The inner ChatView / Sop / AppChat
+    // then drive their own scroll areas (chat messages and the citation panel
+    // scroll independently instead of together).
     return (
-        <div className="flex min-h-[100dvh] w-full flex-1 basis-0 flex-col items-start gap-[10px] self-stretch p-2">
+        <div className="flex h-[100dvh] w-full flex-col items-start gap-[10px] self-stretch overflow-hidden p-2">
             {content}
         </div>
     );

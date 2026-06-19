@@ -345,7 +345,7 @@ export default function AiChatMessages({
                         ? "pt-2"
                         : isNarrowViewport
                             ? "pt-11"
-                            : "pt-14",
+                            : "pt-4",
                 )}
                 onScroll={handleScroll}
             >

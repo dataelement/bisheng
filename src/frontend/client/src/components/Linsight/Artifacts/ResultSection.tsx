@@ -41,9 +41,10 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                 </div>
             )}
 
-            {/* answer summary, markdown rendered */}
+            {/* answer summary, markdown rendered — plain paragraphs flush with the
+                report-link row above (no card chrome), matching the delivery design. */}
             {answer && (
-                <div className="bs-mkdown rounded-2xl border border-gray-100 bg-white p-4 text-sm leading-6 text-gray-800 [&_p:last-child]:mb-0">
+                <div className="bs-mkdown text-sm leading-6 text-gray-800 [&_p:last-child]:mb-0">
                     <Markdown content={answer} isLatestMessage={true} webContent={false} />
                 </div>
             )}

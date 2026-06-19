@@ -756,15 +756,15 @@ export function ArticleList({
                 data-scrolling={isListScrolling ? "true" : "false"}
             >
                 <div className={cn(
-                    "mx-auto w-full min-w-0 overflow-x-hidden",
+                    "mx-auto flex min-h-full w-full min-w-0 flex-col overflow-x-hidden",
                     isGridMode ? "max-w-none" : "max-w-[1000px]",
                     // PC keeps 40px gutters whether grid or preview-open; H5 uses 16px.
                     isH5 ? "px-4" : "px-10",
                 )}>
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
-                        <div className="flex flex-col items-center justify-center h-64 gap-3 text-[#86909c]">
-                            <LoadingIcon className="size-16 text-primary" />
+                        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[#86909c]">
+                            <LoadingIcon className="size-20 text-primary" />
                         </div>
                     ) : articles.length === 0 ? (
                         <div className="flex flex-1 flex-col items-center justify-center py-60 text-center">

@@ -21,7 +21,7 @@ export default function ChatInput({ readOnly, v }) {
     const [audioOpening] = useRecordingAudioLoading();
     const localize = useLocalize();
     const { data: modelData } = useGetWorkbenchModelsQuery();
-    const showVoice = modelData?.asr_model.id;
+    const showVoice = modelData?.asr_model?.id;
 
     const inputFilesRef = useRef(null);
 

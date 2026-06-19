@@ -726,7 +726,7 @@ const ExcelPreview = ({ filePath, fileExt: fileExtProp }: { filePath: string; fi
             <div className="flex items-center justify-center h-full min-h-[500px] bg-white rounded-lg border border-gray-200">
                 <div className="flex flex-col items-center gap-3">
                     <div className="relative">
-                        <LoadingIcon className="w-8 h-8 text-blue-500" />
+                        <LoadingIcon className="size-20 text-blue-500" />
                     </div>
                     <span className="text-sm text-gray-500">{t('loading')}</span>
                     <span className="text-xs text-gray-400">{t('supportedFormats')}</span>

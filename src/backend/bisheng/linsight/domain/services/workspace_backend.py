@@ -275,6 +275,14 @@ class WorkspaceBackend(FilesystemBackend):
     def _to_bytes(content) -> bytes:
         if isinstance(content, bytes):
             return content
+        # Binary views (e.g. BytesIO.getbuffer() returns a memoryview) must be
+        # copied to bytes, NOT stringified. The export_docx tool feeds MarkDocx's
+        # ``getbuffer()`` memoryview here; without this branch it fell through to
+        # ``str(content)`` and wrote the literal text ``<memory at 0x...>`` to
+        # MinIO, producing an unopenable .docx. This is the choke point for every
+        # binary deliverable written through write/awrite.
+        if isinstance(content, (bytearray, memoryview)):
+            return bytes(content)
         return str(content).encode("utf-8")
 
     # -- write --------------------------------------------------------------

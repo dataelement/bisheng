@@ -81,7 +81,7 @@ export function WorkspacePanel({
             {previewFile ? (
                 <>
                     {/* preview toolbar */}
-                    <div className="flex h-12 shrink-0 items-center gap-2 px-3">
+                    <div className="flex h-12 shrink-0 items-center gap-2 px-4">
                         <button type="button" aria-label={localize('com_linsight_back_to_workspace')} className={iconBtn} onClick={onBack}>
                             <Outlined.ArrowLeft className="size-4" />
                         </button>

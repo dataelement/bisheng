@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Download, Loader2, X } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
+import { ChevronRight, Download, Loader2 } from 'lucide-react';
 import { useSetRecoilState } from 'recoil';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
@@ -120,7 +121,7 @@ function CitationReferenceCard({
     'text-[14px] font-normal leading-[22px] text-[#1D2129]';
 
   return (
-    <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] bg-[#FBFBFB] p-2">
+    <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] border border-[#ECECEC] bg-white p-2">
       <div className="flex items-center">
         <SourceTypeBadge preview={preview} type={item.data.type} />
       </div>
@@ -522,46 +523,33 @@ export default function CitationReferencesDrawer({
   // sticking out wider than the title bar.
   const useReadingCardLayout = useExpandedDesktopPreview && !isDesktopPreviewInline;
   const desktopPanelMaxWidth = useReadingCardLayout ? 'max-w-[480px]' : 'max-w-full';
-  // Preview is rendered edge-to-edge in the panel, so the header sits flush
-  // against the panel sides; list view keeps its 16px inset.
-  const desktopHeaderPadding = isDesktopPreviewInline ? '' : 'px-4';
-  const desktopHeaderHeight = 'h-10';
-  const desktopHeaderGap = 'gap-2';
-  const desktopButtonSize = 'size-6 rounded-[6px]';
+  // Align the toolbar chrome with the task-mode workspace panel: h-12 bar and
+  // 28px (h-7 w-7) gray icon buttons (rounded-lg, hover:bg-gray-100).
+  const desktopHeaderHeight = 'h-12';
+  const desktopButtonSize = 'h-7 w-7 rounded-lg';
   const desktopButtonIconSize = 'size-4';
-  const desktopDownloadButtonClass = useExpandedDesktopPreview
-    ? 'text-[#024DE3] hover:bg-[#F2F7FF]'
-    : 'text-[#024DE3] hover:bg-[#F2F7FF]';
-  const desktopCloseButtonClass = useExpandedDesktopPreview
-    ? 'text-[#333333] hover:bg-[#F7F8FA]'
-    : 'text-[#A9AEB8] hover:bg-[#F7F8FA]';
-  const desktopContentOuterClass = useReadingCardLayout
-    ? 'items-center justify-between gap-6 p-2'
-    : 'w-full min-w-0 items-stretch gap-0';
-  const desktopBodyWrapperClass = useReadingCardLayout
-    ? 'max-w-[464px] rounded-[12px] bg-[#F7F8FA]'
-    : 'w-full min-w-0 max-w-full overflow-hidden bg-[#F7F8FA]';
-  const desktopBodyClass = useExpandedDesktopPreview
-    ? 'min-h-0 flex-1 w-full bg-[#F7F8FA]'
-    : 'min-h-0 w-full flex-1 bg-[#fbfbfb]';
+  const desktopDownloadButtonClass = 'text-[#8C8C8C] hover:bg-gray-100';
+  const desktopCloseButtonClass = 'text-[#8C8C8C] hover:bg-gray-100';
   const referenceListContent = (
     <>
       <div
         className={cn(
-          'flex shrink-0 items-center justify-between border-b border-[#ECECEC] bg-white',
+          // Transparent so the bar sits on the panel's #FBFBFB ground (workspace look).
+          'flex shrink-0 items-center justify-between',
           isMobileLikeViewport
             ? cn(
-              'px-4',
+              // Mobile keeps the divider; desktop drops it to match the workspace panel.
+              'border-b border-[#ECECEC] px-4',
               // 竖直：侧栏/全屏均在顶栏内垂直居中；全屏保留安全区 + 顶 16px，并加底内边距平衡
               isFullBleedMobile
                 ? 'pb-3 pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
                 : 'py-3',
             )
-            : 'h-10 px-4',
+            : 'h-12 px-4',
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <h2 className="truncate text-[14px] font-medium leading-[22px] text-[#1D2129]">
+          <h2 className="truncate text-sm font-medium leading-[22px] text-[#212121]">
             {localize('com_msg_source_reference')}
           </h2>
           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
@@ -572,20 +560,23 @@ export default function CitationReferencesDrawer({
           type="button"
           onClick={() => setOpenState(false)}
           className={cn(
-            'inline-flex shrink-0 items-center justify-center hover:bg-[#F2F3F5] hover:text-[#4E5969]',
-            isMobileLikeViewport ? 'size-8 rounded-md' : 'size-6 rounded-[6px]',
+            'inline-flex shrink-0 items-center justify-center transition-colors',
+            isMobileLikeViewport
+              ? 'size-8 rounded-md hover:bg-[#F2F3F5] hover:text-[#4E5969]'
+              : 'h-7 w-7 rounded-lg text-[#8C8C8C] hover:bg-gray-100',
           )}
           aria-label="关闭参考资料"
         >
-          <X className="size-4" strokeWidth={1.5} />
+          <Outlined.Close className="size-4" />
         </button>
       </div>
 
       <div
         className={cn(
-          'min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] space-y-3',
+          'scrollbar-os min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] space-y-3',
           // 设计：标题栏与列表区间距 24px；左右与标题区对齐 16px
-          isMobileLikeViewport ? 'px-4 pt-6 pb-4' : 'px-3 py-4',
+          // Desktop matches the workspace list body padding (px-3 pt-1 pb-4).
+          isMobileLikeViewport ? 'px-4 pt-6 pb-4' : 'px-3 pt-1 pb-4',
         )}
       >
         {references.length > 0 ? (
@@ -612,79 +603,63 @@ export default function CitationReferencesDrawer({
   );
 
   const documentPreviewContent = (
-    <div className={cn('flex min-h-0 flex-1 flex-col bg-white p-2', desktopContentOuterClass)}>
-      <div
-        className={cn(
-          'flex shrink-0 flex-col',
-          useReadingCardLayout ? 'w-full max-w-[464px] gap-4' : 'w-full max-w-full gap-0',
-        )}
-      >
-        <div
-          className={cn(
-            'flex w-full min-w-0 shrink-0 items-center border-b border-[#ECECEC] bg-white',
-            desktopHeaderHeight,
-            desktopHeaderGap,
-            desktopHeaderPadding,
-          )}
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-[#FBFBFB]">
+      {/* preview toolbar — mirrors the task-mode workspace file-detail toolbar
+          (h-12, px-3, gray icon buttons). FilePreview remains the body so PDF
+          citations keep their chunk-locating highlight. */}
+      <div className={cn('flex w-full min-w-0 shrink-0 items-center gap-2 px-4', desktopHeaderHeight)}>
+        <button
+          type="button"
+          onClick={() => {
+            setDesktopView('list');
+            setDocumentPreview(null);
+          }}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#8C8C8C] transition-colors hover:bg-gray-100"
+          aria-label="返回参考资料列表"
         >
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setDesktopView('list');
-                setDocumentPreview(null);
-              }}
-              className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#4E5969] hover:bg-[#F2F3F5]"
-              aria-label="返回参考资料列表"
-            >
-              <ChevronLeft className="size-4" strokeWidth={1.75} />
-            </button>
-            <div className="flex min-w-0 items-center">
-              <h2
-                className="truncate text-[14px] font-medium leading-[22px] text-[#1D2129]"
-                title={documentPreview ? getCitationDocumentName(documentPreview.detail) : ''}
-              >
-                {documentHeaderTitle.name}
-              </h2>
-              {documentHeaderTitle.extension ? (
-                <span className="shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]">
-                  {documentHeaderTitle.extension}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleDownloadDocument}
-            className={cn(
-              'inline-flex shrink-0 items-center justify-center transition-colors',
-              desktopButtonSize,
-              desktopDownloadButtonClass,
-            )}
-            aria-label="下载文档"
+          <Outlined.ArrowLeft className="size-4" />
+        </button>
+        <div className="flex min-w-0 flex-1 items-center">
+          <h2
+            className="truncate text-sm font-medium leading-[22px] text-[#212121]"
+            title={documentPreview ? getCitationDocumentName(documentPreview.detail) : ''}
           >
-            <Download className={useExpandedDesktopPreview ? 'size-4' : 'size-4'} strokeWidth={1.75} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setOpenState(false)}
-            className={cn(
-              'inline-flex shrink-0 items-center justify-center transition-colors',
-              desktopButtonSize,
-              desktopCloseButtonClass,
-            )}
-            aria-label="关闭参考资料"
-          >
-            <X className={desktopButtonIconSize} strokeWidth={useExpandedDesktopPreview ? 1.75 : 1.5} />
-          </button>
+            {documentHeaderTitle.name}
+          </h2>
+          {documentHeaderTitle.extension ? (
+            <span className="shrink-0 text-sm font-medium leading-[22px] text-[#212121]">
+              {documentHeaderTitle.extension}
+            </span>
+          ) : null}
         </div>
+        <button
+          type="button"
+          onClick={handleDownloadDocument}
+          className={cn(
+            'inline-flex shrink-0 items-center justify-center transition-colors',
+            desktopButtonSize,
+            desktopDownloadButtonClass,
+          )}
+          aria-label="下载文档"
+        >
+          <Download className="size-4" strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpenState(false)}
+          className={cn(
+            'inline-flex shrink-0 items-center justify-center transition-colors',
+            desktopButtonSize,
+            desktopCloseButtonClass,
+          )}
+          aria-label="关闭参考资料"
+        >
+          <Outlined.Close className={desktopButtonIconSize} />
+        </button>
       </div>
-      <div className={cn('flex min-h-0 w-full flex-1 flex-col overflow-hidden', desktopBodyWrapperClass)}>
-        <CitationDocumentPreviewContent
-          preview={documentPreview}
-          compactMode
-          className={desktopBodyClass}
-        />
+      {/* preview body — fills the panel like the workspace preview */}
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <CitationDocumentPreviewContent preview={documentPreview} compactMode />
       </div>
     </div>
   );
@@ -695,7 +670,7 @@ export default function CitationReferencesDrawer({
     return (
       <>
         <section
-          className={cn('flex h-full min-h-0 flex-col bg-white', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
+          className={cn('flex h-full min-h-0 flex-col bg-[#FBFBFB]', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
           aria-label="参考资料"
         >
           {panelContent}

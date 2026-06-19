@@ -68,7 +68,7 @@ export const ChatToolDown = ({
               </span>
             </div>
             <Switch
-              className="data-[state=checked]:bg-blue-600"
+              variant="tool"
               disabled={disabled}
               checked={searchType === "netSearch"}
               onCheckedChange={(val) => {

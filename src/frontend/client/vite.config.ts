@@ -71,7 +71,12 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, path.join(__dirname, '..'));
-  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:7860';
+  // MinIO object proxy for bucket paths (/bisheng/...): these must reach MinIO,
+  // NOT the backend (7860 only 404s on object keys). Override per environment via
+  // VITE_DEV_MINIO_TARGET, whose host MUST match the backend `sharepoint` config —
+  // SigV4 presigned URLs sign the Host header, so a mismatch yields 403
+  // SignatureDoesNotMatch (e.g. set http://localhost:9000 when sharepoint=localhost:9000).
+  const minioTarget = env.VITE_DEV_MINIO_TARGET || 'http://127.0.0.1:9000';
   const apiTarget = env.VITE_DEV_API_TARGET || 'http://127.0.0.1:7860';
 
   return {

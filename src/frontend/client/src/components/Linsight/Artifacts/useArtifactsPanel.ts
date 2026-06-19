@@ -5,13 +5,23 @@
  * Plain local state: the panel only lives inside the ExecutionFlow tree,
  * so no Recoil atom is needed.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
 
 export function useArtifactsPanel(versionId: string) {
     const [workspaceOpen, setWorkspaceOpen] = useState(false);
     const [previewFile, setPreviewFile] = useState<ArtifactFile | null>(null);
     const [fromWorkspace, setFromWorkspace] = useState(false);
+
+    // Sop/index.tsx is KeepAlive-cached and lets the user switch task versions
+    // (Header version selector) in place. Reset the workspace/preview area when the
+    // bound version changes so a file opened on one version doesn't stay open after
+    // switching to another (same stale-preview class as useWorkspacePanel).
+    useEffect(() => {
+        setPreviewFile(null);
+        setFromWorkspace(false);
+        setWorkspaceOpen(false);
+    }, [versionId]);
 
     const openWorkspace = () => {
         setPreviewFile(null);

@@ -446,7 +446,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               {loadingList ? (
                 <div className="flex flex-1 items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_loading")}</div>
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+                <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-3 pb-3">
                   {(activeTab === "my_tasks" ? filteredTaskItems : filteredRequestItems).length === 0 ? (
                     <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_empty_list")}</div>
                   ) : activeTab === "my_tasks"
@@ -508,7 +508,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
             {/* Right detail */}
             <div className="flex min-h-0 flex-col">
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+              <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-6 py-5">
                 {loadingDetail ? (
                   <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_loading")}</div>
                 ) : activeTab === "my_tasks" && taskDetail ? (

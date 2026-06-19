@@ -147,14 +147,14 @@ export default function NewChat({
         ) : (
           <div>
             <div className="pb-0">
-              <div className="flex items-center">
+              <div className="flex items-center pl-3">
                 <span className="text-base font-bold leading-8 text-[#1A1A1A]">{localize('com_nav_home')}</span>
               </div>
               <div className="py-3 flex w-full flex-col gap-1">
                 {/* Create chat button */}
                 <Button
                   variant="outline"
-                  className="w-full flex items-center justify-start gap-[8px] border-none rounded-lg px-2 py-1.5 h-auto shadow-none text-[#1A1A1A] font-normal hover:bg-[#F5F5F5] transition-colors"
+                  className="w-full flex items-center justify-start gap-[8px] border-none rounded-lg px-3 py-1.5 h-auto shadow-none text-[#1A1A1A] font-normal hover:bg-[#F5F5F5] transition-colors"
                   aria-label={localize('com_ui_new_chat')}
                   onClick={() => {
                     document.getElementById("create-convo-btn")?.click();
@@ -171,7 +171,7 @@ export default function NewChat({
                   /* Create task button */
                   <Button
                     variant="outline"
-                    className="w-full flex items-center justify-start gap-[8px] border-none rounded-lg px-2 py-1.5 h-auto shadow-none text-[#1A1A1A] font-normal hover:bg-[#F5F5F5] transition-colors"
+                    className="w-full flex items-center justify-start gap-[8px] border-none rounded-lg px-3 py-1.5 h-auto shadow-none text-[#1A1A1A] font-normal hover:bg-[#F5F5F5] transition-colors"
                     aria-label={localize('com_nav_start_new_task')}
                     onClick={handleNewTask}
                   >

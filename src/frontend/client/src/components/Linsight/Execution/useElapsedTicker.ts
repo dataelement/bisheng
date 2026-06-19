@@ -28,15 +28,13 @@ export interface ElapsedTicker {
 }
 
 /**
- * Format a duration for the "用时 N 秒" label, matching DeepThinkingGroup:
- * - 0 / non-positive → '0' (caller treats 0 as "hide the 用时 clause").
- * - < 10s            → one decimal place (e.g. "3.4").
- * - >= 10s           → rounded integer (e.g. "27").
+ * Format a duration for the "用时 N 秒" label. Always one decimal place so a
+ * sub-second / same-second span never collapses to a bare "0 秒" (e.g. "0.4",
+ * "3.4", "142.0"). Non-positive durations render "0.0".
  */
 export function formatSeconds(ms: number): string {
-    if (!ms || ms <= 0) return '0';
-    const sec = ms / 1000;
-    return sec < 10 ? sec.toFixed(1) : Math.round(sec).toString();
+    const sec = !ms || ms <= 0 ? 0 : ms / 1000;
+    return sec.toFixed(1);
 }
 
 /**

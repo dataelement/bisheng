@@ -287,6 +287,7 @@ export function CitationSourceIcon({
   iconClassName,
   fallbackKey,
   ragIconVariant = 'document',
+  clipAsCircle,
 }: {
   detail?: ChatCitation | null;
   preview?: CitationPreview | null;
@@ -295,10 +296,12 @@ export function CitationSourceIcon({
   iconClassName?: string;
   fallbackKey?: string;
   ragIconVariant?: RagIconVariant;
+  /** Override the default circular clip (web favicons / knowledge books). */
+  clipAsCircle?: boolean;
 }) {
   const icon = buildCitationSourceIconData({ detail, preview, type, fallbackKey });
 
-  const shouldClipAsCircle = icon.type === 'web' || ragIconVariant === 'knowledge';
+  const shouldClipAsCircle = clipAsCircle ?? (icon.type === 'web' || ragIconVariant === 'knowledge');
 
   return (
     <span

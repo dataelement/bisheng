@@ -255,7 +255,7 @@ export default function KnowledgeSquare({
                     scrollRef.current = el;
                     scrollRevealRef(el);
                 }}
-                className="flex-1 overflow-y-auto scrollbar-on-scroll bg-white"
+                className="flex-1 flex flex-col overflow-y-auto scrollbar-on-scroll bg-white"
             >
                 {/* Outer holds width/centering + mobile side padding; inner `relative` anchors
                     the search icon so it stays aligned with the input after the padding inset. */}
@@ -274,11 +274,11 @@ export default function KnowledgeSquare({
                     </div>
                 </div>
 
-                <div className="max-w-[1032px] mx-auto px-4 py-4">
+                <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 py-4">
                     {loading && spaces.length === 0 ? (
-                        <div className="flex items-center justify-center h-64 text-[#86909C]">{localize("com_knowledge.loading")}</div>
+                        <div className="flex-1 flex items-center justify-center text-[#86909C]">{localize("com_knowledge.loading")}</div>
                     ) : visibleSpaces.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
+                        <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
                             <img
                                 className="size-[120px] mb-3 object-contain opacity-90"
                                 src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}

@@ -87,6 +87,62 @@ export interface SubagentGroup {
 export type FlowNode = { kind: 'step'; step: MergedStep } | SubagentGroup;
 
 /**
+ * (R3 完全拆平 2026-06) One subagent rendered as its OWN top-level segment, with
+ * no team shell. After backend B2 the subagent's internal steps already ride the
+ * single stream (identified by namespace, not task_id); the render layer explodes
+ * the namespace-grouped {@link SubagentGroup} into one flat segment per subagent.
+ * `goal` is a best-effort delegation goal (order-aligned with the delegation
+ * burst; '' when the burst's goal count doesn't match the agent count).
+ */
+export interface SubagentSegment {
+    kind: 'subagent_segment';
+    /** best-effort delegation goal, '' when unknown */
+    goal: string;
+    /** 1-based index within the original burst (for the "子智能体 N" fallback) */
+    idx: number;
+    /** the subagent's flattened steps (anchor + same-ns children), in order */
+    steps: MergedStep[];
+    startedAt?: number;
+    endedAt?: number;
+    running: boolean;
+}
+
+/**
+ * Explode a namespace-grouped subagent team into one flat top-level segment per
+ * subagent (R3 完全拆平). Goals are matched to agents BY ORDER and only when the
+ * burst's goal count equals the agent count — the backend does not bind a goal to
+ * a specific subgraph namespace (see stream_event_mapper `_handle_tool_starts`),
+ * so a count mismatch degrades to no goal (the renderer falls back to "子智能体 N").
+ */
+export function explodeSubagentGroup(group: SubagentGroup): SubagentSegment[] {
+    const aligned = (group.goals?.length ?? 0) === group.agents.length;
+    return group.agents.map((agent, i) => {
+        const steps = [agent.step, ...agent.children];
+        let startedAt: number | undefined;
+        let endedAt: number | undefined;
+        let running = false;
+        for (const s of steps) {
+            if (s.startedAt !== undefined) {
+                startedAt = startedAt === undefined ? s.startedAt : Math.min(startedAt, s.startedAt);
+            }
+            if (s.endedAt !== undefined) {
+                endedAt = endedAt === undefined ? s.endedAt : Math.max(endedAt, s.endedAt);
+            }
+            if (s.running) running = true;
+        }
+        return {
+            kind: 'subagent_segment' as const,
+            goal: aligned ? group.goals![i] || '' : '',
+            idx: agent.idx ?? i + 1,
+            steps,
+            startedAt,
+            endedAt,
+            running,
+        };
+    });
+}
+
+/**
  * (Wave2) A "deep thinking" episode: one continuous run of top-level (non
  * subagent_group, non-orphan) steps — thinking + tool + knowledge — aggregated
  * into a single collapsible group, isomorphic to the daily-chat DeepThinkingGroup.
@@ -135,6 +191,131 @@ export function firstLine(text: string | null | undefined): string {
     return head.slice(0, FIRST_LINE_MAX) + '…';
 }
 
+/**
+ * (Activity §3) The readable activity categories — one localized "动作摘要" verb
+ * phrase each. `other` is the catch-all bucket for unknown MCP tools. The i18n
+ * key for each lives in execTokens.ts (ACTIVITY_I18N), kept here only as the
+ * category vocabulary so summarizeActivity stays pure / i18n-free.
+ */
+export type ActivityCategory =
+    | 'web_search'
+    | 'knowledge'
+    | 'read_file'
+    | 'write_file'
+    | 'export'
+    | 'code'
+    | 'browse'
+    | 'other';
+
+/** One readable activity bucket: a category + how many times it fired. */
+export interface ActivityCount {
+    category: ActivityCategory;
+    count: number;
+}
+
+/**
+ * Classify a tool name (lowercased) into an ActivityCategory per spec §3. Order
+ * matters: knowledge/search is checked before the generic `search` so that
+ * `search_knowledge_base` lands in `knowledge`, not `web_search`. Returns null
+ * for names that should never count (caller already excludes thinking/ls/
+ * write_todos/ask_user, but this guards defensively).
+ */
+function classifyActivity(name: string): ActivityCategory | null {
+    const n = name.toLowerCase();
+    if (!n) return 'other';
+    // never-count noise (defensive — callers already drop these)
+    if (n === 'thinking' || n === 'ls' || n === 'write_todos' || n === 'ask_user') return null;
+    // knowledge before web_search: search_knowledge_base must not match web_search
+    if (n.includes('knowledge') || n.includes('search_knowledge')) return 'knowledge';
+    if (n.includes('web_search') || n.includes('search')) return 'web_search';
+    if (n.includes('export')) return 'export';
+    // write/edit family before read so `read` doesn't swallow add_text_to_file etc.
+    if (
+        n.includes('write_file') ||
+        n.includes('add_text_to_file') ||
+        n.includes('replace_file_lines') ||
+        n.includes('write') ||
+        n.includes('edit')
+    ) {
+        return 'write_file';
+    }
+    if (n.includes('read_file') || n.includes('read')) return 'read_file';
+    if (n.includes('code_interpreter') || n.includes('python') || n.includes('code')) return 'code';
+    if (n.includes('glob') || n.includes('grep')) return 'browse';
+    return 'other';
+}
+
+/**
+ * (Activity §3) Summarize a group of steps into readable activity counts. Walks
+ * the steps, excludes thinking / ls / write_todos / ask_user, classifies the
+ * rest by tool name (classifyActivity), and returns the categories sorted by
+ * count descending. Empty input (or a pure-thinking group) returns []. Pure —
+ * no i18n; the caller maps category → localized phrase via ACTIVITY_I18N.
+ */
+export function summarizeActivity(steps: MergedStep[] | null | undefined): ActivityCount[] {
+    const counts = new Map<ActivityCategory, number>();
+    (steps || []).forEach((step) => {
+        if (!step || step.stepType === 'thinking') return;
+        const category = classifyActivity(step.name || '');
+        if (!category) return;
+        counts.set(category, (counts.get(category) || 0) + 1);
+    });
+    return Array.from(counts.entries())
+        .map(([category, count]) => ({ category, count }))
+        .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * (Narration §3) Extract a one-line natural-language narration (旁白) from a
+ * thinking passage. Strips markdown emphasis / inline code / fenced code blocks,
+ * then takes the LAST sentence split on `。！？.!?`. If that last sentence is too
+ * short (<4 chars — e.g. a lone "好。") it falls back to the previous sentence.
+ * Empty / unusable input returns '' (caller falls back to a localized label).
+ * The expanded thinking body is unaffected — this only feeds the collapsed hero.
+ */
+const NARRATION_MIN_LEN = 4;
+export function extractNarration(text: string | null | undefined): string {
+    if (!text) return '';
+    let cleaned = text
+        // drop fenced code blocks entirely (```...```)
+        .replace(/```[\s\S]*?```/g, ' ')
+        // inline code `x` -> its inner text
+        .replace(/`([^`]*)`/g, '$1')
+        // markdown emphasis / heading / list / quote markers
+        .replace(/[*_#>~]/g, ' ');
+    // collapse whitespace runs (incl. newlines) to single spaces
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    if (!cleaned) return '';
+    // split into sentences, keeping each sentence's trailing terminator
+    const sentences = cleaned
+        .split(/(?<=[。！？.!?])/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    if (!sentences.length) return '';
+    const last = sentences[sentences.length - 1];
+    // count chars without the trailing terminator for the short-sentence check
+    const bare = last.replace(/[。！？.!?]+$/, '').trim();
+    if (bare.length < NARRATION_MIN_LEN && sentences.length >= 2) {
+        return sentences[sentences.length - 2];
+    }
+    return last;
+}
+
+/**
+ * (Narration §3) Pick the narration for a group of steps. While `running`, use
+ * the LATEST thinking passage's last sentence (live旁白); once done, use the LAST
+ * thinking passage's last sentence (its final summarizing line). Returns '' when
+ * the group has no thinking step (caller falls back to a localized label).
+ */
+export function narrationFromSteps(steps: MergedStep[] | null | undefined, running: boolean): string {
+    const thinking = (steps || []).filter((s) => s && s.stepType === 'thinking');
+    if (!thinking.length) return '';
+    // running -> the most recent thinking passage; done -> the final one. Both
+    // resolve to the last thinking step in document order for this render model.
+    const target = thinking[thinking.length - 1];
+    return extractNarration(target.output);
+}
+
 /** Merge raw start/end frames by call_id, preserving first-seen order. */
 export function mergeStepFrames(history: ExecStepEventData[] | null | undefined): MergedStep[] {
     const byId = new Map<string, MergedStep>();
@@ -148,6 +329,13 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
         // ToolRow would spin forever. Drop it.
         // `ls` is the agent's internal workspace exploration (typically empty at
         // the start of a no-upload task) — display noise, not a deliverable step.
+        // `write_todos` is NOT dropped here (段流重构 2026-06): after the B2
+        // single-bucket change it is the SEGMENT BOUNDARY that cuts the one
+        // execution stream into episodes. Its frame must survive merge so
+        // buildTimelineGroups can flush on it; it is still never rendered as a row
+        // and classifyActivity returns null for it, so it pollutes neither the
+        // step list nor the activity summary. buildFlowNodes drops only the
+        // namespaced (subagent-internal) ones.
         if (frame.name === 'ask_user' || frame.name === 'ls') return;
         const callId = frame.call_id || `__step_${idx}`;
         const ts = typeof frame.timestamp === 'number' ? frame.timestamp : undefined;
@@ -203,7 +391,9 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
  * counts as same) into one rendered thinking step. The backend persists thinking
  * as many tiny token-delta frames (technical debt; see §7 open decision 1) — the
  * render layer stitches the adjacent ones back into a single passage:
- * - output joined with a blank line ("\n\n")
+ * - output concatenated SEAMLESSLY ("") — each delta already carries its own
+ *   leading space and the model's own newlines, so a "\n\n" separator would
+ *   shatter one continuous reasoning into a blank-line-per-token "poem".
  * - startedAt = earliest, endedAt = latest, running = last item's running
  * - callId taken from the first item (stable react key)
  * Thinking across different namespaces is NOT merged (avoid cross-subagent
@@ -221,7 +411,7 @@ export function mergeAdjacentThinking(steps: MergedStep[]): MergedStep[] {
         ) {
             // fold into prev — clone first so we never mutate the input array
             const merged: MergedStep = out[out.length - 1] === prev ? { ...prev } : prev;
-            merged.output = [merged.output, step.output].filter(Boolean).join('\n\n');
+            merged.output = [merged.output, step.output].filter(Boolean).join('');
             if (step.startedAt !== undefined) {
                 merged.startedAt =
                     merged.startedAt === undefined ? step.startedAt : Math.min(merged.startedAt, step.startedAt);
@@ -277,6 +467,13 @@ export function buildFlowNodes(steps: MergedStep[]): FlowNode[] {
     let pendingDelegation = false;
 
     for (const step of merged) {
+        // write_todos is the plan-write call. A subagent-internal one (namespaced)
+        // is noise — drop it so it never becomes a subagent anchor or a row. The
+        // main-graph one (ns is None) falls through to the top-level branch below,
+        // where it is pushed as a step node and consumed as a segment boundary by
+        // buildTimelineGroups (段流重构 2026-06).
+        if (step.name === 'write_todos' && step.namespace) continue;
+
         // main-graph delegation point (B2): record goal/name only — no node yet.
         if (step.stepType === 'subagent') {
             const goal = step.callReason || step.extraInfo?.delegate_goal || '';
@@ -349,11 +546,22 @@ export function buildFlowNodes(steps: MergedStep[]): FlowNode[] {
  * whole input collapses to deep_step_groups, giving the same render primitive
  * for the L3 drill-down.
  */
+/**
+ * (段流重构 2026-06) write_todos is the SEGMENT BOUNDARY. After the B2
+ * single-bucket change the whole main-graph execution lands in ONE ordered
+ * stream, and each main-graph write_todos call cuts it into an episode ("段").
+ * The boundary frame itself is never rendered (the plan is owned by the bottom
+ * TaskPanel) — it only flushes the open episode.
+ */
+function isSegmentBoundary(step: MergedStep): boolean {
+    return step.name === 'write_todos';
+}
+
 export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
     const flow = buildFlowNodes(steps);
     const out: TimelineNode[] = [];
-    // open episode being accumulated; flushed when a subagent_group breaks the
-    // run or the input ends.
+    // open episode being accumulated; flushed when a write_todos segment boundary
+    // or a subagent_group breaks the run, or the input ends.
     let episode: MergedStep[] = [];
 
     const flush = () => {
@@ -376,6 +584,12 @@ export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
 
     for (const node of flow) {
         if (node.kind === 'step') {
+            // write_todos cuts a segment boundary: flush the open episode but
+            // never render the marker itself (段流重构 2026-06).
+            if (isSegmentBoundary(node.step)) {
+                flush();
+                continue;
+            }
             episode.push(node.step);
             continue;
         }
@@ -384,6 +598,45 @@ export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
         out.push(node);
     }
     flush();
+
+    // Duration repair for zero-span deep_step_groups. A single-frame thinking
+    // passage is persisted as ONE row carrying ONE second-level timestamp, so its
+    // startedAt === endedAt → a span of 0 → a misleading "用时 0.0 秒" for a whole
+    // paragraph of reasoning. The real time the model spent on that episode is the
+    // wall-clock until the NEXT node began (it was reasoning across that gap), so
+    // estimate endedAt = the next node's start. Guarded by next > start so the
+    // out-of-order subgraph timestamps (subagent-internal frames predate the
+    // main-graph task frames) can never produce a negative span; an unrepairable
+    // tail group keeps span 0 and the renderer drops its 用时 clause. Running
+    // groups are left to the live ticker.
+    const nodeStart = (n: TimelineNode): number | undefined => {
+        if (n.kind === 'subagent_group') {
+            let min: number | undefined;
+            for (const a of n.agents) {
+                for (const s of [a.step, ...a.children]) {
+                    if (s.startedAt !== undefined) {
+                        min = min === undefined ? s.startedAt : Math.min(min, s.startedAt);
+                    }
+                }
+            }
+            return min;
+        }
+        if (n.kind === 'deep_step_group') return n.startedAt;
+        return n.step.startedAt;
+    };
+    for (let i = 0; i < out.length; i++) {
+        const n = out[i];
+        if (n.kind !== 'deep_step_group' || n.running) continue;
+        if (n.startedAt === undefined) continue;
+        if (n.endedAt !== undefined && n.endedAt > n.startedAt) continue; // already a real span
+        for (let j = i + 1; j < out.length; j++) {
+            const s = nodeStart(out[j]);
+            if (s !== undefined) {
+                if (s > n.startedAt) n.endedAt = s;
+                break;
+            }
+        }
+    }
 
     return out;
 }

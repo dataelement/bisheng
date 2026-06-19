@@ -6,6 +6,7 @@
 import { Outlined } from 'bisheng-icons';
 import { useLocalize } from '~/hooks';
 import { StepRow, detailTextCls } from './StepRow';
+import { INK, MUTED } from './execTokens';
 import type { ClarifyQuestion, ExecStepEventData } from './stepUtils';
 import { parseClarifyRequest } from './stepUtils';
 
@@ -27,7 +28,8 @@ export function IntentRow({ data }: { data: ExecStepEventData }) {
 
     return (
         <StepRow
-            icon={<Outlined.Clap className="size-4 text-[#1A1A1A]" />}
+            // §2.4: Clap 16px, Ink hero glyph (hero-associated icon = Ink per §1.3).
+            icon={<Outlined.Clap size={16} style={{ color: INK }} />}
             title={localize('com_linsight_intent_confirmed')}
             running={false}
         >
@@ -37,11 +39,11 @@ export function IntentRow({ data }: { data: ExecStepEventData }) {
                         const ans = answerFor(q, i);
                         return (
                             <li key={q.id} className="text-xs leading-5">
-                                {/* question: dark, shown once; answer: light gray, trailing */}
-                                <span className="font-medium text-gray-800">
+                                {/* question: Ink, shown once; answer: Muted, trailing (§2.4 color regime) */}
+                                <span className="font-medium" style={{ color: INK }}>
                                     {i + 1}. {q.question}
                                 </span>
-                                {ans && <span className="ml-3 text-gray-400">{ans}</span>}
+                                {ans && <span className="ml-3" style={{ color: MUTED }}>{ans}</span>}
                             </li>
                         );
                     })}
@@ -49,7 +51,11 @@ export function IntentRow({ data }: { data: ExecStepEventData }) {
             ) : (
                 <>
                     {request.callReason && <p className={detailTextCls}>{request.callReason}</p>}
-                    {answer && <p className="whitespace-pre-wrap text-xs leading-5 text-gray-400">{answer}</p>}
+                    {answer && (
+                        <p className="whitespace-pre-wrap text-xs leading-5" style={{ color: MUTED }}>
+                            {answer}
+                        </p>
+                    )}
                 </>
             )}
         </StepRow>

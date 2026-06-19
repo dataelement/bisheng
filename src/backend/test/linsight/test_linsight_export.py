@@ -58,10 +58,30 @@ async def test_export_docx_reads_converts_writes(monkeypatch):
     assert "已生成 Word" in res
 
 
-async def test_export_pdf_reads_converts_writes(monkeypatch):
-    import bisheng.common.utils.markdown_cmpnt.md_to_pdf as md_to_pdf_mod
+async def test_export_docx_handles_memoryview(monkeypatch):
+    """MarkDocx returns a memoryview (BytesIO.getbuffer()); the tool must write
+    real bytes, never the stringified ``<memory at 0x...>`` (the Word-won't-open
+    bug). Regression guard for the memoryview path."""
+    import bisheng.common.utils.markdown_cmpnt.md_to_docx.markdocx as markdocx_mod
 
-    monkeypatch.setattr(md_to_pdf_mod, "md_to_pdf_bytes", lambda md: b"PDFBYTES")
+    class _FakeMarkDocx:
+        def __call__(self, md):
+            return (memoryview(b"DOCXBYTES"), "title")
+
+    monkeypatch.setattr(markdocx_mod, "MarkDocx", _FakeMarkDocx)
+
+    backend = _writable_backend()
+    tool = linsight_export.ExportDocxTool(backend=backend)
+    res = await tool._arun(source_path="output/report.md")
+
+    args, _ = backend.awrite.await_args
+    assert args[1] == b"DOCXBYTES"  # memoryview copied to bytes, not stringified
+    assert "已生成 Word" in res
+
+
+async def test_export_pdf_reads_converts_writes(monkeypatch):
+    # PDF now goes markdown -> docx -> pdf (LibreOffice); patch the helper.
+    monkeypatch.setattr(linsight_export, "_md_to_pdf_bytes_via_libreoffice", lambda md: b"PDFBYTES")
 
     backend = _writable_backend()
     tool = linsight_export.ExportPdfTool(backend=backend)
@@ -71,6 +91,21 @@ async def test_export_pdf_reads_converts_writes(monkeypatch):
     assert args[0] == "output/custom.pdf"  # explicit dest honoured
     assert args[1] == b"PDFBYTES"
     assert "已生成 PDF" in res
+
+
+async def test_export_pdf_engine_error_soft_returns(monkeypatch):
+    """LibreOffice missing/errored must soft-return, never raise (would kill task)."""
+
+    def _boom(md):
+        raise RuntimeError("LibreOffice docx->pdf 转换失败 (soffice 缺失或出错)")
+
+    monkeypatch.setattr(linsight_export, "_md_to_pdf_bytes_via_libreoffice", _boom)
+
+    backend = _writable_backend()
+    tool = linsight_export.ExportPdfTool(backend=backend)
+    res = await tool._arun(source_path="output/report.md")
+    backend.awrite.assert_not_awaited()
+    assert "导出失败" in res
 
 
 async def test_export_docx_missing_source_soft_returns():

@@ -9,7 +9,7 @@ import {
     RefreshCwIcon
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DeepThinkingGroup from "~/components/Chat/Messages/DeepThinkingGroup";
 import ThinkingContent from "~/components/Chat/Messages/ThinkingContent";
 import { groupEventsForDisplay, type DisplayBlock } from "~/components/Chat/Messages/groupEvents";
@@ -30,8 +30,94 @@ import {
 } from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
-import Image from "~/components/Chat/Messages/Content/Image";
-import { FileIcon, getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+
+// Map an uploaded file's extension to a bisheng outlined file-type icon.
+// Anything not listed falls back to the generic Outlined.File icon.
+const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
+    // FileExcel
+    xls: Outlined.FileExcel,
+    xlsx: Outlined.FileExcel,
+    csv: Outlined.FileExcel,
+    et: Outlined.FileExcel,
+    // FilePdf
+    pdf: Outlined.FilePdf,
+    ppt: Outlined.FilePdf,
+    dps: Outlined.FilePdf,
+    // FileTxt
+    txt: Outlined.FileTxt,
+    // FileWord
+    doc: Outlined.FileWord,
+    docx: Outlined.FileWord,
+    wps: Outlined.FileWord,
+    // FileImage
+    png: Outlined.FileImage,
+    jpg: Outlined.FileImage,
+    jpeg: Outlined.FileImage,
+    bmp: Outlined.FileImage,
+    // FileEditing
+    md: Outlined.FileEditing,
+    // File (generic)
+    html: Outlined.File,
+};
+
+/**
+ * Uploaded-file list for a user message: a type icon + filename per row, never a
+ * content preview. Stacks vertically and scrolls past 120px. A linear-gradient
+ * mask softly fades the top/bottom edge (instead of a hard clip) whenever there
+ * is more content to scroll in that direction — same fade trick used elsewhere.
+ */
+function UploadedFileList({ files }: { files: any[] }) {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [fade, setFade] = useState({ top: false, bottom: false });
+
+    const updateFade = useCallback(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const top = el.scrollTop > 0;
+        const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+        setFade((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+    }, []);
+
+    useEffect(() => {
+        updateFade();
+    }, [files, updateFade]);
+
+    const maskStyle = useMemo(() => {
+        if (!fade.top && !fade.bottom) return undefined;
+        const topStop = fade.top ? "16px" : "0";
+        const bottomStop = fade.bottom ? "calc(100% - 16px)" : "100%";
+        const value = `linear-gradient(to bottom, transparent, #000 ${topStop}, #000 ${bottomStop}, transparent)`;
+        return { maskImage: value, WebkitMaskImage: value };
+    }, [fade]);
+
+    if (!files || files.length === 0) return null;
+
+    return (
+        <div
+            ref={scrollRef}
+            onScroll={updateFade}
+            style={maskStyle}
+            className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
+        >
+            {files.map((file, i) => {
+                const fileName = file.name || file.file_name || "File";
+                const fileType = getFileTypebyFileName(fileName);
+                const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
+                return (
+                    <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
+                        <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                            <div className="truncate text-xs" title={fileName}>
+                                {fileName}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
 
 interface AiMessageBubbleProps {
     message: ChatMessage;
@@ -49,23 +135,6 @@ interface AiMessageBubbleProps {
     /** F035: preview a task-turn document in the inline workspace panel (ChatView
         owns it) — a conversation doc link opens the file directly, no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
-}
-
-/**
- * Prefix an image/file path with the app base path (/workspace) so it resolves
- * through the dev proxy / deployment sub-path. Idempotent; handles:
- * - absolute http(s) URLs -> swap the origin for the base path
- * - data:/blob: URIs       -> left untouched
- * - already-prefixed paths -> returned as-is
- * - bare relative paths    -> base path prepended (the 404 case: `/x.jpg`)
- */
-function withWorkspaceBase(p?: string): string | undefined {
-    if (!p) return p;
-    if (/^(data:|blob:)/.test(p)) return p;
-    const base = __APP_ENV__.BASE_URL || '';
-    if (/^https?:\/\//.test(p)) return p.replace(/^https?:\/\/[^\/]+/, base);
-    if (base && (p === base || p.startsWith(`${base}/`))) return p;
-    return `${base}${p.startsWith('/') ? '' : '/'}${p}`;
 }
 
 // --- Copy button with feedback ---
@@ -330,48 +399,10 @@ function UserBubble({
                     className="mr-auto mt-2 shrink-0"
                 />
             )}
-            <div className={cn("min-w-0", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
-                {/* Render uploaded files if any */}
-                {message.files && message.files.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2 mt-1">
-                        {message.files.map((file, i) => {
-                            const fileName = file.name || file.file_name || "File";
-                            const fileType = getFileTypebyFileName(fileName);
-                            const isImage = ["jpg", "jpeg", "png", "bmp", "gif", "webp"].includes(fileType);
-                            // Prefix with the app base path (/workspace) so the URL resolves
-                            // through the dev proxy / deployment sub-path. The raw filepath is
-                            // a bare relative path (e.g. /xxx.jpg) and 404s without it.
-                            const fileUrl = withWorkspaceBase(file.filepath || file.file_url);
-
-                            if (isImage && fileUrl) {
-                                return (
-                                    <div key={i} className="flex border bg-white p-1 rounded-xl max-w-sm">
-                                        <Image
-                                            imagePath={fileUrl}
-                                            altText={fileName}
-                                            height={100}
-                                            width={100}
-                                        />
-                                    </div>
-                                );
-                            }
-
-                            return (
-                                <div key={i} className="flex items-center gap-2 border bg-white p-2 rounded-xl max-w-sm">
-                                    <FileIcon type={fileType} className="" />
-                                    <div className="overflow-hidden">
-                                        <div className="truncate text-sm font-bold" title={fileName}>
-                                            {fileName}
-                                        </div>
-                                        <div className="truncate text-xs text-text-secondary" title={fileName}>
-                                            {fileName && getFileTypebyFileName(fileName)}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
+            <div className={cn("flex min-w-0 flex-col items-end", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
+                {/* Uploaded files: icon + filename only (no preview), with soft fade
+                    edges while scrolling so the 120px-clipped list never hard-cuts. */}
+                <UploadedFileList files={message.files || []} />
                 <div className="flex gap-3">
                     {/* Avatar (hidden by style only) */}
                     <div className="hidden shrink-0 flex justify-center">
@@ -385,7 +416,9 @@ function UserBubble({
                         <div className="hidden rc-name select-none font-semibold text-base">{user?.username}</div>
                         <div
                             className={cn(
-                                "px-3 py-2 whitespace-pre-wrap break-words rounded-[8px]",
+                                // w-fit: the text bubble hugs its own content and stays
+                                // independent of the (possibly wider) file card above it.
+                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap break-words rounded-[8px]",
                                 knowledgeChatLayout
                                     ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
                                     : "rounded-[10px] bg-[#E6EDFC] text-[#1d2129] text-sm"

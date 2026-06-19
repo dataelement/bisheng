@@ -1239,21 +1239,28 @@ class LinsightWorkflowTask:
         # answer (F035 backstop) — same as the _handle_task_success path.
         final_files = []
         execution_tasks = await self._state_manager.get_execution_tasks()
-        # Only REAL planned todos warrant a synthesized report. The always-present
+        # Only REAL planned todos warrant a *synthesized* report. The always-present
         # session-level pseudo task (F035 problem 2) must NOT count here, otherwise
         # a trivial greeting/Q&A that planned no todo would wrongly get a report.
         planned_tasks = [
             t for t in execution_tasks if not (getattr(t, "task_data", None) or {}).get("is_session_global")
         ]
-        if planned_tasks:
-            file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
-            final_files = await linsight_execute_utils.get_final_result_file(
-                session_model=session_model, file_details=file_details, answer=answer
+        # Always collect real ``output/`` deliverables, even with no planned todos:
+        # a simple "把报告转成 docx/pdf" turn calls export_docx/export_pdf (or
+        # write_file) and finishes WITHOUT planning a todo. Gating collection on
+        # planned_tasks dropped those files from the result panel ("暂无产物文件")
+        # though they were written to the workspace. read_file_directory returns []
+        # for an empty output/, so a greeting still yields nothing here.
+        file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
+        final_files = await linsight_execute_utils.get_final_result_file(
+            session_model=session_model, file_details=file_details, answer=answer
+        )
+        # Synthesize a fallback report ONLY when the model actually planned work but
+        # produced no deliverable — never for a trivial greeting/Q&A with no output.
+        if not final_files and planned_tasks:
+            final_files = await linsight_execute_utils.build_fallback_report_file(
+                session_model=session_model, answer=answer, file_dir=self.file_dir
             )
-            if not final_files:
-                final_files = await linsight_execute_utils.build_fallback_report_file(
-                    session_model=session_model, answer=answer, file_dir=self.file_dir
-                )
         session_model.output_result = {
             "answer": answer,
             "final_files": final_files,

@@ -565,11 +565,13 @@ export const ChatKnowledge = ({
               )}
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent side="bottom" sideOffset={6}>
-            {variant === 'knowledge'
-              ? localize('com_ui_knowledge_space')
-              : localize('com_knowledge_add_file')}
-          </TooltipContent>
+          {/* The knowledge pill already shows its label inline, so it needs no
+              tooltip; only the icon-only "+" trigger gets one. */}
+          {variant !== 'knowledge' && (
+            <TooltipContent side="bottom" sideOffset={6}>
+              {localize('com_knowledge_add_file')}
+            </TooltipContent>
+          )}
         </Tooltip>
       </TooltipProvider>
 

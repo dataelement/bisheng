@@ -36,10 +36,29 @@ import AiModelSelect from "./AiModelSelect";
 import BooksIcon from "../ui/icon/Books";
 import BookOpen from "../ui/icon/BookOpen";
 import type { FileType } from "~/components/ui/icon/File/FileIcon";
-import { CitationFileTypeIcon } from "~/components/Chat/Messages/Content/CitationSourceIcon";
+import { Outlined } from "bisheng-icons";
 
 /** 超出该字数则省略；省略后为「前 5 字 + …」共 6 个显示单位（与产品规则一致） */
 const KB_TAG_MAX_CHARS = 5;
+
+// File-chip icons: flat bisheng outlined icons so they render in the same
+// single-color (#999) style as the knowledge-space chip icons.
+const CHIP_FILE_ICONS: Record<string, typeof Outlined.File> = {
+    xls: Outlined.FileExcel,
+    xlsx: Outlined.FileExcel,
+    csv: Outlined.FileExcel,
+    pdf: Outlined.FilePdf,
+    ppt: Outlined.FilePdf,
+    pptx: Outlined.FilePdf,
+    txt: Outlined.FileTxt,
+    doc: Outlined.FileWord,
+    docx: Outlined.FileWord,
+    png: Outlined.FileImage,
+    jpg: Outlined.FileImage,
+    jpeg: Outlined.FileImage,
+    bmp: Outlined.FileImage,
+    md: Outlined.FileEditing,
+};
 
 function formatKbTagLabel(name: string): string {
     const chars = Array.from(name);
@@ -64,7 +83,7 @@ const KbTag = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => {
                 <button
                     type="button"
                     onClick={onRemove}
-                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
                     aria-label="Remove"
                 >
                     ✕
@@ -95,7 +114,10 @@ const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
 
     return (
         <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-[#f0f1f3]">
-            <CitationFileTypeIcon fileType={resolveFileType(file)} className="mr-1 size-4 shrink-0" />
+            {(() => {
+                const FileTypeIcon = CHIP_FILE_ICONS[resolveFileType(file)] ?? Outlined.File;
+                return <FileTypeIcon size={16} className="mr-1 shrink-0 text-[#999]" />;
+            })()}
             <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
                 {file.name}
             </span>
@@ -103,7 +125,7 @@ const FileTag = ({ file, onRemove }: { file: any; onRemove?: () => void }) => {
                 <button
                     type="button"
                     onClick={onRemove}
-                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
                     aria-label="Remove"
                 >
                     ✕
@@ -125,7 +147,7 @@ const SkillTag = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) =>
                 <button
                     type="button"
                     onClick={onRemove}
-                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-200"
+                    className="ml-0.5 flex size-4 shrink-0 items-center justify-center text-slate-400 transition-colors hover:text-slate-600"
                     aria-label="Remove"
                 >
                     ✕

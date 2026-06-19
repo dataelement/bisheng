@@ -121,9 +121,6 @@ class StreamContext:
     svid: str
     # content/positional projection of the latest write_todos snapshot
     todos: list[_TodoProjection] = field(default_factory=list)
-    # task_id of the single in_progress todo (deepagents TodoList semantics:
-    # at most one in_progress at a time). None during planning/wrap-up.
-    current_in_progress_task_id: str | None = None
     # call_id -> open start frame, awaiting its end frame
     open_calls: dict[str, _OpenCall] = field(default_factory=dict)
     # call_id -> buffered orphan end payload (end arrived before start, §3.7)
@@ -260,9 +257,10 @@ class StreamEventMapper:
         if not isinstance(payload, dict):
             payload = {"reason": str(payload)}
 
-        # Single graph, single interrupt point at a time: route to the current
-        # in_progress todo, else the session-level pseudo task (§4.3).
-        task_id = self.ctx.current_in_progress_task_id or self.ctx.svid
+        # B2 segment-stream (段流重构 2026-06): all main-graph steps land in the
+        # session pseudo task (id == svid). The implicit in_progress cursor is
+        # gone — interrupts route to svid like every other main-graph step (§4.3).
+        task_id = self.ctx.svid
         return [
             NeedUserInput(
                 task_id=task_id,
@@ -314,9 +312,11 @@ class StreamEventMapper:
                 status_events.extend(self._status_transition(None, status, proj))
 
         # Tasks that vanished from the new list are marked TERMINATED (not
-        # deleted) — projection drop is enough at the mapper layer.
+        # deleted) — projection drop is enough at the mapper layer. The todo
+        # projection still drives TaskPanel signals (GenerateSubTask / TaskStart /
+        # TaskEnd); it no longer needs an in_progress cursor because steps are no
+        # longer attributed to a todo (B2 段流重构 2026-06).
         self.ctx.todos = new_projection
-        self._refresh_in_progress()
 
         events: list[BaseEvent] = []
         if newly_generated:
@@ -355,13 +355,6 @@ class StreamEventMapper:
             ]
         return []
 
-    def _refresh_in_progress(self) -> None:
-        self.ctx.current_in_progress_task_id = None
-        for p in self.ctx.todos:
-            if p.status == "in_progress":
-                self.ctx.current_in_progress_task_id = p.task_id
-                break
-
     # -- messages mode -----------------------------------------------------
 
     def _handle_messages(self, chunk: Any, ns: str | None) -> list[BaseEvent]:
@@ -387,7 +380,10 @@ class StreamEventMapper:
 
     def _handle_tool_starts(self, tool_calls: list[dict[str, Any]], ns: str | None) -> list[BaseEvent]:
         events: list[BaseEvent] = []
-        task_id = self.ctx.current_in_progress_task_id or self.ctx.svid
+        # B2: every tool step (write_todos included) lands in the session bucket;
+        # write_todos surfaces as a visible ExecStep and serves as the frontend's
+        # segment boundary (段流重构 2026-06).
+        task_id = self.ctx.svid
         for tc in tool_calls:
             call_id = tc.get("id") or tc.get("call_id")
             if not call_id:
@@ -491,7 +487,8 @@ class StreamEventMapper:
         extra_info: dict[str, Any] = {"is_thinking": True, "truncated": truncated}
         if ns:
             extra_info["namespace"] = ns
-        task_id = self.ctx.current_in_progress_task_id or self.ctx.svid
+        # B2: thinking rows land in the session bucket (id == svid) too.
+        task_id = self.ctx.svid
         # thinking has no tool call_id. ``messages`` mode streams it token-by-token,
         # so hashing the per-chunk delta would mint a new id every frame and the
         # frontend (merge-by-call_id) would render one row per token. Instead keep

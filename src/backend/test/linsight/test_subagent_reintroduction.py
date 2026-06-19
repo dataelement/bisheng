@@ -144,6 +144,32 @@ def test_system_prompt_drops_kb_tool_when_unavailable():
         assert "search_knowledge_base" not in without_kb
 
 
+def test_delegation_restates_kb_ids_only_when_kb_present():
+    """Lockstep for the task-delegation KB rule (方案 A).
+
+    A subagent only ever sees the task ``description`` — deepagents replaces its
+    messages with ``[HumanMessage(description)]`` (subagents.py
+    ``_validate_and_prepare_state``), so it never sees the "可用知识库" block in
+    the main graph's first user message. Because ``search_knowledge_base``
+    requires a ``knowledge_id``, the main prompt must tell the model to restate
+    the ids in ``description`` — but ONLY when a KB exists, else it would coax a
+    ``knowledge_id`` for a tool that isn't bound (the same prompt/tool mismatch
+    the rest of this file guards).
+    """
+    from bisheng.linsight.domain.services.agent_factory import _build_linsight_system_prompt
+
+    with_kb = _build_linsight_system_prompt(True)
+    without_kb = _build_linsight_system_prompt(False)
+    # With a KB: the delegation rule names knowledge_id so the subagent can search.
+    assert "knowledge_id" in with_kb
+    # Without a KB: nothing to search -> no knowledge_id delegation rule (lockstep).
+    assert "knowledge_id" not in without_kb
+    # The self-contained-description contract is unconditional (a subagent never
+    # sees the parent context regardless of whether a KB is selected).
+    assert "自包含" in with_kb
+    assert "自包含" in without_kb
+
+
 def test_researcher_subagent_prompt_tracks_kb_tool_presence():
     """_build_researcher_subagent must mention search_knowledge_base only when the
     filtered subagent tool subset actually contains it (lockstep with the graph)."""

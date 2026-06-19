@@ -116,7 +116,7 @@ export default function ArticlePage() {
     if (isLoading) {
         return (
             <div className="flex h-screen items-center justify-center bg-white">
-                <LoadingIcon className="size-12 text-primary" />
+                <LoadingIcon className="size-20 text-primary" />
             </div>
         );
     }

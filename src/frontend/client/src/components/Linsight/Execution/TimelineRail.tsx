@@ -9,9 +9,10 @@
  * Rail anatomy (from ThinkingContent):
  *   flex shrink-0 flex-col items-center gap-0.5 self-stretch pt-[3px]
  *     ├─ size-4 icon slot (centered)
- *     └─ w-px flex-1 bg-[#E0E0E0] connector (rendered when showConnector)
+ *     └─ w-px flex-1 connector in HAIRLINE (rendered when showConnector)
  */
-import { type FC, type ReactNode } from 'react';
+import { type CSSProperties, type FC, type ReactNode } from 'react';
+import { HAIRLINE } from './execTokens';
 
 export interface TimelineRailProps {
     /** Leading glyph (status icon / tool icon), sized 16px by the caller. */
@@ -24,10 +25,13 @@ export interface TimelineRailProps {
     showConnector?: boolean;
 }
 
+/** Connector color is the shared Hairline token (replaces legacy #E0E0E0). */
+const connectorStyle: CSSProperties = { backgroundColor: HAIRLINE };
+
 const TimelineRail: FC<TimelineRailProps> = ({ icon, showConnector = false }) => (
     <div className="flex shrink-0 flex-col items-center gap-0.5 self-stretch pt-[3px]">
         <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
-        {showConnector && <div className="w-px flex-1 bg-[#E0E0E0]" aria-hidden="true" />}
+        {showConnector && <div className="w-px flex-1" style={connectorStyle} aria-hidden="true" />}
     </div>
 );
 
