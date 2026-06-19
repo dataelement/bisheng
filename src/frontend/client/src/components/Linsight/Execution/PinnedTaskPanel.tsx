@@ -33,7 +33,10 @@ export function PinnedTaskPanel({ versionId }: { versionId: string }) {
     // so the empty/no-task state leaves no gap above the input.
     return (
         <div className="pb-3">
-            <TaskPanel tasks={tasks} completed={completed} />
+            {/* Key by versionId so the panel remounts (and its collapsed default
+                re-applies) on every conversation switch, instead of carrying the
+                previous turn's open/closed state over. */}
+            <TaskPanel key={versionId} tasks={tasks} completed={completed} />
         </div>
     );
 }

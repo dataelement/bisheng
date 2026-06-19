@@ -149,6 +149,12 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
         // got its end frame (e.g. a safety-blocked subagent) would otherwise loop.
         <ExecutionLiveContext.Provider value={running}>
         <div className="relative flex h-full w-full flex-col">
+            {/* Soft top fade: content dissolves into the page as it scrolls under the
+                top edge, instead of a hard cut. Sits ABOVE normal scroll content
+                (z-10) so it fades, but BELOW pinned sticky headers (z-20) — the
+                overflow container creates no stacking context, so a header's z-20
+                bubbles up to outrank this overlay and stays crisp. */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b from-white to-transparent" />
             {/* ── conversational flow ─────────────────────────────────────── */}
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scroll-hover">
                 <div className="mx-auto w-full max-w-[800px] px-4 pb-6 pt-4">

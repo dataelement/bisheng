@@ -24,15 +24,20 @@
  * tokens come from execTokens, the timer math from useElapsedTicker.
  */
 import { Outlined } from 'bisheng-icons';
-import { useMemo, type FC, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FC, type ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
 import { useCollapseState } from '~/store/linsightCollapse';
 import { cn, formatSeconds } from '~/utils';
-import { ACCENT, ACTIVITY_I18N, BODY, INK, MUTED } from './execTokens';
+import { ACCENT, ACTIVITY_I18N, BODY, INK } from './execTokens';
+
+// Node-header palette, aligned with the blue-box IntentRow/StepRow: the static
+// leading glyph takes Ink like the Clap icon, while the live loading spinner keeps
+// the single Accent (blue) highlight; the chevron is muted and darkens on hover;
+// the title + narration sit lighter as quiet meta.
+const NODE_TEXT = '#999999';
 import { useExecutionLive } from './executionLive';
 import { KnowledgeRow } from './KnowledgeRow';
 import { NarrationTicker } from './NarrationTicker';
-import TimelineRail from './TimelineRail';
 import ToolRowLite from './ToolRowLite';
 import { useElapsedTicker } from './useElapsedTicker';
 import { firstLine, narrationFromSteps, summarizeActivity } from './stepUtils';
@@ -110,6 +115,34 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
     const persistKey = group.steps[0]?.callId ?? '';
     const [open, setOpen] = useCollapseState(persistKey, running);
 
+    // Sticky-header pin detection. A zero-height sentinel sits just above the
+    // header; once it scrolls past the TOP edge of the chat scroll container, the
+    // header is pinned. We then paint a white ::before cap over the container's top
+    // padding strip — overflow clips at the padding box, so scrolled body text
+    // would otherwise bleed into that strip above the pinned header. Only active
+    // while expanded (a collapsed header has no body to flank).
+    const sentinelRef = useRef<HTMLDivElement | null>(null);
+    const [pinned, setPinned] = useState(false);
+    useEffect(() => {
+        const el = sentinelRef.current;
+        if (!open || !el) {
+            setPinned(false);
+            return;
+        }
+        const root = el.closest('.overflow-y-auto') as HTMLElement | null;
+        const io = new IntersectionObserver(
+            ([entry]) => {
+                const rootTop = entry.rootBounds?.top ?? 0;
+                // Pinned only when the sentinel left past the TOP edge (leaving past
+                // the bottom just means the whole node scrolled out of view).
+                setPinned(!entry.isIntersecting && entry.boundingClientRect.top <= rootTop);
+            },
+            { root, threshold: [0, 1] },
+        );
+        io.observe(el);
+        return () => io.disconnect();
+    }, [open]);
+
     // Timestamps on MergedStep are second-level ints (BaseEvent.timestamp); the
     // ticker math is in milliseconds, so scale up here.
     const startMs = group.startedAt != null ? group.startedAt * 1000 : null;
@@ -120,13 +153,16 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
     // this episode did ("检索知识库 3 次 · 读 2 文件") — built from summarizeActivity,
     // which excludes thinking / write_todos / ls / ask_user. A pure-reasoning
     // segment yields no activity and falls back to the plain 深度思考 label.
+    const activity = useMemo(() => summarizeActivity(group.steps), [group.steps]);
     const activityText = useMemo<string>(() => {
-        const activity = summarizeActivity(group.steps);
         if (!activity.length) return '';
         return activity
             .map((a) => localize(ACTIVITY_I18N[a.category], { 0: String(a.count) }))
             .join(' · ');
-    }, [group.steps, localize]);
+    }, [activity, localize]);
+    // A file-editing episode (dominant activity is write_file) carries the write
+    // glyph instead of the generic reasoning bulb.
+    const isWriteFile = activity[0]?.category === 'write_file';
 
     // Stable header label. Activity summary + "（用时 N 秒）" suffix when measurable;
     // the duration clause is dropped when nested (compact) OR when the measured span
@@ -205,55 +241,91 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
         return <ToolRowLite key={seg.key} step={seg.step} />;
     });
 
+    // Single-column layout so the header (icon + title) pins as ONE row. The body
+    // and narration are indented (pl-6 = 16px icon + 8px gap) to stay aligned under
+    // the title, matching the old rail + content two-column offset.
     return (
-        <div className="flex w-full min-w-0 gap-2 animate-thinking-appear">
-            <TimelineRail
-                icon={
-                    // R3: a subagent segment carries the delegation icon so its work
-                    // stays legible after the team shell is dissolved; a main-graph
-                    // segment keeps the reasoning bulb.
-                    subagent ? (
-                        <Outlined.PeopleRound size={16} style={{ color: running ? ACCENT : MUTED }} />
+        <div className="w-full min-w-0 pb-3 animate-thinking-appear">
+            {/* Zero-height sentinel driving the IntersectionObserver pin detection. */}
+            <div ref={sentinelRef} aria-hidden className="h-0" />
+            <button
+                type="button"
+                onClick={() => setOpen(!open)}
+                className={cn(
+                    // 4px vertical padding always, so the header height is identical
+                    // collapsed and expanded (no jump on toggle).
+                    'group flex w-full items-center gap-2 py-1 text-left text-sm font-medium leading-[22px]',
+                    // When expanded, pin the whole header row to the top of the chat
+                    // scroll area; the opaque white backing masks the body scrolling
+                    // beneath it.
+                    open && 'sticky top-0 z-20 bg-white',
+                    // Once actually pinned: a white ::before cap covers the scroll
+                    // container's top padding strip (body would otherwise bleed above
+                    // the header), and a white→transparent ::after gradient just below
+                    // the header softly fades body text in as it scrolls out from
+                    // under the pinned header instead of a hard cut. The ::after is
+                    // pointer-events-none so it never steals clicks from the body.
+                    pinned &&
+                        'before:absolute before:inset-x-0 before:bottom-full before:h-4 before:bg-white before:content-[""] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-5 after:bg-gradient-to-b after:from-white after:to-transparent after:content-[""]',
+                )}
+                style={{ color: NODE_TEXT }}
+            >
+                {/* Icon regime: while running AND collapsed the node shows the
+                    loading spinner; otherwise (expanded, or finished) a glyph —
+                    subagent → delegation, file-editing episode → write, everything
+                    else → reasoning bulb. All glyphs share NODE_ICON (unified ink);
+                    the running pulse lives on the label so it never fades the backing. */}
+                <span className="flex size-4 shrink-0 items-center justify-center">
+                    {running && !open ? (
+                        <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
+                    ) : subagent ? (
+                        <Outlined.PeopleRound size={16} style={{ color: INK }} />
+                    ) : isWriteFile ? (
+                        <Outlined.Write size={16} style={{ color: INK }} />
                     ) : (
-                        <Outlined.Bulb size={16} style={{ color: running ? ACCENT : MUTED }} />
-                    )
-                }
-                showConnector={open}
-            />
-            <div className="flex min-w-0 flex-1 flex-col pb-3">
-                <button
-                    type="button"
-                    onClick={() => setOpen(!open)}
-                    className={cn(
-                        'group flex w-full items-center gap-2 text-left text-sm font-medium leading-[22px]',
-                        running && 'animate-pulse',
+                        <Outlined.Bulb size={16} style={{ color: INK }} />
                     )}
-                    style={{ color: INK }}
+                </span>
+                {/* Title darkens to ink on hover (matching the StepRow blue-box
+                    trigger). When expanded it stays a solid dark gray (the open node
+                    is the focused one). While running the label breathes
+                    (animate-pulse); hover halts the breathing so it settles to a solid
+                    dark gray instead of fading in and out. */}
+                <span
+                    className={cn(
+                        'min-w-0 truncate transition-colors group-hover:text-[#212121]',
+                        open && 'text-[#212121]',
+                        running && 'animate-pulse group-hover:animate-none',
+                    )}
                 >
-                    <span className="min-w-0 truncate">{label}</span>
-                    <Outlined.Down
-                        size={16}
-                        className={cn(
-                            'shrink-0 transform-gpu transition-transform duration-200',
-                            open && 'rotate-180',
-                        )}
-                        style={{ color: MUTED }}
-                    />
-                </button>
-                {/* R2 旁白 (live thought ticker): the segment's latest COMPLETE
-                    sentence, advancing one sentence at a time with a vertical
-                    crossfade. Shown while the segment runs (a live aside under the
-                    header) AND when collapsed (the summary); hidden only when a
-                    finished segment is expanded, where the full thinking body below
-                    already carries the same reasoning. */}
-                {(running || !open) && <NarrationTicker text={narration} />}
-                <div
-                    className={cn('grid transition-all duration-300 ease-out', open && 'mt-2')}
-                    style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
-                >
-                    <div className="min-h-0 overflow-hidden">
-                        <div className="flex flex-col gap-1.5">{body}</div>
-                    </div>
+                    {label}
+                </span>
+                {/* Single chevron rotates right→down (collapsed → expanded), matching
+                    the StepRow / daily "深度思考" toggle; muted, darkening on hover. */}
+                <Outlined.Down
+                    size={16}
+                    className={cn(
+                        'shrink-0 transform-gpu text-[#8C8C8C] transition duration-200 group-hover:text-[#212121]',
+                        !open && '-rotate-90',
+                    )}
+                />
+            </button>
+            {/* R2 旁白 (live thought ticker): the segment's latest COMPLETE sentence,
+                advancing one sentence at a time with a vertical crossfade. Shown
+                while the segment runs AND when collapsed; hidden only when a finished
+                segment is expanded, where the full thinking body carries the same
+                reasoning. Indented to align under the title. */}
+            {(running || !open) && (
+                <div className="pl-6">
+                    <NarrationTicker text={narration} />
+                </div>
+            )}
+            <div
+                className={cn('grid transition-all duration-300 ease-out', open && 'mt-2')}
+                style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
+            >
+                <div className="min-h-0 overflow-hidden">
+                    <div className="flex flex-col gap-1.5 pl-6">{body}</div>
                 </div>
             </div>
         </div>

@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { NotificationSeverity } from '~/common';
 import Markdown from '~/components/Chat/Messages/Content/Markdown';
 import { Button } from '~/components/ui';
+import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useLocalize } from '~/hooks';
 import '~/markdown.css';
 import { useToastContext } from '~/Providers';
@@ -171,16 +172,9 @@ export function PreviewBody({ file, versionId }: PreviewBodyProps) {
         );
     }
     if (loading) {
-        // Match the task workbench loading (SopLoading): the linsi-load image inside
-        // the rotating-border box, instead of the generic spinner.
         return (
-            <div className="flex h-full items-center justify-center">
-                <div className="lingsi-border-box">
-                    <div
-                        className="h-[102px] w-[194px] rounded-md bg-white bg-no-repeat"
-                        style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/linsi-load.png)` }}
-                    />
-                </div>
+            <div className="flex h-full flex-1 items-center justify-center">
+                <LoadingIcon className="size-20 text-primary" />
             </div>
         );
     }
