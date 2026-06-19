@@ -627,6 +627,51 @@ describe('stepUtils — extractNarration (§3 narration 旁白)', () => {
     });
 });
 
+describe('stepUtils — extractNarration 选句质量 (碎片/列表/标题/数据/工具名)', () => {
+    it('does NOT break a sentence at a decimal point / percent (缺陷1)', () => {
+        // the "." in "76.5%" is followed by a digit, not whitespace — not a boundary,
+        // so the digit-heavy financial sentence stays whole instead of "…+76." fragment
+        expect(extractNarration('营收预计80亿, 同比+76.5%, 增长强劲。')).toBe(
+            '营收预计80亿, 同比+76.5%, 增长强劲。',
+        );
+    });
+
+    it('rejects a bare parenthesized enumeration, falling back to the prior sentence (缺陷2a)', () => {
+        expect(extractNarration('我会导出多种格式。\n(markdown, html, docx, pdf)\n')).toBe(
+            '我会导出多种格式。',
+        );
+    });
+
+    it('prefers a terminated sentence over a title-like fragment (缺陷2b)', () => {
+        expect(extractNarration('我已完成估值与风险分析。\nInvestment conclusion\n')).toBe(
+            '我已完成估值与风险分析。',
+        );
+    });
+
+    it('strips a leading list bullet and rejects a colon-顿号 enumeration (缺陷3)', () => {
+        const text = '下面总结主要风险。\n- 风险：汇兑损失、客户集中度、竞争加剧、上游材料瓶颈\n';
+        expect(extractNarration(text)).toBe('下面总结主要风险。');
+    });
+
+    it('rejects a lowercase-leading continuation fragment when a clean sentence exists (缺陷4a)', () => {
+        const text = 'The model has been calibrated. confirmed, and provide uncertainty disclosures.';
+        expect(extractNarration(text)).toBe('The model has been calibrated.');
+    });
+
+    it('rejects a digit-leading data enumeration in favor of the prior sentence (缺陷4b)', () => {
+        const text = 'I will outline the demand drivers next. 6T, AI computing demand, etc.';
+        expect(extractNarration(text)).toBe('I will outline the demand drivers next.');
+    });
+
+    it('suppresses a leaked internal tool name (缺陷5, default on)', () => {
+        expect(extractNarration('先看看有什么资料。\n让我调用 ask user。')).toBe('先看看有什么资料。');
+    });
+
+    it('returns "" when every unit is structural junk (no prose to surface)', () => {
+        expect(extractNarration('(a, b, c)\n(d, e, f)\n')).toBe('');
+    });
+});
+
 describe('stepUtils — narrationFromSteps (§3 running vs done)', () => {
     it('running -> the latest thinking passage last sentence', () => {
         const steps: MergedStep[] = [

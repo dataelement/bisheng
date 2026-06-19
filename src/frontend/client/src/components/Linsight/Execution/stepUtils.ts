@@ -268,32 +268,88 @@ export function summarizeActivity(steps: MergedStep[] | null | undefined): Activ
         .sort((a, b) => b.count - a.count);
 }
 
-/**
- * (Narration §3) Extract a one-line natural-language narration (旁白) from a
- * thinking passage. How "one sentence" is judged:
- *  - Split into UNITS on both sentence terminators (。！？.!?…) AND newlines — the
- *    model separates thoughts line-by-line as well as by punctuation, so a newline
- *    is a real boundary (we do NOT collapse newlines away first).
- *  - Keep only COMPLETE units (terminator- or newline-bounded); a trailing
- *    un-terminated fragment (mid-stream) is dropped, so streaming never shows a
- *    half-typed line.
- *  - Prefer the LAST unit that reads as a natural aside: within a sane length
- *    window (4–56 chars) and — when the passage is Chinese — actually CONTAINING
- *    CJK. This skips lone English tails (e.g. "to the main agent.") and over-long
- *    instruction sentences, falling back to the last complete unit if none qualify.
- * No complete unit yet → '' (caller shows nothing). The expanded thinking body is
- * unaffected — this only feeds the collapsed hero line.
- */
 const NARRATION_MIN_LEN = 4;
 // A narration aside longer than this is almost certainly an instruction / list,
 // not a natural "colleague reporting" line — skip it for a shorter sentence.
 const NARRATION_MAX_LEN = 56;
+
+// Unit boundaries: CJK 。！？… and newlines ALWAYS split; an ASCII .!? only splits
+// when followed by whitespace/end-of-string — so a mid-token dot in a decimal /
+// abbreviation / ticker ("76.5%", "U.S.", "601138.SH") is NOT a false boundary.
+// Mirrors the boundary semantics firstLine already uses (kept as a separate const
+// on purpose — firstLine matches a prefix, this splits into all units).
+const UNIT_SPLIT = /(?<=[。！？…])|(?<=[.!?](?=\s|$))|\n+/;
+
+// A unit whose head is an ASCII lowercase letter / digit, or an English connective,
+// reads as a split-off continuation or a data tail ("confirmed, and …", "6T, … etc.")
+// rather than a fresh narration sentence. Demoted (not banned) — see the 3-pass scan.
+const CONNECTIVE_HEAD = /^(and|but|or|so|because|which|that|then|also|however|moreover|etc)\b/i;
+// Internal tool names leaking into reasoning ("让我调用 ask user。") are implementation
+// noise, never a user-facing aside. Suppressed by default (decision 2026-06).
+const INTERNAL_TOOL = /\b(ask_user|write_todos|search_knowledge_base|read_file|write_file|code_interpreter)\b/i;
+const INTERNAL_TOOL_PHRASE = /(调用|call)\s*(ask[_ ]?user|write[_ ]?todos|search[_ ]?knowledge)/i;
 
 /** Does the text contain any CJK ideograph? (used to skip lone non-CJK tails). */
 function hasCJK(s: string): boolean {
     return /[一-鿿]/.test(s);
 }
 
+/**
+ * Split a cleaned thinking passage into trimmed thought units. ASCII terminators
+ * only break at real sentence ends (UNIT_SPLIT), so decimals / tickers stay whole.
+ */
+function splitIntoUnits(cleaned: string): string[] {
+    return cleaned
+        .split(UNIT_SPLIT)
+        .map((u) => u.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+}
+
+/**
+ * Base prose gate — rejects what is STRUCTURALLY never a one-line aside, in EVERY
+ * scan pass: out-of-window length, a lone non-CJK tail in a Chinese passage, a bare
+ * parenthetical enumeration "(a, b, c)", a colon-led 顿号/comma list "风险：a、b、c",
+ * or a leaked internal tool name. `bare` is the unit with trailing terminators removed.
+ */
+function isBaseProse(bare: string, cjk: boolean): boolean {
+    if (bare.length < NARRATION_MIN_LEN || bare.length > NARRATION_MAX_LEN) return false;
+    if (cjk && !hasCJK(bare)) return false; // skip lone English tails in a Chinese passage
+    const t = bare.trim();
+    if (/^[(（[【]/.test(t) && /[)）\]】]$/.test(t)) return false; // bare parenthetical enumeration
+    if (/[:：].*[、,].*[、,]/.test(bare)) return false; // colon + ≥2 separators = a list, not a sentence
+    if (INTERNAL_TOOL.test(bare) || INTERNAL_TOOL_PHRASE.test(bare)) return false;
+    return true;
+}
+
+/**
+ * Strict prose gate — base gate plus a DEMOTION of continuation/data heads (lowercase
+ * or digit start, or a connective). Used by the first two passes so a clean
+ * capitalized/CJK sentence always wins over a split-off tail; the third pass drops
+ * this so a lowercase sentence that is the ONLY candidate still surfaces.
+ */
+function isStrictProse(bare: string, cjk: boolean): boolean {
+    if (!isBaseProse(bare, cjk)) return false;
+    if (/^[a-z0-9]/.test(bare) || CONNECTIVE_HEAD.test(bare)) return false;
+    return true;
+}
+
+/**
+ * (Narration §3) Extract a one-line natural-language narration (旁白) from a
+ * thinking passage. Pipeline:
+ *  - Clean: drop fenced/inline code, markdown markers, AND leading list bullets.
+ *  - Split into UNITS on sentence terminators (CJK always; ASCII only at a real
+ *    sentence end) AND newlines. Drop a trailing un-terminated fragment (mid-stream)
+ *    so streaming never shows a half-typed line.
+ *  - Pick the LAST unit that reads as a natural aside via a 3-pass scan:
+ *      1. a terminator-ended STRICT-prose sentence (the cleanest case),
+ *      2. any STRICT-prose unit (newline-bounded lines count — a completed line),
+ *      3. any BASE-prose unit (relax the head demotion so a lone lowercase/English
+ *         sentence still surfaces).
+ *    Each pass walks from the last unit backward. Structural junk (parentheticals,
+ *    lists, leaked tool names, out-of-window lengths) is rejected in every pass.
+ *  - Nothing natural → '' (caller falls back to the activity-summary label; better
+ *    blank than surfacing junk). The expanded thinking body is unaffected.
+ */
 export function extractNarration(text: string | null | undefined): string {
     if (!text) return '';
     const cleaned = text
@@ -301,31 +357,36 @@ export function extractNarration(text: string | null | undefined): string {
         .replace(/```[\s\S]*?```/g, ' ')
         // inline code `x` -> its inner text
         .replace(/`([^`]*)`/g, '$1')
-        // markdown emphasis / heading / list / quote markers
-        .replace(/[*_#>~]/g, ' ');
-    // Split into thought units on sentence terminators OR newlines (do NOT collapse
-    // newlines first — they are real thought boundaries).
-    const rawUnits = cleaned.split(/(?<=[。！？.!?…])|\n+/);
+        // markdown emphasis / heading / quote / strike markers
+        .replace(/[*_#>~]/g, ' ')
+        // leading list bullets ("- ", "* ", "1. ", "1)", "(1)") — require trailing
+        // whitespace so "-5%" / "3.5" are untouched
+        .replace(/^[ \t]*(?:[-*•‣◦]|\d+[.)]|[（(]\d+[）)])[ \t]+/gm, '');
     // A trailing unit is INCOMPLETE only when the text ends mid-sentence (no
     // terminator and no trailing newline) — drop it.
     const endsClean = /[。！？.!?…]\s*$/.test(cleaned) || /\n\s*$/.test(cleaned);
-    const units = rawUnits.map((u) => u.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const units = splitIntoUnits(cleaned);
     if (!units.length) return '';
     const complete = endsClean ? units : units.slice(0, -1);
     if (!complete.length) return '';
 
     const cjk = hasCJK(cleaned);
-    const isNatural = (u: string): boolean => {
-        const bare = u.replace(/[。！？.!?…]+$/, '').trim();
-        if (bare.length < NARRATION_MIN_LEN || bare.length > NARRATION_MAX_LEN) return false;
-        if (cjk && !hasCJK(u)) return false; // skip lone English tails in a Chinese passage
-        return true;
-    };
+    const bareOf = (u: string) => u.replace(/[。！？.!?…]+$/, '').trim();
+    const isTerm = (u: string) => /[。！？.!?…]\s*$/.test(u);
+    // Pass 1: a terminator-ended, strict-prose sentence.
     for (let i = complete.length - 1; i >= 0; i--) {
-        if (isNatural(complete[i])) return complete[i];
+        if (isTerm(complete[i]) && isStrictProse(bareOf(complete[i]), cjk)) return complete[i];
     }
-    // Fallback: the last complete unit (a long/odd line still beats nothing).
-    return complete[complete.length - 1];
+    // Pass 2: any strict-prose unit (newline-bounded lines have no terminator).
+    for (let i = complete.length - 1; i >= 0; i--) {
+        if (isStrictProse(bareOf(complete[i]), cjk)) return complete[i];
+    }
+    // Pass 3: relax the head demotion — a lone lowercase/English sentence still beats
+    // nothing, but structural junk (base gate) is still rejected.
+    for (let i = complete.length - 1; i >= 0; i--) {
+        if (isBaseProse(bareOf(complete[i]), cjk)) return complete[i];
+    }
+    return '';
 }
 
 /**
