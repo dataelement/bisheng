@@ -342,19 +342,27 @@ function splitIntoUnits(cleaned: string): string[] {
         .filter(Boolean);
 }
 
+// A numbered outline / agenda label line the model drafts INTO its reasoning while
+// composing a deliverable ("Day 7: 返程", "Day 1: 抵达福州…", "第3天：…", "Step 2: …") —
+// content, not a narration aside. Shape: a short label CONTAINING A DIGIT, then a colon,
+// then a value. The digit requirement keeps prose label-values ("结论：…", "Note: …") safe.
+const OUTLINE_LABEL = /^[^。！？.!?,，、:：]{0,10}\d[^。！？.!?,，、:：]{0,3}[:：]\s*\S/;
+
 /**
  * Base prose gate — rejects what is STRUCTURALLY never a one-line aside, in EVERY
- * scan pass: out-of-window length, a lone non-CJK tail in a Chinese passage, a bare
- * parenthetical enumeration "(a, b, c)", a colon-led 顿号/comma list "风险：a、b、c",
- * or a leaked internal tool name / virtual-FS path. `bare` is the unit with trailing
- * terminators removed.
+ * scan pass: out-of-window length, a bare parenthetical enumeration "(a, b, c)", a
+ * colon-led 顿号/comma list "风险：a、b、c", a numbered outline label "Day 7: 返程", or a
+ * leaked internal tool name / virtual-FS path. Language preference (CJK) is NOT here —
+ * it is a strict-only demotion (see isStrictProse) so a meaningful English sentence can
+ * still surface in Pass 3 when the CJK options are all junk. `bare` = unit sans trailing
+ * terminators.
  */
-function isBaseProse(bare: string, cjk: boolean): boolean {
+function isBaseProse(bare: string): boolean {
     if (bare.length < NARRATION_MIN_LEN || bare.length > NARRATION_MAX_LEN) return false;
-    if (cjk && !hasCJK(bare)) return false; // skip lone English tails in a Chinese passage
     const t = bare.trim();
     if (/^[(（[【]/.test(t) && /[)）\]】]$/.test(t)) return false; // bare parenthetical enumeration
     if (/[:：].*[、,].*[、,]/.test(bare)) return false; // colon + ≥2 separators = a list, not a sentence
+    if (OUTLINE_LABEL.test(t)) return false; // numbered outline / agenda label line (drafted content)
     if (INTERNAL_TOOL.test(bare) || INTERNAL_TOOL_PHRASE.test(bare) || INTERNAL_PATH.test(bare)) {
         return false; // leaked internal tool name or virtual-FS scratchpad path
     }
@@ -362,13 +370,15 @@ function isBaseProse(bare: string, cjk: boolean): boolean {
 }
 
 /**
- * Strict prose gate — base gate plus a DEMOTION of continuation/data heads (lowercase
- * or digit start, or a connective). Used by the first two passes so a clean
- * capitalized/CJK sentence always wins over a split-off tail; the third pass drops
- * this so a lowercase sentence that is the ONLY candidate still surfaces.
+ * Strict prose gate — base gate plus DEMOTIONS used by the first two passes: a lone
+ * non-CJK tail in a Chinese passage (prefer CJK), and a continuation/data head
+ * (lowercase / digit start, or a connective). So a clean CJK / capitalized sentence
+ * wins over an English tail or a split-off fragment; Pass 3 drops these demotions so a
+ * meaningful English sentence still surfaces when it is the only real sentence.
  */
 function isStrictProse(bare: string, cjk: boolean): boolean {
-    if (!isBaseProse(bare, cjk)) return false;
+    if (!isBaseProse(bare)) return false;
+    if (cjk && !hasCJK(bare)) return false; // demote a lone English tail in a CJK passage
     if (/^[a-z0-9]/.test(bare) || CONNECTIVE_HEAD.test(bare)) return false;
     return true;
 }
@@ -383,10 +393,12 @@ function isStrictProse(bare: string, cjk: boolean): boolean {
  *  - Pick the LAST unit that reads as a natural aside via a 3-pass scan:
  *      1. a terminator-ended STRICT-prose sentence (the cleanest case),
  *      2. any STRICT-prose unit (newline-bounded lines count — a completed line),
- *      3. any BASE-prose unit (relax the head demotion so a lone lowercase/English
- *         sentence still surfaces).
+ *      3. a terminator-ended BASE-prose SENTENCE (relax the CJK/head demotions so a
+ *         meaningful English sentence surfaces over CJK outline junk — but still a real
+ *         sentence, not a newline-bounded heading fragment).
  *    Each pass walks from the last unit backward. Structural junk (parentheticals,
- *    lists, leaked tool names, out-of-window lengths) is rejected in every pass.
+ *    lists, outline labels, leaked tool names, out-of-window lengths) is rejected in
+ *    every pass.
  *  - Nothing natural → '' (caller falls back to the activity-summary label; better
  *    blank than surfacing junk). The expanded thinking body is unaffected.
  */
@@ -416,10 +428,12 @@ export function extractNarration(text: string | null | undefined): string {
     for (let i = complete.length - 1; i >= 0; i--) {
         if (isStrictProse(bareOf(complete[i]), cjk)) return complete[i];
     }
-    // Pass 3: relax the head demotion — a lone lowercase/English sentence still beats
-    // nothing, but structural junk (base gate) is still rejected.
+    // Pass 3: a terminator-ended base-prose sentence — relax the CJK/head demotions so a
+    // meaningful English sentence (e.g. "Let me write out a solid plan now.") beats the
+    // CJK outline junk it sits among, while the terminator requirement keeps a
+    // newline-bounded English heading from surfacing.
     for (let i = complete.length - 1; i >= 0; i--) {
-        if (isBaseProse(bareOf(complete[i]), cjk)) return complete[i];
+        if (isTerm(complete[i]) && isBaseProse(bareOf(complete[i]))) return complete[i];
     }
     return '';
 }
