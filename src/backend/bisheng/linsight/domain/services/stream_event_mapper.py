@@ -125,6 +125,17 @@ class StreamContext:
     open_calls: dict[str, _OpenCall] = field(default_factory=dict)
     # call_id -> buffered orphan end payload (end arrived before start, §3.7)
     orphan_ends: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # call_id -> raw tool-call args JSON, REASSEMBLED from the token-delta
+    # tool_call_chunks of the `messages` stream (§3.7 streamed tool-call
+    # reassembly). A provider like DeepSeek streams a tool call's args across many
+    # chunks; only the FIRST carries name+id (with args still empty), the rest
+    # carry id='' arg-string deltas. Without this, a `task` delegation's goal
+    # (args.description) is lost — the start frame is built from the first,
+    # argless chunk. Keyed by call_id so a parallel multi-call burst stays split.
+    tool_arg_buffers: dict[str, str] = field(default_factory=dict)
+    # tool_call_chunks delta `index` -> call_id (the id is only present on the
+    # FIRST delta of each call; later deltas carry only the index).
+    tool_arg_index_to_id: dict[int, str] = field(default_factory=dict)
     # call_id shared by the deltas of the current contiguous thinking stream;
     # None means "no open thinking segment" (closed by any non-thinking chunk).
     current_thinking_call_id: str | None = None
@@ -361,22 +372,123 @@ class StreamEventMapper:
         """``messages`` mode chunk is ``(message, metadata)``."""
         message = chunk[0] if isinstance(chunk, (list, tuple)) else chunk
 
+        # Reassemble streamed tool-call args (token-delta tool_call_chunks). The
+        # model streams a tool call's args across many chunks and only the FIRST
+        # carries name+id; the start frame built from it therefore has empty args
+        # (a `task` delegation lost its goal). Accumulate the deltas here.
+        self._accumulate_tool_args(message)
+        # A delegation whose streamed args JUST completed gets a refreshed start
+        # frame carrying the now-known goal/params. Persistence upserts by call_id
+        # (state_message_manager.add_execution_task_step), so this REPLACES the
+        # goal-less start emitted when the call first surfaced — fixing both the
+        # live WS view and the persisted history with one frame and no duplicate.
+        enriched = self._reconcile_open_delegations()
+
         # Thinking stream: reasoning_content (DeepSeek-R1) or thinking blocks.
         thinking = self._extract_thinking(message)
         if thinking:
-            return [self._build_thinking_step(thinking, ns)]
+            return [*enriched, self._build_thinking_step(thinking, ns)]
 
         # Tool-call start frames live on AIMessage.tool_calls.
         tool_calls = getattr(message, "tool_calls", None)
         if tool_calls:
-            return self._handle_tool_starts(tool_calls, ns)
+            return [*enriched, *self._handle_tool_starts(tool_calls, ns)]
 
         # Tool result -> end frame, keyed by tool_call_id.
         tool_call_id = getattr(message, "tool_call_id", None)
         if tool_call_id:
-            return self._handle_tool_end(message, tool_call_id, ns)
+            return [*enriched, *self._handle_tool_end(message, tool_call_id, ns)]
 
-        return []
+        return enriched
+
+    def _accumulate_tool_args(self, message: Any) -> None:
+        """Append this chunk's tool_call_chunks arg-string deltas to per-call
+        buffers (see ``StreamContext.tool_arg_buffers``).
+
+        Only the first delta of a call carries ``id``; later deltas carry only
+        ``index``, so an index->call_id map threads them together. Plain
+        (non-chunk) messages have no tool_call_chunks and are skipped, so a
+        provider that ships full args in one shot is unaffected.
+        """
+        chunks = getattr(message, "tool_call_chunks", None)
+        if not chunks:
+            return
+        for tcc in chunks:
+            if not isinstance(tcc, dict):
+                continue
+            index = tcc.get("index")
+            cid = tcc.get("id")
+            if cid:
+                if index is not None:
+                    self.ctx.tool_arg_index_to_id[index] = cid
+                self.ctx.tool_arg_buffers.setdefault(cid, "")
+            elif index is not None:
+                cid = self.ctx.tool_arg_index_to_id.get(index)
+            if not cid:
+                continue
+            self.ctx.tool_arg_buffers[cid] = self.ctx.tool_arg_buffers.get(cid, "") + (tcc.get("args") or "")
+
+    def _parse_arg_buffer(self, call_id: str) -> dict[str, Any] | None:
+        """Parse a call's reassembled arg buffer once it is a complete JSON object.
+
+        Returns ``None`` while the buffer is still partial (mid-stream JSON does
+        not parse) — strict ``json.loads`` succeeds only when the object closes,
+        so this fires exactly once per call, when its args finish streaming.
+        """
+        raw = self.ctx.tool_arg_buffers.get(call_id)
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _enrich_delegation_from_buffer(self, open_call: _OpenCall) -> bool:
+        """Fill an open ``task`` delegation's goal/params from its reassembled args.
+
+        Idempotent: returns ``False`` (no-op) once the goal is already set, for a
+        non-delegation call, or while the args buffer is still incomplete. Returns
+        ``True`` only on the transition empty -> goal-known, so the caller emits
+        exactly one refreshed start frame per delegation.
+        """
+        if open_call.step_type != "subagent" or open_call.delegate_goal:
+            return False
+        args = self._parse_arg_buffer(open_call.call_id)
+        if not args:
+            return False
+        goal = args.get("description") or args.get("instruction") or ""
+        if not goal:
+            return False
+        open_call.delegate_goal = goal
+        open_call.call_reason = goal
+        open_call.params = args
+        open_call.name = str(args.get("subagent_type") or open_call.name or "general-purpose")
+        return True
+
+    def _reconcile_open_delegations(self) -> list[BaseEvent]:
+        """Emit a refreshed start frame for each delegation whose args just completed."""
+        events: list[BaseEvent] = []
+        for open_call in self.ctx.open_calls.values():
+            if not self._enrich_delegation_from_buffer(open_call):
+                continue
+            extra_info: dict[str, Any] = {"truncated": False, "delegate_goal": open_call.delegate_goal}
+            if open_call.namespace:
+                extra_info["namespace"] = open_call.namespace
+            events.append(
+                ExecStep(
+                    task_id=open_call.task_id,
+                    call_id=open_call.call_id,
+                    name=open_call.name,
+                    call_reason=open_call.call_reason or "",
+                    params=open_call.params,
+                    output=None,
+                    step_type=open_call.step_type,
+                    status="start",
+                    extra_info=extra_info,
+                )
+            )
+        return events
 
     def _handle_tool_starts(self, tool_calls: list[dict[str, Any]], ns: str | None) -> list[BaseEvent]:
         events: list[BaseEvent] = []
@@ -461,6 +573,12 @@ class StreamEventMapper:
             # End arrived before start — buffer it (§3.7 reordering).
             self.ctx.orphan_ends[call_id] = payload
             return []
+        # Last-chance goal/params fill: if _reconcile_open_delegations never ran
+        # for this call (e.g. the args finished streaming in the same chunk that
+        # also carried the tool result), recover them from the buffer so the end
+        # frame still carries the delegation goal. The buffer is then disposable.
+        self._enrich_delegation_from_buffer(open_call)
+        self.ctx.tool_arg_buffers.pop(call_id, None)
         return [self._build_end_step(open_call, payload)]
 
     def _build_end_step(self, open_call: _OpenCall, payload: dict[str, Any]) -> ExecStep:

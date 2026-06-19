@@ -492,3 +492,83 @@ class TestSubagentDelegation:
         assert events[0].step_type == "tool"
         # namespace still rides along so the UI can attribute it to its owner
         assert events[0].extra_info.get("namespace") == "general-purpose:0"
+
+
+class TestStreamedDelegationArgs:
+    """A `task` delegation whose args stream across token-delta tool_call_chunks
+    (DeepSeek et al.) must still recover its goal. Before the reassembly fix the
+    start frame was built from the first, argless chunk, so delegate_goal was '',
+    making the subagent indistinguishable from a plain deep-thinking segment.
+    """
+
+    @staticmethod
+    def _arg_delta(name: str, args: str, cid: str, index: int = 0) -> AIMessageChunk:
+        """An AIMessageChunk carrying ONE tool_call_chunks arg-string delta.
+
+        Mirrors the real stream: only the first delta of a call carries name+id
+        (with args still empty); later deltas carry id='' arg-string fragments.
+        """
+        return AIMessageChunk(
+            content="",
+            tool_call_chunks=[{"name": name, "args": args, "id": cid, "index": index, "type": "tool_call_chunk"}],
+        )
+
+    def test_streamed_task_args_recover_goal(self, mapper: StreamEventMapper):
+        # chunk 1: name+id, args still empty -> argless start frame (goal '')
+        c1 = self._arg_delta("task", "", "call_s1")
+        s1 = [e for e in mapper.normalize("messages", (c1, {})) if isinstance(e, ExecStep)]
+        assert s1 and s1[0].step_type == "subagent" and s1[0].call_id == "call_s1"
+        assert s1[0].extra_info.get("delegate_goal") == ""  # goal not known yet
+
+        # chunk 2: partial args JSON — buffer still incomplete, nothing emitted
+        c2 = self._arg_delta("", '{"description": "调研数据中心光模块', "")
+        assert [e for e in mapper.normalize("messages", (c2, {})) if isinstance(e, ExecStep)] == []
+
+        # chunk 3: args JSON closes -> refreshed start frame carries the goal
+        c3 = self._arg_delta("", '", "subagent_type": "general-purpose"}', "")
+        s3 = [e for e in mapper.normalize("messages", (c3, {})) if isinstance(e, ExecStep)]
+        assert len(s3) == 1
+        ev = s3[0]
+        # same call_id -> persistence upserts it over the argless start frame
+        assert ev.call_id == "call_s1"
+        assert ev.step_type == "subagent"
+        assert ev.status == "start"
+        assert ev.name == "general-purpose"  # subagent_type recovered from args
+        assert ev.extra_info.get("delegate_goal") == "调研数据中心光模块"
+        assert ev.call_reason == "调研数据中心光模块"
+
+    def test_streamed_task_end_frame_carries_goal(self, mapper: StreamEventMapper):
+        for delta in (
+            self._arg_delta("task", "", "call_s2"),
+            self._arg_delta("", '{"description": "调研竞争格局"}', ""),
+        ):
+            mapper.normalize("messages", (delta, {}))
+        tool_msg = ToolMessage(content="子代理返回的调研摘要", tool_call_id="call_s2")
+        end = [e for e in mapper.normalize("messages", (tool_msg, {})) if isinstance(e, ExecStep)]
+        assert len(end) == 1
+        assert end[0].status == "end"
+        assert end[0].extra_info.get("delegate_goal") == "调研竞争格局"
+        assert end[0].output == "子代理返回的调研摘要"
+
+    def test_parallel_streamed_delegations_stay_separated(self, mapper: StreamEventMapper):
+        # Two parallel task calls (indices 0 and 1) interleave their arg deltas;
+        # each must reassemble against its own call_id.
+        mapper.normalize("messages", (self._arg_delta("task", "", "call_a", index=0), {}))
+        mapper.normalize("messages", (self._arg_delta("task", "", "call_b", index=1), {}))
+        mapper.normalize("messages", (self._arg_delta("", '{"description": "任务A"}', "", index=0), {}))
+        ev_b = [
+            e
+            for e in mapper.normalize("messages", (self._arg_delta("", '{"description": "任务B"}', "", index=1), {}))
+            if isinstance(e, ExecStep)
+        ]
+        assert len(ev_b) == 1
+        assert ev_b[0].call_id == "call_b"
+        assert ev_b[0].extra_info.get("delegate_goal") == "任务B"
+
+    def test_complete_args_in_one_chunk_still_works(self, mapper: StreamEventMapper):
+        # Backward-compat: a provider that ships full args in one AIMessage (no
+        # streaming) gets the goal at the start frame and triggers no refresh.
+        msg = AIMessage(content="", tool_calls=[{"id": "c1", "name": "task", "args": {"description": "调研"}}])
+        events = [e for e in mapper.normalize("messages", (msg, {})) if isinstance(e, ExecStep)]
+        assert len(events) == 1  # exactly one start frame, no duplicate refresh
+        assert events[0].extra_info.get("delegate_goal") == "调研"
