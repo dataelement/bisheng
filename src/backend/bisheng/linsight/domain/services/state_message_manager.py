@@ -72,6 +72,18 @@ class LinsightStateMessageManager:
     DEFAULT_RETRY_ATTEMPTS = 3
     DEFAULT_RETRY_DELAY = 1
     KEY_PREFIX = "linsight_tasks:"
+    # Max interval (seconds) between DB rewrites of a task's `history` while a
+    # single thinking segment streams. A reasoning model streams thinking
+    # token-by-token and each delta upserts into the SAME history entry, so the
+    # old per-delta DB write rewrote the whole (growing, ~MB) history JSON
+    # thousands of times for one task. On DM8 (达梦) that exhausted the undo
+    # segment and wedged the giant UPDATE mid-flight (-7120 "Undo record version
+    # too old"), making the row unreadable and white-screening the task page.
+    # Coalescing the thinking-delta DB writes to at most one per this interval
+    # cuts the write amplification by 1-2 orders of magnitude. Tool / subagent /
+    # status frames and a thinking segment's FIRST delta still persist
+    # immediately, so deliverables and reload data are never delayed.
+    THINKING_DB_FLUSH_INTERVAL = 2.0
 
     def __init__(self, session_version_id: str):
         """
@@ -91,6 +103,9 @@ class LinsightStateMessageManager:
             "messages": f"{self._key_prefix}messages",
             "execution_tasks": f"{self._key_prefix}execution_tasks:",
         }
+        # task_id -> event-loop monotonic time of its last `history` DB flush;
+        # drives THINKING_DB_FLUSH_INTERVAL coalescing in add_execution_task_step.
+        self._last_history_db_flush: dict[str, float] = {}
 
     async def _handle_redis_operation(self, operation, *args, **kwargs):
         """
@@ -461,10 +476,29 @@ class LinsightStateMessageManager:
             if not merged:
                 task_model.history.append(step_dump)
 
-            # Update Redis and database
+            # Redis always carries the freshest history: get_execution_task reads
+            # it back to accumulate the next step, and the live WS view derives from
+            # push_message — so it is written every step (no -7120 risk on Redis).
             await self._redis_client.aset(task_key, task_model.model_dump(), expiration=self.DEFAULT_EXPIRATION)
 
-            await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
+            # DB write-amplification guard (DM8 -7120 incident, 2026-06): a thinking
+            # segment streams as many token-delta frames that all merge into ONE
+            # history entry. Rewriting the whole (growing, ~MB) history JSON to the
+            # DB on every such delta is what exhausted the DM8 undo segment and
+            # wedged the giant UPDATE. Coalesce them — a merged thinking delta flushes
+            # the DB at most once per THINKING_DB_FLUSH_INTERVAL. EVERY other frame
+            # (tool / subagent / knowledge / call_user_input, a NEW thinking segment's
+            # first delta, anything non-thinking) flushes immediately, so deliverables
+            # / outputs / a reloaded view are never behind. Redis stays authoritative
+            # in the throttle window, so no step is lost.
+            now = asyncio.get_event_loop().time()
+            is_thinking_delta = merged and step_dump.get("step_type") == "thinking"
+            recently_flushed = (
+                now - self._last_history_db_flush.get(task_id, float("-inf"))
+            ) < self.THINKING_DB_FLUSH_INTERVAL
+            if not (is_thinking_delta and recently_flushed):
+                await LinsightExecuteTaskDao.update_by_id(task_id, history=task_model.history)
+                self._last_history_db_flush[task_id] = now
 
             # Tool-call steps carry the model's chosen input params (e.g. the
             # knowledge_id / query passed to search_knowledge_base) + result. The
