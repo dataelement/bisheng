@@ -36,9 +36,11 @@ export function useWorkspacePanel(versionId: string) {
         setOpen(true);
     };
 
-    /** Close the whole panel (list X or preview Close); entry button returns. */
+    /** Close the whole panel (list X or preview Close); entry button returns.
+     * Keep previewFile as-is so a preview collapses while still showing the file
+     * instead of flashing back to the list mid-animation; openWorkspace (and the
+     * versionId reset above) restore the list view on the next open. */
     const closeWorkspace = () => {
-        setPreviewFile(null);
         setFullscreen(false);
         setOpen(false);
     };

@@ -1,4 +1,5 @@
-import { Loader2, LayoutGrid } from 'lucide-react';
+import { LayoutGrid } from 'lucide-react';
+import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AgentCard } from './components/AgentCard';
@@ -181,11 +182,11 @@ export default function AppCenter() {
                 data-scrolling={isMainScrolling ? 'true' : 'false'}
             >
                 {loading ? (
-                    <div className="flex w-full items-center justify-center py-20">
-                        <Loader2 className="animate-spin text-[#335cff] size-8" />
+                    <div className="flex w-full flex-1 items-center justify-center">
+                        <LoadingIcon className="size-20 text-primary" />
                     </div>
                 ) : apps.length === 0 ? (
-                    <div className="w-full flex items-center justify-center py-10">
+                    <div className="w-full flex-1 flex items-center justify-center">
                         <AppEmptyState />
                     </div>
                 ) : (

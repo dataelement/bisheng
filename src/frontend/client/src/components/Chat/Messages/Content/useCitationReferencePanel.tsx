@@ -58,7 +58,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
           handleCloseCitationPanel();
         }
       }}
-      panelClassName="h-full w-full max-w-none bg-white"
+      panelClassName="h-full w-full max-w-none bg-[#FBFBFB]"
       messageId={citationPanelPayload?.messageId}
       content={citationPanelPayload?.content ?? ''}
       webContent={citationPanelPayload?.webContent}
@@ -70,6 +70,55 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
   );
 
   const citationPanelElement = useMemo(() => {
+    // ≥1024: in-flow docked panel that stays mounted, so open/close animates its
+    // width + opacity + padding with the same easing as the task-mode workspace
+    // docked card — instead of a hard mount/unmount with a one-way slide-in.
+    // overflow-hidden clips the content while the inner box keeps a min-width, so
+    // it slides/clips rather than reflowing as the panel collapses.
+    const isInlineFlowPanel =
+      useInlineCitationPanel && !usePortaledInlineCitationPanel && !isCitationMobile;
+    if (isInlineFlowPanel) {
+      const inlineOpen = citationPanelOpen && !!citationPanelPayload;
+      return (
+        <div
+          className={cn(
+            'min-h-0 shrink-0 overflow-hidden transition-[width,opacity,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
+            inlineOpen ? 'p-1 opacity-100' : 'pointer-events-none p-0 opacity-0',
+          )}
+          style={{ width: inlineOpen ? (useExpandedCitationPanel ? '480px' : '360px') : '0px' }}
+        >
+          {citationPanelPayload && (
+            <div
+              data-citation-popover-surface
+              // min-w must stay below the p-1 content width (panel width − 8px), or
+              // the inner box overflows and overflow-hidden clips the right gutter.
+              className={cn('h-full', useExpandedCitationPanel ? 'min-w-[472px]' : 'min-w-[352px]')}
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <CitationReferencesDrawer
+                panelOnly
+                desktopMode="inline-panel"
+                open={citationPanelOpen}
+                onOpenChange={(nextOpen) => {
+                  if (!nextOpen) {
+                    handleCloseCitationPanel();
+                  }
+                }}
+                panelClassName="h-full w-full overflow-hidden rounded-[12px] border border-[#ECECEC] bg-[#FBFBFB]"
+                messageId={citationPanelPayload.messageId}
+                content={citationPanelPayload.content}
+                webContent={citationPanelPayload.webContent}
+                citations={citationPanelPayload.citations}
+                referenceItems={citationPanelPayload.referenceItems}
+                initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
+              />
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (!citationPanelOpen || !citationPanelPayload) {
       return null;
     }
@@ -109,55 +158,25 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
       );
     }
 
+    // 768–1023: portaled fixed overlay (≥1024 in-flow handled above).
     if (useInlineCitationPanel) {
-      if (usePortaledInlineCitationPanel && inlineCitationPortalReady) {
-        return createPortal(
-          <div
-            data-citation-popover-surface
-            className={cn(
-              'fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300',
-              'rounded-tl-xl',
-              useExpandedCitationPanel ? 'w-[min(480px,100vw)]' : 'w-[min(360px,100vw)]',
-            )}
-            onClick={(event) => event.stopPropagation()}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {citationPanelContent}
-          </div>,
-          document.body,
-        );
-      }
-
-      if (usePortaledInlineCitationPanel && !inlineCitationPortalReady) {
+      if (!inlineCitationPortalReady) {
         return null;
       }
-
-      return (
+      return createPortal(
         <div
           data-citation-popover-surface
           className={cn(
-            'flex h-full min-w-0 shrink-0 border-l border-[#ECECEC] bg-white animate-in slide-in-from-right duration-300',
-            useExpandedCitationPanel ? 'w-[480px]' : 'w-[360px]',
+            'fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300',
+            'rounded-tl-xl',
+            useExpandedCitationPanel ? 'w-[min(480px,100vw)]' : 'w-[min(360px,100vw)]',
           )}
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
         >
-          <CitationReferencesDrawer
-            panelOnly
-            desktopMode="inline-panel"
-            open={citationPanelOpen}
-            onOpenChange={(nextOpen) => {
-              if (!nextOpen) {
-                handleCloseCitationPanel();
-              }
-            }}
-            panelClassName="w-full"
-            messageId={citationPanelPayload.messageId}
-            content={citationPanelPayload.content}
-            webContent={citationPanelPayload.webContent}
-            citations={citationPanelPayload.citations}
-            referenceItems={citationPanelPayload.referenceItems}
-            initialDocumentPreview={citationPanelPayload.initialDocumentPreview}
-          />
-        </div>
+          {citationPanelContent}
+        </div>,
+        document.body,
       );
     }
 
@@ -181,7 +200,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
                 handleCloseCitationPanel();
               }
             }}
-            panelClassName="h-full w-full max-w-none bg-white"
+            panelClassName="h-full w-full max-w-none bg-[#FBFBFB]"
             messageId={citationPanelPayload.messageId}
             content={citationPanelPayload.content}
             webContent={citationPanelPayload.webContent}

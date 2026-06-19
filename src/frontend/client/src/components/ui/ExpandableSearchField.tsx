@@ -162,7 +162,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                 </div>
                 <input
                     ref={setInputRef}
-                    type="search"
+                    type="text"
                     inputMode="search"
                     autoComplete="off"
                     disabled={disabled}

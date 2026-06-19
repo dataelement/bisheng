@@ -63,7 +63,7 @@ const DocxPreview = ({ filePath }) => {
 
     if (loading) {
         return <div className="absolute left-0 top-0 z-10 flex h-full w-full items-center justify-center bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
-            <LoadingIcon />
+            <LoadingIcon className="size-20" />
         </div>
     }
 

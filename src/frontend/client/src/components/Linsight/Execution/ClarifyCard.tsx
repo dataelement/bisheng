@@ -324,7 +324,23 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                 - Last page: only 确定 (always shown + clickable = finish; 跳过 hidden).
                 - Earlier pages: 确定/下一步 once answered (multi-select / free-text;
                   single-select auto-advances on pick) + 跳过 → to skip to the next. */}
-            <div className="mt-3 flex items-center justify-end gap-4 pr-4">
+            <div className="mt-3 flex items-center justify-end gap-2 pr-4">
+                {!isLast && (
+                    <button
+                        type="button"
+                        disabled={disabled || submitted}
+                        onClick={handleSkipCurrent}
+                        className="flex items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
+                    >
+                        {localize('com_linsight_clarify_skip')}
+                        {/* Hide the arrow on multi-select pages (跳过 sits beside 下一题). */}
+                        {!q?.multiple && <ArrowRight size={14} className="shrink-0" />}
+                    </button>
+                )}
+                {/* Divider only when both 跳过 and 下一题 are present. */}
+                {!isLast && hasAnswer && (q?.multiple || !q) && (
+                    <span className="h-3.5 w-px bg-[#E0E0E0]" />
+                )}
                 {(isLast || (hasAnswer && (q?.multiple || !q))) && (
                     <button
                         type="button"
@@ -342,17 +358,6 @@ export function ClarifyCard({ data, disabled = false, onSubmit }: ClarifyCardPro
                             ? localize('com_linsight_clarify_submit')
                             : localize('com_linsight_clarify_next')}
                         <Outlined.CornerDownLeft size={14} className="shrink-0" />
-                    </button>
-                )}
-                {!isLast && (
-                    <button
-                        type="button"
-                        disabled={disabled || submitted}
-                        onClick={handleSkipCurrent}
-                        className="flex items-center gap-1 text-sm font-medium text-[#8C8C8C] hover:text-[#212121] disabled:opacity-50 transition-colors"
-                    >
-                        {localize('com_linsight_clarify_skip')}
-                        <ArrowRight size={14} className="shrink-0" />
                     </button>
                 )}
             </div>

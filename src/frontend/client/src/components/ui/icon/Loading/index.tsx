@@ -35,7 +35,7 @@ export const LoadingIcon = forwardRef<
                 src={loadingIcon}
                 alt=""
                 {...props}
-                className={cn('text-primary max-w-14', className, window.BRAND_CONFIG?.loadingAnimation)}
+                className={cn('text-primary', className || 'max-w-14', window.BRAND_CONFIG?.loadingAnimation)}
             />
         );
     }

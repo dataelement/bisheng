@@ -29,7 +29,7 @@ export default function index({ id = '', vid = '', shareToken = '' }) {
         <div className='relative h-full bg-white'>
             {
                 loading && <div className='absolute z-10 size-full flex justify-center items-center bg-white/50'>
-                    <LoadingIcon />
+                    <LoadingIcon className="size-20" />
                 </div>
             }
             <Header
