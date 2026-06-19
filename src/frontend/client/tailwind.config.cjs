@@ -45,6 +45,18 @@ module.exports = {
           '0%': { opacity: '0', transform: 'translateY(4px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // Linsight narration ticker (R2): the incoming complete sentence rolls up
+        // from below into place + fades in...
+        'narration-in': {
+          '0%': { opacity: '0', transform: 'translateY(0.5em)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        // ...while the outgoing sentence rolls further up + fades out (a vertical
+        // departure-board crossfade between discrete thoughts).
+        'narration-out': {
+          '0%': { opacity: '1', transform: 'translateY(0)' },
+          '100%': { opacity: '0', transform: 'translateY(-0.5em)' },
+        },
         // diagonal glint sweeping continuously across the subagent card
         'sheen-sweep': {
           '0%': { transform: 'translateX(-130%)' },
@@ -67,6 +79,9 @@ module.exports = {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-scale': 'pulse-scale 1s ease-in-out infinite',
         'thinking-appear': 'thinking-appear 0.25s ease-out',
+        // easeOutExpo-ish entrance; sharper exit so the old line clears quickly.
+        'narration-in': 'narration-in 0.42s cubic-bezier(0.22, 1, 0.36, 1)',
+        'narration-out': 'narration-out 0.42s cubic-bezier(0.4, 0, 1, 1) forwards',
       },
       colors: {
         gray: {

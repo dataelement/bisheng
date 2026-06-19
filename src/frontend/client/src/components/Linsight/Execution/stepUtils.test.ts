@@ -568,6 +568,16 @@ describe('stepUtils — extractNarration (§3 narration 旁白)', () => {
         expect(extractNarration(null)).toBe('');
         expect(extractNarration('```py\nx=1\n```')).toBe('');
     });
+
+    it('holds the last COMPLETE sentence and ignores a trailing streaming fragment', () => {
+        // mid-stream: the final clause has no terminator yet -> use the prior complete one
+        expect(extractNarration('先看看已有材料。我正在分析竞争格局和主要厂')).toBe('先看看已有材料。');
+        // no complete sentence yet -> nothing (never surface a half-typed fragment)
+        expect(extractNarration('我正在分析竞争格局')).toBe('');
+        expect(extractNarration('. module competitive landscape and major vendors. I will keep going')).toBe(
+            'module competitive landscape and major vendors.',
+        );
+    });
 });
 
 describe('stepUtils — narrationFromSteps (§3 running vs done)', () => {

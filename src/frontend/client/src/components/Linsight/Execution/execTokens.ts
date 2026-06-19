@@ -44,8 +44,8 @@ export const ACTIVITY_I18N: Record<ActivityCategory, string> = {
 
 // ── card texture re-exports ─────────────────────────────────────────────────
 /**
- * Re-export the subagent card texture tokens so callers can pull every shared
- * token from one module. The definitions stay in cardTexture.ts (SubagentTrack
- * already imports them there — do not move the bytes).
+ * Re-export the card texture tokens so callers can pull every shared token from
+ * one module. The definitions stay in cardTexture.ts (no current consumer after
+ * the R3 完全拆平 refactor removed the subagent cards — kept for future reuse).
  */
 export { DOT_BG, SHEEN } from './cardTexture';

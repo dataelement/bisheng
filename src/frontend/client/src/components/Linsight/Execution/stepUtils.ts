@@ -269,10 +269,13 @@ export function summarizeActivity(steps: MergedStep[] | null | undefined): Activ
 /**
  * (Narration §3) Extract a one-line natural-language narration (旁白) from a
  * thinking passage. Strips markdown emphasis / inline code / fenced code blocks,
- * then takes the LAST sentence split on `。！？.!?`. If that last sentence is too
- * short (<4 chars — e.g. a lone "好。") it falls back to the previous sentence.
- * Empty / unusable input returns '' (caller falls back to a localized label).
- * The expanded thinking body is unaffected — this only feeds the collapsed hero.
+ * then takes the last COMPLETE sentence (one ending in `。！？.!?`). A trailing
+ * un-terminated fragment is IGNORED — this is the key streaming fix: while a
+ * sentence is still being typed it has no terminator, so the narration holds the
+ * previous complete sentence instead of churning through half-words. If the last
+ * complete sentence is too short (<4 chars — e.g. a lone "好。") it falls back to
+ * the previous one. No complete sentence yet → '' (caller shows nothing). The
+ * expanded thinking body is unaffected — this only feeds the collapsed hero.
  */
 const NARRATION_MIN_LEN = 4;
 export function extractNarration(text: string | null | undefined): string {
@@ -287,11 +290,12 @@ export function extractNarration(text: string | null | undefined): string {
     // collapse whitespace runs (incl. newlines) to single spaces
     cleaned = cleaned.replace(/\s+/g, ' ').trim();
     if (!cleaned) return '';
-    // split into sentences, keeping each sentence's trailing terminator
+    // Split on sentence terminators and keep ONLY COMPLETE sentences (ending in a
+    // terminator); a trailing un-terminated fragment (mid-stream) is dropped.
     const sentences = cleaned
         .split(/(?<=[。！？.!?])/)
         .map((s) => s.trim())
-        .filter(Boolean);
+        .filter((s) => /[。！？.!?]$/.test(s));
     if (!sentences.length) return '';
     const last = sentences[sentences.length - 1];
     // count chars without the trailing terminator for the short-sentence check

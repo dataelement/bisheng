@@ -31,6 +31,7 @@ import { cn } from '~/utils';
 import { ACCENT, ACTIVITY_I18N, BODY, INK, MUTED } from './execTokens';
 import { useExecutionLive } from './executionLive';
 import { KnowledgeRow } from './KnowledgeRow';
+import { NarrationTicker } from './NarrationTicker';
 import TimelineRail from './TimelineRail';
 import ToolRowLite from './ToolRowLite';
 import { formatSeconds, useElapsedTicker } from './useElapsedTicker';
@@ -221,14 +222,13 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
                         style={{ color: MUTED }}
                     />
                 </button>
-                {/* R2 旁白: shown only while collapsed — once expanded the full
-                    thinking body carries the same reasoning, so the aside would just
-                    duplicate it. Quiet (Muted), clamped to two lines. */}
-                {!open && narration && (
-                    <p className="mt-0.5 line-clamp-2 text-xs leading-5" style={{ color: MUTED }}>
-                        {narration}
-                    </p>
-                )}
+                {/* R2 旁白 (live thought ticker): the segment's latest COMPLETE
+                    sentence, advancing one sentence at a time with a vertical
+                    crossfade. Shown while the segment runs (a live aside under the
+                    header) AND when collapsed (the summary); hidden only when a
+                    finished segment is expanded, where the full thinking body below
+                    already carries the same reasoning. */}
+                {(running || !open) && <NarrationTicker text={narration} />}
                 <div
                     className={cn('grid transition-all duration-300 ease-out', open && 'mt-2')}
                     style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
