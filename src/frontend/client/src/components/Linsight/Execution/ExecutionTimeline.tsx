@@ -14,10 +14,9 @@
 import { useMemo } from 'react';
 import { DeepStepGroup } from './DeepStepGroup';
 import { KnowledgeRow } from './KnowledgeRow';
-import { SubagentTeamGroup } from './SubagentTeamGroup';
 import { ToolRowLite } from './ToolRowLite';
 import type { ExecStepEventData } from './stepUtils';
-import { buildTimelineGroups, mergeStepFrames } from './stepUtils';
+import { buildTimelineGroups, explodeSubagentGroup, mergeStepFrames } from './stepUtils';
 
 interface ExecutionTimelineProps {
     history: ExecStepEventData[] | null | undefined;
@@ -50,10 +49,26 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
                 if (node.kind === 'subagent_group') {
                     // buildFlowNodes materializes a group only once a real subagent
                     // (a distinct namespace) arrives, so this is normally non-empty;
-                    // guard defensively so a stray empty group can never crash on
-                    // `agents[0].step` downstream.
+                    // guard defensively so a stray empty group can never crash.
                     if (!node.agents.length) return null;
-                    return <SubagentTeamGroup key={node.agents[0].step.callId} group={node} />;
+                    // R3 完全拆平 (2026-06): dissolve the team shell — render each
+                    // subagent as its own flat top-level segment via the shared
+                    // DeepStepGroup, headed by its delegation goal + activity summary
+                    // and a distinct agent rail icon. (Trade-off accepted in §1.3:
+                    // the explicit "N parallel subagents" grouping signal is dropped.)
+                    return explodeSubagentGroup(node).map((seg, sIdx) => (
+                        <DeepStepGroup
+                            key={seg.steps[0]?.callId ?? `sub_${idx}_${sIdx}`}
+                            group={{
+                                kind: 'deep_step_group',
+                                steps: seg.steps,
+                                startedAt: seg.startedAt,
+                                endedAt: seg.endedAt,
+                                running: seg.running,
+                            }}
+                            subagent={{ goal: seg.goal, idx: seg.idx }}
+                        />
+                    ));
                 }
                 // Residual bare `step` node: buildTimelineGroups wraps every
                 // top-level step into a deep_step_group, so this branch is a

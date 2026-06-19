@@ -411,6 +411,7 @@
   "com_linsight_act_code": "Ran code {{0}} time(s)",
   "com_linsight_act_browse": "Searched files {{0}} time(s)",
   "com_linsight_act_other": "Performed {{0}} step(s)",
+  "com_linsight_act_summary": "{{0}} ({{1}}s)",
   "com_linsight_subagent_parallel": "Dispatched {{0}} subagents for parallel research",
   "com_linsight_elapsed_running": "Elapsed {{0}}",
   "com_linsight_elapsed_done": "Took {{0}}",

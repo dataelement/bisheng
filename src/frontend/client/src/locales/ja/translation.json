@@ -396,6 +396,7 @@
   "com_linsight_act_code": "コード実行 {{0}} 回",
   "com_linsight_act_browse": "ファイル検索 {{0}} 回",
   "com_linsight_act_other": "{{0}} 件の操作を実行",
+  "com_linsight_act_summary": "{{0}}（{{1}}秒）",
   "com_linsight_subagent_parallel": "{{0}} 個のサブエージェントを並行調査に派遣しました",
   "com_linsight_elapsed_running": "経過 {{0}}",
   "com_linsight_elapsed_done": "所要 {{0}}",

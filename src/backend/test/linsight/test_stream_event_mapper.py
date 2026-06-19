@@ -131,12 +131,17 @@ class TestTaskIdStability:
 
 
 # --------------------------------------------------------------------------
-# ExecStep.task_id attribution (design §3.3.1 rule 4)
+# ExecStep.task_id attribution — B2 段流重构 (2026-06): EVERY main-graph step
+# lands in the single session bucket (id == svid). The implicit in_progress
+# cursor is gone; steps are NEVER attributed to a todo. write_todos is only the
+# segment boundary, not an attribution signal.
 # --------------------------------------------------------------------------
 
 
 class TestExecStepAttribution:
-    def test_step_attributed_to_in_progress_todo(self, mapper: StreamEventMapper):
+    def test_step_lands_in_session_bucket_even_with_in_progress_todo(self, mapper: StreamEventMapper):
+        # Core B2 inversion: even while a todo is in_progress, the step's task_id
+        # is svid (NOT the todo's id). No more time-cursor.
         mapper.normalize(
             "updates",
             {"tools": {"todos": [{"content": "任务A", "status": "in_progress"}]}},
@@ -147,9 +152,9 @@ class TestExecStepAttribution:
         )
         events = mapper.normalize("messages", (msg, {}))
         steps = [e for e in events if isinstance(e, ExecStep)]
-        assert steps and steps[0].task_id == _task_id("任务A")
+        assert steps and steps[0].task_id == SVID
 
-    def test_step_falls_back_to_svid_without_in_progress(self, mapper: StreamEventMapper):
+    def test_step_lands_in_session_bucket_without_todos(self, mapper: StreamEventMapper):
         msg = AIMessage(
             content="",
             tool_calls=[{"id": "call_1", "name": "search", "args": {"q": "x"}}],
@@ -157,6 +162,31 @@ class TestExecStepAttribution:
         events = mapper.normalize("messages", (msg, {}))
         steps = [e for e in events if isinstance(e, ExecStep)]
         assert steps and steps[0].task_id == SVID
+
+    def test_thinking_lands_in_session_bucket(self, mapper: StreamEventMapper):
+        # thinking rows follow the same rule, even with an in_progress todo.
+        mapper.normalize(
+            "updates",
+            {"tools": {"todos": [{"content": "任务A", "status": "in_progress"}]}},
+        )
+        chunk = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "想一下"})
+        ev = [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)][0]
+        assert ev.step_type == "thinking"
+        assert ev.task_id == SVID
+
+    def test_subagent_internal_step_lands_in_session_bucket(self, mapper: StreamEventMapper):
+        # A subagent-internal tool (namespaced) is identified by extra_info.namespace,
+        # NOT by task_id — its task_id is still the session bucket (svid). This is
+        # what keeps R3 (subagent flattening) working after B2.
+        mapper.normalize(
+            "updates",
+            {"tools": {"todos": [{"content": "任务A", "status": "in_progress"}]}},
+        )
+        sub_ns = ("tools:9c3a0a1b-2c3d-4e5f-8a9b-0c1d2e3f4a5b",)
+        msg = AIMessage(content="", tool_calls=[{"id": "call_sub", "name": "search_kb", "args": {"q": "x"}}])
+        ev = [e for e in mapper.normalize("messages", (msg, {}), namespace=sub_ns) if isinstance(e, ExecStep)][0]
+        assert ev.task_id == SVID
+        assert ev.extra_info.get("namespace") == sub_ns[0]
 
 
 # --------------------------------------------------------------------------
@@ -309,12 +339,12 @@ class TestKnowledge:
 
 class TestInterrupt:
     def test_interrupt_chunk_becomes_need_user_input(self, mapper: StreamEventMapper):
-        # set an in_progress task so NeedUserInput routes to it
+        # B2: even with an in_progress todo, the interrupt routes to the session
+        # bucket (svid), not the todo — the in_progress cursor is gone.
         mapper.normalize(
             "updates",
             {"tools": {"todos": [{"content": "生成分析报告", "status": "in_progress"}]}},
         )
-        tid = _task_id("生成分析报告")
 
         class _Interrupt:
             def __init__(self, value):
@@ -333,7 +363,7 @@ class TestInterrupt:
         events = mapper.normalize("updates", chunk)
         nui = [e for e in events if isinstance(e, NeedUserInput)]
         assert len(nui) == 1
-        assert nui[0].task_id == tid
+        assert nui[0].task_id == SVID
         assert nui[0].call_reason == "请确认报告输出语言"
         assert nui[0].step_type == "call_user_input"
 
@@ -398,7 +428,6 @@ class TestStreamContext:
     def test_context_starts_clean(self):
         ctx = StreamContext(svid=SVID)
         assert ctx.terminated is False
-        assert ctx.current_in_progress_task_id is None
         assert ctx.open_calls == {}
         assert ctx.orphan_ends == {}
 

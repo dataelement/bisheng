@@ -399,6 +399,7 @@
   "com_linsight_act_code": "运行代码 {{0}} 次",
   "com_linsight_act_browse": "查找文件 {{0}} 次",
   "com_linsight_act_other": "执行 {{0}} 步操作",
+  "com_linsight_act_summary": "{{0}}（用时 {{1}} 秒）",
   "com_linsight_subagent_parallel": "已派出 {{0}} 个子智能体并行调研",
   "com_linsight_elapsed_running": "已用 {{0}}",
   "com_linsight_elapsed_done": "用时 {{0}}",

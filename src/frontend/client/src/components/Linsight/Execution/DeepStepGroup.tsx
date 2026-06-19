@@ -28,12 +28,13 @@ import { useMemo, type FC, type ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
 import { useCollapseState } from '~/store/linsightCollapse';
 import { cn } from '~/utils';
-import { ACCENT, BODY, INK, MUTED } from './execTokens';
+import { ACCENT, ACTIVITY_I18N, BODY, INK, MUTED } from './execTokens';
 import { useExecutionLive } from './executionLive';
 import { KnowledgeRow } from './KnowledgeRow';
 import TimelineRail from './TimelineRail';
 import ToolRowLite from './ToolRowLite';
 import { formatSeconds, useElapsedTicker } from './useElapsedTicker';
+import { narrationFromSteps, summarizeActivity } from './stepUtils';
 import type { DeepStepGroup as DeepStepGroupData, MergedStep } from './stepUtils';
 
 export interface DeepStepGroupProps {
@@ -45,6 +46,13 @@ export interface DeepStepGroupProps {
      * thinking group is noise. Top-level groups (compact=false) keep their time.
      */
     compact?: boolean;
+    /**
+     * (R3 完全拆平 2026-06) When set, this group IS a single subagent rendered as
+     * its own top-level segment (no team shell). The header carries the delegation
+     * goal + activity summary and a distinct rail icon so subagent work is still
+     * legible at a glance even after the team grouping is dissolved.
+     */
+    subagent?: { goal: string; idx: number };
 }
 
 /** A render segment: a stitched thinking passage, or a single tool/knowledge step. */
@@ -78,7 +86,7 @@ function buildSegments(steps: MergedStep[]): Segment[] {
     return out;
 }
 
-const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false }) => {
+const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagent }) => {
     const localize = useLocalize();
     // Gate "running" on the turn being live: a completed/stopped turn means
     // nothing is actually running, so a dangling step (e.g. a safety-blocked
@@ -99,28 +107,60 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false }) => {
     const endMs = group.endedAt != null ? group.endedAt * 1000 : null;
     const { elapsedMs } = useElapsedTicker(startMs, endMs, running);
 
-    // Stable duration label — the i18n key bakes in "（用时 {{0}} 秒）", so feed it
-    // the bare number (formatSeconds). 0 elapsed still reads "用时 0 秒" rather than
-    // an empty header, keeping the label shape constant.
+    // R1 (段流重构 2026-06): the segment header is the ACTIVITY SUMMARY of what
+    // this episode did ("检索知识库 3 次 · 读 2 文件") — built from summarizeActivity,
+    // which excludes thinking / write_todos / ls / ask_user. A pure-reasoning
+    // segment yields no activity and falls back to the plain 深度思考 label.
+    const activityText = useMemo<string>(() => {
+        const activity = summarizeActivity(group.steps);
+        if (!activity.length) return '';
+        return activity
+            .map((a) => localize(ACTIVITY_I18N[a.category], { 0: String(a.count) }))
+            .join(' · ');
+    }, [group.steps, localize]);
+
+    // Stable header label. Activity summary + "（用时 N 秒）" suffix when measurable;
+    // the duration clause is dropped when nested (compact) OR when the measured span
+    // is 0 (a single second-level frame would read a misleading "用时 0.0 秒").
     const label = useMemo<string>(() => {
-        // Drop the "（用时 N 秒）" clause when nested (compact) OR when the measured
-        // span is 0. A single-frame thinking passage is persisted as ONE row with
-        // ONE second-level timestamp, so startedAt == endedAt → elapsed 0; printing
-        // "用时 0.0 秒" for a paragraph of reasoning is misleading (the real time is
-        // simply unmeasurable at second resolution). Show the bare phrase instead.
-        if (compact || elapsedMs <= 0) {
+        const seconds = formatSeconds(elapsedMs);
+        const noDuration = compact || elapsedMs <= 0;
+        // R3 完全拆平: a subagent segment reads "{goal} · {activity}" (falling back
+        // to "子智能体 N" when the burst carried no per-agent goal), + 用时 suffix.
+        if (subagent) {
+            const core =
+                [subagent.goal, activityText].filter(Boolean).join(' · ') ||
+                localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
+            return noDuration ? core : localize('com_linsight_act_summary', { 0: core, 1: seconds });
+        }
+        // R1: activity-summary header (verbs + counts), the primary case.
+        if (activityText) {
+            return noDuration
+                ? activityText
+                : localize('com_linsight_act_summary', { 0: activityText, 1: seconds });
+        }
+        // Pure-reasoning fallback: the plain 深度思考 duration label.
+        if (noDuration) {
             return localize(
                 running
                     ? 'com_linsight_deep_thinking_running_compact'
                     : 'com_linsight_deep_thinking_done_compact',
             );
         }
-        const seconds = formatSeconds(elapsedMs);
         return localize(
             running ? 'com_linsight_deep_thinking_running' : 'com_linsight_deep_thinking_done',
             { 0: seconds },
         );
-    }, [compact, elapsedMs, running, localize]);
+    }, [subagent, activityText, compact, elapsedMs, running, localize]);
+
+    // R2 旁白 (degraded path, 2026-06): the segment's last reasoning sentence,
+    // surfaced as a quiet aside so the collapsed stack reads like a colleague
+    // reporting ("先摸清已有材料。"). Derived from the in-segment thinking — no
+    // backend dependency. Suppressed in compact (drilldown) context; '' → hidden.
+    const narration = useMemo(
+        () => (compact ? '' : narrationFromSteps(group.steps, running)),
+        [compact, group.steps, running],
+    );
 
     const segments = useMemo(() => buildSegments(group.steps), [group.steps]);
 
@@ -149,7 +189,16 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false }) => {
     return (
         <div className="flex w-full min-w-0 gap-2 animate-thinking-appear">
             <TimelineRail
-                icon={<Outlined.Bulb size={16} style={{ color: running ? ACCENT : MUTED }} />}
+                icon={
+                    // R3: a subagent segment carries the delegation icon so its work
+                    // stays legible after the team shell is dissolved; a main-graph
+                    // segment keeps the reasoning bulb.
+                    subagent ? (
+                        <Outlined.PeopleRound size={16} style={{ color: running ? ACCENT : MUTED }} />
+                    ) : (
+                        <Outlined.Bulb size={16} style={{ color: running ? ACCENT : MUTED }} />
+                    )
+                }
                 showConnector={open}
             />
             <div className="flex min-w-0 flex-1 flex-col pb-3">
@@ -172,6 +221,14 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false }) => {
                         style={{ color: MUTED }}
                     />
                 </button>
+                {/* R2 旁白: shown only while collapsed — once expanded the full
+                    thinking body carries the same reasoning, so the aside would just
+                    duplicate it. Quiet (Muted), clamped to two lines. */}
+                {!open && narration && (
+                    <p className="mt-0.5 line-clamp-2 text-xs leading-5" style={{ color: MUTED }}>
+                        {narration}
+                    </p>
+                )}
                 <div
                     className={cn('grid transition-all duration-300 ease-out', open && 'mt-2')}
                     style={{ gridTemplateRows: open ? '1fr' : '0fr' }}
@@ -187,7 +244,7 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false }) => {
 
 DeepStepGroup.displayName = 'DeepStepGroup';
 
-// Exported both ways: SubagentTrack imports the default, ExecutionTimeline a
-// named member. Provide both so either consumer compiles without cross-file churn.
+// Exported both as a named member (ExecutionTimeline) and as default, kept for
+// back-compat with either import style.
 export { DeepStepGroup };
 export default DeepStepGroup;

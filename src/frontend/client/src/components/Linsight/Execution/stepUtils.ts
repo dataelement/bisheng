@@ -87,6 +87,62 @@ export interface SubagentGroup {
 export type FlowNode = { kind: 'step'; step: MergedStep } | SubagentGroup;
 
 /**
+ * (R3 完全拆平 2026-06) One subagent rendered as its OWN top-level segment, with
+ * no team shell. After backend B2 the subagent's internal steps already ride the
+ * single stream (identified by namespace, not task_id); the render layer explodes
+ * the namespace-grouped {@link SubagentGroup} into one flat segment per subagent.
+ * `goal` is a best-effort delegation goal (order-aligned with the delegation
+ * burst; '' when the burst's goal count doesn't match the agent count).
+ */
+export interface SubagentSegment {
+    kind: 'subagent_segment';
+    /** best-effort delegation goal, '' when unknown */
+    goal: string;
+    /** 1-based index within the original burst (for the "子智能体 N" fallback) */
+    idx: number;
+    /** the subagent's flattened steps (anchor + same-ns children), in order */
+    steps: MergedStep[];
+    startedAt?: number;
+    endedAt?: number;
+    running: boolean;
+}
+
+/**
+ * Explode a namespace-grouped subagent team into one flat top-level segment per
+ * subagent (R3 完全拆平). Goals are matched to agents BY ORDER and only when the
+ * burst's goal count equals the agent count — the backend does not bind a goal to
+ * a specific subgraph namespace (see stream_event_mapper `_handle_tool_starts`),
+ * so a count mismatch degrades to no goal (the renderer falls back to "子智能体 N").
+ */
+export function explodeSubagentGroup(group: SubagentGroup): SubagentSegment[] {
+    const aligned = (group.goals?.length ?? 0) === group.agents.length;
+    return group.agents.map((agent, i) => {
+        const steps = [agent.step, ...agent.children];
+        let startedAt: number | undefined;
+        let endedAt: number | undefined;
+        let running = false;
+        for (const s of steps) {
+            if (s.startedAt !== undefined) {
+                startedAt = startedAt === undefined ? s.startedAt : Math.min(startedAt, s.startedAt);
+            }
+            if (s.endedAt !== undefined) {
+                endedAt = endedAt === undefined ? s.endedAt : Math.max(endedAt, s.endedAt);
+            }
+            if (s.running) running = true;
+        }
+        return {
+            kind: 'subagent_segment' as const,
+            goal: aligned ? group.goals![i] || '' : '',
+            idx: agent.idx ?? i + 1,
+            steps,
+            startedAt,
+            endedAt,
+            running,
+        };
+    });
+}
+
+/**
  * (Wave2) A "deep thinking" episode: one continuous run of top-level (non
  * subagent_group, non-orphan) steps — thinking + tool + knowledge — aggregated
  * into a single collapsible group, isomorphic to the daily-chat DeepThinkingGroup.
@@ -273,10 +329,14 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
         // ToolRow would spin forever. Drop it.
         // `ls` is the agent's internal workspace exploration (typically empty at
         // the start of a no-upload task) — display noise, not a deliverable step.
-        // `write_todos` only mutates the plan; the plan is rendered exclusively by
-        // the bottom TaskPanel (single source of truth), so it is display noise in
-        // the execution flow and must not show up in steps or activity summaries.
-        if (frame.name === 'ask_user' || frame.name === 'ls' || frame.name === 'write_todos') return;
+        // `write_todos` is NOT dropped here (段流重构 2026-06): after the B2
+        // single-bucket change it is the SEGMENT BOUNDARY that cuts the one
+        // execution stream into episodes. Its frame must survive merge so
+        // buildTimelineGroups can flush on it; it is still never rendered as a row
+        // and classifyActivity returns null for it, so it pollutes neither the
+        // step list nor the activity summary. buildFlowNodes drops only the
+        // namespaced (subagent-internal) ones.
+        if (frame.name === 'ask_user' || frame.name === 'ls') return;
         const callId = frame.call_id || `__step_${idx}`;
         const ts = typeof frame.timestamp === 'number' ? frame.timestamp : undefined;
         const existing = byId.get(callId);
@@ -407,6 +467,13 @@ export function buildFlowNodes(steps: MergedStep[]): FlowNode[] {
     let pendingDelegation = false;
 
     for (const step of merged) {
+        // write_todos is the plan-write call. A subagent-internal one (namespaced)
+        // is noise — drop it so it never becomes a subagent anchor or a row. The
+        // main-graph one (ns is None) falls through to the top-level branch below,
+        // where it is pushed as a step node and consumed as a segment boundary by
+        // buildTimelineGroups (段流重构 2026-06).
+        if (step.name === 'write_todos' && step.namespace) continue;
+
         // main-graph delegation point (B2): record goal/name only — no node yet.
         if (step.stepType === 'subagent') {
             const goal = step.callReason || step.extraInfo?.delegate_goal || '';
@@ -479,11 +546,22 @@ export function buildFlowNodes(steps: MergedStep[]): FlowNode[] {
  * whole input collapses to deep_step_groups, giving the same render primitive
  * for the L3 drill-down.
  */
+/**
+ * (段流重构 2026-06) write_todos is the SEGMENT BOUNDARY. After the B2
+ * single-bucket change the whole main-graph execution lands in ONE ordered
+ * stream, and each main-graph write_todos call cuts it into an episode ("段").
+ * The boundary frame itself is never rendered (the plan is owned by the bottom
+ * TaskPanel) — it only flushes the open episode.
+ */
+function isSegmentBoundary(step: MergedStep): boolean {
+    return step.name === 'write_todos';
+}
+
 export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
     const flow = buildFlowNodes(steps);
     const out: TimelineNode[] = [];
-    // open episode being accumulated; flushed when a subagent_group breaks the
-    // run or the input ends.
+    // open episode being accumulated; flushed when a write_todos segment boundary
+    // or a subagent_group breaks the run, or the input ends.
     let episode: MergedStep[] = [];
 
     const flush = () => {
@@ -506,6 +584,12 @@ export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
 
     for (const node of flow) {
         if (node.kind === 'step') {
+            // write_todos cuts a segment boundary: flush the open episode but
+            // never render the marker itself (段流重构 2026-06).
+            if (isSegmentBoundary(node.step)) {
+                flush();
+                continue;
+            }
             episode.push(node.step);
             continue;
         }

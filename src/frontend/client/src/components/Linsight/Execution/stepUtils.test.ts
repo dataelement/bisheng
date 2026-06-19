@@ -1,6 +1,7 @@
 import {
     buildFlowNodes,
     buildTimelineGroups,
+    explodeSubagentGroup,
     extractNarration,
     firstLine,
     mergeStepFrames,
@@ -200,21 +201,23 @@ describe('stepUtils — top-level steps stay inline alongside team groups', () =
 });
 
 describe('stepUtils — buildTimelineGroups (Wave2 deep_step_group aggregation)', () => {
-    it('wraps a continuous top-level thinking+tool run into ONE deep_step_group (ordered, both kinds; write_todos dropped)', () => {
+    it('cuts a segment at each write_todos boundary; the marker itself is never rendered (段流重构)', () => {
         const history: ExecStepEventData[] = [
             frame({ call_id: 'p_think1', name: 'thinking', step_type: 'thinking', output: '先拆解问题', timestamp: 10 }),
-            // write_todos is plan-only noise — dropped by mergeStepFrames, must not appear
+            // write_todos is the SEGMENT BOUNDARY (段流): it closes the planning
+            // episode but never renders as a row.
             frame({ call_id: 'p_todos', name: 'write_todos', step_type: 'tool', output: '已写清单', timestamp: 12 }),
             frame({ call_id: 'p_tool', name: 'web_search', step_type: 'tool', output: '搜到了', timestamp: 13 }),
             frame({ call_id: 'p_know', name: 'search_knowledge_base', step_type: 'knowledge', output: '查到背景', timestamp: 14 }),
         ];
         const nodes = buildTimelineGroups(mergeStepFrames(history));
-        expect(nodes).toHaveLength(1);
-        expect(nodes[0].kind).toBe('deep_step_group');
-        const grp = nodes[0] as DeepStepGroup;
-        // write_todos is gone; remaining steps preserved in order, both kinds present
-        expect(grp.steps.map((s) => s.callId)).toEqual(['p_think1', 'p_tool', 'p_know']);
-        expect(grp.steps.map((s) => s.stepType)).toEqual(['thinking', 'tool', 'knowledge']);
+        // two segments split at write_todos: [thinking] | [web_search, knowledge]
+        expect(nodes.map((n) => n.kind)).toEqual(['deep_step_group', 'deep_step_group']);
+        expect((nodes[0] as DeepStepGroup).steps.map((s) => s.callId)).toEqual(['p_think1']);
+        expect((nodes[1] as DeepStepGroup).steps.map((s) => s.callId)).toEqual(['p_tool', 'p_know']);
+        // write_todos never appears as a rendered step in ANY segment
+        const allSteps = nodes.flatMap((n) => (n as DeepStepGroup).steps);
+        expect(allSteps.some((s) => s.name === 'write_todos')).toBe(false);
     });
 
     it('a subagent_group breaks the top-level run and passes through verbatim (22→3 preserved)', () => {
@@ -336,27 +339,107 @@ describe('stepUtils — lazy team group (empty-group crash regression)', () => {
     });
 });
 
-describe('stepUtils — write_todos exclusion (mergeStepFrames discard set)', () => {
-    it('drops write_todos frames entirely (plan is owned by the bottom TaskPanel)', () => {
+describe('stepUtils — write_todos segment boundary (段流重构)', () => {
+    it('keeps a main-graph write_todos through merge but cuts a segment on it (never a rendered row)', () => {
         const history: ExecStepEventData[] = [
             frame({ call_id: 'k1', name: 'think', step_type: 'thinking', output: '想', timestamp: 1 }),
             frame({ call_id: 'k2', name: 'write_todos', step_type: 'tool', output: '清单', timestamp: 2 }),
             frame({ call_id: 'k3', name: 'web_search', step_type: 'tool', output: 'hit', timestamp: 3 }),
         ];
+        // the frame survives merge — it is the boundary signal...
         const merged = mergeStepFrames(history);
-        expect(merged.map((s) => s.name)).toEqual(['think', 'web_search']);
-        expect(merged.some((s) => s.name === 'write_todos')).toBe(false);
+        expect(merged.some((s) => s.name === 'write_todos')).toBe(true);
+        // ...but buildTimelineGroups cuts at it and never renders it as a step
+        const nodes = buildTimelineGroups(merged);
+        expect(nodes.map((n) => n.kind)).toEqual(['deep_step_group', 'deep_step_group']);
+        const allSteps = nodes.flatMap((n) => (n as DeepStepGroup).steps);
+        expect(allSteps.map((s) => s.name)).toEqual(['think', 'web_search']);
+        expect(allSteps.some((s) => s.name === 'write_todos')).toBe(false);
     });
 
-    it('still drops ask_user and ls alongside write_todos (full discard set)', () => {
+    it('drops a subagent-internal (namespaced) write_todos as noise — never a boundary or row', () => {
+        const history: ExecStepEventData[] = [
+            delegation,
+            nsStep(NS_A, { call_id: 'a_think', name: 'thinking', step_type: 'thinking', output: '子代理思路', timestamp: 50 }),
+            nsStep(NS_A, { call_id: 'a_todos', name: 'write_todos', step_type: 'tool', output: 'x', timestamp: 51 }),
+            nsStep(NS_A, { call_id: 'a_tool', name: 'web_search', step_type: 'tool', output: 'hit', timestamp: 52 }),
+        ];
+        const group = buildFlowNodes(mergeStepFrames(history)).find(
+            (n): n is SubagentGroup => n.kind === 'subagent_group',
+        )!;
+        const agent = group.agents[0];
+        const childNames = [agent.step, ...agent.children].map((s) => s.name);
+        // the namespaced write_todos is dropped from the subagent's children
+        expect(childNames).not.toContain('write_todos');
+        expect(childNames).toEqual(['thinking', 'web_search']);
+    });
+
+    it('still drops ask_user and ls (write_todos is no longer in the discard set)', () => {
         const history: ExecStepEventData[] = [
             frame({ call_id: 'a', name: 'ask_user', step_type: 'tool', status: 'start', timestamp: 1 }),
             frame({ call_id: 'b', name: 'ls', step_type: 'tool', output: '', timestamp: 2 }),
-            frame({ call_id: 'c', name: 'write_todos', step_type: 'tool', output: 'x', timestamp: 3 }),
             frame({ call_id: 'd', name: 'web_search', step_type: 'tool', output: 'hit', timestamp: 4 }),
         ];
         const merged = mergeStepFrames(history);
         expect(merged.map((s) => s.name)).toEqual(['web_search']);
+    });
+});
+
+describe('stepUtils — explodeSubagentGroup (R3 完全拆平)', () => {
+    function teamOf(history: ExecStepEventData[]): SubagentGroup {
+        return buildFlowNodes(mergeStepFrames(history)).find(
+            (n): n is SubagentGroup => n.kind === 'subagent_group',
+        )!;
+    }
+
+    it('explodes a team into one flat segment per subagent, each carrying its own steps', () => {
+        const history: ExecStepEventData[] = [
+            { ...delegation, call_id: 't1' },
+            nsStep(NS_A, { call_id: 'a1', name: 'web_search', step_type: 'tool', output: 'a', timestamp: 100, status: 'start' }),
+            nsStep(NS_A, { call_id: 'a1', name: 'web_search', step_type: 'tool', output: 'a', timestamp: 105, status: 'end' }),
+            nsStep(NS_B, { call_id: 'b1', name: 'read_file', step_type: 'tool', output: 'b', timestamp: 101 }),
+        ];
+        const segs = explodeSubagentGroup(teamOf(history));
+        expect(segs).toHaveLength(2);
+        expect(segs.map((s) => s.kind)).toEqual(['subagent_segment', 'subagent_segment']);
+        // each segment carries ONLY its own subagent's (namespaced) steps
+        expect(segs[0].steps.every((s) => s.namespace === NS_A)).toBe(true);
+        expect(segs[1].steps.every((s) => s.namespace === NS_B)).toBe(true);
+        // 1-based idx + per-agent time range (a1 spans 100..105)
+        expect(segs[0].idx).toBe(1);
+        expect(segs[0].startedAt).toBe(100);
+        expect(segs[0].endedAt).toBe(105);
+    });
+
+    it('matches goals to agents BY ORDER only when the counts are equal', () => {
+        const history: ExecStepEventData[] = [
+            { ...delegation, call_id: 't1', call_reason: '调研A', extra_info: { delegate_goal: '调研A' } },
+            { ...delegation, call_id: 't2', call_reason: '调研B', extra_info: { delegate_goal: '调研B' } },
+            nsStep(NS_A, { call_id: 'a1', name: 'web_search', step_type: 'tool', output: 'a', timestamp: 100 }),
+            nsStep(NS_B, { call_id: 'b1', name: 'web_search', step_type: 'tool', output: 'b', timestamp: 101 }),
+        ];
+        const segs = explodeSubagentGroup(teamOf(history));
+        expect(segs.map((s) => s.goal)).toEqual(['调研A', '调研B']);
+    });
+
+    it('drops goals when the burst goal count != agent count (no false binding)', () => {
+        const history: ExecStepEventData[] = [
+            // ONE delegation goal, but TWO subagents spawn -> cannot bind reliably
+            { ...delegation, call_id: 't1', call_reason: '调研全部', extra_info: { delegate_goal: '调研全部' } },
+            nsStep(NS_A, { call_id: 'a1', name: 'web_search', step_type: 'tool', output: 'a', timestamp: 100 }),
+            nsStep(NS_B, { call_id: 'b1', name: 'web_search', step_type: 'tool', output: 'b', timestamp: 101 }),
+        ];
+        const segs = explodeSubagentGroup(teamOf(history));
+        expect(segs.map((s) => s.goal)).toEqual(['', '']);
+    });
+
+    it('marks a segment running while any of its steps is unclosed', () => {
+        const history: ExecStepEventData[] = [
+            { ...delegation, call_id: 't1' },
+            nsStep(NS_A, { call_id: 'a1', name: 'web_search', step_type: 'tool', output: 'a', timestamp: 100, status: 'start' }),
+        ];
+        const segs = explodeSubagentGroup(teamOf(history));
+        expect(segs[0].running).toBe(true);
     });
 });
 

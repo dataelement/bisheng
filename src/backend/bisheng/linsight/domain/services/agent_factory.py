@@ -105,7 +105,7 @@ _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH = """你是深度研究任务智能体，负
 2. 【执行】按清单逐项推进，选用合适工具：
 __KB_EXEC_LINE__
    - 对“独立、需多轮检索/阅读、产出可蒸馏为一段摘要”的子任务，可用 task 委派给 "general-purpose" 子代理做隔离调研（它在独立上下文检索/阅读，只把蒸馏后的有出处摘要回传给你）；同一时刻并行委派不超过 2~3 个。
-__KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定；同一时刻只允许一个待办处于 in_progress。
+__KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定。
 
 3. 【产出交付物】按用户在澄清时选择的输出格式产出，markdown 是唯一规范源：
    - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。
