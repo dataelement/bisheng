@@ -105,7 +105,7 @@ _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH = """你是深度研究任务智能体，负
 2. 【执行】按清单逐项推进，选用合适工具：
 __KB_EXEC_LINE__
    - 对“独立、需多轮检索/阅读、产出可蒸馏为一段摘要”的子任务，可用 task 委派给 "general-purpose" 子代理做隔离调研（它在独立上下文检索/阅读，只把蒸馏后的有出处摘要回传给你）；同一时刻并行委派不超过 2~3 个。
-   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定；同一时刻只允许一个待办处于 in_progress。
+__KB_DELEGATE_LINE__   更新待办时只翻转 status（pending/in_progress/completed），不改写已有文案，以保证任务标识稳定；同一时刻只允许一个待办处于 in_progress。
 
 3. 【产出交付物】按用户在澄清时选择的输出格式产出，markdown 是唯一规范源：
    - 3a（始终）：write_file 写 output/<name>.md（结构化 markdown，其它格式由它派生）。
@@ -141,7 +141,7 @@ __KB_EXEC_LINE__
 __KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工具；交付物写 output/，中间产物写 scratch/。
 - export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
 - export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
-- task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
+- task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。description 必须自包含——子代理看不到你的对话历史与上下文，只能读到 description，因此完成该子任务所需的全部背景、目标、约束与必要标识都要写进去；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
 
 # 风格
 
@@ -170,6 +170,18 @@ def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
             "读写文件用 write_file / read_file / edit_file / ls。"
         )
         tool_line = "- search_knowledge_base：在授权的知识库/知识空间语义检索。\n"
+        # Delegation must restate the KB ids: a subagent's messages are replaced
+        # with ONLY the task `description` (deepagents subagents.py
+        # _validate_and_prepare_state), so it never sees the "可用知识库" block in
+        # the main graph's first user message. search_knowledge_base requires a
+        # knowledge_id, so without the ids in `description` the subagent cannot
+        # search and silently degrades. Advertise this rule IFF a KB exists.
+        delegate_line = (
+            "   - 用 task 委派需要检索知识库/知识空间的子任务时，必须在 description 中"
+            "明确列出本次可检索的知识库及其 knowledge_id（子代理看不到上面的“可用知识库”"
+            "清单，只能读到 description；不写明 id 它就无法检索知识库，只能空跑或退化为"
+            "仅凭自身知识作答）。\n"
+        )
     else:
         exec_line = (
             "   - 读写文件用 write_file / read_file / edit_file / ls；若用户上传了文件，"
@@ -177,8 +189,11 @@ def _build_linsight_system_prompt(has_knowledge_base: bool) -> str:
             "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。"
         )
         tool_line = ""
-    return _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line).replace(
-        "__KB_TOOL_LINE__", tool_line
+        delegate_line = ""
+    return (
+        _LINSIGHT_SYSTEM_PROMPT_TEMPLATE_ZH.replace("__KB_EXEC_LINE__", exec_line)
+        .replace("__KB_TOOL_LINE__", tool_line)
+        .replace("__KB_DELEGATE_LINE__", delegate_line)
     )
 
 
