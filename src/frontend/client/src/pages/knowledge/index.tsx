@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState } from "recoil";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import store from "~/store";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -22,6 +22,8 @@ import {
     SpaceSortType,
     getSpaceInfoApi,
     getMineSpacesApi,
+    getJoinedSpacesApi,
+    getDepartmentSpacesApi,
     createSpaceApi,
     updateSpaceApi,
     deleteSpaceApi,
@@ -41,6 +43,7 @@ import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
 import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 
 export default function Knowledge() {
     const localize = useLocalize();
@@ -111,6 +114,37 @@ export default function Knowledge() {
         if (!Array.isArray(plugins)) return "enabled";
         return plugins.includes("knowledge_space") ? "enabled" : "disabled";
     }, [user, isUserLoading]);
+    const knowledgePluginEnabled = knowledgePluginGate === "enabled";
+
+    // Mirror the sidebar's space-list queries (same keys → react-query dedupes,
+    // no extra requests) purely to know when the first fetch has settled. The
+    // sidebar owns auto-select, so activeSpace stays null until those lists load;
+    // this lets the PC view show a loading state instead of flashing the "no
+    // space, create one" empty state before auto-select can land.
+    const { isFetched: mineSpacesFetched } = useQuery({
+        queryKey: ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
+        queryFn: () => getMineSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
+        enabled: knowledgePluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+    const { isFetched: joinedSpacesFetched } = useQuery({
+        queryKey: ["knowledgeSpaces", "joined", SpaceSortType.UPDATE_TIME],
+        queryFn: () => getJoinedSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
+        enabled: knowledgePluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+    const { isFetched: departmentSpacesFetched } = useQuery({
+        queryKey: ["knowledgeSpaces", "department", SpaceSortType.UPDATE_TIME],
+        queryFn: () => getDepartmentSpacesApi({ order_by: SpaceSortType.UPDATE_TIME }),
+        enabled: knowledgePluginEnabled,
+        placeholderData: (prev) => prev,
+    });
+
+    // True while we still can't tell whether the user has any space: the plugin
+    // gate is resolving, or the space lists haven't finished their first fetch.
+    const spacesResolving =
+        knowledgePluginGate === "loading" ||
+        (knowledgePluginEnabled && (!mineSpacesFetched || !joinedSpacesFetched || !departmentSpacesFetched));
 
     useEffect(() => {
         if (!isH5) setSpaceListDrawerOpen(false);
@@ -840,6 +874,12 @@ export default function Knowledge() {
                             onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                         />
                     </div>
+                </div>
+            ) : spacesResolving ? (
+                /* PC loading state — keep the loading view up until the space lists
+                   settle so the empty state never flashes before auto-select. */
+                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-[#86909c]">
+                    <LoadingIcon className="size-20 text-primary" />
                 </div>
             ) : (
                 /* PC empty state when no space is selected */

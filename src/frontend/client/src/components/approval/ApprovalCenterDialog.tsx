@@ -112,7 +112,7 @@ function TimelineStep({ action, operatorName, createTime, detail, localize, isLa
         {!isLast && <span className="mt-1 w-px flex-1 bg-[#e5e6eb]" />}
       </div>
       <div className={cn("min-w-0 flex-1", isLast ? "pb-1" : "pb-4")}>
-        <div className="text-[14px] font-medium text-[#1d2129]">{title}</div>
+        <div className="text-[14px] font-medium text-text-primary">{title}</div>
         {desc && <div className="mt-0.5 text-[12px] text-[#86909c]">{desc}</div>}
         {comment && <div className="mt-1 rounded-lg bg-[#f7f8fa] px-3 py-2 text-[12px] text-[#4e5969] break-all">{comment}</div>}
         <div className="mt-1 text-[11px] text-[#c9cdd4]">{formatTime(createTime)}</div>
@@ -151,13 +151,16 @@ function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>)
 
 function InfoGrid({ rows }: { rows: [string, string][] }) {
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#f2f3f5] bg-[#f2f3f5]">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#f2f3f5] bg-[#f2f3f5]">
       {rows.map(([label, value]) => (
-        <div key={label} className="bg-white px-4 py-3">
+        <div key={label} className="bg-white px-3 py-2">
           <div className="text-[12px] text-[#86909c]">{label}</div>
-          <div className="mt-1 text-[14px] font-medium text-[#1d2129] break-all">{value || "--"}</div>
+          <div className="mt-1 text-[14px] font-medium text-text-primary break-all">{value || "--"}</div>
         </div>
       ))}
+      {/* Fill the trailing empty slot on an odd row count so it stays white, not the grid's gray gutter.
+         -ml-px covers the 1px gap gutter on its left so no divider line shows beside the empty cell. */}
+      {rows.length % 2 === 1 && <div className="-ml-px bg-white" />}
     </div>
   );
 }
@@ -375,32 +378,32 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent close={false} className="h-[80vh] max-h-[820px] w-[calc(100vw-64px)] max-w-[1080px] rounded-2xl p-0">
-        <div className="flex h-full flex-col overflow-hidden rounded-2xl bg-white">
+      <DialogContent close={false} className="h-[80vh] max-h-[820px] w-[calc(100vw-64px)] max-w-[1080px] rounded-xl sm:rounded-xl p-0">
+        <div className="flex h-full flex-col overflow-hidden rounded-xl bg-white">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-[#f2f3f5] px-6 py-4">
-            <h2 className="text-[18px] font-semibold text-[#1d2129]">{localize("com_approval_center_title")}</h2>
+          <div className="flex items-center justify-between border-b border-[#f2f3f5] px-5 py-3">
+            <h2 className="text-[16px] font-semibold text-text-primary">{localize("com_approval_center_title")}</h2>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
               aria-label={localize("com_ui_close")}
-              className="rounded-sm text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
+              className="rounded-lg text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="grid min-h-0 flex-1 grid-cols-[84px_300px_minmax(0,1fr)]">
+          <div className="grid min-h-0 flex-1 grid-cols-[72px_300px_minmax(0,1fr)]">
             {/* Vertical icon tabs (my_tasks / my_requests) */}
-            <div className="flex flex-col gap-2 border-r border-[#f2f3f5] bg-[#fafbfc] p-2 pt-3">
+            <div className="flex flex-col gap-0 border-r border-[#f2f3f5] bg-[#fafbfc] px-1 pb-2">
               {(["my_tasks", "my_requests"] as ApprovalCenterTab[]).map((tab) => {
                 const TabIcon = tab === "my_tasks" ? Outlined.ApprovalTodo : Outlined.ApprovalSubmitted;
                 return (
                   <button key={tab} type="button"
-                    className={cn("flex flex-col items-center gap-1 rounded-lg px-1 py-2.5 text-[12px] leading-none transition-colors",
-                      activeTab === tab ? "text-[#165dff] font-medium" : "text-[#4e5969] hover:bg-[#f7f8fa]")}
+                    className={cn("flex w-16 flex-col items-center gap-2 rounded-lg px-1 py-5 text-[12px] leading-none transition-colors",
+                      activeTab === tab ? "text-[#212121] font-medium" : "text-[#999999] hover:bg-[#f7f8fa]")}
                     onClick={() => { setActiveTab(tab); setSearchQuery(""); }}>
-                    <TabIcon className="size-[22px]" />
+                    <TabIcon className="size-[18px]" />
                     {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
                   </button>
                 );
@@ -408,14 +411,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
             </div>
 
             {/* Left list */}
-            <div className="flex min-h-0 flex-col border-r border-[#f2f3f5] bg-[#fafbfc]">
+            <div className="flex min-h-0 flex-col border-r border-[#f2f3f5] bg-white">
               <div className="flex gap-2 px-3 pt-3 pb-2">
                 {activeTab === "my_tasks"
                   ? (["pending_me", "processed"] as TaskFilter[]).map((f) => (
                       <button key={f} type="button"
                         className={cn(
-                          "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-[#335CFF]",
-                          taskFilter === f ? "border-[#335CFF] text-[#335CFF]" : "text-[#212121]")}
+                          "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-[#212121]",
+                          taskFilter === f ? "border-[#212121] text-[#212121] font-medium" : "text-[#999999] font-normal")}
                         onClick={() => setTaskFilter(f)}>
                         {f === "pending_me" ? localize("com_approval_task_filter_pending") : localize("com_approval_task_filter_processed")}
                       </button>
@@ -423,8 +426,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                   : (["in_progress", "completed"] as RequestsFilter[]).map((f) => (
                       <button key={f} type="button"
                         className={cn(
-                          "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-[#335CFF]",
-                          requestsFilter === f ? "border-[#335CFF] text-[#335CFF]" : "text-[#212121]")}
+                          "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-[#212121]",
+                          requestsFilter === f ? "border-[#212121] text-[#212121] font-medium" : "text-[#999999] font-normal")}
                         onClick={() => setRequestsFilter(f)}>
                         {f === "in_progress" ? localize("com_approval_status_pending") : localize("com_approval_tab_completed")}
                       </button>
@@ -454,11 +457,11 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                         const id = getId(item, "task");
                         return (
                           <button key={`t-${id}`} type="button"
-                            className={cn("mt-2 w-full rounded-xl border px-4 py-3 text-left transition-colors",
-                              selectedTaskId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
+                            className={cn("mt-2 w-full rounded-lg border px-4 py-3 text-left transition-colors",
+                              selectedTaskId === id ? "border-transparent bg-[#f2f3f5]" : "border-transparent bg-white hover:bg-[#f7f8fa]")}
                             onClick={() => id && openTask(id)}>
                             <div className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
+                              <span className={cn("line-clamp-1 text-[14px] text-text-primary", selectedTaskId === id ? "font-medium" : "font-normal")}>{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
                                 {item.grant_revoked && (
                                   <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
@@ -468,7 +471,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                                 <StatusBadge status={item.status} instanceStatus={item.instance_status} scope="task" localize={localize} />
                               </div>
                             </div>
-                            <div className="mt-1.5 flex items-center justify-between text-[12px] text-[#c9cdd4]">
+                            <div className={cn("mt-1.5 flex items-center justify-between text-[12px]", selectedTaskId === id ? "text-[#86909c]" : "text-[#c9cdd4]")}>
                               <span>{item.applicant_user_name}{item.applicant_department_name ? ` · ${item.applicant_department_name}` : ""}</span>
                               <span>{formatTime(item.create_time)}</span>
                             </div>
@@ -479,11 +482,11 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                         const id = getId(item, "instance");
                         return (
                           <button key={`r-${id}`} type="button"
-                            className={cn("mt-2 w-full rounded-xl border px-4 py-3 text-left transition-colors",
-                              selectedInstanceId === id ? "border-[#165dff] bg-white shadow-[0_2px_12px_rgba(22,93,255,0.08)]" : "border-transparent bg-white hover:border-[#d9e3f0]")}
+                            className={cn("mt-2 w-full rounded-lg border px-4 py-3 text-left transition-colors",
+                              selectedInstanceId === id ? "border-transparent bg-[#f2f3f5]" : "border-transparent bg-white hover:bg-[#f7f8fa]")}
                             onClick={() => id && openRequest(id)}>
                             <div className="flex items-start justify-between gap-2">
-                              <span className="line-clamp-1 text-[14px] font-medium text-[#1d2129]">{formatTitle(item.scenario_code, item.business_name, localize)}</span>
+                              <span className={cn("line-clamp-1 text-[14px] text-text-primary", selectedInstanceId === id ? "font-medium" : "font-normal")}>{formatTitle(item.scenario_code, item.business_name, localize)}</span>
                               <div className="flex shrink-0 items-center gap-1">
                                 {item.grant_revoked && (
                                   <span className="rounded-full bg-[#f7f8fa] px-2 py-0.5 text-[12px] font-medium text-[#86909c]">
@@ -508,7 +511,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
             {/* Right detail */}
             <div className="flex min-h-0 flex-col">
-              <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-6 py-5">
+              <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-5 py-3">
                 {loadingDetail ? (
                   <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_loading")}</div>
                 ) : activeTab === "my_tasks" && taskDetail ? (
@@ -522,31 +525,26 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
               {/* Fixed footer buttons */}
               {(isTaskPending || isInstancePending || canRevoke) && (
-                <div className="flex flex-col gap-3 border-t border-[#f2f3f5] px-6 py-4">
+                <div className="flex flex-col gap-4 border-t border-[#f2f3f5] px-5 py-4">
                   {isTaskPending && (
                     <textarea
                       value={decisionComment}
                       onChange={(e) => setDecisionComment(e.target.value)}
                       placeholder={localize("com_approval_decision_comment_placeholder")}
                       rows={2}
-                      className="w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[13px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+                      className="w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[13px] text-text-primary placeholder:text-[#c9cdd4] outline-none transition-[border-color,box-shadow] focus:border-[#DDDDDD] focus:shadow-[0_0_0_2px_#F1F5F9]"
                     />
                   )}
                   <div className="flex items-center justify-end gap-3">
-                  <button type="button"
-                    className="rounded-lg border border-[#e5e6eb] px-4 py-2 text-[14px] text-[#4e5969] hover:bg-[#f7f8fa]"
-                    onClick={() => onOpenChange(false)}>
-                    {localize("com_ui_close")}
-                  </button>
                   {isTaskPending && (
                     <>
                       <button type="button" disabled={actionLoading}
-                        className="rounded-lg border border-[#f53f3f] px-4 py-2 text-[14px] text-[#f53f3f] hover:bg-[#fff2f0] disabled:opacity-60"
+                        className="inline-flex h-8 items-center justify-center rounded-md border border-[#f53f3f] px-4 text-[14px] font-normal text-[#f53f3f] hover:bg-[#fff2f0] disabled:opacity-60"
                         onClick={() => runTaskDecision("reject")}>
                         {localize("com_approval_action_reject")}
                       </button>
                       <button type="button" disabled={actionLoading}
-                        className="rounded-lg bg-[#165dff] px-5 py-2 text-[14px] text-white hover:bg-[#1350e8] disabled:opacity-60"
+                        className="inline-flex h-8 items-center justify-center rounded-md bg-[#165dff] px-4 text-[14px] font-normal text-white hover:bg-[#1350e8] disabled:opacity-60"
                         onClick={() => runTaskDecision("approve")}>
                         {localize("com_approval_action_approve")}
                       </button>
@@ -554,14 +552,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                   )}
                   {isInstancePending && (
                     <button type="button" disabled={actionLoading}
-                      className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f7ff] disabled:opacity-60"
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-[#165dff] px-4 text-[14px] font-normal text-[#165dff] hover:bg-[#f2f7ff] disabled:opacity-60"
                       onClick={runWithdraw}>
                       {localize("com_approval_action_withdraw")}
                     </button>
                   )}
                   {canRevoke && (
                     <button type="button" disabled={actionLoading}
-                      className="rounded-lg border border-[#ff7d00] px-4 py-2 text-[14px] text-[#ff7d00] hover:bg-[#fff7e8] disabled:opacity-60"
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-[#ff7d00] px-4 text-[14px] font-normal text-[#ff7d00] hover:bg-[#fff7e8] disabled:opacity-60"
                       onClick={runRevokeGrant}>
                       {localize("com_approval_action_revoke_grant")}
                     </button>
@@ -574,15 +572,15 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
         </div>
       </DialogContent>
       <Dialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
-        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-2xl">
-          <div className="text-[16px] font-semibold text-[#1d2129]">{localize("com_approval_revoke_dialog_title")}</div>
+        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-lg">
+          <div className="text-[16px] font-semibold text-text-primary">{localize("com_approval_revoke_dialog_title")}</div>
           <textarea
             rows={4}
             value={revokeReason}
             onChange={(e) => setRevokeReason(e.target.value)}
             maxLength={500}
             placeholder={localize("com_approval_revoke_reason_placeholder")}
-            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-text-primary placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
           />
           <div className="mt-4 flex justify-end gap-3">
             <button type="button"
@@ -600,15 +598,15 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
         </DialogContent>
       </Dialog>
       <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
-        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-2xl">
-          <div className="text-[16px] font-semibold text-[#1d2129]">{localize("com_approval_withdraw_dialog_title")}</div>
+        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-lg">
+          <div className="text-[16px] font-semibold text-text-primary">{localize("com_approval_withdraw_dialog_title")}</div>
           <textarea
             rows={4}
             value={withdrawReason}
             onChange={(e) => setWithdrawReason(e.target.value)}
             maxLength={500}
             placeholder={localize("com_approval_withdraw_reason_placeholder")}
-            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
+            className="mt-2 w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[14px] text-text-primary placeholder:text-[#c9cdd4] outline-none focus:border-[#165dff]"
           />
           <div className="mt-4 flex justify-end gap-3">
             <button type="button"
@@ -634,11 +632,10 @@ function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenario
   return (
     <div className="mb-5">
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 text-[#86909c]">📄</span>
-        <h3 className="flex-1 text-[18px] font-semibold text-[#1d2129] leading-snug">{title || "--"}</h3>
+        <h3 className="flex-1 text-[16px] font-semibold text-text-primary leading-snug">{title || "--"}</h3>
         <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} />
       </div>
-      <p className="mt-1.5 text-[13px] text-[#86909c] pl-6">
+      <p className="mt-1.5 text-[13px] text-[#86909c]">
         {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
       </p>
     </div>
@@ -670,35 +667,35 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
-        <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_basic_info")}</div>
+        <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
         <InfoGrid rows={basicRows} />
       </div>
 
       {showContent && (
         <div>
-          <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_business_content")}</div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#f2f3f5] bg-[#f2f3f5]">
+          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#f2f3f5] bg-[#f2f3f5]">
             {detailEntries.map(([k, v]) => (
-              <div key={k} className="bg-white px-4 py-3">
+              <div key={k} className="bg-white px-3 py-2">
                 <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
-                <div className="mt-1 text-[14px] text-[#1d2129] break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+                <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
               </div>
             ))}
+            {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
           </div>
         </div>
       )}
 
       {detail.reason && (
         <div>
-          <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_apply_reason")}</div>
-          <div className="rounded-xl bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
+          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
+          <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
         </div>
       )}
 
       {((detail.action_logs && detail.action_logs.length > 0) || (detail.tasks && detail.tasks.length > 0) || detail.current_node_name) ? (
         <div>
-          <div className="mb-3 flex items-center gap-1.5 text-[14px] font-medium text-[#1d2129]">
-            <span className="text-[16px]">⊙</span>
+          <div className="mb-3 text-[14px] font-medium text-text-primary">
             {localize("com_approval_progress_section")}
           </div>
           {/* submitted / resubmitted logs first */}
@@ -748,7 +745,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
                   </div>
                   <div className={cn("min-w-0 flex-1", isLast ? "pb-1" : "pb-4")}>
                     <div className="flex items-center gap-2">
-                      <span className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-[#1d2129]")}>
+                      <span className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-text-primary")}>
                         {node.node_name || "--"}
                       </span>
                       {!isNotStarted && nodeBadgeMap[s] && (
@@ -777,7 +774,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
                                 <div className="flex items-center gap-1.5">
                                   <span className={cn("text-[12px] font-bold", tIconCls)}>{tIcon}</span>
                                   {t.approver_user_name && (
-                                    <span className="text-[13px] text-[#1d2129]">{t.approver_user_name}</span>
+                                    <span className="text-[13px] text-text-primary">{t.approver_user_name}</span>
                                   )}
                                   <span className="text-[12px] text-[#86909c]">{tLabel}</span>
                                 </div>
@@ -842,35 +839,35 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
         scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
-        <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_basic_info")}</div>
+        <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
         <InfoGrid rows={basicRows} />
       </div>
 
       {detailEntries.length > 0 && (
         <div>
-          <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_business_content")}</div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[#f2f3f5] bg-[#f2f3f5]">
+          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#f2f3f5] bg-[#f2f3f5]">
             {detailEntries.map(([k, v]) => (
-              <div key={k} className="bg-white px-4 py-3">
+              <div key={k} className="bg-white px-3 py-2">
                 <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
-                <div className="mt-1 text-[14px] text-[#1d2129] break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+                <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
               </div>
             ))}
+            {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
           </div>
         </div>
       )}
 
       {detail.reason && (
         <div>
-          <div className="mb-2 text-[14px] font-medium text-[#1d2129]">{localize("com_approval_section_apply_reason")}</div>
-          <div className="rounded-xl bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
+          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
+          <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
         </div>
       )}
 
       {((detail.action_logs && detail.action_logs.length > 0) || (detail.tasks && detail.tasks.length > 0)) && (
         <div>
-          <div className="mb-3 flex items-center gap-1.5 text-[14px] font-medium text-[#1d2129]">
-            <span className="text-[16px]">⊙</span>
+          <div className="mb-3 text-[14px] font-medium text-text-primary">
             {localize("com_approval_progress_section")}
           </div>
           {/* submitted / resubmitted logs first */}
@@ -922,7 +919,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
                   <div className={cn("min-w-0 flex-1", isLast ? "pb-1" : "pb-4")}>
                     {/* Node name + aggregate status badge */}
                     <div className="flex items-center gap-2">
-                      <span className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-[#1d2129]")}>
+                      <span className={cn("text-[14px] font-medium", isNotStarted ? "text-[#86909c]" : "text-text-primary")}>
                         {node.node_name || "--"}
                       </span>
                       {!isNotStarted && nodeBadgeMap[s] && (
@@ -952,7 +949,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
                                 <div className="flex items-center gap-1.5">
                                   <span className={cn("text-[12px] font-bold", tIconCls)}>{tIcon}</span>
                                   {t.approver_user_name && (
-                                    <span className="text-[13px] text-[#1d2129]">{t.approver_user_name}</span>
+                                    <span className="text-[13px] text-text-primary">{t.approver_user_name}</span>
                                   )}
                                   <span className="text-[12px] text-[#86909c]">{tLabel}</span>
                                 </div>

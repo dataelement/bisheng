@@ -320,28 +320,28 @@ export function AccountInfoDialog({
             <DialogContent
                 close={false}
                 className={cn(
-                    "flex h-[600px] max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] flex-col gap-0 overflow-hidden rounded-lg border border-[#ECECEC] bg-white p-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)]",
+                    "flex h-[600px] max-h-[calc(100vh-32px)] w-[600px] max-w-[calc(100vw-32px)] flex-col gap-0 overflow-hidden rounded-xl sm:rounded-xl border border-[#ECECEC] bg-white p-0 shadow-[0_8px_24px_rgba(15,23,42,0.12)]",
                     // H5：全屏页面（与 tailwind touch-mobile = max-width 1023px 一致）
                     "touch-mobile:inset-x-0 touch-mobile:bottom-0 touch-mobile:left-0 touch-mobile:right-0 touch-mobile:top-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none",
                 )}
             >
                 {/* 标题栏 */}
-                <div className="flex h-12 w-full shrink-0 items-center justify-between px-6 touch-mobile:px-4">
+                <div className="flex h-12 w-full shrink-0 items-center justify-between px-5 touch-mobile:px-4">
                     <h2 className="text-[16px] font-semibold leading-6 text-[#1d2129]">
                         {localize("com_account_info_title")}
                     </h2>
                     <button
                         type="button"
                         onClick={() => handleOpenChange(false)}
-                        className="flex size-8 shrink-0 items-center justify-center rounded-md text-[#86909c] transition-colors hover:bg-[#f2f3f5] hover:text-[#1d2129]"
+                        className="rounded-lg text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
                         aria-label={localize("com_ui_close")}
                     >
-                        <X className="size-4" />
+                        <X className="h-4 w-4" />
                     </button>
                 </div>
 
                 {/* 内容区：桌面固定稿；移动端全屏时可滚动 */}
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-4 touch-mobile:overflow-y-auto touch-mobile:px-4">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4 touch-mobile:overflow-y-auto touch-mobile:px-4">
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -350,7 +350,7 @@ export function AccountInfoDialog({
                         onChange={handleAvatarChange}
                     />
 
-                    <div className="mx-auto flex w-[552px] max-w-[min(728px,100%)] flex-col gap-5 touch-mobile:w-full touch-mobile:max-w-full">
+                    <div className="mx-auto flex w-[552px] max-w-[min(728px,100%)] flex-1 flex-col gap-5 touch-mobile:w-full touch-mobile:max-w-full touch-mobile:flex-none">
                         <section className="flex flex-col gap-5">
                             <h3 className="text-[14px] font-semibold leading-5 text-[#212121]">
                                 {localize("com_account_info_basic_info")}
@@ -376,7 +376,7 @@ export function AccountInfoDialog({
                             </div>
                         </section>
 
-                        <section className="flex flex-col gap-5">
+                        <section className="flex flex-1 flex-col gap-5">
                             <h3 className="text-[14px] font-semibold leading-5 text-[#1d2129]">
                                 {localize("com_account_info_security_settings")}
                             </h3>
@@ -398,7 +398,7 @@ export function AccountInfoDialog({
                                     </button>
                                 </div>
                             ) : (
-                                <div className="flex flex-col gap-5">
+                                <div className="flex flex-1 flex-col gap-5">
                                     <div>
                                         <label className="mb-1 block text-[14px] text-[#4e5969]" htmlFor="account-old-pwd">
                                             {localize("com_account_info_old_password")}
@@ -479,11 +479,11 @@ export function AccountInfoDialog({
                                     </div>
 
                                     {/* Desktop：表单项内操作；H5 仅用底部通栏按钮 */}
-                                    <div className="hidden touch-desktop:flex items-center justify-end gap-4">
+                                    <div className="mt-auto hidden touch-desktop:flex items-center justify-end gap-4">
                                         <button
                                             type="button"
                                             onClick={handleCancel}
-                                            className="text-[14px] text-[#4e5969] transition-colors hover:text-[#1d2129]"
+                                            className="h-8 rounded-md border border-[#e5e6eb] bg-white px-4 text-[14px] font-normal text-[#4e5969] transition-colors hover:bg-[#f7f8fa] hover:text-[#1d2129]"
                                         >
                                             {localize("cancel")}
                                         </button>
@@ -492,7 +492,7 @@ export function AccountInfoDialog({
                                             onClick={handleSubmit}
                                             disabled={isSubmitDisabled()}
                                             className={cn(
-                                                "h-9 rounded-md px-5 text-[14px] font-normal text-white disabled:opacity-100",
+                                                "h-8 rounded-md px-4 text-[14px] font-normal text-white disabled:opacity-100",
                                                 isSubmitDisabled()
                                                     ? "cursor-not-allowed bg-[#7399E4] hover:bg-[#7399E4]"
                                                     : "bg-[#0253E8] hover:bg-[#0246cc]"

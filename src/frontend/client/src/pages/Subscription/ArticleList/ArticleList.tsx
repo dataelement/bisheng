@@ -171,7 +171,10 @@ export function ArticleList({
     const [articles, setArticles] = useState<Article[]>([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(false);
-    const [loading, setLoading] = useState(false);
+    // Start in the loading state: the initial mount fetches articles on the next
+    // render cycle, so this keeps the loading view up from first paint and stops
+    // the empty state from flashing before the first article list arrives.
+    const [loading, setLoading] = useState(true);
     const [selectedSubChannelName, setSelectedSubChannelName] = useState<string | undefined>(undefined);
 
     const [searchKey, setSearchQuery] = useState("");
@@ -275,6 +278,11 @@ export function ArticleList({
         const isChannelSwitch = channel.id !== prevChannelIdRef.current;
         if (isChannelSwitch) {
             prevChannelIdRef.current = channel.id;
+            // Enter the loading state and drop the previous channel's articles right away.
+            // The actual fetch happens on the next render (after the filter resets below),
+            // so without this the list would briefly show the old/empty state during the gap.
+            setLoading(true);
+            setArticles([]);
             setCurrentPage(1);
             setSearchQuery("");
             const savedSubName = localStorage.getItem(`selectedSubChannelName-${channel.id}`) || undefined;

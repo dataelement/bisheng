@@ -124,7 +124,7 @@ export default function AppCenter() {
         <div
             className={cn(
                 // 填满 MainLayout 白卡片；正文区单独滚动 + scroll-on-scroll（含 PC 窄屏）
-                'bg-white flex min-h-0 flex-1 w-full flex-col items-center relative overflow-hidden',
+                'bg-white flex h-full min-h-0 flex-1 w-full flex-col items-center relative overflow-hidden',
                 // 与首页 MobileNav（px-4）水平对齐；顶栏由 MainLayout 提供，正文略留底距
                 isH5Layout ? 'px-4 pb-5 pt-3' : 'px-[12px] py-[20px]',
             )}

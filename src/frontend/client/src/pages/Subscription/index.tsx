@@ -17,6 +17,7 @@ import {
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
@@ -374,6 +375,14 @@ export default function Subscription() {
         placeholderData: (prev) => prev,
     });
 
+    // True while we still can't tell whether the user has channels: the plugin
+    // gate is resolving, or the channel lists haven't finished their first fetch.
+    // Drives a loading view so the "no channels, create one" empty state never
+    // flashes before auto-select can land on a real channel.
+    const channelsResolving =
+        channelPluginGate === "loading" ||
+        (channelPluginEnabled && (!createdAutoFetched || !subscribedAutoFetched));
+
     useEffect(() => {
         createdChannelCountRef.current = createdChannelsForAuto.length;
     }, [createdChannelsForAuto.length]);
@@ -567,6 +576,28 @@ export default function Subscription() {
                                     setShowFullScreenBtn(true);
                                 }}
                             />
+                        ) : channelsResolving ? (
+                            <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-[#86909c]">
+                                {isH5 ? (
+                                    <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center px-4 pt-[env(safe-area-inset-top,0px)]">
+                                        <button
+                                            type="button"
+                                            aria-label={localize("com_nav_open_sidebar")}
+                                            onClick={() => setSystemMenuOpen(true)}
+                                            className={mobileHeadIconBtnClassName}
+                                        >
+                                            <Outlined.SidebarMenu className="size-4" />
+                                        </button>
+                                        <h1
+                                            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[24px] leading-8 text-[#212121]"
+                                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
+                                        >
+                                            {localize("com_subscription.subscribe")}
+                                        </h1>
+                                    </div>
+                                ) : null}
+                                <LoadingIcon className="size-20 text-primary" />
+                            </div>
                         ) : (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center">
                                 {isH5 ? (

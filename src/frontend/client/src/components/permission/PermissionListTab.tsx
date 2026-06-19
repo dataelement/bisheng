@@ -21,7 +21,8 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { Building2, ChevronDown, Loader2, RotateCcw, Search, User, Users } from "lucide-react";
+import { Building2, ChevronDown, RotateCcw, Search, User, Users } from "lucide-react";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
@@ -485,8 +486,8 @@ export function PermissionListTab({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+      <div className="flex h-full flex-1 items-center justify-center">
+        <LoadingIcon className="size-20 text-primary" />
       </div>
     );
   }

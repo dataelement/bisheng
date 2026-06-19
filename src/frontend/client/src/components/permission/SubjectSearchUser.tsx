@@ -208,7 +208,7 @@ export function SubjectSearchUser({
       </div>
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]"
+        className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]"
       >
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">
@@ -223,11 +223,10 @@ export function SubjectSearchUser({
         {!loading &&
           results.map((user) => {
             const isDisabled = disabledIdSet.has(user.user_id);
-            // Secondary line: person id + primary department path, mirroring the
-            // admin-side picker. Both fields are optional, so join only what exists.
-            const subText = [user.external_id, user.primary_department_path]
-              .filter(Boolean)
-              .join(" / ");
+            // User id (external_id) renders right after the username; the dedicated
+            // column shows only the org/department path.
+            const departmentPath = user.primary_department_path ?? "";
+            const showUserId = !!user.external_id && user.external_id !== user.user_name;
             return (
               <div
                 key={user.user_id}
@@ -243,13 +242,19 @@ export function SubjectSearchUser({
                   checked={selectedIds.has(user.user_id)}
                   disabled={isDisabled}
                 />
-                {/* Name column (fixed width) + department caption after it, mirroring the
-                    permission-list row layout. */}
-                <div className="flex w-[180px] shrink-0 items-center gap-2">
+                {/* Name column: username + user id (external_id) after it; the next
+                    column shows only the org/department path. */}
+                <div className="flex w-[220px] shrink-0 items-center gap-1.5">
                   <UserIcon className="h-4 w-4 shrink-0 text-gray-400" />
-                  <span className="truncate text-sm" title={user.user_name}>{user.user_name}</span>
+                  <span className="min-w-0 truncate text-sm" title={user.user_name}>{user.user_name}</span>
+                  {showUserId && (
+                    <>
+                      <span className="h-3 w-px shrink-0 bg-[#D9D9D9]" aria-hidden />
+                      <span className="shrink-0 truncate text-xs text-[#999999]" title={user.external_id ?? undefined}>{user.external_id}</span>
+                    </>
+                  )}
                 </div>
-                <span className="min-w-0 flex-1 truncate text-xs text-[#999999]" title={subText}>{subText}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-[#999999]" title={departmentPath}>{departmentPath}</span>
                 {isDisabled && (
                   <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
                     {localize("com_permission.already_granted")}

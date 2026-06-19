@@ -66,7 +66,7 @@ const AiModelSelect = memo(
                         </span>
                     </div>
                 </SelectTrigger>
-                <SelectContent className="bg-white">
+                <SelectContent auto className="bg-white w-[200px]">
                     {uniqueOptions.map((opt) => (
                         <SelectItem key={opt.id + ""} value={opt.id + ""}>
                             {opt.displayName}
