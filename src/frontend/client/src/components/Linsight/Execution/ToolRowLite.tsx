@@ -63,10 +63,13 @@ function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>
 
 const ToolRowLite: FC<ToolRowLiteProps> = ({ step }) => {
     const localize = useLocalize();
-    // Default-open while running (live tool surfaces its detail), collapsed once
-    // finished — but row-level open is local here; the parent DeepStepGroup owns
-    // the group-level fold so a single tool toggle never collapses the episode.
-    const [open, setOpen] = useState<boolean>(step.running);
+    // Default COLLAPSED to a single verb-phrase line (入参/结果 on demand). The
+    // parent group already stays expanded while it's the active episode; keeping
+    // each tool row as one quiet line stops the expanded group from becoming a wall
+    // of streamed tool output and removes the only remaining in-group height churn
+    // (a row auto-expanding the moment its output streamed in). Row-level open is
+    // local; the parent DeepStepGroup owns the group-level fold.
+    const [open, setOpen] = useState<boolean>(false);
 
     const paramsText = formatStepParams(step.params);
     const hasDetails = !!(step.callReason || paramsText || step.output);

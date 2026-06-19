@@ -106,6 +106,26 @@ describe('stepUtils — firstLine (A)', () => {
             'Let me organize all findings.',
         );
     });
+
+    it('cuts a numbered-enumeration goal to its lead-in (no dangling "1.")', () => {
+        // a delegation goal "<lead-in>：1. … 2. …" — keep the instruction, drop the list
+        const goal = '研究首尔美食探店攻略，请搜索并整理以下信息：\n1. 必吃餐厅\n2. 人均消费\n3. 交通方式';
+        expect(firstLine(goal, 48)).toBe('研究首尔美食探店攻略，请搜索并整理以下信息');
+    });
+
+    it('does not treat a list ordinal "1." as a sentence boundary', () => {
+        expect(firstLine('计划：1. 调研 2. 写作', 24)).toBe('计划');
+        // a goal that LEADS with a list marker drops the marker and keeps the first
+        // item, then cuts the rest of the enumeration
+        expect(firstLine('1. 调研行业 2. 写报告 3. 复核', 24)).toBe('调研行业');
+    });
+
+    it('strips markdown markers / inline code from the gist', () => {
+        // inline code is unwrapped, not shown as raw `backticks`
+        expect(firstLine('整理 `新易盛` 的财务数据。', 48)).toBe('整理 新易盛 的财务数据。');
+        // a leading bullet the goal opens with is dropped
+        expect(firstLine('- 调研行业概况', 24)).toBe('调研行业概况');
+    });
 });
 
 describe('stepUtils — timestamp -> startedAt/endedAt (B)', () => {

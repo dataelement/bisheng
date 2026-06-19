@@ -14,10 +14,10 @@ import { isTaskDone, isTaskRunning } from './stepUtils';
 
 export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: boolean }) {
     const localize = useLocalize();
-    // Default expanded (user decision, Wave2): the checklist opens by default so
-    // the per-task progress is visible without an extra click; position unchanged
-    // (still pinned above the input).
-    const [open, setOpen] = useState(true);
+    // Default collapsed: the panel opens collapsed on every conversation switch
+    // (the parent keys this by versionId so it remounts per turn), keeping the
+    // flow above the input clean; one click expands the per-task progress.
+    const [open, setOpen] = useState(false);
 
     if (!tasks.length) return null;
 
@@ -39,12 +39,16 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
                 onClick={() => setOpen(!open)}
                 className="flex w-full items-center gap-2 px-4 py-3 text-left"
             >
-                {/* §2.7 unified icon regime: running → Accent spinner; otherwise the
-                    Ink hero glyph. */}
-                {runningTask ? (
-                    <Outlined.Loading size={16} className="shrink-0 animate-spin" style={{ color: ACCENT }} />
-                ) : (
+                {/* Header glyph:
+                    - all done → DoubleCheck (both expanded & collapsed)
+                    - in progress + expanded → the task (list) glyph
+                    - in progress + collapsed → Accent spinner (live activity cue) */}
+                {allDone ? (
+                    <Outlined.DoubleCheck size={16} className="shrink-0" style={{ color: INK }} />
+                ) : open ? (
                     <Outlined.ListSuccess size={16} className="shrink-0" style={{ color: INK }} />
+                ) : (
+                    <Outlined.Loading size={16} className="shrink-0 animate-spin" style={{ color: ACCENT }} />
                 )}
                 <span className="shrink-0 text-[16px] font-medium" style={{ color: INK }}>
                     {allDone ? localize('com_linsight_task_panel_done') : localize('com_linsight_task_panel')}

@@ -334,6 +334,13 @@ export default function AiChatMessages({
                     workspaceOpen={workspaceOpen}
                 />
             )}
+            <div className="relative flex min-h-0 flex-1 flex-col">
+            {/* Soft top fade: content dissolves into the page as it scrolls under the
+                top edge instead of a hard cut. Sits ABOVE normal scroll content
+                (z-10) so it fades, but BELOW pinned sticky headers (z-20) — the
+                overflow container creates no stacking context, so a header's z-20
+                bubbles up to outrank this overlay and stays crisp. */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-white to-transparent" />
             <div
                 ref={(el) => {
                     scrollRef.current = el;
@@ -404,6 +411,7 @@ export default function AiChatMessages({
                     <div ref={endRef} className="h-0 shrink-0" />
                     </SelectionMessagesProvider>
                 </div>
+            </div>
             </div>
             {/* Scroll to bottom button */}
             {showScrollBtn && (

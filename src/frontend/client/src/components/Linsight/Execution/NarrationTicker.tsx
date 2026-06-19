@@ -20,7 +20,9 @@
  * single clamped line) so it sits under a group header as an aside.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { MUTED } from './execTokens';
+
+// Narration sits one notch lighter than the node title — quiet meta under the header.
+const NARRATION_COLOR = '#999999';
 
 interface NarrationTickerProps {
     /** the current COMPLETE narration sentence; '' / unchanged updates are held */
@@ -89,7 +91,7 @@ export function NarrationTicker({ text }: NarrationTickerProps) {
                 <span
                     key={`out-${cycle}`}
                     className="absolute inset-x-0 top-0 block animate-narration-out truncate text-xs leading-5 motion-reduce:animate-none"
-                    style={{ color: MUTED }}
+                    style={{ color: NARRATION_COLOR }}
                 >
                     {leaving}
                 </span>
@@ -98,7 +100,7 @@ export function NarrationTicker({ text }: NarrationTickerProps) {
                 <span
                     key={`in-${cycle}`}
                     className="block animate-narration-in truncate text-xs leading-5 motion-reduce:animate-none"
-                    style={{ color: MUTED }}
+                    style={{ color: NARRATION_COLOR }}
                 >
                     {displayed}
                 </span>
