@@ -184,9 +184,11 @@ export function firstLine(text: string | null | undefined, max: number = FIRST_L
     // collapse all whitespace runs (incl. newlines) to single spaces, then trim
     const flat = text.replace(/\s+/g, ' ').trim();
     if (!flat) return '';
-    // prefer the first sentence boundary (CJK 。！？ or ASCII .!?) when it lands
-    // inside the budget, otherwise hard-truncate
-    const sentence = flat.match(/^.*?[。！？.!?]/);
+    // prefer the first sentence boundary when it lands inside the budget, otherwise
+    // hard-truncate. CJK 。！？… always terminate; an ASCII .!? only does when it is
+    // followed by whitespace or end-of-string — so a mid-token dot in a ticker /
+    // decimal / abbreviation ("601138.SH", "3.5", "U.S.") is NOT a false boundary.
+    const sentence = flat.match(/^.*?(?:[。！？…]|[.!?](?=\s|$))/);
     const head = sentence && sentence[0].length <= max ? sentence[0] : flat;
     if (head.length <= max) return head;
     return head.slice(0, max) + '…';

@@ -91,6 +91,21 @@ describe('stepUtils — firstLine (A)', () => {
         expect(out.endsWith('…')).toBe(true);
         expect(out.length).toBe(49); // 48 chars + ellipsis
     });
+
+    it('does not break at a mid-token ASCII dot (ticker / decimal / abbreviation)', () => {
+        // The "." in "601138.SH" is followed by a letter, NOT whitespace/end — so it
+        // is not a sentence boundary; the real break is the 。 after 公司基本信息.
+        const goal = '请调研工业富联（富士康工业互联网股份有限公司，股票代码601138.SH）的公司基本信息。请汇总。';
+        expect(firstLine(goal, 100)).toBe('请调研工业富联（富士康工业互联网股份有限公司，股票代码601138.SH）的公司基本信息。');
+        // a decimal point mid-number is likewise not a boundary
+        expect(firstLine('毛利率 3.5 个百分点。', 50)).toBe('毛利率 3.5 个百分点。');
+    });
+
+    it('still treats an ASCII period as a boundary when it ends an English sentence', () => {
+        expect(firstLine('Let me organize all findings. Then deliver.', 80)).toBe(
+            'Let me organize all findings.',
+        );
+    });
 });
 
 describe('stepUtils — timestamp -> startedAt/endedAt (B)', () => {
