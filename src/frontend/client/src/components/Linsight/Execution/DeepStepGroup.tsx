@@ -27,14 +27,14 @@ import { Outlined } from 'bisheng-icons';
 import { useMemo, type FC, type ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
 import { useCollapseState } from '~/store/linsightCollapse';
-import { cn } from '~/utils';
+import { cn, formatSeconds } from '~/utils';
 import { ACCENT, ACTIVITY_I18N, BODY, INK, MUTED } from './execTokens';
 import { useExecutionLive } from './executionLive';
 import { KnowledgeRow } from './KnowledgeRow';
 import { NarrationTicker } from './NarrationTicker';
 import TimelineRail from './TimelineRail';
 import ToolRowLite from './ToolRowLite';
-import { formatSeconds, useElapsedTicker } from './useElapsedTicker';
+import { useElapsedTicker } from './useElapsedTicker';
 import { narrationFromSteps, summarizeActivity } from './stepUtils';
 import type { DeepStepGroup as DeepStepGroupData, MergedStep } from './stepUtils';
 

@@ -7,6 +7,7 @@ export { default as buildTree } from './buildTree';
 export { default as cleanupPreset } from './cleanupPreset';
 export { default as cn } from './cn';
 export * from './convos';
+export * from './duration';
 export * from './endpoints';
 export * from './files';
 export * from './forms';

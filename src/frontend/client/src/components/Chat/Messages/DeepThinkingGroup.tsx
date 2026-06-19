@@ -16,7 +16,7 @@ import {
     type MouseEvent,
 } from "react";
 import type { AgentEvent } from "~/api/chatApi";
-import { cn } from "~/utils";
+import { cn, formatSeconds } from "~/utils";
 import ThinkingContent from "./ThinkingContent";
 import ToolCallDisplay from "./ToolCallDisplay";
 
@@ -30,12 +30,6 @@ export interface DeepThinkingGroupProps {
     events: AgentEvent[];
     /** True if this group is the currently-open trailing run. */
     isStreaming: boolean;
-}
-
-function formatSeconds(ms: number): string {
-    if (!ms || ms <= 0) return "0";
-    const sec = ms / 1000;
-    return sec < 10 ? sec.toFixed(1) : Math.round(sec).toString();
 }
 
 /** Pick the earliest started_at across events; fall back to undefined. */
