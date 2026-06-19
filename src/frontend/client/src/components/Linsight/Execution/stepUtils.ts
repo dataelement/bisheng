@@ -162,9 +162,10 @@ export interface DeepStepGroup {
 }
 
 /**
- * The Wave2 timeline node union consumed by ExecutionTimeline / SubagentTrack.
- * A `subagent_group` is the same shape buildFlowNodes already emits (preserved
- * verbatim, so the 22→3 grouping is untouched); a `deep_step_group` wraps a run
+ * The Wave2 timeline node union consumed by ExecutionTimeline. A `subagent_group`
+ * is the same shape buildFlowNodes already emits (preserved verbatim; the render
+ * layer explodes it into per-subagent segments — see explodeSubagentGroup); a
+ * `deep_step_group` wraps a run
  * of consecutive top-level steps. The `step` member is kept in the union for
  * type-compat / defensive callers, but buildTimelineGroups never emits a bare
  * `step` — every top-level step is wrapped in a deep_step_group for uniform
@@ -541,10 +542,8 @@ export function buildFlowNodes(steps: MergedStep[]): FlowNode[] {
  *
  * A lone top-level step is ALSO wrapped in a deep_step_group (uniform rendering
  * — ExecutionTimeline only has to dispatch two node kinds). buildTimelineGroups
- * accepts ANY MergedStep[]: when SubagentTrack drills into a single subagent's
- * `children` (pure thinking + tool, no delegation frame, no namespace flip) the
- * whole input collapses to deep_step_groups, giving the same render primitive
- * for the L3 drill-down.
+ * accepts ANY MergedStep[], so the same primitive serves any pure thinking+tool
+ * run (no delegation frame, no namespace flip) that collapses to deep_step_groups.
  */
 /**
  * (段流重构 2026-06) write_todos is the SEGMENT BOUNDARY. After the B2
@@ -658,7 +657,12 @@ export function isFlowNodeRunning(node: FlowNode): boolean {
  * or the most recent node if none is running. Returns null for an empty history.
  */
 export function activeFlowNode(history: ExecStepEventData[] | null | undefined): FlowNode | null {
-    const nodes = buildFlowNodes(mergeStepFrames(history));
+    // Exclude write_todos boundary markers: they are segment cuts, never a
+    // renderable header — returning one would let a consumer render it as a row
+    // ("已更新任务清单"), breaking the same contract buildTimelineGroups enforces.
+    const nodes = buildFlowNodes(mergeStepFrames(history)).filter(
+        (n) => !(n.kind === 'step' && isSegmentBoundary(n.step)),
+    );
     if (!nodes.length) return null;
     for (let i = nodes.length - 1; i >= 0; i--) {
         if (isFlowNodeRunning(nodes[i])) return nodes[i];

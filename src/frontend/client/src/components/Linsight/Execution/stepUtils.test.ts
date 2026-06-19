@@ -1,4 +1,5 @@
 import {
+    activeFlowNode,
     buildFlowNodes,
     buildTimelineGroups,
     explodeSubagentGroup,
@@ -279,8 +280,9 @@ describe('stepUtils — buildTimelineGroups (Wave2 deep_step_group aggregation)'
     });
 
     it('drill-down: a subagent\'s pure thinking+tool children aggregate into deep_step_groups', () => {
-        // SubagentTrack feeds one agent's children (no delegation frame, namespaced
-        // tool/thinking) back into buildTimelineGroups for the L3 view.
+        // buildTimelineGroups is general-purpose: fed one agent's children (no
+        // delegation frame, namespaced tool/thinking) it collapses them to
+        // deep_step_groups — the same primitive the exploded-subagent path reuses.
         const history: ExecStepEventData[] = [
             delegation,
             nsStep(NS_A, { call_id: 'c_think', name: 'thinking', step_type: 'thinking', output: '子代理思路', timestamp: 50 }),
@@ -440,6 +442,29 @@ describe('stepUtils — explodeSubagentGroup (R3 完全拆平)', () => {
         ];
         const segs = explodeSubagentGroup(teamOf(history));
         expect(segs[0].running).toBe(true);
+    });
+});
+
+describe('stepUtils — activeFlowNode (write_todos boundary never surfaces as a header)', () => {
+    it('never returns a write_todos boundary node, even when it is the last frame', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 't1', name: 'web_search', step_type: 'tool', output: 'hit', timestamp: 1 }),
+            // a trailing write_todos boundary (e.g. the model marks the plan done)
+            frame({ call_id: 't2', name: 'write_todos', step_type: 'tool', output: '清单', timestamp: 2 }),
+        ];
+        const node = activeFlowNode(history);
+        expect(node).not.toBeNull();
+        expect(node!.kind === 'step' && node!.step.name === 'write_todos').toBe(false);
+        // it falls back to the last NON-boundary node
+        expect(node!.kind === 'step' && node!.step.name === 'web_search').toBe(true);
+    });
+
+    it('returns null when the history is only boundaries / empty', () => {
+        expect(activeFlowNode([])).toBeNull();
+        const onlyBoundary: ExecStepEventData[] = [
+            frame({ call_id: 'b', name: 'write_todos', step_type: 'tool', output: 'x', timestamp: 1 }),
+        ];
+        expect(activeFlowNode(onlyBoundary)).toBeNull();
     });
 });
 

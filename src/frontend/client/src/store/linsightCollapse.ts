@@ -1,10 +1,10 @@
 /**
  * Linsight task-mode collapse persistence (F7).
  *
- * Group-level expand/collapse state for the execution timeline
- * (DeepStepGroup / SubagentTeamGroup / SubagentTrack) is persisted to
- * sessionStorage so that toggling a group open/closed survives a page refresh
- * and switching between conversations within the same tab.
+ * Group-level expand/collapse state for the execution timeline (DeepStepGroup,
+ * including each exploded per-subagent segment) is persisted to sessionStorage
+ * so that toggling a group open/closed survives a page refresh and switching
+ * between conversations within the same tab.
  *
  * This is PURELY client UI state — it is never sent to the backend and issues
  * NO HTTP (constitution C7). Persistence is opt-in per group via a stable key
