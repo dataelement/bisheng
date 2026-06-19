@@ -11,6 +11,7 @@ Two defects:
      and surfaces it first otherwise.
 """
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 from bisheng.linsight.domain.models.linsight_execute_task import (
@@ -33,9 +34,12 @@ def _make_manager(monkeypatch):
     monkeypatch.setattr(smm, "get_redis_client_sync", lambda: MagicMock())
     mgr = smm.LinsightStateMessageManager("svid")
     mgr._redis_client = MagicMock()
-    mgr._redis_client.aset = AsyncMock()
 
-    store = {"history": []}
+    # `store["history"]` mirrors the EVERY-STEP source of truth (Redis): the real
+    # get_execution_task reads Redis to accumulate the next step, so aset writes it
+    # each call. `store["db_writes"]` counts the (now throttled) DB update_by_id
+    # calls, so a test can assert the thinking-delta write coalescing.
+    store = {"history": [], "db_writes": 0}
     task = LinsightExecuteTask(
         id="t1",
         session_version_id="svid",
@@ -44,6 +48,12 @@ def _make_manager(monkeypatch):
         history=[],
     )
 
+    async def fake_aset(key, value, expiration=None):
+        if isinstance(value, dict) and "history" in value:
+            store["history"] = value["history"]
+
+    mgr._redis_client.aset = AsyncMock(side_effect=fake_aset)
+
     async def fake_get(task_id):
         task.history = list(store["history"])
         return task
@@ -51,6 +61,7 @@ def _make_manager(monkeypatch):
     async def fake_update(task_id, **kwargs):
         if "history" in kwargs:
             store["history"] = kwargs["history"]
+            store["db_writes"] += 1
         return task
 
     mgr.get_execution_task = fake_get
@@ -128,6 +139,56 @@ async def test_need_user_input_without_call_id_appends(monkeypatch):
     assert len(store["history"]) == 2
     # set_user_input relies on the call_user_input step being history[-1].
     assert store["history"][-1]["step_type"] == "call_user_input"
+
+
+# ---------------------------------------------------------------------------
+# DB write-amplification guard (DM8 -7120 incident): thinking token-delta DB
+# writes are coalesced; everything else flushes immediately.
+# ---------------------------------------------------------------------------
+
+
+async def test_thinking_deltas_coalesce_db_writes(monkeypatch):
+    mgr, store = _make_manager(monkeypatch)
+
+    # 3 deltas of ONE thinking segment, streamed back-to-back (well within the
+    # flush interval).
+    await mgr.add_execution_task_step("t1", _thinking("c1", "Hel"))  # first delta -> DB flush
+    await mgr.add_execution_task_step("t1", _thinking("c1", "lo "))  # merge -> throttled
+    await mgr.add_execution_task_step("t1", _thinking("c1", "world"))  # merge -> throttled
+
+    # Redis (every-step truth) accumulated the full text...
+    assert store["history"][0]["output"] == "Hello world"
+    assert mgr._redis_client.aset.await_count == 3
+    # ...but the DB was rewritten ONCE (the first, appended delta), not per token.
+    assert store["db_writes"] == 1
+
+
+async def test_tool_frames_always_flush_db(monkeypatch):
+    mgr, store = _make_manager(monkeypatch)
+
+    # A tool start + end (end merges into start by call_id) must BOTH persist to
+    # the DB immediately — tool/output frames are never throttled.
+    await mgr.add_execution_task_step("t1", _tool("c2", "start"))
+    await mgr.add_execution_task_step("t1", _tool("c2", "end", output="r"))
+
+    assert store["db_writes"] == 2
+
+
+async def test_thinking_delta_flushes_after_interval(monkeypatch):
+    mgr, store = _make_manager(monkeypatch)
+
+    await mgr.add_execution_task_step("t1", _thinking("c1", "a"))  # first delta -> flush (db=1)
+    await mgr.add_execution_task_step("t1", _thinking("c1", "b"))  # merge -> throttled (db=1)
+    assert store["db_writes"] == 1
+
+    # Simulate the flush window elapsing: a long thinking segment still persists
+    # periodically so a mid-run reload isn't stale and nothing is lost.
+    elapsed = asyncio.get_event_loop().time() - mgr.THINKING_DB_FLUSH_INTERVAL - 1
+    mgr._last_history_db_flush["t1"] = elapsed
+    await mgr.add_execution_task_step("t1", _thinking("c1", "c"))  # interval passed -> flush (db=2)
+
+    assert store["db_writes"] == 2
+    assert store["history"][0]["output"] == "abc"
 
 
 # ---------------------------------------------------------------------------

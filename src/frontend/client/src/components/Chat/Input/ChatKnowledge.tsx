@@ -51,7 +51,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-const MAX_SUB_HEIGHT = 320;
+const MAX_SUB_HEIGHT = 240;
 const BOTTOM_GAP = 8;
 /** 移动端：碰撞检测余量；底部勿过大，否则 flip/shift 会把整块菜单顶到视口上方导致裁切 */
 const MOBILE_MENU_COLLISION = {

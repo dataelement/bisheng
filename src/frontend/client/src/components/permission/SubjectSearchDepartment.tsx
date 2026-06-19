@@ -179,7 +179,7 @@ export function SubjectSearchDepartment({
           className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]">
+      <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]">
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">{localize("com_ui_loading")}</div>
         )}
@@ -257,7 +257,7 @@ function TreeNode({
             className="rounded p-0.5 hover:bg-gray-200"
             onClick={(e) => { e.stopPropagation(); onExpand(node.id); }}
           >
-            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
           </button>
         ) : (
           <span className="w-5" />

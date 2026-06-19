@@ -6,6 +6,7 @@ import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getChannelSquareApi, subscribeManagerChannelApi } from "~/api/channels";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 
 type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
@@ -58,6 +59,10 @@ function ChannelSquare({
   const [page, setPage] = useState(1);
   const [hasMorePage, setHasMorePage] = useState(true);
   const [allChannels, setAllChannels] = useState<SquareChannel[]>([]);
+  // Track only the very first page-1 fetch so the empty state never flashes
+  // before data arrives. Subsequent search/refresh reloads keep the existing
+  // list (search filters client-side), so we don't re-enter the loading view.
+  const [initialLoading, setInitialLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const scrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const { showToast } = useToastContext();
@@ -196,6 +201,8 @@ function ChannelSquare({
         setPage(nextPage);
       } catch {
         // 出错时不打断现有列表
+      } finally {
+        if (nextPage === 1) setInitialLoading(false);
       }
     },
     [searchQuery]
@@ -270,7 +277,7 @@ function ChannelSquare({
           scrollRef.current = el;
           scrollRevealRef(el);
         }}
-        className="flex-1 overflow-y-auto scrollbar-on-scroll bg-white"
+        className="flex-1 flex flex-col overflow-y-auto scrollbar-on-scroll bg-white"
         onScroll={handleListScroll}
       >
         <div className="relative mx-auto mb-6 mt-6 w-full max-w-[480px]">
@@ -288,10 +295,14 @@ function ChannelSquare({
             className="pl-9 h-8 text-[12px] rounded-md bg-white border-[#E5E6EB] focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
           />
         </div>
-        <div className="max-w-[1032px] mx-auto px-4 pb-4 pt-0">
+        <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 pb-4 pt-0">
 
-          {visibleChannels.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-[#86909c]">
+          {initialLoading ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
+              <LoadingIcon className="size-20 text-primary" />
+            </div>
+          ) : visibleChannels.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
               <img
                 className="size-[120px] mb-3 object-contain opacity-90"
                 src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}

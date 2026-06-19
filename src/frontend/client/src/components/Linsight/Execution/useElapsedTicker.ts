@@ -28,16 +28,6 @@ export interface ElapsedTicker {
 }
 
 /**
- * Format a duration for the "用时 N 秒" label. Always one decimal place so a
- * sub-second / same-second span never collapses to a bare "0 秒" (e.g. "0.4",
- * "3.4", "142.0"). Non-positive durations render "0.0".
- */
-export function formatSeconds(ms: number): string {
-    const sec = !ms || ms <= 0 ? 0 : ms / 1000;
-    return sec.toFixed(1);
-}
-
-/**
  * @param startMs   group start wall-clock (ms); null/undefined ⇒ no clock.
  * @param endMs     group end wall-clock (ms); read only when not streaming.
  * @param streaming true while the group is still open/active.

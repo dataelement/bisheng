@@ -121,7 +121,7 @@ function CitationReferenceCard({
     'text-[14px] font-normal leading-[22px] text-[#1D2129]';
 
   return (
-    <div className="flex min-h-[92px] flex-col gap-2 rounded-[6px] border border-[#ECECEC] bg-white p-2">
+    <div className="flex min-h-[92px] flex-col gap-2 rounded-[8px] border border-[#ECECEC] bg-white p-2">
       <div className="flex items-center">
         <SourceTypeBadge preview={preview} type={item.data.type} />
       </div>
@@ -192,7 +192,7 @@ function CitationReferenceCard({
           </>
         ) : (
           <>
-            <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
+            <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" clipAsCircle={false} />
             <span className="truncate">{preview?.sourceName || '政策文件'}</span>
           </>
         )}
@@ -552,7 +552,7 @@ export default function CitationReferencesDrawer({
           <h2 className="truncate text-sm font-medium leading-[22px] text-[#212121]">
             {localize('com_msg_source_reference')}
           </h2>
-          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
+          <span className="flex h-[18px] min-w-[16px] shrink-0 items-center justify-center rounded-full bg-gray-100 px-1.5 text-[10px] text-[#666]">
             {references.length}
           </span>
         </div>

@@ -1,11 +1,12 @@
 /**
- * Shared card-texture tokens for task-mode subagent cards — the single source of
- * truth so SubagentTrack and any future polished card stay byte-identical.
+ * Shared card-texture tokens for task-mode polished cards — a single source of
+ * truth so any future polished card stays byte-identical.
  *
- * Both tokens are extracted verbatim from the merged-out colleague card
- * SubagentRow (3ceecea64), itself sourced from the clarification card
- * (ClarifyCard:161). ClarifyCard keeps its own inline copy (do NOT touch its
- * bytes); this module is the reuse point for the Execution subagent surface.
+ * NOTE: the original consumers (SubagentTrack / SubagentTeamGroup) were removed
+ * in the R3 完全拆平 refactor, so these tokens currently have no consumer; kept
+ * as the reuse point for a future Execution card surface. Both are extracted
+ * verbatim from the clarification card (ClarifyCard:161) — ClarifyCard keeps its
+ * own inline copy (do NOT touch its bytes).
  *
  * No imports / side effects / HTTP — pure constants (constitution C7 safe).
  */

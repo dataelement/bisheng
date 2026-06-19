@@ -45,6 +45,21 @@ module.exports = {
           '0%': { opacity: '0', transform: 'translateY(4px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        // Linsight narration ticker (R2): the incoming complete sentence rolls up
+        // into place, but stays INVISIBLE for the first half so it never overlaps
+        // the outgoing one (no ghost / double-image during the slide).
+        'narration-in': {
+          '0%': { opacity: '0', transform: 'translateY(55%)' },
+          '50%': { opacity: '0', transform: 'translateY(28%)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        // The outgoing sentence fades FULLY by the midpoint, then keeps sliding up
+        // (already invisible) — so there is no frame where both lines are visible.
+        'narration-out': {
+          '0%': { opacity: '1', transform: 'translateY(0)' },
+          '50%': { opacity: '0', transform: 'translateY(-28%)' },
+          '100%': { opacity: '0', transform: 'translateY(-55%)' },
+        },
         // diagonal glint sweeping continuously across the subagent card
         'sheen-sweep': {
           '0%': { transform: 'translateX(-130%)' },
@@ -67,6 +82,9 @@ module.exports = {
         'accordion-up': 'accordion-up 0.2s ease-out',
         'pulse-scale': 'pulse-scale 1s ease-in-out infinite',
         'thinking-appear': 'thinking-appear 0.25s ease-out',
+        // Slower, calmer handoff; staggered opacity keyframes do the no-overlap work.
+        'narration-in': 'narration-in 0.5s ease-out',
+        'narration-out': 'narration-out 0.5s ease-in forwards',
       },
       colors: {
         gray: {

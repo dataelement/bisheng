@@ -27,14 +27,15 @@ import { Outlined } from 'bisheng-icons';
 import { useMemo, type FC, type ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
 import { useCollapseState } from '~/store/linsightCollapse';
-import { cn } from '~/utils';
+import { cn, formatSeconds } from '~/utils';
 import { ACCENT, ACTIVITY_I18N, BODY, INK, MUTED } from './execTokens';
 import { useExecutionLive } from './executionLive';
 import { KnowledgeRow } from './KnowledgeRow';
+import { NarrationTicker } from './NarrationTicker';
 import TimelineRail from './TimelineRail';
 import ToolRowLite from './ToolRowLite';
-import { formatSeconds, useElapsedTicker } from './useElapsedTicker';
-import { narrationFromSteps, summarizeActivity } from './stepUtils';
+import { useElapsedTicker } from './useElapsedTicker';
+import { firstLine, narrationFromSteps, summarizeActivity } from './stepUtils';
 import type { DeepStepGroup as DeepStepGroupData, MergedStep } from './stepUtils';
 
 export interface DeepStepGroupProps {
@@ -54,6 +55,14 @@ export interface DeepStepGroupProps {
      */
     subagent?: { goal: string; idx: number };
 }
+
+/**
+ * Subagent header budget: the delegation goal is the `task` tool's `description`
+ * arg, which the model writes as a long multi-sentence instruction. The header
+ * renders only its first sentence/clause (firstLine), widened to ~one line's worth
+ * so a typical goal stays intact instead of being chopped mid-word by `truncate`.
+ */
+const SUBAGENT_GOAL_TITLE_MAX = 48;
 
 /** A render segment: a stitched thinking passage, or a single tool/knowledge step. */
 type Segment =
@@ -125,12 +134,22 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
     const label = useMemo<string>(() => {
         const seconds = formatSeconds(elapsedMs);
         const noDuration = compact || elapsedMs <= 0;
-        // R3 完全拆平: a subagent segment reads "{goal} · {activity}" (falling back
-        // to "子智能体 N" when the burst carried no per-agent goal), + 用时 suffix.
+        // R3 完全拆平: a subagent segment is headed by its delegation GOAL + 用时.
         if (subagent) {
+            // The goal is the subagent's identity, so it OWNS the header line. Show
+            // only its GIST — the first sentence/clause, hard-capped to ~one line via
+            // firstLine — so a long multi-sentence instruction doesn't read as a
+            // run-on chopped mid-word by `truncate`.
+            //
+            // The activity summary (联网搜索 N 次 · 编辑 M 文件) is intentionally NOT
+            // appended here: it is process detail that competes with the goal for
+            // width (and collides with a truncated goal's open paren), and it is
+            // already visible when the card is expanded. It is kept only as a
+            // FALLBACK label for a goal-less (degraded) subagent — there it is more
+            // informative than a bare "子智能体 N".
+            const goalGist = firstLine(subagent.goal, SUBAGENT_GOAL_TITLE_MAX);
             const core =
-                [subagent.goal, activityText].filter(Boolean).join(' · ') ||
-                localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
+                goalGist || activityText || localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
             return noDuration ? core : localize('com_linsight_act_summary', { 0: core, 1: seconds });
         }
         // R1: activity-summary header (verbs + counts), the primary case.
@@ -221,14 +240,13 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
                         style={{ color: MUTED }}
                     />
                 </button>
-                {/* R2 旁白: shown only while collapsed — once expanded the full
-                    thinking body carries the same reasoning, so the aside would just
-                    duplicate it. Quiet (Muted), clamped to two lines. */}
-                {!open && narration && (
-                    <p className="mt-0.5 line-clamp-2 text-xs leading-5" style={{ color: MUTED }}>
-                        {narration}
-                    </p>
-                )}
+                {/* R2 旁白 (live thought ticker): the segment's latest COMPLETE
+                    sentence, advancing one sentence at a time with a vertical
+                    crossfade. Shown while the segment runs (a live aside under the
+                    header) AND when collapsed (the summary); hidden only when a
+                    finished segment is expanded, where the full thinking body below
+                    already carries the same reasoning. */}
+                {(running || !open) && <NarrationTicker text={narration} />}
                 <div
                     className={cn('grid transition-all duration-300 ease-out', open && 'mt-2')}
                     style={{ gridTemplateRows: open ? '1fr' : '0fr' }}

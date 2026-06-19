@@ -1009,6 +1009,7 @@ export function NotificationsDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                close={false}
                 onOpenAutoFocus={(e) => {
                     // 避免小视口（含 PC 小窗）打开即激活搜索框
                     if (isNarrowMobileLayout || isTouchMobile) {
@@ -1019,9 +1020,17 @@ export function NotificationsDialog({
                     "p-0 gap-0 shadow-[0_8px_24px_rgba(0,0,0,0.12)] duration-500 ease-out [animation-duration:450ms] data-[state=closed]:[animation-duration:320ms]",
                     isNarrowMobileLayout
                         ? "fixed inset-0 left-0 top-0 h-[100dvh] max-h-[100dvh] w-full max-w-none translate-x-0 translate-y-0 rounded-none"
-                        : "h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] rounded-2xl",
+                        : "h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] rounded-xl sm:rounded-xl",
                 )}
             >
+                <button
+                    type="button"
+                    onClick={() => onOpenChange?.(false)}
+                    aria-label={localize("com_ui_close")}
+                    className="absolute right-5 top-4 z-10 rounded-lg text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
+                >
+                    <XIcon className="h-4 w-4" />
+                </button>
                 <div className={cn("flex h-full flex-col overflow-hidden", isNarrowMobileLayout ? "rounded-none" : "rounded-2xl")}>
                     <Tabs
                         value={activeTab}
@@ -1029,7 +1038,7 @@ export function NotificationsDialog({
                         className="flex min-h-0 flex-1 flex-col"
                     >
                         <div className="flex min-h-0 flex-1 flex-col">
-                            <div className={cn("flex-shrink-0 space-y-3 py-3", isNarrowMobileLayout ? "px-4 pb-4 pt-4 pr-4" : "px-6")}>
+                            <div className={cn("flex-shrink-0 space-y-3 py-3", isNarrowMobileLayout ? "px-4 pb-4 pt-4 pr-4" : "px-5")}>
                                 {/* 标题 + Tab：移动端 Tab 紧挨在「消息提醒」下方并左对齐（覆盖 TabsList 默认 justify-center） */}
                                 <div className={cn("flex flex-col", isNarrowMobileLayout ? "gap-3" : "gap-4")}>
                                     <h2 className={cn("text-[#1d2129]", isNarrowMobileLayout ? "text-[20px] font-medium leading-[1.4] text-[#212121]" : "min-h-8 text-[16px] font-semibold leading-8")}>
@@ -1138,7 +1147,7 @@ export function NotificationsDialog({
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "all" ? "true" : "false"}
-                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isNarrowMobileLayout ? "px-4 py-3" : "px-6 py-3")}
+                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isNarrowMobileLayout ? "px-4 py-3" : "px-5 py-3")}
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
@@ -1165,7 +1174,7 @@ export function NotificationsDialog({
                                     <div
                                         data-message-scroll-root="true"
                                         data-active={activeTab === "request" ? "true" : "false"}
-                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isNarrowMobileLayout ? "px-4 py-3" : "px-6 py-3")}
+                                        className={cn("h-full overflow-y-auto scroll-on-scroll", isNarrowMobileLayout ? "px-4 py-3" : "px-5 py-3")}
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (

@@ -1,4 +1,5 @@
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
+import { LoadingIcon } from "~/components/ui/icon/Loading"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useToastContext } from "~/Providers"
@@ -253,7 +254,7 @@ export default function ExplorePlaza() {
     }
 
     return (
-        <div className="flex w-full flex-col items-center bg-white pb-16">
+        <div className="flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white">
             {/* 顶部横幅：背景图尺寸与知识广场（KnowledgeSquare tabbg）相同 — bg-cover + center */}
             <div
                 className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-cover bg-center bg-no-repeat"
@@ -279,7 +280,7 @@ export default function ExplorePlaza() {
             </div>
 
             {/* 过滤栏：桌面与原先一致；窄屏搜索独占一行（移动端始终展开搜索） */}
-            <div className="w-full max-w-[1000px] flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
+            <div className="w-full max-w-[1000px] shrink-0 flex items-center justify-between z-10 px-5 py-5 max-[576px]:flex-col max-[576px]:items-stretch max-[576px]:gap-3">
                 <div className="order-2 max-[576px]:order-1 max-[576px]:w-full min-w-0 min-[577px]:shrink-0">
                     <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
                 </div>
@@ -289,7 +290,7 @@ export default function ExplorePlaza() {
             </div>
 
             {/* 智能体网格 */}
-            <main className="w-full max-w-[1000px] px-5">
+            <main className="flex min-h-0 w-full max-w-[1000px] flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-on-scroll px-5 pb-5">
                 <div
                     className="grid w-full gap-[12px]"
                     style={{ gridTemplateColumns: `repeat(${exploreCols}, minmax(0, 1fr))` }}
@@ -300,24 +301,29 @@ export default function ExplorePlaza() {
                 </div>
 
                 {/* 滚动触发器 & 加载状态显示 */}
-                <div ref={loaderRef} className="flex justify-center py-10 w-full">
-                    {loading && (
-                        <div className="flex items-center gap-2 text-[#335cff]">
-                            <Loader2 className="animate-spin" size={24} />
+                <div
+                    ref={loaderRef}
+                    className={cn(
+                        'flex w-full flex-col items-center',
+                        (loading || agents.length === 0) ? 'flex-1 justify-center' : 'py-10',
+                    )}
+                >
+                    {loading ? (
+                        <div className="flex flex-col items-center gap-3 text-[#335cff]">
+                            <LoadingIcon className="size-20 text-primary" />
                             <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>
-                    )}
-                    {!loading && loadingMore && (
+                    ) : loadingMore ? (
                         <div className="flex items-center gap-2 text-[#335cff]">
-                            <Loader2 className="animate-spin" size={20} />
+                            <LoadingIcon className="size-6 text-primary" />
                             <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>
-                    )}
+                    ) : null}
                     {!hasMore && agents.length > 0 && (
                         <p className="text-[#a9aeb8] text-[12px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_end_of_list')}</p>
                     )}
                     {!loading && agents.length === 0 && (
-                        <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC'] mt-4 py-10">{localize('com_app_explore_no_agents')}</p>
+                        <p className="text-[#a9aeb8] text-[14px] font-['PingFang_SC'] mt-4">{localize('com_app_explore_no_agents')}</p>
                     )}
                 </div>
             </main>

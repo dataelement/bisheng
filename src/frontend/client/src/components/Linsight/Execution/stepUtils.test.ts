@@ -76,6 +76,36 @@ describe('stepUtils — firstLine (A)', () => {
     it('prefers the first sentence when it fits the budget', () => {
         expect(firstLine('对齐口径。然后再算同比。')).toBe('对齐口径。');
     });
+
+    it('honors a custom budget — returns the first sentence intact when it fits (subagent title)', () => {
+        // The subagent card passes a widened budget (~48) so a typical delegation
+        // goal's first sentence survives instead of being chopped at 24.
+        const goal = '调研中际旭创（股票代码：300308）的公司基本信息与业务概况。请检索并返回以下内容的蒸馏摘要。';
+        // first sentence (≤ 48) → returned whole, the trailing detail sentence dropped
+        expect(firstLine(goal, 48)).toBe('调研中际旭创（股票代码：300308）的公司基本信息与业务概况。');
+    });
+
+    it('honors a custom budget — hard-truncates a first sentence that exceeds it', () => {
+        const long = 'a'.repeat(60) + '。';
+        const out = firstLine(long, 48);
+        expect(out.endsWith('…')).toBe(true);
+        expect(out.length).toBe(49); // 48 chars + ellipsis
+    });
+
+    it('does not break at a mid-token ASCII dot (ticker / decimal / abbreviation)', () => {
+        // The "." in "601138.SH" is followed by a letter, NOT whitespace/end — so it
+        // is not a sentence boundary; the real break is the 。 after 公司基本信息.
+        const goal = '请调研工业富联（富士康工业互联网股份有限公司，股票代码601138.SH）的公司基本信息。请汇总。';
+        expect(firstLine(goal, 100)).toBe('请调研工业富联（富士康工业互联网股份有限公司，股票代码601138.SH）的公司基本信息。');
+        // a decimal point mid-number is likewise not a boundary
+        expect(firstLine('毛利率 3.5 个百分点。', 50)).toBe('毛利率 3.5 个百分点。');
+    });
+
+    it('still treats an ASCII period as a boundary when it ends an English sentence', () => {
+        expect(firstLine('Let me organize all findings. Then deliver.', 80)).toBe(
+            'Let me organize all findings.',
+        );
+    });
 });
 
 describe('stepUtils — timestamp -> startedAt/endedAt (B)', () => {
@@ -567,6 +597,78 @@ describe('stepUtils — extractNarration (§3 narration 旁白)', () => {
         expect(extractNarration('')).toBe('');
         expect(extractNarration(null)).toBe('');
         expect(extractNarration('```py\nx=1\n```')).toBe('');
+    });
+
+    it('holds the last COMPLETE sentence and ignores a trailing streaming fragment', () => {
+        // mid-stream: the final clause has no terminator yet -> use the prior complete one
+        expect(extractNarration('先看看已有材料。我正在分析竞争格局和主要厂')).toBe('先看看已有材料。');
+        // no complete sentence yet -> nothing (never surface a half-typed fragment)
+        expect(extractNarration('我正在分析竞争格局')).toBe('');
+        expect(extractNarration('. module competitive landscape and major vendors. I will keep going')).toBe(
+            'module competitive landscape and major vendors.',
+        );
+    });
+
+    it('skips a trailing non-CJK fragment in a Chinese passage', () => {
+        expect(extractNarration('我要调研这家公司的行业前景与风险。Now returning to the main agent.')).toBe(
+            '我要调研这家公司的行业前景与风险。',
+        );
+    });
+
+    it('treats a newline as a sentence boundary (a completed line counts)', () => {
+        expect(extractNarration('先列大纲\n现在开始检索资料\n')).toBe('现在开始检索资料');
+    });
+
+    it('skips an over-long instruction sentence in favor of a shorter one', () => {
+        const text =
+            '先摸清已有材料。' +
+            '请检索并返回以下内容的蒸馏摘要需注明信息来源时间数据口径并将蒸馏后的结果完整回传给主智能体不要省略任何关键事实和数据点确保可追溯。';
+        expect(extractNarration(text)).toBe('先摸清已有材料。');
+    });
+});
+
+describe('stepUtils — extractNarration 选句质量 (碎片/列表/标题/数据/工具名)', () => {
+    it('does NOT break a sentence at a decimal point / percent (缺陷1)', () => {
+        // the "." in "76.5%" is followed by a digit, not whitespace — not a boundary,
+        // so the digit-heavy financial sentence stays whole instead of "…+76." fragment
+        expect(extractNarration('营收预计80亿, 同比+76.5%, 增长强劲。')).toBe(
+            '营收预计80亿, 同比+76.5%, 增长强劲。',
+        );
+    });
+
+    it('rejects a bare parenthesized enumeration, falling back to the prior sentence (缺陷2a)', () => {
+        expect(extractNarration('我会导出多种格式。\n(markdown, html, docx, pdf)\n')).toBe(
+            '我会导出多种格式。',
+        );
+    });
+
+    it('prefers a terminated sentence over a title-like fragment (缺陷2b)', () => {
+        expect(extractNarration('我已完成估值与风险分析。\nInvestment conclusion\n')).toBe(
+            '我已完成估值与风险分析。',
+        );
+    });
+
+    it('strips a leading list bullet and rejects a colon-顿号 enumeration (缺陷3)', () => {
+        const text = '下面总结主要风险。\n- 风险：汇兑损失、客户集中度、竞争加剧、上游材料瓶颈\n';
+        expect(extractNarration(text)).toBe('下面总结主要风险。');
+    });
+
+    it('rejects a lowercase-leading continuation fragment when a clean sentence exists (缺陷4a)', () => {
+        const text = 'The model has been calibrated. confirmed, and provide uncertainty disclosures.';
+        expect(extractNarration(text)).toBe('The model has been calibrated.');
+    });
+
+    it('rejects a digit-leading data enumeration in favor of the prior sentence (缺陷4b)', () => {
+        const text = 'I will outline the demand drivers next. 6T, AI computing demand, etc.';
+        expect(extractNarration(text)).toBe('I will outline the demand drivers next.');
+    });
+
+    it('suppresses a leaked internal tool name (缺陷5, default on)', () => {
+        expect(extractNarration('先看看有什么资料。\n让我调用 ask user。')).toBe('先看看有什么资料。');
+    });
+
+    it('returns "" when every unit is structural junk (no prose to surface)', () => {
+        expect(extractNarration('(a, b, c)\n(d, e, f)\n')).toBe('');
     });
 });
 
