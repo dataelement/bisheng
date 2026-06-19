@@ -702,6 +702,31 @@ describe('stepUtils — extractNarration 选句质量 (碎片/列表/标题/数�
         );
     });
 
+    it('skips a numbered outline line (Day 7: 返程) for the real English intent sentence', () => {
+        // mixed passage: CJK itinerary lines are drafted CONTENT; the English intent
+        // sentence is the actual aside. Day-lines must not win over it.
+        expect(extractNarration('Day 7: 返程\nLet me write the plan now.')).toBe(
+            'Let me write the plan now.',
+        );
+    });
+
+    it('surfaces the English intent sentence over CJK outline data in a mixed passage', () => {
+        const text = [
+            'Let me design an optimized route:',
+            'Day 1: 抵达福州，游三坊七巷',
+            'Day 7: 返程',
+            'Let me write out a solid plan now.',
+        ].join('\n');
+        expect(extractNarration(text)).toBe('Let me write out a solid plan now.');
+    });
+
+    it('still prefers a clean CJK sentence over an English plumbing tail (R-cjk demotion)', () => {
+        // R-cjk is demoted, not removed — Pass 1 still grabs the CJK sentence here
+        expect(
+            extractNarration('我要调研这家公司的行业前景与风险。Now returning to the main agent.'),
+        ).toBe('我要调研这家公司的行业前景与风险。');
+    });
+
     it('returns "" when every unit is structural junk (no prose to surface)', () => {
         expect(extractNarration('(a, b, c)\n(d, e, f)\n')).toBe('');
     });

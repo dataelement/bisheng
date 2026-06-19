@@ -52,7 +52,7 @@ const ThinkingContent: FC<ThinkingContentProps> = memo(({ reasoning, showConnect
                         size={16}
                         className={cn(
                             "shrink-0 transform-gpu transition-transform duration-200",
-                            isExpanded && "rotate-180",
+                            !isExpanded && "-rotate-90",
                         )}
                     />
                 </button>

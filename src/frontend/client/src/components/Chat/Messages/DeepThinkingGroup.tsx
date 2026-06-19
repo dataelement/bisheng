@@ -147,7 +147,7 @@ const DeepThinkingGroup: FC<DeepThinkingGroupProps> = memo(
                     <span>{label}</span>
                     <Outlined.Down
                         size={16}
-                        className={cn(BUTTON_STYLES.icon, isExpanded && "rotate-180")}
+                        className={cn(BUTTON_STYLES.icon, !isExpanded && "-rotate-90")}
                     />
                 </button>
                 <div

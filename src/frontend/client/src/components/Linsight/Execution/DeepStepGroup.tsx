@@ -280,14 +280,12 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
                     // scroll area; the opaque white backing masks the body scrolling
                     // beneath it.
                     open && 'sticky top-0 z-20 bg-white',
-                    // Once actually pinned: a white ::before cap covers the scroll
-                    // container's top padding strip (body would otherwise bleed above
-                    // the header), and a white→transparent ::after gradient just below
-                    // the header softly fades body text in as it scrolls out from
-                    // under the pinned header instead of a hard cut. The ::after is
-                    // pointer-events-none so it never steals clicks from the body.
+                    // Once actually pinned, a solid white ::before cap covers the
+                    // scroll container's top padding strip — body text would otherwise
+                    // bleed above the header. (The body edge below the header is a hard
+                    // cut; no soft gradient there.)
                     pinned &&
-                        'before:absolute before:inset-x-0 before:bottom-full before:h-4 before:bg-white before:content-[""] after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-5 after:bg-gradient-to-b after:from-white after:to-transparent after:content-[""]',
+                        'before:absolute before:inset-x-0 before:bottom-full before:h-4 before:bg-white before:content-[""]',
                 )}
                 style={{ color: NODE_TEXT }}
             >

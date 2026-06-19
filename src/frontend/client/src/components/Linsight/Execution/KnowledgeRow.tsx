@@ -5,7 +5,7 @@
  */
 import { Outlined } from 'bisheng-icons';
 import { cn } from '~/utils';
-import { ACCENT, BODY, MUTED } from './execTokens';
+import { ACCENT, BODY, INK, MUTED } from './execTokens';
 import { detailTextCls, StepRow } from './StepRow';
 import type { MergedStep } from './stepUtils';
 
@@ -30,12 +30,12 @@ function knowledgeHits(step: MergedStep): { title: string }[] {
 
 export function KnowledgeRow({ step }: { step: MergedStep }) {
     const hits = knowledgeHits(step);
-    // Unified icon system (§1.3): running → Accent Loading spinner; done → Muted
-    // BookOpenText. Hit-list glyph is the Outlined.File equivalent (lucide
-    // FileText removed), 16px Muted — no more blue one-off icon.
+    // Unified icon system (§1.3): running → Accent Loading spinner; done → Ink
+    // BookOpenText (matching the top-level node glyph). Hit-list glyph is the
+    // Outlined.File equivalent (lucide FileText removed), 16px Muted as detail.
     const icon = step.running
         ? <Outlined.Loading size={16} className="animate-spin" style={{ color: ACCENT }} />
-        : <Outlined.BookOpenText size={16} style={{ color: MUTED }} />;
+        : <Outlined.BookOpenText size={16} style={{ color: INK }} />;
     return (
         <StepRow icon={icon} title={step.name} running={step.running}>
             {step.callReason && <p className={detailTextCls} style={{ color: BODY }}>{step.callReason}</p>}

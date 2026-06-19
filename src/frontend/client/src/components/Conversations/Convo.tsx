@@ -1,3 +1,4 @@
+import { Outlined } from "bisheng-icons";
 import { Check, X } from "lucide-react";
 import type { FocusEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +14,7 @@ import { Constants } from "~/types/chat";
 import { useLocalize, usePrefersMobileLayout, useNavigateToConvo } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import store from "~/store";
+import { conversationTaskRunningState } from "~/store/linsight";
 import { cn } from "~/utils";
 import { ConvoOptions } from "./ConvoOptions";
 
@@ -45,6 +47,11 @@ export default function Conversation({
   const { navigateWithLastTools } = useNavigateToConvo();
   const { showToast } = useToastContext();
   const { conversationId, title } = conversation;
+  // Task-mode execution indicator: true while this conversation's linsight
+  // session is still running, driving the sidebar spinner.
+  const isTaskRunning = useRecoilValue(
+    conversationTaskRunningState(conversationId ?? "")
+  );
   const inputRef = useRef<HTMLInputElement | null>(null);
   const renameActionsRef = useRef<HTMLDivElement | null>(null);
   const [titleInput, setTitleInput] = useState(title);
@@ -263,22 +270,48 @@ export default function Conversation({
         className={cn(
           isSmallScreen
             ? "flex w-[48px] justify-end items-center shrink-0"
-            : isPopoverActive || isActiveConvo
-              ? "flex"
-              : "hidden group-focus-within:flex group-hover:flex",
+            : // While running, keep the slot visible so the spinner shows without
+              // hover; otherwise reveal the options menu on hover / when active.
+              isPopoverActive || isActiveConvo || isTaskRunning
+              ? "flex items-center"
+              : "hidden items-center group-focus-within:flex group-hover:flex",
           "coarse-pointer:flex",
         )}
       >
-        {!renaming && (
-          <ConvoOptions
-            title={title}
-            retainView={retainView}
-            renameHandler={renameHandler}
-            isActiveConvo={isActiveConvo}
-            conversationId={conversationId}
-            isPopoverActive={isPopoverActive}
-            setIsPopoverActive={setIsPopoverActive}
+        {!renaming && isTaskRunning && (
+          // Task-mode running indicator: a body-colored spinner that yields the
+          // slot to the options menu on hover (or when its popover is open).
+          <Outlined.Loading
+            size={16}
+            className={cn(
+              "shrink-0 animate-spin",
+              isPopoverActive
+                ? "hidden"
+                : "group-hover:hidden group-focus-within:hidden",
+            )}
+            style={{ color: "#1A1A1A" }}
           />
+        )}
+        {!renaming && (
+          <div
+            className={cn(
+              // When running, the menu is hover-only so it swaps in for the
+              // spinner; otherwise it always fills this (already hover-gated) slot.
+              isTaskRunning && !isPopoverActive
+                ? "hidden group-focus-within:flex group-hover:flex"
+                : "flex",
+            )}
+          >
+            <ConvoOptions
+              title={title}
+              retainView={retainView}
+              renameHandler={renameHandler}
+              isActiveConvo={isActiveConvo}
+              conversationId={conversationId}
+              isPopoverActive={isPopoverActive}
+              setIsPopoverActive={setIsPopoverActive}
+            />
+          </div>
         )}
       </div>
     </div>

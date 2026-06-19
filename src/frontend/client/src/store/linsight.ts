@@ -1,5 +1,5 @@
 // src/state/linsightState.ts
-import { atom, atomFamily } from 'recoil';
+import { atom, atomFamily, selectorFamily } from 'recoil';
 import { ExtendedFile } from '~/common';
 
 /**
@@ -150,6 +150,37 @@ export const linsightMapState = atom<Map<string, LinsightInfo>>({
 export const activeSessionIdState = atom<string | null>({
     key: 'activeSessionIdState',
     default: null,
+});
+
+/**
+ * Whether a conversation (chat_id) currently owns a task-mode session that is
+ * still executing — drives the per-conversation running spinner in the sidebar
+ * list. A linsight session stores its owning chat_id in `session_id` (see
+ * useAiChat `onTaskHandoff`), so we match the conversation against that. The
+ * "running" set mirrors ChatView's `taskRunning` (startup → execution) so the
+ * spinner is live for exactly the window the stop button is.
+ */
+export const conversationTaskRunningState = selectorFamily<boolean, string>({
+    key: 'conversationTaskRunningState',
+    get:
+        (conversationId: string) =>
+        ({ get }) => {
+            if (!conversationId) return false;
+            const map = get(linsightMapState);
+            for (const info of map.values()) {
+                if (info.session_id !== conversationId) continue;
+                const s = info.status;
+                if (
+                    s === SopStatus.NotStarted ||
+                    s === SopStatus.SopGenerating ||
+                    s === SopStatus.SopGenerated ||
+                    s === SopStatus.Running
+                ) {
+                    return true;
+                }
+            }
+            return false;
+        },
 });
 
 
