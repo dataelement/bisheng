@@ -224,7 +224,7 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-2 pl-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'h-[100dvh] flex flex-col justify-between py-2 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // Mobile chat 路由的 sidebar 显隐由 MainLayout 顶层条件渲染管理(systemMenuRevealing),
         // 这里不再硬加 hidden,否则 systemMenu 露出时 sidebar 也被隐掉。
       )}
