@@ -119,7 +119,7 @@ export default function MobileNav({
     >
       <div
         className={cn(
-          'flex h-11 min-h-11 w-full flex-row items-center justify-between px-4',
+          'relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4',
         )}
       >
         {appSurfaceShowBackWithMenu ? (
@@ -168,7 +168,13 @@ export default function MobileNav({
         )}
         {showWorkbenchMergedBar && chatMobileHeader ? (
           <>
-            <div className="flex min-w-0 flex-1 justify-center px-1">
+            {/* Title is absolutely screen-centered (left-1/2 + -translate-x-1/2)
+                instead of flex-centered between the side buttons, so it stays at
+                the true horizontal midpoint regardless of how many icons sit on
+                either edge. max-w reserves room for the menu (left) and the
+                share + new-chat icons (right) so a long title truncates rather
+                than sliding under them. Mirrors the 知识空间 / 订阅 mobile headers. */}
+            <div className="absolute left-1/2 top-0 flex h-full max-w-[calc(100%-128px)] -translate-x-1/2 items-center justify-center px-1">
               {appSurfaceBackAction ? (
                 // App-surface chat: title opens the app-chat history dropdown (app card
                 // + conversation list). The dropdown itself is rendered by AppRoot which
@@ -226,7 +232,8 @@ export default function MobileNav({
             </div>
             <div
               className={cn(
-                'flex shrink-0 items-center gap-0.5',
+                // 12px gap between the share and new-chat icon buttons.
+                'flex shrink-0 items-center gap-3',
                 // Match the non-merged branch: while either history dropdown is open, dim
                 // and disable adjacent icons so the only available action is selecting/
                 // closing the list. Main-chat dropdown only applies outside app surface;
@@ -241,6 +248,8 @@ export default function MobileNav({
                   type={shareType}
                   flowId={chatMobileHeader.flowId || undefined}
                   chatId={chatMobileHeader.conversationId}
+                  iconClassName="size-5 shrink-0"
+                  buttonClassName={cn(mobileHeadIconBtnClassName, 'p-0 hover:bg-transparent')}
                 />
               )}
               <button
@@ -271,12 +280,12 @@ export default function MobileNav({
                   aria-expanded={historyDropdownOpen}
                   className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
                 >
-                  <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                  <span className="truncate text-[14px] font-medium leading-[22px] text-[#212121]">
                     {localize('com_ui_chat_list')}
                   </span>
                   <Outlined.Down
                     className={cn(
-                      'size-5 shrink-0 text-[#86909C] transition-transform',
+                      'size-4 shrink-0 text-[#86909C] transition-transform',
                       historyDropdownOpen && 'rotate-180',
                     )}
                   />
