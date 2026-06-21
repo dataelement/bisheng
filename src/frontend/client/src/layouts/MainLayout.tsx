@@ -21,7 +21,7 @@ const systemNoticeTodayKey = () => {
 };
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
-import { canOpenPlatformAdminPanel, canOpenWorkbench } from '~/utils/platformAccess';
+import { canOpenWorkbench, hasRealAdminMenu } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
 import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
@@ -100,16 +100,6 @@ function Sidebar({
   const plugins: string[] | null = Array.isArray((user as any)?.plugins)
     ? ((user as any)?.plugins as string[])
     : null;
-  const canOpenPlatform = useMemo(
-    () =>
-      canOpenPlatformAdminPanel({
-        role: user?.role,
-        plugins,
-        is_department_admin: (user as { is_department_admin?: boolean } | undefined)
-          ?.is_department_admin,
-      }),
-    [plugins, user],
-  );
   const canOpenWorkbenchEntry = useMemo(
     () =>
       !Array.isArray(plugins) ||
@@ -121,7 +111,13 @@ function Sidebar({
       }),
     [plugins, user],
   );
-  const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean })?.menu_approval_mode);
+  // Workbench approval scope gates the workspace tabs (falls back to the legacy
+  // global flag for roles saved before the workbench/admin split).
+  const menuApprovalMode = Boolean(
+    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean })
+      ?.menu_approval_mode_workbench
+    ?? (user as { menu_approval_mode?: boolean })?.menu_approval_mode,
+  );
   const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
   const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
   const showSubscriptionTab = showWorkbenchItem('subscription');
@@ -129,12 +125,22 @@ function Sidebar({
   const showHomeTab = showWorkbenchItem('home');
   const showAppsTab = showWorkbenchItem('apps');
 
-  const showAdminPanelShortcut =
-    (user as { has_admin_console?: boolean } | null)?.has_admin_console
-    ?? (
-      user?.role === 'admin'
-      || Boolean(plugins?.includes('backend') || plugins?.includes('admin'))
-    );
+  // Admin approval scope (falls back to the legacy global flag).
+  const adminApprovalMode = Boolean(
+    (user as { menu_approval_mode_admin?: boolean; menu_approval_mode?: boolean })
+      ?.menu_approval_mode_admin
+    ?? (user as { menu_approval_mode?: boolean })?.menu_approval_mode,
+  );
+  // Show the 管理后台 entry only when the user can actually use it: super/dept
+  // admin, OR a real admin content menu, OR the admin approval scope lets them
+  // apply from within. A bare `admin` parent with the admin scope off no longer
+  // surfaces the entry (it would only lead to an empty admin shell).
+  const showAdminEntry =
+    user?.role === 'admin'
+    || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
+    || hasRealAdminMenu(plugins)
+    || (adminApprovalMode
+      && Boolean((user as { has_admin_console?: boolean } | null)?.has_admin_console));
 
   // 首钢门户专属入口：仅首钢部署（YAML 命名空间或 ConfigMap window 变量任一有值）+ 系统超管 + 桌面端才显示
   const portalAdminUrl =
@@ -283,7 +289,7 @@ function Sidebar({
       </div>
 
       <div className="flex flex-col gap-4 items-center">
-        {!isMobile && (canOpenPlatform || showAdminPanelShortcut) && (
+        {!isMobile && showAdminEntry && (
           <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
             <div
               title={localize('com_nav_admin_panel')}

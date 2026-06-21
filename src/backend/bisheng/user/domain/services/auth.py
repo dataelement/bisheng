@@ -743,19 +743,50 @@ class LoginUser(BaseModel):
         }
 
     @classmethod
-    async def compute_menu_approval_mode(cls, user: User) -> bool:
-        """True when any assigned (non-super-admin) role sets ``quota_config.menu_approval_mode``."""
+    async def compute_menu_approval_modes(cls, user: User) -> tuple[bool, bool]:
+        """Per-area "show unauthorized menus (apply)" flags: ``(workbench, admin)``.
+
+        True when any assigned (non-super-admin) role enables the corresponding
+        scope. The scoped keys ``menu_approval_mode_workbench`` /
+        ``menu_approval_mode_admin`` supersede the legacy global
+        ``menu_approval_mode``; reads fall back to the legacy key so existing
+        roles keep their current behavior until re-saved.
+        """
         db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
         role_ids = [ur.role_id for ur in db_user_role if ur.role_id != AdminRole]
         if not role_ids:
-            return False
+            return False, False
         roles = await RoleDao.aget_role_by_ids(role_ids)
+
+        def _truthy(v: object) -> bool:
+            return v is True or v == 1 or str(v).lower() in ("true", "1")
+
+        workbench = admin = False
         for r in roles or []:
             qc = r.quota_config or {}
-            v = qc.get("menu_approval_mode")
-            if v is True or v == 1 or str(v).lower() in ("true", "1"):
-                return True
-        return False
+            legacy = qc.get("menu_approval_mode")
+            workbench = workbench or _truthy(qc.get("menu_approval_mode_workbench", legacy))
+            admin = admin or _truthy(qc.get("menu_approval_mode_admin", legacy))
+            if workbench and admin:
+                break
+        return workbench, admin
+
+    @classmethod
+    async def compute_menu_approval_mode(cls, user: User) -> bool:
+        """Legacy union flag (workbench OR admin), kept for back-compat callers."""
+        workbench, admin = await cls.compute_menu_approval_modes(user)
+        return workbench or admin
+
+    @classmethod
+    async def compute_menu_approval_mode_for_menu(cls, user: User, menu_key: str) -> bool:
+        """Effective approval flag for the scope ``menu_key`` belongs to.
+
+        Admin-area menus resolve to the admin scope; everything else (workbench
+        menus) resolves to the workbench scope. This keeps a user from applying
+        for an admin menu when only the workbench scope is enabled.
+        """
+        workbench, admin = await cls.compute_menu_approval_modes(user)
+        return admin if menu_key in _WEB_MENU_ADMIN_ALL else workbench
 
     @classmethod
     async def assert_effective_web_menu_contains(cls, user_id: int, menu_key: str) -> None:

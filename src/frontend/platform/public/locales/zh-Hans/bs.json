@@ -324,6 +324,8 @@
     "workbenchTaskModeHint": "「首页」子能力。关闭后，工作台首页不展示技能与任务模式选择，左上角「新建任务」入口也将隐藏。",
     "menuApprovalMode": "显示未授权菜单（支持申请）",
     "menuApprovalModeHint": "开启后，未授权的菜单入口依然可见，用户可发起权限申请；关闭则自动隐藏所有无权限的菜单。",
+    "menuApprovalModeWorkbenchHint": "开启后，工作台中未授权的菜单入口依然可见，用户可发起权限申请；关闭则自动隐藏所有无权限的工作台菜单。",
+    "menuApprovalModeAdminHint": "开启后，管理后台中未授权的菜单入口依然可见，用户可发起权限申请；关闭则自动隐藏未授权后台菜单，且无任何后台菜单权限时不显示「管理后台」入口。",
     "approvalEntryHint": "审批流程配置、异常处理与站内信联动统一在“审批”模块维护。",
     "roleMenuLoading": "正在加载该角色的菜单权限…",
     "roleMenuLoadFailed": "角色菜单权限加载失败，当前不允许保存，请重试后再编辑。",

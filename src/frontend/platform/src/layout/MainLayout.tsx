@@ -79,7 +79,9 @@ export default function MainLayout() {
     const showSystemNav = isFullAdminShell || isChildAdmin
     // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
     const showApprovalNav = isSuperAdmin || isChildAdmin
-    const menuApprovalMode = Boolean(user.menu_approval_mode)
+    // Admin-area approval scope (falls back to the legacy global flag for
+    // roles saved before the workbench/admin split).
+    const menuApprovalMode = Boolean(user.menu_approval_mode_admin ?? user.menu_approval_mode)
     const hasAdminEntry =
         isSuperAdmin
         || isDeptAdmin

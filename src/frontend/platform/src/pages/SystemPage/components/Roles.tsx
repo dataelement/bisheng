@@ -144,7 +144,10 @@ export default function Roles() {
   const [quotaSpaceSubscribeUnlimited, setQuotaSpaceSubscribeUnlimited] = useState(false)
   const [quotaSpaceSubscribeCount, setQuotaSpaceSubscribeCount] = useState("100")
   const [menuIds, setMenuIds] = useState<string[]>([])
-  const [menuApprovalMode, setMenuApprovalMode] = useState(false)
+  // Per-area "show unauthorized menus (apply)" toggles, split from the legacy
+  // single flag so workbench and admin can be configured independently.
+  const [workbenchApprovalMode, setWorkbenchApprovalMode] = useState(false)
+  const [adminApprovalMode, setAdminApprovalMode] = useState(false)
   const [isMenuLoading, setIsMenuLoading] = useState(false)
   const [menuLoadFailed, setMenuLoadFailed] = useState(false)
   const [initialEditSnapshot, setInitialEditSnapshot] = useState("")
@@ -206,7 +209,8 @@ export default function Roles() {
     quotaSpaceSubscribeUnlimitedVal: boolean,
     quotaSpaceSubscribeCountVal: string,
     menuIdsVal: string[],
-    menuApprovalModeVal: boolean,
+    workbenchApprovalModeVal: boolean,
+    adminApprovalModeVal: boolean,
   ) => JSON.stringify({
     roleNameVal,
     departmentIdVal,
@@ -217,7 +221,8 @@ export default function Roles() {
     quotaSpaceSubscribeUnlimitedVal,
     quotaSpaceSubscribeCountVal,
     menuIds: [...menuIdsVal].sort(),
-    menuApprovalModeVal,
+    workbenchApprovalModeVal,
+    adminApprovalModeVal,
   })
 
   const loadDepartments = async () => {
@@ -258,12 +263,13 @@ export default function Roles() {
     setQuotaChannelCount("10")
     setQuotaSpaceSubscribeUnlimited(false)
     setQuotaSpaceSubscribeCount("100")
-    setMenuApprovalMode(false)
+    setWorkbenchApprovalMode(false)
+    setAdminApprovalMode(false)
     setMenuIds(nextMenuIds)
     setIsMenuLoading(false)
     setMenuLoadFailed(false)
     setInitialEditSnapshot(
-      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", false, "100", nextMenuIds, false)
+      buildEditSnapshot("", nextDepartmentId, false, "500", false, "10", false, "100", nextMenuIds, false, false)
     )
     setEditOpen(true)
   }
@@ -289,9 +295,14 @@ export default function Roles() {
       if (!ids.includes(parent)) ids = ids.filter((id) => !deps.includes(id))
     })
     setMenuIds(ids)
-    const qc = role.quota_config || {}
-    const approvalFromRole = Boolean((qc as Record<string, unknown>).menu_approval_mode)
-    setMenuApprovalMode(approvalFromRole)
+    const qc = (role.quota_config || {}) as Record<string, unknown>
+    // Scoped keys supersede the legacy global flag; fall back to it for roles
+    // saved before the split so the dialog mirrors the current behavior.
+    const legacyApproval = Boolean(qc.menu_approval_mode)
+    const workbenchApproval = Boolean(qc.menu_approval_mode_workbench ?? legacyApproval)
+    const adminApproval = Boolean(qc.menu_approval_mode_admin ?? legacyApproval)
+    setWorkbenchApprovalMode(workbenchApproval)
+    setAdminApprovalMode(adminApproval)
     setInitialEditSnapshot(
       buildEditSnapshot(
         role.role_name || "",
@@ -303,7 +314,8 @@ export default function Roles() {
         spaceSubscribeLimit === -1,
         spaceSubscribeLimit >= 0 ? String(spaceSubscribeLimit) : "100",
         ids,
-        approvalFromRole,
+        workbenchApproval,
+        adminApproval,
       )
     )
     setIsMenuLoading(false)
@@ -341,7 +353,11 @@ export default function Roles() {
     base.knowledge_space_subscribe = quotaSpaceSubscribeUnlimited
       ? -1
       : Math.max(0, Number(quotaSpaceSubscribeCount || 0))
-    base.menu_approval_mode = menuApprovalMode
+    base.menu_approval_mode_workbench = workbenchApprovalMode
+    base.menu_approval_mode_admin = adminApprovalMode
+    // Keep the legacy global flag in sync (= OR of both scopes) for any
+    // consumer that still reads it during the transition.
+    base.menu_approval_mode = workbenchApprovalMode || adminApprovalMode
     return base
   }
 
@@ -513,7 +529,8 @@ export default function Roles() {
       quotaSpaceSubscribeUnlimited,
       quotaSpaceSubscribeCount,
       menuIds,
-      menuApprovalMode,
+      workbenchApprovalMode,
+      adminApprovalMode,
     )
     return current !== initialEditSnapshot
   }, [
@@ -528,7 +545,8 @@ export default function Roles() {
     quotaSpaceSubscribeUnlimited,
     quotaSpaceSubscribeCount,
     menuIds,
-    menuApprovalMode,
+    workbenchApprovalMode,
+    adminApprovalMode,
   ])
 
   const requestCloseEditDialog = () => {
@@ -836,17 +854,6 @@ export default function Roles() {
             <div className="rounded-md border p-3">
               <Label>{t("system.menuPermissionSection")}</Label>
               <p className="mt-1 text-xs text-muted-foreground">{t("system.menuPermissionHint")}</p>
-              <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
-                <Switch
-                  checked={menuApprovalMode}
-                  onCheckedChange={(v) => setMenuApprovalMode(Boolean(v))}
-                  disabled={isMenuLoading || (Boolean(activeRole) && menuLoadFailed)}
-                />
-                <div>
-                  <div className="text-sm font-medium">{t("system.menuApprovalMode")}</div>
-                  <div className="text-xs text-muted-foreground">{t("system.menuApprovalModeHint")}</div>
-                </div>
-              </label>
               {isMenuLoading && (
                 <p className="mt-2 text-xs text-muted-foreground">
                   {t("system.roleMenuLoading")}
@@ -877,6 +884,17 @@ export default function Roles() {
                   <div className="mb-2 flex items-center justify-between">
                     <div className="text-xs font-medium text-muted-foreground">{t("system.workbenchMenuAuthorization")}</div>
                   </div>
+                  <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
+                    <Switch
+                      checked={workbenchApprovalMode}
+                      onCheckedChange={(v) => setWorkbenchApprovalMode(Boolean(v))}
+                      disabled={isMenuLoading || (Boolean(activeRole) && menuLoadFailed)}
+                    />
+                    <div>
+                      <div className="text-sm font-medium">{t("system.menuApprovalMode")}</div>
+                      <div className="text-xs text-muted-foreground">{t("system.menuApprovalModeWorkbenchHint")}</div>
+                    </div>
+                  </label>
                   <label
                     className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
                     onClick={() =>
@@ -947,6 +965,17 @@ export default function Roles() {
                   <div className="mb-2 flex items-center justify-between">
                     <div className="text-xs font-medium text-muted-foreground">{t("system.adminMenuAuthorization")}</div>
                   </div>
+                  <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2">
+                    <Switch
+                      checked={adminApprovalMode}
+                      onCheckedChange={(v) => setAdminApprovalMode(Boolean(v))}
+                      disabled={isMenuLoading || (Boolean(activeRole) && menuLoadFailed)}
+                    />
+                    <div>
+                      <div className="text-sm font-medium">{t("system.menuApprovalMode")}</div>
+                      <div className="text-xs text-muted-foreground">{t("system.menuApprovalModeAdminHint")}</div>
+                    </div>
+                  </label>
                   <label
                     className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-background px-2 py-1 text-base font-semibold"
                     onClick={() =>

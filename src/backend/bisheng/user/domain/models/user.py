@@ -106,8 +106,13 @@ class UserRead(UserBase):
     role: str | None = None  # admin；非超管时由服务端序列化（见 /user/info）
     access_token: str | None = None
     web_menu: list[str] | None = None
-    # True if any assigned role sets quota_config.menu_approval_mode (需审批模式)
+    # Legacy union flag (workbench OR admin), kept for back-compat clients.
     menu_approval_mode: bool | None = None
+    # Per-area "show unauthorized menus (apply)" flags. The workbench flag gates
+    # the client workspace tabs; the admin flag gates the platform admin menus
+    # and the client's 管理后台 entrance. Optional so older clients ignore them.
+    menu_approval_mode_workbench: bool | None = None
+    menu_approval_mode_admin: bool | None = None
     admin_groups: list[int] | None = None  # Managed User GroupsIDVertical
     # PRD 3.2.2 用户组管理入口：超管 / 部门管理员
     can_manage_user_groups: bool | None = None

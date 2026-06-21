@@ -44,7 +44,15 @@ DEFAULT_ROLE_QUOTA: dict[str, int] = {
 _TENANT_ONLY_QUOTA_KEYS = {"storage_gb", "user_count", "model_tokens_monthly"}
 
 # Stored in role.quota_config JSON but not numeric quotas (menu UX flags).
-_ROLE_QUOTA_METADATA_KEYS = {"menu_approval_mode"}
+# ``menu_approval_mode`` is the legacy global flag, kept for back-compat; the
+# per-area flags (``_workbench`` / ``_admin``) supersede it (see F0xx role menu
+# scope split). Reads fall back to the legacy key until a role is re-saved.
+_MENU_APPROVAL_MODE_KEYS = {
+    "menu_approval_mode",
+    "menu_approval_mode_workbench",
+    "menu_approval_mode_admin",
+}
+_ROLE_QUOTA_METADATA_KEYS = set(_MENU_APPROVAL_MODE_KEYS)
 
 VALID_QUOTA_KEYS = set(DEFAULT_ROLE_QUOTA.keys()) | _TENANT_ONLY_QUOTA_KEYS | _ROLE_QUOTA_METADATA_KEYS
 
@@ -794,7 +802,7 @@ class QuotaService:
                 raise QuotaConfigInvalidError(
                     msg=f"quota_config contains unknown key: {key}",
                 )
-            if key == "menu_approval_mode":
+            if key in _MENU_APPROVAL_MODE_KEYS:
                 if isinstance(value, bool):
                     continue
                 if isinstance(value, int) and value in (0, 1):
