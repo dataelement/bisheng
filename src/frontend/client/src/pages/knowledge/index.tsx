@@ -834,6 +834,7 @@ export default function Knowledge() {
                             onDragStateChange={handleDragStateChange}
                             uploadingFiles={fileUpload.uploadingFiles}
                             creatingFolder={fileUpload.creatingFolder}
+                            folderUploading={fileUpload.folderUploading}
                             onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
                             onCreateSpace={handleCreateSpace}
                             onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}

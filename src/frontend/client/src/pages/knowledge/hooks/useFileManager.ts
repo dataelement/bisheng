@@ -211,6 +211,11 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             setSearchQuery("");
             setSearchTagIds([]);
             setStatusFilter([]);
+            // Clear the previous space/folder's rows so the detail pane shows its
+            // loading state (gated on `loading && files.length === 0`) on every
+            // switch — not just for empty (e.g. department) spaces — instead of
+            // lingering on stale files until the new list arrives.
+            setFiles([]);
 
             // The URL folder id is the single source of truth — sync the content
             // pane to it on every change. A previous "consumed" guard skipped
