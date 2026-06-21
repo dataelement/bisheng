@@ -21,7 +21,7 @@ const systemNoticeTodayKey = () => {
 };
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
-import { canOpenWorkbench, hasRealAdminMenu } from '~/utils/platformAccess';
+import { canOpenWorkbench } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
 import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
@@ -125,22 +125,17 @@ function Sidebar({
   const showHomeTab = showWorkbenchItem('home');
   const showAppsTab = showWorkbenchItem('apps');
 
-  // Admin approval scope (falls back to the legacy global flag).
-  const adminApprovalMode = Boolean(
-    (user as { menu_approval_mode_admin?: boolean; menu_approval_mode?: boolean })
-      ?.menu_approval_mode_admin
-    ?? (user as { menu_approval_mode?: boolean })?.menu_approval_mode,
-  );
-  // Show the 管理后台 entry only when the user can actually use it: super/dept
-  // admin, OR a real admin content menu, OR the admin approval scope lets them
-  // apply from within. A bare `admin` parent with the admin scope off no longer
-  // surfaces the entry (it would only lead to an empty admin shell).
+  // The 管理后台 entry mirrors the 管理后台 parent menu toggle: show it iff the
+  // user has admin-console access. Closing the parent strips all admin menus on
+  // the backend → has_admin_console=false → entry hidden. The admin approval
+  // scope only controls unauthorized menus *inside* the console, not this entry.
   const showAdminEntry =
-    user?.role === 'admin'
-    || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
-    || hasRealAdminMenu(plugins)
-    || (adminApprovalMode
-      && Boolean((user as { has_admin_console?: boolean } | null)?.has_admin_console));
+    (user as { has_admin_console?: boolean } | null)?.has_admin_console
+    ?? (
+      user?.role === 'admin'
+      || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
+      || Boolean(plugins?.includes('admin') || plugins?.includes('backend'))
+    );
 
   // 首钢门户专属入口：仅首钢部署（YAML 命名空间或 ConfigMap window 变量任一有值）+ 系统超管 + 桌面端才显示
   const portalAdminUrl =
