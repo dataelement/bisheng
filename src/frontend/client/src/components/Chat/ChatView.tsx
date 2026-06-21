@@ -14,7 +14,7 @@ import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspaceP
 import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { userStopLinsightEvent } from '~/api/linsight';
-import { SopStatus } from '~/store/linsight';
+import { SopStatus, taskModeState } from '~/store/linsight';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -59,13 +59,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const [inputText, setInputText] = useState('');
 
-  // F035: task mode is a LOCAL toggle on the daily welcome page — no route jump.
+  // F035: task mode is a toggle on the daily welcome page — no route jump.
   // The route stays `/c`; only submitting in task mode navigates to /linsight.
-  // Initial value comes from nav state so the sidebar "新建任务" entry can land
-  // here already in task mode (see Nav/NewChat handleNewTask).
-  const [taskMode, setTaskMode] = useState<boolean>(
-    !!(location.state as any)?.taskMode,
-  );
+  // Driven by a GLOBAL atom (not local state): ChatView is KeepAlive-cached, so a
+  // nav-state/effect-based toggle goes stale after returning from another tab.
+  // The sidebar "新建任务/新建对话" buttons set the atom directly (see Nav/NewChat),
+  // which the re-activated ChatView reads immediately.
+  const [taskMode, setTaskMode] = useRecoilState(taskModeState);
 
   const { data: bsConfig } = useGetBsConfig();
   const { user } = useAuthContext();
