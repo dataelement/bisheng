@@ -23,8 +23,9 @@ import SystemModelConfig from "./SystemModelConfig"
 
 function CustomTableRow({ data, index, user, onModel, onCheck }) {
     const { t } = useTranslation()
+    const { appConfig } = useContext(locationContext)
     const [expand, setExpand] = useState(false)
-    const canManage = canManageModelSettings(user)
+    const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
 
     // Root-shared rows are read-only for the current caller; the backend
     // sets `is_root_shared_readonly` on the list API so Child Admins do
@@ -115,7 +116,7 @@ export default function Management() {
     const [systemModelTab, setSystemModelTab] = useState<string | undefined>(undefined)
     const [loading, setLoading] = useState(false)
     const { refetch } = useModel()
-    const canManage = canManageModelSettings(user)
+    const canManage = canManageModelSettings(user, appConfig.multiTenantEnabled)
 
     const [searchParams, setSearchParams] = useSearchParams()
     useEffect(() => {
