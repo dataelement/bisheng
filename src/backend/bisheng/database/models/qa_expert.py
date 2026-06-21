@@ -64,7 +64,7 @@ class Question(SQLModel, table=True):
     vote_count: int = Field(default=0)
     answer_count: int = Field(default=0, index=True)
     view_count: int = Field(default=0)
-    
+    comment_count: int = Field(default=0)
     # 时间戳
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -121,12 +121,13 @@ class Comment(SQLModel, table=True):
     
     id: Optional[int] = Field(default=None, primary_key=True)
     answer_id: int = Field(index=True)
+    question_id: int = Field(index=True)
     user_id: int = Field(index=True)
+    user_name: Optional[str] = Field(default=None, description="评论者名称")
     content: str
     is_follow_up: bool = Field(default=False)  # True 为追问，False 为评论
     # 统计字段
     vote_count: int = Field(default=0)
-    
     # 时间戳
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     
@@ -197,27 +198,3 @@ class QANotification(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     
 
-
-
-# ==================== 问题草稿表 ====================
-
-class QuestionDraft(SQLModel, table=True):
-    """问题草稿"""
-    __tablename__ = "qa_question_draft"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    user_id: int = Field(index=True)
-    title: Optional[str] = None
-    description: Optional[str] = None
-    business_domain: Optional[str] = None
-    attachments: list = Field(default=[], sa_column=Column(JsonType))
-    related_docs: list = Field(default=[], sa_column=Column(JsonType))
-    invited_experts: list = Field(default=[], sa_column=Column(JsonType))
-    anonymous: bool = Field(default=False)
-    
-    # 多租户字段
-    tenant_id: int = Field(default=1, index=True)
-    
-    # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
