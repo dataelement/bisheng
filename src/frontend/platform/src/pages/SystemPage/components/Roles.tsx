@@ -434,14 +434,20 @@ export default function Roles() {
 
   const isMenuEnabled = (id: string) => menuIds.includes(id)
 
-  /** 一级开关：只增删父级 id，不改动二级（二级在父级关闭时置灰保留状态） */
-  const toggleMenuGroup = (parentId: string, _children: readonly string[], checked: boolean) => {
+  /** 一级开关：开启只增父级；关闭时联动移除其下所有二级（含任务模式等挂在子项下的
+   *  嵌套依赖），与保存时的依赖清理一致——避免父级关了二级还残留勾选状态。 */
+  const toggleMenuGroup = (parentId: string, children: readonly string[], checked: boolean) => {
     setMenuIds((prev) => {
       const next = new Set(prev)
       if (checked) {
         next.add(parentId)
       } else {
         next.delete(parentId)
+        children.forEach((child) => {
+          next.delete(child)
+          const deps = CHILD_DEPENDENTS[child] || []
+          deps.forEach((dep) => next.delete(dep))
+        })
       }
       return Array.from(next)
     })
