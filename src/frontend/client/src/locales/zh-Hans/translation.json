@@ -370,6 +370,7 @@
   "com_linsight_add_skill": "添加技能",
   "com_linsight_exit_task_mode": "退出任务模式",
   "com_linsight_input_placeholder": "请输入你的任务目标，然后交给$t(bisheng)$t(linsight)",
+  "com_linsight_awaiting_reply": "请在上方回答问题后继续任务",
   "com_linsight_skill_empty": "暂无可用技能",
   "com_linsight_skill_search": "搜索技能",
   "com_linsight_task_mode": "任务模式",

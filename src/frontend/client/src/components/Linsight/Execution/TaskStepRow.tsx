@@ -39,6 +39,13 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
     const hasError = !!task.errorMsg && TASK_ERROR_STATUSES.includes(task.status);
     // Real (non-clarify) execution steps under this task's own id.
     const hasSteps = (task.history || []).some((h) => h?.step_type !== 'call_user_input');
+    // Parked on a task-level clarify: an unanswered call_user_input under this
+    // task. waiting_for_user_input is in TASK_RUNNING_STATUSES (so isTaskRunning
+    // is true), but a parked agent is suspended on an interrupt — nothing is
+    // executing — so it must NOT keep the tail episode's clock ticking.
+    const awaitingInput = (task.history || []).some(
+        (h) => h?.step_type === 'call_user_input' && !h?.is_completed,
+    );
 
     // Direction A: a task with no real execution adds nothing to the timeline —
     // the plan/progress is shown in the pinned TaskPanel, not as an empty flow row.
@@ -53,7 +60,7 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
                 "active" (expanded). A completed task — even though the session is
                 still live — passes false so its last episode collapses to a summary
                 instead of staying stuck open. */}
-            <ExecutionLiveContext.Provider value={isTaskRunning(task.status)}>
+            <ExecutionLiveContext.Provider value={isTaskRunning(task.status) && !awaitingInput}>
                 <ExecutionTimeline history={task.history} />
             </ExecutionLiveContext.Provider>
             {startedChildren.map((child) => (

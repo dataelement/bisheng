@@ -15,6 +15,8 @@ import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Ar
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus, taskModeState } from '~/store/linsight';
+import { findPendingUserInput, splitSessionPseudoTask } from '~/components/Linsight/Execution/stepUtils';
+import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtils';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -493,6 +495,21 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     );
   }, [taskLinsight]);
 
+  // A parked task (ask_user awaiting the user's reply) keeps status === Running —
+  // park is not a distinct live status — so taskRunning stays true even though the
+  // agent is suspended on an interrupt and nothing is executing. Detect the park
+  // (an unanswered call_user_input in the latest task turn) so the input can drop
+  // the misleading "running" Stop button and show a "waiting for your reply" hint;
+  // the user answers via the ClarifyCard in the message stream, not this input.
+  const awaitingUserInput = useMemo(() => {
+    if (!taskRunning || !taskLinsight) return false;
+    const { tasks, sessionSteps } = splitSessionPseudoTask(
+      ((taskLinsight as any).tasks as any[]) || [],
+      ((taskLinsight as any).sessionSteps as ExecStepEventData[]) || [],
+    );
+    return !!findPendingUserInput(sessionSteps, tasks);
+  }, [taskRunning, taskLinsight]);
+
   // Stop button handler. A task round runs via the linsight worker/WS, normally
   // AFTER the handoff SSE stream closed — route the stop to terminate-execute.
   const handleStop = useCallback(() => {
@@ -610,12 +627,18 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               disabled={!bsConfig?.models?.length || !!shareToken}
                               sendDisabled={taskRunning}
                               isStreaming={isStreaming}
-                              taskRunning={taskRunning}
+                              // Parked awaiting the user → not "running": drop the Stop
+                              // button (sendDisabled still blocks a new round until the
+                              // current one resolves). The user replies via the
+                              // ClarifyCard in the stream above, not this input.
+                              taskRunning={taskRunning && !awaitingUserInput}
                               features={{ taskModeEntry: canUseTaskMode, taskMode: (taskMode || taskRunning) && canUseTaskMode }}
                               onToggleTaskMode={() => setTaskMode((v) => !v)}
-                              placeholder={taskMode
-                                ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
-                                : undefined}
+                              placeholder={awaitingUserInput
+                                ? t('com_linsight_awaiting_reply')
+                                : taskMode
+                                  ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
+                                  : undefined}
                               onScrollToBottom={() => { }}
                               modelOptions={bsConfig?.models}
                               modelValue={chatModel.id}
