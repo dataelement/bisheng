@@ -725,8 +725,17 @@ class LoginUser(BaseModel):
         return has_wb or has_adm
 
     @classmethod
-    def default_web_entry(cls, has_workbench: bool, has_admin_console: bool) -> str:
-        """First app after login: ``platform`` (管理后台) or ``workspace`` (工作台). Both open → platform."""
+    def default_web_entry(cls, has_workbench: bool, has_admin_console: bool, *, prefer_workbench: bool = False) -> str:
+        """First app after login: ``platform`` (管理后台) or ``workspace`` (工作台).
+
+        Super admins / department admins with both areas land on 管理后台. Regular
+        users (``prefer_workbench=True``) with workbench access land on 工作台 even
+        when their role also grants admin-console menus, so they aren't dropped
+        straight into the console on login (they can still open it manually if
+        their menus permit).
+        """
+        if prefer_workbench and has_workbench:
+            return "workspace"
         if has_admin_console:
             return "platform"
         if has_workbench:
@@ -736,10 +745,17 @@ class LoginUser(BaseModel):
     @classmethod
     async def user_entry_payload_for_read(cls, user: User) -> dict:
         hw, ha = await cls.effective_workbench_admin_flags(user)
+        # Regular users (neither super-admin nor department admin) prefer 工作台
+        # when they have workbench access — even if their role also carries
+        # admin-console menus (e.g. legacy default roles) — so login doesn't drop
+        # them into 管理后台. `and` short-circuits the dept-admin FGA call for supers.
+        db_user_role = await UserRoleDao.aget_user_roles(user.user_id)
+        is_super = any(ur.role_id == AdminRole for ur in db_user_role)
+        prefer_workbench = (not is_super) and not bool(await DepartmentDao.aget_user_admin_departments(user.user_id))
         return {
             "has_workbench": hw,
             "has_admin_console": ha,
-            "default_entry": cls.default_web_entry(hw, ha),
+            "default_entry": cls.default_web_entry(hw, ha, prefer_workbench=prefer_workbench),
         }
 
     @classmethod

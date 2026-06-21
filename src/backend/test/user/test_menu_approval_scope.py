@@ -105,3 +105,17 @@ async def test_for_menu_resolves_admin_scope_for_admin_menu():
         assert await LoginUser.compute_menu_approval_mode_for_menu(user, "knowledge") is False
         # 'apps' is a workbench menu → workbench scope (True).
         assert await LoginUser.compute_menu_approval_mode_for_menu(user, "apps") is True
+
+
+def test_default_web_entry_regular_user_prefers_workspace():
+    """Regular users land on 工作台; admins keep 管理后台 priority."""
+    # Regular user with BOTH areas → 工作台 (not dropped into the console on login).
+    assert LoginUser.default_web_entry(True, True, prefer_workbench=True) == "workspace"
+    # Admin (prefer_workbench=False) with both areas keeps 管理后台.
+    assert LoginUser.default_web_entry(True, True, prefer_workbench=False) == "platform"
+    # Regular user with admin menus but no workbench still falls back to 管理后台.
+    assert LoginUser.default_web_entry(False, True, prefer_workbench=True) == "platform"
+    # Only workbench → 工作台 regardless of the flag.
+    assert LoginUser.default_web_entry(True, False) == "workspace"
+    # Neither area → 管理后台 default.
+    assert LoginUser.default_web_entry(False, False, prefer_workbench=True) == "platform"
