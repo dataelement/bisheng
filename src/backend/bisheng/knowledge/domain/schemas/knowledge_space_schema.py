@@ -437,6 +437,14 @@ class FileCreateReq(BaseModel):
     file_category_code: Optional[str] = Field(None, max_length=16, description="Selected business file category code")
 
 
+class WebLinkCreateReq(BaseModel):
+    url: str = Field(..., min_length=1, max_length=2048, description="Web page URL")
+    title: Optional[str] = Field(None, max_length=200, description="Optional display title")
+    parent_id: Optional[int] = Field(None, description="Parent Folder ID")
+    file_category_code: Optional[str] = Field(None, max_length=16, description="Selected business file category code")
+    overwrite: bool = Field(False, description="Overwrite an existing web link file with the same name or content")
+
+
 class UploadFolderRecommendFileReq(BaseModel):
     client_file_id: str = Field(..., min_length=1, max_length=128, description="Frontend local file ID")
     file_name: str = Field(..., min_length=1, max_length=255, description="Upload file name")

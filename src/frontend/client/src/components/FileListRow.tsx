@@ -63,6 +63,15 @@ export function FileListRow({
             [FileType.JPG]: "jpg",
             [FileType.JPEG]: "jpeg",
             [FileType.PNG]: "png",
+            [FileType.HTML]: "html",
+            [FileType.TXT]: "txt",
+            [FileType.MD]: "md",
+            [FileType.AUDIO]: "音频",
+            [FileType.VIDEO]: "视频",
+            [FileType.WEB]: "网页",
+            [FileType.WPS]: "wps",
+            [FileType.DPS]: "dps",
+            [FileType.ET]: "et",
             [FileType.OTHER]: "其他"
         };
         return typeMap[type] || type;

@@ -35,7 +35,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -65,7 +65,10 @@ function isNonEmptyText(value?: string | null): value is string {
     return Boolean(value?.trim());
 }
 
-function getFileTypeDisplay(fileName: string) {
+function getFileTypeDisplay(fileName: string, fileType?: FileType) {
+    if (fileType === FileType.AUDIO) return "音频";
+    if (fileType === FileType.VIDEO) return "视频";
+    if (fileType === FileType.WEB) return "网页";
     const name = fileName.trim();
     const dotIndex = name.lastIndexOf(".");
     if (dotIndex <= 0 || dotIndex === name.length - 1) return EMPTY_FIELD_PLACEHOLDER;
@@ -243,6 +246,20 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
             >
                 <span className={cn("size-1.5 shrink-0 rounded-full", rejected ? "bg-[#f53f3f]" : "bg-[#165dff]")} />
                 {approvalStatusLabel}
+            </div>
+        );
+    }
+    if (status === FileStatus.UPLOADING && file) {
+        const label = getUploadTransientStatusLabel(file, localize);
+        return wrapWithReason(
+            <div
+                className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
+                    "bg-[#e8f3ff] text-[#165dff]"
+                )}
+            >
+                <span className="size-1.5 shrink-0 rounded-full bg-[#165dff]" />
+                {label}
             </div>
         );
     }
@@ -1243,7 +1260,7 @@ function FileRow({
                     style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
                 >
                     <span className="truncate block">
-                        {isFolder ? localize("com_knowledge.folder") : getFileTypeDisplay(file.name)}
+                        {isFolder ? localize("com_knowledge.folder") : getFileTypeDisplay(file.name, file.type)}
                     </span>
                 </TableCell>
             )}

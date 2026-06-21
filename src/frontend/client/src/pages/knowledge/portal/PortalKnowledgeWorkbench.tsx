@@ -19,6 +19,7 @@ import {
     getFilePreviewApi,
     getSpaceChildrenApi,
     getSpaceInfoApi,
+    importWebLinkApi,
     pinSpaceApi,
     searchSpaceChildrenApi,
     unsubscribeSpaceApi,
@@ -27,13 +28,22 @@ import {
 } from "~/api/knowledge";
 import { checkPermission, canOpenPermissionDialog } from "~/api/permission";
 import { NotificationSeverity } from "~/common";
+import {
+    Button,
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    Input,
+} from "~/components/ui";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
 import { useConfirm, useToastContext } from "~/Providers";
 import { usePrefersMobileLayout } from "~/hooks";
 import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
-import { triggerUrlDownload } from "../knowledgeUtils";
+import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, resolveUploadSizeLimits, triggerUrlDownload, type UploadSizeEnvConfig } from "../knowledgeUtils";
 import { submitKnowledgeSpaceCreate } from "../createKnowledgeSpaceApproval";
 import { TREE_PAGE_SIZE } from "./constants";
 import type {
@@ -77,6 +87,8 @@ const getPortalSpaceLevel = (space?: KnowledgeSpace | null) => (
     space?.spaceLevel ?? (space as any)?.space_level
 );
 
+const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
+
 export default function PortalKnowledgeWorkbench() {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -114,6 +126,11 @@ export default function PortalKnowledgeWorkbench() {
     const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [pendingCreateLevel, setPendingCreateLevel] = useState<SpaceLevel>(SpaceLevel.PERSONAL);
     const [uploadedFilesOpen, setUploadedFilesOpen] = useState(false);
+    const [uploadRecordsRefreshKey, setUploadRecordsRefreshKey] = useState(0);
+    const [webLinkDialogOpen, setWebLinkDialogOpen] = useState(false);
+    const [webLinkUrl, setWebLinkUrl] = useState("");
+    const [webLinkTitle, setWebLinkTitle] = useState("");
+    const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
     const [spaceMenuOpenId, setSpaceMenuOpenId] = useState<string | null>(null);
     const [treeNodes, setTreeNodes] = useState<PortalFileTreeNode[]>([]);
     const [treeLoading, setTreeLoading] = useState(false);
@@ -143,6 +160,7 @@ export default function PortalKnowledgeWorkbench() {
         fileUrl: "",
         fileType: "",
         error: "",
+        previewData: null,
     });
     const activeSpaceIdRef = useRef<string | undefined>();
 
@@ -546,6 +564,62 @@ export default function PortalKnowledgeWorkbench() {
         () => currentFolderNode ? currentFolderNode.children.map((node) => node.file) : treeNodes.map((node) => node.file),
         [currentFolderNode, treeNodes],
     );
+    const currentFolderFilesRef = useRef(currentFolderFiles);
+    currentFolderFilesRef.current = currentFolderFiles;
+
+    const refreshLoadedStatuses = useCallback(async () => {
+        if (!activeSpace?.id || searchMode) return;
+        const currentFiles = currentFolderFilesRef.current;
+        if (currentFiles.length === 0) return;
+
+        try {
+            const fetchSize = Math.min(currentFiles.length, 100);
+            const res = await getSpaceChildrenApi({
+                space_id: activeSpace.id,
+                parent_id: currentFolderId,
+                page: 1,
+                page_size: fetchSize,
+                order_field: sortBy,
+                order_sort: sortDirection,
+                file_status: statusFilterNumbers,
+            });
+            if (activeSpaceIdRef.current !== activeSpace.id) return;
+
+            const updatesById = new Map(res.data.map((file) => [String(file.id), file]));
+            setCurrentFolderFiles((prev) => {
+                const knownIds = new Set(prev.map((file) => String(file.id)));
+                const merged = prev.map((file) => updatesById.get(String(file.id)) ?? file);
+                const newRows = res.data.filter((file) => !knownIds.has(String(file.id)));
+                return newRows.length > 0 ? [...newRows, ...merged] : merged;
+            });
+        } catch {
+            // Silent — polling failure must not toast.
+        }
+    }, [
+        activeSpace?.id,
+        currentFolderId,
+        searchMode,
+        setCurrentFolderFiles,
+        sortBy,
+        sortDirection,
+        statusFilterNumbers,
+    ]);
+
+    const refreshLoadedStatusesRef = useRef(refreshLoadedStatuses);
+    refreshLoadedStatusesRef.current = refreshLoadedStatuses;
+
+    useEffect(() => {
+        if (!activeSpace?.id || searchMode) return;
+        const hasPending = currentFolderFiles.some((file) => isKnowledgeItemPending(file));
+        if (!hasPending) return;
+
+        const timer = setInterval(() => {
+            void refreshLoadedStatusesRef.current();
+        }, 5000);
+
+        return () => clearInterval(timer);
+    }, [activeSpace?.id, currentFolderFiles, searchMode]);
+
     const currentFileListPage = currentFolderNode?.page ?? treeRootPage;
     const currentFileListTotal = currentFolderNode?.total ?? treeRootTotal;
     const currentFileListHasMore = searchMode
@@ -572,6 +646,12 @@ export default function PortalKnowledgeWorkbench() {
         () => normalizePortalFileCategoryOptions((bsConfig as any)?.shougang?.file_encoding?.document_types),
         [bsConfig],
     );
+    const portalUploadSizeLimits = useMemo(
+        () => resolveUploadSizeLimits((bsConfig as UploadSizeEnvConfig | null) ?? undefined),
+        [bsConfig],
+    );
+    const portalMaxFileSizeMB = portalUploadSizeLimits.defaultMaxMB;
+    const portalEnableEtl4lm = (bsConfig as any)?.enable_etl4lm ?? true;
     const fileEncodingPrefix = useMemo(() => {
         const prefix = (bsConfig as any)?.shougang?.prefix;
         return typeof prefix === "string" && prefix.trim() ? prefix.trim() : "SGGF";
@@ -605,12 +685,16 @@ export default function PortalKnowledgeWorkbench() {
         uploadReviewRows,
         uploadFolderOptions,
         duplicateFiles,
+        duplicateOverwriting,
         fileCategoryCode,
         fileCategoryOptions: resolvedFileCategoryOptions,
         businessDomainCode,
         uploadTagOptions,
         selectedUploadTagValues,
         uploadTagLoading,
+        fileInputAccept,
+        supportedFormatsLabel,
+        maxFileSizeMB,
         setUploadDialogOpen,
         setUploadStep,
         setUploadReviewRows,
@@ -640,8 +724,14 @@ export default function PortalKnowledgeWorkbench() {
         currentPath,
         statusFilterNumbers,
         fileCategoryOptions,
+        enableEtl4lm: portalEnableEtl4lm,
+        uploadSizeLimits: portalUploadSizeLimits,
+        maxFileSizeMB: portalMaxFileSizeMB,
         reloadFiles,
-        onUploaded: () => setUploadedFilesOpen(true),
+        onUploaded: () => {
+            setUploadRecordsRefreshKey((key) => key + 1);
+            setUploadedFilesOpen(true);
+        },
         showToast,
     });
 
@@ -873,7 +963,7 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         if (!activeSpace || !selectedFile || isFolder(selectedFile)) {
-            setPreview({ loading: false, fileUrl: "", fileType: "", error: "" });
+            setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
             return;
         }
 
@@ -883,6 +973,7 @@ export default function PortalKnowledgeWorkbench() {
                 fileUrl: "",
                 fileType: "",
                 error: "文件尚未完成解析，暂时不可预览。",
+                previewData: null,
             });
             return;
         }
@@ -893,18 +984,26 @@ export default function PortalKnowledgeWorkbench() {
             fileUrl: "",
             fileType: extractExt(selectedFile.name),
             error: "",
+            previewData: null,
         });
 
         getFilePreviewApi(activeSpace.id, selectedFile.id)
             .then((res) => {
                 if (cancelled) return;
-                const nextUrl = res.preview_url || res.original_url;
+                const resolvedPreview = {
+                    ...res,
+                    original_url: resolvePreviewUrl(res.original_url),
+                    preview_url: resolvePreviewUrl(res.preview_url),
+                    html_preview_url: resolvePreviewUrl(res.html_preview_url),
+                };
+                const nextUrl = res.preview_url || res.html_preview_url || res.original_url;
                 if (!nextUrl) {
                     setPreview({
                         loading: false,
                         fileUrl: "",
                         fileType: extractExt(selectedFile.name),
                         error: "未获取到文件预览地址。",
+                        previewData: null,
                     });
                     return;
                 }
@@ -913,6 +1012,7 @@ export default function PortalKnowledgeWorkbench() {
                     fileUrl: resolvePreviewUrl(nextUrl),
                     fileType: extractExt(selectedFile.name, nextUrl),
                     error: "",
+                    previewData: resolvedPreview,
                 });
             })
             .catch(() => {
@@ -922,6 +1022,7 @@ export default function PortalKnowledgeWorkbench() {
                     fileUrl: "",
                     fileType: extractExt(selectedFile.name),
                     error: "文件预览加载失败。",
+                    previewData: null,
                 });
             });
 
@@ -933,6 +1034,103 @@ export default function PortalKnowledgeWorkbench() {
     const showUnavailable = useCallback(() => {
         showToast({ message: "暂未开放", severity: NotificationSeverity.INFO });
     }, [showToast]);
+
+    const handleOpenWebLinkDialog = useCallback(() => {
+        if (!canUploadInPortal || !activeSpace) {
+            showToast({ message: "无上传权限", severity: NotificationSeverity.ERROR });
+            return;
+        }
+        setWebLinkDialogOpen(true);
+    }, [activeSpace, canUploadInPortal, showToast]);
+
+    const handleImportWebLink = useCallback(async () => {
+        const spaceId = activeSpace?.id;
+        const normalizedUrl = webLinkUrl.trim();
+        if (!spaceId) return;
+        if (!normalizedUrl) {
+            showToast({ message: "请输入网页链接", severity: NotificationSeverity.ERROR });
+            return;
+        }
+        try {
+            const parsed = new URL(normalizedUrl);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+                showToast({ message: "仅支持 http 或 https 链接", severity: NotificationSeverity.ERROR });
+                return;
+            }
+        } catch {
+            showToast({ message: "请输入有效的网页链接", severity: NotificationSeverity.ERROR });
+            return;
+        }
+
+        setWebLinkSubmitting(true);
+        const isDuplicateError = (error: any) => WEB_LINK_DUPLICATE_ERROR_CODES.has(Number(error?.status_code));
+        const submitWebLink = async (overwrite = false) => {
+            const created = await importWebLinkApi(spaceId, {
+                url: normalizedUrl,
+                title: webLinkTitle.trim() || undefined,
+                parent_id: currentFolderId ? Number(currentFolderId) : null,
+                ...(overwrite ? { overwrite: true } : {}),
+            });
+            setSearchMode(false);
+            setSearchResults([]);
+            setCurrentFolderFiles((prev) => [
+                created,
+                ...prev.filter((file) => (
+                    file.id !== created.id
+                    && file.name !== created.name
+                    && file.sourceUrl !== created.sourceUrl
+                )),
+            ]);
+            setCurrentFileListTotal((prev) => prev + (overwrite ? 0 : 1));
+            setWebLinkUrl("");
+            setWebLinkTitle("");
+            setWebLinkDialogOpen(false);
+            showToast({ message: "网页链接已开始导入", severity: NotificationSeverity.SUCCESS });
+        };
+        try {
+            await submitWebLink();
+        } catch (error: any) {
+            if (isDuplicateError(error)) {
+                const shouldOverwrite = await confirm({
+                    title: "发现重复网页链接",
+                    description: webLinkTitle.trim() || normalizedUrl,
+                    cancelText: "取消",
+                    confirmText: "覆盖",
+                });
+                if (shouldOverwrite) {
+                    setWebLinkDialogOpen(false);
+                    try {
+                        await submitWebLink(true);
+                    } catch (overwriteError: any) {
+                        showToast({
+                            message: overwriteError?.message || "网页链接覆盖失败",
+                            severity: NotificationSeverity.ERROR,
+                        });
+                    }
+                } else {
+                    setWebLinkUrl("");
+                    setWebLinkTitle("");
+                    setWebLinkDialogOpen(false);
+                }
+                return;
+            }
+            showToast({
+                message: error?.message || "网页链接导入失败",
+                severity: NotificationSeverity.ERROR,
+            });
+        } finally {
+            setWebLinkSubmitting(false);
+        }
+    }, [
+        activeSpace?.id,
+        confirm,
+        currentFolderId,
+        setCurrentFileListTotal,
+        setCurrentFolderFiles,
+        showToast,
+        webLinkTitle,
+        webLinkUrl,
+    ]);
 
     const handleSearch = useCallback(async () => {
         const spaceId = activeSpace?.id;
@@ -1060,7 +1258,7 @@ export default function PortalKnowledgeWorkbench() {
         setActivePanel(null);
         setAiDrawerOpen(false);
         setSummaryExpanded(false);
-        setPreview({ loading: false, fileUrl: "", fileType: "", error: "" });
+        setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
     }, []);
 
     const handleToggleFileSelection = useCallback((file: KnowledgeFile, checked: boolean) => {
@@ -1536,6 +1734,7 @@ export default function PortalKnowledgeWorkbench() {
                                                             canCreateFolder={canCreateFolderInPortal}
                                                             statusFilter={statusFilter}
                                                             onOpenUploadDialog={handleOpenUploadDialog}
+                                                            onOpenWebLinkDialog={handleOpenWebLinkDialog}
                                                             onShowUnavailable={showUnavailable}
                                                             onCreateFolder={() => fileUpload.handleCreateFolder()}
                                                             onToggleStatusFilter={handleToggleStatusFilter}
@@ -1694,6 +1893,9 @@ export default function PortalKnowledgeWorkbench() {
                     uploadTagOptions,
                     selectedUploadTagValues,
                     uploadTagLoading,
+                    fileInputAccept,
+                    supportedFormatsLabel,
+                    maxFileSizeMB,
                     onOpen: () => setUploadDialogOpen(true),
                     onClose: resetUploadDialog,
                     onAddUploadFiles: handleAddUploadFiles,
@@ -1712,17 +1914,69 @@ export default function PortalKnowledgeWorkbench() {
                     onStartUploadImport: () => void handleStartUploadImport(),
                 }}
                 duplicateFiles={duplicateFiles}
+                duplicateOverwriting={duplicateOverwriting}
                 onDuplicateSkip={handleDuplicateSkip}
                 onDuplicateOverwrite={handleDuplicateOverwrite}
             />
             <PortalUploadedFilesDrawer
                 open={uploadedFilesOpen}
+                refreshKey={uploadRecordsRefreshKey}
                 onOpenChange={setUploadedFilesOpen}
                 onRecordsChanged={() => reloadFiles()}
                 showToast={showToast}
                 fileCategoryOptions={fileCategoryOptions}
                 encodingPrefix={fileEncodingPrefix}
             />
+            <Dialog open={webLinkDialogOpen} onOpenChange={(open) => {
+                if (webLinkSubmitting) return;
+                setWebLinkDialogOpen(open);
+            }}>
+                <DialogContent className="max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>网页链接</DialogTitle>
+                    </DialogHeader>
+                    <form
+                        className="space-y-4"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            if (webLinkSubmitting) return;
+                            void handleImportWebLink();
+                        }}
+                    >
+                        <label className="block space-y-2 text-sm text-[#1d2129]">
+                            <span className="font-medium">链接地址</span>
+                            <Input
+                                value={webLinkUrl}
+                                onChange={(event) => setWebLinkUrl(event.currentTarget.value)}
+                                placeholder="https://example.com/page"
+                                disabled={webLinkSubmitting}
+                            />
+                        </label>
+                        <label className="block space-y-2 text-sm text-[#1d2129]">
+                            <span className="font-medium">显示名称</span>
+                            <Input
+                                value={webLinkTitle}
+                                onChange={(event) => setWebLinkTitle(event.currentTarget.value)}
+                                placeholder="留空则自动读取网页标题"
+                                disabled={webLinkSubmitting}
+                            />
+                        </label>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setWebLinkDialogOpen(false)}
+                                disabled={webLinkSubmitting}
+                            >
+                                取消
+                            </Button>
+                            <Button type="submit" disabled={webLinkSubmitting}>
+                                {webLinkSubmitting ? "导入中..." : "导入"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -13,7 +13,8 @@ import {
     Tag,
     RotateCcw,
     Trash2,
-    FileSearch
+    FileSearch,
+    Link2
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -56,6 +57,7 @@ interface KnowledgeSpaceHeaderProps {
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
     onTriggerUploadFolder: () => void;
+    onTriggerWebLink: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
     /** Localized comma-joined list of supported upload formats for the upload-button tooltip. */
@@ -105,6 +107,7 @@ export function KnowledgeSpaceHeader({
     onCreateFolder,
     onTriggerUpload,
     onTriggerUploadFolder,
+    onTriggerWebLink,
     canCreateFolder = false,
     canUploadFile = false,
     supportedFormatsLabel,
@@ -417,6 +420,12 @@ export function KnowledgeSpaceHeader({
                                         </TooltipContent>
                                     </Tooltip>
                                 )}
+                            </DropdownMenuItem>
+                        )}
+                        {canUploadFile && (
+                            <DropdownMenuItem onClick={onTriggerWebLink} className="cursor-pointer">
+                                <Link2 className="mr-2 size-4" />
+                                <span className="flex-1">网页链接</span>
                             </DropdownMenuItem>
                         )}
                     </DropdownMenuContent>

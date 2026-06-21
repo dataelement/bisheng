@@ -39,6 +39,7 @@ import {
     getSpaceChildrenApi,
     getSpaceInfoApi,
     getSpaceTagsApi,
+    importWebLinkApi,
     linkAsNewVersionApi,
     listMyUploadedFilesApi,
     listKnowledgeFolders,
@@ -376,6 +377,7 @@ jest.mock("~/api/knowledge", () => ({
     getSpaceChildrenApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
+    importWebLinkApi: jest.fn(),
     uploadFileToServerApi: jest.fn(),
     addFilesApi: jest.fn(),
     recommendUploadFoldersApi: jest.fn(),
@@ -509,6 +511,9 @@ describe("PortalKnowledgeWorkbench", () => {
         } as any);
         jest.mocked(getSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
+        jest.mocked(importWebLinkApi).mockResolvedValue(makeFile("web-1", "网页链接", {
+            type: FileType.MD,
+        }) as any);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([] as any);
         jest.mocked(getKnowledgeSpaceTagLibrariesApi).mockResolvedValue({ data: [] } as any);
         jest.mocked(getKnowledgeSpaceTagLibraryDetailApi).mockResolvedValue({ tags: [] } as any);
@@ -3595,9 +3600,12 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByTestId("portal-upload-review-dialog")).not.toBeInTheDocument();
     });
 
-    test("shows unavailable toast for web link and online document placeholders", async () => {
+    test("imports a web link from the portal action and keeps online document placeholder unavailable", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
+        });
+        const createdWebFile = makeFile("web-99", "示例页面", {
+            type: FileType.MD,
         });
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
@@ -3609,10 +3617,28 @@ describe("PortalKnowledgeWorkbench", () => {
             data: [],
             total: 0,
         } as any);
+        jest.mocked(importWebLinkApi).mockResolvedValue(createdWebFile as any);
 
         renderWorkbench();
 
         fireEvent.click(await screen.findByRole("button", { name: "网页链接" }));
+        fireEvent.change(screen.getByPlaceholderText("https://example.com/page"), {
+            target: { value: "https://example.com/docs" },
+        });
+        fireEvent.change(screen.getByPlaceholderText("留空则自动读取网页标题"), {
+            target: { value: "示例页面" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "导入" }));
+
+        await waitFor(() => {
+            expect(importWebLinkApi).toHaveBeenCalledWith("personal-1", {
+                url: "https://example.com/docs",
+                title: "示例页面",
+                parent_id: null,
+            });
+        });
+        expect(await screen.findByText("示例页面")).toBeInTheDocument();
+
         fireEvent.click(screen.getByRole("button", { name: "在线创建文档" }));
 
         expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({

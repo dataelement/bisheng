@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, type MouseEvent,
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi, getPendingSimilarFilesApi, importWebLinkApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -14,16 +14,21 @@ import {
 import {
     Dialog,
     DialogContent,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
+    Button,
+    Input,
 } from "~/components/ui";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import {
-    DEFAULT_MAX_FILE_SIZE_MB,
     MAX_FOLDER_UPLOAD_COUNT,
     MAX_UPLOAD_COUNT,
     getAllowedExtensions,
     getFileInputAccept,
+    getMaxFileSizeBytesForFile,
+    getMaxFileSizeMBForFile,
+    resolveUploadSizeLimits,
     triggerUrlDownload,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
@@ -49,6 +54,8 @@ import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarList
 import { cn, getFullWidthLength } from "~/utils";
 import type { PortalFileCategoryOption } from "../portal/types";
 
+const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
+
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
     files: KnowledgeFile[];
@@ -66,7 +73,7 @@ interface KnowledgeSpaceContentProps {
     onUploadFile: (files?: FileList | File[]) => void;
     onUploadFolder: (
         files: FileList | File[],
-        options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+        options: { allowedExtensions: readonly string[]; limits: import("../knowledgeUtils").UploadSizeLimits },
     ) => void;
     onCreateFolder: () => void;
     onDownloadFile: (fileId: string) => void;
@@ -158,9 +165,14 @@ export function KnowledgeSpaceContent({
         ...(creatingFolder ? [creatingFolder] : []),
         ...uploadingFiles,
     ].filter((file) => isCurrentSpaceFile(file) && isCurrentFolderTransientFile(file));
+    const uploadingNames = new Set(
+        transientFiles
+            .filter((file) => file.status === FileStatus.UPLOADING)
+            .map((file) => file.name),
+    );
     const displayFiles = [
         ...transientFiles,
-        ...files.filter(isCurrentSpaceFile),
+        ...files.filter((file) => isCurrentSpaceFile(file) && !uploadingNames.has(file.name)),
     ];
 
     const [searchQuery, setSearchQuery] = useState("");
@@ -627,8 +639,10 @@ export function KnowledgeSpaceContent({
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
-    const maxFileSizeMB = bishengConfig?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB;
-    const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+    const uploadSizeLimits = useMemo(
+        () => resolveUploadSizeLimits(bishengConfig ?? undefined),
+        [bishengConfig],
+    );
     const enableEtl4lm = bishengConfig?.enable_etl4lm ?? false;
     const allowedExtensions = getAllowedExtensions(enableEtl4lm);
     const fileInputAccept = getFileInputAccept(enableEtl4lm);
@@ -636,6 +650,10 @@ export function KnowledgeSpaceContent({
     // ─── File Upload Trigger ─────────────────────────────────────────────
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
+    const [webLinkDialogOpen, setWebLinkDialogOpen] = useState(false);
+    const [webLinkUrl, setWebLinkUrl] = useState("");
+    const [webLinkTitle, setWebLinkTitle] = useState("");
+    const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
 
     const triggerUpload = () => {
         if (!canUploadFile) return;
@@ -645,6 +663,83 @@ export function KnowledgeSpaceContent({
     const triggerUploadFolder = () => {
         if (!canUploadFile) return;
         folderInputRef.current?.click();
+    };
+
+    const triggerWebLink = () => {
+        if (!canUploadFile) return;
+        setWebLinkDialogOpen(true);
+    };
+
+    const isWebLinkDuplicateError = (error: any) => WEB_LINK_DUPLICATE_ERROR_CODES.has(Number(error?.status_code));
+
+    const submitWebLink = async (overwrite = false) => {
+        const created = await importWebLinkApi(space.id, {
+            url: webLinkUrl.trim(),
+            title: webLinkTitle.trim() || undefined,
+            parent_id: currentFolderId ? Number(currentFolderId) : null,
+            ...(overwrite ? { overwrite: true } : {}),
+        });
+        setFiles((prev) => [
+            created,
+            ...prev.filter((file) => (
+                file.id !== created.id
+                && file.name !== created.name
+                && file.sourceUrl !== created.sourceUrl
+            )),
+        ]);
+        setTotal((prev) => prev + (overwrite ? 0 : 1));
+        setWebLinkUrl("");
+        setWebLinkTitle("");
+        setWebLinkDialogOpen(false);
+        showToast({ message: "网页链接已开始导入", status: "success" });
+    };
+
+    const handleSubmitWebLink = async () => {
+        const normalizedUrl = webLinkUrl.trim();
+        if (!normalizedUrl) {
+            showToast({ message: "请输入网页链接", status: "error" });
+            return;
+        }
+        try {
+            const parsed = new URL(normalizedUrl);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+                showToast({ message: "仅支持 http 或 https 链接", status: "error" });
+                return;
+            }
+        } catch {
+            showToast({ message: "请输入有效的网页链接", status: "error" });
+            return;
+        }
+
+        setWebLinkSubmitting(true);
+        try {
+            await submitWebLink();
+        } catch (error: any) {
+            if (isWebLinkDuplicateError(error)) {
+                const shouldOverwrite = await confirm({
+                    title: "发现重复网页链接",
+                    description: webLinkTitle.trim() || normalizedUrl,
+                    cancelText: "取消",
+                    confirmText: "覆盖",
+                });
+                if (shouldOverwrite) {
+                    setWebLinkDialogOpen(false);
+                    try {
+                        await submitWebLink(true);
+                    } catch (overwriteError: any) {
+                        showToast({ message: overwriteError?.message || "网页链接覆盖失败", status: "error" });
+                    }
+                } else {
+                    setWebLinkUrl("");
+                    setWebLinkTitle("");
+                    setWebLinkDialogOpen(false);
+                }
+                return;
+            }
+            showToast({ message: error?.message || "网页链接导入失败", status: "error" });
+        } finally {
+            setWebLinkSubmitting(false);
+        }
     };
 
     useEffect(() => {
@@ -674,8 +769,14 @@ export function KnowledgeSpaceContent({
             }
 
             for (let f of filesList) {
-                if (f.size > maxFileSizeBytes) {
-                    showToast({ message: localize("com_knowledge.file_exceeds_limit", { name: f.name, size: maxFileSizeMB }), status: "error" });
+                if (f.size > getMaxFileSizeBytesForFile(f.name, uploadSizeLimits)) {
+                    showToast({
+                        message: localize("com_knowledge.file_exceeds_limit", {
+                            name: f.name,
+                            size: getMaxFileSizeMBForFile(f.name, uploadSizeLimits),
+                        }),
+                        status: "error",
+                    });
                     if (fileInputRef.current) fileInputRef.current.value = "";
                     return;
                 }
@@ -701,7 +802,7 @@ export function KnowledgeSpaceContent({
         if (filesList && filesList.length > 0 && canUploadFile) {
             onUploadFolder(filesList, {
                 allowedExtensions,
-                maxSizeMB: maxFileSizeMB,
+                limits: uploadSizeLimits,
             });
         }
         if (folderInputRef.current) folderInputRef.current.value = "";
@@ -711,7 +812,7 @@ export function KnowledgeSpaceContent({
     const { handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useFileDragDrop({
         onDragStateChange,
         onUploadFile: canUploadFile ? onUploadFile : () => undefined,
-        maxFileSizeMB,
+        uploadSizeLimits,
         enableEtl4lm,
     });
 
@@ -1065,6 +1166,7 @@ export function KnowledgeSpaceContent({
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 onTriggerUploadFolder={triggerUploadFolder}
+                onTriggerWebLink={triggerWebLink}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
                 supportedFormatsLabel={localize(
@@ -1320,6 +1422,57 @@ export function KnowledgeSpaceContent({
                             {violationFile?.errorMessage || localize("com_knowledge.sensitive_violation_message")}
                         </div>
                     </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={webLinkDialogOpen} onOpenChange={(open) => {
+                if (webLinkSubmitting) return;
+                setWebLinkDialogOpen(open);
+            }}>
+                <DialogContent className="max-w-[520px]">
+                    <DialogHeader>
+                        <DialogTitle>网页链接</DialogTitle>
+                    </DialogHeader>
+                    <form
+                        className="space-y-4"
+                        onSubmit={(event) => {
+                            event.preventDefault();
+                            if (webLinkSubmitting) return;
+                            void handleSubmitWebLink();
+                        }}
+                    >
+                        <label className="block space-y-2 text-sm text-[#1d2129]">
+                            <span className="font-medium">链接地址</span>
+                            <Input
+                                value={webLinkUrl}
+                                onChange={(event) => setWebLinkUrl(event.currentTarget.value)}
+                                placeholder="https://example.com/page"
+                                disabled={webLinkSubmitting}
+                            />
+                        </label>
+                        <label className="block space-y-2 text-sm text-[#1d2129]">
+                            <span className="font-medium">显示名称</span>
+                            <Input
+                                value={webLinkTitle}
+                                onChange={(event) => setWebLinkTitle(event.currentTarget.value)}
+                                placeholder="留空则自动读取网页标题"
+                                disabled={webLinkSubmitting}
+                            />
+                        </label>
+                        <DialogFooter>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setWebLinkDialogOpen(false)}
+                                disabled={webLinkSubmitting}
+                            >
+                                {localize("com_knowledge.cancel")}
+                            </Button>
+                            <Button type="submit" disabled={webLinkSubmitting}>
+                                {webLinkSubmitting ? "导入中..." : "导入"}
+                            </Button>
+                        </DialogFooter>
+                    </form>
                 </DialogContent>
             </Dialog>
 

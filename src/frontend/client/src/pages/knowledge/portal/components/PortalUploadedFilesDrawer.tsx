@@ -14,6 +14,7 @@ import { NotificationSeverity } from "~/common";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
 import TagGroup from "../../SpaceDetail/TagGroup";
+import { isKnowledgeItemPending } from "../../knowledgeUtils";
 import type { PortalFileCategoryOption } from "../types";
 import {
     BUSINESS_DOMAIN_OPTIONS,
@@ -195,6 +196,8 @@ function FolderPickerNode({
 
 interface PortalUploadedFilesDrawerProps {
     open: boolean;
+    /** Increment after each upload so the drawer reloads even when already open. */
+    refreshKey?: number;
     onOpenChange: (open: boolean) => void;
     onRecordsChanged?: () => void | Promise<void>;
     showToast: (toast: { message: string; severity: NotificationSeverity }) => void;
@@ -204,6 +207,7 @@ interface PortalUploadedFilesDrawerProps {
 
 export function PortalUploadedFilesDrawer({
     open,
+    refreshKey = 0,
     onOpenChange,
     onRecordsChanged,
     showToast,
@@ -252,7 +256,19 @@ export function PortalUploadedFilesDrawer({
             return;
         }
         void loadRecords(page);
-    }, [loadRecords, open, page]);
+    }, [loadRecords, open, page, refreshKey]);
+
+    useEffect(() => {
+        if (!open) return;
+        const hasPending = records.some((record) => isKnowledgeItemPending(record));
+        if (!hasPending) return;
+
+        const timer = setInterval(() => {
+            void loadRecords(page);
+        }, 5000);
+
+        return () => clearInterval(timer);
+    }, [loadRecords, open, page, records]);
 
     const editingRecord = useMemo(
         () => records.find((record) => record.id === editingFileId) ?? null,

@@ -52,6 +52,7 @@ type PortalDialogsProps = {
     onManageEditingSpaceMembers: () => void;
     uploadDialogProps: ComponentProps<typeof PortalUploadDialog>;
     duplicateFiles: DuplicateFile[];
+    duplicateOverwriting?: boolean;
     onDuplicateSkip: () => void;
     onDuplicateOverwrite: () => void;
 };
@@ -89,6 +90,7 @@ export function PortalDialogs({
     onManageEditingSpaceMembers,
     uploadDialogProps,
     duplicateFiles,
+    duplicateOverwriting = false,
     onDuplicateSkip,
     onDuplicateOverwrite,
 }: PortalDialogsProps) {
@@ -180,7 +182,14 @@ export function PortalDialogs({
 
             <PortalUploadDialog {...uploadDialogProps} />
 
-            <Dialog open={duplicateFiles.length > 0} onOpenChange={(open) => !open && onDuplicateSkip()}>
+            <Dialog
+                open={duplicateFiles.length > 0}
+                onOpenChange={(open) => {
+                    if (!open && !duplicateOverwriting) {
+                        onDuplicateSkip();
+                    }
+                }}
+            >
                 <DialogContent className="sm:max-w-[460px]" onPointerDownOutside={(event) => event.preventDefault()}>
                     <DialogHeader>
                         <DialogTitle>发现重复文件</DialogTitle>
@@ -193,12 +202,15 @@ export function PortalDialogs({
                             </li>
                         ))}
                     </ul>
+                    {duplicateOverwriting ? (
+                        <p className="text-sm text-[#86909c]">正在覆盖，大文件可能需要数分钟，请勿重复点击…</p>
+                    ) : null}
                     <DialogFooter>
-                        <Button variant="outline" className="h-8" onClick={onDuplicateSkip}>
+                        <Button variant="outline" className="h-8" disabled={duplicateOverwriting} onClick={onDuplicateSkip}>
                             取消
                         </Button>
-                        <Button className="h-8" onClick={onDuplicateOverwrite}>
-                            覆盖
+                        <Button className="h-8" disabled={duplicateOverwriting} onClick={onDuplicateOverwrite}>
+                            {duplicateOverwriting ? "覆盖中…" : "覆盖"}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -217,12 +217,15 @@ class KnowledgeUtils(BaseService):
         """Get the preview file corresponding to the knowledge base file atminioStorage Path for This path is stored in the officialbucketand within"""
         if file_name:
             file_ext = file_name.split(".")[-1]
+        file_ext = file_ext.lower() if file_ext else file_ext
         if file_ext in ["doc", "docx", "wps"]:
             return f"preview/{file_id}.docx"
         elif file_ext in ["xls", "xlsx", "et"]:
             return f"preview/{file_id}.xlsx"
         elif file_ext in ["ppt", "pptx", "dps"]:
             return f"preview/{file_id}.pdf"
+        elif file_ext in ["mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "avi", "mkv", "webm"]:
+            return f"preview/{file_id}.md"
         # No preview required for other file types
         return None
 

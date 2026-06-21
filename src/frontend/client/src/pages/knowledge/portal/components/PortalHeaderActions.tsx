@@ -14,6 +14,7 @@ interface PortalHeaderActionsProps {
     canCreateFolder: boolean;
     statusFilter: FileStatus[];
     onOpenUploadDialog: () => void;
+    onOpenWebLinkDialog: () => void;
     onShowUnavailable: () => void;
     onCreateFolder: () => void;
     onToggleStatusFilter: (status: FileStatus, checked: boolean) => void;
@@ -24,6 +25,7 @@ export function PortalHeaderActions({
     canCreateFolder,
     statusFilter,
     onOpenUploadDialog,
+    onOpenWebLinkDialog,
     onShowUnavailable,
     onCreateFolder,
     onToggleStatusFilter,
@@ -43,8 +45,9 @@ export function PortalHeaderActions({
             <button
                 type="button"
                 className={s.folderAction}
-                onClick={onShowUnavailable}
-                title="网页链接"
+                onClick={onOpenWebLinkDialog}
+                disabled={!canUpload}
+                title={canUpload ? "网页链接" : "无上传权限"}
                 aria-label="网页链接"
             >
                 <Globe2 size={14} />
