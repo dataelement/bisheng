@@ -296,6 +296,11 @@ class ShougangPortalFileSearchReq(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
 
 
+class ShougangPortalFileTagResp(BaseModel):
+    tag_name: str = ""
+    resource_type: str = ""
+
+
 class ShougangPortalFileItemResp(BaseModel):
     id: int
     space_id: int
@@ -304,6 +309,7 @@ class ShougangPortalFileItemResp(BaseModel):
     source: str = ""
     updated_at: str = ""
     tags: List[str] = Field(default_factory=list)
+    tag_infos: List[ShougangPortalFileTagResp] = Field(default_factory=list)
     file_ext: str = ""
     file_size: str = ""
     file_encoding: str = ""

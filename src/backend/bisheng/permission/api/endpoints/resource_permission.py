@@ -576,6 +576,45 @@ def _model_matches_relation(relation: str, model: dict | None) -> bool:
     return model is None or model.get('relation') == relation
 
 
+def _is_system_usage_relation_model(relation: str, model: dict | None) -> bool:
+    if relation not in {'editor', 'viewer'} or not model:
+        return False
+    return (
+        bool(model.get('is_system'))
+        and model.get('id') == relation
+        and model.get('relation') == relation
+    )
+
+
+def _requires_knowledge_owner_delegation(
+    *,
+    resource_type: str,
+    relation: str,
+    model: dict | None,
+) -> bool:
+    if resource_type not in _KNOWLEDGE_PERMISSION_RESOURCE_TYPES:
+        return False
+    if relation in {'owner', 'manager'}:
+        return True
+    if relation not in {'editor', 'viewer'}:
+        return True
+    if _is_system_usage_relation_model(relation, model):
+        return False
+
+    model_permission_ids = _permission_ids_for_model(resource_type, relation, model)
+    relation_permission_ids = _default_permission_ids_for_relation(resource_type, relation)
+    return bool(model_permission_ids - relation_permission_ids)
+
+
+def _caller_has_knowledge_owner_delegation(
+    *,
+    resource_type: str,
+    caller_permission_ids: set[str],
+) -> bool:
+    owner_permission_ids = _default_permission_ids_for_relation(resource_type, 'owner')
+    return bool(owner_permission_ids) and owner_permission_ids.issubset(caller_permission_ids)
+
+
 def _can_grant_relation_model(
     *,
     resource_type: str,
@@ -585,6 +624,20 @@ def _can_grant_relation_model(
 ) -> bool:
     if not _model_matches_relation(relation, model):
         return False
+
+    if _requires_knowledge_owner_delegation(
+        resource_type=resource_type,
+        relation=relation,
+        model=model,
+    ) and not _caller_has_knowledge_owner_delegation(
+        resource_type=resource_type,
+        caller_permission_ids=caller_permission_ids,
+    ):
+        return False
+
+    if resource_type in _KNOWLEDGE_PERMISSION_RESOURCE_TYPES:
+        management_permission_ids = _management_permission_ids(resource_type)
+        return bool(management_permission_ids & caller_permission_ids)
 
     tier_map = _MANAGE_PERMISSION_BY_RESOURCE_TIER.get(resource_type)
     if tier_map:

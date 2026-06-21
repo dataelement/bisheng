@@ -36,6 +36,7 @@ interface DocumentPreviewProps {
     documentPath: string;
     preview: PreviewState;
     summaryExpanded: boolean;
+    canEditTags: boolean;
     onOpenTags: () => void;
     // onOpenShare: () => void;
     onDownload: () => void;
@@ -50,6 +51,7 @@ export function DocumentPreview({
     documentPath,
     preview,
     summaryExpanded,
+    canEditTags,
     onOpenTags,
     // onOpenShare,
     onDownload,
@@ -73,9 +75,11 @@ export function DocumentPreview({
                             <div className={s.docPath}>{documentPath}</div>
                         </div>
                         <div className={s.docActions} data-testid="portal-document-actions">
-                            <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={onOpenTags}>
-                                <SquarePen size={16} />
-                            </button>
+                            {canEditTags ? (
+                                <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={onOpenTags}>
+                                    <SquarePen size={16} />
+                                </button>
+                            ) : null}
                             {/* <button type="button" className={s.iconAction} title="分享" aria-label="分享" onClick={onOpenShare}>
                                 <Share2 size={16} />
                             </button> */}

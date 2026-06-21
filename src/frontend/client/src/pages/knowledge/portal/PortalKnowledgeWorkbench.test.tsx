@@ -2625,6 +2625,8 @@ describe("PortalKnowledgeWorkbench", () => {
                 expect.any(Object),
             );
         });
+        const actions = await screen.findByTestId("portal-document-actions");
+        expect(within(actions).queryByRole("button", { name: "编辑标签" })).not.toBeInTheDocument();
         expect(within(drawer).getByText("RPT-PP-00000001")).toBeInTheDocument();
         expect(within(drawer).queryByRole("button", { name: "编辑文件编码" })).not.toBeInTheDocument();
         expect(updateFileEncoding).not.toHaveBeenCalled();

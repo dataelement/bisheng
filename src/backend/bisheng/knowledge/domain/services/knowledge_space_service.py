@@ -4163,6 +4163,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     def _map_shougang_portal_file_item(self, space_id: int, item: Dict) -> ShougangPortalFileItemResp:
         file_name = str(item.get("file_name") or "")
+        tag_infos = [
+            {
+                "tag_name": str(tag.get("name")),
+                "resource_type": str(tag.get("resource_type") or ""),
+            }
+            for tag in item.get("tags") or []
+            if isinstance(tag, dict) and tag.get("name")
+        ]
         return ShougangPortalFileItemResp(
             id=int(item.get("id") or 0),
             space_id=space_id,
@@ -4170,7 +4178,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             summary=str(item.get("abstract") or ""),
             source=str(item.get("knowledge_name") or item.get("space_name") or space_id),
             updated_at=self._serialize_datetime(item.get("update_time")),
-            tags=[{"tag_name": tag.get("name"), "resource_type": tag.get("resource_type")} for tag in item.get("tags") or [] if isinstance(tag, dict) and tag.get("name")],
+            tags=[tag["tag_name"] for tag in tag_infos],
+            tag_infos=tag_infos,
             file_ext=self._get_file_ext(file_name),
             file_size=str(item.get("file_size") or ""),
             file_encoding=str(
@@ -4210,7 +4219,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         def score(item: ShougangPortalFileItemResp) -> tuple[int, str]:
             title = item.title.lower()
             summary = item.summary.lower()
-            tags = [tag.lower() for tag in item.tags]
+            tags = [
+                tag_text.lower()
+                for tag_text in (
+                    KnowledgeSpaceService._shougang_portal_tag_text(tag)
+                    for tag in item.tags
+                )
+                if tag_text
+            ]
             hit_score = 0
             if title == keyword_lower:
                 hit_score += 4
@@ -4223,6 +4239,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return hit_score, item.updated_at
 
         return sorted(items, key=score, reverse=True)
+
+    @staticmethod
+    def _shougang_portal_tag_text(tag: Any) -> str:
+        if isinstance(tag, str):
+            return tag
+        if isinstance(tag, dict):
+            return str(tag.get("tag_name") or tag.get("name") or "")
+        return str(getattr(tag, "tag_name", None) or getattr(tag, "name", None) or "")
 
     async def delete_space(self, space_id: int) -> None:
         space = await KnowledgeDao.aquery_by_id(space_id)

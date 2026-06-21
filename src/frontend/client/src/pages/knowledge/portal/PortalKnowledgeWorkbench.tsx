@@ -1799,6 +1799,7 @@ export default function PortalKnowledgeWorkbench() {
                     activeSpace={activeSpace}
                     aiDrawerOpen={aiDrawerOpen}
                     canEditEncoding={canEditSelectedFileEncoding}
+                    canEditTags={canEditSelectedFileEncoding}
                     canManagePermission={canManageSelectedFilePermission}
                     documentPath={documentPath}
                     isPersonalSpace={isActiveSpacePersonal}
@@ -1818,7 +1819,10 @@ export default function PortalKnowledgeWorkbench() {
                         setPermissionTarget(selectedFile);
                         setPermissionOpen(true);
                     }}
-                    onOpenTags={() => setTagModalOpen(true)}
+                    onOpenTags={() => {
+                        if (!canEditSelectedFileEncoding) return;
+                        setTagModalOpen(true);
+                    }}
                     onPanelChange={setActivePanel}
                     onToggleSummary={() => {
                         setActivePanel(null);
