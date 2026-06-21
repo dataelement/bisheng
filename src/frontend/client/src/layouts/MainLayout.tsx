@@ -125,17 +125,15 @@ function Sidebar({
   const showHomeTab = showWorkbenchItem('home');
   const showAppsTab = showWorkbenchItem('apps');
 
-  // The 管理后台 entry mirrors the 管理后台 parent menu toggle: show it iff the
-  // user has admin-console access. Closing the parent strips all admin menus on
-  // the backend → has_admin_console=false → entry hidden. The admin approval
-  // scope only controls unauthorized menus *inside* the console, not this entry.
+  // The 管理后台 entry mirrors the 「管理后台」 parent toggle in the role dialog,
+  // which is keyed on the new `admin` menu only — NOT the deprecated `backend`
+  // alias or any admin child menu. So we deliberately do not use has_admin_console
+  // here (it also counts `backend` + child menus). Super/dept admins always have
+  // it. The admin approval scope only governs menus *inside* the console.
   const showAdminEntry =
-    (user as { has_admin_console?: boolean } | null)?.has_admin_console
-    ?? (
-      user?.role === 'admin'
-      || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
-      || Boolean(plugins?.includes('admin') || plugins?.includes('backend'))
-    );
+    user?.role === 'admin'
+    || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
+    || Boolean(plugins?.includes('admin'));
 
   // 首钢门户专属入口：仅首钢部署（YAML 命名空间或 ConfigMap window 变量任一有值）+ 系统超管 + 桌面端才显示
   const portalAdminUrl =
