@@ -262,7 +262,7 @@ export function KnowledgeSpaceShareDialog({
                         </DialogTitle>
                     </DialogHeader>
 
-                    <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="user-manger mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
                         <div className="flex items-center gap-3">
                             <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
                                 {SUBJECT_TABS.map((tab) => (
