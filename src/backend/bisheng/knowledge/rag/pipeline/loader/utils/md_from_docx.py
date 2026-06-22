@@ -6,8 +6,10 @@ from uuid import uuid4
 import pypandoc
 from loguru import logger
 
-if os.environ.get('BISHNEG_DOCX_MD_TIMEOUT'):
-    CONVERT_TIMEOUT_SECONDS = int(os.environ.get('BISHNEG_DOCX_MD_TIMEOUT'))
+from bisheng.knowledge.rag.pipeline.loader.utils.docx_sanitizer import sanitize_docx_textbox_noise
+
+if os.environ.get("BISHNEG_DOCX_MD_TIMEOUT"):
+    CONVERT_TIMEOUT_SECONDS = int(os.environ.get("BISHNEG_DOCX_MD_TIMEOUT"))
 else:
     CONVERT_TIMEOUT_SECONDS = 300
 
@@ -29,7 +31,10 @@ except OSError:  # OSError Yes  get_pandoc_path Thrown when not found
 
 
 def convert_doc_to_md_pandoc_high_quality(
-        doc_path_str: str, output_md_str: str, image_dir_name: str = "media", retry_convert_docx: bool = True,
+    doc_path_str: str,
+    output_md_str: str,
+    image_dir_name: str = "media",
+    retry_convert_docx: bool = True,
 ):
     """
     Use Pandoc will be .doc OR .docx Convert files with high quality to Markdown, and extract the image.
@@ -67,13 +72,18 @@ def convert_doc_to_md_pandoc_high_quality(
     # For example: if output_md_path Yes  "output/document.md" Dan image_dir_name Yes  "images",
     # Images will be stored in "output/images/" Under the directory, the link would be "images/image1.png"
 
+    pandoc_input_path = sanitize_docx_textbox_noise(doc_path, output_md_path.parent)
+
     # Build the pandoc command directly so we can kill the process on timeout
     cmd = [
-              pandoc_path,
-              str(doc_path),
-              "-t", pandoc_format_to,
-              "-o", str(output_md_path),
-          ] + extra_args
+        pandoc_path,
+        str(pandoc_input_path),
+        "-t",
+        pandoc_format_to,
+        "-o",
+        str(output_md_path),
+        *extra_args,
+    ]
 
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     try:
@@ -89,9 +99,7 @@ def convert_doc_to_md_pandoc_high_quality(
         logger.error(
             f"Convert File {doc_path} timed out after {CONVERT_TIMEOUT_SECONDS} seconds, pandoc process killed."
         )
-        raise TimeoutError(
-            f"Docx to Markdown conversion timed out after {CONVERT_TIMEOUT_SECONDS} seconds"
-        )
+        raise TimeoutError(f"Docx to Markdown conversion timed out after {CONVERT_TIMEOUT_SECONDS} seconds")
     except Exception as e:
         logger.debug(f"Convert File {doc_path} An unknown error occurred while: {e}")
 
@@ -103,8 +111,12 @@ def convert_doc_to_md_pandoc_high_quality(
             output_docx_path = convert_doc_to_docx(doc_path_str, output_dir)
             if not output_docx_path:
                 raise RuntimeError("convert to docx failed")
-            convert_doc_to_md_pandoc_high_quality(doc_path_str=output_docx_path, output_md_str=output_md_str,
-                                                  image_dir_name=image_dir_name, retry_convert_docx=False)
+            convert_doc_to_md_pandoc_high_quality(
+                doc_path_str=output_docx_path,
+                output_md_str=output_md_str,
+                image_dir_name=image_dir_name,
+                retry_convert_docx=False,
+            )
             return
         raise RuntimeError("convert to md failed")
 
