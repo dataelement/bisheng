@@ -28,7 +28,7 @@
 #    secret_key: minioadmin
 
 # 数据库配置database_url: "mysql+pymysql://root:1234@mysql:3306/bisheng?charset=utf8mb4"database_url: "mysql+pymysql://root:1234@mysql:3306/bisheng?charset=utf8mb4"
-database_url: "mysql+pymysql://root:gAAAAABlsc05yYeNuwuU_m2g7sGMMq2y2jPA72SaUnR05KFPz9uSawL82EXC3tgyFVl_Zp8kEPrfV-eB2SRyk1P_F4JbaXiGDg==@mysql:3306/bisheng?charset=utf8mb4"
+database_url: "mysql+pymysql://root:gAAAAABlp4b4c59FeVGF_OQRVf6NOUIGdxq8246EBD-b0hdK_jVKRs1x4PoAn0A6C5S6IiFKmWn0Nm5eBUWu-7jxcqw6TiVjQA==@192.168.106.171:3306/bisheng?charset=utf8mb4"
 #database_url: "mysql+pymysql://root:1234@192.168.106.125:3306/bisheng"
 #database_url: "mysql+pymysql://root:gAAAAABlp5vQN7g85IfoeK8nLCb9cfVqpy9ZK9kN7b0qbAXZ4NOZT_Ef7stKJBY6PjL0dngQnCvQMdsavuGu-EE2o6Zlvv6l-Frye08DBXRR4WmL7y7EfK4=@192.168.106.116:3306/langflow?charset=utf8mb4"
 redis_url: "redis://192.168.106.171:6379/11"

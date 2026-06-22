@@ -1,24 +1,4 @@
 services:
-  mysql:
-    container_name: bisheng-mysql
-    image: mysql:8.0
-
-    ports:
-      - "3307:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: "1234"  # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
-      MYSQL_DATABASE: bisheng
-      TZ: Asia/Shanghai
-    volumes:
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysql -u root -p$$MYSQL_ROOT_PASSWORD -e 'CREATE DATABASE IF NOT EXISTS openfga;'"]
-      start_period: 30s
-      interval: 20s
-      timeout: 10s
-      retries: 4
-    restart: on-failure
 
   backend:
     container_name: bisheng-backend
@@ -58,9 +38,6 @@ services:
       interval: 90s
       timeout: 30s
       retries: 3
-    depends_on:
-      mysql:
-        condition: service_healthy
 
   frontend:
     container_name: bisheng-frontend
