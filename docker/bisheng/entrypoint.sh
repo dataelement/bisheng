@@ -27,7 +27,7 @@ start_beat(){
 
 start_linsight(){
   # 灵思后台任务worker
-    python bisheng/linsight/worker.py --worker_num 4 --max_concurrency 5
+    python bisheng/linsight/worker.py --worker_num 1 --max_concurrency 5
 }
 start_default(){
     # 默认其他任务的执行worker，目前是定时统计埋点数据
@@ -69,7 +69,7 @@ elif [ "$start_mode" = "worker" ]; then
 #    # 处理工作流相关任务的worker
 #    start_workflow &
 #    # 处理linsight相关任务的worker
-#    start_linsight &
+   start_linsight &
 #    # 默认其他任务的执行worker，目前是定时统计埋点数据
 #    start_default &
     start_min_worker &
