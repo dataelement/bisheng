@@ -50,6 +50,7 @@ interface FilePaneProps {
     onSearchTextChange: (value: string) => void;
     onSearch: () => void;
     onOpenUploadDialog: () => void;
+    onOpenWebLinkDialog: () => void;
     onShowUnavailable: () => void;
     onCreateFolder: () => void;
     onToggleStatusFilter: (status: FileStatus, checked: boolean) => void;
@@ -95,6 +96,7 @@ export function FilePane({
     onSearchTextChange,
     onSearch,
     onOpenUploadDialog,
+    onOpenWebLinkDialog,
     onShowUnavailable,
     onCreateFolder,
     onToggleStatusFilter,
@@ -143,8 +145,9 @@ export function FilePane({
                     <button
                         type="button"
                         className={s.folderAction}
-                        onClick={onShowUnavailable}
-                        title="网页链接"
+                        onClick={onOpenWebLinkDialog}
+                        disabled={!canUploadInPortal}
+                        title={canUploadInPortal ? "网页链接" : "无上传权限"}
                         aria-label="网页链接"
                     >
                         <Globe2 size={14} />

@@ -11,7 +11,22 @@ from langchain_milvus import Milvus as LangchainMilvus
 logger = logging.getLogger(__name__)
 
 
+def _ensure_current_thread_event_loop() -> None:
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        return
+
+    if loop.is_closed():
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
+
 class Milvus(LangchainMilvus):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        _ensure_current_thread_event_loop()
+        super().__init__(*args, **kwargs)
+
     async def asimilarity_search_with_score_by_vector(
             self,
             embedding: Any,

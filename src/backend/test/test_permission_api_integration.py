@@ -13,9 +13,12 @@ import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from bisheng.core.openfga.exceptions import FGAWriteError
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.openfga.exceptions import FGAWriteError
 from bisheng.permission.api.router import router as permission_router
+from bisheng.permission.domain.knowledge_space_permission_template import (
+    default_permission_ids_for_relation as default_knowledge_space_permissions,
+)
 from bisheng.permission.domain.schemas.permission_schema import ResourcePermissionItem
 
 
@@ -1165,6 +1168,9 @@ class TestPermissionApiIntegration:
         ) as mock_authorize, patch(
             'bisheng.permission.api.endpoints.resource_permission._save_bindings',
             new_callable=AsyncMock,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._sync_knowledge_space_direct_user_memberships',
+            new_callable=AsyncMock,
         ):
             with TestClient(app) as client:
                 resp = client.post(
@@ -1549,6 +1555,69 @@ class TestPermissionApiIntegration:
                 'is_system': True,
             },
             {
+                'id': 'editor',
+                'name': '可编辑',
+                'relation': 'editor',
+                'grant_tier': 'usage',
+                'permissions': sorted(default_knowledge_space_permissions('editor') | {'manage_space_relation'}),
+                'permissions_explicit': True,
+                'is_system': True,
+            },
+            {
+                'id': 'viewer',
+                'name': '可查看',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+        ]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_permission_level',
+            new_callable=AsyncMock,
+            return_value='can_read',
+        ) as mock_get_permission_level, patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value={
+                'manage_space_relation',
+                'view_space',
+                'download_folder',
+                'download_file',
+                'view_folder',
+                'view_file',
+            },
+        ):
+            with TestClient(app) as client:
+                resp = client.get(
+                    '/api/v1/permissions/relation-models/grantable',
+                    params={'object_type': 'knowledge_space', 'object_id': '1'},
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert [item['id'] for item in body['data']] == ['editor', 'viewer']
+        mock_get_permission_level.assert_not_awaited()
+
+    def test_grantable_knowledge_space_manager_cannot_delegate_custom_editor_with_manage_permission(self):
+        app = _make_app(_ViewerUser)
+        models = [
+            {
+                'id': 'custom_editor_manage',
+                'name': '自定义编辑管理',
+                'relation': 'editor',
+                'grant_tier': 'usage',
+                'permissions': sorted(default_knowledge_space_permissions('editor') | {'manage_space_relation'}),
+                'permissions_explicit': True,
+                'is_system': False,
+            },
+            {
                 'id': 'viewer',
                 'name': '可查看',
                 'relation': 'viewer',
@@ -1660,6 +1729,9 @@ class TestPermissionApiIntegration:
             'bisheng.permission.api.endpoints.resource_permission._save_bindings',
             new_callable=AsyncMock,
         ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._sync_knowledge_space_direct_user_memberships',
+            new_callable=AsyncMock,
+        ), patch(
             'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
             new_callable=AsyncMock,
             return_value='owner',
@@ -1690,6 +1762,377 @@ class TestPermissionApiIntegration:
         mock_authorize.assert_awaited_once()
         assert mock_authorize.await_args.kwargs['grants'][0].relation == 'owner'
 
+    def test_grantable_knowledge_space_manager_cannot_delegate_manager_model(self):
+        app = _make_app(_ViewerUser)
+        models = [
+            {
+                'id': 'owner',
+                'name': '所有者',
+                'relation': 'owner',
+                'grant_tier': 'owner',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+            {
+                'id': 'manager',
+                'name': '可管理',
+                'relation': 'manager',
+                'grant_tier': 'manager',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+            {
+                'id': 'editor',
+                'name': '可编辑',
+                'relation': 'editor',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+            {
+                'id': 'viewer',
+                'name': '可查看',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+        ]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=default_knowledge_space_permissions('manager'),
+        ):
+            with TestClient(app) as client:
+                resp = client.get(
+                    '/api/v1/permissions/relation-models/grantable',
+                    params={'object_type': 'knowledge_space', 'object_id': '1'},
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        assert [item['id'] for item in body['data']] == ['editor', 'viewer']
+
+    def test_authorize_knowledge_space_manager_cannot_grant_manager_model(self):
+        app = _make_app(_ViewerUser)
+        models = [{
+            'id': 'manager',
+            'name': '可管理',
+            'relation': 'manager',
+            'grant_tier': 'manager',
+            'permissions': [],
+            'permissions_explicit': False,
+            'is_system': True,
+        }]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=default_knowledge_space_permissions('viewer') | {'manage_space_relation'},
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/knowledge_space/1/authorize',
+                    json={
+                        'grants': [{
+                            'subject_type': 'user',
+                            'subject_id': 8,
+                            'relation': 'manager',
+                            'model_id': 'manager',
+                        }],
+                        'revokes': [],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 19000
+        mock_authorize.assert_not_awaited()
+
+    def test_authorize_knowledge_space_manager_can_grant_explicit_system_editor_model(self):
+        app = _make_app(_ViewerUser)
+        models = [{
+            'id': 'editor',
+            'name': '可编辑',
+            'relation': 'editor',
+            'grant_tier': 'usage',
+            'permissions': sorted(default_knowledge_space_permissions('editor') | {'manage_space_relation'}),
+            'permissions_explicit': True,
+            'is_system': True,
+        }]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._sync_knowledge_space_direct_user_memberships',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=default_knowledge_space_permissions('viewer') | {'manage_space_relation'},
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/knowledge_space/1/authorize',
+                    json={
+                        'grants': [{
+                            'subject_type': 'user',
+                            'subject_id': 8,
+                            'relation': 'editor',
+                            'model_id': 'editor',
+                        }],
+                        'revokes': [],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        mock_authorize.assert_awaited_once()
+        assert mock_authorize.await_args.kwargs['grants'][0].relation == 'editor'
+
+    def test_authorize_knowledge_file_manager_can_grant_editor_model(self):
+        app = _make_app(_ViewerUser)
+        models = [{
+            'id': 'editor',
+            'name': '可编辑',
+            'relation': 'editor',
+            'grant_tier': 'usage',
+            'permissions': [],
+            'permissions_explicit': False,
+            'is_system': True,
+        }]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=default_knowledge_space_permissions('viewer') | {'manage_file_relation'},
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/knowledge_file/1/authorize',
+                    json={
+                        'grants': [{
+                            'subject_type': 'department',
+                            'subject_id': 8,
+                            'relation': 'editor',
+                            'model_id': 'editor',
+                            'include_children': False,
+                        }],
+                        'revokes': [],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        mock_authorize.assert_awaited_once()
+        assert mock_authorize.await_args.kwargs['grants'][0].relation == 'editor'
+
+    def test_authorize_folder_manager_can_modify_subject_between_usage_models(self):
+        app = _make_app(_ViewerUser)
+        models = [
+            {
+                'id': 'editor',
+                'name': '可编辑',
+                'relation': 'editor',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+            {
+                'id': 'viewer',
+                'name': '可查看',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+        ]
+        bindings = [{
+            'key': 'folder:1:user:8:viewer:-',
+            'resource_type': 'folder',
+            'resource_id': '1',
+            'subject_type': 'user',
+            'subject_id': 8,
+            'relation': 'viewer',
+            'include_children': None,
+            'model_id': 'viewer',
+        }]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=bindings,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            new_callable=AsyncMock,
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=default_knowledge_space_permissions('viewer') | {'manage_folder_relation'},
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/folder/1/authorize',
+                    json={
+                        'grants': [{
+                            'subject_type': 'user',
+                            'subject_id': 8,
+                            'relation': 'editor',
+                            'model_id': 'editor',
+                        }],
+                        'revokes': [{
+                            'subject_type': 'user',
+                            'subject_id': 8,
+                            'relation': 'viewer',
+                        }],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 200
+        mock_authorize.assert_awaited_once()
+        assert mock_authorize.await_args.kwargs['grants'][0].relation == 'editor'
+        assert mock_authorize.await_args.kwargs['revokes'][0].relation == 'viewer'
+
+    def test_authorize_folder_manager_cannot_modify_subject_to_manager_model(self):
+        app = _make_app(_ViewerUser)
+        models = [
+            {
+                'id': 'manager',
+                'name': '可管理',
+                'relation': 'manager',
+                'grant_tier': 'manager',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+            {
+                'id': 'viewer',
+                'name': '可查看',
+                'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+        ]
+
+        with patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_relation_models',
+            new_callable=AsyncMock,
+            return_value=models,
+        ), patch(
+            'bisheng.permission.api.endpoints.resource_permission._get_bindings',
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.get_implicit_permission_level',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async',
+            new_callable=AsyncMock,
+            return_value=default_knowledge_space_permissions('manager'),
+        ), patch(
+            'bisheng.permission.domain.services.permission_service.PermissionService.authorize',
+            new_callable=AsyncMock,
+        ) as mock_authorize:
+            with TestClient(app) as client:
+                resp = client.post(
+                    '/api/v1/permissions/resources/folder/1/authorize',
+                    json={
+                        'grants': [{
+                            'subject_type': 'user',
+                            'subject_id': 8,
+                            'relation': 'manager',
+                            'model_id': 'manager',
+                        }],
+                        'revokes': [{
+                            'subject_type': 'user',
+                            'subject_id': 8,
+                            'relation': 'viewer',
+                        }],
+                    },
+                )
+                body = resp.json()
+
+        assert body['status_code'] == 19000
+        mock_authorize.assert_not_awaited()
+
     def test_grantable_folder_uses_manage_permission_id_only(self):
         app = _make_app(_ViewerUser)
         models = [
@@ -1698,6 +2141,15 @@ class TestPermissionApiIntegration:
                 'name': '所有者',
                 'relation': 'owner',
                 'grant_tier': 'owner',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+            {
+                'id': 'editor',
+                'name': '可编辑',
+                'relation': 'editor',
+                'grant_tier': 'usage',
                 'permissions': [],
                 'permissions_explicit': False,
                 'is_system': True,
@@ -1734,7 +2186,7 @@ class TestPermissionApiIntegration:
                 body = resp.json()
 
         assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['viewer']
+        assert [item['id'] for item in body['data']] == ['editor', 'viewer']
         mock_get_permission_level.assert_not_awaited()
         assert mock_get_effective_permissions.await_args.kwargs['nearest_binding_wins'] is True
 
@@ -1754,6 +2206,15 @@ class TestPermissionApiIntegration:
                 'id': 'viewer',
                 'name': '可查看',
                 'relation': 'viewer',
+                'grant_tier': 'usage',
+                'permissions': [],
+                'permissions_explicit': False,
+                'is_system': True,
+            },
+            {
+                'id': 'editor',
+                'name': '可编辑',
+                'relation': 'editor',
                 'grant_tier': 'usage',
                 'permissions': [],
                 'permissions_explicit': False,
@@ -1782,6 +2243,6 @@ class TestPermissionApiIntegration:
                 body = resp.json()
 
         assert body['status_code'] == 200
-        assert [item['id'] for item in body['data']] == ['viewer']
+        assert [item['id'] for item in body['data']] == ['viewer', 'editor']
         mock_get_permission_level.assert_not_awaited()
         assert mock_get_effective_permissions.await_args.kwargs['nearest_binding_wins'] is True

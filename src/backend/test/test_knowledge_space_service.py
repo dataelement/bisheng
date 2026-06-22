@@ -40,6 +40,7 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpace
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFileSearchReq,
+    ShougangPortalQaFileSearchReq,
     ShougangPortalHomeReq,
     ShougangPortalSpaceInfoItemResp,
     SpaceSubscriptionStatusEnum,
@@ -1279,6 +1280,60 @@ async def test_shougang_portal_file_search_uses_batch_file_query(service):
     assert mock_batch_files.await_args.kwargs['knowledge_ids'] == [12, 18]
     assert result['total'] == 2
     assert [item['space_id'] for item in result['data']] == [12, 18]
+    assert result['data'][0]['tags'] == ['热轧']
+    assert result['data'][0]['tag_infos'] == [{'tag_name': '热轧', 'resource_type': ''}]
+
+
+@pytest.mark.asyncio
+async def test_shougang_portal_qa_file_search_sorts_object_tags(service):
+    space = _make_space(space_id=12, user_id=7)
+    space.name = '热轧知识库'
+    files = [
+        _make_file(file_id=1580, knowledge_id=12, file_name='精轧机振动纹治理.pdf'),
+    ]
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        new_callable=AsyncMock,
+        return_value=files,
+    ), patch.object(
+        service,
+        '_filter_shougang_portal_visible_files',
+        new_callable=AsyncMock,
+        return_value=files,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        return_value=[
+            {
+                **files[0].model_dump(),
+                'tags': [{'id': 101, 'name': '振动纹'}],
+            },
+        ],
+    ), patch.object(
+        service,
+        '_resolve_shougang_portal_source_paths',
+        new_callable=AsyncMock,
+        return_value=({1580: '热轧知识库'}, {1580: '热轧知识库>精轧机振动纹治理.pdf'}),
+    ):
+        result = await service.search_shougang_portal_qa_files_by_name(
+            ShougangPortalQaFileSearchReq(
+                q='振动纹',
+                space_ids=[12],
+                page=1,
+                page_size=20,
+            )
+        )
+
+    assert result['total'] == 1
+    assert result['data'][0]['id'] == 1580
+    assert result['data'][0]['tags'] == ['振动纹']
+    assert result['data'][0]['tag_infos'] == [{'tag_name': '振动纹', 'resource_type': ''}]
 
 
 @pytest.mark.asyncio
@@ -2354,6 +2409,8 @@ async def test_shougang_portal_home_uses_batch_tag_and_file_queries(service):
     assert mock_batch_files.await_args.kwargs['knowledge_ids'] == [12, 18]
     assert mock_batch_files.await_args.kwargs['file_ids'] == [1580, 1801]
     assert result['sections']['最新精选'][0]['space_id'] == 12
+    assert result['sections']['最新精选'][0]['tags'] == ['最新精选']
+    assert result['sections']['最新精选'][0]['tag_infos'] == [{'tag_name': '最新精选', 'resource_type': ''}]
     assert result['sections']['典型案例'][0]['space_id'] == 18
     assert result['tags'] == ['最新精选', '典型案例']
 

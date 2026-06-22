@@ -46,6 +46,9 @@ interface PortalUploadDialogProps {
     uploadTagOptions: PortalUploadTagOption[];
     selectedUploadTagValues: string[];
     uploadTagLoading: boolean;
+    fileInputAccept: string;
+    supportedFormatsLabel: string;
+    maxFileSizeMB: number;
     onOpen: () => void;
     onClose: () => void;
     onAddUploadFiles: (files?: FileList | File[]) => void;
@@ -140,6 +143,9 @@ export function PortalUploadDialog({
     uploadTagOptions,
     selectedUploadTagValues,
     uploadTagLoading,
+    fileInputAccept,
+    supportedFormatsLabel,
+    maxFileSizeMB,
     onOpen,
     onClose,
     onAddUploadFiles,
@@ -193,7 +199,7 @@ export function PortalUploadDialog({
                                 >
                                     <Upload size={34} />
                                     <span>点击选择文件或拖拽文件到此处</span>
-                                    <small>支持多个文件同时上传</small>
+                                    <small>支持 {supportedFormatsLabel}，单文件最大 {maxFileSizeMB}MB</small>
                                     <div className={s.uploadPickActions}>
                                         <button
                                             type="button"
@@ -217,6 +223,7 @@ export function PortalUploadDialog({
                                     className={s.uploadNativeInput}
                                     type="file"
                                     multiple
+                                    accept={fileInputAccept}
                                     onChange={(event) => {
                                         onAddUploadFiles(event.currentTarget.files || undefined);
                                         event.currentTarget.value = "";

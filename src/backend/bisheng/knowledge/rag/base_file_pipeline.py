@@ -12,6 +12,7 @@ from bisheng.knowledge.rag.pipeline.loader.etl4lm import Etl4lmLoader
 from bisheng.knowledge.rag.pipeline.loader.excel import ExcelLoader
 from bisheng.knowledge.rag.pipeline.loader.hierarchical import HierarchicalMarkdownLoader, HierarchicalWordLoader
 from bisheng.knowledge.rag.pipeline.loader.html import BishengHtmlLoader
+from bisheng.knowledge.rag.pipeline.loader.media import BishengMediaLoader
 from bisheng.knowledge.rag.pipeline.loader.mineru import MineruLoader
 from bisheng.knowledge.rag.pipeline.loader.paddle_ocr import PaddleOcrLoader
 from bisheng.knowledge.rag.pipeline.loader.pdf import LocalPdfLoader
@@ -41,6 +42,17 @@ FileExtensionMap = {
     "jpg": {"loader": "_init_image_loader", "transformers": "_init_common_transformers"},
     "jpeg": {"loader": "_init_image_loader", "transformers": "_init_common_transformers"},
     "bmp": {"loader": "_init_image_loader", "transformers": "_init_common_transformers"},
+    "mp3": {"loader": "_init_audio_loader", "transformers": "_init_common_transformers"},
+    "wav": {"loader": "_init_audio_loader", "transformers": "_init_common_transformers"},
+    "m4a": {"loader": "_init_audio_loader", "transformers": "_init_common_transformers"},
+    "aac": {"loader": "_init_audio_loader", "transformers": "_init_common_transformers"},
+    "flac": {"loader": "_init_audio_loader", "transformers": "_init_common_transformers"},
+    "ogg": {"loader": "_init_audio_loader", "transformers": "_init_common_transformers"},
+    "mp4": {"loader": "_init_video_loader", "transformers": "_init_common_transformers"},
+    "mov": {"loader": "_init_video_loader", "transformers": "_init_common_transformers"},
+    "avi": {"loader": "_init_video_loader", "transformers": "_init_common_transformers"},
+    "mkv": {"loader": "_init_video_loader", "transformers": "_init_common_transformers"},
+    "webm": {"loader": "_init_video_loader", "transformers": "_init_common_transformers"},
 }
 
 
@@ -226,3 +238,17 @@ class BaseFilePipeline(BasePipeline):
         if isinstance(pdf_loader, LocalPdfLoader):
             raise KnowledgeFileNotSupportedError()
         return pdf_loader
+
+    def _init_audio_loader(self) -> BaseBishengLoader:
+        return BishengMediaLoader(
+            **self._get_loader_common_params(),
+            knowledge_file=getattr(self, "db_file", None),
+            media_kind="audio",
+        )
+
+    def _init_video_loader(self) -> BaseBishengLoader:
+        return BishengMediaLoader(
+            **self._get_loader_common_params(),
+            knowledge_file=getattr(self, "db_file", None),
+            media_kind="video",
+        )

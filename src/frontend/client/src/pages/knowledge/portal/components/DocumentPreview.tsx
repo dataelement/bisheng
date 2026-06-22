@@ -2,14 +2,41 @@ import { ChevronDown, ChevronUp, Copy, Download, FileText, ShieldCheck, SquarePe
 // import { Share2 } from "lucide-react";
 import type { KnowledgeFile } from "~/api/knowledge";
 import FilePreview from "../../FilePreview";
+import { RichKnowledgePreview } from "../../FilePreview/RichKnowledgePreview";
 import type { PreviewState } from "../types";
 import s from "../PortalKnowledgeWorkbench.module.css";
+
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
+
+function getExtensionFromUrl(url?: string): string {
+    if (!url) return "";
+    const path = url.split("?")[0].split("#")[0];
+    const filename = path.split("/").pop() || "";
+    const dotIndex = filename.lastIndexOf(".");
+    return dotIndex >= 0 ? filename.slice(dotIndex + 1).toLowerCase() : "";
+}
+
+function isRichPreviewData(previewData: PreviewState["previewData"]): boolean {
+    if (!previewData) return false;
+    const ext = getExtensionFromUrl(previewData.original_url || previewData.preview_url);
+    return (
+        previewData.file_source === "web_link"
+        || previewData.file_source === "audio_transcript"
+        || previewData.file_source === "video_transcript"
+        || previewData.media_kind === "audio"
+        || previewData.media_kind === "video"
+        || AUDIO_EXTENSIONS.has(ext)
+        || VIDEO_EXTENSIONS.has(ext)
+    );
+}
 
 interface DocumentPreviewProps {
     selectedFile: KnowledgeFile | null;
     documentPath: string;
     preview: PreviewState;
     summaryExpanded: boolean;
+    canEditTags: boolean;
     onOpenTags: () => void;
     // onOpenShare: () => void;
     onDownload: () => void;
@@ -24,6 +51,7 @@ export function DocumentPreview({
     documentPath,
     preview,
     summaryExpanded,
+    canEditTags,
     onOpenTags,
     // onOpenShare,
     onDownload,
@@ -32,6 +60,8 @@ export function DocumentPreview({
     onCopyEncoding,
     onToggleSummary,
 }: DocumentPreviewProps) {
+    const isRichPreview = isRichPreviewData(preview.previewData);
+
     return (
         <section className={s.documentShell}>
             {selectedFile ? (
@@ -45,9 +75,11 @@ export function DocumentPreview({
                             <div className={s.docPath}>{documentPath}</div>
                         </div>
                         <div className={s.docActions} data-testid="portal-document-actions">
-                            <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={onOpenTags}>
-                                <SquarePen size={16} />
-                            </button>
+                            {canEditTags ? (
+                                <button type="button" className={s.iconAction} title="编辑标签" aria-label="编辑标签" onClick={onOpenTags}>
+                                    <SquarePen size={16} />
+                                </button>
+                            ) : null}
                             {/* <button type="button" className={s.iconAction} title="分享" aria-label="分享" onClick={onOpenShare}>
                                 <Share2 size={16} />
                             </button> */}
@@ -98,13 +130,22 @@ export function DocumentPreview({
                             </div>
                         ) : preview.fileUrl ? (
                             <div className={s.previewFrame}>
-                                <FilePreview
-                                    fileName={selectedFile.name}
-                                    fileType={preview.fileType}
-                                    fileUrl={preview.fileUrl}
-                                    compactMode
-                                    allowDownload={false}
-                                />
+                                {isRichPreview && preview.previewData ? (
+                                    <RichKnowledgePreview
+                                        fileName={selectedFile.name}
+                                        preview={preview.previewData}
+                                        compactMode
+                                        allowDownload={false}
+                                    />
+                                ) : (
+                                    <FilePreview
+                                        fileName={selectedFile.name}
+                                        fileType={preview.fileType}
+                                        fileUrl={preview.fileUrl}
+                                        compactMode
+                                        allowDownload={false}
+                                    />
+                                )}
                             </div>
                         ) : (
                             <div className={s.previewCard}>

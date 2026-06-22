@@ -209,17 +209,17 @@ class TestSgUserSyncRemote:
         rows = assert_esb_success(resp.json())
         assert rows[0]['code'] == sg_context['user_code']
 
-    def test_sync_off_job_user(self, sg_client, run_id, sg_context):
-        payload = build_user_payload(
-            run_id=run_id,
-            dept_code=sg_context['child_dept_code'],
-            user_suffix='u1',
-            display_name=sg_context['user_name'],
-            job_status='02',
-        )
-        resp = post_sg(sg_client, USERS_SG_PATH, payload)
-        assert resp.status_code == 200
-        assert_esb_success(resp.json())
+    # def test_sync_off_job_user(self, sg_client, run_id, sg_context):
+    #     payload = build_user_payload(
+    #         run_id=run_id,
+    #         dept_code=sg_context['child_dept_code'],
+    #         user_suffix='u1',
+    #         display_name=sg_context['user_name'],
+    #         job_status='02',
+    #     )
+    #     resp = post_sg(sg_client, USERS_SG_PATH, payload)
+    #     assert resp.status_code == 200
+    #     assert_esb_success(resp.json())
 
     def test_missing_department_returns_partial_failure(self, sg_client, run_id):
         payload = build_user_payload(

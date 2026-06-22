@@ -21,44 +21,41 @@ import asyncio
 import importlib.util
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 
 def _load_tasks_module() -> ModuleType:
-    _celery_stub = MagicMock(name='bisheng_celery')
-    _celery_stub.task = lambda *a, **kw: (lambda fn: fn)  # passthrough
-    sys.modules['bisheng.worker.main'] = MagicMock(bisheng_celery=_celery_stub)
+    _celery_stub = MagicMock(name="bisheng_celery")
+    _celery_stub.task = lambda *a, **kw: lambda fn: fn  # passthrough
+    sys.modules["bisheng.worker.main"] = MagicMock(bisheng_celery=_celery_stub)
 
-    if 'bisheng.worker' not in sys.modules or not isinstance(
-        getattr(sys.modules['bisheng.worker'], '__path__', None), list,
+    if "bisheng.worker" not in sys.modules or not isinstance(
+        getattr(sys.modules["bisheng.worker"], "__path__", None),
+        list,
     ):
         # Derive the worker path from this test file's location so the
         # test works under any checkout root (main repo, worktrees,
         # /opt/bisheng, /opt/bisheng-f019, etc.). A hard-coded /opt path
         # would break the moment we run inside a worktree.
-        worker_path = Path(__file__).resolve().parent.parent / 'bisheng' / 'worker'
-        stub_pkg = ModuleType('bisheng.worker')
+        worker_path = Path(__file__).resolve().parent.parent / "bisheng" / "worker"
+        stub_pkg = ModuleType("bisheng.worker")
         stub_pkg.__path__ = [str(worker_path)]
-        sys.modules['bisheng.worker'] = stub_pkg
-    if 'bisheng.worker.admin_scope' not in sys.modules:
-        sub_pkg = ModuleType('bisheng.worker.admin_scope')
-        sub_pkg.__path__ = [str(
-            Path(sys.modules['bisheng.worker'].__path__[0]) / 'admin_scope'
-        )]
-        sys.modules['bisheng.worker.admin_scope'] = sub_pkg
+        sys.modules["bisheng.worker"] = stub_pkg
+    if "bisheng.worker.admin_scope" not in sys.modules:
+        sub_pkg = ModuleType("bisheng.worker.admin_scope")
+        sub_pkg.__path__ = [str(Path(sys.modules["bisheng.worker"].__path__[0]) / "admin_scope")]
+        sys.modules["bisheng.worker.admin_scope"] = sub_pkg
 
-    tasks_path = (
-        Path(sys.modules['bisheng.worker'].__path__[0])
-        / 'admin_scope' / 'tasks.py'
-    )
+    tasks_path = Path(sys.modules["bisheng.worker"].__path__[0]) / "admin_scope" / "tasks.py"
     spec = importlib.util.spec_from_file_location(
-        'bisheng.worker.admin_scope.tasks', tasks_path,
+        "bisheng.worker.admin_scope.tasks",
+        tasks_path,
     )
     module = importlib.util.module_from_spec(spec)
-    sys.modules['bisheng.worker.admin_scope.tasks'] = module
+    sys.modules["bisheng.worker.admin_scope.tasks"] = module
     spec.loader.exec_module(module)
     return module
 
@@ -70,31 +67,46 @@ tasks_module = _load_tasks_module()
 # Fake Redis + DAO patches
 # ---------------------------------------------------------------------------
 
+
 class _FakeRedis:
     def __init__(self, store: dict[str, str]):
         self.store = dict(store)
         self.deleted: list[str] = []
+        self.sync_get_calls: list[str] = []
+        self.sync_delete_calls: list[str] = []
 
-    async def akeys(self, pattern: str):
-        prefix = pattern.rstrip('*')
+    def keys(self, pattern: str):
+        prefix = pattern.rstrip("*")
         return [k for k in self.store if k.startswith(prefix)]
 
-    async def aget(self, key: str):
+    def get(self, key: str):
+        self.sync_get_calls.append(key)
         return self.store.get(key)
 
-    async def adelete(self, key: str):
+    def delete(self, key: str):
+        self.sync_delete_calls.append(key)
         if key in self.store:
             del self.store[key]
             self.deleted.append(key)
             return 1
         return 0
 
+    async def akeys(self, pattern: str):  # pragma: no cover - regression guard
+        raise AssertionError("admin_scope_cleanup must not use async Redis keys")
+
+    async def aget(self, key: str):  # pragma: no cover - regression guard
+        raise AssertionError("admin_scope_cleanup must not use async Redis get")
+
+    async def adelete(self, key: str):  # pragma: no cover - regression guard
+        raise AssertionError("admin_scope_cleanup must not use async Redis delete")
+
 
 @pytest.fixture()
 def bypass_spy(monkeypatch):
     """Wrap ``bypass_tenant_filter`` so we can assert it was used."""
     from bisheng.core.context import tenant as tenant_mod
-    calls = {'entered': 0, 'exited': 0}
+
+    calls = {"entered": 0, "exited": 0}
 
     real_cm = tenant_mod.bypass_tenant_filter
 
@@ -103,16 +115,16 @@ def bypass_spy(monkeypatch):
 
         @contextmanager
         def _cm():
-            calls['entered'] += 1
+            calls["entered"] += 1
             with real_cm():
                 yield
-            calls['exited'] += 1
+            calls["exited"] += 1
 
         return _cm()
 
     # Replace in the tasks module's imported symbol — the function imports
     # it lazily inside ``_cleanup_async``, so we patch the source module.
-    monkeypatch.setattr(tenant_mod, 'bypass_tenant_filter', _spy)
+    monkeypatch.setattr(tenant_mod, "bypass_tenant_filter", _spy)
     return calls
 
 
@@ -120,17 +132,17 @@ def _patch_deps(monkeypatch, redis_store, non_active_ids):
     """Install a fake Redis + TenantDao for a single test call."""
     fake = _FakeRedis(redis_store)
 
-    async def _get_client():
-        return fake
-
     # Patch the module-level imports inside ``_cleanup_async``.
     import importlib
-    rm_mod = importlib.import_module('bisheng.core.cache.redis_manager')
-    monkeypatch.setattr(rm_mod, 'get_redis_client', _get_client)
+
+    rm_mod = importlib.import_module("bisheng.core.cache.redis_manager")
+    monkeypatch.setattr(rm_mod, "get_redis_client_sync", lambda: fake)
 
     from bisheng.database.models.tenant import TenantDao
+
     monkeypatch.setattr(
-        TenantDao, 'aget_non_active_ids',
+        TenantDao,
+        "aget_non_active_ids",
         AsyncMock(return_value=list(non_active_ids)),
     )
     return fake
@@ -140,25 +152,26 @@ def _patch_deps(monkeypatch, redis_store, non_active_ids):
 # Tests
 # ---------------------------------------------------------------------------
 
+
 def test_cleanup_removes_non_active_scopes(monkeypatch, bypass_spy):
     """AC-13: keys pointing at non-active tenants → deleted."""
     fake = _patch_deps(
         monkeypatch,
         redis_store={
-            'admin_scope:1': '5',   # tenant 5 disabled → DELETE
-            'admin_scope:2': '6',   # tenant 6 active → KEEP
-            'admin_scope:3': '7',   # tenant 7 orphaned → DELETE
+            "admin_scope:1": "5",  # tenant 5 disabled → DELETE
+            "admin_scope:2": "6",  # tenant 6 active → KEEP
+            "admin_scope:3": "7",  # tenant 7 orphaned → DELETE
         },
         non_active_ids={5, 7},
     )
 
     asyncio.run(tasks_module._cleanup_async())
 
-    assert sorted(fake.deleted) == ['admin_scope:1', 'admin_scope:3']
-    assert 'admin_scope:2' in fake.store
+    assert sorted(fake.deleted) == ["admin_scope:1", "admin_scope:3"]
+    assert "admin_scope:2" in fake.store
     # Bypass wrapped the DB query exactly once.
-    assert bypass_spy['entered'] == 1
-    assert bypass_spy['exited'] == 1
+    assert bypass_spy["entered"] == 1
+    assert bypass_spy["exited"] == 1
 
 
 def test_cleanup_noop_when_no_keys(monkeypatch, bypass_spy):
@@ -169,21 +182,21 @@ def test_cleanup_noop_when_no_keys(monkeypatch, bypass_spy):
 
     assert fake.deleted == []
     # bypass_tenant_filter must NOT be entered — proof the DB lookup was skipped.
-    assert bypass_spy['entered'] == 0
+    assert bypass_spy["entered"] == 0
 
 
 def test_cleanup_noop_when_all_active(monkeypatch, bypass_spy):
     """No non-active tenants → no deletes even with scope keys present."""
     fake = _patch_deps(
         monkeypatch,
-        redis_store={'admin_scope:1': '5', 'admin_scope:2': '6'},
+        redis_store={"admin_scope:1": "5", "admin_scope:2": "6"},
         non_active_ids=set(),
     )
 
     asyncio.run(tasks_module._cleanup_async())
 
     assert fake.deleted == []
-    assert bypass_spy['entered'] == 1
+    assert bypass_spy["entered"] == 1
 
 
 def test_cleanup_removes_corrupt_value(monkeypatch, bypass_spy):
@@ -191,8 +204,8 @@ def test_cleanup_removes_corrupt_value(monkeypatch, bypass_spy):
     fake = _patch_deps(
         monkeypatch,
         redis_store={
-            'admin_scope:1': 'not-a-number',
-            'admin_scope:2': '6',
+            "admin_scope:1": "not-a-number",
+            "admin_scope:2": "6",
         },
         non_active_ids={999},  # Neither key points at a non-active tenant.
     )
@@ -200,5 +213,5 @@ def test_cleanup_removes_corrupt_value(monkeypatch, bypass_spy):
     asyncio.run(tasks_module._cleanup_async())
 
     # Corrupt key deleted, valid key kept.
-    assert fake.deleted == ['admin_scope:1']
-    assert 'admin_scope:2' in fake.store
+    assert fake.deleted == ["admin_scope:1"]
+    assert "admin_scope:2" in fake.store

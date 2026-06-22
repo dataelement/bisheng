@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useCallback, useContext, useState } from "react"
+import React, { createContext, useCallback, useContext, useState, type KeyboardEvent } from "react"
 
 import { AlertCircle, X } from "lucide-react"
 import {
@@ -41,21 +41,29 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
         })
     }, [])
 
-    const handleCancel = () => {
-        setOpen(false)
-        resolvePromise?.(false)
-    }
-
-    const handleConfirm = () => {
+    const handleConfirm = useCallback(() => {
         setOpen(false)
         resolvePromise?.(true)
-    }
+    }, [resolvePromise])
+
+    const handleCancel = useCallback(() => {
+        setOpen(false)
+        resolvePromise?.(false)
+    }, [resolvePromise])
+
+    const handleContentKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+            return
+        }
+        event.preventDefault()
+        handleConfirm()
+    }, [handleConfirm])
 
     return (
         <ConfirmContext.Provider value={{ confirm }}>
             {children}
             <AlertDialog open={open} onOpenChange={setOpen}>
-                <AlertDialogContent className="sm:max-w-[400px] p-6">
+                <AlertDialogContent className="sm:max-w-[400px] p-6" onKeyDown={handleContentKeyDown}>
                     <button
                         onClick={handleCancel}
                         className="absolute right-4 top-4 opacity-70 hover:opacity-100 transition-opacity"

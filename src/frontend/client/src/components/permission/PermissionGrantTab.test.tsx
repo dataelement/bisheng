@@ -135,6 +135,40 @@ describe("PermissionGrantTab", () => {
     expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
   });
 
+  it("uses backend-filtered grantable models so managers cannot select manager grants", async () => {
+    mockedGetGrantableRelationModels.mockResolvedValue([
+      {
+        id: "editor",
+        name: "Editor",
+        relation: "editor",
+        permissions: [],
+        is_system: true,
+      },
+      {
+        id: "viewer",
+        name: "Viewer",
+        relation: "viewer",
+        permissions: [],
+        is_system: true,
+      },
+    ]);
+
+    render(
+      <PermissionGrantTab
+        resourceType="knowledge_file"
+        resourceId="file-1"
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("com_permission.level_viewer")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("com_permission.level_manager")).not.toBeInTheDocument();
+    expect(screen.queryByText("com_permission.level_owner")).not.toBeInTheDocument();
+  });
+
   it("submits the current include-children checkbox value for department grants", async () => {
     render(
       <PermissionGrantTab

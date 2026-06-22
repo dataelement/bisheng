@@ -98,6 +98,7 @@ export default defineConfig(({ command, mode }) => {
           changeOrigin: true,
           secure: false,
           ws: true,
+          timeout: 600_000,
           configure: (proxy, options) => {
             proxy.on('proxyReq', (proxyReq, req, res) => {
               console.log('Proxying request to:', proxyReq.path);
