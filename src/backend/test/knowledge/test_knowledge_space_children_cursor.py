@@ -17,18 +17,20 @@ Key F027 AD-14 invariants covered:
 from __future__ import annotations
 
 import ast
-import inspect
 import re
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from sqlalchemy import literal, select
+from sqlalchemy import select
 from sqlalchemy.dialects import sqlite
 
 from bisheng.knowledge.domain.models.knowledge_space_file import (
+    SpaceFileDao,
     _EXT_PRIORITIES,
     _EXT_RANK_FALLBACK,
+    child_order_cursor_key_len,
     _compute_ext_rank_case_when,
     _compute_ext_rank_python,
 )
@@ -38,6 +40,38 @@ def _read(rel: str) -> str:
     return (
         Path(__file__).resolve().parents[2] / "bisheng" / rel
     ).read_text(encoding="utf-8")
+
+
+class _FakeListResult:
+    def __init__(self, values=None):
+        self._values = values or []
+
+    def all(self):
+        return self._values
+
+
+class _FakeAsyncSession:
+    def __init__(self):
+        self.statement = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def exec(self, statement):
+        self.statement = statement
+        return _FakeListResult()
+
+
+def _compile_sql(statement) -> str:
+    return str(
+        statement.compile(
+            dialect=sqlite.dialect(),
+            compile_kwargs={"literal_binds": True},
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +140,13 @@ def test_ext_priority_table_length_is_15():
     assert _EXT_PRIORITIES[-1] == ("html", 15)
 
 
+def test_child_order_cursor_key_lengths_match_sort_modes():
+    assert child_order_cursor_key_len("file_type") == 4
+    assert child_order_cursor_key_len("file_name") == 3
+    assert child_order_cursor_key_len("update_time") == 2
+    assert child_order_cursor_key_len("unsupported") == 4
+
+
 # ---------------------------------------------------------------------------
 # AC-10 / AC-11: DAO and service structural invariants
 # ---------------------------------------------------------------------------
@@ -121,6 +162,76 @@ def test_async_list_children_accepts_cursor_param():
     )
     all_arg_names = {a.arg for a in func.args.args} | {a.arg for a in func.args.kwonlyargs}
     assert "cursor" in all_arg_names, "async_list_children must accept `cursor` kwarg"
+
+
+@pytest.mark.asyncio
+async def test_async_list_children_cursor_first_page_is_limited():
+    """Cursor scan mode uses page=0 for the first page; it must still LIMIT."""
+    session = _FakeAsyncSession()
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+        return_value=session,
+    ):
+        await SpaceFileDao.async_list_children(
+            knowledge_id=1,
+            parent_id=None,
+            order_field="file_name",
+            order_sort="asc",
+            page=0,
+            page_size=10,
+        )
+
+    sql = _compile_sql(session.statement)
+    assert "ORDER BY file_name ASC" in sql
+    assert "LIMIT 10" in sql
+
+
+@pytest.mark.asyncio
+async def test_async_list_children_file_name_cursor_uses_keyset():
+    session = _FakeAsyncSession()
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+        return_value=session,
+    ):
+        await SpaceFileDao.async_list_children(
+            knowledge_id=1,
+            parent_id=None,
+            order_field="file_name",
+            order_sort="asc",
+            page=0,
+            page_size=10,
+            cursor=["m.txt", "2026-01-01T00:00:00", 99],
+        )
+
+    sql = _compile_sql(session.statement)
+    assert "file_name > 'm.txt'" in sql
+    assert "update_time < '2026-01-01T00:00:00'" in sql
+    assert "id < 99" in sql
+    assert "LIMIT 10" in sql
+
+
+@pytest.mark.asyncio
+async def test_async_list_children_update_time_cursor_uses_keyset():
+    session = _FakeAsyncSession()
+    with patch(
+        "bisheng.knowledge.domain.models.knowledge_space_file.get_async_db_session",
+        return_value=session,
+    ):
+        await SpaceFileDao.async_list_children(
+            knowledge_id=1,
+            parent_id=None,
+            order_field="update_time",
+            order_sort="desc",
+            page=0,
+            page_size=10,
+            cursor=["2026-01-01T00:00:00", 99],
+        )
+
+    sql = _compile_sql(session.statement)
+    assert "update_time < '2026-01-01T00:00:00'" in sql
+    assert "id < 99" in sql
+    assert "ORDER BY update_time DESC, id DESC" in sql
+    assert "LIMIT 10" in sql
 
 
 def test_scan_visible_child_items_uses_cursor_fetch_until_enough():
@@ -140,7 +251,7 @@ def test_scan_visible_child_items_uses_cursor_fetch_until_enough():
 
     # New: batch_cursor advances via DB last row keyset
     assert "batch_cursor" in func_src
-    assert "_compute_ext_rank_python" in func_src
+    assert "build_child_order_cursor_key" in func_src
 
     # Fetch-until-enough: break when visible exceeds page_size+1 probe
     assert re.search(r"len\(visible_page_items\)\s*>\s*page_size", func_src)
@@ -192,8 +303,49 @@ def test_list_space_children_returns_page_infinite_cursor_data():
     func_src = ast.get_source_segment(src, func)
     assert "PageInfiniteCursorData(" in func_src
     assert "encode_cursor(" in func_src
-    # Cursor key shape: 4-tuple including ext_rank
-    assert "_compute_ext_rank_python" in func_src
+    # Cursor key shape is delegated to the shared sort-aware helper.
+    assert "build_child_order_cursor_key" in func_src
+
+
+def test_list_space_children_uses_space_scoped_version_exclusion():
+    src = _read("knowledge/domain/services/knowledge_space_service.py")
+    tree = ast.parse(src)
+    cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "KnowledgeSpaceService")
+    func = next(
+        n for n in cls.body
+        if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "list_space_children"
+    )
+    func_src = ast.get_source_segment(src, func)
+
+    assert "find_non_primary_file_ids_by_knowledge_ids([space_id])" in func_src
+    assert "find_non_primary_file_ids()" not in func_src
+
+
+def test_list_space_children_does_not_repeat_view_permission_checks():
+    src = _read("knowledge/domain/services/knowledge_space_service.py")
+    tree = ast.parse(src)
+    cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "KnowledgeSpaceService")
+    func = next(
+        n for n in cls.body
+        if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "list_space_children"
+    )
+    func_src = ast.get_source_segment(src, func)
+
+    assert '_require_permission_id("knowledge_space", space_id, "view_space")' not in func_src
+    assert '_require_permission_id("folder", parent_id, "view_folder"' not in func_src
+
+
+def test_list_space_children_skips_folder_count_enrichment():
+    src = _read("knowledge/domain/services/knowledge_space_service.py")
+    tree = ast.parse(src)
+    cls = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "KnowledgeSpaceService")
+    func = next(
+        n for n in cls.body
+        if isinstance(n, (ast.AsyncFunctionDef, ast.FunctionDef)) and n.name == "list_space_children"
+    )
+    func_src = ast.get_source_segment(src, func)
+
+    assert "include_folder_counts=False" in func_src
 
 
 # ---------------------------------------------------------------------------

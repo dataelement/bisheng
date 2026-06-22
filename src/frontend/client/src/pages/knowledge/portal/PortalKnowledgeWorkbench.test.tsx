@@ -37,6 +37,7 @@ import {
     getSimilarCandidatesApi,
     getMineSpacesApi,
     getSpaceChildrenApi,
+    getSpaceFolderStatsApi,
     getSpaceInfoApi,
     getSpaceTagsApi,
     importWebLinkApi,
@@ -375,6 +376,7 @@ jest.mock("~/api/knowledge", () => ({
     unsubscribeSpaceApi: jest.fn(),
     pinSpaceApi: jest.fn(),
     getSpaceChildrenApi: jest.fn(),
+    getSpaceFolderStatsApi: jest.fn(),
     getSpaceTagsApi: jest.fn(),
     searchSpaceChildrenApi: jest.fn(),
     importWebLinkApi: jest.fn(),
@@ -510,6 +512,7 @@ describe("PortalKnowledgeWorkbench", () => {
             defaultSpaceLevel: SpaceLevel.PERSONAL,
         } as any);
         jest.mocked(getSpaceChildrenApi).mockImplementation(() => new Promise(() => undefined) as any);
+        jest.mocked(getSpaceFolderStatsApi).mockResolvedValue([] as any);
         jest.mocked(searchSpaceChildrenApi).mockResolvedValue({ data: [], total: 0 } as any);
         jest.mocked(importWebLinkApi).mockResolvedValue(makeFile("web-1", "网页链接", {
             type: FileType.MD,
@@ -1227,6 +1230,56 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.getAllByText("解析中").length).toBeGreaterThan(0);
         expect(within(noStatusRow).queryByText("成功")).not.toBeInTheDocument();
         expect(within(noStatusRow).queryByText("0/0")).not.toBeInTheDocument();
+    });
+
+    test("lazy loads missing folder stats for portal file rows", async () => {
+        const personalSpace = makeSpace("personal-1", "我的技术文档", {
+            role: SpaceRole.ADMIN,
+        });
+        const folder = makeFile("101", "技术文档", {
+            type: FileType.FOLDER,
+            successFileNum: undefined,
+            fileNum: undefined,
+            processingFileNum: undefined,
+        });
+        let resolveStats: (value: any) => void = () => undefined;
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [],
+            personalSpaces: [personalSpace],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [folder],
+            total: 1,
+        } as any);
+        jest.mocked(getSpaceFolderStatsApi).mockImplementation(() => new Promise((resolve) => {
+            resolveStats = resolve;
+        }) as any);
+
+        renderWorkbench();
+
+        const folderRow = await screen.findByTestId("file-tree-row-101");
+        expect(within(folderRow).getByText("加载中")).toBeInTheDocument();
+        expect(within(folderRow).queryByText("(0/0)")).not.toBeInTheDocument();
+        expect(getSpaceFolderStatsApi).toHaveBeenCalledWith({
+            space_id: "personal-1",
+            folder_ids: ["101"],
+        });
+
+        await act(async () => {
+            resolveStats([{
+                folderId: "101",
+                successFileNum: 2,
+                fileNum: 5,
+                visibleSuccessFileNum: 2,
+                processingFileNum: 1,
+            }]);
+        });
+
+        await waitFor(() => {
+            expect(folderRow).toHaveTextContent(/2\s*\/\s*5/);
+        });
     });
 
     test("renders empty file list fields with double dash placeholders", async () => {

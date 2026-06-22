@@ -198,12 +198,15 @@ export function flattenUploadFolders(nodes: PortalUploadFolderNode[]): Array<{ i
 }
 
 export function folderCountText(file: KnowledgeFile) {
+    if (file.folderStatsLoading) return "加载中";
+    if (file.folderStatsError) return "--";
     if (file.successFileNum === undefined || file.fileNum === undefined) return "";
     return `(${file.successFileNum}/${file.fileNum})`;
 }
 
 export function isRetryable(file: KnowledgeFile) {
     if (file.status === FileStatus.FAILED || file.status === FileStatus.VIOLATION) return true;
+    if (isFolder(file) && (file.folderStatsLoading || file.folderStatsError)) return false;
     if (isFolder(file) && file.successFileNum !== undefined && file.fileNum !== undefined) {
         return file.successFileNum < file.fileNum;
     }

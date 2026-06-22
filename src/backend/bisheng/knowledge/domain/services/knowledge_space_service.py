@@ -5236,7 +5236,123 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 source_path_map[item_id] = space_name
         return folder_path_map, source_path_map
 
-    async def _handle_file_folder_extra_info(self, res: List[KnowledgeFile]) -> List[Dict]:
+    async def _count_folder_file_stats(
+        self,
+        folder: KnowledgeFile,
+        *,
+        permission_context: Optional[dict] = None,
+    ) -> Dict[str, int]:
+        from sqlmodel import col
+        from sqlalchemy import or_
+
+        prefix = f"{folder.file_level_path or ''}/{folder.id}"
+        stmt = (
+            select(KnowledgeFile.status, func.count(KnowledgeFile.id))
+            .where(
+                KnowledgeFile.knowledge_id == folder.knowledge_id,
+                KnowledgeFile.file_type == FileType.FILE.value,
+                or_(
+                    col(KnowledgeFile.file_level_path) == prefix,
+                    col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                ),
+            )
+            .group_by(KnowledgeFile.status)
+        )
+
+        in_progress_statuses = {
+            KnowledgeFileStatus.PROCESSING.value,
+            KnowledgeFileStatus.WAITING.value,
+            KnowledgeFileStatus.REBUILDING.value,
+        }
+        async with get_async_db_session() as session:
+            rows = (await session.exec(stmt)).all()
+
+        total = sum(row[1] for row in rows)
+        success = sum(row[1] for row in rows if row[0] == KnowledgeFileStatus.SUCCESS.value)
+        processing = sum(row[1] for row in rows if row[0] in in_progress_statuses)
+        visible_success = await self._count_visible_success_files_under_folder(
+            folder,
+            prefix,
+            permission_context=permission_context,
+        )
+        return {
+            "file_num": total,
+            "success_file_num": success,
+            "visible_success_file_num": visible_success,
+            "processing_file_num": processing,
+        }
+
+    async def _load_folder_stat_counts(self, folders: List[KnowledgeFile]) -> Dict[int, Dict[str, int]]:
+        folder_counts: Dict[int, Dict[str, int]] = {}
+        if not folders:
+            return folder_counts
+
+        folders_by_space: Dict[int, List[KnowledgeFile]] = {}
+        for folder in folders:
+            folders_by_space.setdefault(int(folder.knowledge_id), []).append(folder)
+
+        async def count_folder(folder: KnowledgeFile, permission_context: dict):
+            folder_counts[int(folder.id)] = await self._count_folder_file_stats(
+                folder,
+                permission_context=permission_context,
+            )
+
+        for space_id, space_folders in folders_by_space.items():
+            permission_context = await self._build_child_permission_context(space_id)
+            await asyncio.gather(
+                *(count_folder(folder, permission_context) for folder in space_folders)
+            )
+
+        return folder_counts
+
+    async def get_space_folder_stats(self, space_id: int, folder_ids: List[int]) -> Dict:
+        unique_folder_ids = self._dedupe_ids([int(folder_id) for folder_id in folder_ids or []])
+        if not unique_folder_ids:
+            return {"stats": []}
+
+        await self._require_read_permission(space_id)
+        folders = await KnowledgeFileDao.aget_file_by_ids(unique_folder_ids)
+        folder_by_id = {int(folder.id): folder for folder in folders}
+        if set(folder_by_id) != set(unique_folder_ids):
+            raise SpaceFolderNotFoundError()
+
+        ordered_folders: List[KnowledgeFile] = []
+        for folder_id in unique_folder_ids:
+            folder = self._ensure_space_folder(folder_by_id.get(folder_id), space_id)
+            ordered_folders.append(folder)
+
+        await asyncio.gather(
+            *(
+                self._require_resource_permission("can_read", "folder", int(folder.id))
+                for folder in ordered_folders
+            )
+        )
+
+        folder_counts = await self._load_folder_stat_counts(ordered_folders)
+        return {
+            "stats": [
+                {
+                    "folder_id": folder_id,
+                    **folder_counts.get(
+                        folder_id,
+                        {
+                            "file_num": 0,
+                            "success_file_num": 0,
+                            "visible_success_file_num": 0,
+                            "processing_file_num": 0,
+                        },
+                    ),
+                }
+                for folder_id in unique_folder_ids
+            ]
+        }
+
+    async def _handle_file_folder_extra_info(
+        self,
+        res: List[KnowledgeFile],
+        *,
+        include_folder_counts: bool = True,
+    ) -> List[Dict]:
         folder_ids = []
         file_ids = []
         for one in res:
@@ -5245,48 +5361,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else:
                 file_ids.append(one.id)
 
-        # folder need find all success file num and all file num
         folder_counts = {}
-        if folder_ids:
-            from sqlmodel import select, col
-            from sqlalchemy import func, or_
-            from bisheng.core.database import get_async_db_session
-
-            async def count_folder(folder: KnowledgeFile):
-                prefix = f"{folder.file_level_path or ''}/{folder.id}"
-                stmt = (
-                    select(KnowledgeFile.status, func.count(KnowledgeFile.id))
-                    .where(
-                        KnowledgeFile.knowledge_id == folder.knowledge_id,
-                        KnowledgeFile.file_type == 1,
-                        or_(
-                            col(KnowledgeFile.file_level_path) == prefix,
-                            col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                        ),
-                    )
-                    .group_by(KnowledgeFile.status)
-                )
-
-                in_progress_statuses = {
-                    KnowledgeFileStatus.PROCESSING.value,
-                    KnowledgeFileStatus.WAITING.value,
-                    KnowledgeFileStatus.REBUILDING.value,
-                }
-                async with get_async_db_session() as session:
-                    rows = (await session.exec(stmt)).all()
-                    total = sum(r[1] for r in rows)
-                    success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
-                    processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
-                    visible_success = await self._count_visible_success_files_under_folder(folder, prefix)
-                    folder_counts[folder.id] = {
-                        "file_num": total,
-                        "success_file_num": success,
-                        "visible_success_file_num": visible_success,
-                        "processing_file_num": processing,
-                    }
-
+        if include_folder_counts and folder_ids:
             folders = [f for f in res if f.file_type == FileType.DIR]
-            await asyncio.gather(*(count_folder(f) for f in folders))
+            folder_counts = await self._load_folder_stat_counts(folders)
 
         # file need find all tags
         file_tags = {}
@@ -5303,11 +5381,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for one in res:
             item = one.model_dump()
             if one.file_type == FileType.DIR:
-                counts = folder_counts.get(
-                    one.id,
-                    {"file_num": 0, "success_file_num": 0, "processing_file_num": 0},
-                )
-                item.update(counts)
+                if include_folder_counts:
+                    counts = folder_counts.get(
+                        int(one.id),
+                        {
+                            "file_num": 0,
+                            "success_file_num": 0,
+                            "visible_success_file_num": 0,
+                            "processing_file_num": 0,
+                        },
+                    )
+                    item.update(counts)
                 item["summary"] = ""
             else:
                 item["thumbnails"] = self.get_logo_share_link(one.thumbnails)
@@ -5321,7 +5405,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return result
 
-    async def _count_visible_success_files_under_folder(self, folder: KnowledgeFile, prefix: str) -> int:
+    async def _count_visible_success_files_under_folder(
+        self,
+        folder: KnowledgeFile,
+        prefix: str,
+        *,
+        permission_context: Optional[dict] = None,
+    ) -> int:
         children = await SpaceFileDao.get_children_by_prefix(
             folder.knowledge_id,
             prefix,
@@ -5334,7 +5424,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ]
         if not files:
             return 0
-        visible_files = await self._filter_visible_child_items(files, space_id=int(folder.knowledge_id))
+        visible_files = await self._filter_visible_child_items(
+            files,
+            space_id=int(folder.knowledge_id),
+            context=permission_context,
+        )
         return len(visible_files)
 
     async def _filter_visible_child_items(
@@ -5389,9 +5483,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Returns ``(visible_page_items, has_more)`` — the visible items are
         already truncated to ``page_size`` if ``has_more`` is True.
         """
-        from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
+        from bisheng.knowledge.domain.models.knowledge_space_file import (
+            build_child_order_cursor_key,
+            normalize_child_order_field,
+            normalize_child_order_sort,
+        )
 
         visible_page_items: List[KnowledgeFile] = []
+        order_field = normalize_child_order_field(order_field)
+        order_sort = normalize_child_order_sort(order_sort)
         permission_context = await self._build_child_permission_context(space_id)
         batch_cursor: Optional[List] = list(cursor) if cursor else None
 
@@ -5428,12 +5528,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # the last visible, items filtered out between them would be
             # re-emitted on the next batch.
             last_db = batch_items[-1]
-            batch_cursor = [
-                last_db.file_type,
-                _compute_ext_rank_python(last_db.file_name),
-                last_db.update_time,
-                last_db.id,
-            ]
+            batch_cursor = build_child_order_cursor_key(last_db, order_field)
 
             if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
                 break
@@ -5461,20 +5556,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
-        from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
+        from bisheng.knowledge.domain.models.knowledge_space_file import (
+            build_child_order_cursor_key,
+            child_order_cursor_key_len,
+            normalize_child_order_field,
+            normalize_child_order_sort,
+        )
 
-        await self._require_read_permission(space_id)
         if parent_id:
             await self._require_folder_relation(space_id, parent_id, "can_read")
-            await self._require_permission_id("folder", parent_id, "view_folder", space_id=space_id)
         else:
-            await self._require_permission_id("knowledge_space", space_id, "view_space")
+            await self._require_read_permission(space_id)
 
+        order_field = normalize_child_order_field(order_field)
+        order_sort = normalize_child_order_sort(order_sort)
         context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
         try:
             decoded = decode_cursor(
                 cursor,
-                expected_key_len=4,
+                expected_key_len=child_order_cursor_key_len(order_field),
                 expected_context=context,
             )
         except CursorDecodeError as exc:
@@ -5483,7 +5583,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Exclude non-primary version files so only the current primary revision is visible.
         exclude_file_ids: Optional[List[int]] = None
         if self.version_repo is not None:
-            exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
+            exclude_file_ids = (
+                await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id])
+                or None
+            )
 
         visible_page_items, has_more = await self._scan_visible_child_items(
             space_id=space_id,
@@ -5501,18 +5604,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(visible_page_items)
 
-        data = await self._handle_file_folder_extra_info(visible_page_items)
+        data = await self._handle_file_folder_extra_info(
+            visible_page_items,
+            include_folder_counts=False,
+        )
 
         next_cursor: Optional[str] = None
         if has_more and visible_page_items:
             last = visible_page_items[-1]
             next_cursor = encode_cursor(
-                (
-                    last.file_type,
-                    _compute_ext_rank_python(last.file_name),
-                    last.update_time,
-                    last.id,
-                ),
+                build_child_order_cursor_key(last, order_field),
                 context=context,
             )
 

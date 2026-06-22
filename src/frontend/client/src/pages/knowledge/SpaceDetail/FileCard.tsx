@@ -509,12 +509,18 @@ export function FileCard({
                     {/* 底部信息 (标签、数量和时间) */}
                     <div className="flex items-center justify-between mt-1 min-w-0 gap-2">
                         <div className="flex items-center flex-1 min-w-0 min-h-[24px]">
-                            {isAdmin && isFolder && file.fileNum != null && (
+                            {isFolder && file.folderStatsLoading && (
+                                <span className="text-xs text-[#86909c] whitespace-nowrap">加载中</span>
+                            )}
+                            {isFolder && file.folderStatsError && (
+                                <span className="text-xs text-[#86909c] whitespace-nowrap">--</span>
+                            )}
+                            {isAdmin && isFolder && !file.folderStatsLoading && !file.folderStatsError && file.fileNum != null && (
                                 <span className="text-xs text-[#86909c] whitespace-nowrap">
                                     {localize("com_knowledge_items_count", { count: file.fileNum ?? 0 })}
                                 </span>
                             )}
-                            {!isAdmin && isFolder && file.fileNum != null && (
+                            {!isAdmin && isFolder && !file.folderStatsLoading && !file.folderStatsError && file.fileNum != null && (
                                 <span className="text-xs text-[#86909c] whitespace-nowrap">
                                     {localize("com_knowledge_items_count", { count: file.successFileNum ?? 0 })}
                                 </span>
