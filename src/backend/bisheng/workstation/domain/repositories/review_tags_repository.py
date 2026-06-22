@@ -71,7 +71,7 @@ class ReviewTagsRepositoryImpl:
     async def query_review_tag_link_list_by_tag_id(self, tag_id: int, tenant_id: int):
         statement = select(ReviewTagLink).where(ReviewTagLink.tag_id == tag_id, ReviewTagLink.tenant_id == tenant_id, ReviewTagLink.is_deleted == False)
         review_tag_link = await self.session.exec(statement)
-        return review_tag_link.all()
+        return review_tag_link.scalars().all()
 
 
     async def approve_tag_to_move(self, review_tag: ReviewTag, review_tag_link: list[ReviewTagLink]):

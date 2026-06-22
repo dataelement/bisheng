@@ -32,6 +32,7 @@ class TagRepositoryImpl:
             taglink.resource_id = link.resource_id
             taglink.resource_type = link.resource_type
             taglink.tenant_id = link.tenant_id
+            taglink.user_id = link.user_id
             taglink.create_time = link.create_time
             taglink.update_time = link.update_time
             self.session.add(taglink)
