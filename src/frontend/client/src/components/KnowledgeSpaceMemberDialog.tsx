@@ -220,7 +220,7 @@ export function KnowledgeSpaceMemberDialog({
             return (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <button className="inline-flex items-center gap-1 text-[14px] text-[#999] hover:text-[#165DFF]">
+                        <button className="inline-flex items-center gap-1 text-[14px] text-[#999] hover:text-blue-500">
                             {getRoleLabel(m.role, localize)}
                             <ChevronDown className="size-3.5" />
                         </button>
@@ -230,7 +230,7 @@ export function KnowledgeSpaceMemberDialog({
                             className={cn(
                                 "cursor-default",
                                 m.role === "member" &&
-                                    "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
+                                    "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500"
                             )}
                             onClick={(e) => e.preventDefault()}
                         >
@@ -252,7 +252,7 @@ export function KnowledgeSpaceMemberDialog({
         return (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <button className="inline-flex items-center gap-1 text-[14px] text-[#999] hover:text-[#165DFF]">
+                    <button className="inline-flex items-center gap-1 text-[14px] text-[#999] hover:text-blue-500">
                         {getRoleLabel(m.role, localize)}
                         <ChevronDown className="size-3.5" />
                     </button>
@@ -261,7 +261,7 @@ export function KnowledgeSpaceMemberDialog({
                     <DropdownMenuItem
                         className={cn(
                             m.role === "admin" &&
-                                "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
+                                "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500"
                         )}
                         onClick={() => {
                             if (!canCreatorManage || m.role === "admin" || m.role === "creator") return;
@@ -273,7 +273,7 @@ export function KnowledgeSpaceMemberDialog({
                     <DropdownMenuItem
                         className={cn(
                             m.role === "member" &&
-                                "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
+                                "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500"
                         )}
                         onClick={() => {
                             if (!canCreatorManage || m.role === "member") return;
@@ -380,7 +380,7 @@ export function KnowledgeSpaceMemberDialog({
                         <div className="flex items-center gap-4">
                         <span className="shrink-0 leading-none">
                             <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_1")}</span>
-                            <span className="text-[#165DFF]">{total}</span>
+                            <span className="text-blue-500">{total}</span>
                             <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_2")}</span>
                             <span className="text-[#4E5969]">{PAGE_SIZE}</span>
                             <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_3")}</span>
@@ -388,7 +388,7 @@ export function KnowledgeSpaceMemberDialog({
                         <div className="flex shrink-0 items-center gap-1.5">
                             <Button
                                 variant="ghost"
-                                className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-[#165DFF] disabled:opacity-40"
+                                className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
                                 disabled={page <= 1}
                                 onClick={() => setPage(Math.max(1, page - 1))}
                             >
@@ -405,8 +405,8 @@ export function KnowledgeSpaceMemberDialog({
                                             className={cn(
                                                 "flex h-6 min-w-6 items-center justify-center px-1.5 text-[14px] transition-colors",
                                                 p === page
-                                                    ? "rounded-[8px] border border-[#165DFF] text-[#165DFF]"
-                                                    : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-[#165DFF]"
+                                                    ? "rounded-[8px] border border-blue-500 text-blue-500"
+                                                    : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-blue-500"
                                             )}
                                             onClick={() => setPage(p)}
                                         >
@@ -417,7 +417,7 @@ export function KnowledgeSpaceMemberDialog({
                             })}
                             <Button
                                 variant="ghost"
-                                className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-[#165DFF] disabled:opacity-40"
+                                className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
                                 disabled={page >= totalPages}
                                 onClick={() => setPage(Math.min(totalPages, page + 1))}
                             >

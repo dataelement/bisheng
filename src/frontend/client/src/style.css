@@ -61,7 +61,7 @@ html {
   --header-hover: var(--gray-50);
   --header-button-hover: var(--gray-50);
   --surface-active: var(--gray-100);
-  --surface-active-alt: rgb(219 234 254);
+  --surface-active-alt: rgb(232 243 255); /* #E8F3FF — brand-blue selection bg */
   --surface-hover: var(--gray-200);
   --surface-hover-alt: var(--gray-300);
   --surface-primary: var(--white);
@@ -88,7 +88,7 @@ html {
   --foreground: 0 0% 3.9%;
   --card: 0 0% 100%;
   --card-foreground: 0 0% 3.9%;
-  --primary: 228 100% 60%;
+  --primary: 222 100% 54%; /* #165DFF — design brand blue */
   --primary-foreground: 0 0% 100%;
   --secondary: 0 0% 96.1%;
   --secondary-foreground: 0 0% 9%;
@@ -108,6 +108,45 @@ html {
   --chart-4: 43 74% 66%;
   --chart-5: 27 87% 67%;
   --switch-unchecked: 0 0% 58%;
+
+  /* Brand accent palette — default = design-system brand blue (Arco-style ramp,
+     primary-6 #165DFF / pressed #024DE3). RGB channels so Tailwind's `blue-*`
+     utilities support `/<alpha>`. 500 = main accent, 600 = button/strong.
+     Overridden by .theme-green. */
+  --brand-50: 232 243 255;   /* #E8F3FF — light tint / selection bg */
+  --brand-100: 190 218 255;  /* #BEDAFF */
+  --brand-200: 148 191 255;  /* #94BFFF */
+  --brand-300: 106 161 255;  /* #6AA1FF */
+  --brand-400: 64 128 255;   /* #4080FF */
+  --brand-500: 22 93 255;    /* #165DFF — main brand blue */
+  --brand-600: 2 77 227;     /* #024DE3 — button / pressed */
+  --brand-700: 2 57 171;     /* #0239AB */
+  --brand-800: 4 43 128;     /* #042B80 */
+  --brand-900: 5 29 82;      /* #051D52 */
+  --brand-main: 22 93 255;   /* #165DFF */
+}
+
+/* Green brand theme — toggled via `theme-green` class on <html>.
+   Re-points the brand palette + the few brand-tinted tokens. Frontend-only.
+   Mirrors the blue ramp: 500 = main #187C54, 600 = pressed, 50 = #E4F1EC tint. */
+.theme-green {
+  --brand-50: 228 241 236;   /* #E4F1EC — light tint / selection bg */
+  --brand-100: 204 228 218;  /* #CCE4DA */
+  --brand-200: 163 210 192;  /* #A3D2C0 */
+  --brand-300: 111 186 160;  /* #6FBAA0 */
+  --brand-400: 61 155 120;   /* #3D9B78 */
+  --brand-500: 24 124 84;    /* #187C54 — main brand green */
+  --brand-600: 19 99 69;     /* #136345 — button / pressed */
+  --brand-700: 15 77 54;     /* #0F4D36 */
+  --brand-800: 10 56 38;     /* #0A3826 */
+  --brand-900: 6 38 25;      /* #062619 */
+  --brand-main: 24 124 84;   /* #187C54 */
+
+  /* Brand-tinted surfaces driven by their own vars (not the blue palette). */
+  --primary: 154 67% 29%;
+  --surface-active-alt: rgb(228 241 236);
+  --surface-primary-alt: #f4faf7;
+  --search-input: hsla(152, 40%, 99%, 1);
 }
 
 .dark {
@@ -2818,7 +2857,7 @@ button.scroll-convo {
 }
 
 .lingsi-text {
-  background: linear-gradient(90deg, #143BFF 0%, #58A6FF 50.48%, #143BFF 100%);
+  background: linear-gradient(90deg, rgb(var(--brand-500)) 0%, rgb(var(--brand-400)) 50.48%, rgb(var(--brand-500)) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -2875,12 +2914,12 @@ button.scroll-convo {
 }
 
 .ai-btn-border-draw::before {
-  border-color: #335CFF;
+  border-color: rgb(var(--brand-500));
   clip-path: inset(0 100% 100% 0);
 }
 
 .ai-btn-border-draw::after {
-  border-color: #335CFF;
+  border-color: rgb(var(--brand-500));
   clip-path: inset(100% 0 0 100%);
 }
 

@@ -77,7 +77,7 @@ export function FileListRow({
             case FileStatus.SUCCESS:
                 return <span className="text-[#00b42a]">成功</span>;
             case FileStatus.PROCESSING:
-                return <span className="text-[#165dff]">处理中</span>;
+                return <span className="text-blue-500">处理中</span>;
             case FileStatus.FAILED:
                 return <span className="text-[#f53f3f]">失败</span>;
             case FileStatus.VIOLATION:

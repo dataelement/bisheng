@@ -534,7 +534,7 @@ export const ChatKnowledge = ({
                   <div className="relative shrink-0">
                     <span
                       aria-hidden
-                      className="block size-4 bg-[#165DFF]"
+                      className="block size-4 bg-blue-500"
                       style={{
                         WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
                         maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,

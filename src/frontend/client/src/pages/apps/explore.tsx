@@ -33,7 +33,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                 "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
                 "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
                 "fine-pointer:hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
-                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity fine-pointer:group-hover:after:opacity-100",
+                "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover:after:opacity-100",
                 "fine-pointer:hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
             )}
         >
@@ -109,7 +109,7 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
                         ) : null}
                         <button
                             onClick={(e) => { e.stopPropagation(); onClick(agent); }}
-                            className="bg-[#335cff] flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] transition-colors fine-pointer:hover:bg-blue-600"
+                            className="bg-blue-500 flex flex-[1_0_0] h-[28px] items-center justify-center px-[10px] rounded-[6px] text-white text-[14px] font-['PingFang_SC'] transition-colors fine-pointer:hover:bg-blue-600"
                         >
                             {localize('com_app_start_chat')}
                         </button>
@@ -264,13 +264,13 @@ export default function ExplorePlaza() {
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}
-                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-[#335CFF]"
+                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
                     >
                         <ArrowLeft className="size-3.5" />
                     </Button>
                 </div>
                 <div className="relative mx-auto flex w-full max-w-[1000px] flex-col items-center justify-center px-5 pb-5 pt-7 text-center">
-                    <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-[#335CFF]">
+                    <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">
                         {bannerTitle}
                     </h1>
                     <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
@@ -309,12 +309,12 @@ export default function ExplorePlaza() {
                     )}
                 >
                     {loading ? (
-                        <div className="flex flex-col items-center gap-3 text-[#335cff]">
+                        <div className="flex flex-col items-center gap-3 text-blue-500">
                             <LoadingIcon className="size-20 text-primary" />
                             <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     ) : loadingMore ? (
-                        <div className="flex items-center gap-2 text-[#335cff]">
+                        <div className="flex items-center gap-2 text-blue-500">
                             <LoadingIcon className="size-6 text-primary" />
                             <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
                         </div>

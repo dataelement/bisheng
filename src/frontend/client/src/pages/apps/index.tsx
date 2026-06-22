@@ -113,7 +113,7 @@ export default function AppCenter() {
             to="/apps/explore"
             className="backdrop-blur-[4px] flex shrink-0 items-center justify-center gap-[6px] rounded-[8px] px-[10px] py-[6px] transition-colors fine-pointer:hover:bg-gray-50"
         >
-            <ChannelBlocksArrowsIcon className="size-4 text-[#335cff]" />
+            <ChannelBlocksArrowsIcon className="size-4 text-blue-500" />
             <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px] whitespace-nowrap">
                 探索更多应用
             </span>
@@ -133,7 +133,7 @@ export default function AppCenter() {
                 <>
                     {/* H5：一行 — 应用中心 | 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}
                     <header className="flex w-full max-w-[1000px] shrink-0 items-center gap-2 min-w-0">
-                        <h1 className="font-['PingFang_SC'] font-semibold leading-[28px] text-[#335cff] text-[20px] shrink-0">
+                        <h1 className="font-['PingFang_SC'] font-semibold leading-[28px] text-blue-500 text-[20px] shrink-0">
                             应用中心
                         </h1>
                         <p
@@ -151,7 +151,7 @@ export default function AppCenter() {
             ) : (
                 <>
                     <header className="relative flex w-full max-w-[1000px] shrink-0 items-center leading-8">
-                        <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
+                        <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-blue-500 text-[24px]">
                             应用中心
                         </h1>
                     </header>

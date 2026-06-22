@@ -106,7 +106,7 @@ export default function MenuUnavailablePage() {
           <button
             type="button"
             disabled={applied}
-            className="rounded-lg bg-[#165dff] px-4 py-2 text-sm text-white transition-colors hover:bg-[#0e42d2] disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => setShowDialog(true)}
           >
             {applied
@@ -131,7 +131,7 @@ export default function MenuUnavailablePage() {
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               placeholder={localize('com_menu_unavailable_reason_placeholder') as string}
-              className="mb-4 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-[#165dff]"
+              className="mb-4 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-blue-500"
             />
             <div className="flex justify-end gap-3">
               <button
@@ -145,7 +145,7 @@ export default function MenuUnavailablePage() {
                 type="button"
                 disabled={submitting}
                 onClick={() => void handleSubmit()}
-                className="rounded-lg bg-[#165dff] px-4 py-2 text-sm text-white hover:bg-[#0e42d2] disabled:opacity-60"
+                className="rounded-lg bg-blue-500 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-60"
               >
                 {submitting ? localize('com_menu_unavailable_apply_submitting') : localize('com_ui_submit')}
               </button>

@@ -1,4 +1,4 @@
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Palette } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { useRecoilState } from "recoil";
@@ -45,12 +45,14 @@ type ApprovalCenterTarget = {
 function UserPopMenuDrawer() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [langOpen, setLangOpen] = useState(false);
+    const [themeOpen, setThemeOpen] = useState(false);
     const rootRef = useRef<HTMLDivElement>(null);
 
     const { user, logout } = useAuthContext();
     const { unreadCount, refreshCount } = useNotificationCount();
     const localize = useLocalize();
     const [langcode, setLangcode] = useRecoilState(store.lang);
+    const [brand, setBrand] = useRecoilState(store.brandTheme);
     const changeLang = (lang: string) => {
         setLangcode(lang);
         setLangOpen(false);
@@ -95,6 +97,7 @@ function UserPopMenuDrawer() {
     useEffect(() => {
         if (!menuOpen) {
             setLangOpen(false);
+            setThemeOpen(false);
             return;
         }
         void refreshCount();
@@ -250,6 +253,46 @@ function UserPopMenuDrawer() {
                         ) : null}
                     </div>
 
+                    {/* Theme color — temporary frontend-only switch (blue / green) */}
+                    <div className="mt-0.5">
+                        <button
+                            type="button"
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-1.5 text-left outline-none hover:bg-gray-50"
+                            onClick={() => setThemeOpen((o) => !o)}
+                        >
+                            <div className="flex items-center gap-3">
+                                <Palette className="size-[18px] text-gray-600" />
+                                <span className="whitespace-nowrap text-[14px] text-gray-700">{localize("com_nav_theme_color")}</span>
+                            </div>
+                            <ChevronRight
+                                className={cn("size-4 shrink-0 text-gray-500 transition-transform", themeOpen && "rotate-90")}
+                                aria-hidden
+                            />
+                        </button>
+                        {themeOpen ? (
+                            <div className="mt-1 space-y-0.5 border-l-2 border-gray-100 py-1 pl-3 ml-3">
+                                <button
+                                    type="button"
+                                    className="flex w-full items-center rounded-lg py-2 pl-2 pr-3 text-left text-sm hover:bg-gray-50"
+                                    onClick={() => setBrand("blue")}
+                                >
+                                    <span className="mr-2 inline-block size-3.5 shrink-0 rounded-full bg-[#165dff]" />
+                                    <span className="flex-1">{localize("com_nav_theme_color_blue")}</span>
+                                    {brand === "blue" && <Check className="size-4 text-blue-600" />}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="flex w-full items-center rounded-lg py-2 pl-2 pr-3 text-left text-sm hover:bg-gray-50"
+                                    onClick={() => setBrand("green")}
+                                >
+                                    <span className="mr-2 inline-block size-3.5 shrink-0 rounded-full bg-[#187c54]" />
+                                    <span className="flex-1">{localize("com_nav_theme_color_green")}</span>
+                                    {brand === "green" && <Check className="size-4 text-blue-600" />}
+                                </button>
+                            </div>
+                        ) : null}
+                    </div>
+
                     <button
                         type="button"
                         className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left outline-none transition-colors hover:bg-red-50 text-[#f53f3f]"
@@ -307,6 +350,7 @@ function UserPopMenuRail() {
 
     const localize = useLocalize();
     const [langcode, setLangcode] = useRecoilState(store.lang);
+    const [brand, setBrand] = useRecoilState(store.brandTheme);
     const changeLang = (lang: string) => setLangcode(lang);
     const displayName = user?.username || "admin";
     const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
@@ -471,18 +515,38 @@ function UserPopMenuRail() {
                         <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
                             <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
                                 <span className={cn(actionMenuLabelClassName, "flex-1")}>中文</span>
-                                {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                                {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-500" />}
                             </ActionMenuItem>
                             <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('en'))}>
                                 <span className={cn(actionMenuLabelClassName, "flex-1")}>English</span>
-                                {langcode === 'en' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                                {langcode === 'en' && <Check className="ml-2 size-4 text-blue-500" />}
                             </ActionMenuItem>
                             {!window.APP_CONFIG?.disableJa && (
                                 <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('ja'))}>
                                     <span className={cn(actionMenuLabelClassName, "flex-1")}>日本語</span>
-                                    {langcode === 'ja' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                                    {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-500" />}
                                 </ActionMenuItem>
                             )}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+
+                    {/* Theme color — temporary frontend-only switch (blue / green) */}
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className={cn(actionMenuItemClassName, "data-[state=open]:bg-[#f2f3f5]")}>
+                            <Palette className={actionMenuItemIconClassName} />
+                            <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_theme_color')}</span>
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
+                            <ActionMenuItem onSelect={runMenuItemSelect(() => setBrand('blue'))}>
+                                <span className="mr-2 inline-block size-3.5 shrink-0 rounded-full bg-[#165dff]" />
+                                <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_theme_color_blue')}</span>
+                                {brand === 'blue' && <Check className="ml-2 size-4 text-blue-500" />}
+                            </ActionMenuItem>
+                            <ActionMenuItem onSelect={runMenuItemSelect(() => setBrand('green'))}>
+                                <span className="mr-2 inline-block size-3.5 shrink-0 rounded-full bg-[#187c54]" />
+                                <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_theme_color_green')}</span>
+                                {brand === 'green' && <Check className="ml-2 size-4 text-blue-500" />}
+                            </ActionMenuItem>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
 

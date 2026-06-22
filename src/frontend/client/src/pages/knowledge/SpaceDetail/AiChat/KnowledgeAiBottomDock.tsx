@@ -160,7 +160,7 @@ export function KnowledgeAiBottomDock({
                         aria-label={localize("com_knowledge.history_chat")}
                         className={cn(
                             "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                            showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
+                            showHistory ? "text-blue-500" : "text-[#212121] hover:text-[#4e5969]",
                         )}
                     >
                         <Outlined.History className="size-4" />
@@ -353,7 +353,7 @@ export function KnowledgeAiBottomDock({
                                                     aria-label={localize("com_knowledge.history_chat")}
                                                     className={cn(
                                                         "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                                                        showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
+                                                        showHistory ? "text-blue-500" : "text-[#212121] hover:text-[#4e5969]",
                                                     )}
                                                 >
                                                     <Outlined.History className="size-4 shrink-0" />

@@ -472,7 +472,7 @@ export function KnowledgeSpacePreviewDrawer({
                             )}
 
                             <div className="flex items-center gap-1.5 mb-3 mt-4">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-[#165DFF] text-white text-xs">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs">
                                     {space.creator?.[0] || "?"}
                                 </span>
                                 <span className="text-sm text-[#86909c]">{space.creator}</span>
@@ -514,7 +514,7 @@ export function KnowledgeSpacePreviewDrawer({
                                     <div className="mb-1 text-sm text-[#4E5969] flex items-center gap-2 flex-wrap">
                                         <button
                                             type="button"
-                                            className="text-[#165DFF] hover:underline"
+                                            className="text-blue-500 hover:underline"
                                             onClick={() => goToParentDepth(0)}
                                         >
                                             {localize("com_knowledge.all_files")}</button>
@@ -526,7 +526,7 @@ export function KnowledgeSpacePreviewDrawer({
                                                     <button
                                                         type="button"
                                                         onClick={() => goToParentDepth(depth)}
-                                                        className={depth === parentNameStack.length ? "text-[#86909c] cursor-default" : "text-[#165DFF] hover:underline"}
+                                                        className={depth === parentNameStack.length ? "text-[#86909c] cursor-default" : "text-blue-500 hover:underline"}
                                                         disabled={depth === parentNameStack.length}
                                                     >
                                                         {name}

@@ -32,7 +32,7 @@ export function TaskModeToggle({ active, disabled = false, onClick }: TaskModeTo
             aria-label={showExit ? localize('com_linsight_exit_task_mode') : localize('com_linsight_task_mode')}
             className={cn(
                 // primary-100 is not a theme token; use a light primary tint to match.
-                'flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal transition-colors outline-none hover:bg-[#E0E6FF]',
+                'flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal transition-colors outline-none hover:bg-blue-100',
                 active ? 'text-blue-600' : 'text-[#4E5969]',
                 disabled && 'cursor-not-allowed opacity-50',
             )}

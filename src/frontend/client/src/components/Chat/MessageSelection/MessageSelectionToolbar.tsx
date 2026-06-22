@@ -149,7 +149,7 @@ export function MessageSelectionToolbar({
         iconColor: string;
     };
     const formatButtons: FormatButton[] = [
-        { format: 'docx', labelKey: 'workstation.messageExport.exportAsWord', icon: Outlined.FileWord, iconColor: 'text-[#2F6CF6]' },
+        { format: 'docx', labelKey: 'workstation.messageExport.exportAsWord', icon: Outlined.FileWord, iconColor: 'text-blue-500' },
         { format: 'pdf', labelKey: 'workstation.messageExport.exportAsPdf', icon: Outlined.FilePdf, iconColor: 'text-[#E84B3C]' },
         { format: 'md', labelKey: 'workstation.messageExport.exportAsMarkdown', icon: Outlined.FileEditing, iconColor: 'text-[#F58A1F]' },
         { format: 'txt', labelKey: 'workstation.messageExport.exportAsTxt', icon: Outlined.FileTxt, iconColor: 'text-[#5C6680]' },

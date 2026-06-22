@@ -22,7 +22,7 @@ export interface HubModuleLink {
   closeDrawerOnNavigate?: boolean;
 }
 
-/** Shared row styles: matches MainLayout narrow SidebarItem (p-3, rounded-lg, #e6edfc). */
+/** Shared row styles: matches MainLayout narrow SidebarItem (p-3, rounded-lg, brand-tinted active bg). */
 const hubNavItemClassName = (
   navActive: boolean,
   routeActive: boolean,
@@ -30,15 +30,15 @@ const hubNavItemClassName = (
   squareItems: boolean,
 ) =>
   cn(
-    'flex cursor-pointer items-center justify-center rounded-lg p-3 transition-colors fine-pointer:hover:bg-[#e6edfc] coarse-pointer:hover:bg-transparent',
+    'flex cursor-pointer items-center justify-center rounded-lg p-3 transition-colors fine-pointer:hover:bg-blue-500/[0.07] coarse-pointer:hover:bg-transparent',
     squareItems && 'h-11 w-11 p-0 shrink-0',
     equalWidth && !squareItems && 'min-w-0 flex-1',
     !equalWidth && 'shrink-0',
-    (navActive || routeActive) && 'bg-[#e6edfc]',
+    (navActive || routeActive) && 'bg-blue-500/[0.07]',
   );
 
 const hubIconClassName = (on: boolean) =>
-  cn('size-5 shrink-0', on ? 'text-[#335CFF]' : 'text-[#818181]');
+  cn('size-5 shrink-0', on ? 'text-blue-500' : 'text-[#818181]');
 
 export function useHubModuleLinks(): HubModuleLink[] {
   const { pathname } = useLocation();

@@ -507,7 +507,7 @@ export function CreateChannelDrawer({
 
                                                     <RadioGroup.Item
                                                         value={opt.value}
-                                                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                                     >
                                                         <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                                     </RadioGroup.Item>
@@ -766,7 +766,7 @@ export function CreateChannelDrawer({
                                             form.setSubmitting(false);
                                         }
                                     }}
-                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 touch-mobile:flex-1"
+                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 touch-mobile:flex-1"
                                 >
                                     {isEditMode
                                         ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")

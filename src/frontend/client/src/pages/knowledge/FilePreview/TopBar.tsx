@@ -157,7 +157,7 @@ export function TopBar({
                                 <ZoomOutIcon className="text-[#64698b]" />
                             </Button>
 
-                            <div className="bg-white border hover:border-[#335cff] cursor-pointer transition-colors border-[#ececec] border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-[6px] shrink-0 w-[88px] h-[32px]">
+                            <div className="bg-white border hover:border-blue-500 cursor-pointer transition-colors border-[#ececec] border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-[6px] shrink-0 w-[88px] h-[32px]">
                                 <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
                                     <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] not-italic relative shrink-0 text-[#212121] text-[14px] whitespace-nowrap">
                                         {zoomLevel}%

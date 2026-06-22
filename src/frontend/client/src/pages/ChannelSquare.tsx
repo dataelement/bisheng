@@ -252,7 +252,7 @@ function ChannelSquare({
             <Button
               variant="ghost"
               onClick={onBack}
-              className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#165DFF]"
+              className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-blue-500"
             >
               <ArrowLeft className="size-3.5" />
             </Button>
@@ -262,7 +262,7 @@ function ChannelSquare({
         {/* 主要内容 */}
         <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
 
-          <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">
+          <h1 className="mb-1 text-[26px] font-semibold text-blue-500">
             {tTitle}
           </h1>
           <p className="text-[13px] text-[#86909C]">

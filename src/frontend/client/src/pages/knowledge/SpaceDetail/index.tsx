@@ -1325,7 +1325,7 @@ export function KnowledgeSpaceContent({
                                 {searchQuery ? localize("com_knowledge.no_matched_file") : canUploadFile ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
                                 {canUploadFile && !searchQuery && (
                                     <span
-                                        className="cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                                        className="cursor-pointer text-blue-500 transition-colors hover:text-blue-400 active:text-blue-700"
                                         onClick={triggerUpload}
                                     >
                                         {localize("com_knowledge.upload_file")}

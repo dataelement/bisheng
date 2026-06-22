@@ -116,7 +116,7 @@ export function GuestConvoItem({ conv, isActive, onClick, onRename, onDelete }: 
               <X className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-[#4e5969]" />
             </button>
             <button onClick={submitRename}>
-              <Check className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-[#165dff]" />
+              <Check className="h-4 w-4 transition-colors duration-200 ease-in-out hover:opacity-70 text-blue-500" />
             </button>
           </div>
         </div>

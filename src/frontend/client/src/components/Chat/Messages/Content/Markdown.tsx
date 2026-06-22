@@ -291,7 +291,7 @@ function CitationPreviewCard({
   const cardClassName = 'group relative cursor-pointer w-[320px] max-w-[calc(100vw-32px)] overflow-hidden rounded-lg bg-white text-[#1D2129] shadow-[0_4px_19px_rgba(34,34,34,0.07)]';
   const titleClassName = 'min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-[#1D2129]';
   const titleContainerClassName = 'bg-white p-3';
-  const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-[#024DE3]`;
+  const interactiveTitleClassName = `${titleClassName} transition-colors duration-200 group-hover:text-blue-600`;
   const ragTitleClassName = 'min-w-0 truncate text-[14px] font-medium leading-[22px] text-[#1D2129]';
   const formatSourceMeta = (value?: string) => {
     if (!value) {
@@ -374,13 +374,13 @@ function CitationPreviewCard({
       <CitationSourceIcon detail={detail} preview={preview} type={preview.type} />
       <div className="flex min-w-0 flex-1 items-center gap-1">
         <span
-          className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-[#024DE3]` : ragTitleClassName} min-w-0 truncate`}
+          className={`${onOpenDocumentPreview ? `${ragTitleClassName} transition-colors duration-200 group-hover:text-blue-600` : ragTitleClassName} min-w-0 truncate`}
           title={preview.title}
         >
           {ragTitleParts.name || preview.title}
         </span>
         {ragTitleParts.extension && (
-          <span className={`${onOpenDocumentPreview ? 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129] transition-colors duration-200 group-hover:text-[#024DE3]' : 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]'}`}>
+          <span className={`${onOpenDocumentPreview ? 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129] transition-colors duration-200 group-hover:text-blue-600' : 'shrink-0 text-[14px] font-medium leading-[22px] text-[#1D2129]'}`}>
             {ragTitleParts.extension}
           </span>
         )}
@@ -648,7 +648,7 @@ const Citation = ({
             if (!citationPreviewUsesHover) return;
             scheduleClose();
           }}
-          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] ${notPermitted ? 'cursor-default' : 'cursor-pointer'} select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-[#024DE3]/25 focus-visible:ring-2 ${citationClassName}`}
+          className={`ml-2 inline-flex h-[18px] min-h-[18px] min-w-[18px] ${notPermitted ? 'cursor-default' : 'cursor-pointer'} select-none items-center justify-center rounded-full px-1 text-[12px] font-medium leading-none outline-none ring-blue-600/25 focus-visible:ring-2 ${citationClassName}`}
         >
           <span className="flex items-center justify-center">{children}</span>
         </button>

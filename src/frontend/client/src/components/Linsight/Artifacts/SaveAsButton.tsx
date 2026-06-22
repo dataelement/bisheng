@@ -90,7 +90,7 @@ export function SaveAsButton({ file, versionId, iconOnly = false }: SaveAsButton
             type="button"
             disabled={busy}
             aria-label={localize('com_linsight_save_as')}
-            className="rounded-md p-1 text-[#8C8C8C] transition-colors hover:text-[#335CFF] disabled:opacity-50"
+            className="rounded-md p-1 text-[#8C8C8C] transition-colors hover:text-blue-500 disabled:opacity-50"
         >
             <Outlined.Download className="size-[18px]" />
         </button>

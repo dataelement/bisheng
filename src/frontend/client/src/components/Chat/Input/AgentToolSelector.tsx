@@ -123,7 +123,7 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
           {/* Blue dot when any tool is selected — mirrors the knowledge-space
               selector (ChatKnowledge) so both pickers signal an active selection. */}
           <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0 text-[#165DFF]", isActive && "text-blue-600")} strokeWidth={1.5} />
+            <ApiAppIcon size="15" className={cn("shrink-0 text-blue-500", isActive && "text-blue-600")} strokeWidth={1.5} />
             {isActive && (
               <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
             )}

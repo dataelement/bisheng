@@ -47,7 +47,7 @@ const ROLE_SELECT_TRIGGER_CLASS = cn(
     ROLE_SELECT_WIDTH_CLASS,
     "box-border shrink-0 appearance-none rounded-[6px] border-[#EBECF0] bg-white shadow-none",
     "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-[#818181]",
-    "hover:border-[#CED4E0] hover:text-[#165DFF]",
+    "hover:border-[#CED4E0] hover:text-blue-500",
 );
 
 function getRoleLabel(role: ChannelMember["role"], localize: (key: string) => string) {
@@ -259,7 +259,7 @@ export function ChannelMemberDialog({
                             className={cn(
                                 "cursor-default",
                                 m.role === "member" &&
-                                "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
+                                "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500"
                             )}
                             onClick={(e) => e.preventDefault()}
                         >
@@ -293,7 +293,7 @@ export function ChannelMemberDialog({
                     <DropdownMenuItem
                         className={cn(
                             m.role === "admin" &&
-                            "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
+                            "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500"
                         )}
                         onClick={() => {
                             if (!canCreatorManage || m.role === "admin" || m.role === "creator") return;
@@ -305,7 +305,7 @@ export function ChannelMemberDialog({
                     <DropdownMenuItem
                         className={cn(
                             m.role === "member" &&
-                            "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]"
+                            "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500"
                         )}
                         onClick={() => {
                             if (!canCreatorManage || m.role === "member") return;
@@ -413,7 +413,7 @@ export function ChannelMemberDialog({
                         <div className="flex items-center gap-2">
                             <span className="shrink-0 leading-none text-[14px]">
                                 <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_1")}</span>
-                                <span className="text-[#165DFF]">{total}</span>
+                                <span className="text-blue-500">{total}</span>
                                 <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_2")}</span>
                                 <span className="text-[#4E5969]">{PAGE_SIZE}</span>
                                 <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_3")}</span>
@@ -421,7 +421,7 @@ export function ChannelMemberDialog({
                             <div className="flex shrink-0 items-center gap-1.5">
                                 <Button
                                     variant="ghost"
-                                    className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-[#165DFF] disabled:opacity-40"
+                                    className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
                                     disabled={page <= 1}
                                     onClick={() => fetchMembers(Math.max(1, page - 1))}
                                 >
@@ -438,8 +438,8 @@ export function ChannelMemberDialog({
                                                 className={cn(
                                                     "flex h-6 min-w-6 items-center justify-center px-1.5 text-[14px] transition-colors",
                                                     p === page
-                                                        ? "rounded-[8px] border border-[#165DFF] text-[#165DFF]"
-                                                        : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-[#165DFF]"
+                                                        ? "rounded-[8px] border border-blue-500 text-blue-500"
+                                                        : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-blue-500"
                                                 )}
                                                 onClick={() => fetchMembers(p)}
                                             >
@@ -450,7 +450,7 @@ export function ChannelMemberDialog({
                                 })}
                                 <Button
                                     variant="ghost"
-                                    className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-[#165DFF] disabled:opacity-40"
+                                    className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
                                     disabled={page >= totalPages}
                                     onClick={() => fetchMembers(Math.min(totalPages, page + 1))}
                                 >

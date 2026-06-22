@@ -139,7 +139,7 @@ const SkillTag = ({ skill, onRemove }: { skill: any; onRemove?: () => void }) =>
     const label = skill?.display_name || skill?.name || "";
     return (
         <div className="group flex h-6 min-w-0 max-w-[160px] shrink-0 items-center rounded-[4px] bg-[#f8f8f8] px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-[#f0f1f3]">
-            <Sparkles className="mr-1 size-4 shrink-0 text-[#165DFF]" />
+            <Sparkles className="mr-1 size-4 shrink-0 text-blue-500" />
             <span className="min-w-0 flex-1 truncate text-left" title={label}>
                 {label}
             </span>

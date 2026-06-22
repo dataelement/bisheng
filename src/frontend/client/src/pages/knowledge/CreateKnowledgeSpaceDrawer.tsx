@@ -368,7 +368,7 @@ export function CreateKnowledgeSpaceDrawer({
                             <div className="flex gap-3">
                                 <Button
                                     variant="secondary"
-                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] border border-[#165DFF] bg-white px-4 text-[14px] font-normal leading-none text-[#165DFF] hover:bg-[#E8F3FF]"
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] border border-blue-500 bg-white px-4 text-[14px] font-normal leading-none text-blue-500 hover:bg-[#E8F3FF]"
                                     onClick={() => {
                                         onViewSpace?.();
                                         onOpenChange(false);
@@ -377,7 +377,7 @@ export function CreateKnowledgeSpaceDrawer({
                                     {localize("com_subscription.goto_knowledge_space")}
                                 </Button>
                                 <Button
-                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-[#165DFF] px-4 text-[14px] font-normal leading-none text-white hover:bg-[#4080FF]"
+                                    className="inline-flex h-8 min-w-[100px] items-center justify-center rounded-[6px] bg-blue-500 px-4 text-[14px] font-normal leading-none text-white hover:bg-blue-400"
                                     onClick={() => {
                                         onManageMembers?.();
                                         onOpenChange(false);
@@ -527,7 +527,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         >
                                             <RadioGroup.Item
                                                 value={opt.value}
-                                                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                                className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
@@ -590,7 +590,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <RadioGroup.Item
                                                 value="yes"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
@@ -599,7 +599,7 @@ export function CreateKnowledgeSpaceDrawer({
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <RadioGroup.Item
                                                 value="no"
-                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                             >
                                                 <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                             </RadioGroup.Item>
@@ -616,13 +616,13 @@ export function CreateKnowledgeSpaceDrawer({
                                             <TabsList className="h-8 gap-1 rounded-[6px] border border-[#E5E6EB] bg-white p-1">
                                                 <TabsTrigger
                                                     value="library"
-                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
+                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-blue-500"
                                                 >
                                                     {localize("com_knowledge.auto_tag_mode_library")}
                                                 </TabsTrigger>
                                                 <TabsTrigger
                                                     value="custom"
-                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-[#165DFF]"
+                                                    className="min-w-0 px-3 py-1 text-[13px] data-[state=active]:bg-[#E8F3FF] data-[state=active]:text-blue-500"
                                                 >
                                                     {localize("com_knowledge.auto_tag_mode_custom")}
                                                 </TabsTrigger>
@@ -681,7 +681,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                                 ).map((tag, idx) => (
                                                                     <span
                                                                         key={`${tag}-${idx}`}
-                                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-[#165DFF]"
+                                                                        className="mb-1.5 mr-1.5 inline-flex items-center rounded-full bg-[#E8F3FF] px-2 py-0.5 text-[12px] text-blue-500"
                                                                     >
                                                                         {tag}
                                                                     </span>
@@ -689,7 +689,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                                 {autoTagLibraryTags.length > AUTO_TAG_PREVIEW_LIMIT && (
                                                                     <button
                                                                         type="button"
-                                                                        className="mb-1.5 text-[12px] text-[#165DFF] hover:underline"
+                                                                        className="mb-1.5 text-[12px] text-blue-500 hover:underline"
                                                                         onClick={() => setAutoTagPreviewExpanded((prev) => !prev)}
                                                                     >
                                                                         {autoTagPreviewExpanded
@@ -723,7 +723,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                     <button
                                                         type="button"
                                                         onClick={() => txtInputRef.current?.click()}
-                                                        className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 text-[12px] text-[#165DFF] hover:underline"
+                                                        className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 text-[12px] text-blue-500 hover:underline"
                                                     >
                                                         <Upload className="h-3 w-3" />
                                                         {localize("com_knowledge.upload_txt")}
@@ -756,7 +756,7 @@ export function CreateKnowledgeSpaceDrawer({
                         </Button>
                         <Button
                             disabled={submitting}
-                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
+                            className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
                             onClick={handleConfirm}
                         >
                             {submitting

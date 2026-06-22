@@ -32,8 +32,8 @@ export function RoundCheckbox({ checked, onCheckedChange, className }: RoundChec
             {/* 20x20 hit area, 12x12 visible circle. */}
             {checked ? (
                 // Blue ring + solid blue center dot (radio-like).
-                <span className="flex size-3 items-center justify-center rounded-full border-[1.5px] border-[#165DFF] bg-white">
-                    <span className="size-1.5 rounded-full bg-[#165DFF]" />
+                <span className="flex size-3 items-center justify-center rounded-full border-[1.5px] border-blue-500 bg-white">
+                    <span className="size-1.5 rounded-full bg-blue-500" />
                 </span>
             ) : (
                 <span className="size-3 rounded-full border-[1.5px] border-[#D9D9D9] bg-transparent" />

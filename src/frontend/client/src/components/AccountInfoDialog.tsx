@@ -360,7 +360,7 @@ export function AccountInfoDialog({
                                     type="button"
                                     onClick={handleAvatarClick}
                                     title={localize("com_account_info_change_avatar")}
-                                    className="group relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[#165dff] focus-visible:ring-offset-2"
+                                    className="group relative shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                                 >
                                     <Avatar className="size-14 ring-1 ring-[#f2f3f5]">
                                         {currentAvatarUrl ? <AvatarImage src={currentAvatarUrl} alt="User" /> : <AvatarName name={username} />}
@@ -494,8 +494,8 @@ export function AccountInfoDialog({
                                             className={cn(
                                                 "h-8 rounded-md px-4 text-[14px] font-normal text-white disabled:opacity-100",
                                                 isSubmitDisabled()
-                                                    ? "cursor-not-allowed bg-[#7399E4] hover:bg-[#7399E4]"
-                                                    : "bg-[#0253E8] hover:bg-[#0246cc]"
+                                                    ? "cursor-not-allowed bg-blue-300 hover:bg-blue-300"
+                                                    : "bg-blue-600 hover:bg-blue-700"
                                             )}
                                         >
                                             {localize("com_account_info_confirm_change")}
@@ -524,7 +524,7 @@ export function AccountInfoDialog({
                                 "h-11 flex-1 rounded-lg px-4 text-[15px] font-normal",
                                 isSubmitDisabled()
                                     ? "cursor-not-allowed bg-[#e5e6eb] text-[#c9cdd4] hover:bg-[#e5e6eb]"
-                                    : "bg-[#165dff] text-white hover:bg-[#4080ff]",
+                                    : "bg-blue-500 text-white hover:bg-blue-400",
                             )}
                         >
                             {localize("com_account_info_confirm_change")}

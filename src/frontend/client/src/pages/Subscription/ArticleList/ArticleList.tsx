@@ -141,7 +141,7 @@ function SubChannelTab({
                 <button type="button" onClick={onClick} className={className}>
                     <span ref={labelRef} className="block max-w-[240px] truncate">{sub.name}</span>
                     {sub.unreadCount && sub.unreadCount > 0 ? (
-                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
                             {sub.unreadCount}
                         </span>
                     ) : null}
@@ -562,13 +562,13 @@ export function ArticleList({
                                         className={cn(
                                             "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
                                             !selectedSubChannelName
-                                                ? "border-[#335CFF] text-[#335CFF]"
+                                                ? "border-blue-500 text-blue-500"
                                                 : "border-transparent text-[#212121]",
                                         )}
                                     >
                                         <span>{localize("com_subscription.all")}</span>
                                         {channel.unreadCount > 0 && (
-                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
                                                 {channel.unreadCount}
                                             </span>
                                         )}
@@ -581,7 +581,7 @@ export function ArticleList({
                                             className={cn(
                                                 "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
                                                 selectedSubChannelName === sub.name
-                                                    ? "border-[#335CFF] text-[#335CFF]"
+                                                    ? "border-blue-500 text-blue-500"
                                                     : "border-transparent text-[#212121]",
                                             )}
                                         />
@@ -698,13 +698,13 @@ export function ArticleList({
                                     className={cn(
                                         "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
                                         !selectedSubChannelName
-                                            ? "border-[#335CFF] text-[#335CFF]"
-                                            : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
+                                            ? "border-blue-500 text-blue-500"
+                                            : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
                                     )}
                                 >
                                     <span>{localize("com_subscription.all")}</span>
                                     {channel.unreadCount > 0 && (
-                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
                                             {channel.unreadCount}
                                         </span>
                                     )}
@@ -717,8 +717,8 @@ export function ArticleList({
                                         className={cn(
                                             "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
                                             selectedSubChannelName === sub.name
-                                                ? "border-[#335CFF] text-[#335CFF]"
-                                                : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
+                                                ? "border-blue-500 text-blue-500"
+                                                : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
                                         )}
                                     />
                                 ))}

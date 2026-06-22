@@ -80,7 +80,7 @@ export default function ChannelItem({
     return (
         <div
             className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
-                ? "bg-[#E6EDFC] border-primary shadow-sm"
+                ? "bg-blue-500/[0.07] border-primary shadow-sm"
                 : "border-transparent hover:bg-[#F7F7F7]"
                 }`}
             style={{
@@ -132,7 +132,7 @@ export default function ChannelItem({
                 {channel.unreadCount > 0 && (
                     <span
                         className={cn(
-                            "flex items-center justify-center rounded-md bg-[#335CFF33]/20 px-1.5 py-[1px] text-[10px] font-medium text-primary",
+                            "flex items-center justify-center rounded-md bg-blue-500/20 px-1.5 py-[1px] text-[10px] font-medium text-primary",
                             "coarse-pointer:relative coarse-pointer:shrink-0 coarse-pointer:opacity-100",
                             "fine-pointer:absolute fine-pointer:right-0",
                             menuOpen
