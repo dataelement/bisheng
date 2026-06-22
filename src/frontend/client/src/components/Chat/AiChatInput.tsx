@@ -545,7 +545,7 @@ const AiChatInput = memo(
                         style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
                             "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pt-0",
-                            "placeholder-black/50 dark:placeholder-white/50",
+                            "placeholder:text-[#999999]",
                             "max-h-[240px] scrollbar-gutter-stable",
                             size === 'mini' ? 'min-h-0' : 'min-h-12',
                             removeFocusRings,
