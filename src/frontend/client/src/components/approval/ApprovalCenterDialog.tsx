@@ -62,7 +62,7 @@ function StatusBadge({ status, instanceStatus, scope, localize }: { status?: str
   // Task scope: if my task is approved but instance execution failed, surface the failure.
   const effective = scope === "task" && s === "approved" && is === "execute_failed" ? "execute_failed" : s;
   const TASK_MAP: Record<string, { text: string; cls: string }> = {
-    pending:        { text: localize("com_approval_task_badge_pending"),    cls: "bg-[#e8f3ff] text-blue-500" },
+    pending:        { text: localize("com_approval_task_badge_pending"),    cls: "bg-[#e8f3ff] text-[#165dff]" },
     approved:       { text: localize("com_approval_task_badge_approved"),   cls: "bg-[#e8ffea] text-[#00b42a]" },
     rejected:       { text: localize("com_approval_task_badge_rejected"),   cls: "bg-[#fff2f0] text-[#f53f3f]" },
     cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
@@ -71,7 +71,7 @@ function StatusBadge({ status, instanceStatus, scope, localize }: { status?: str
     exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
   };
   const INSTANCE_MAP: Record<string, { text: string; cls: string }> = {
-    pending:        { text: localize("com_approval_status_pending"),        cls: "bg-[#e8f3ff] text-blue-500" },
+    pending:        { text: localize("com_approval_status_pending"),        cls: "bg-[#e8f3ff] text-[#165dff]" },
     approved:       { text: localize("com_approval_status_approved"),       cls: "bg-[#e8ffea] text-[#00b42a]" },
     executed:       { text: localize("com_approval_status_approved"),       cls: "bg-[#e8ffea] text-[#00b42a]" },
     rejected:       { text: localize("com_approval_status_rejected"),       cls: "bg-[#fff2f0] text-[#f53f3f]" },
@@ -552,7 +552,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                   )}
                   {isInstancePending && (
                     <button type="button" disabled={actionLoading}
-                      className="inline-flex h-8 items-center justify-center rounded-md border border-blue-500 px-4 text-[14px] font-normal text-blue-500 hover:bg-[#f2f7ff] disabled:opacity-60"
+                      className="inline-flex h-8 items-center justify-center rounded-md border border-blue-500 px-4 text-[14px] font-normal text-blue-500 hover:bg-blue-500/[0.06] disabled:opacity-60"
                       onClick={runWithdraw}>
                       {localize("com_approval_action_withdraw")}
                     </button>
@@ -615,7 +615,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               {localize("com_ui_cancel")}
             </button>
             <button type="button"
-              className="rounded-lg border border-blue-500 px-4 py-2 text-[14px] text-blue-500 hover:bg-[#f2f7ff]"
+              className="rounded-lg border border-blue-500 px-4 py-2 text-[14px] text-blue-500 hover:bg-blue-500/[0.06]"
               onClick={confirmWithdraw}>
               {localize("com_approval_action_withdraw")}
             </button>
@@ -733,7 +733,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
               const nodeBadgeMap: Record<string, { text: string; cls: string }> = {
                 approved:  { text: localize("com_approval_status_approved"),  cls: "bg-[#e8ffea] text-[#00b42a]" },
                 rejected:  { text: localize("com_approval_status_rejected"),  cls: "bg-[#fff2f0] text-[#f53f3f]" },
-                pending:   { text: localize("com_approval_status_pending"),   cls: "bg-[#e8f3ff] text-blue-500" },
+                pending:   { text: localize("com_approval_status_pending"),   cls: "bg-[#e8f3ff] text-[#165dff]" },
                 skipped:   { text: localize("com_approval_status_skipped"),   cls: "bg-[#f7f8fa] text-[#86909c]" },
                 cancelled: { text: localize("com_approval_status_cancelled"), cls: "bg-[#f7f8fa] text-[#86909c]" },
               };
@@ -906,7 +906,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
               const nodeBadgeMap: Record<string, { text: string; cls: string }> = {
                 approved:  { text: localize("com_approval_status_approved"),  cls: "bg-[#e8ffea] text-[#00b42a]" },
                 rejected:  { text: localize("com_approval_status_rejected"),  cls: "bg-[#fff2f0] text-[#f53f3f]" },
-                pending:   { text: localize("com_approval_status_pending"),   cls: "bg-[#e8f3ff] text-blue-500" },
+                pending:   { text: localize("com_approval_status_pending"),   cls: "bg-[#e8f3ff] text-[#165dff]" },
                 skipped:   { text: localize("com_approval_status_skipped"),   cls: "bg-[#f7f8fa] text-[#86909c]" },
                 cancelled: { text: localize("com_approval_status_cancelled"), cls: "bg-[#f7f8fa] text-[#86909c]" },
               };

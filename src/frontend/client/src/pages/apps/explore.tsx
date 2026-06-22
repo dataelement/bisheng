@@ -15,7 +15,6 @@ import { getAppShareUrl } from './appUtils'
 import { AgentNavigation } from './components/AgentNavigation'
 import { AppSearchBar } from './components/AppSearchBar'
 
-const APP_TAB_BANNER = `${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab.svg`
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = 'app-last-origin';
 
@@ -31,10 +30,10 @@ const ExploreCard = ({ agent, onClick, onShare }: { agent: any, onClick: (agent:
             onClick={() => onClick(agent)}
             className={cn(
                 "group relative content-stretch flex h-[80px] items-center gap-[12px] overflow-clip rounded-[8px] p-[12px] transition-all cursor-pointer",
-                "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]",
+                "border-[0.5px] border-solid border-[#EBECF0] bg-[linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)]",
                 "fine-pointer:hover:shadow-[0_8px_20px_0_rgba(117,145,212,0.12)]",
                 "after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover:after:opacity-100",
-                "fine-pointer:hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(110deg,#F9FBFE_0%,#FFF_50%,#F9FBFE_100%)]"
+                "fine-pointer:hover:bg-[linear-gradient(0deg,#FFF_0%,#FFF_100%),linear-gradient(135deg,rgb(var(--brand-500)/0.04)_0%,#FFF_50%,rgb(var(--brand-500)/0.04)_100%)]"
             )}
         >
             {/* 左侧图标 */}
@@ -255,11 +254,26 @@ export default function ExplorePlaza() {
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-hidden bg-white">
-            {/* 顶部横幅：背景图尺寸与知识广场（KnowledgeSquare tabbg）相同 — bg-cover + center */}
+            {/* 顶部横幅：与知识广场一致 — 跟随主题的品牌色渐变底（brand-50 → white） */}
             <div
-                className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-cover bg-center bg-no-repeat"
-                style={{ backgroundImage: `url(${APP_TAB_BANNER})` }}
+                className="relative w-full shrink-0 overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
             >
+                {/* Decorative scattered icons — kept from the original banner art, recolored
+                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-blue-200"
+                    style={{
+                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab-icons.svg)`,
+                        maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/apptab-icons.svg)`,
+                        WebkitMaskSize: "cover",
+                        maskSize: "cover",
+                        WebkitMaskPosition: "center",
+                        maskPosition: "center",
+                        WebkitMaskRepeat: "no-repeat",
+                        maskRepeat: "no-repeat",
+                    }}
+                />
                 <div className="absolute left-4 top-4 z-10">
                     <Button
                         variant="ghost"

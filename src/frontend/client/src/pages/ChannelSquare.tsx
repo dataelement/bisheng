@@ -242,9 +242,24 @@ function ChannelSquare({
     <div className="h-full w-full flex flex-col bg-white overflow-hidden">
       {/* 头部区域 */}
       <div
-        className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-center bg-no-repeat bg-cover"
-        style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel.svg)` }}
+        className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
       >
+        {/* Decorative scattered icons — kept from the original banner art, recolored
+            via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-blue-200"
+          style={{
+            WebkitMaskImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel-icons.svg)`,
+            maskImage: `url(${__APP_ENV__.BASE_URL}/assets/channel/bgchannel-icons.svg)`,
+            WebkitMaskSize: "cover",
+            maskSize: "cover",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+          }}
+        />
 
         {/* 返回按钮：固定在头部左上，不跟随居中容器偏移 */}
         {onBack && (

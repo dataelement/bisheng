@@ -143,7 +143,7 @@ export function SideNav() {
             <div className="shrink-0 touch-mobile:px-2 touch-mobile:pt-4 touch-mobile:pb-6">
                 <div
                     className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px]"
-                    style={{ backgroundImage: "linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)" }}
+                    style={{ backgroundImage: "linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)" }}
                 >
                     <div className="flex items-center gap-[8px]">
                         <AppAvator

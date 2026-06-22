@@ -39,7 +39,7 @@ export function AgentCard({
         'group/card relative flex h-[132px] cursor-pointer flex-col justify-between overflow-hidden rounded-[6px] border border-solid p-2 transition-all',
         'border-[#ebecf0] border-[0.5px] bg-white fine-pointer:hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]',
         'after:pointer-events-none after:absolute after:inset-0 after:rounded-[6px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100',
-        'bg-[linear-gradient(123.519deg,_rgb(249,251,254)_0%,_rgb(255,255,255)_50%,_rgb(249,251,254)_100%)]',
+        'bg-[linear-gradient(135deg,_rgb(var(--brand-500)/0.04)_0%,_rgb(255,255,255)_50%,_rgb(var(--brand-500)/0.04)_100%)]',
       )}
       onClick={() => onStartChat(agent)}
     >
@@ -63,7 +63,7 @@ export function AgentCard({
           >
             {isPinned ? (
               <span
-                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#5773B4]"
+                className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#5C8A77]"
                 aria-label={localize('com_app_unpin_tooltip')}
               >
                 <Outlined.Pin size={16} className="shrink-0" />
@@ -129,7 +129,7 @@ export function AgentCard({
                     <span className="relative inline-flex size-[18px] items-center justify-center">
                       <Outlined.Pin
                         size={18}
-                        className="absolute shrink-0 text-[#5773B4] transition-opacity fine-pointer:group-hover/pin:opacity-0"
+                        className="absolute shrink-0 text-[#5C8A77] transition-opacity fine-pointer:group-hover/pin:opacity-0"
                       />
                       <Outlined.PinOff
                         size={18}
