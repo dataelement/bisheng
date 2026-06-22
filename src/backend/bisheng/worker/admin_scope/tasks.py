@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
     acks_late=True,
     time_limit=600,
     soft_time_limit=540,
-    name='bisheng.worker.admin_scope.tasks.admin_scope_cleanup',
+    name="bisheng.worker.admin_scope.tasks.admin_scope_cleanup",
 )
 def admin_scope_cleanup():
     run_async_task(_cleanup_async)
@@ -40,12 +40,12 @@ async def _cleanup_async() -> None:
 
     Fast path: if no scope keys exist, skip the DB query altogether.
     """
-    from bisheng.core.cache.redis_manager import get_redis_client
+    from bisheng.core.cache.redis_manager import get_redis_client_sync
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.database.models.tenant import TenantDao
 
-    redis = await get_redis_client()
-    keys = await redis.akeys('admin_scope:*')
+    redis = get_redis_client_sync()
+    keys = redis.keys("admin_scope:*")
     if not keys:
         return
 
@@ -60,9 +60,9 @@ async def _cleanup_async() -> None:
     deleted = 0
     for key in keys:
         try:
-            raw = await redis.aget(key)
-        except Exception as exc:  # noqa: BLE001
-            logger.debug('admin_scope_cleanup: read %s failed: %s', key, exc)
+            raw = redis.get(key)
+        except Exception as exc:
+            logger.debug("admin_scope_cleanup: read %s failed: %s", key, exc)
             continue
         if raw is None:
             continue
@@ -70,14 +70,16 @@ async def _cleanup_async() -> None:
             scope_id = int(raw)
         except (TypeError, ValueError):
             # Corrupt value — treat as stale and remove.
-            await redis.adelete(key)
+            redis.delete(key)
             deleted += 1
             continue
         if scope_id in non_active:
-            await redis.adelete(key)
+            redis.delete(key)
             deleted += 1
 
     logger.info(
-        'admin_scope_cleanup done: total_keys=%d non_active_tenants=%d deleted=%d',
-        len(keys), len(non_active), deleted,
+        "admin_scope_cleanup done: total_keys=%d non_active_tenants=%d deleted=%d",
+        len(keys),
+        len(non_active),
+        deleted,
     )
