@@ -289,6 +289,8 @@ export interface KnowledgeFile {
     successFileNum?: number;
     /** Total number of files (folders only) */
     fileNum?: number;
+    /** Number of visible successfully parsed files (folders only) */
+    visibleSuccessFileNum?: number;
     /** Number of files in PROCESSING/WAITING/REBUILDING (folders only) */
     processingFileNum?: number;
     /** Source of the file, e.g. 'channel' for subscription channel files */
@@ -313,6 +315,18 @@ export interface KnowledgeFile {
     uploadProgress?: number;
     /** Distinguishes byte upload vs backend registration for large files */
     uploadPhase?: "uploading" | "registering";
+    /** Transient state while portal lazily loads folder statistics */
+    folderStatsLoading?: boolean;
+    /** Transient state when portal folder statistics failed to load */
+    folderStatsError?: boolean;
+}
+
+export interface KnowledgeFolderStats {
+    folderId: string;
+    fileNum: number;
+    successFileNum: number;
+    visibleSuccessFileNum: number;
+    processingFileNum: number;
 }
 
 export interface UploadedFileRecord extends KnowledgeFile {
@@ -444,6 +458,7 @@ interface RawKnowledgeFile {
     thumbnails?: string | null;
     success_file_num?: number;
     file_num?: number;
+    visible_success_file_num?: number;
     processing_file_num?: number;
     tags?: Array<{ id: number; name: string }>;
 }
@@ -777,6 +792,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw?.success_file_num !== undefined ? Number(raw.success_file_num) : undefined,
         fileNum: raw?.file_num !== undefined ? Number(raw.file_num) : undefined,
+        visibleSuccessFileNum: raw?.visible_success_file_num !== undefined ? Number(raw.visible_success_file_num) : undefined,
         processingFileNum: raw?.processing_file_num !== undefined ? Number(raw.processing_file_num) : undefined,
         fileSource: raw?.file_source,
         userMetadata,
@@ -883,6 +899,7 @@ function mapRawFile(raw: RawKnowledgeFile): KnowledgeFile {
         sensitiveCheck: extractKnowledgeFileSensitiveCheck(raw),
         successFileNum: raw.success_file_num,
         fileNum: raw.file_num,
+        visibleSuccessFileNum: raw.visible_success_file_num,
         processingFileNum: raw.processing_file_num,
     };
 }
@@ -1599,6 +1616,7 @@ export async function listKnowledgeFolders(params: {
 export async function getSpaceChildrenApi(params: {
     space_id: string;
     parent_id?: string;
+    page?: number;
     cursor?: string | null;
     page_size?: number;
     order_field?: string;
@@ -1631,6 +1649,32 @@ export async function getSpaceChildrenApi(params: {
         has_more: !!payload?.has_more,
         next_cursor: payload?.next_cursor ?? null,
     };
+}
+
+export async function getSpaceFolderStatsApi(params: {
+    space_id: string;
+    folder_ids: Array<string | number>;
+}): Promise<KnowledgeFolderStats[]> {
+    const folderIds = Array.from(new Set(
+        params.folder_ids
+            .map((id) => Number(id))
+            .filter((id) => Number.isFinite(id) && id > 0),
+    ));
+    if (!params.space_id || folderIds.length === 0) return [];
+
+    const res = await request.post(
+        `/api/v1/knowledge/space/${params.space_id}/folder-stats`,
+        { folder_ids: folderIds },
+    ) as ApiResponse<{ stats?: any[] }> & { stats?: any[] };
+    const payload: any = res?.data ?? res ?? {};
+    const stats = Array.isArray(payload?.stats) ? payload.stats : [];
+    return stats.map((raw) => ({
+        folderId: String(raw?.folder_id ?? raw?.folderId ?? ""),
+        fileNum: Number(raw?.file_num ?? raw?.fileNum ?? 0),
+        successFileNum: Number(raw?.success_file_num ?? raw?.successFileNum ?? 0),
+        visibleSuccessFileNum: Number(raw?.visible_success_file_num ?? raw?.visibleSuccessFileNum ?? 0),
+        processingFileNum: Number(raw?.processing_file_num ?? raw?.processingFileNum ?? 0),
+    })).filter((item) => item.folderId);
 }
 
 /**

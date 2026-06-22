@@ -19,6 +19,22 @@ _EXT_PRIORITIES: List[tuple] = [
     ('md', 13), ('txt', 14), ('html', 15),
 ]
 _EXT_RANK_FALLBACK = 999
+_CHILD_ORDER_FIELDS = {"file_type", "file_name", "update_time"}
+
+
+def normalize_child_order_field(order_field: Optional[str]) -> str:
+    """Return a supported child-list order field.
+
+    The value is later embedded in an ORDER BY text fragment, so keep the
+    allowlist tight and default unknown client input to the historical order.
+    """
+    if order_field in _CHILD_ORDER_FIELDS:
+        return order_field
+    return "file_type"
+
+
+def normalize_child_order_sort(order_sort: Optional[str]) -> str:
+    return "desc" if str(order_sort or "").lower() == "desc" else "asc"
 
 
 def _compute_ext_rank_python(file_name: Optional[str]) -> int:
@@ -48,6 +64,36 @@ def _compute_ext_rank_case_when():
         for ext, rank in _EXT_PRIORITIES
     ]
     return case(*whens, else_=_EXT_RANK_FALLBACK)
+
+
+def child_order_cursor_key_len(order_field: Optional[str]) -> int:
+    order_field = normalize_child_order_field(order_field)
+    if order_field == "file_type":
+        return 4
+    if order_field == "file_name":
+        return 3
+    return 2
+
+
+def build_child_order_cursor_key(item: KnowledgeFile, order_field: Optional[str]) -> List:
+    order_field = normalize_child_order_field(order_field)
+    if order_field == "file_type":
+        return [
+            item.file_type,
+            _compute_ext_rank_python(item.file_name),
+            item.update_time,
+            item.id,
+        ]
+    if order_field == "file_name":
+        return [
+            item.file_name or "",
+            item.update_time,
+            item.id,
+        ]
+    return [
+        item.update_time,
+        item.id,
+    ]
 
 
 class SpaceFileDao(KnowledgeFileDao):
@@ -150,11 +196,12 @@ class SpaceFileDao(KnowledgeFileDao):
         Async: List direct children (folders first, then files) under a given parent.
         When parent_id is None, returns root-level items (file_level_path == '').
 
-        F027: when ``cursor`` is provided (4-tuple ``(file_type, ext_rank,
-        update_time, id)``), keyset WHERE is injected and the offset path is
-        skipped. ``order_field`` must be ``"file_type"`` in cursor mode
-        (other order_fields keep using OFFSET).
+        F027: when ``page == 0`` this method uses cursor scan mode. The first
+        page still applies ORDER BY + LIMIT; subsequent calls add a keyset
+        WHERE based on the requested sort field.
         """
+        order_field = normalize_child_order_field(order_field)
+        order_sort = normalize_child_order_sort(order_sort)
         if parent_id is None:
             exact_path = ''
             path_filter = cls._root_path_filter()
@@ -201,28 +248,16 @@ class SpaceFileDao(KnowledgeFileDao):
             .where(*filters)
         )
 
-        # F027: cursor-based keyset takes precedence over OFFSET.
-        if cursor is not None and order_field == "file_type":
+        # F027: cursor-based keyset takes precedence over OFFSET. ``page == 0``
+        # is the first cursor page and must still be bounded by ``page_size``.
+        if cursor is not None or page == 0:
             from bisheng.database.utils.keyset import build_keyset_where
 
-            order_dir_asc = (order_sort or "asc").lower() == "asc"
-            sort_cols = (
-                KnowledgeFile.file_type,
-                _compute_ext_rank_case_when(),
-                KnowledgeFile.update_time,
-                KnowledgeFile.id,
-            )
-            # Mixed direction: file_type + ext_rank follow ``order_sort``;
-            # update_time + id are always DESC (newest first within same ext).
-            descending = (
-                not order_dir_asc,
-                not order_dir_asc,
-                True,
-                True,
-            )
-            statement = statement.where(
-                build_keyset_where(sort_cols, tuple(cursor), descending=descending)
-            )
+            sort_cols, descending = cls._keyset_sort_columns(order_field, order_sort)
+            if cursor is not None:
+                statement = statement.where(
+                    build_keyset_where(sort_cols, tuple(cursor), descending=descending)
+                )
             if page_size:
                 statement = statement.limit(page_size)
             statement = statement.order_by(
@@ -239,8 +274,44 @@ class SpaceFileDao(KnowledgeFileDao):
             return result.all()
 
     @staticmethod
+    def _keyset_sort_columns(order_field: str, order_sort: str):
+        order_field = normalize_child_order_field(order_field)
+        order_sort = normalize_child_order_sort(order_sort)
+        order_dir_asc = order_sort == "asc"
+        if order_field == "file_type":
+            return (
+                KnowledgeFile.file_type,
+                _compute_ext_rank_case_when(),
+                KnowledgeFile.update_time,
+                KnowledgeFile.id,
+            ), (
+                not order_dir_asc,
+                not order_dir_asc,
+                True,
+                True,
+            )
+        if order_field == "file_name":
+            return (
+                KnowledgeFile.file_name,
+                KnowledgeFile.update_time,
+                KnowledgeFile.id,
+            ), (
+                not order_dir_asc,
+                True,
+                True,
+            )
+        return (
+            KnowledgeFile.update_time,
+            KnowledgeFile.id,
+        ), (
+            not order_dir_asc,
+            not order_dir_asc,
+        )
+
+    @staticmethod
     def order_field_text(order_field: str, order_sort: str) -> str:
-        order_sort = order_sort.upper()
+        order_field = normalize_child_order_field(order_field)
+        order_sort = normalize_child_order_sort(order_sort).upper()
         order_text = ""
 
         if order_field == "file_type":
@@ -265,10 +336,12 @@ class SpaceFileDao(KnowledgeFileDao):
                 ELSE 999
             END {order_sort}
             """
+        elif order_field == "update_time":
+            order_text += f"update_time {order_sort}, id {order_sort}"
         else:
-            order_text += f"{order_field} {order_sort}"
+            order_text += f"file_name {order_sort}"
         if order_field != "update_time":
-            order_text += ", update_time desc"
+            order_text += ", update_time desc, id desc"
         return order_text
 
     @classmethod

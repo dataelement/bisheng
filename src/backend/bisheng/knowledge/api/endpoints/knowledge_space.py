@@ -29,6 +29,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDownloadReq,
     UpdateSpaceMemberRoleRequest,
     RemoveSpaceMemberRequest,
+    KnowledgeSpaceFolderStatsReq,
     ChatReq,
     ChatFolderReq,
 )
@@ -368,6 +369,16 @@ async def list_space_children(
         page_size=page_size,
         file_type=file_type,
     )
+    return resp_200(result)
+
+
+@router.post("/{space_id}/folder-stats")
+async def get_space_folder_stats(
+    space_id: int,
+    req: KnowledgeSpaceFolderStatsReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.get_space_folder_stats(space_id, req.folder_ids)
     return resp_200(result)
 
 

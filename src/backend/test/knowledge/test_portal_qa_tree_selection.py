@@ -121,10 +121,85 @@ async def test_folder_extra_info_uses_visible_success_file_count(monkeypatch):
         return [visible_file, hidden_file]
 
     monkeypatch.setattr(core_database, 'get_async_db_session', lambda: _Session())
+    monkeypatch.setattr(svc_mod, 'get_async_db_session', lambda: _Session())
     monkeypatch.setattr(svc_mod.SpaceFileDao, 'get_children_by_prefix', _children_by_prefix)
+    monkeypatch.setattr(service, '_build_child_permission_context', AsyncMock(return_value={}))
     monkeypatch.setattr(service, '_filter_visible_child_items', AsyncMock(return_value=[visible_file]))
 
     result = await service._handle_file_folder_extra_info([folder])
 
     assert result[0]['success_file_num'] == 2
     assert result[0]['visible_success_file_num'] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_space_folder_stats_returns_counts_in_request_order(monkeypatch):
+    service = object.__new__(svc_mod.KnowledgeSpaceService)
+    service.login_user = SimpleNamespace(user_id=7, user_name='tester')
+
+    folder_a = _file(3001, folder=True, path='')
+    folder_b = _file(3002, folder=True, path='')
+
+    async def _get_files_by_ids(file_ids):
+        assert file_ids == [3002, 3001]
+        return [folder_a, folder_b]
+
+    monkeypatch.setattr(service, '_require_read_permission', AsyncMock())
+    monkeypatch.setattr(service, '_require_resource_permission', AsyncMock())
+    monkeypatch.setattr(
+        service,
+        '_load_folder_stat_counts',
+        AsyncMock(return_value={
+            3001: {
+                'file_num': 7,
+                'success_file_num': 5,
+                'visible_success_file_num': 4,
+                'processing_file_num': 1,
+            },
+            3002: {
+                'file_num': 3,
+                'success_file_num': 2,
+                'visible_success_file_num': 2,
+                'processing_file_num': 0,
+            },
+        }),
+    )
+    monkeypatch.setattr(svc_mod.KnowledgeFileDao, 'aget_file_by_ids', staticmethod(_get_files_by_ids))
+
+    result = await service.get_space_folder_stats(7101, [3002, 3001, 3002])
+
+    assert result == {
+        'stats': [
+            {
+                'folder_id': 3002,
+                'file_num': 3,
+                'success_file_num': 2,
+                'visible_success_file_num': 2,
+                'processing_file_num': 0,
+            },
+            {
+                'folder_id': 3001,
+                'file_num': 7,
+                'success_file_num': 5,
+                'visible_success_file_num': 4,
+                'processing_file_num': 1,
+            },
+        ]
+    }
+    service._require_read_permission.assert_awaited_once_with(7101)
+    service._require_resource_permission.assert_any_await('can_read', 'folder', 3001)
+    service._require_resource_permission.assert_any_await('can_read', 'folder', 3002)
+
+
+@pytest.mark.asyncio
+async def test_handle_file_folder_extra_info_can_skip_folder_counts():
+    service = object.__new__(svc_mod.KnowledgeSpaceService)
+    folder = _file(3001, folder=True, path='')
+
+    result = await service._handle_file_folder_extra_info([folder], include_folder_counts=False)
+
+    assert result[0]['summary'] == ''
+    assert 'file_num' not in result[0]
+    assert 'success_file_num' not in result[0]
+    assert 'visible_success_file_num' not in result[0]
+    assert 'processing_file_num' not in result[0]

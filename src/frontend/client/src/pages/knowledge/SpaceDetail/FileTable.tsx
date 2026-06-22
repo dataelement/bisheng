@@ -1433,10 +1433,18 @@ function FileRow({
                     style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                 >
                     {isFolder ? (
-                        isAdmin ? <span className="whitespace-nowrap text-sm">
-                            <span className="text-[#00b42a]">{file.successFileNum ?? 0}</span>
-                            <span className="text-[#86909c]">/{file.fileNum ?? 0}</span>
-                        </span> : null
+                        isAdmin ? (
+                            file.folderStatsLoading ? (
+                                <span className="whitespace-nowrap text-sm text-[#86909c]">加载中</span>
+                            ) : file.folderStatsError ? (
+                                <span className="whitespace-nowrap text-sm text-[#86909c]">{EMPTY_FIELD_PLACEHOLDER}</span>
+                            ) : file.successFileNum !== undefined && file.fileNum !== undefined ? (
+                                <span className="whitespace-nowrap text-sm">
+                                    <span className="text-[#00b42a]">{file.successFileNum}</span>
+                                    <span className="text-[#86909c]">/{file.fileNum}</span>
+                                </span>
+                            ) : null
+                        ) : null
                     ) : (
                         isAdmin || file.approvalStatus
                             ? <StatusBadge status={file.status ?? FileStatus.WAITING} file={file} />

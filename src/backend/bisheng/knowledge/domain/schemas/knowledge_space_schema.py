@@ -600,6 +600,42 @@ class RemoveSpaceMemberRequest(BaseModel):
     user_id: int = Field(..., description="Target User ID to Remove")
 
 
+class KnowledgeSpaceFolderStatsReq(BaseModel):
+    """Batch folder statistics request."""
+
+    folder_ids: List[int] = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Folder IDs to load statistics for",
+    )
+
+
+class KnowledgeSpaceFolderStatsItemResp(BaseModel):
+    """Folder statistics item."""
+
+    folder_id: int = Field(..., description="Folder ID")
+    file_num: int = Field(0, description="Total file count under the folder")
+    success_file_num: int = Field(0, description="Successful file count under the folder")
+    visible_success_file_num: int = Field(
+        0,
+        description="Visible successful file count under the folder",
+    )
+    processing_file_num: int = Field(
+        0,
+        description="Processing/waiting/rebuilding file count under the folder",
+    )
+
+
+class KnowledgeSpaceFolderStatsResp(BaseModel):
+    """Batch folder statistics response."""
+
+    stats: List[KnowledgeSpaceFolderStatsItemResp] = Field(
+        default_factory=list,
+        description="Folder statistics items in request order",
+    )
+
+
 class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     """Knowledge Space File Response"""
 
