@@ -226,11 +226,17 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
     })();
     const btnConfig = getButtonConfig(effectiveSubscribeStatus);
 
-    // 需审核频道：非创建者且未订阅/未通过时才隐藏文章列表；创建者需可查看文章
+    // REVIEW channels hide the article list until the viewer subscribes and is
+    // approved. Admins and ReBAC-granted users carry `view_channel` in
+    // permission_ids and may read without subscribing — mirrors knowledge-space
+    // APPROVAL access (backend get_article_detail enforces the same view_channel gate).
+    const canViewChannelContent =
+        channelDetail?.permission_ids?.includes("view_channel") ?? false;
     const hideArticles =
         channelDetail?.visibility === "review" &&
         !isCreatorView &&
-        effectiveSubscribeStatus !== "subscribed";
+        effectiveSubscribeStatus !== "subscribed" &&
+        !canViewChannelContent;
 
     // Handle error — channel not found, inaccessible, or articles cannot be loaded
     useEffect(() => {
