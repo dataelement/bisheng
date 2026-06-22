@@ -33,7 +33,7 @@ import { TaskPanel } from './TaskPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import { ExecutionLiveContext } from './executionLive';
-import { isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
+import { findPendingUserInput, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
 
 interface ExecutionFlowProps {
@@ -49,19 +49,6 @@ interface ExecutionFlowProps {
     /** workspace/preview panel state — lifted to Sop/index so the Header's
         workspace button drives the same drawer */
     artifactsPanel: ReturnType<typeof useArtifactsPanel>;
-}
-
-/** Collect every clarify (call_user_input) entry across session + tasks. */
-function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[]) {
-    const entries: ExecStepEventData[] = [];
-    sessionSteps.forEach((s) => s?.step_type === 'call_user_input' && entries.push(s));
-    tasks.forEach((task) => {
-        (task.history || []).forEach((h) => h?.step_type === 'call_user_input' && entries.push(h));
-        (task.children || []).forEach((child) =>
-            (child.history || []).forEach((h) => h?.step_type === 'call_user_input' && entries.push(h)),
-        );
-    });
-    return entries;
 }
 
 export function ExecutionFlow({ versionId, conversationId, isSharePage = false, readOnly = false, artifactsPanel }: ExecutionFlowProps) {
@@ -102,11 +89,10 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     // clarify requests: the newest unanswered one is the active card;
     // session-level answered ones become flow-level intent rows
     // (task-level answered ones render inside their TaskStepRow)
-    const pendingInput = useMemo(() => {
-        if (!running) return null;
-        const entries = collectUserInputs(sessionSteps, tasks);
-        return [...entries].reverse().find((e) => !e.is_completed) || null;
-    }, [running, sessionSteps, tasks]);
+    const pendingInput = useMemo(
+        () => (running ? findPendingUserInput(sessionSteps, tasks) : null),
+        [running, sessionSteps, tasks],
+    );
 
     const answeredSessionInputs = useMemo(
         () => sessionSteps.filter((s) => s?.step_type === 'call_user_input' && s?.is_completed),
@@ -147,7 +133,11 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
         // Provide turn liveness so timeline groups never stay stuck "running"
         // (ticking clock) after the turn completes — a dangling step that never
         // got its end frame (e.g. a safety-blocked subagent) would otherwise loop.
-        <ExecutionLiveContext.Provider value={running}>
+        // A park (ask_user awaiting the user) also counts as NOT live: the agent
+        // is suspended on an interrupt, nothing is executing, so the clock must
+        // freeze (the thinking that led to the question is done) until the user
+        // answers and a fresh episode starts streaming.
+        <ExecutionLiveContext.Provider value={running && !pendingInput}>
         <div className="relative flex h-full w-full flex-col">
             {/* Soft top fade: content dissolves into the page as it scrolls under the
                 top edge, instead of a hard cut. Sits ABOVE normal scroll content
@@ -271,10 +261,14 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
                                 : linsight?.session_id || 'new'
                         }
                         disabled={running || !!pendingInput}
-                        // While running, the disabled input's action button morphs into
-                        // a Stop button — the only stop affordance once the task leaves
-                        // the queue. `stop` (WS hook) terminates the live session.
-                        running={running}
+                        // While actively executing, the disabled input's action button
+                        // morphs into a Stop button — the only stop affordance once the
+                        // task leaves the queue. `stop` (WS hook) terminates the live
+                        // session. During a park (pendingInput) the task is suspended
+                        // awaiting the user's answer (given via the ClarifyCard above),
+                        // NOT executing — so drop the Stop button: showing it reads as
+                        // "running" when nothing is actually running.
+                        running={running && !pendingInput}
                         onStop={stop}
                         // F035 multi-turn: a send here continues THIS conversation
                         // (same session_version + agent thread) instead of starting

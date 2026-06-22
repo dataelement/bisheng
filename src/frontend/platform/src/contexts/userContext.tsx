@@ -217,7 +217,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     // first approvable menu so the user sees an apply button.
                     // Otherwise fall back to the generic placeholder.
                     const APPROVABLE_ORDER = ['board', 'build', 'knowledge', 'model', 'evaluation', 'mark_task', 'log'];
-                    const firstApprovable = res.menu_approval_mode
+                    // Admin-area approval scope (legacy global flag as fallback).
+                    const adminApprovalMode = res.menu_approval_mode_admin ?? res.menu_approval_mode;
+                    const firstApprovable = adminApprovalMode
                         ? APPROVABLE_ORDER[0]
                         : null;
                     const fallback = firstApprovable
@@ -248,7 +250,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
                     menuName
                     && res.role !== 'admin'
                     && !web_menu.includes(menuName)
-                    && !res.menu_approval_mode
+                    && !(res.menu_approval_mode_admin ?? res.menu_approval_mode)
                 ) {
                     history.pushState(null, '', BASE_URL + '/403');
                 }

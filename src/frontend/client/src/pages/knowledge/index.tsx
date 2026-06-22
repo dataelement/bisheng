@@ -767,6 +767,20 @@ export default function Knowledge() {
                                 }}
                             />
                         </div>
+                        {/* Fixed bottom go-to-square — same as the mobile homepage */}
+                        <div className="shrink-0 bg-white px-3 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+8px)]">
+                            <Button
+                                variant="secondary"
+                                onClick={() => {
+                                    setShowKnowledgeSquare(true);
+                                    setSpaceListDrawerOpen(false);
+                                }}
+                                className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                            >
+                                <Outlined.BlocksAndArrows className="size-4" />
+                                {localize("com_knowledge.go_to_square")}
+                            </Button>
+                        </div>
                     </div>,
                     document.body,
                 )
@@ -820,6 +834,7 @@ export default function Knowledge() {
                             onDragStateChange={handleDragStateChange}
                             uploadingFiles={fileUpload.uploadingFiles}
                             creatingFolder={fileUpload.creatingFolder}
+                            folderUploading={fileUpload.folderUploading}
                             onCancelCreateFolder={fileUpload.handleCancelCreateFolder}
                             onCreateSpace={handleCreateSpace}
                             onGoKnowledgeSquare={() => setShowKnowledgeSquare(true)}
@@ -873,6 +888,17 @@ export default function Knowledge() {
                             onManageMembers={(space) => openSpacePermissionDialog(space)}
                             onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                         />
+                    </div>
+                    {/* Fixed bottom go-to-square — reuses the PC sidebar button style */}
+                    <div className="shrink-0 bg-white px-3 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+8px)]">
+                        <Button
+                            variant="secondary"
+                            onClick={() => setShowKnowledgeSquare(true)}
+                            className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                        >
+                            <Outlined.BlocksAndArrows className="size-4" />
+                            {localize("com_knowledge.go_to_square")}
+                        </Button>
                     </div>
                 </div>
             ) : spacesResolving ? (

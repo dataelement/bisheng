@@ -20,6 +20,7 @@ import { locationContext } from "@/contexts/locationContext";
 import i18next from "i18next";
 import { Check, ChevronDown, GanttChartIcon, Lock, MoonStar, Sun } from "lucide-react";
 import { ApprovalMenuIcon } from "@/components/bs-icons/menu/approval";
+import { TenantMenuIcon } from "@/components/bs-icons/menu/tenant";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -79,7 +80,9 @@ export default function MainLayout() {
     const showSystemNav = isFullAdminShell || isChildAdmin
     // 审批管理 — 仅超管 / Child Admin（部门管理员不可见）
     const showApprovalNav = isSuperAdmin || isChildAdmin
-    const menuApprovalMode = Boolean(user.menu_approval_mode)
+    // Admin-area approval scope (falls back to the legacy global flag for
+    // roles saved before the workbench/admin split).
+    const menuApprovalMode = Boolean(user.menu_approval_mode_admin ?? user.menu_approval_mode)
     const hasAdminEntry =
         isSuperAdmin
         || isDeptAdmin
@@ -243,7 +246,7 @@ export default function MainLayout() {
                         {
                             isSuperAdmin && appConfig.multiTenantEnabled && <>
                                 <NavLink to='/tenant' className={`navlink inline-flex rounded-lg w-full px-6 hover:bg-nav-hover h-12 mb-[3.5px]`}>
-                                    <SystemIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('tenant.management')}</span>
+                                    <TenantMenuIcon className="h-6 w-6 my-[12px]" /><span className="mx-[14px] max-w-[56px] text-[14px] leading-[48px]">{t('tenant.management')}</span>
                                 </NavLink>
                             </>
                         }

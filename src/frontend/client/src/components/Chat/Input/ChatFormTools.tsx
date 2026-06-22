@@ -53,7 +53,8 @@ export const ChatToolDown = ({
           )}
         >
           <Settings2Icon size="16" />
-          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] touch-mobile:max-w-[min(18vw,56px)]">
+          {/* Mobile: collapse to icon + chevron only to save horizontal space. */}
+          <span className="text-xs font-normal truncate min-w-0 max-w-[min(36vw,140px)] touch-mobile:max-w-[min(18vw,56px)] touch-mobile:hidden">
             {localize("com_tools_title")}
           </span>
         </div>

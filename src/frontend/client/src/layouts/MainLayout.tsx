@@ -21,7 +21,7 @@ const systemNoticeTodayKey = () => {
 };
 import { cn } from '~/utils';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
-import { canOpenPlatformAdminPanel, canOpenWorkbench } from '~/utils/platformAccess';
+import { canOpenWorkbench } from '~/utils/platformAccess';
 import { UserPopMenu } from './UserPopMenu';
 import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
@@ -100,16 +100,6 @@ function Sidebar({
   const plugins: string[] | null = Array.isArray((user as any)?.plugins)
     ? ((user as any)?.plugins as string[])
     : null;
-  const canOpenPlatform = useMemo(
-    () =>
-      canOpenPlatformAdminPanel({
-        role: user?.role,
-        plugins,
-        is_department_admin: (user as { is_department_admin?: boolean } | undefined)
-          ?.is_department_admin,
-      }),
-    [plugins, user],
-  );
   const canOpenWorkbenchEntry = useMemo(
     () =>
       !Array.isArray(plugins) ||
@@ -121,7 +111,13 @@ function Sidebar({
       }),
     [plugins, user],
   );
-  const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean })?.menu_approval_mode);
+  // Workbench approval scope gates the workspace tabs (falls back to the legacy
+  // global flag for roles saved before the workbench/admin split).
+  const menuApprovalMode = Boolean(
+    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean })
+      ?.menu_approval_mode_workbench
+    ?? (user as { menu_approval_mode?: boolean })?.menu_approval_mode,
+  );
   const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
   const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
   const showSubscriptionTab = showWorkbenchItem('subscription');
@@ -129,12 +125,15 @@ function Sidebar({
   const showHomeTab = showWorkbenchItem('home');
   const showAppsTab = showWorkbenchItem('apps');
 
-  const showAdminPanelShortcut =
-    (user as { has_admin_console?: boolean } | null)?.has_admin_console
-    ?? (
-      user?.role === 'admin'
-      || Boolean(plugins?.includes('backend') || plugins?.includes('admin'))
-    );
+  // The 管理后台 entry mirrors the 「管理后台」 parent toggle in the role dialog,
+  // which is keyed on the new `admin` menu only — NOT the deprecated `backend`
+  // alias or any admin child menu. So we deliberately do not use has_admin_console
+  // here (it also counts `backend` + child menus). Super/dept admins always have
+  // it. The admin approval scope only governs menus *inside* the console.
+  const showAdminEntry =
+    user?.role === 'admin'
+    || Boolean((user as { is_department_admin?: boolean } | null)?.is_department_admin)
+    || Boolean(plugins?.includes('admin'));
 
   // 首钢门户专属入口：仅首钢部署（YAML 命名空间或 ConfigMap window 变量任一有值）+ 系统超管 + 桌面端才显示
   const portalAdminUrl =
@@ -224,7 +223,7 @@ function Sidebar({
     <div
       className={cn(
         showExpandedHubSidebar ? (overlay ? 'w-full' : 'w-[38vw]') : 'w-16',
-        'h-[100dvh] flex flex-col justify-between py-2 pl-2 shrink-0 bg-[rgb(227, 227, 227)]',
+        'h-[100dvh] flex flex-col justify-between py-2 px-2 shrink-0 bg-[rgb(227, 227, 227)]',
         // Mobile chat 路由的 sidebar 显隐由 MainLayout 顶层条件渲染管理(systemMenuRevealing),
         // 这里不再硬加 hidden,否则 systemMenu 露出时 sidebar 也被隐掉。
       )}
@@ -283,7 +282,7 @@ function Sidebar({
       </div>
 
       <div className="flex flex-col gap-4 items-center">
-        {!isMobile && (canOpenPlatform || showAdminPanelShortcut) && (
+        {!isMobile && showAdminEntry && (
           <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
             <div
               title={localize('com_nav_admin_panel')}

@@ -15,8 +15,12 @@ export type User = {
     role: string;
     /** WEB_MENU third_id 列表（构建/知识等侧栏与动态路由） */
     web_menu?: string[];
-    /** 需审批模式：任意角色 quota_config.menu_approval_mode */
+    /** 需审批模式（旧全局键，兼容用）：任意角色 quota_config.menu_approval_mode */
     menu_approval_mode?: boolean;
+    /** 工作台未授权菜单显示+申请（quota_config.menu_approval_mode_workbench） */
+    menu_approval_mode_workbench?: boolean;
+    /** 管理后台未授权菜单显示+申请（quota_config.menu_approval_mode_admin） */
+    menu_approval_mode_admin?: boolean;
     /** PRD 3.2.2：可进入用户组管理（超管 / 部门管理员） */
     can_manage_user_groups?: boolean;
     is_department_admin?: boolean;

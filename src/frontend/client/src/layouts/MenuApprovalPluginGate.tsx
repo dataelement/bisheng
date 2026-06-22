@@ -5,6 +5,7 @@ import { useAuthContext } from '~/hooks';
 type MenuApprovalUser = {
   plugins?: unknown;
   menu_approval_mode?: boolean;
+  menu_approval_mode_workbench?: boolean;
 };
 
 /**
@@ -21,7 +22,8 @@ export default function MenuApprovalPluginGate({
   const { user } = useAuthContext();
   const u = user as MenuApprovalUser | null;
   const plugins = u?.plugins;
-  const menuApprovalMode = Boolean(u?.menu_approval_mode);
+  // Workbench sections use the workbench approval scope (legacy flag as fallback).
+  const menuApprovalMode = Boolean(u?.menu_approval_mode_workbench ?? u?.menu_approval_mode);
   if (!Array.isArray(plugins)) {
     return <>{children}</>;
   }

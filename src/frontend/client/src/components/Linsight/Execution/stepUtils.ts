@@ -882,6 +882,34 @@ export function composeClarifyAnswer(
         .join('\n');
 }
 
+/**
+ * The newest UNANSWERED clarify (call_user_input) across a turn's session steps +
+ * tasks (and legacy subtask children), or null when nothing is pending. This is
+ * the precise "parked on an ask_user, waiting for the user's reply" signal: the
+ * live WS keeps the top-level session status at Running during a park (park is
+ * NOT a distinct live status — see reference notes), so an unanswered
+ * call_user_input is what distinguishes "waiting for your reply" from "actively
+ * executing". Shared by every carrier (ExecutionFlow / TaskTurnPanel / ChatView)
+ * so the timeline clock freeze + the input's stop/await state stay in lockstep.
+ */
+export function findPendingUserInput(
+    sessionSteps: ExecStepEventData[] | null | undefined,
+    tasks: ReadonlyArray<{
+        history?: ExecStepEventData[] | null;
+        children?: ReadonlyArray<{ history?: ExecStepEventData[] | null }> | null;
+    }> | null | undefined,
+): ExecStepEventData | null {
+    const entries: ExecStepEventData[] = [];
+    (sessionSteps || []).forEach((s) => s?.step_type === 'call_user_input' && entries.push(s));
+    (tasks || []).forEach((task) => {
+        (task.history || []).forEach((h) => h?.step_type === 'call_user_input' && entries.push(h));
+        (task.children || []).forEach((child) =>
+            (child.history || []).forEach((h) => h?.step_type === 'call_user_input' && entries.push(h)),
+        );
+    });
+    return [...entries].reverse().find((e) => !e.is_completed) || null;
+}
+
 // ── shared status helpers ────────────────────────────────────────────────────
 
 export const TASK_DONE_STATUSES = ['success'];

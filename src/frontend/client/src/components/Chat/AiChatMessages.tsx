@@ -351,7 +351,11 @@ export default function AiChatMessages({
                     hideHeaderTitle
                         ? "pt-2"
                         : isNarrowViewport
-                            ? "pt-11"
+                            // Narrow viewport renders no in-flow HeaderTitle (it returns
+                            // null — MobileNav owns the top bar), so the old pt-11 left a
+                            // vestigial 44px gap at the top where scrolled content bled
+                            // above the pinned sticky header. Match the headerless pt-2.
+                            ? "pt-2"
                             : "pt-4",
                 )}
                 onScroll={handleScroll}

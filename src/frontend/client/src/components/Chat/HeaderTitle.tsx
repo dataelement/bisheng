@@ -1,4 +1,4 @@
-import { PanelRight } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
 import { useLocation } from 'react-router-dom';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
 import { cn } from '~/utils';
@@ -80,7 +80,7 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
               workspaceOpen ? 'pointer-events-none w-0 opacity-0' : 'w-7 opacity-100 delay-150',
             )}
           >
-            <PanelRight size={16} className="shrink-0" />
+            <Outlined.RightSidebar size={16} className="shrink-0" />
           </button>
         )}
       </div>

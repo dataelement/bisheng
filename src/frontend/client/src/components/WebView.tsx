@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { resolveArtifactUrl } from "~/components/Linsight/Artifacts/artifactUtils";
+import { applyHtmlViewerTabIdentity, resolveArtifactUrl } from "~/components/Linsight/Artifacts/artifactUtils";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 
 // The SPA index.html is returned as a fallback when the artifact file does not
@@ -42,7 +42,17 @@ export default function WebView() {
                     throw new Error(`Failed to fetch file: ${response.status} ${response.statusText}`);
                 }
                 const text = await response.text();
-                if (!cancelled) setContent(isAppShellFallback(text) ? '' : text);
+                if (cancelled) return;
+                if (isAppShellFallback(text)) {
+                    setContent('');
+                    return;
+                }
+                setContent(text);
+                // brand-runtime.js applies the brand favicon/title asynchronously;
+                // wait for it so its config write does not clobber the report
+                // title we set below (the favicon is identical either way).
+                await window.__BRAND_CONFIG_READY__?.catch(() => undefined);
+                if (!cancelled) applyHtmlViewerTabIdentity(text);
             } catch (err) {
                 console.error('WebView failed to load html artifact:', err);
                 if (!cancelled) setContent('');

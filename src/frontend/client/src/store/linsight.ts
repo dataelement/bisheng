@@ -153,6 +153,19 @@ export const activeSessionIdState = atom<string | null>({
 });
 
 /**
+ * Daily-chat "task mode" toggle for the /c welcome page. Lives in a global atom
+ * (not ChatView local state) because ChatView is KeepAlive-cached: after
+ * visiting another tab (e.g. knowledge space) and returning, the cached instance
+ * does NOT re-run its location-driven effect, so a nav-state/effect-based toggle
+ * goes stale. The sidebar "新建任务/新建对话" buttons set this atom directly, which
+ * the (re-activated) ChatView reads immediately — immune to the cache freeze.
+ */
+export const taskModeState = atom<boolean>({
+    key: 'taskModeState',
+    default: false,
+});
+
+/**
  * Whether a conversation (chat_id) currently owns a task-mode session that is
  * still executing — drives the per-conversation running spinner in the sidebar
  * list. A linsight session stores its owning chat_id in `session_id` (see

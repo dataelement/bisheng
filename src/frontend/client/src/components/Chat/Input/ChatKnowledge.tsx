@@ -547,7 +547,9 @@ export const ChatKnowledge = ({
                       <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
                     )}
                   </div>
-                  <span>{localize('com_ui_knowledge_space')}</span>
+                  {/* Mobile: collapse to icon + chevron only to save horizontal
+                      space in the input toolbar. */}
+                  <span className="touch-mobile:hidden">{localize('com_ui_knowledge_space')}</span>
                   <Outlined.Down size={16} className="text-[#999]" />
                 </button>
               ) : (

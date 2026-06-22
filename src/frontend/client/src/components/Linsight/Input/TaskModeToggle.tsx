@@ -42,7 +42,15 @@ export function TaskModeToggle({ active, disabled = false, onClick }: TaskModeTo
             ) : (
                 <Outlined.Binoculars size={16} className={active ? 'text-blue-600' : 'text-[#4E5969]'} />
             )}
-            <span>{localize('com_linsight_task_mode')}</span>
+            {/* Mobile: collapse to icon only to save horizontal space in the
+                input toolbar, matching the knowledge/tools selectors. */}
+            <span className="touch-mobile:hidden">{localize('com_linsight_task_mode')}</span>
+            {/* Mobile + active: persistent exit "x" standing in for the other
+                selectors' chevron — same size/color/gap as their down icon
+                (size 16, #999). Desktop keeps the hover-swap affordance above. */}
+            {active && (
+                <X size={16} className="hidden shrink-0 text-[#999] touch-mobile:block" />
+            )}
         </button>
     );
 }

@@ -2,7 +2,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { Outlined } from 'bisheng-icons';
 import { useNavigate } from 'react-router-dom';
-import { useRecoilValue } from 'recoil';
+import { useRecoilValue, useSetRecoilState } from 'recoil';
+import { taskModeState } from '~/store/linsight';
 import { icons } from '~/components/Chat/Menus/Endpoints/Icons';
 import ConvoIconURL from '~/components/Endpoints/ConvoIconURL';
 import { useGetBsConfig, useGetEndpointsQuery } from '~/hooks/queries/data-provider';
@@ -80,6 +81,7 @@ export default function NewChat({
   const { newConversation: newConvo } = useNewConvo(index);
   const { data: bsConfig } = useGetBsConfig()
   const navigate = useNavigate();
+  const setTaskMode = useSetRecoilState(taskModeState);
   const localize = useLocalize();
   const { user } = useAuthContext();
 
@@ -100,6 +102,9 @@ export default function NewChat({
     // not a separate route. Land on /c/new with nav state so ChatView starts
     // in task mode; execution still navigates to /linsight on submit.
     newConvo();
+    // Set the global atom directly so the (KeepAlive-cached) ChatView enters task
+    // mode even when its location-driven effect won't re-run after a tab switch.
+    setTaskMode(true);
     navigate('/c/new', { state: { taskMode: true } });
     if (isSmallScreen) {
       toggleNav();
@@ -114,6 +119,9 @@ export default function NewChat({
     if (event.button === 0 && !(event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       newConvo();
+      // Reset the global atom directly (KeepAlive-cached ChatView won't re-run
+      // its location effect after a tab switch — see taskModeState).
+      setTaskMode(false);
       navigate('/c/new');
       // Keep auto-collapse behavior only on small screens.
       if (isSmallScreen) {

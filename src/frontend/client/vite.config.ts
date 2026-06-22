@@ -17,11 +17,35 @@ const app_env = {
 
 const minioPathRE = /^\/(?:workspace\/)?bisheng(?:\/|$)/;
 
+// Emit one loud, actionable warning the first time MinIO answers a proxied
+// object request with 403. For presigned (SigV4) URLs to the public bucket a
+// 403 is almost always SignatureDoesNotMatch: the dev proxy forwards Host =
+// <proxy target host>, but the URL was signed for the backend `sharepoint`
+// host. The classic trap is `127.0.0.1` vs `localhost` (not interchangeable for
+// signing). Without this, the only symptom is silently broken images.
+let warnedMinio403 = false;
+function warnMinioSignatureMismatch(envVar: string, targetHost: string, requestUrl: string): void {
+  if (warnedMinio403) return;
+  warnedMinio403 = true;
+  console.warn(
+    `\n\x1b[33m[bisheng:minio-proxy] ⚠️  MinIO returned 403 for "${requestUrl}".\n` +
+    `  Almost certainly a SigV4 host mismatch: the dev proxy forwards Host=${targetHost},\n` +
+    `  but the presigned URL was signed for a different host.\n` +
+    `  Fix: set ${envVar} so its host EXACTLY equals backend config.yaml\n` +
+    `  object_storage.minio.sharepoint  (note: 127.0.0.1 ≠ localhost).\x1b[0m\n`,
+  );
+}
+
 function minioFileProxyPlugin(minioTarget: string): Plugin {
+  const minioTargetHost = new URL(minioTarget).host;
   return {
     name: 'bisheng:minio-file-proxy',
     apply: 'serve',
     configureServer(server) {
+      console.log(
+        `[bisheng:minio-proxy] dev object proxy -> ${minioTarget} ` +
+        `(host must equal backend sharepoint; 127.0.0.1 ≠ localhost)`,
+      );
       const minioProxyMiddleware = (req, res, next) => {
         const requestUrl = req.url || '';
 
@@ -45,6 +69,9 @@ function minioFileProxyPlugin(minioTarget: string): Plugin {
             },
           },
           (proxyRes) => {
+            if (proxyRes.statusCode === 403) {
+              warnMinioSignatureMismatch('VITE_DEV_MINIO_TARGET', minioTargetHost, requestUrl);
+            }
             res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
             proxyRes.pipe(res);
           },

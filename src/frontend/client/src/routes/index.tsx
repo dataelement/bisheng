@@ -67,7 +67,12 @@ function HomeEntryRedirect() {
   // In approval mode, a new user may have workbench entry but no nav plugins yet.
   // Send them to the default apply page so they can request access instead of seeing
   // a dead-end generic message.
-  const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode);
+  // Workspace landing fallback uses the workbench approval scope (legacy flag as fallback).
+  const menuApprovalMode = Boolean(
+    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean } | null)
+      ?.menu_approval_mode_workbench
+    ?? (user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode,
+  );
   if (menuApprovalMode) {
     return <Navigate to="/menu-unavailable?plugin=home" replace />;
   }

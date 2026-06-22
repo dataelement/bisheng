@@ -128,7 +128,8 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
               <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
             )}
           </div>
-          <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)]">
+          {/* Mobile: collapse to icon + chevron only to save horizontal space. */}
+          <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)] touch-mobile:hidden">
             {localize("com_tools_title")}
             {/* {isActive ? ` (${activeCount})` : ""} */}
           </span>

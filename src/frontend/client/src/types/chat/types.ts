@@ -116,8 +116,12 @@ export type TUser = {
   provider: string;
   plugins?: string[];
   is_department_admin?: boolean;
-  /** 与 /user/info 的 menu_approval_mode 对齐 */
+  /** 旧全局键（兼容用），与 /user/info 的 menu_approval_mode 对齐 */
   menu_approval_mode?: boolean;
+  /** 工作台未授权菜单显示+申请（menu_approval_mode_workbench，兜底旧键） */
+  menu_approval_mode_workbench?: boolean;
+  /** 管理后台未授权菜单显示+申请（menu_approval_mode_admin，兜底旧键） */
+  menu_approval_mode_admin?: boolean;
   /** /user/info：有效工作台区域 */
   has_workbench?: boolean;
   /** /user/info：有效管理后台区域 */

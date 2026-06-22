@@ -542,8 +542,6 @@ export function KnowledgeSpaceSidebar({
                                     sortFieldLabel={localize("com_knowledge.sort_field")}
                                     onSortChange={(v) => setSort("joined", v as SpaceSortType)}
                                     mobile={mobilePageMode}
-                                    onSquare={mobilePageMode ? () => onKnowledgeSquare?.() : undefined}
-                                    squareLabel={localize("com_knowledge.go_to_square")}
                                 />
                                 {!joinedCollapsed && (
                                     <div className={listRowClassName}>

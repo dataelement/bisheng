@@ -54,7 +54,12 @@ export function useHubModuleLinks(): HubModuleLink[] {
       plugins,
       is_department_admin: (user as { is_department_admin?: boolean } | undefined)?.is_department_admin,
     });
-  const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean })?.menu_approval_mode);
+  // Workbench nav tabs use the workbench approval scope (legacy flag as fallback).
+  const menuApprovalMode = Boolean(
+    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean })
+      ?.menu_approval_mode_workbench
+    ?? (user as { menu_approval_mode?: boolean })?.menu_approval_mode,
+  );
   const hasPlugin = (id: string) => (plugins ? plugins.includes(id) : true);
   const showWorkbenchItem = (id: string) => hasPlugin(id) || menuApprovalMode;
   const showSubscriptionTab = showWorkbenchItem('subscription');

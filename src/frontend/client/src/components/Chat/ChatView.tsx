@@ -14,7 +14,9 @@ import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspaceP
 import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { userStopLinsightEvent } from '~/api/linsight';
-import { SopStatus } from '~/store/linsight';
+import { SopStatus, taskModeState } from '~/store/linsight';
+import { findPendingUserInput, splitSessionPseudoTask } from '~/components/Linsight/Execution/stepUtils';
+import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtils';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
@@ -43,6 +45,7 @@ import {
   useMessageSelection,
 } from '~/hooks/useMessageSelection';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
+import useMediaQuery from '~/hooks/useMediaQuery';
 import { useToastContext } from '~/Providers';
 import { NotificationSeverity } from '~/common';
 import {
@@ -58,13 +61,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const [inputText, setInputText] = useState('');
 
-  // F035: task mode is a LOCAL toggle on the daily welcome page — no route jump.
+  // F035: task mode is a toggle on the daily welcome page — no route jump.
   // The route stays `/c`; only submitting in task mode navigates to /linsight.
-  // Initial value comes from nav state so the sidebar "新建任务" entry can land
-  // here already in task mode (see Nav/NewChat handleNewTask).
-  const [taskMode, setTaskMode] = useState<boolean>(
-    !!(location.state as any)?.taskMode,
-  );
+  // Driven by a GLOBAL atom (not local state): ChatView is KeepAlive-cached, so a
+  // nav-state/effect-based toggle goes stale after returning from another tab.
+  // The sidebar "新建任务/新建对话" buttons set the atom directly (see Nav/NewChat),
+  // which the re-activated ChatView reads immediately.
+  const [taskMode, setTaskMode] = useRecoilState(taskModeState);
 
   const { data: bsConfig } = useGetBsConfig();
   const { user } = useAuthContext();
@@ -189,6 +192,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const { state: selectionState, getSelectedIds, exitSelectionMode } =
     useMessageSelection();
   const isH5 = usePrefersMobileLayout();
+  // Matches the CSS `touch-mobile` variant (≤1023px) so the JS-measured apps
+  // offset stays in sync with the CSS-based welcome-block centering.
+  const isTouchLayout = useMediaQuery('(max-width: 1023px)');
   const { showToast } = useToastContext();
   const [exportSheetOpen, setExportSheetOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -305,6 +311,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     const ro = new ResizeObserver(update);
     ro.observe(el);
     landingResizeObserverRef.current = ro;
+  }, []);
+
+  // Mobile only: the landing parent is `h-full` (= the visible scroll-area
+  // height, header/banner already excluded). We center the welcome block at
+  // its 50% mark and place the apps `parentH/2 + blockH/2 + 40px` from the top
+  // — i.e. exactly 40px below the centered input — instead of `vh`, which on
+  // mobile resolves below the visual center (layout-viewport relative).
+  const landingParentObserverRef = useRef<ResizeObserver | null>(null);
+  const [landingParentHeight, setLandingParentHeight] = useState(0);
+  const landingParentRef = useCallback((el: HTMLDivElement | null) => {
+    if (landingParentObserverRef.current) {
+      landingParentObserverRef.current.disconnect();
+      landingParentObserverRef.current = null;
+    }
+    if (!el) return;
+    const update = () => setLandingParentHeight(el.clientHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    landingParentObserverRef.current = ro;
   }, []);
 
   // F035: task mode is a ROLE permission. The backend folds each role's
@@ -469,6 +495,21 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     );
   }, [taskLinsight]);
 
+  // A parked task (ask_user awaiting the user's reply) keeps status === Running —
+  // park is not a distinct live status — so taskRunning stays true even though the
+  // agent is suspended on an interrupt and nothing is executing. Detect the park
+  // (an unanswered call_user_input in the latest task turn) so the input can drop
+  // the misleading "running" Stop button and show a "waiting for your reply" hint;
+  // the user answers via the ClarifyCard in the message stream, not this input.
+  const awaitingUserInput = useMemo(() => {
+    if (!taskRunning || !taskLinsight) return false;
+    const { tasks, sessionSteps } = splitSessionPseudoTask(
+      ((taskLinsight as any).tasks as any[]) || [],
+      ((taskLinsight as any).sessionSteps as ExecStepEventData[]) || [],
+    );
+    return !!findPendingUserInput(sessionSteps, tasks);
+  }, [taskRunning, taskLinsight]);
+
   // Stop button handler. A task round runs via the linsight worker/WS, normally
   // AFTER the handoff SSE stream closed — route the stop to terminate-execute.
   const handleStop = useCallback(() => {
@@ -519,7 +560,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
             return (
               <div className={cn(
                 'flex flex-col relative',
-                useMessagesLayout ? 'h-full' : ''
+                // Landing (non-messages) layout keeps auto height on desktop so the
+                // vh-positioned welcome block + apps flow naturally. On mobile it
+                // needs a definite height so the landing block's `min-h-full`
+                // centering resolves against the visible scroll-area height.
+                useMessagesLayout ? 'h-full' : 'touch-mobile:h-full'
               )}>
                 {/* Content area: Split into Chat Main and Citation Sidebar */}
                 {isLoading && conversationId !== 'new' ? (
@@ -582,12 +627,18 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               disabled={!bsConfig?.models?.length || !!shareToken}
                               sendDisabled={taskRunning}
                               isStreaming={isStreaming}
-                              taskRunning={taskRunning}
+                              // Parked awaiting the user → not "running": drop the Stop
+                              // button (sendDisabled still blocks a new round until the
+                              // current one resolves). The user replies via the
+                              // ClarifyCard in the stream above, not this input.
+                              taskRunning={taskRunning && !awaitingUserInput}
                               features={{ taskModeEntry: canUseTaskMode, taskMode: (taskMode || taskRunning) && canUseTaskMode }}
                               onToggleTaskMode={() => setTaskMode((v) => !v)}
-                              placeholder={taskMode
-                                ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
-                                : undefined}
+                              placeholder={awaitingUserInput
+                                ? t('com_linsight_awaiting_reply')
+                                : taskMode
+                                  ? ((bsConfig as any)?.linsightConfig?.input_placeholder || t('com_linsight_input_placeholder'))
+                                  : undefined}
                               onScrollToBottom={() => { }}
                               modelOptions={bsConfig?.models}
                               modelValue={chatModel.id}
@@ -668,15 +719,26 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                      `landingBlockHeight` is measured live with a ResizeObserver.
                      When total content exceeds viewport, the parent's
                      overflow-y-auto handles scrolling — the centered block scrolls
-                     up with the document as expected. */
-                  <div className="relative min-h-full">
+                     up with the document as expected.
+
+                     Mobile (touch-mobile, ≤1023px) can NOT use `vh`: the MobileNav
+                     header + Banner sit above this scroll container, so `45vh`
+                     (layout-viewport relative) resolves below the visible center.
+                     Instead the parent gets a definite `h-full` (= the visible
+                     scroll-area height) so the welcome block sits at 45% of it
+                     (`top-[45%]`, slightly above true center — looks more
+                     balanced than dead-center), and the apps sit 40px below the
+                     input via a JS-measured offset (see landingParentHeight). */
+                  <div ref={landingParentRef} className="relative min-h-full touch-mobile:h-full">
                     {/* Centered: welcome message + input. `top: 50vh` (viewport
                         height), NOT `top: 50%` — the parent's effective height
                         gets stretched by the apps' paddingTop below, so a
-                        percentage would resolve to a non-viewport midpoint. */}
+                        percentage would resolve to a non-viewport midpoint.
+                        On mobile the parent is a fixed `h-full` box, so `top-[45%]`
+                        resolves against the visible height (45vh-equivalent). */}
                     <div
                       ref={landingBlockRef}
-                      className="absolute inset-x-0 top-[45vh] -translate-y-1/2"
+                      className="absolute inset-x-0 top-[45vh] -translate-y-1/2 touch-mobile:top-[45%]"
                     >
                       {/* F035 Track H (P5): daily/task mode switch removed —
                           task mode is reached via the sidebar "new task" entry
@@ -722,10 +784,15 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
                     {/* Recommended apps: 40px below the centered block. The
                         paddingTop pushes apps to (viewport midpoint) + (landing
-                        half-height) + 40px = (landing block bottom) + 40px. */}
+                        half-height) + 40px = (landing block bottom) + 40px.
+                        On mobile `vh` is replaced by the measured visible height
+                        (landingParentHeight) so the gap stays exactly 40px below
+                        the centered input rather than landing on the next screen. */}
                     <div
                       style={{
-                        paddingTop: `calc(45vh + ${landingBlockHeight / 2 + 40}px)`,
+                        paddingTop: isTouchLayout
+                          ? `${landingParentHeight * 0.45 + landingBlockHeight / 2 + 40}px`
+                          : `calc(45vh + ${landingBlockHeight / 2 + 40}px)`,
                       }}
                     >
                       <DailyFeaturedApps t={t} />

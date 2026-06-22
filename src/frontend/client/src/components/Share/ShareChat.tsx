@@ -3,8 +3,8 @@ import { useToastContext } from "~/Providers";
 import { getShareLinkApi } from "~/api";
 import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
+import { Outlined } from "bisheng-icons";
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, Input } from "../ui";
-import { ShareOutlineIcon } from "../icons/ShareOutlineIcon";
 
 interface ShareDialogProps {
     type: 'linsight_session' | 'workbench_chat' | 'workflow' | 'skill' | 'assistant'
@@ -13,9 +13,21 @@ interface ShareDialogProps {
     versionId?: string
     /** 与灵思头部「任务描述」等操作一致：描边 + 图标 + 「分享」文案 */
     labeled?: boolean
+    /** Override the share icon classes (e.g. size-5 in the mobile top bar). */
+    iconClassName?: string
+    /** Override the icon-only button box (e.g. align with the mobile top-bar icon buttons). */
+    buttonClassName?: string
 }
 
-export default function ShareChat({ type, chatId, flowId, versionId, labeled }: ShareDialogProps) {
+export default function ShareChat({
+    type,
+    chatId,
+    flowId,
+    versionId,
+    labeled,
+    iconClassName = "size-4 text-gray-800 shrink-0",
+    buttonClassName = "h-[28px] w-[28px] p-0 text-[#212121] hover:bg-gray-100",
+}: ShareDialogProps) {
     /** 灵思会话顶部需与「任务描述」同款描边按钮；未传 labeled 时由 type 决定 */
     const showLabeledToolbar = labeled ?? type === "linsight_session"
 
@@ -60,11 +72,11 @@ export default function ShareChat({ type, chatId, flowId, versionId, labeled }: 
             className={
                 showLabeledToolbar
                     ? "h-7 px-3 rounded-lg shadow-sm focus-visible:outline-0 font-normal"
-                    : "h-[28px] w-[28px] p-0 text-[#212121] hover:bg-gray-100"
+                    : buttonClassName
             }
             onClick={() => setIsOpen(true)}
         >
-            <ShareOutlineIcon className="size-4 text-gray-800 shrink-0" />
+            <Outlined.Share className={iconClassName} />
             {showLabeledToolbar ? (
                 <span className="text-xs">{localize("com_ui_share")}</span>
             ) : null}
