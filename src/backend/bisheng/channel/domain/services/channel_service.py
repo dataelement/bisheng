@@ -2362,7 +2362,16 @@ class ChannelService:
             user_id=login_user.user_id,
         )
         if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
+            # Non-members may still view when granted `view_channel` via ReBAC, or
+            # when they are a super/tenant admin (resolved to owner-equivalent
+            # permissions). Mirrors knowledge-space APPROVAL access, where admins /
+            # ReBAC-granted users read content without subscribing. find_membership
+            # is ACTIVE-only for channels, so a PENDING applicant resolves to None
+            # here and gains no membership-derived permission — the approval gate
+            # stays intact.
+            permission_ids = await self._get_channel_permission_ids(channel_id, login_user, current_membership)
+            if "view_channel" not in permission_ids:
+                raise ChannelAccessDeniedError(msg="You do not have permission to view this channel")
 
         # 1. Fetch article from ES
         article = await self.article_es_service.get_article(article_id)
