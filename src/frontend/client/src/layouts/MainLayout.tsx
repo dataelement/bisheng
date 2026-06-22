@@ -281,7 +281,7 @@ function Sidebar({
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 items-center">
+      <div className="flex flex-col gap-2 items-center">
         {!isMobile && showAdminEntry && (
           <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
             <div
