@@ -532,9 +532,14 @@ export const ChatKnowledge = ({
                   aria-label={localize('com_ui_knowledge_space')}
                 >
                   <div className="relative shrink-0">
+                    {/* Icon is neutral by default (matches the + button) and
+                        turns brand-blue once a space is selected. */}
                     <span
                       aria-hidden
-                      className="block size-4 bg-blue-500"
+                      className={cn(
+                        "block size-4",
+                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-600" : "bg-[#4E5969]"
+                      )}
                       style={{
                         WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
                         maskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
@@ -543,9 +548,6 @@ export const ChatKnowledge = ({
                         WebkitMaskSize: 'contain', maskSize: 'contain',
                       }}
                     />
-                    {selectedKnowledgeSpaces.length > 0 && (
-                      <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-                    )}
                   </div>
                   {/* Mobile: collapse to icon + chevron only to save horizontal
                       space in the input toolbar. */}
@@ -679,10 +681,8 @@ export const ChatKnowledge = ({
             >
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  <Outlined.Books size={18} className="text-[#999]" />
-                  {selectedOrgKbs.length > 0 && (
-                    <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-                  )}
+                  {/* Icon turns brand-blue once an org KB is selected (no dot). */}
+                  <Outlined.Books size={18} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
                 </div>
                 <span className="text-[14px] font-normal text-slate-700">
                   {localize('com_tools_org_knowledge')}
@@ -732,10 +732,8 @@ export const ChatKnowledge = ({
           >
             <div className="flex min-w-0 items-center gap-2">
               <div className="relative shrink-0">
-                <Outlined.Books size={18} className="text-[#999]" />
-                {selectedOrgKbs.length > 0 && (
-                  <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-                )}
+                {/* Icon turns brand-blue once an org KB is selected (no dot). */}
+                <Outlined.Books size={18} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
               </div>
               <span className="truncate text-[14px] font-normal text-slate-700">
                 {localize('com_tools_org_knowledge')}

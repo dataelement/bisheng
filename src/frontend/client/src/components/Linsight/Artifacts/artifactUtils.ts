@@ -107,6 +107,41 @@ export function openHtmlArtifactViewer(file: ArtifactFile, versionId: string): v
     window.open(`${__APP_ENV__.BASE_URL}/html?${params.toString()}`, '_blank');
 }
 
+/**
+ * Give the standalone HTML viewer tab (`/html`) the right tab identity.
+ *
+ * The report is rendered inside a sandboxed `<iframe srcDoc>`, so its own
+ * `<head>` (`<title>` / `<link rel="icon">`) cannot influence THIS browser tab —
+ * the browser derives the tab title and favicon from the top-level `/html`
+ * document only. Without this, a generated report tab would fall back to the
+ * generic page favicon instead of the configured brand icon (品牌定制 →
+ * 浏览器标签图标). So we set both here:
+ *   - favicon: the brand favicon resolved by brand-runtime.js (falls back to the
+ *     bundled default), so the tab matches the rest of the app;
+ *   - title: the report's own `<title>`, so multiple report tabs stay
+ *     distinguishable (DOMParser does not execute scripts, so reading the title
+ *     from untrusted HTML is safe).
+ */
+export function applyHtmlViewerTabIdentity(htmlContent: string): void {
+    const faviconUrl =
+        window.BRAND_CONFIG?.assets?.favicon?.url ||
+        `${__APP_ENV__.BASE_URL}/assets/bisheng/favicon.ico`;
+    let iconLink = document.head.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!iconLink) {
+        iconLink = document.createElement('link');
+        iconLink.rel = 'icon';
+        document.head.appendChild(iconLink);
+    }
+    iconLink.href = faviconUrl;
+
+    const reportTitle = new DOMParser()
+        .parseFromString(htmlContent || '', 'text/html')
+        .title.trim();
+    if (reportTitle) {
+        document.title = reportTitle;
+    }
+}
+
 /** Download the original artifact file ("save as" action). */
 export async function downloadArtifactFile(file: ArtifactFile, versionId: string): Promise<void> {
     const url = await resolveArtifactUrl(file.file_url, versionId);

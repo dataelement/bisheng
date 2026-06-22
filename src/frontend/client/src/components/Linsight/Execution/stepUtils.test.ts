@@ -4,6 +4,7 @@ import {
     buildTimelineGroups,
     explodeSubagentGroup,
     extractNarration,
+    findPendingUserInput,
     firstLine,
     mergeStepFrames,
     narrationFromSteps,
@@ -753,5 +754,47 @@ describe('stepUtils — narrationFromSteps (§3 running vs done)', () => {
     it('returns empty string when there is no thinking step', () => {
         expect(narrationFromSteps([step({ name: 'web_search', stepType: 'tool' })], false)).toBe('');
         expect(narrationFromSteps([], true)).toBe('');
+    });
+});
+
+describe('stepUtils — findPendingUserInput (park-awaiting-user signal)', () => {
+    const clarify = (over: Partial<ExecStepEventData>): ExecStepEventData => ({
+        step_type: 'call_user_input',
+        ...over,
+    });
+
+    it('returns null when there is no clarify at all', () => {
+        expect(findPendingUserInput([], [])).toBeNull();
+        expect(findPendingUserInput([{ step_type: 'thinking' }], [])).toBeNull();
+    });
+
+    it('returns the unanswered session-level clarify (the park signal)', () => {
+        const pending = clarify({ call_reason: 'need scope', is_completed: false });
+        expect(findPendingUserInput([pending], [])).toBe(pending);
+    });
+
+    it('returns null once every clarify is answered (resumed, not parked)', () => {
+        const answered = clarify({ call_reason: 'need scope', is_completed: true });
+        expect(findPendingUserInput([answered], [])).toBeNull();
+    });
+
+    it('prefers the NEWEST unanswered entry (latest park wins)', () => {
+        const first = clarify({ call_reason: 'q1', is_completed: true });
+        const second = clarify({ call_reason: 'q2', is_completed: false });
+        expect(findPendingUserInput([first, second], [])).toBe(second);
+    });
+
+    it('collects clarifies from task history and legacy subtask children', () => {
+        const taskClarify = clarify({ call_reason: 'task-level', is_completed: false });
+        const childClarify = clarify({ call_reason: 'child-level', is_completed: false });
+        // newest unanswered wins; child is appended after the task history, so it is later
+        expect(
+            findPendingUserInput([], [{ history: [taskClarify], children: [{ history: [childClarify] }] }]),
+        ).toBe(childClarify);
+    });
+
+    it('tolerates null/undefined inputs and missing history', () => {
+        expect(findPendingUserInput(null, null)).toBeNull();
+        expect(findPendingUserInput(undefined, [{ history: null, children: null }])).toBeNull();
     });
 });

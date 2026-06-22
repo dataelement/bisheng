@@ -23,6 +23,7 @@ from collections.abc import Callable
 from typing import Any
 
 from langchain_milvus import Milvus as _LangchainMilvus
+from loguru import logger
 from pymilvus import connections
 
 _ORM_CONNECT_KEYS = ("uri", "host", "port", "user", "password", "token", "db_name", "secure")
@@ -58,6 +59,47 @@ class Milvus(_LangchainMilvus):
     @col.setter
     def col(self, value) -> None:
         _LangchainMilvus.col.fset(self, value)
+
+    def _ensure_fields_loaded(self) -> None:
+        """Repopulate ``self.fields`` if it was never extracted from the collection.
+
+        ``self.fields`` is a one-shot snapshot taken at ``__init__``/``_init`` time
+        and drives which metadata keys survive ``_prepare_insert_list`` (keys not in
+        ``self.fields`` are silently dropped). langchain-milvus only re-extracts the
+        snapshot inside ``_init``, which runs *only when the collection is absent*.
+
+        Under concurrent first-time uploads to a new knowledge base, every worker
+        except the one that wins the schema-creation race constructs its instance
+        while the collection still does not exist, leaving ``self.fields`` empty.
+        Once a peer creates the collection, those waiting instances never refresh —
+        so their inserts drop every metadata field (including the non-nullable
+        ``document_id``), fail, and strand the file in a terminal FAILED state.
+
+        Refresh the snapshot here whenever it is empty but the collection now
+        exists. Best-effort: a failure to read the schema must not block the insert
+        (the absent collection / genuine error paths are handled downstream).
+        """
+        if self.fields:
+            return
+        try:
+            if self.client.has_collection(self.collection_name):
+                self._extract_fields()
+        except Exception:
+            # Non-critical: leave fields as-is and let the normal insert path
+            # surface any real schema/connection error.
+            logger.warning(
+                "milvus _ensure_fields_loaded failed for collection={}; proceeding without field refresh",
+                self.collection_name,
+                exc_info=True,
+            )
+
+    def add_texts(self, *args: Any, **kwargs: Any) -> list[str]:
+        self._ensure_fields_loaded()
+        return super().add_texts(*args, **kwargs)
+
+    async def aadd_texts(self, *args: Any, **kwargs: Any) -> list[str]:
+        self._ensure_fields_loaded()
+        return await super().aadd_texts(*args, **kwargs)
 
     def _select_relevance_score_fn(self) -> Callable[[float], float]:
         try:

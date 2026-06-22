@@ -175,7 +175,8 @@ export default function App() {
     if (user && user.role === 'admin') return getAdminRouter()
     if (!user?.user_id) return null
     const perms = resolveRoutePermissions(user)
-    return getPrivateRouter(perms, { menuApprovalMode: Boolean(user.menu_approval_mode) })
+    // Admin-shell routes: gated by the admin approval scope (legacy flag as fallback).
+    return getPrivateRouter(perms, { menuApprovalMode: Boolean(user.menu_approval_mode_admin ?? user.menu_approval_mode) })
   }, [user])
 
   // url error toast

@@ -43,7 +43,7 @@ import { ResultPanel } from './ResultPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
-import { isTaskStarted, splitSessionPseudoTask } from './stepUtils';
+import { findPendingUserInput, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 
 interface TaskTurnPanelProps {
     /** linsight session_version id holding this turn's execution detail */
@@ -57,19 +57,6 @@ interface TaskTurnPanelProps {
     /** Preview a result document in the chat-embedded inline workspace panel
         (ChatView owns it). A doc link opens the file directly — no drawer. */
     onPreviewFile?: (file: ArtifactFile) => void;
-}
-
-/** Collect every clarify (call_user_input) entry across session + tasks. */
-function collectUserInputs(sessionSteps: ExecStepEventData[], tasks: ExecTask[]) {
-    const entries: ExecStepEventData[] = [];
-    sessionSteps.forEach((s) => s?.step_type === 'call_user_input' && entries.push(s));
-    tasks.forEach((task) => {
-        (task.history || []).forEach((h) => h?.step_type === 'call_user_input' && entries.push(h));
-        (task.children || []).forEach((child) =>
-            (child.history || []).forEach((h) => h?.step_type === 'call_user_input' && entries.push(h)),
-        );
-    });
-    return entries;
 }
 
 export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = false, onPreviewFile }: TaskTurnPanelProps) {
@@ -122,11 +109,10 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     const stopped = status === SopStatus.Stoped;
     const fileList: ArtifactFile[] = (linsight?.file_list as ArtifactFile[]) || [];
 
-    const pendingInput = useMemo(() => {
-        if (!running) return null;
-        const entries = collectUserInputs(sessionSteps, tasks);
-        return [...entries].reverse().find((e) => !e.is_completed) || null;
-    }, [running, sessionSteps, tasks]);
+    const pendingInput = useMemo(
+        () => (running ? findPendingUserInput(sessionSteps, tasks) : null),
+        [running, sessionSteps, tasks],
+    );
 
     const answeredSessionInputs = useMemo(
         () => sessionSteps.filter((s) => s?.step_type === 'call_user_input' && s?.is_completed),
@@ -192,7 +178,10 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     return (
         // Provide turn liveness so a dangling/blocked step can't keep a group
         // ticking "running" after this turn completes (see ExecutionLiveContext).
-        <ExecutionLiveContext.Provider value={running}>
+        // A park (pendingInput: ask_user awaiting the user) is also NOT live — the
+        // agent is suspended on an interrupt, so freeze the clock until the user
+        // answers and execution resumes with a fresh episode.
+        <ExecutionLiveContext.Provider value={running && !pendingInput}>
         <div ref={rootRef} className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
             {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}

@@ -84,6 +84,8 @@ interface KnowledgeSpaceContentProps {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     uploadingFiles?: KnowledgeFile[];
     creatingFolder?: KnowledgeFile | null;
+    /** True while a dragged/picked folder batch is uploading — shows a loading overlay. */
+    folderUploading?: boolean;
     onCancelCreateFolder?: () => void;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
@@ -126,6 +128,7 @@ export function KnowledgeSpaceContent({
     onDragStateChange,
     uploadingFiles = [],
     creatingFolder,
+    folderUploading = false,
     onCancelCreateFolder,
     onCreateSpace,
     onGoKnowledgeSquare,
@@ -1303,12 +1306,15 @@ export function KnowledgeSpaceContent({
                     {suppressList ? (
                         // Search page before any query — intentionally empty.
                         <div className="min-h-0 flex-1" />
-                    ) : loading && displayFiles.length === 0 ? (
+                    ) : (loading && displayFiles.length === 0) || folderUploading ? (
                         // Space switching / first load: show a spinner instead of the
                         // "no files here" empty illustration. The fileManager hook clears
                         // `files` immediately on activeSpace change, so this branch fires
                         // for the entire fetch window — the right pane no longer keeps
                         // showing the previous space's contents while the API responds.
+                        // Also covers a dragged/picked folder upload (folderUploading), so
+                        // the drop shows immediate feedback instead of appearing frozen
+                        // until the folder finally lands.
                         <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
                             <LoadingIcon className="size-20 text-primary" />
                         </div>

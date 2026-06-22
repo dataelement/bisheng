@@ -238,6 +238,9 @@ export function useFileUpload({
     const localize = useLocalize();
     const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
     const [creatingFolder, setCreatingFolder] = useState<KnowledgeFile | null>(null);
+    // True while a dragged/picked folder batch is uploading + registering, so the
+    // detail pane can show a loading state instead of appearing unresponsive.
+    const [folderUploading, setFolderUploading] = useState(false);
     // Duplicate file detection state
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
 
@@ -378,6 +381,10 @@ export function useFileUpload({
             // upload every file twice and trigger spurious dup warnings).
             if (folderUploadInFlightRef.current) return;
             folderUploadInFlightRef.current = true;
+            // Surface a loading state for the whole batch — uploading bodies +
+            // registering the tree + refresh can take a while, and without it the
+            // drop appears to do nothing until the folder finally shows up.
+            setFolderUploading(true);
             try {
             const allFiles = Array.from(fileList);
 
@@ -489,6 +496,7 @@ export function useFileUpload({
             await loadFiles(currentPage);
             } finally {
                 folderUploadInFlightRef.current = false;
+                setFolderUploading(false);
             }
         },
         [activeSpace, currentFolderId, currentPage, loadFiles, localize, showToast],
@@ -631,6 +639,7 @@ export function useFileUpload({
     return {
         uploadingFiles,
         creatingFolder,
+        folderUploading,
         duplicateFiles,
         handleUploadFile,
         handleUploadFolder,

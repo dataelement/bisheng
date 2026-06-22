@@ -30,7 +30,12 @@ export default function MenuUnavailablePage() {
   const pluginId = searchParams.get('plugin') || '';
   const hasPlugin = Array.isArray((user as { plugins?: string[] } | null)?.plugins)
     && Boolean((user as { plugins?: string[] } | null)?.plugins?.includes(pluginId));
-  const menuApprovalMode = Boolean((user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode);
+  // Workspace menu-unavailable flow uses the workbench approval scope (legacy flag as fallback).
+  const menuApprovalMode = Boolean(
+    (user as { menu_approval_mode_workbench?: boolean; menu_approval_mode?: boolean } | null)
+      ?.menu_approval_mode_workbench
+    ?? (user as { menu_approval_mode?: boolean } | null)?.menu_approval_mode,
+  );
   const canApply = Boolean(pluginId) && menuApprovalMode && !hasPlugin;
 
   // If the user already has the permission (e.g. approval was granted and they refreshed),

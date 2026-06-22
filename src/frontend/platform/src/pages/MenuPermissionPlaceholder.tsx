@@ -28,7 +28,8 @@ export default function MenuPermissionPlaceholder() {
   const menuKey = new URLSearchParams(location.search).get("menu") ?? "";
   const menuLabelKey = menuKey ? MENU_LABEL_KEYS[menuKey] : "";
   const menuName = menuLabelKey ? t(menuLabelKey, { defaultValue: menuKey }) : "";
-  const approvalEnabled = Boolean(user?.menu_approval_mode);
+  // Admin-area approval scope (legacy global flag as fallback).
+  const approvalEnabled = Boolean(user?.menu_approval_mode_admin ?? user?.menu_approval_mode);
 
   const [showDialog, setShowDialog] = useState(false);
   const [reason, setReason] = useState("");

@@ -135,6 +135,8 @@ export function getUser(): Promise<t.TUser> {
       web_menu,
       avatar,
       menu_approval_mode,
+      menu_approval_mode_workbench,
+      menu_approval_mode_admin,
       is_department_admin,
       has_workbench: hbApi,
       has_admin_console: haApi,
@@ -181,7 +183,11 @@ export function getUser(): Promise<t.TUser> {
       "role": role,
       "plugins": wm,
       "is_department_admin": Boolean(is_department_admin),
+      // Legacy union flag (kept for back-compat) + per-area scopes. Scoped keys
+      // fall back to the legacy flag for roles saved before the split.
       "menu_approval_mode": Boolean(menu_approval_mode),
+      "menu_approval_mode_workbench": Boolean(menu_approval_mode_workbench ?? menu_approval_mode),
+      "menu_approval_mode_admin": Boolean(menu_approval_mode_admin ?? menu_approval_mode),
       has_workbench: canWorkspace,
       has_admin_console: canManagement,
       "termsAccepted": false,
