@@ -39,6 +39,7 @@ from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq, UpdateKnowledgeMetadataFieldsReq,
     ModifyKnowledgeFileMetaDataReq, UpdateFileTagsReq, BatchAddFileTagsReq)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
@@ -84,6 +85,7 @@ async def upload_knowledge_file(*,
 
     try:
         file_name = file.filename
+        validate_knowledge_upload_file_size(file_name, file.size)
 
         # Save the uploaded file
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
@@ -568,11 +570,7 @@ def delete_knowledge_chunk(request: Request,
 async def get_file_share_url(request: Request,
                              login_user: UserPayload = Depends(UserPayload.get_login_user),
                              file_id: int = Query(description='File UniqueID')):
-    original_url, preview_url = await KnowledgeService.aget_file_share_with_auth(login_user, file_id)
-    return resp_200(data={
-        'original_url': original_url,
-        'preview_url': preview_url
-    })
+    return resp_200(data=await KnowledgeService.aget_file_share_detail_with_auth(login_user, file_id))
 
 
 @router.get('/file_bbox')

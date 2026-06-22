@@ -24,8 +24,12 @@ import {
     getRootFolderName,
     isHiddenName,
     isKnowledgeItemPending,
+    isWebLinkKnowledgeFile,
     MAX_FOLDER_DEPTH,
     MAX_FOLDER_UPLOAD_COUNT,
+    resolveWebLinkDisplayName,
+    toWebLinkFileName,
+    type UploadSizeLimits,
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
 import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
@@ -151,6 +155,8 @@ export function useFileUpload({
                 type: getFileTypeFromName(file.name),
                 size: file.size,
                 status: FileStatus.UPLOADING,
+                uploadPhase: "uploading",
+                uploadProgress: 0,
                 tags: [],
                 path: file.name,
                 parentId: currentFolderId,
@@ -160,56 +166,80 @@ export function useFileUpload({
             }));
             setUploadingFiles(prev => [...placeholders, ...prev]);
 
+            const updatePlaceholder = (placeholderId: string, patch: Partial<KnowledgeFile>) => {
+                if (!isCurrentSpace()) {
+                    return;
+                }
+                setUploadingFiles(prev =>
+                    prev.map(f => (f.id === placeholderId ? { ...f, ...patch } : f))
+                );
+            };
 
             // Upload each file to server
             const uploadedPaths: string[] = [];
+            const placeholderByName = new Map(placeholders.map((p, index) => [fileArray[index].name, p]));
 
             const failures: { name: string; reason: string }[] = [];
-            for (const file of fileArray) {
-                try {
-                    const res: UploadFileResponse = await uploadFileToServerApi(activeSpace.id, file);
-                    uploadedPaths.push(res.file_path);
-                } catch (err) {
-                    failures.push({
-                        name: file.name,
-                        reason: resolveUploadErrorReason(err),
+            try {
+                for (const file of fileArray) {
+                    const placeholder = placeholderByName.get(file.name);
+                    try {
+                        const res: UploadFileResponse = await uploadFileToServerApi(
+                            activeSpace.id,
+                            file,
+                            undefined,
+                            {
+                                onProgress: (percent) => {
+                                    if (placeholder) {
+                                        updatePlaceholder(placeholder.id, { uploadProgress: percent });
+                                    }
+                                },
+                            },
+                        );
+                        uploadedPaths.push(res.file_path);
+                        if (placeholder) {
+                            updatePlaceholder(placeholder.id, { uploadProgress: 100 });
+                        }
+                    } catch (err) {
+                        failures.push({
+                            name: file.name,
+                            reason: resolveUploadErrorReason(err),
+                        });
+                    }
+                }
+                if (!isCurrentSpace()) {
+                    return;
+                }
+                if (failures.length > 0) {
+                    const lines = failures.map(({ name, reason }) =>
+                        reason
+                            ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
+                            : localize("com_knowledge.file_upload_failed", { 0: name })
+                    );
+                    const everyReasonMissing = failures.every((f) => !f.reason);
+                    const message = everyReasonMissing
+                        ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")
+                        : lines.join("\n");
+                    showToast({
+                        message,
+                        severity: NotificationSeverity.ERROR,
                     });
                 }
-            }
-            if (!isCurrentSpace()) {
-                return;
-            }
-            if (failures.length > 0) {
-                // Render each failure with the backend reason inline (quota / dup /
-                // permission etc). The browser-upload hint is now strictly a
-                // last-resort fallback — only appended when *every* failure has
-                // no actionable reason (i.e. likely a client-wide network /
-                // timeout case, the scenario the hint was originally written for).
-                const lines = failures.map(({ name, reason }) =>
-                    reason
-                        ? localize("com_knowledge.file_upload_failed_with_reason", { 0: name, 1: reason })
-                        : localize("com_knowledge.file_upload_failed", { 0: name })
-                );
-                const everyReasonMissing = failures.every((f) => !f.reason);
-                const message = everyReasonMissing
-                    ? [...lines, localize("com_knowledge.upload_browser_hint")].join("\n")
-                    : lines.join("\n");
-                showToast({
-                    message,
-                    severity: NotificationSeverity.ERROR,
-                });
-            }
 
-            // If all uploads failed, clear placeholders and bail out
-            if (uploadedPaths.length === 0) {
+                if (uploadedPaths.length === 0) {
+                    return;
+                }
+
+                // Large duplicate overwrites can block here while the backend
+                // copies the file into MinIO — surface a distinct UI phase.
                 setUploadingFiles(prev =>
-                    prev.filter(f => !placeholders.some(p => p.id === f.id))
+                    prev.map(f =>
+                        placeholders.some(p => p.id === f.id)
+                            ? { ...f, uploadPhase: "registering", uploadProgress: undefined }
+                            : f
+                    )
                 );
-                return;
-            }
 
-            // Register all uploaded files and check for duplicates from response
-            try {
                 const registeredFiles = await addFilesApi(activeSpace.id, {
                     file_path: uploadedPaths,
                     parent_id: currentFolderId ? Number(currentFolderId) : null,
@@ -240,20 +270,15 @@ export function useFileUpload({
                 if (!hasPendingRegisteredFiles) {
                     await loadFiles(currentPage);
                 }
-                if (!isCurrentSpace()) {
-                    return;
+            } catch {
+                // addFiles errors are surfaced by the request interceptor
+            } finally {
+                if (isCurrentSpace()) {
+                    setUploadingFiles(prev =>
+                        prev.filter(f => !placeholders.some(p => p.id === f.id))
+                    );
                 }
-            } catch (e) {
-                // showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
             }
-
-            if (!isCurrentSpace()) {
-                return;
-            }
-            // Clear placeholders after list data has been updated
-            setUploadingFiles(prev =>
-                prev.filter(f => !placeholders.some(p => p.id === f.id))
-            );
         },
         [activeSpace, currentFolderId, currentPage, files, loadFiles, localize, setFiles, setTotal, showToast]
     );
@@ -298,7 +323,7 @@ export function useFileUpload({
     const handleUploadFolder = useCallback(
         async (
             fileList: FileList | File[],
-            options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+            options: { allowedExtensions: readonly string[]; limits: UploadSizeLimits },
         ) => {
             if (!activeSpace || !fileList || fileList.length === 0) return;
             // Re-entry guard. Ignore a second call while the first is still
@@ -500,7 +525,24 @@ export function useFileUpload({
                 if (target.type === FileType.FOLDER) {
                     await renameFolderApi(activeSpace.id, fileId, newName);
                 } else {
-                    await renameFileApi(activeSpace.id, fileId, newName);
+                    const isWebLink = isWebLinkKnowledgeFile(target);
+                    const apiName = isWebLink ? toWebLinkFileName(newName) : newName;
+                    const displayName = isWebLink ? resolveWebLinkDisplayName(apiName) : newName;
+                    await renameFileApi(activeSpace.id, fileId, apiName);
+                    setFiles(prev => prev.map(f => {
+                        if (f.id !== fileId) return f;
+                        if (!isWebLink) return { ...f, name: displayName };
+                        return {
+                            ...f,
+                            name: displayName,
+                            userMetadata: {
+                                ...f.userMetadata,
+                                web_title: displayName,
+                            },
+                        };
+                    }));
+                    showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS } as any);
+                    return;
                 }
                 setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
                 if (target.type === FileType.FOLDER) {

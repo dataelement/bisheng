@@ -74,6 +74,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
     // Refs
     const isChangingRef = useRef(false);
     const [previewUrl, setPreviewUrl] = useState()
+    const [previewData, setPreviewData] = useState(null)
     const [hasChunkBboxes, setHasChunkBboxes] = useState(false);
     const latestFileUrlRef = useRef('');
     const latestPreviewUrlRef = useRef('');
@@ -239,6 +240,16 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             const res = await getFilePathApi(fileId);
             const pares = await getFileBboxApi(fileId);
             setPartitions(pares || []);
+            setPreviewData({
+                original_url: res.original_url || '',
+                preview_url: res.preview_url || '',
+                file_source: res.file_source || '',
+                source_url: res.source_url || '',
+                final_url: res.final_url || '',
+                web_title: res.web_title || '',
+                media_kind: res.media_kind || '',
+                html_preview_url: res.html_preview_url || '',
+            });
 
             // Get current selected file information
             const currentFile = rawFiles.find(f => String(f.id) === String(fileId));
@@ -279,6 +290,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             } else {
                 setFileUrl('');
                 setPreviewUrl('');
+                setPreviewData(null);
                 latestOriginalUrlRef.current = '';
                 return '';
             }
@@ -286,6 +298,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
             console.error('Failed to get file URL:', err);
             setFileUrl('');
             setPreviewUrl('');
+            setPreviewData(null);
             setPartitions([]);
             latestOriginalUrlRef.current = '';
             return '';
@@ -354,6 +367,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
         setChunks([]);
         setFileUrl('');
         setPreviewUrl('');
+        setPreviewData(null);
         latestOriginalUrlRef.current = '';
 
         try {
@@ -858,6 +872,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
                         key={selectedFileId}
                         partitions={partitions}
                         previewUrl={previewUrl}
+                        previewData={previewData}
                         urlState={{ load: !isFetchingUrl, url: previewUrl || fileUrl }}
                         file={currentFile}
                         chunks={chunks}

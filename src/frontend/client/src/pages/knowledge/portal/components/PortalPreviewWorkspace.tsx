@@ -11,6 +11,7 @@ interface PortalPreviewWorkspaceProps {
     activeSpace: KnowledgeSpace | null;
     aiDrawerOpen: boolean;
     canEditEncoding: boolean;
+    canEditTags: boolean;
     canManagePermission: boolean;
     documentPath: string;
     encodingPrefix: string;
@@ -36,6 +37,7 @@ export function PortalPreviewWorkspace({
     activeSpace,
     aiDrawerOpen,
     canEditEncoding,
+    canEditTags,
     canManagePermission,
     documentPath,
     encodingPrefix,
@@ -66,6 +68,7 @@ export function PortalPreviewWorkspace({
                     documentPath={documentPath}
                     preview={preview}
                     summaryExpanded={summaryExpanded}
+                    canEditTags={canEditTags}
                     onOpenTags={onOpenTags}
                     // onOpenShare={() => setActivePanel("share")}
                     onDownload={onDownload}

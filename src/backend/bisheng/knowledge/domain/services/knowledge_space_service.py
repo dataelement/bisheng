@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import tempfile
 import time
@@ -71,12 +72,13 @@ from bisheng.common.models.space_channel_member import (
 )
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.user_group import UserGroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
-from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag
+from bisheng.database.models.tag import TagDao, TagBusinessTypeEnum, Tag, TagResourceTypeEnum
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -156,6 +158,10 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
     KnowledgeSpaceTagLibraryService,
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
+from bisheng.knowledge.domain.services.web_link_import_service import (
+    KnowledgeWebLinkImportService,
+    WebLinkImportResult,
+)
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
@@ -251,6 +257,11 @@ PORTAL_SEARCH_RERANK_MODEL_ID_ENV = "BISHENG_PORTAL_SEARCH_RERANK_MODEL_ID"
 _PORTAL_VISIBLE_SPACE_CACHE_TTL = 5.0
 _PORTAL_VISIBLE_SPACE_CACHE: Dict[tuple, tuple[float, List[Knowledge]]] = {}
 _PORTAL_VISIBLE_SPACE_CACHE_LOCK = asyncio.Lock()
+
+_AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
+_VIDEO_FILE_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
+_WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]
+_WEB_LINK_SEPARATOR_RULES = ["after" for _ in _WEB_LINK_SEPARATORS]
 
 
 @dataclass
@@ -4152,6 +4163,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     def _map_shougang_portal_file_item(self, space_id: int, item: Dict) -> ShougangPortalFileItemResp:
         file_name = str(item.get("file_name") or "")
+        tag_infos = [
+            {
+                "tag_name": str(tag.get("name")),
+                "resource_type": str(tag.get("resource_type") or ""),
+            }
+            for tag in item.get("tags") or []
+            if isinstance(tag, dict) and tag.get("name")
+        ]
         return ShougangPortalFileItemResp(
             id=int(item.get("id") or 0),
             space_id=space_id,
@@ -4159,7 +4178,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             summary=str(item.get("abstract") or ""),
             source=str(item.get("knowledge_name") or item.get("space_name") or space_id),
             updated_at=self._serialize_datetime(item.get("update_time")),
-            tags=[str(tag.get("name")) for tag in item.get("tags") or [] if isinstance(tag, dict) and tag.get("name")],
+            tags=[tag["tag_name"] for tag in tag_infos],
+            tag_infos=tag_infos,
             file_ext=self._get_file_ext(file_name),
             file_size=str(item.get("file_size") or ""),
             file_encoding=str(
@@ -4199,7 +4219,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         def score(item: ShougangPortalFileItemResp) -> tuple[int, str]:
             title = item.title.lower()
             summary = item.summary.lower()
-            tags = [tag.lower() for tag in item.tags]
+            tags = [
+                tag_text.lower()
+                for tag_text in (
+                    KnowledgeSpaceService._shougang_portal_tag_text(tag)
+                    for tag in item.tags
+                )
+                if tag_text
+            ]
             hit_score = 0
             if title == keyword_lower:
                 hit_score += 4
@@ -4212,6 +4239,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return hit_score, item.updated_at
 
         return sorted(items, key=score, reverse=True)
+
+    @staticmethod
+    def _shougang_portal_tag_text(tag: Any) -> str:
+        if isinstance(tag, str):
+            return tag
+        if isinstance(tag, dict):
+            return str(tag.get("tag_name") or tag.get("name") or "")
+        return str(getattr(tag, "tag_name", None) or getattr(tag, "name", None) or "")
 
     async def delete_space(self, space_id: int) -> None:
         space = await KnowledgeDao.aquery_by_id(space_id)
@@ -5262,7 +5297,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 [str(fid) for fid in file_ids],
             )
             for fid_str, tags in tag_dict.items():
-                file_tags[int(fid_str)] = [{"id": t.id, "name": t.name} for t in tags]
+                file_tags[int(fid_str)] = [{"id": t.id, "name": t.name, "resource_type": t.resource_type} for t in tags]
 
         result = []
         for one in res:
@@ -6248,6 +6283,340 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # ──────────────────────────── Files ───────────────────────────────────────
 
+    async def import_web_link(
+        self,
+        knowledge_id: int,
+        url: str,
+        title: Optional[str] = None,
+        parent_id: Optional[int] = None,
+        file_category_code: Optional[str] = None,
+        overwrite: bool = False,
+    ) -> KnowledgeFile:
+        if parent_id:
+            await self._require_permission_id("folder", parent_id, "upload_file", space_id=knowledge_id)
+        else:
+            await self._require_permission_id("knowledge_space", knowledge_id, "upload_file")
+
+        db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not db_knowledge:
+            raise SpaceFolderNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(db_knowledge, "import_web_link")
+
+        level = 0
+        file_level_path = ""
+        parent_type = "knowledge_space"
+        parent_resource_id = knowledge_id
+        if parent_id:
+            parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
+            level = parent_folder.level + 1
+            file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
+            parent_type = "folder"
+            parent_resource_id = parent_id
+
+        result = await KnowledgeWebLinkImportService.fetch(url)
+        file_name = self._build_web_link_file_name(title or result.title, result.final_url)
+        markdown_bytes = result.markdown.encode("utf-8")
+
+        duplicate_files: list[KnowledgeFile] = []
+        content_duplicates = KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, md5_=result.content_hash)
+        name_duplicates = KnowledgeFileDao.get_file_by_condition(knowledge_id=knowledge_id, file_name=file_name)
+        for duplicate_file in [*(content_duplicates or []), *(name_duplicates or [])]:
+            if duplicate_file and all(existing.id != duplicate_file.id for existing in duplicate_files):
+                duplicate_files.append(duplicate_file)
+
+        if duplicate_files and not overwrite:
+            if content_duplicates:
+                raise SpaceFileDuplicateError()
+            raise SpaceFileNameDuplicateError()
+        overwrite_file = duplicate_files[0] if duplicate_files and overwrite else None
+        replaced_total_bytes = int(overwrite_file.file_size or 0) if overwrite_file else 0
+        replaced_user_bytes = (
+            int(overwrite_file.file_size or 0)
+            if overwrite_file and overwrite_file.user_id == self.login_user.user_id
+            else 0
+        )
+
+        role_user_limit_bytes = await QuotaService.get_knowledge_space_upload_limit_bytes(self.login_user)
+        current_user_total = int(await SpaceFileDao.get_user_total_file_size(self.login_user.user_id))
+        target_tid = db_knowledge.tenant_id
+        tenant_remaining_bytes = await QuotaService.get_tenant_storage_remaining_bytes(target_tid)
+        if tenant_remaining_bytes is not None:
+            tenant_used_at_start_bytes = await QuotaService.get_tenant_storage_used_bytes(target_tid)
+            tenant_cap_bytes = tenant_used_at_start_bytes + tenant_remaining_bytes
+            next_tenant_total_bytes = tenant_used_at_start_bytes - replaced_total_bytes + result.content_length
+        else:
+            tenant_cap_bytes = None
+            next_tenant_total_bytes = 0
+        if tenant_cap_bytes is not None and next_tenant_total_bytes > tenant_cap_bytes:
+            blocker = (
+                target_tid,
+                "tenant_limit",
+                round(next_tenant_total_bytes / (1024**3), 2),
+                round(tenant_cap_bytes / (1024**3), 2),
+                "",
+            )
+            raise QuotaService._make_storage_quota_error(blocker, "storage_gb")
+        if role_user_limit_bytes is not None and current_user_total - replaced_user_bytes + result.content_length > role_user_limit_bytes:
+            raise SpaceFileSizeLimitError()
+
+        split_rule_dict = FileProcessBase(knowledge_id=knowledge_id).model_dump()
+        split_rule_dict["separator"] = _WEB_LINK_SEPARATORS
+        split_rule_dict["separator_rule"] = _WEB_LINK_SEPARATOR_RULES
+        split_rule_dict["chunk_overlap"] = 0
+        normalized_file_category_code = self.normalize_file_category_code(file_category_code)
+        if normalized_file_category_code:
+            split_rule_dict[self.file_category_code_key] = normalized_file_category_code
+
+        imported_at = datetime.now().isoformat(timespec="seconds")
+        web_link_display_title = self._web_link_display_title(file_name)
+        if overwrite_file:
+            return await self._overwrite_web_link_file(
+                db_file=overwrite_file,
+                url=url,
+                result=result,
+                file_name=file_name,
+                markdown_bytes=markdown_bytes,
+                split_rule_dict=split_rule_dict,
+                imported_at=imported_at,
+                level=level,
+                file_level_path=file_level_path,
+                new_parent_type=parent_type,
+                new_parent_id=parent_resource_id,
+            )
+
+        db_file = KnowledgeFile(
+            knowledge_id=knowledge_id,
+            tenant_id=db_knowledge.tenant_id,
+            file_name=file_name,
+            file_size=result.content_length,
+            md5=result.content_hash,
+            split_rule=json.dumps(split_rule_dict, ensure_ascii=False),
+            user_id=self.login_user.user_id,
+            user_name=self.login_user.user_name,
+            updater_id=self.login_user.user_id,
+            updater_name=self.login_user.user_name,
+            level=level,
+            file_level_path=file_level_path,
+            file_source=FileSource.WEB_LINK.value,
+            user_metadata={
+                "source_type": "web_link",
+                "source_url": url,
+                "final_url": result.final_url,
+                "web_title": web_link_display_title,
+                "imported_at": imported_at,
+            },
+        )
+
+        created_files: list[KnowledgeFile] = []
+        minio_client = get_minio_storage_sync()
+        html_snapshot_object_name = ""
+        try:
+            db_file = KnowledgeFileDao.add_file(db_file)
+            created_files.append(db_file)
+            db_file.object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, db_file.file_name)
+            minio_client.put_object_sync(
+                bucket_name=minio_client.bucket,
+                object_name=db_file.object_name,
+                file=markdown_bytes,
+                content_type="text/markdown; charset=utf-8",
+            )
+            if result.html_snapshot:
+                html_snapshot_object_name = f"preview/{db_file.id}.html"
+                minio_client.put_object_sync(
+                    bucket_name=minio_client.bucket,
+                    object_name=html_snapshot_object_name,
+                    file=result.html_snapshot.encode("utf-8"),
+                    content_type="text/html; charset=utf-8",
+                )
+                db_file.user_metadata = {
+                    **(db_file.user_metadata or {}),
+                    "html_snapshot_object_name": html_snapshot_object_name,
+                }
+            db_file = KnowledgeFileDao.update(db_file)
+            await self._create_primary_document_for_file(db_file)
+            await self._initialize_child_resource_permissions(
+                "knowledge_file",
+                db_file.id,
+                parent_type,
+                parent_resource_id,
+            )
+        except Exception:
+            try:
+                if getattr(db_file, "object_name", None):
+                    minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=db_file.object_name)
+                if html_snapshot_object_name:
+                    minio_client.remove_object_sync(
+                        bucket_name=minio_client.bucket,
+                        object_name=html_snapshot_object_name,
+                    )
+                await self._cleanup_created_knowledge_files(created_files)
+            except Exception as cleanup_exc:
+                logger.warning(f"Failed to cleanup web link import after error: {cleanup_exc}")
+            raise
+
+        KnowledgeService.audit_telemetry_service.telemetry_new_knowledge_file(self.login_user)
+        preview_cache_key = self.get_preview_cache_key(knowledge_id, result.final_url, md5_value=result.content_hash)
+        file_worker.parse_knowledge_file_celery.delay(db_file.id, preview_cache_key)
+        await self.update_folder_update_time(file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
+        return db_file
+
+    async def _overwrite_web_link_file(
+        self,
+        *,
+        db_file: KnowledgeFile,
+        url: str,
+        result: WebLinkImportResult,
+        file_name: str,
+        markdown_bytes: bytes,
+        split_rule_dict: dict,
+        imported_at: str,
+        level: int,
+        file_level_path: str,
+        new_parent_type: str,
+        new_parent_id: int,
+    ) -> KnowledgeFile:
+        old_file_level_path = db_file.file_level_path or ""
+        old_parent_type, old_parent_id = self._parent_tuple_ref_from_level_path(
+            old_file_level_path,
+            db_file.knowledge_id,
+        )
+        minio_client = get_minio_storage_sync()
+        old_object_name = db_file.object_name
+        object_name = KnowledgeUtils.get_knowledge_file_object_name(db_file.id, file_name)
+        html_snapshot_object_name = f"preview/{db_file.id}.html" if result.html_snapshot else ""
+
+        minio_client.put_object_sync(
+            bucket_name=minio_client.bucket,
+            object_name=object_name,
+            file=markdown_bytes,
+            content_type="text/markdown; charset=utf-8",
+        )
+        if result.html_snapshot:
+            minio_client.put_object_sync(
+                bucket_name=minio_client.bucket,
+                object_name=html_snapshot_object_name,
+                file=result.html_snapshot.encode("utf-8"),
+                content_type="text/html; charset=utf-8",
+            )
+        if old_object_name and old_object_name != object_name:
+            try:
+                minio_client.remove_object_sync(bucket_name=minio_client.bucket, object_name=old_object_name)
+            except Exception as exc:
+                logger.warning(f"Failed to remove old web link object after overwrite: {exc}")
+
+        db_file.file_name = file_name
+        db_file.file_size = result.content_length
+        db_file.md5 = result.content_hash
+        db_file.object_name = object_name
+        db_file.split_rule = json.dumps(split_rule_dict, ensure_ascii=False)
+        db_file.updater_id = self.login_user.user_id
+        db_file.updater_name = self.login_user.user_name
+        db_file.level = level
+        db_file.file_level_path = file_level_path
+        db_file.file_source = FileSource.WEB_LINK.value
+        db_file.status = KnowledgeFileStatus.WAITING.value
+        db_file.remark = ""
+        db_file.similar_status = 0
+        db_file.simhash = None
+        db_file.user_metadata = {
+            "source_type": "web_link",
+            "source_url": url,
+            "final_url": result.final_url,
+            "web_title": self._web_link_display_title(file_name),
+            "imported_at": imported_at,
+            **({"html_snapshot_object_name": html_snapshot_object_name} if html_snapshot_object_name else {}),
+        }
+        db_file = await KnowledgeFileDao.async_update(db_file)
+
+        await self._replace_resource_parent_tuple(
+            object_type="knowledge_file",
+            object_id=db_file.id,
+            old_parent_type=old_parent_type,
+            old_parent_id=old_parent_id,
+            new_parent_type=new_parent_type,
+            new_parent_id=new_parent_id,
+        )
+        await self._sync_document_folder_for_file(db_file.id, file_level_path, level)
+        preview_cache_key = self.get_preview_cache_key(
+            db_file.knowledge_id,
+            result.final_url,
+            md5_value=result.content_hash,
+        )
+        file_worker.retry_knowledge_file_celery.delay(db_file.id, preview_cache_key)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([db_file.id])
+        await self.update_folder_update_time(old_file_level_path)
+        if file_level_path != old_file_level_path:
+            await self.update_folder_update_time(file_level_path)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(db_file.knowledge_id)
+        return db_file
+
+    @staticmethod
+    def _web_link_display_title(file_name: str) -> str:
+        if file_name.lower().endswith(".md"):
+            return file_name[:-3]
+        return file_name
+
+    @staticmethod
+    def _normalize_web_link_file_name(name: str) -> str:
+        cleaned = (name or "").strip()
+        if not cleaned:
+            return cleaned
+        if cleaned.lower().endswith(".md"):
+            return cleaned
+        return f"{cleaned}.md"
+
+    @staticmethod
+    def _build_web_link_file_name(title: str, url: str) -> str:
+        display_title = (title or "").strip() or KnowledgeWebLinkImportService._title_from_url(url)
+        display_title = re.sub(r"[\x00-\x1f\\/:*?\"<>|]+", " ", display_title)
+        display_title = re.sub(r"\s+", " ", display_title).strip(". ").strip()
+        if not display_title:
+            display_title = "web-link"
+        return f"{display_title[:180]}.md"
+
+    @staticmethod
+    def _resolve_upload_file_source(file_name: str, default_source: str) -> str:
+        file_ext = (file_name.rsplit(".", 1)[-1] if "." in file_name else "").lower()
+        if file_ext in _AUDIO_FILE_EXTENSIONS:
+            return FileSource.AUDIO_TRANSCRIPT.value
+        if file_ext in _VIDEO_FILE_EXTENSIONS:
+            return FileSource.VIDEO_TRANSCRIPT.value
+        return default_source
+
+    async def _create_primary_document_for_file(self, db_file: KnowledgeFile) -> None:
+        async with get_async_db_session() as v_session:
+            v_doc = KnowledgeDocument(
+                knowledge_id=db_file.knowledge_id,
+                file_level_path=db_file.file_level_path,
+                level=db_file.level or 0,
+            )
+            v_session.add(v_doc)
+            await v_session.flush()
+            v_version = KnowledgeDocumentVersion(
+                document_id=v_doc.id,
+                knowledge_file_id=db_file.id,
+                version_no=1,
+                is_primary=True,
+            )
+            v_session.add(v_version)
+            await v_session.flush()
+            v_doc.primary_version_id = v_version.id
+            v_session.add(v_doc)
+            await v_session.commit()
+
+    async def _cleanup_created_knowledge_files(self, created_files: List[KnowledgeFile]) -> None:
+        created_file_ids = [created_file.id for created_file in created_files if getattr(created_file, "id", None)]
+        if not created_file_ids:
+            return
+        expanded_ids = await self._cascade_version_links_on_delete(created_file_ids)
+        try:
+            await self._cleanup_resource_tuples(
+                [("knowledge_file", created_file_id) for created_file_id in expanded_ids]
+            )
+        finally:
+            await KnowledgeFileDao.adelete_batch(expanded_ids)
+
     async def add_file(
         self,
         knowledge_id: int,
@@ -6355,6 +6724,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     },
                 )
                 if db_file.status != KnowledgeFileStatus.FAILED.value:
+                    next_file_source = self._resolve_upload_file_source(db_file.file_name, file_source.value)
+                    if db_file.file_source != next_file_source:
+                        db_file.file_source = next_file_source
+                        db_file = KnowledgeFileDao.update(db_file)
                     if getattr(db_file, "id", None):
                         created_files.append(db_file)
                         # Plan 2 Task 9: also create a logical document + V1 (primary) for the uploaded file.
@@ -6436,6 +6809,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceNotFoundError()
         self._ensure_space_async_task_tenant_consistency(space, "rename_file")
 
+        if file_record.file_source == FileSource.WEB_LINK.value:
+            new_name = self._normalize_web_link_file_name(new_name)
+
         old_suffix = file_record.file_name.rsplit(".", 1)[-1] if "." in file_record.file_name else ""
         new_suffix = new_name.rsplit(".", 1)[-1] if "." in new_name else ""
         if old_suffix != new_suffix:
@@ -6445,6 +6821,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFileNameDuplicateError()
 
         file_record.file_name = new_name
+        if file_record.file_source == FileSource.WEB_LINK.value:
+            metadata = dict(file_record.user_metadata or {})
+            metadata["web_title"] = self._web_link_display_title(new_name)
+            file_record.user_metadata = metadata
         updated_file = await KnowledgeFileDao.async_update(file_record)
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
 
@@ -6564,15 +6944,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_record = await self._require_file_relation(file_id, "can_read")
         await self._require_permission_id("knowledge_file", file_id, "view_file", space_id=file_record.knowledge_id)
 
-        original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
         asyncio.create_task(self._log_file_preview_success(file_record))  # noqa: RUF006
         if not self._is_portal_bff_proxy_request():
             asyncio.create_task(self._log_portal_document_read_success(file_record))  # noqa: RUF006
 
-        return {
-            "original_url": original_url,
-            "preview_url": preview_url,
-        }
+        return KnowledgeService.get_file_share_detail(file_record)
 
     def _is_portal_bff_proxy_request(self) -> bool:
         return is_portal_bff_proxy_source(self.request.headers.get(PORTAL_BFF_TELEMETRY_SOURCE_HEADER))
@@ -6658,6 +7034,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             user_id=self.login_user.user_id,
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
             business_id=str(space_id),
+            resource_type=TagResourceTypeEnum.MANUAL_TAG,
         )
         return await TagDao.ainsert_tag(new_tag)
 

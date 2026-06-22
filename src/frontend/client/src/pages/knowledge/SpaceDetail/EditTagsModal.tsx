@@ -1,6 +1,6 @@
 import { useState, KeyboardEvent, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Trash2, X } from "lucide-react";
+import { Trash2, X, Tag, Network, PencilLine } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -261,13 +261,17 @@ export function EditTagsModal({
                     {/* <div className="w-full h-px bg-[#ebecf0] my-[-1px]" /> */}
 
                     {/* 推荐标签 */}
-                    <div className="flex flex-col gap-2 pt-1">
+                    <div className="flex flex-col gap-3 pt-1">
                         <div className="text-[14px] leading-5 font-medium text-[#212121]">{localize("com_knowledge.recommended_tags")}</div>
-                        <div className="flex flex-wrap gap-1">
-                            {spaceTags.length === 0 && (
-                                <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
-                            )}
-                            {spaceTags.map((tag) => {
+                        {spaceTags.length === 0 && (
+                            <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
+                        )}
+                        {(() => {
+                            const systemTags = spaceTags.filter((t) => t.resource_type === "system_tag");
+                            const aiTags = spaceTags.filter((t) => t.resource_type === "ai_auto_tag");
+                            const manualTags = spaceTags.filter((t) => !t.resource_type || t.resource_type === "manual_tag");
+
+                            const renderTagItem = (tag: SpaceTag) => {
                                 const isSelected = selectedTagIds.has(tag.id);
                                 return (
                                     <span
@@ -293,8 +297,37 @@ export function EditTagsModal({
                                         </button>
                                     </span>
                                 );
-                            })}
-                        </div>
+                            };
+
+                            return (
+                                <>
+                                    {systemTags.length > 0 && (
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex flex-wrap items-center gap-1">
+                                                <Network className="size-3.5 text-[#4e5969] shrink-0" />
+                                                {systemTags.map(renderTagItem)}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {aiTags.length > 0 && (
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex flex-wrap items-center gap-1">
+                                                <Tag className="size-3.5 text-[#4e5969] shrink-0" />
+                                                {aiTags.map(renderTagItem)}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {manualTags.length > 0 && (
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex flex-wrap items-center gap-1">
+                                                <PencilLine className="size-3.5 text-[#4e5969] shrink-0" />
+                                                {manualTags.map(renderTagItem)}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        })()}
                     </div>
                 </div>
 

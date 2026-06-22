@@ -201,6 +201,12 @@ export function getFileTypeColor(type: FileType): string {
         case FileType.JPEG:
         case FileType.PNG:
             return "#722ed1";
+        case FileType.AUDIO:
+            return "#14c9c9";
+        case FileType.VIDEO:
+            return "#ff7d00";
+        case FileType.WEB:
+            return "#165dff";
         default:
             return "#86909c";
     }

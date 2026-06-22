@@ -249,6 +249,33 @@ describe("usePortalUploadDialog", () => {
         });
     });
 
+    test("accepts audio and video files in portal upload selections", () => {
+        const { hook, params } = renderUploadDialogHook();
+        const audioFile = new File(["audio"], "访谈.mp3", { type: "audio/mpeg" });
+        const unsupportedFile = new File(["bin"], "安装包.exe", { type: "application/octet-stream" });
+
+        act(() => {
+            hook.result.current.handleAddUploadFiles([audioFile, unsupportedFile]);
+        });
+
+        expect(hook.result.current.uploadFiles).toHaveLength(1);
+        expect(hook.result.current.uploadFiles[0].file.name).toBe("访谈.mp3");
+        expect(params.showToast).toHaveBeenCalledWith(expect.objectContaining({
+            message: expect.stringContaining("安装包.exe"),
+        }));
+
+        const { hook: folderHook } = renderUploadDialogHook();
+        const videoFile = new File(["video"], "培训.mp4", { type: "video/mp4" });
+        Object.defineProperty(videoFile, "webkitRelativePath", { value: "培训资料/培训.mp4" });
+
+        act(() => {
+            folderHook.result.current.handleAddUploadFolder([videoFile]);
+        });
+
+        expect(folderHook.result.current.uploadFiles).toHaveLength(1);
+        expect(folderHook.result.current.uploadFiles[0].file.name).toBe("培训.mp4");
+    });
+
     test("passes selected file category when registering uploaded files", async () => {
         jest.mocked(addFilesApi).mockResolvedValue([makeFile()] as any);
         const { hook } = renderUploadDialogHook();

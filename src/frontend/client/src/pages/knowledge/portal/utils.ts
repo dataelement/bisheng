@@ -53,10 +53,17 @@ export function formatFileSize(size?: number) {
     return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }
 
+function extractExtFromSource(source: string) {
+    const cleanSource = source.split("?")[0].split("#")[0];
+    const filePart = cleanSource.split("/").pop() || "";
+    const dotIndex = filePart.lastIndexOf(".");
+    if (dotIndex <= 0 || dotIndex >= filePart.length - 1) return "";
+    const ext = filePart.slice(dotIndex + 1).toLowerCase();
+    return /^[a-z0-9]{1,10}$/.test(ext) ? ext : "";
+}
+
 export function extractExt(fileName: string, fileUrl = "") {
-    const source = fileName || fileUrl.split("?")[0] || "";
-    const ext = source.split(".").pop()?.toLowerCase() || "";
-    return ext || "txt";
+    return extractExtFromSource(fileUrl) || extractExtFromSource(fileName) || "txt";
 }
 
 export function resolvePreviewUrl(url: string) {

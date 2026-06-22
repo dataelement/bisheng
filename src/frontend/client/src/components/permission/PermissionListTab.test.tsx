@@ -256,6 +256,52 @@ describe("Client PermissionListTab", () => {
     });
   });
 
+  it("uses backend-filtered grantable models when editing a subject relation", async () => {
+    mockedGetGrantableRelationModels.mockResolvedValue([
+      {
+        id: "editor",
+        name: "Editor",
+        relation: "editor",
+        permissions: [],
+        is_system: true,
+      },
+      {
+        id: "viewer",
+        name: "Viewer",
+        relation: "viewer",
+        permissions: [],
+        is_system: true,
+      },
+    ]);
+    mockedGetResourcePermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 2,
+        subject_name: "Alice",
+        relation: "viewer",
+        model_id: "viewer",
+        model_name: "Viewer",
+      },
+    ] as any);
+
+    render(
+      <PermissionListTab
+        resourceType="folder"
+        resourceId="folder-1"
+        refreshKey={0}
+        fixedSubjectType="user"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Alice").length).toBeGreaterThan(0);
+    });
+
+    expect(screen.getByRole("button", { name: "com_permission.level_editor" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "com_permission.level_manager" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "com_permission.level_owner" })).not.toBeInTheDocument();
+  });
+
   it("deletes department include-children grants across subtree and exact variants", async () => {
     mockedGetResourcePermissions.mockResolvedValue([
       {

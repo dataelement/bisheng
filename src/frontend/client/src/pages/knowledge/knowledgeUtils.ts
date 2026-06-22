@@ -27,6 +27,26 @@ export function isKnowledgeApprovalRejected(file: KnowledgeFile): boolean {
     return file.approvalStatus === "rejected" || file.approvalStatus === "sensitive_rejected";
 }
 
+export {
+    isWebLinkKnowledgeFile,
+    resolveWebLinkDisplayName,
+    toWebLinkFileName,
+} from "~/api/knowledge";
+
+/** Label for transient upload rows (progress % / registering phase). */
+export function getUploadTransientStatusLabel(
+    file: KnowledgeFile,
+    localize: (key: string, options?: Record<string, unknown>) => string,
+): string {
+    if (file.uploadPhase === "registering") {
+        return localize("com_knowledge.registering_status");
+    }
+    if (file.status === FileStatus.UPLOADING && file.uploadProgress != null) {
+        return localize("com_knowledge.uploading_status_with_progress", { 0: file.uploadProgress });
+    }
+    return localize("com_knowledge.uploading_status");
+}
+
 export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
     if (file.approvalStatus) {
         return file.approvalStatus === "pending_review";
@@ -56,12 +76,14 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
 export const ALLOWED_EXTENSIONS = [
     "pdf", "txt", "docx", "ppt", "pptx", "md", "html",
     "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg", "bmp",
-    "wps", "dps", "et",
+    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg",
+    "mp4", "mov", "avi", "mkv", "webm",
 ] as const;
 
 /** Subset used when ETL4LM is NOT deployed — drops images. */
 const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
     "pdf", "txt", "docx", "doc", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv",
+    "wps", "dps", "et", "mp3", "wav", "m4a", "aac", "flac", "ogg", "mp4", "mov", "avi", "mkv", "webm",
 ];
 
 /**
@@ -79,6 +101,9 @@ export const ALLOWED_MIME_TYPES = [
     "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
     "text/markdown", "text/html", "text/csv",
     "image/png", "image/jpeg", "image/bmp",
+    "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/m4a", "audio/x-m4a",
+    "audio/aac", "audio/flac", "audio/ogg",
+    "video/mp4", "video/quicktime", "video/x-msvideo", "video/avi", "video/x-matroska", "video/webm",
     "application/vnd.ms-works", "application/kswps", "application/wps-office.wps", // wps
     "application/vnd.wps-presentation", "application/kswps", // dps
     "application/vnd.ms-excel", "application/kset", // et
@@ -110,6 +135,44 @@ export function getFileInputAccept(enableEtl4lm: boolean): string {
 /** Default maximum single file size in MB (used when env config is not available) */
 export const DEFAULT_MAX_FILE_SIZE_MB = 200;
 
+/** Default maximum media file size in MB when env config is not available */
+export const DEFAULT_MEDIA_MAX_FILE_SIZE_MB = 1024;
+
+export const MEDIA_FILE_EXTENSIONS = [
+    "mp3", "wav", "m4a", "aac", "flac", "ogg",
+    "mp4", "mov", "avi", "mkv", "webm",
+] as const;
+
+export interface UploadSizeLimits {
+    defaultMaxMB: number;
+    mediaMaxMB: number;
+}
+
+export interface UploadSizeEnvConfig {
+    uploaded_files_maximum_size?: number;
+    uploaded_media_maximum_size?: number;
+}
+
+export function resolveUploadSizeLimits(config?: UploadSizeEnvConfig | null): UploadSizeLimits {
+    return {
+        defaultMaxMB: config?.uploaded_files_maximum_size ?? DEFAULT_MAX_FILE_SIZE_MB,
+        mediaMaxMB: config?.uploaded_media_maximum_size ?? DEFAULT_MEDIA_MAX_FILE_SIZE_MB,
+    };
+}
+
+export function isMediaFileName(name: string): boolean {
+    const ext = name.split(".").pop()?.toLowerCase();
+    return Boolean(ext && (MEDIA_FILE_EXTENSIONS as readonly string[]).includes(ext));
+}
+
+export function getMaxFileSizeMBForFile(name: string, limits: UploadSizeLimits): number {
+    return isMediaFileName(name) ? limits.mediaMaxMB : limits.defaultMaxMB;
+}
+
+export function getMaxFileSizeBytesForFile(name: string, limits: UploadSizeLimits): number {
+    return getMaxFileSizeMBForFile(name, limits) * 1024 * 1024;
+}
+
 /** Maximum number of files per upload batch */
 export const MAX_UPLOAD_COUNT = 50;
 
@@ -135,6 +198,19 @@ export function getFileTypeFromName(name: string): FileType {
         case "jpg": return FileType.JPG;
         case "jpeg": return FileType.JPEG;
         case "png": return FileType.PNG;
+        case "mp3":
+        case "wav":
+        case "m4a":
+        case "aac":
+        case "flac":
+        case "ogg":
+            return FileType.AUDIO;
+        case "mp4":
+        case "mov":
+        case "avi":
+        case "mkv":
+        case "webm":
+            return FileType.VIDEO;
         case "wps": return FileType.WPS;
         case "dps": return FileType.DPS;
         case "et": return FileType.ET;
@@ -204,14 +280,13 @@ export function getRootFolderName(relativePath: string): string {
  */
 export function filterFolderUploadFiles(
     files: File[],
-    options: { allowedExtensions: readonly string[]; maxSizeMB: number },
+    options: { allowedExtensions: readonly string[]; limits: UploadSizeLimits },
 ): File[] {
-    const maxBytes = options.maxSizeMB * 1024 * 1024;
     return files.filter((file) => {
         const rel = file.webkitRelativePath || file.name;
         if (rel.split("/").length !== 2) return false;
         if (isHiddenName(file.name)) return false;
-        if (file.size > maxBytes) return false;
+        if (file.size > getMaxFileSizeBytesForFile(file.name, options.limits)) return false;
         const ext = file.name.split(".").pop()?.toLowerCase();
         if (!ext || !options.allowedExtensions.includes(ext)) return false;
         return true;
@@ -220,11 +295,10 @@ export function filterFolderUploadFiles(
 
 /**
  * Validate a single file for upload eligibility (size + extension).
- * @param file - File to validate
- * @param maxSizeMB - Maximum file size in MB (from env config or default 200)
  * Returns an error message string, or null if valid.
  */
-export function validateFileForUpload(file: File, maxSizeMB: number = DEFAULT_MAX_FILE_SIZE_MB): string | null {
+export function validateFileForUpload(file: File, limits: UploadSizeLimits): string | null {
+    const maxSizeMB = getMaxFileSizeMBForFile(file.name, limits);
     const maxSizeBytes = maxSizeMB * 1024 * 1024;
     if (file.size > maxSizeBytes) {
         return i18next.t("com_knowledge.file_exceeds_limit", { name: file.name, size: maxSizeMB });

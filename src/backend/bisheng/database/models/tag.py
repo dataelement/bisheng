@@ -17,6 +17,10 @@ class TagBusinessTypeEnum(str, Enum):
     APPLICATION = 'application'
     KNOWLEDGE = 'knowledge'
 
+class TagResourceTypeEnum(str, Enum):
+    AI_AUTO_TAG = 'ai_auto_tag'
+    SYSTEM_TAG = 'system_tag'
+    MANUAL_TAG = 'manual_tag'
 
 class TagBase(SQLModelSerializable):
     """
@@ -31,6 +35,7 @@ class TagBase(SQLModelSerializable):
         sa_column=Column(Integer, nullable=False, server_default=text('1'),
                          index=True, comment='Tenant ID'),
     )
+    resource_type: str = Field(default=TagResourceTypeEnum.MANUAL_TAG, description="Resource Type")
     create_time: Optional[datetime] = Field(default=None, sa_column=Column(
         DateTime, nullable=False, index=True, server_default=text('CURRENT_TIMESTAMP')), description="Creation Time")
     update_time: Optional[datetime] = Field(default=None, sa_column=Column(
@@ -308,7 +313,7 @@ class TagDao(Tag):
         str, List[Tag]]:
         """ Query all tags under resources """
         with get_sync_db_session() as session:
-            statement = select(Tag.id, Tag.name, TagLink.resource_id).join(TagLink,
+            statement = select(Tag.id, Tag.name, TagLink.resource_id, Tag.resource_type).join(TagLink,
                                                                            and_(
                                                                                Tag.id == TagLink.tag_id,
                                                                                TagLink.resource_id.in_(resource_ids),
@@ -319,7 +324,7 @@ class TagDao(Tag):
             for one in result:
                 if one[2] not in ret:
                     ret[one[2]] = []
-                ret[one[2]].append(Tag(id=one[0], name=one[1]))
+                ret[one[2]].append(Tag(id=one[0], name=one[1], resource_type=one[3]))
             return ret
 
     @classmethod

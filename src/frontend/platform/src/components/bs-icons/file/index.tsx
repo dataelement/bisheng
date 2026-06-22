@@ -23,6 +23,17 @@ export type FileType =
     | 'jpeg'
     | 'png'
     | 'bmp'
+    | 'mp3'
+    | 'wav'
+    | 'm4a'
+    | 'aac'
+    | 'flac'
+    | 'ogg'
+    | 'mp4'
+    | 'mov'
+    | 'avi'
+    | 'mkv'
+    | 'webm'
     | 'csv'
     | 'et'
     | 'xls'
@@ -45,6 +56,17 @@ const iconComponents: Record<FileType, React.ComponentType<any>> = {
     jpeg: ImageIcon,
     png: ImageIcon,
     bmp: ImageIcon,
+    mp3: TxtIcon,
+    wav: TxtIcon,
+    m4a: TxtIcon,
+    aac: TxtIcon,
+    flac: TxtIcon,
+    ogg: TxtIcon,
+    mp4: TxtIcon,
+    mov: TxtIcon,
+    avi: TxtIcon,
+    mkv: TxtIcon,
+    webm: TxtIcon,
     csv: CsvIcon,
     et: XlsxIcon,
     xls: XlsIcon,

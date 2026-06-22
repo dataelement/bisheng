@@ -2,7 +2,7 @@
 import { TipIcon } from "@/components/bs-icons/tip"
 import i18next from "i18next"
 import { X } from "lucide-react"
-import { useRef, useState } from "react"
+import { useRef, useState, type KeyboardEvent } from "react"
 import { createRoot } from "react-dom/client"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "."
 
@@ -15,6 +15,8 @@ interface ConfirmParams {
     onClose?: () => void
     onCancel?: () => void
     onOk?: (next) => void
+    okDisabled?: boolean
+    okHidden?: boolean
 }
 
 let openFn = (_: ConfirmParams) => { }
@@ -45,12 +47,20 @@ function ConfirmWrapper() {
             : close()
     }
 
+    const handleContentKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== "Enter" || event.nativeEvent.isComposing) {
+            return
+        }
+        event.preventDefault()
+        handleOkClick()
+    }
+
     if (!paramRef.current) return null
-    const { title, desc, okTxt, canelTxt, showClose = true } = paramRef.current
+    const { title, desc, okTxt, canelTxt, showClose = true, okDisabled = false, okHidden = false } = paramRef.current
 
     return (
         <AlertDialog open={open} onOpenChange={setOpen}>
-            <AlertDialogContent>
+            <AlertDialogContent onKeyDown={handleContentKeyDown}>
                 <AlertDialogHeader className="relative">
                     <div><TipIcon /></div>
                     {showClose && <X onClick={close} className="absolute right-0 top-[-0.5rem] cursor-pointer text-gray-400 hover:text-gray-600"></X>}
@@ -61,7 +71,7 @@ function ConfirmWrapper() {
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel onClick={handleCancelClick} className="px-11">{canelTxt}</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleOkClick} className="px-11">{okTxt}</AlertDialogAction>
+                    {!okHidden && <AlertDialogAction onClick={handleOkClick} disabled={okDisabled} className="px-11">{okTxt}</AlertDialogAction>}
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>

@@ -14,7 +14,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Badge } from "~/components/ui/Badge";
@@ -155,6 +155,20 @@ export function FileCard({
                 [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
                 [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), color: "text-[#f53f3f]", bg: "bg-[#fff2f0]", dot: "bg-[#f53f3f]" },
             };
+            if (file.status === FileStatus.UPLOADING) {
+                const label = getUploadTransientStatusLabel(file, localize);
+                badge = (
+                    <span
+                        className={cn(
+                            "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-sm px-2 py-0.5 text-xs font-medium",
+                            "bg-[#e8f3ff] text-[#165dff]",
+                        )}
+                    >
+                        <span className="size-1.5 shrink-0 rounded-full bg-[#165dff]" />
+                        {label}
+                    </span>
+                );
+            } else {
             const item = config[file.status];
             if (!item) return null;
             badge = (
@@ -169,6 +183,7 @@ export function FileCard({
                     {item.label}
                 </span>
             );
+            }
         }
 
         if (!badge) return null;

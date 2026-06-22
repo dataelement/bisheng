@@ -206,6 +206,9 @@ async def upload_file_to_minio(file: UploadFile, object_name, bucket_name: str) 
     await minio_client.put_object(bucket_name=bucket_name, object_name=object_name, file=file.file)
     return await minio_client.get_share_link(object_name, bucket_name)
 
+async def get_share_file_url(object_name: str, bucket_name: str):
+    minio_client = await get_minio_storage()
+    return await minio_client.get_share_link(object_name, bucket_name or minio_client.bucket)
 
 @create_cache_folder_async
 async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str) -> str:

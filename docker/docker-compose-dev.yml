@@ -1,0 +1,82 @@
+services:
+  mysql:
+    container_name: bisheng-mysql
+    image: mysql:8.0
+
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: "1234"  # 数据库密码，如果修改需要同步修改bisheng/congfig/config.yaml配置database_url的mysql连接密码
+      MYSQL_DATABASE: bisheng
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/conf/my.cnf:/etc/mysql/my.cnf
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/mysql/data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -u root -p$$MYSQL_ROOT_PASSWORD -e 'CREATE DATABASE IF NOT EXISTS openfga;'"]
+      start_period: 30s
+      interval: 20s
+      timeout: 10s
+      retries: 4
+    restart: on-failure
+
+  backend:
+    container_name: bisheng-backend
+    #image: cr.dataelem.com/dataelement/bisheng-backend:2.5.0-sg
+    build:
+      context: ../src/backend
+      dockerfile: Dockerfile
+    image: bisheng-backend:local
+    ports:
+      - "7860:7860"
+    environment:
+      TZ: Asia/Shanghai
+      BS_SSO_SYNC__GATEWAY_HMAC_SECRET: "bisheng-local-hmac-20260422"
+      BS_MILVUS_CONNECTION_ARGS: '{"host":"milvus","port":"19530","user":"","password":"","secure":false}'
+      BS_MILVUS_IS_PARTITION: 'true'
+      BS_MILVUS_PARTITION_SUFFIX: '1'
+      BS_ELASTICSEARCH_URL: 'http://elasticsearch:9200'
+      BS_ELASTICSEARCH_SSL_VERIFY: '{}'  # 可根据自己部署的密码进行配置 '{"basic_auth": ("elastic", "elastic")}'
+      BS_MINIO_SCHEMA: 'false'
+      BS_MINIO_CERT_CHECK: 'false'
+      BS_MINIO_ENDPOINT: 'minio:9000'
+      BS_MINIO_SHAREPOINT: 'minio:9000'
+      BS_MINIO_ACCESS_KEY: 'minioadmin'
+      BS_MINIO_SECRET_KEY: 'minioadmin'
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/config/config_dev.yaml:/app/bisheng/config.yaml
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/bisheng/entrypoint.sh:/app/entrypoint.sh
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/bisheng:/app/data
+      - ../src/backend:/app
+    security_opt:
+      - seccomp:unconfined
+    command: sh entrypoint.sh api  # 启动api服务
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      start_period: 30s
+      interval: 90s
+      timeout: 30s
+      retries: 3
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  frontend:
+    container_name: bisheng-frontend
+    # 注意：此处为 Hub 的 latest，未必与自建镜像 backend:v2.5-local 同版本；界面偏旧请 pull 最新或按源码 build（见 AGENTS / 部署文档）
+    #image: cr.dataelem.com/dataelement/bisheng-frontend:2.5.0-sg
+    build:
+      context: ../src/frontend
+      dockerfile: Dockerfile
+    image: bisheng-frontend:local
+    ports:
+      - "3001:3001"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/nginx/conf.d:/etc/nginx/conf.d
+    restart: on-failure
+    depends_on:
+      - backend

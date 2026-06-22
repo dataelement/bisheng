@@ -1,4 +1,4 @@
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import {
     Table,
@@ -16,10 +16,11 @@ import { Checkbox } from "@/components/bs-ui/checkBox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
 import Tip from "@/components/bs-ui/tooltip/tip";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
+import { locationContext } from "@/contexts/locationContext";
 import { downloadFile, truncateString } from "@/util/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import { CircleAlertIcon, ClipboardPenLine, Filter, RotateCw, Trash2, Download, Tag as TagIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SearchInput } from "../../../components/bs-ui/input";
 import AutoPagination from "../../../components/bs-ui/pagination/autoPagination";
@@ -27,9 +28,11 @@ import { deleteFile, getKnowledgeDetailApi, readFileByLibDatabase, retryKnowledg
 import { captureAndAlertRequestErrorHoc } from "../../../controllers/request";
 import { useTable } from "../../../util/hook";
 import useKnowledgeStore from "../useKnowledgeStore";
+import AddKnowledgeFileMenu from "./AddKnowledgeFileMenu";
 import { MetadataManagementDialog } from "./MetadataManagementDialog";
 import FileTagList from "./tags/FileTagList";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
+import WebLinkImportDialog from "./WebLinkImportDialog";
 
 interface StatusIndicatorProps {
     status: number;
@@ -45,6 +48,7 @@ const STATUS_CONFIG: Record<number, { labelKey: string; colorClass: string; bgCl
     6: { labelKey: "timeout", colorClass: "text-red-500", bgClass: "bg-red-500" },
     7: { labelKey: "violation", colorClass: "text-red-500", bgClass: "bg-red-500" },
 };
+const POLLING_STATUS = new Set([1, 4, 5]);
 
 function formatSensitiveViolationMessage(hits: any[], t: (key: string, options?: Record<string, any>) => string) {
     const words = hits
@@ -145,6 +149,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     const { t } = useTranslation('knowledge')
     const { id } = useParams()
     const { toast } = useToast()
+    const { appConfig } = useContext(locationContext)
 
     const { setEditable } = useKnowledgeStore();
     const { page, pageSize, data: datalist, total, loading, setPage, search, reload, filterData } = useTable({ cancelLoadingWhenReload: true }, (param) =>
@@ -161,6 +166,11 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     const [tempFilters, setTempFilters] = useState<number[]>([]);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [metadataFields, setMetadataFields] = useState<Array<{ field_name: string; field_type: string }>>([]);
+    const [webLinkOpen, setWebLinkOpen] = useState(false);
+    const formatText = appConfig.enableEtl4lm
+        ? t('supportedFormatsWithImages', { ns: 'bs', maxSize: appConfig.uploadFileMaxSize })
+        : t('supportedFormatsWithoutImages', { ns: 'bs', maxSize: appConfig.uploadFileMaxSize })
+
     useEffect(() => {
         setEditable(canEditKb);
     }, [canEditKb, setEditable]);
@@ -168,13 +178,13 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     // Polling during parsing
     const timerRef = useRef(null)
     useEffect(() => {
-        if (datalist.some(el => el.status === 1)) {
+        if (datalist.some(el => POLLING_STATUS.has(el.status))) {
             timerRef.current = setTimeout(() => {
                 reload()
             }, 5000)
             return () => clearTimeout(timerRef.current)
         }
-    }, [datalist])
+    }, [datalist, reload])
 
     const applyFilters = () => {
         setSelectedFilters([...tempFilters]);
@@ -501,9 +511,11 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                         </Button>
                     )}
                     {canEditKb && (
-                        <Link to={`/filelib/upload/${id}`}>
-                            <Button className="px-4 md:px-8 h-9">{t('uploadFile')}</Button>
-                        </Link>
+                        <AddKnowledgeFileMenu
+                            supportedFormatsLabel={formatText}
+                            onUploadFile={() => navigate(`/filelib/upload/${id}`)}
+                            onWebLink={() => setWebLinkOpen(true)}
+                        />
                     )}
                 </div>
             </div>
@@ -769,6 +781,12 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 hasManagePermission={canEditKb}
                 id={id}
                 initialMetadata={metadataFields}
+            />
+            <WebLinkImportDialog
+                knowledgeId={id}
+                open={webLinkOpen}
+                onOpenChange={setWebLinkOpen}
+                onImported={reload}
             />
         </div>
 

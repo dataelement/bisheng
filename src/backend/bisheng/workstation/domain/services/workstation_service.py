@@ -737,6 +737,18 @@ class WorkStationService(BaseService):
         return ret, inherited, source_tenant_id, has_override
 
     @classmethod
+    def query_knowledge_space_config_with_meta(
+        cls,
+    ) -> tuple[Optional[KnowledgeSpaceConfig], bool, int, bool]:
+        value, inherited, source_tenant_id, has_override = cls._resolve_tenant_config(
+            ConfigKeyEnum.WORKSTATION_KNOWLEDGE_SPACE
+        )
+        if not value:
+            return None, inherited, source_tenant_id, has_override
+        ret = KnowledgeSpaceConfig(**json.loads(value))
+        return ret, inherited, source_tenant_id, has_override
+
+    @classmethod
     async def acopy_root_builtin_tools_to_tenant(cls, tenant_id: int) -> dict:
         result = {
             'tenant_id': tenant_id,

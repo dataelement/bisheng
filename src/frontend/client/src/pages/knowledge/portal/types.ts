@@ -1,5 +1,6 @@
 import type {
     KnowledgeFile,
+    KnowledgeFilePreview,
     KnowledgeSpace,
     SimilarCandidateEntry,
     SpaceLevel,
@@ -25,6 +26,7 @@ export interface PreviewState {
     fileUrl: string;
     fileType: string;
     error: string;
+    previewData?: KnowledgeFilePreview | null;
 }
 
 export interface PortalFileTreeNode {

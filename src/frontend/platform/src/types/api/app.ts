@@ -13,8 +13,10 @@ export type AppConfig = {
     version: string;
     /** 注册入口 */
     enable_registration: boolean;
-    /** 最大上传文件大小 mb */
-    uploaded_files_maximum_size: number;
+  /** 最大上传文件大小 mb */
+  uploaded_files_maximum_size: number;
+  /** 知识库/知识空间音视频上传最大限制 mb */
+  uploaded_media_maximum_size?: number;
     /** 是否部署 ETL4LM  */
     enable_etl4lm: boolean;
 };

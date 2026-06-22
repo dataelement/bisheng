@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 from langchain_core.documents import Document
 from loguru import logger
@@ -10,7 +10,7 @@ from sqlmodel import select
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.database import get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
+from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink, TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileSource,
@@ -44,7 +44,7 @@ class KnowledgeSpaceAutoTagService:
             if not cls._should_run(knowledge, db_file):
                 return
 
-            library = KnowledgeSpaceTagLibraryDao.get(knowledge.auto_tag_library_id)
+            library = KnowledgeSpaceTagLibraryDao.get(knowledge.auto_tag_library_id if knowledge.auto_tag_library_id else 1)
             if not library or not library.tags:
                 logger.info(
                     "auto_tag_skip_empty_library space_id={} file_id={} library_id={}",
@@ -78,21 +78,41 @@ class KnowledgeSpaceAutoTagService:
                 (llm_config.auto_tag_prompt or "").strip()
                 or DEFAULT_AUTO_TAG_SYSTEM_PROMPT
             )
-            selected = cls._invoke_llm(llm, text, library.tags or [], system_prompt)
-            matched = cls._match_library_tags(selected, library.tags or [])
+
+            tags_list = list(dict.fromkeys(
+                            tag for tag in (library.tags or []) + (library.ai_tags or [])
+                            if tag  # 过滤 None、空字符串等假值
+                        ))
+            selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
+            matched, ai_matched = cls._match_library_tags(selected, library.tags or [], library.ai_tags or [])
             if not matched:
                 logger.info(
                     "auto_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id
                 )
                 return
-
-            cls._append_file_tags(
-                space_id=knowledge.id,
-                file_id=db_file.id,
-                tag_names=matched,
-                user_id=db_file.user_id or 0,
-                tenant_id=db_file.tenant_id,
-            )
+            else:
+                cls._append_file_tags(
+                    space_id=knowledge.id,
+                    file_id=db_file.id,
+                    tag_names=matched,
+                    user_id=db_file.user_id or 0,
+                    tenant_id=db_file.tenant_id,
+                    resource_type=TagResourceTypeEnum.SYSTEM_TAG,
+                )
+            if not ai_matched:
+                logger.info(
+                    "auto_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id
+                )
+                return
+            else:
+                cls._append_file_tags(
+                    space_id=knowledge.id,
+                    file_id=db_file.id,
+                    tag_names=ai_matched,
+                    user_id=db_file.user_id or 0,
+                    tenant_id=db_file.tenant_id,
+                    resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+                )
             logger.info(
                 "auto_tag_success space_id={} file_id={} tags={}",
                 knowledge.id,
@@ -183,8 +203,8 @@ class KnowledgeSpaceAutoTagService:
 
     @staticmethod
     def _match_library_tags(
-        selected: Iterable[str], library_tags: List[str]
-    ) -> List[str]:
+        selected: Iterable[str], library_tags: List[str], ai_tags: List[str]
+    ) -> Tuple[List[str], List[str]]:
         allowed = {tag: tag for tag in library_tags}
         matched: List[str] = []
         for tag in selected:
@@ -192,7 +212,16 @@ class KnowledgeSpaceAutoTagService:
                 matched.append(allowed[tag])
             if len(matched) >= AUTO_TAG_MAX_RESULT:
                 break
-        return matched
+        ai_matched: List[str] = []
+        count = len(matched)
+        if count < AUTO_TAG_MAX_RESULT:
+            ai_allowed = {tag: tag for tag in ai_tags}
+            for tag in selected:
+                if tag in ai_allowed and tag not in ai_matched and tag not in matched:
+                    ai_matched.append(ai_allowed[tag])
+                if count + len(ai_matched) >= AUTO_TAG_MAX_RESULT:
+                    break
+        return matched, ai_matched
 
     @staticmethod
     def _append_file_tags(
@@ -201,6 +230,7 @@ class KnowledgeSpaceAutoTagService:
         tag_names: List[str],
         user_id: int,
         tenant_id: Optional[int],
+        resource_type: TagResourceTypeEnum,
     ) -> None:
         if not tag_names:
             return
@@ -219,6 +249,7 @@ class KnowledgeSpaceAutoTagService:
                         name=tag_name,
                         business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
                         business_id=str(space_id),
+                        resource_type=resource_type,
                         user_id=user_id,
                         tenant_id=tenant_id,
                     )

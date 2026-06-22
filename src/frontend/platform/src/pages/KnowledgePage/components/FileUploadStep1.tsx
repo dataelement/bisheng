@@ -57,6 +57,7 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
         await onSave(params)
         setLoading(false)
     }
+
     useEffect(() => {
         if (initialFiles.length > 0) {
             handleFileChange(initialFiles, []);
@@ -64,7 +65,13 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
 
         }
     }, [initialFiles]);
-    return <div className={`relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col pb-[calc(11rem+env(safe-area-inset-bottom))] pt-6 ${hidden ? 'hidden' : ''}`}>
+    const containerClassName = [
+        'relative mx-auto flex min-h-full w-full max-w-[1120px] flex-col',
+        'pb-[calc(11rem+env(safe-area-inset-bottom))] pt-6',
+        hidden ? 'hidden' : ''
+    ].filter(Boolean).join(' ')
+
+    return <div className={containerClassName}>
         <KnowledgeUploadComponent
             size={appConfig.uploadFileMaxSize}
             progressClassName='pb-2'
@@ -76,7 +83,12 @@ export default function FileUploadStep1({ hidden, onNext, onSave, initialFiles }
             onFileChange={handleFileChange}
             initialFiles={initialFiles}
         />
-        <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4 border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]">
+        <div
+            className={[
+                'fixed bottom-0 left-0 right-0 z-30 flex justify-center gap-4',
+                'border-t border-[#e4e8ee] bg-white px-4 py-4 sm:left-[184px]'
+            ].join(' ')}
+        >
             <Button disabled={loading || !finish} variant="outline" onClick={handleSave}>{t("uploadDirectly")}</Button>
             <Button disabled={loading || !finish} onClick={() => {
                 onNext(filesRef.current)
