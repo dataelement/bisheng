@@ -77,10 +77,16 @@
       : ((brandName && (brandName.en || brandName.zh)) || "");
   }
 
-  function applyDocumentBrand(config) {
-    var title = getBrandTitle(config && config.brandName);
-    if (title) {
-      document.title = title;
+  function applyDocumentBrand(config, applyTitle) {
+    // Only set the document title from the async runtime-config (applyTitle=true).
+    // The synchronous static config.js pass must NOT touch the title, otherwise
+    // its hardcoded default brand name flashes in the tab before the real brand
+    // arrives from /api/v1/brand/runtime-config.
+    if (applyTitle) {
+      var title = getBrandTitle(config && config.brandName);
+      if (title) {
+        document.title = title;
+      }
     }
 
     var favicon = config && config.assets && config.assets.favicon && config.assets.favicon.url;
@@ -92,7 +98,7 @@
     }
   }
 
-  function applyBrandConfig(incoming) {
+  function applyBrandConfig(incoming, applyTitle) {
     var previous = window.BRAND_CONFIG || {};
     var next = mergeObject(previous, incoming);
     next.brandName = mergeObject(previous.brandName, incoming && incoming.brandName);
@@ -124,7 +130,7 @@
     next.loadingAnimation = (next.loading && next.loading.animation) || previous.loadingAnimation || "";
 
     window.BRAND_CONFIG = next;
-    applyDocumentBrand(next);
+    applyDocumentBrand(next, applyTitle);
     return next;
   }
 
@@ -137,6 +143,9 @@
     });
   }
 
+  // Initial synchronous pass from the static config.js: apply favicon/assets but
+  // NOT the title (applyTitle omitted → falsy), so the hardcoded default brand
+  // name never flashes in the tab.
   applyBrandConfig(window.BRAND_CONFIG || {});
 
   window.__BRAND_CONFIG_READY__ = (window.fetch
@@ -144,10 +153,12 @@
     : Promise.resolve({})
   )
     .then(function (config) {
-      return applyBrandConfig(config || {});
+      // Real brand arrived — now set the title.
+      return applyBrandConfig(config || {}, true);
     })
     .catch(function () {
-      applyDocumentBrand(window.BRAND_CONFIG || {});
+      // Fetch failed — fall back to whatever brand we have (the static default).
+      applyDocumentBrand(window.BRAND_CONFIG || {}, true);
       return window.BRAND_CONFIG || {};
     });
 })();
