@@ -238,9 +238,11 @@ export function useFileUpload({
     const localize = useLocalize();
     const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
     const [creatingFolder, setCreatingFolder] = useState<KnowledgeFile | null>(null);
-    // True while a dragged/picked folder batch is uploading + registering, so the
-    // detail pane can show a loading state instead of appearing unresponsive.
-    const [folderUploading, setFolderUploading] = useState(false);
+    // Placeholder folder card shown while a dragged/picked folder batch is uploading +
+    // registering. Rendered with a translucent "uploading" overlay and not clickable,
+    // so the rest of the list stays interactive instead of being hidden behind a
+    // full-pane spinner. Cleared (replaced by the real folder) once the batch lands.
+    const [uploadingFolder, setUploadingFolder] = useState<KnowledgeFile | null>(null);
     // Duplicate file detection state
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
 
@@ -381,10 +383,9 @@ export function useFileUpload({
             // upload every file twice and trigger spurious dup warnings).
             if (folderUploadInFlightRef.current) return;
             folderUploadInFlightRef.current = true;
-            // Surface a loading state for the whole batch — uploading bodies +
-            // registering the tree + refresh can take a while, and without it the
-            // drop appears to do nothing until the folder finally shows up.
-            setFolderUploading(true);
+            // Track whether a placeholder card was shown, so finally only clears it
+            // when one was actually created (early-return rejections show none).
+            let placeholderShown = false;
             try {
             const allFiles = Array.from(fileList);
 
@@ -403,6 +404,24 @@ export function useFileUpload({
                 });
                 return;
             }
+
+            // Cheap checks passed — drop a placeholder folder card into the grid
+            // immediately (just the name) so the user gets instant feedback. It
+            // renders with an "uploading" overlay and is not clickable; the real
+            // folder replaces it after the batch registers + the list refreshes.
+            setUploadingFolder({
+                id: `upload_folder_${Date.now()}`,
+                name: rootName,
+                type: FileType.FOLDER,
+                tags: [],
+                path: rootName,
+                parentId: currentFolderId,
+                spaceId: activeSpace.id,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                status: FileStatus.UPLOADING,
+            });
+            placeholderShown = true;
 
             // Reject if the picked folder name is already used at the current
             // location. Use the same listing API the left tree uses so admin
@@ -496,7 +515,8 @@ export function useFileUpload({
             await loadFiles(currentPage);
             } finally {
                 folderUploadInFlightRef.current = false;
-                setFolderUploading(false);
+                // Clear the placeholder; the refreshed list now carries the real folder.
+                if (placeholderShown) setUploadingFolder(null);
             }
         },
         [activeSpace, currentFolderId, currentPage, loadFiles, localize, showToast],
@@ -639,7 +659,7 @@ export function useFileUpload({
     return {
         uploadingFiles,
         creatingFolder,
-        folderUploading,
+        uploadingFolder,
         duplicateFiles,
         handleUploadFile,
         handleUploadFolder,

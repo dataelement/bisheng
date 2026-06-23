@@ -84,8 +84,8 @@ interface KnowledgeSpaceContentProps {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     uploadingFiles?: KnowledgeFile[];
     creatingFolder?: KnowledgeFile | null;
-    /** True while a dragged/picked folder batch is uploading — shows a loading overlay. */
-    folderUploading?: boolean;
+    /** Placeholder folder card shown while a dragged/picked folder batch uploads. */
+    uploadingFolder?: KnowledgeFile | null;
     onCancelCreateFolder?: () => void;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
@@ -128,7 +128,7 @@ export function KnowledgeSpaceContent({
     onDragStateChange,
     uploadingFiles = [],
     creatingFolder,
-    folderUploading = false,
+    uploadingFolder = null,
     onCancelCreateFolder,
     onCreateSpace,
     onGoKnowledgeSquare,
@@ -147,6 +147,14 @@ export function KnowledgeSpaceContent({
     const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
+        // In-progress folder upload: show its placeholder card (keyed to the space +
+        // folder it was started in, like the file placeholders below) so it stays put
+        // when the user navigates elsewhere mid-upload.
+        ...(uploadingFolder &&
+            String(uploadingFolder.spaceId) === String(space.id) &&
+            String(uploadingFolder.parentId ?? "") === String(currentFolderId ?? "")
+            ? [uploadingFolder]
+            : []),
         // Uploading placeholders are keyed to the space AND folder they were
         // started in (placeholder.parentId = the folder at upload time). Filter to
         // the active space + current folder so an in-progress root upload does not
@@ -705,7 +713,14 @@ export function KnowledgeSpaceContent({
         onSort(newSortBy, newDirection);
     };
 
+    // An uploading folder placeholder has only a temp id and no backend identity —
+    // it must not be selectable (neither individually nor via select-all).
+    const isFolderUploadPlaceholder = (f: KnowledgeFile) =>
+        f.type === FileType.FOLDER && isKnowledgeItemUploading(f);
+
     const handleSelectFile = (fileId: string, selected: boolean) => {
+        const target = displayFiles.find((f) => f.id === fileId);
+        if (target && isFolderUploadPlaceholder(target)) return;
         const newSelected = new Set(selectedFiles);
         if (selected) {
             newSelected.add(fileId);
@@ -730,10 +745,12 @@ export function KnowledgeSpaceContent({
 
     const handleSelectAll = (isAllSelectedOnPage: boolean) => {
         const newSelected = new Set(selectedFiles);
+        // Skip uploading folder placeholders so select-all never picks them up.
+        const selectable = displayFiles.filter((f) => !isFolderUploadPlaceholder(f));
         if (isAllSelectedOnPage) {
-            displayFiles.forEach(f => newSelected.delete(f.id));
+            selectable.forEach(f => newSelected.delete(f.id));
         } else {
-            displayFiles.forEach(f => newSelected.add(f.id));
+            selectable.forEach(f => newSelected.add(f.id));
         }
         setSelectedFiles(newSelected);
     };
@@ -1306,15 +1323,14 @@ export function KnowledgeSpaceContent({
                     {suppressList ? (
                         // Search page before any query — intentionally empty.
                         <div className="min-h-0 flex-1" />
-                    ) : (loading && displayFiles.length === 0) || folderUploading ? (
+                    ) : (loading && displayFiles.length === 0) ? (
                         // Space switching / first load: show a spinner instead of the
                         // "no files here" empty illustration. The fileManager hook clears
                         // `files` immediately on activeSpace change, so this branch fires
                         // for the entire fetch window — the right pane no longer keeps
                         // showing the previous space's contents while the API responds.
-                        // Also covers a dragged/picked folder upload (folderUploading), so
-                        // the drop shows immediate feedback instead of appearing frozen
-                        // until the folder finally lands.
+                        // A folder upload no longer hits this branch: its placeholder card
+                        // lives in the grid (displayFiles), keeping the rest interactive.
                         <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
                             <LoadingIcon className="size-20 text-primary" />
                         </div>
