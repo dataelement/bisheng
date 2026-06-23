@@ -29,6 +29,34 @@ Options:
 - `--include-deleted`: 包含已删除会话
 - `--full-session`: 只要会话在时间窗口内活跃，就导出该会话的全部消息
 
+## Expert QA Scripts
+
+### `delete_qa_expert_question.py`
+
+按专家问答问题 ID 删除 `qa_question` 及关联的回答、评论 / 追问、问题投票、回答投票、评论投票和通知。
+
+默认 dry-run，只输出影响范围；执行写入必须显式传入 `--apply`。
+
+Usage:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/delete_qa_expert_question.py 123
+PYTHONPATH=./ .venv/bin/python scripts/delete_qa_expert_question.py 123 --apply
+
+bash scripts/delete_qa_expert_question.sh 123
+bash scripts/delete_qa_expert_question.sh 123 --apply
+```
+
+Scope:
+
+- `qa_question`
+- `qa_answer`
+- `qa_comment`
+- `qa_question_vote`
+- `qa_answer_vote`
+- `qa_comment_vote`
+- `qa_notification`
+
 ## Permission Scripts
 
 ### `migrate_workstation_models_to_workbench.py`

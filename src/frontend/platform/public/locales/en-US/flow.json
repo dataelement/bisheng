@@ -163,6 +163,17 @@
   "required": "Required",
   "isRequired": "Is Required",
   "documentKnowledgeBase": "Document Knowledge",
+  "knowledgeSpace": "Knowledge Space",
+  "searchKnowledgeSpaceName": "Search knowledge space name",
+  "noKnowledgeSpace": "No available knowledge spaces",
+  "loadingKnowledgeSpaces": "Loading knowledge spaces...",
+  "emptyKnowledgeSpaces": "No matching knowledge spaces",
+  "knowledgeSpaceLevel": {
+    "public": "Public Spaces",
+    "department": "Department Spaces",
+    "team": "Team Spaces",
+    "personal": "Personal Spaces"
+  },
   "temporarySessionFiles": "Temporary Knowledge",
   "storeFilesSentInCurrentSession": "Store files sent in the current session",
   "displayNameTooltip": "Displayed on the user conversation page",

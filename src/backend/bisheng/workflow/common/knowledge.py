@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Dict, Any, Literal
+from typing import Any, Dict, List, Literal
 
 from langchain_core.documents import Document
 from loguru import logger
@@ -14,8 +14,66 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 from bisheng.knowledge.rag.version_filter import build_primary_only_filter
 from bisheng.llm.domain import LLMService
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
+from bisheng.user.domain.services.auth import LoginUser
 from bisheng.workflow.common.condition import ComparisonType
 from bisheng.workflow.nodes.base import BaseNode
+
+
+def ensure_knowledge_space_login_user(login_user: Any) -> LoginUser:
+    """Return a permission-service compatible user for workflow space retrieval."""
+    if hasattr(login_user, "get_user_group_ids"):
+        return login_user
+    if not login_user or not getattr(login_user, "user_id", None):
+        raise ValueError("knowledge space retrieval requires a login user")
+
+    return LoginUser(
+        user_id=int(login_user.user_id),
+        user_name=getattr(login_user, "user_name", "") or "",
+        user_role=getattr(login_user, "user_role", None) or [],
+        tenant_id=getattr(login_user, "tenant_id", 1) or 1,
+        token_version=getattr(login_user, "token_version", 0) or 0,
+        is_global_super=getattr(login_user, "is_global_super", False),
+    )
+
+
+def retrieve_knowledge_space_documents_sync(
+    *,
+    request: Any,
+    login_user: Any,
+    query: str,
+    knowledge_base_ids: list[int],
+    top_k: int = 100,
+    max_content: int = 15000,
+) -> list[tuple[int, Document]]:
+    """Synchronously retrieve authorized knowledge-space chunks for workflow nodes."""
+    if not knowledge_base_ids:
+        return []
+
+    import asyncio
+
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
+        KnowledgeDocumentVersionRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
+    from bisheng.worker._asyncio_utils import run_async_task
+
+    async def _retrieve() -> list[tuple[int, Document]]:
+        async with get_async_db_session() as session:
+            service = KnowledgeSpaceChatService(request, ensure_knowledge_space_login_user(login_user))
+            service.version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
+            return await service.aretrieve_chunks(
+                query=query,
+                knowledge_base_ids=knowledge_base_ids,
+                top_k=top_k,
+                max_content=max_content,
+            )
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return run_async_task(_retrieve)
+    raise RuntimeError("knowledge space retrieval does not support running inside an active event loop")
 
 
 class ConditionOne(BaseModel):
@@ -188,7 +246,8 @@ class RagUtils(BaseNode):
         ]
 
         self._advance_kwargs = self.node_params.get('advanced_retrieval_switch', {})
-        self._metadata_filter = ConditionCases(**self.node_params.get('metadata_filter', {}))
+        metadata_filter = {} if self._knowledge_type == 'space' else self.node_params.get('metadata_filter', {})
+        self._metadata_filter = ConditionCases(**metadata_filter)
         if self._advance_kwargs:
             self._advance_kwargs = self.node_params.get('advanced_retrieval_switch', {})
             self._knowledge_auth = self._advance_kwargs['user_auth']
@@ -224,6 +283,9 @@ class RagUtils(BaseNode):
             return str(timestamp)
 
     def retrieve_question(self, question: str) -> List[Document]:
+        if self._knowledge_type == 'space':
+            return self.retrieve_space_question(question)
+
         # 1: retrieve documents from multi retrievers
         knowledge_retriever_tool = KnowledgeRetrieverTool(
             vector_retriever=self._multi_milvus_retriever,
@@ -254,6 +316,21 @@ class RagUtils(BaseNode):
                             one.metadata["user_metadata"][user_key] = self.format_timestamp(user_value)
         return finally_docs
 
+    def retrieve_space_question(self, question: str) -> List[Document]:
+        chunks = retrieve_knowledge_space_documents_sync(
+            request=getattr(self, "request", None),
+            login_user=self.user_info,
+            query=question,
+            knowledge_base_ids=[int(one) for one in self._knowledge_value],
+            top_k=self._retriever_kwargs["k"],
+            max_content=self._max_chunk_size,
+        )
+        docs = []
+        for knowledge_id, doc in chunks:
+            doc.metadata["knowledge_space_id"] = knowledge_id
+            docs.append(doc)
+        return docs
+
     def init_user_question(self) -> List[str]:
         # Convert all user questions to strings by default
         ret = []
@@ -275,8 +352,19 @@ class RagUtils(BaseNode):
     def init_multi_retriever(self):
         if self._knowledge_type == "knowledge":
             self.init_knowledge_retriever()
-        else:
+        elif self._knowledge_type == "space":
+            self.init_space_retriever()
+        elif self._knowledge_type == "tmp":
             self.init_file_retriever()
+        else:
+            raise ValueError(f"Unsupported knowledge retrieval type: {self._knowledge_type}")
+
+    def init_space_retriever(self):
+        """Knowledge-space retrieval is executed per question with permission checks."""
+        if not self._knowledge_value:
+            raise ValueError("Knowledge space retrieval requires at least one selected space")
+        self._multi_es_retriever = None
+        self._multi_milvus_retriever = None
 
     def _fetch_non_primary_file_ids(self, knowledge_ids: List[int]) -> List[int]:
         """Best-effort sync fetch of non-primary file ids for the given knowledges."""

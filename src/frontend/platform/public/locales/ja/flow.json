@@ -163,6 +163,17 @@
   "required": "必須",
   "isRequired": "必須入力項目",
   "documentKnowledgeBase": "ドキュメント知識ベース",
+  "knowledgeSpace": "ナレッジスペース",
+  "searchKnowledgeSpaceName": "ナレッジスペース名を検索",
+  "noKnowledgeSpace": "利用可能なナレッジスペースはありません",
+  "loadingKnowledgeSpaces": "ナレッジスペースを読み込み中...",
+  "emptyKnowledgeSpaces": "一致するナレッジスペースはありません",
+  "knowledgeSpaceLevel": {
+    "public": "公共スペース",
+    "department": "部門スペース",
+    "team": "チームスペース",
+    "personal": "個人スペース"
+  },
   "temporarySessionFiles": "一時セッションファイル",
   "storeFilesSentInCurrentSession": "現在のセッションで送信されたファイルを保存",
   "displayNameTooltip": "ユーザーセッションページにこの名前が表示されます",

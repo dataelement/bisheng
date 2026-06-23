@@ -163,6 +163,17 @@
   "required": "不可为空",
   "isRequired": "是否必填",
   "documentKnowledgeBase": "文档知识库",
+  "knowledgeSpace": "知识空间",
+  "searchKnowledgeSpaceName": "搜索知识空间名称",
+  "noKnowledgeSpace": "暂无可用知识空间",
+  "loadingKnowledgeSpaces": "正在加载知识空间...",
+  "emptyKnowledgeSpaces": "暂无匹配的知识空间",
+  "knowledgeSpaceLevel": {
+    "public": "公共空间",
+    "department": "部门空间",
+    "team": "团队空间",
+    "personal": "个人空间"
+  },
   "temporarySessionFiles": "临时知识库",
   "storeFilesSentInCurrentSession": "存储当前会话中发送的文件",
   "displayNameTooltip": "用户会话页面展示此名称",

@@ -132,6 +132,23 @@ async def get_auto_tag_visibility(
     return resp_200({"visible": visible})
 
 
+@router.get("/options")
+async def get_authorized_space_options(
+    keyword: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    order_by: str = Query(default="name"),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    options = await svc.get_authorized_space_options(
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        order_by=order_by,
+    )
+    return resp_200(options)
+
+
 @router.get("/{space_id}/info")
 async def get_space_info(
     space_id: int,

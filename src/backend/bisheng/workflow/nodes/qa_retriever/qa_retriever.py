@@ -3,8 +3,19 @@ from typing import Any
 
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.workflow.common.knowledge import retrieve_knowledge_space_documents_sync
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng_langchain.chains.retrieval.retrieval_chain import RetrievalChain
+
+
+def normalize_qa_knowledge_value(raw_value: Any) -> tuple[str, list[int]]:
+    if isinstance(raw_value, dict):
+        knowledge_type = raw_value.get('type') or 'qa'
+        values = raw_value.get('value') or []
+    else:
+        knowledge_type = 'qa'
+        values = raw_value or []
+    return knowledge_type, [one.get("key") for one in values if one]
 
 
 class QARetrieverNode(BaseNode):
@@ -14,7 +25,9 @@ class QARetrieverNode(BaseNode):
 
         # Initialize input
         self._user_question = self.node_params.get('user_question', '')
-        self._qa_knowledge_id = [one.get("key") for one in self.node_params.get('qa_knowledge_id', []) if one]
+        self._knowledge_type, self._qa_knowledge_id = normalize_qa_knowledge_value(
+            self.node_params.get('qa_knowledge_id', [])
+        )
         self._score = self.node_params.get('score', 0.6)
 
         # Inisialisasiretriever, Running Initialization
@@ -22,6 +35,8 @@ class QARetrieverNode(BaseNode):
 
     def _init_retriever(self):
         if self._retriever:
+            return
+        if self._knowledge_type == 'space':
             return
 
         knowledge_vector_list = KnowledgeRag.get_multi_knowledge_vectorstore_sync(self.user_id,
@@ -44,10 +59,31 @@ class QARetrieverNode(BaseNode):
 
         self._retriever = RetrievalChain(retriever=multi_milvus_retriever)
 
+    def _retrieve_space_answer(self, question: str) -> str:
+        chunks = retrieve_knowledge_space_documents_sync(
+            request=getattr(self, "request", None),
+            login_user=self.user_info,
+            query=question,
+            knowledge_base_ids=[int(one) for one in self._qa_knowledge_id],
+            top_k=1,
+        )
+        if not chunks:
+            self.graph_state.set_variable(self.id, '$retrieved_result$', None)
+            return ''
+
+        _, doc = chunks[0]
+        self.graph_state.set_variable(self.id, '$retrieved_result$', doc)
+        return doc.page_content
+
     def _run(self, unique_id: str):
         self.init_user_info()
         self._init_retriever()
         question = self.get_other_node_variable(self._user_question)
+        if self._knowledge_type == 'space':
+            return {
+                'retrieved_result': self._retrieve_space_answer(question)
+            }
+
         result = self._retriever.invoke({'query': question})
         # qa have a result; turn out to bedocument
         if result['result']:

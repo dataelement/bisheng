@@ -732,7 +732,10 @@ const workflowTemplate = [
                         "key": "qa_knowledge_id",
                         "label": "true",
                         "type": "qa_select_multi",
-                        "value": [],
+                        "value": {
+                            "type": "qa",
+                            "value": []
+                        },
                         "required": true,
                         "placeholder": "true"
                     },
