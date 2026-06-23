@@ -3093,6 +3093,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             status=[KnowledgeFileStatus.SUCCESS.value],
             order_by="update_time",
             order_sort="desc",
+            match_file_encoding=True,
         )
         if not files:
             return self._build_shougang_portal_search_response([])

@@ -486,7 +486,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
                                       file_ids: List[int] = None, file_level_path: str = None,
                                       extra_file_ids: List[int] = None,
                                       file_type: int = None,
-                                      *, order_by: str = None, order_field: str = None, order_sort: str = "desc"):
+                                      *, order_by: str = None, order_field: str = None, order_sort: str = "desc",
+                                      match_file_encoding: bool = False):
         and_statement = []
         if status:
             and_statement.append(KnowledgeFile.status.in_(status))
@@ -497,14 +498,23 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if file_type is not None:
             and_statement.append(KnowledgeFile.file_type == file_type)
 
+        name_match = None
+        if file_name:
+            name_match = KnowledgeFile.file_name.like(f'%{file_name}%')
+            if match_file_encoding:
+                name_match = or_(
+                    name_match,
+                    KnowledgeFile.file_encoding.like(f'%{file_name}%'),
+                )
+
         keyword_statement = None
-        if file_name and extra_file_ids:
+        if name_match is not None and extra_file_ids:
             keyword_statement = or_(
-                KnowledgeFile.file_name.like(f'%{file_name}%'),
+                name_match,
                 KnowledgeFile.id.in_(extra_file_ids),
             )
-        elif file_name:
-            keyword_statement = KnowledgeFile.file_name.like(f'%{file_name}%')
+        elif name_match is not None:
+            keyword_statement = name_match
         elif extra_file_ids:
             keyword_statement = KnowledgeFile.id.in_(extra_file_ids)
 
@@ -562,7 +572,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
                                          status: List[int] = None, file_ids: List[int] = None,
                                          extra_file_ids: List[int] = None, file_ext: str = None,
                                          order_by: str = None, order_field: str = None,
-                                         order_sort: str = "desc") -> List[KnowledgeFile]:
+                                         order_sort: str = "desc",
+                                         match_file_encoding: bool = False) -> List[KnowledgeFile]:
         unique_knowledge_ids = list(dict.fromkeys(int(knowledge_id) for knowledge_id in knowledge_ids if knowledge_id))
         if not unique_knowledge_ids:
             return []
@@ -579,6 +590,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
             order_by=order_by,
             order_field=order_field,
             order_sort=order_sort,
+            match_file_encoding=match_file_encoding,
         )
         normalized_ext = (file_ext or '').strip().lower().lstrip('.')
         if normalized_ext:

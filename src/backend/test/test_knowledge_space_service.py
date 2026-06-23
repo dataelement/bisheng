@@ -1337,6 +1337,49 @@ async def test_shougang_portal_qa_file_search_sorts_object_tags(service):
 
 
 @pytest.mark.asyncio
+async def test_shougang_portal_qa_file_search_enables_file_encoding_match(service):
+    space = _make_space(space_id=12, user_id=7)
+    files = [
+        _make_file(file_id=1580, knowledge_id=12, file_name='精轧机振动纹治理.pdf'),
+    ]
+    dao_mock = AsyncMock(return_value=files)
+
+    with patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_spaces_by_ids',
+        new_callable=AsyncMock,
+        return_value=[space],
+    ), patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_space_filters',
+        dao_mock,
+    ), patch.object(
+        service,
+        '_filter_shougang_portal_visible_files',
+        new_callable=AsyncMock,
+        return_value=files,
+    ), patch.object(
+        service,
+        '_handle_file_folder_extra_info',
+        new_callable=AsyncMock,
+        return_value=[{**files[0].model_dump(), 'tags': []}],
+    ), patch.object(
+        service,
+        '_resolve_shougang_portal_source_paths',
+        new_callable=AsyncMock,
+        return_value=({1580: ''}, {1580: ''}),
+    ):
+        await service.search_shougang_portal_qa_files_by_name(
+            ShougangPortalQaFileSearchReq(
+                q='DEV-PROC-001',
+                space_ids=[12],
+                page=1,
+                page_size=20,
+            )
+        )
+
+    assert dao_mock.await_args.kwargs.get('match_file_encoding') is True
+
+
+@pytest.mark.asyncio
 async def test_shougang_portal_file_search_uses_semantic_chunk_recall_and_file_permissions(service):
     space = _make_space(space_id=12, user_id=7)
     space.name = '热轧知识库'
