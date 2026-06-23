@@ -827,6 +827,7 @@ export default function Knowledge() {
                             onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
                             onRenameFile={fileUpload.handleRenameFile}
                             onDeleteFile={fileUpload.handleDeleteFile}
+                            onBatchDeleteFiles={fileUpload.handleBatchDelete}
                             onEditTags={fileUpload.handleEditTags}
                             onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
                             currentPath={fileManager.currentPath}
