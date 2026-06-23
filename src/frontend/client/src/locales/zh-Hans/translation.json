@@ -48,6 +48,7 @@
   "com_agents_search_name": "根据名称搜索代理",
   "com_agents_update_error": "更新代理时出现错误。",
   "com_app_center_description": "您可以在这里选择需要的智能体来进行生产与工作～",
+  "com_app_center_title": "应用中心",
   "com_app_center_welcome": "探索$t(bisheng)的智能体",
   "com_app_explore_end_of_list": "—— 已经到底啦 ——",
   "com_app_explore_loading_more": "正在加载更多智能体...",
