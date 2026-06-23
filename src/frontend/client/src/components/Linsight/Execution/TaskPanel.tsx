@@ -32,7 +32,7 @@ export function TaskPanel({ tasks, completed }: { tasks: ExecTask[]; completed: 
     const showRunningInline = !open && !allDone && !!runningName;
 
     return (
-        <div className="w-full rounded-xl border border-[#ECECEC] bg-white">
+        <div className="w-full rounded-2xl border border-[#ECECEC] bg-white">
             {/* header */}
             <button
                 type="button"

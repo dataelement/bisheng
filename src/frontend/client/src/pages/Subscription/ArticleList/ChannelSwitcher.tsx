@@ -151,14 +151,15 @@ export function ChannelSwitcher({
                 </span>
                 <Outlined.Exchange className="size-4" />
             </button>
-            <div className="flex items-center gap-2.5 px-1">
+            {/* Each action is a 20px hit-box wrapping a 16px icon; 12px between them. */}
+            <div className="flex items-center gap-3">
                 {group === "created" && onCreateChannel ? (
                     <button
                         type="button"
                         onClick={() => { onCreateChannel(); setOpen(false); }}
                         aria-label={localize("com_subscription.create")}
                         title={localize("com_subscription.create")}
-                        className="text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
+                        className="flex size-5 shrink-0 items-center justify-center text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
                     >
                         <Outlined.Plus className="size-4" />
                     </button>
@@ -168,7 +169,7 @@ export function ChannelSwitcher({
                     onClick={toggleSort}
                     aria-label={getSortText(currentSort)}
                     title={getSortText(currentSort)}
-                    className="text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
+                    className="flex size-5 shrink-0 items-center justify-center text-[#86909C] transition-colors fine-pointer:hover:text-[#212121]"
                 >
                     <Outlined.Sort className="size-4" />
                 </button>
@@ -182,7 +183,7 @@ export function ChannelSwitcher({
             <button
                 type="button"
                 onClick={() => { onChannelSquare(); setOpen(false); }}
-                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[6px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+                className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[8px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
             >
                 <Outlined.BlocksAndArrows className="size-4 text-[#86909C]" />
                 {localize("com_subscription.go_to_square")}
@@ -244,10 +245,7 @@ export function ChannelSwitcher({
                     aria-expanded={open}
                     className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
                 >
-                    <span
-                        className="truncate text-[20px] font-bold leading-7 text-[#212121]"
-                        style={{ fontFamily: SERIF_FONT_STACK }}
-                    >
+                    <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
                         {channelName}
                     </span>
                     <Outlined.Down className={cn(
@@ -257,14 +255,21 @@ export function ChannelSwitcher({
                 </button>
                 {open ? (
                     <div
-                        className="fixed inset-x-0 bottom-0 z-[55] flex flex-col gap-2 bg-white p-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]"
+                        className="fixed inset-x-0 bottom-0 z-[55] flex flex-col bg-white"
                         style={{ top: mobileTopOffset ?? "calc(env(safe-area-inset-top, 0px) + 44px)" }}
                         role="dialog"
                         aria-modal="true"
                     >
-                        {renderSectionHeader()}
-                        {renderChannelList()}
-                        {renderChannelSquareButton()}
+                        {/* Header + scrollable list + footer button are now distinct
+                            hierarchy layers (matching the chat-history / knowledge
+                            switchers) instead of flat siblings under one padded box. */}
+                        <div className="shrink-0 pl-3 pr-4 pt-3">{renderSectionHeader()}</div>
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pt-2">
+                            {renderChannelList()}
+                        </div>
+                        <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+                            {renderChannelSquareButton()}
+                        </div>
                     </div>
                 ) : null}
             </>

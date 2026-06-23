@@ -92,7 +92,7 @@ export function MobileChatHistoryDropdown({
             <div
                 ref={containerRef}
                 className={cn(
-                    'scrollbar-trigger scrollbar-os min-h-0 flex-1 overflow-y-auto px-2 py-2',
+                    'scrollbar-trigger scrollbar-os min-h-0 flex-1 overflow-y-auto px-3 py-2',
                 )}
             >
                 <Conversations
@@ -106,14 +106,14 @@ export function MobileChatHistoryDropdown({
             </div>
 
             {/* Bottom action: 开启新对话 — same style as channel/knowledge dropdown bottom button */}
-            <div className="shrink-0 px-3 pt-2 pb-[max(12px,env(safe-area-inset-bottom))]">
+            <div className="shrink-0 px-4 pt-4 pb-[max(16px,env(safe-area-inset-bottom))]">
                 <button
                     type="button"
                     onClick={() => {
                         onClose();
                         onNewChat();
                     }}
-                    className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[6px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+                    className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[8px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
                 >
                     <Plus className="size-4 text-[#86909C]" strokeWidth={2} />
                     {localize('com_ui_new_chat')}

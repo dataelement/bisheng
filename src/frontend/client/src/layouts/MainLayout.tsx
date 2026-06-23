@@ -505,7 +505,10 @@ export default function MainLayout() {
             ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
             className={cn(
               'bg-white shadow-[0px_0px_20px_0px_#07225808]',
-              (!isMobile || systemMenuRevealing) && 'rounded-xl',
+              !isMobile && 'rounded-xl',
+              // When the left system menu is revealed, the panel slides right and
+              // exposes its left edge — round the left corners to 24px.
+              systemMenuRevealing && 'rounded-l-[24px]',
               isMobile
                 ? innerScrollShell
                   ? 'flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden'

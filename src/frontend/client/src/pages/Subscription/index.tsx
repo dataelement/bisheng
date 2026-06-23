@@ -579,21 +579,22 @@ export default function Subscription() {
                         ) : channelsResolving ? (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-[#86909c]">
                                 {isH5 ? (
-                                    <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center px-4 pt-[env(safe-area-inset-top,0px)]">
-                                        <button
-                                            type="button"
-                                            aria-label={localize("com_nav_open_sidebar")}
-                                            onClick={() => setSystemMenuOpen(true)}
-                                            className={mobileHeadIconBtnClassName}
-                                        >
-                                            <Outlined.SidebarMenu className="size-4" />
-                                        </button>
-                                        <h1
-                                            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[24px] leading-8 text-[#212121]"
-                                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
-                                        >
-                                            {localize("com_subscription.subscribe")}
-                                        </h1>
+                                    <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                                        {/* Match the loaded ArticleList header: safe-area+8px top
+                                            padding on the wrapper, a separate h-11 row, size-5 icon. */}
+                                        <div className="relative flex h-11 items-center px-4">
+                                            <button
+                                                type="button"
+                                                aria-label={localize("com_nav_open_sidebar")}
+                                                onClick={() => setSystemMenuOpen(true)}
+                                                className={mobileHeadIconBtnClassName}
+                                            >
+                                                <Outlined.SidebarMenu className="size-5" />
+                                            </button>
+                                            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
+                                                {localize("com_subscription.subscribe")}
+                                            </h1>
+                                        </div>
                                     </div>
                                 ) : null}
                                 <LoadingIcon className="size-20 text-primary" />
@@ -601,21 +602,22 @@ export default function Subscription() {
                         ) : (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center">
                                 {isH5 ? (
-                                    <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center px-4 pt-[env(safe-area-inset-top,0px)]">
-                                        <button
-                                            type="button"
-                                            aria-label={localize("com_nav_open_sidebar")}
-                                            onClick={() => setSystemMenuOpen(true)}
-                                            className={mobileHeadIconBtnClassName}
-                                        >
-                                            <Outlined.SidebarMenu className="size-4" />
-                                        </button>
-                                        <h1
-                                            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[24px] leading-8 text-[#212121]"
-                                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
-                                        >
-                                            {localize("com_subscription.subscribe")}
-                                        </h1>
+                                    <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                                        {/* Match the loaded ArticleList header: safe-area+8px top
+                                            padding on the wrapper, a separate h-11 row, size-5 icon. */}
+                                        <div className="relative flex h-11 items-center px-4">
+                                            <button
+                                                type="button"
+                                                aria-label={localize("com_nav_open_sidebar")}
+                                                onClick={() => setSystemMenuOpen(true)}
+                                                className={mobileHeadIconBtnClassName}
+                                            >
+                                                <Outlined.SidebarMenu className="size-5" />
+                                            </button>
+                                            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
+                                                {localize("com_subscription.subscribe")}
+                                            </h1>
+                                        </div>
                                     </div>
                                 ) : null}
                                 <img

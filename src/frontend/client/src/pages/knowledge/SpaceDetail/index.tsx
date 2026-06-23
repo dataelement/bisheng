@@ -1150,7 +1150,7 @@ export function KnowledgeSpaceContent({
                             aria-expanded={spaceListOpen}
                             className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
                         >
-                            <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                            <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
                                 {currentPath.length > 0 ? currentPath[currentPath.length - 1].name : space.name}
                             </span>
                             <Outlined.Down className={cn("size-5 shrink-0 text-[#86909C] transition-transform", spaceListOpen && "rotate-180")} />
