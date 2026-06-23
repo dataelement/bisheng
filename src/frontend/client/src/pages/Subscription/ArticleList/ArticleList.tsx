@@ -819,8 +819,10 @@ export function ArticleList({
                                                     className={cn(
                                                         "grid gap-x-4",
                                                         rowDivider,
-                                                        // minmax(0,1fr) keeps both columns strictly equal width.
-                                                        row[1] ? "grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)]" : "grid-cols-1",
+                                                        // minmax(0,1fr) keeps both columns strictly equal width. Always use the
+                                                        // two-column template so a lone last article stays half-width (first
+                                                        // column) instead of stretching across the full row.
+                                                        "grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)]",
                                                     )}
                                                 >
                                                     <div>
