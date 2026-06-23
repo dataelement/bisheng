@@ -124,8 +124,10 @@ export default function KnowledgeSpaceItem({
                 onClick={() => onSelect(space)}
             >
                 <div className="flex items-center flex-1">
-                    {/* Expand/collapse chevron — only shown when treeEnabled */}
-                    {treeEnabled && (
+                    {/* Expand/collapse chevron — only shown when treeEnabled.
+                        Hidden in compact (mobile switcher): there the whole row just
+                        navigates into the space, with no folder tree. */}
+                    {treeEnabled && !compact && (
                         <button
                             type="button"
                             className="flex size-5 shrink-0 items-center justify-center"
@@ -278,7 +280,7 @@ export default function KnowledgeSpaceItem({
                 No wrapper indent: each tree node uses its own paddingLeft
                 ((depth+1)*20) so depth-0 folders align with the space row's
                 icon position, matching the design's 20px-per-level structure. */}
-            {expanded && treeEnabled && (
+            {expanded && treeEnabled && !compact && (
                 <div>
                     <KnowledgeFolderTree
                         compact={compact}
