@@ -81,7 +81,9 @@ export default function KnowledgeSpaceItem({
     // inside it is selected — folders take over the active styling once chosen
     // so only one row in the tree appears active at a time.
     const isFolderSelectedHere = isActive && !!urlFolderId;
-    const showSpaceHighlight = isActive && !isFolderSelectedHere;
+    // In compact mode (mobile switcher) there's no folder tree to take over the
+    // active styling, so the space row stays highlighted even inside a sub-folder.
+    const showSpaceHighlight = isActive && (compact || !isFolderSelectedHere);
 
     const handleSelectFolder = (folder: FolderSelectPayload | null) => {
         if (folder) {

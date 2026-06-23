@@ -40,6 +40,9 @@ export interface FilePreviewProps {
      *  (sidebar/zoom/pagination). Used by the mobile bare-preview layout where the
      *  header is replaced by floating controls. */
     hideHeader?: boolean;
+    /** Hide the left thumbnail sidebar entirely (e.g. the mobile bare-preview
+     *  layout, where the page-thumbnail panel has no room and isn't wanted). */
+    hideSidebar?: boolean;
     /** Whether to expose download actions. */
     allowDownload?: boolean;
     /** Suppress the TopBar's built-in download button (the caller renders its own,
@@ -60,13 +63,14 @@ export default function FilePreview({
     targetBBox = null,
     compactMode = false,
     hideHeader = false,
+    hideSidebar = false,
     allowDownload = true,
     hideHeaderDownload = false,
     onDownloadFile,
 }: FilePreviewProps) {
     const localize = useLocalize();
     const viewerType = getViewerType(fileType);
-    const hasSidebar = !compactMode && supportsSidebar(viewerType);
+    const hasSidebar = !compactMode && !hideSidebar && supportsSidebar(viewerType);
     const hasPagination = !compactMode && supportsPagination(viewerType);
     const hasZoom = !compactMode && supportsZoom(viewerType);
     // Suppress the TopBar header without dropping into compactMode (which also
