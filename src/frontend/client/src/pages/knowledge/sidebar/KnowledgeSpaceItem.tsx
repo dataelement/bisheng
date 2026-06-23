@@ -112,7 +112,7 @@ export default function KnowledgeSpaceItem({
             {/* Space row */}
             <div
                 data-ee-row
-                className={`group flex items-center justify-between h-7 rounded-md cursor-pointer border ${showSpaceHighlight
+                className={`group flex items-center justify-between ${compact ? "h-8" : "h-7"} rounded-md cursor-pointer border ${showSpaceHighlight
                     ? "bg-[#EEEEEE] border-transparent"
                     : "border-transparent hover:bg-[#F4F4F4]"
                     }`}
