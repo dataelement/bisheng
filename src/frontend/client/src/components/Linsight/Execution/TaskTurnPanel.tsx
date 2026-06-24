@@ -42,7 +42,7 @@ import { ResultPanel } from './ResultPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
-import { findPendingUserInput, hasRenderableTimeline, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
+import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 
 interface TaskTurnPanelProps {
     /** linsight session_version id holding this turn's execution detail */
@@ -229,11 +229,19 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 above the input (ChatView) — not inline in the message stream. */}
 
             {/* Persistent "still working" indicator — covers the quiet windows
-                between steps and, crucially, the final report-generation phase
+                between tasks and, crucially, the final report-generation phase
                 (status stays Running with no step events while the backend
                 synthesizes get_final_result_file / the report), so the user does
-                not mistake an in-progress task for a finished one. */}
-            {running && !queueing && !planning && !pendingInput && <BreathingRow state="generating" />}
+                not mistake an in-progress task for a finished one. Gated on the
+                TASK phase (tasks.length > 0) and no actively-running task — mirrors
+                ExecutionFlow's `generating`. NOT `!planning`: once the planning row
+                defers to the live deep-thinking node (时序内联), `!planning` would
+                let this row surface concurrently with 正在深度思考 during the
+                pre-task thinking phase. The deep-thinking node's live-tail owns the
+                "working" signal until the first task arrives. */}
+            {running && !queueing && !pendingInput && tasks.length > 0 && !tasks.some((t) => isTaskRunning(t.status)) && (
+                <BreathingRow state="generating" />
+            )}
 
             {/* artifacts: report link / answer markdown / file card. Clicking a
                 document link opens it directly in ChatView's inline workspace
