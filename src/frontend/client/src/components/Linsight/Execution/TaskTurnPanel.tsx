@@ -42,7 +42,7 @@ import { ResultPanel } from './ResultPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
-import { findPendingUserInput, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
+import { findPendingUserInput, hasRenderableTimeline, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 
 interface TaskTurnPanelProps {
     /** linsight session_version id holding this turn's execution detail */
@@ -124,7 +124,17 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     // from lingering next to real task rows.
     const queueing = running && noProgressYet && (linsight?.queueCount || 0) > 0;
 
-    const planning = running && !queueing && !tasks.length && !pendingInput;
+    // Does the session timeline already have content to render? Once deep-thinking
+    // starts streaming, ExecutionTimeline owns the "working" signal (+ live-tail
+    // through the gap), so the planning row must not run concurrently. Memo keyed
+    // on a composite signature because the WS pump mutates sessionSteps in place.
+    const hasSessionTimeline = useMemo(
+        () => hasRenderableTimeline(sessionSteps),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
+        [sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
+    );
+
+    const planning = running && !queueing && !tasks.length && !pendingInput && !hasSessionTimeline;
 
     const handleClarifySubmit = (taskId: string, ans: string) => {
         sendInput({ task_id: taskId || versionId, user_input: ans, files: [] });
