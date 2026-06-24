@@ -36,7 +36,6 @@ import { SopStatus } from '~/store/linsight';
 import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { QueueCard } from './QueueCard';
-import { IntentRow } from './IntentRow';
 import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
@@ -114,11 +113,6 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
         [running, sessionSteps, tasks],
     );
 
-    const answeredSessionInputs = useMemo(
-        () => sessionSteps.filter((s) => s?.step_type === 'call_user_input' && s?.is_completed),
-        [sessionSteps],
-    );
-
     // Queued in the worker queue: running but the worker hasn't started us yet
     // (no task list / steps produced). Poll queue-status only in this window so
     // the badge clears the moment the worker picks us up (index → 0) or any
@@ -186,12 +180,9 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
             {/* queueing card (auto-disappears when the worker picks us up) */}
             {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
 
-            {/* answered session-level clarifies -> intent summary rows */}
-            {answeredSessionInputs.map((entry, i) => (
-                <IntentRow key={`intent_${i}`} data={entry} />
-            ))}
-
-            {/* session-level steps (planning-stage tools etc.) */}
+            {/* session-level steps (planning-stage tools etc.); an answered clarify
+                renders as an inline IntentRow at its chronological position here
+                (时序内联) instead of being hoisted above the timeline. */}
             <ExecutionTimeline history={sessionSteps} />
 
             {/* planning breathing row */}

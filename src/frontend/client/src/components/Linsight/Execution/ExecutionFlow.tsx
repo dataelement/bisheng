@@ -24,7 +24,6 @@ import { useLocalize } from '~/hooks';
 import { BreathingRow } from './BreathingRow';
 import { ClarifyCard } from './ClarifyCard';
 import { ConversationRound } from './ConversationRound';
-import { IntentRow } from './IntentRow';
 import { LegacySopRow } from './LegacySopRow';
 import { QueueCard } from './QueueCard';
 import { ExecutionTimeline } from './ExecutionTimeline';
@@ -92,11 +91,6 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     const pendingInput = useMemo(
         () => (running ? findPendingUserInput(sessionSteps, tasks) : null),
         [running, sessionSteps, tasks],
-    );
-
-    const answeredSessionInputs = useMemo(
-        () => sessionSteps.filter((s) => s?.step_type === 'call_user_input' && s?.is_completed),
-        [sessionSteps],
     );
 
     // The session-global pseudo task (id == versionId) carries planning/wrap-up
@@ -176,16 +170,13 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
 
                     {!queueing && (
                         // §1.4 spacing rhythm: a uniform gap-3 between top-level
-                        // groups (intent / timeline groups / breathing / task rows /
-                        // clarify) so the flow reads with one cadence instead of each
-                        // row's ad-hoc margin. Structure/logic unchanged.
+                        // groups (timeline groups incl. inline intent / breathing /
+                        // task rows / clarify) so the flow reads with one cadence
+                        // instead of each row's ad-hoc margin. Structure/logic unchanged.
                         <div className="flex flex-col gap-3">
-                            {/* session-level answered clarifies -> intent summary rows */}
-                            {answeredSessionInputs.map((entry, i) => (
-                                <IntentRow key={`intent_${i}`} data={entry} />
-                            ))}
-
-                            {/* session-level steps (task_id == svid pseudo task, e.g. planning-stage tools) */}
+                            {/* session-level steps (task_id == svid pseudo task, e.g.
+                                planning-stage tools); an answered clarify renders as an
+                                inline IntentRow at its chronological position here. */}
                             <ExecutionTimeline history={sessionSteps} />
 
                             {/* planning breathing row */}

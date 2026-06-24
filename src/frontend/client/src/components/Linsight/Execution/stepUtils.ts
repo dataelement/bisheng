@@ -162,16 +162,32 @@ export interface DeepStepGroup {
 }
 
 /**
+ * An answered clarify (call_user_input + is_completed) rendered INLINE at its
+ * chronological position in the timeline (not hoisted to the panel top). It cuts
+ * the surrounding thinking into the episode BEFORE the question and the resumed
+ * episode AFTER it, so the flow reads 思考A → 已明确意图 → 思考B in real order.
+ * Carries the raw frame for IntentRow (parseClarifyRequest reads params/user_input)
+ * plus the frame timestamp so the duration-repair pass can order around it.
+ */
+export interface IntentNode {
+    kind: 'intent';
+    data: ExecStepEventData;
+    /** frame second-level timestamp — lets nodeStart() order this node */
+    startedAt?: number;
+}
+
+/**
  * The Wave2 timeline node union consumed by ExecutionTimeline. A `subagent_group`
  * is the same shape buildFlowNodes already emits (preserved verbatim; the render
  * layer explodes it into per-subagent segments — see explodeSubagentGroup); a
  * `deep_step_group` wraps a run
- * of consecutive top-level steps. The `step` member is kept in the union for
+ * of consecutive top-level steps; an `intent` node is an inline answered clarify
+ * (see IntentNode). The `step` member is kept in the union for
  * type-compat / defensive callers, but buildTimelineGroups never emits a bare
  * `step` — every top-level step is wrapped in a deep_step_group for uniform
  * rendering (decision pinned in stepUtils.test.ts).
  */
-export type TimelineNode = DeepStepGroup | SubagentGroup | { kind: 'step'; step: MergedStep };
+export type TimelineNode = DeepStepGroup | SubagentGroup | IntentNode | { kind: 'step'; step: MergedStep };
 
 /**
  * (A) Distil a one-line fingerprint from a step's output: first sentence / line,
@@ -290,7 +306,10 @@ function classifyActivity(name: string): ActivityCategory | null {
 export function summarizeActivity(steps: MergedStep[] | null | undefined): ActivityCount[] {
     const counts = new Map<ActivityCategory, number>();
     (steps || []).forEach((step) => {
-        if (!step || step.stepType === 'thinking') return;
+        // thinking is never an activity; call_user_input is a boundary (an inline
+        // IntentRow, never part of an episode) — defensive so it can never be
+        // miscounted as `other` (its empty name would otherwise classify there).
+        if (!step || step.stepType === 'thinking' || step.stepType === 'call_user_input') return;
         const category = classifyActivity(step.name || '');
         if (!category) return;
         counts.set(category, (counts.get(category) || 0) + 1);
@@ -459,7 +478,16 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
     const order: string[] = [];
 
     (history || []).forEach((frame, idx) => {
-        if (!frame || frame.step_type === 'call_user_input') return; // user-input handled by ClarifyCard/IntentRow
+        if (!frame) return;
+        // `call_user_input` is NOT dropped here anymore (时序内联 2026-06): it now
+        // rides the merged stream as a SEGMENT BOUNDARY so the answered clarify
+        // renders as an inline IntentRow at its chronological position (cutting the
+        // pre-question thinking from the resumed thinking) instead of being hoisted
+        // to the panel top. buildTimelineGroups consumes it: an answered one emits
+        // an `intent` node; an unanswered (parked) one only flushes the open episode
+        // and is otherwise dropped (rendered as the active ClarifyCard via
+        // findPendingUserInput). The frame carries no call_id/status/name (it is a
+        // NeedUserInput model_dump, not an ExecStep), so it lands on `__step_${idx}`.
         // `ask_user` is the HITL interrupt mechanism, surfaced as a ClarifyCard /
         // IntentRow — not a normal tool step. Its tool-call frame emits a `start`
         // but never an `end` (interrupt() halts the graph), so rendering it as a
@@ -719,6 +747,18 @@ export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
 
     for (const node of flow) {
         if (node.kind === 'step') {
+            // call_user_input is a SEGMENT BOUNDARY (时序内联 2026-06): it closes the
+            // pre-question episode so the resumed thinking starts a fresh one. An
+            // ANSWERED clarify emits an inline `intent` node (IntentRow) at this
+            // position; an UNANSWERED (parked) one is dropped here — it surfaces as
+            // the active ClarifyCard via findPendingUserInput, not in the timeline.
+            if (node.step.stepType === 'call_user_input') {
+                flush();
+                if (node.step.raw?.is_completed) {
+                    out.push({ kind: 'intent', data: node.step.raw, startedAt: node.step.startedAt });
+                }
+                continue;
+            }
             // write_todos cuts a segment boundary: flush the open episode but
             // never render the marker itself (段流重构 2026-06).
             if (isSegmentBoundary(node.step)) {
@@ -757,6 +797,7 @@ export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
             return min;
         }
         if (n.kind === 'deep_step_group') return n.startedAt;
+        if (n.kind === 'intent') return n.startedAt;
         return n.step.startedAt;
     };
     for (let i = 0; i < out.length; i++) {
@@ -793,11 +834,12 @@ export function isFlowNodeRunning(node: FlowNode): boolean {
  * or the most recent node if none is running. Returns null for an empty history.
  */
 export function activeFlowNode(history: ExecStepEventData[] | null | undefined): FlowNode | null {
-    // Exclude write_todos boundary markers: they are segment cuts, never a
-    // renderable header — returning one would let a consumer render it as a row
-    // ("已更新任务清单"), breaking the same contract buildTimelineGroups enforces.
+    // Exclude write_todos boundary markers AND call_user_input clarifies: both are
+    // segment cuts, never a renderable header — returning one would let a consumer
+    // render it as a row ("已更新任务清单" / a stray intent), breaking the same
+    // contract buildTimelineGroups enforces (write_todos cut, clarify → IntentRow).
     const nodes = buildFlowNodes(mergeStepFrames(history)).filter(
-        (n) => !(n.kind === 'step' && isSegmentBoundary(n.step)),
+        (n) => !(n.kind === 'step' && (isSegmentBoundary(n.step) || n.step.stepType === 'call_user_input')),
     );
     if (!nodes.length) return null;
     for (let i = nodes.length - 1; i >= 0; i--) {
@@ -939,8 +981,9 @@ export function isTaskStarted(status?: string): boolean {
  * (planning / thinking / write_todos / ask_user) inside a single "执行准备"
  * pseudo-task (``task_data.is_session_global``) so they survive a refresh — see
  * task_exec._ensure_session_pseudo_task. The LIVE flow instead keeps them in a
- * separate inline ``sessionSteps`` bucket and renders the answered clarify as an
- * "已经明确用户意图" IntentRow.
+ * separate inline ``sessionSteps`` bucket; either way the answered clarify renders
+ * as an "已经明确用户意图" IntentRow inlined at its chronological position by
+ * buildTimelineGroups (时序内联 2026-06) — no longer hoisted to the panel top.
  *
  * To make the reloaded view match the live one, lift the pseudo-task's steps
  * back out: drop it from the rendered task list and expose its ``history`` as

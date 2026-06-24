@@ -8,9 +8,10 @@ import {
     firstLine,
     mergeStepFrames,
     narrationFromSteps,
+    parseClarifyRequest,
     summarizeActivity,
 } from './stepUtils';
-import type { DeepStepGroup, ExecStepEventData, MergedStep, SubagentGroup } from './stepUtils';
+import type { DeepStepGroup, ExecStepEventData, IntentNode, MergedStep, SubagentGroup } from './stepUtils';
 
 // These frames mirror the REAL persisted history contract (ExecStep.model_dump()):
 // the subgraph namespace lives in extra_info.namespace and a second-level int
@@ -435,6 +436,74 @@ describe('stepUtils — write_todos segment boundary (段流重构)', () => {
         ];
         const merged = mergeStepFrames(history);
         expect(merged.map((s) => s.name)).toEqual(['web_search']);
+    });
+});
+
+describe('stepUtils — call_user_input inline IntentRow (时序内联)', () => {
+    // A planning-phase clarify: thinking → ask_user(answered) → resumed thinking,
+    // all before the first write_todos (so without the inline cut both thinkings
+    // would merge into ONE deep_step_group hoisted below the intent). The frame is
+    // a NeedUserInput model_dump: no call_id/status/name, just step_type +
+    // call_reason + params.tool_calls, with is_completed/user_input stamped on
+    // answer. Source: backend test/linsight/fixtures/ws_events/event_samples.json.
+    const clarifyParams = {
+        tool_calls: [
+            { id: 'call_ui_01', name: 'ask_user', args: { question: '报告用中文还是英文？', options: ['中文', 'English'] } },
+        ],
+    };
+
+    it('cuts thinking at an answered clarify: deep_step_group → intent → deep_step_group, in order', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'tA', name: 'thinking', step_type: 'thinking', output: '这些信息我不问就会做错，需要先澄清。', timestamp: 1 }),
+            frame({ step_type: 'call_user_input', status: undefined, call_reason: '请确认报告输出语言', params: clarifyParams, is_completed: true, user_input: '中文', timestamp: 2 }),
+            frame({ call_id: 'tB', name: 'thinking', step_type: 'thinking', output: '已澄清，开始规划行程。', timestamp: 3 }),
+        ];
+        const nodes = buildTimelineGroups(mergeStepFrames(history));
+        // chronological order: pre-question thinking, the intent record, resumed thinking
+        expect(nodes.map((n) => n.kind)).toEqual(['deep_step_group', 'intent', 'deep_step_group']);
+        // the two thinkings are NOT merged across the clarify boundary
+        expect((nodes[0] as DeepStepGroup).steps.map((s) => s.output)).toEqual(['这些信息我不问就会做错，需要先澄清。']);
+        expect((nodes[2] as DeepStepGroup).steps.map((s) => s.output)).toEqual(['已澄清，开始规划行程。']);
+    });
+
+    it('the intent node carries the raw answered frame (parseClarifyRequest-ready)', () => {
+        const history: ExecStepEventData[] = [
+            frame({ step_type: 'call_user_input', status: undefined, call_reason: '请确认报告输出语言', params: clarifyParams, is_completed: true, user_input: '中文', timestamp: 2 }),
+        ];
+        const nodes = buildTimelineGroups(mergeStepFrames(history));
+        expect(nodes).toHaveLength(1);
+        const intent = nodes[0] as IntentNode;
+        expect(intent.kind).toBe('intent');
+        expect(intent.startedAt).toBe(2);
+        expect(intent.data.is_completed).toBe(true);
+        expect(intent.data.user_input).toBe('中文');
+        // the same data feeds IntentRow via parseClarifyRequest
+        const req = parseClarifyRequest(intent.data);
+        expect(req.questions.map((q) => q.question)).toEqual(['报告用中文还是英文？']);
+    });
+
+    it('an UNANSWERED (parked) clarify produces NO intent node but still flushes the preceding episode', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'tA', name: 'thinking', step_type: 'thinking', output: '先想想要问什么。', timestamp: 1 }),
+            // parked: no is_completed — surfaced as the active ClarifyCard, not here
+            frame({ step_type: 'call_user_input', status: 'start', call_reason: '请确认报告输出语言', params: clarifyParams, timestamp: 2 }),
+        ];
+        const nodes = buildTimelineGroups(mergeStepFrames(history));
+        // only the pre-question thinking episode — the clarify is dropped from the timeline
+        expect(nodes.map((n) => n.kind)).toEqual(['deep_step_group']);
+        expect(nodes.some((n) => n.kind === 'intent')).toBe(false);
+    });
+
+    it('activeFlowNode never surfaces a call_user_input as a collapsed-task header', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'tA', name: 'web_search', step_type: 'tool', output: 'hit', timestamp: 1 }),
+            frame({ step_type: 'call_user_input', status: undefined, call_reason: 'q', params: clarifyParams, is_completed: true, user_input: '中文', timestamp: 2 }),
+        ];
+        const node = activeFlowNode(history);
+        expect(node).not.toBeNull();
+        // falls back to the last NON-clarify node, not the clarify boundary
+        expect(node!.kind === 'step' && node!.step.stepType === 'call_user_input').toBe(false);
+        expect(node!.kind === 'step' && node!.step.name === 'web_search').toBe(true);
     });
 });
 

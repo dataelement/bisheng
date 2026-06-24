@@ -13,7 +13,6 @@ import type { LinsightRoundSnapshot } from '~/store/linsight';
 import type { ArtifactFile } from '~/components/Linsight/Artifacts/artifactUtils';
 import { ResultSection } from '~/components/Linsight/Artifacts/ResultSection';
 import { useLocalize } from '~/hooks';
-import { IntentRow } from './IntentRow';
 import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
@@ -32,9 +31,6 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
     const localize = useLocalize();
     const sessionSteps: ExecStepEventData[] = round.sessionSteps || [];
     const tasks: ExecTask[] = (round.tasks as any) || [];
-    const answeredInputs = sessionSteps.filter(
-        (s) => s?.step_type === 'call_user_input' && (s as any)?.is_completed,
-    );
     const files: ArtifactFile[] = (round.file_list as ArtifactFile[]) || [];
     const stopped = round.status === SopStatus.Stoped;
 
@@ -52,10 +48,8 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
                 </div>
             )}
 
-            {answeredInputs.map((entry, i) => (
-                <IntentRow key={`h_intent_${i}`} data={entry} />
-            ))}
-
+            {/* an answered clarify renders as an inline IntentRow at its
+                chronological position inside the timeline (时序内联). */}
             <ExecutionTimeline history={sessionSteps} />
 
             {tasks.filter((task) => isTaskStarted(task.status)).map((task) => (
