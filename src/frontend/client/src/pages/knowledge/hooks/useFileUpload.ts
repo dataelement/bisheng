@@ -14,6 +14,7 @@ import {
     type FolderUploadItemPayload,
     renameFileApi,
     deleteFileApi,
+    batchDeleteApi,
     retryDuplicateFilesApi,
     listKnowledgeFolders,
     type UploadFileResponse,
@@ -238,9 +239,11 @@ export function useFileUpload({
     const localize = useLocalize();
     const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
     const [creatingFolder, setCreatingFolder] = useState<KnowledgeFile | null>(null);
-    // True while a dragged/picked folder batch is uploading + registering, so the
-    // detail pane can show a loading state instead of appearing unresponsive.
-    const [folderUploading, setFolderUploading] = useState(false);
+    // Placeholder folder card shown while a dragged/picked folder batch is uploading +
+    // registering. Rendered with a translucent "uploading" overlay and not clickable,
+    // so the rest of the list stays interactive instead of being hidden behind a
+    // full-pane spinner. Cleared (replaced by the real folder) once the batch lands.
+    const [uploadingFolder, setUploadingFolder] = useState<KnowledgeFile | null>(null);
     // Duplicate file detection state
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
 
@@ -322,7 +325,7 @@ export function useFileUpload({
                     Boolean(file.status && PENDING_REGISTERED_FILE_STATUSES.has(file.status))
                 );
                 if (!hasPendingRegisteredFiles) {
-                    await loadFiles(currentPage);
+                    await loadFiles(1); // reconcile from page 1 (cursor mode: page>1 = append)
                 }
             } catch (e) {
                 // showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
@@ -342,7 +345,7 @@ export function useFileUpload({
         const fileObjs = duplicateFiles.map(d => d.rawObj).filter(Boolean);
         try {
             await retryDuplicateFilesApi(activeSpace.id, fileObjs);
-            await loadFiles(currentPage);
+            await loadFiles(1); // refresh from page 1 (cursor mode: page>1 = append)
         } catch {
             showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
         } finally {
@@ -381,10 +384,9 @@ export function useFileUpload({
             // upload every file twice and trigger spurious dup warnings).
             if (folderUploadInFlightRef.current) return;
             folderUploadInFlightRef.current = true;
-            // Surface a loading state for the whole batch — uploading bodies +
-            // registering the tree + refresh can take a while, and without it the
-            // drop appears to do nothing until the folder finally shows up.
-            setFolderUploading(true);
+            // Track whether a placeholder card was shown, so finally only clears it
+            // when one was actually created (early-return rejections show none).
+            let placeholderShown = false;
             try {
             const allFiles = Array.from(fileList);
 
@@ -403,6 +405,24 @@ export function useFileUpload({
                 });
                 return;
             }
+
+            // Cheap checks passed — drop a placeholder folder card into the grid
+            // immediately (just the name) so the user gets instant feedback. It
+            // renders with an "uploading" overlay and is not clickable; the real
+            // folder replaces it after the batch registers + the list refreshes.
+            setUploadingFolder({
+                id: `upload_folder_${Date.now()}`,
+                name: rootName,
+                type: FileType.FOLDER,
+                tags: [],
+                path: rootName,
+                parentId: currentFolderId,
+                spaceId: activeSpace.id,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                status: FileStatus.UPLOADING,
+            });
+            placeholderShown = true;
 
             // Reject if the picked folder name is already used at the current
             // location. Use the same listing API the left tree uses so admin
@@ -493,10 +513,11 @@ export function useFileUpload({
             }
 
             dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-            await loadFiles(currentPage);
+            await loadFiles(1); // refresh from page 1 (cursor mode: page>1 = append)
             } finally {
                 folderUploadInFlightRef.current = false;
-                setFolderUploading(false);
+                // Clear the placeholder; the refreshed list now carries the real folder.
+                if (placeholderShown) setUploadingFolder(null);
             }
         },
         [activeSpace, currentFolderId, currentPage, loadFiles, localize, showToast],
@@ -591,9 +612,13 @@ export function useFileUpload({
         async (fileId: string) => {
             if (!activeSpace) return;
 
-            // Empty fileId is used as a "refresh" signal — just refresh
+            // Empty fileId is used as a "refresh" signal. Under cursor-based
+            // infinite scroll, loadFiles(page>1) APPENDS the next page rather
+            // than refreshing in place, so after the user has paged down a
+            // "refresh" must reset to page 1 — otherwise just-deleted rows on
+            // page 1 are never dropped and a stale next page gets appended.
             if (!fileId) {
-                loadFiles(currentPage);
+                loadFiles(1);
                 return;
             }
 
@@ -607,9 +632,6 @@ export function useFileUpload({
             setFiles(prev => prev.filter(f => f.id !== fileId));
             setTotal(prev => Math.max(0, prev - 1));
             showToast({ message: localize("com_knowledge.deleted"), severity: NotificationSeverity.SUCCESS });
-            if (isFolder) {
-                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-            }
 
             // 2) Fire the backend API; on failure roll back via a reload.
             try {
@@ -621,25 +643,78 @@ export function useFileUpload({
             } catch {
                 showToast({ message: localize("com_knowledge.delete_failed"), severity: NotificationSeverity.ERROR });
                 clearPendingDeletion([fileId]);
-                loadFiles(currentPage);
+                loadFiles(1); // roll back to a fresh first page (cursor mode: page>1 = append)
                 return;
+            }
+            // Sync the sidebar tree only AFTER the folder delete has committed —
+            // dispatching before the await fires loadFiles(1) while the DELETE is
+            // still in flight, which re-fetches the not-yet-deleted folder.
+            if (isFolder) {
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             }
             clearPendingDeletion([fileId]);
         },
-        [activeSpace, currentPage, files, setFiles, loadFiles, showToast, setTotal, markPendingDeletion, clearPendingDeletion, localize]
+        [activeSpace, files, setFiles, loadFiles, showToast, setTotal, markPendingDeletion, clearPendingDeletion, localize]
+    );
+
+    // ─── Batch delete file/folders ───────────────────────────────────────
+    // Optimistic, same contract as handleDeleteFile: drop the selected rows
+    // from the accumulated list immediately and mark them pending so neither
+    // the 5s poll nor a concurrent load revives them. This keeps the user's
+    // scroll position (no reset to page 1) and works no matter which page the
+    // rows were loaded from. On API failure we roll back via a fresh reload.
+    // Returns true on success so the caller can clear its selection / toast.
+    const handleBatchDelete = useCallback(
+        async (ids: Array<string | number>): Promise<boolean> => {
+            if (!activeSpace || ids.length === 0) return false;
+
+            const strIds = ids.map(String);
+            const targets = files.filter(f => strIds.includes(String(f.id)));
+            const fileIds = targets.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
+            const folderIds = targets.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
+            const hasFolder = folderIds.length > 0;
+
+            // 1) Optimistically remove the rows + mark so neither the 5s poll
+            //    nor an in-flight reload revives them while the API is running.
+            markPendingDeletion(strIds);
+            setFiles(prev => prev.filter(f => !strIds.includes(String(f.id))));
+            setTotal(prev => Math.max(0, prev - strIds.length));
+
+            // 2) Fire the backend API; on failure roll back via a fresh reload.
+            try {
+                await batchDeleteApi(activeSpace.id, {
+                    file_ids: fileIds.length ? fileIds : undefined,
+                    folder_ids: folderIds.length ? folderIds : undefined,
+                });
+            } catch {
+                clearPendingDeletion(strIds);
+                loadFiles(1); // roll back to a fresh first page
+                return false;
+            }
+
+            // 3) Only AFTER the delete has committed do we sync the sidebar tree
+            //    for folder removals. Dispatching earlier would fire loadFiles(1)
+            //    while the DELETE is still in flight — that GET races ahead of the
+            //    commit, re-fetches the not-yet-deleted folders, and (once the
+            //    pending-deletion mark is cleared below) re-adds them to the list.
+            if (hasFolder) dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            clearPendingDeletion(strIds);
+            return true;
+        },
+        [activeSpace, files, setFiles, setTotal, loadFiles, markPendingDeletion, clearPendingDeletion]
     );
 
     const handleEditTags = useCallback(
         (_fileId: string) => {
-            loadFiles(currentPage);
+            loadFiles(1); // refresh from page 1 (cursor mode: page>1 = append, not refresh)
         },
-        [currentPage, loadFiles]
+        [loadFiles]
     );
 
     return {
         uploadingFiles,
         creatingFolder,
-        folderUploading,
+        uploadingFolder,
         duplicateFiles,
         handleUploadFile,
         handleUploadFolder,
@@ -647,6 +722,7 @@ export function useFileUpload({
         handleCancelCreateFolder,
         handleRenameFile,
         handleDeleteFile,
+        handleBatchDelete,
         handleEditTags,
         handleDuplicateOverwrite,
         handleDuplicateSkip,

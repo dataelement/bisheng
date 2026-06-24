@@ -199,9 +199,9 @@ export function ArticleList({
         queryFn: () => getChannelDetailApi(channel.id),
         staleTime: 60_000, // Cache for 1 minute
     });
-    const canManageChannel = channel.role === "creator" || channel.role === "admin";
-    const canOpenChannelShare =
-        canManageChannel || (channelDetail ? channelDetail.visibility !== "private" : false);
+    // Share entry is available to anyone who can see the channel (creator/admin or subscriber),
+    // regardless of visibility — subscribers should always be able to copy/share the link.
+    const canOpenChannelShare = true;
 
     // Derive source options directly from channelDetail.source_infos (refreshes after channel edit)
     const sourceOptions = useMemo(() => {
@@ -612,8 +612,8 @@ export function ArticleList({
                     // PC keeps 40px gutters whether grid or preview-open; H5 uses 16px.
                     isH5 ? "px-4" : "px-10",
                 )}>
-                    {/* 频道名 + 信息 + 分享 */}
-                    <div className="flex items-center justify-between gap-3">
+                    {/* 频道名 + 信息 */}
+                    <div className="flex items-center gap-3">
                         <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
                             {onChannelSelect ? (
                                 <ChannelSwitcher
@@ -644,28 +644,6 @@ export function ArticleList({
                                     {channelDetail?.name || channel.name}
                                 </h1>
                             )}
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-3">
-                            {onChannelSelect ? (
-                                <ChannelActionsMenu
-                                    channel={channel}
-                                    onChannelSelect={onChannelSelect}
-                                    onManageMembers={onManageMembers}
-                                    onChannelSettings={onChannelSettings}
-                                />
-                            ) : null}
-                            {canOpenChannelShare ? (
-                                <CopyShareLinkButton
-                                    sharePath={`/channel/share/${channel.id}`}
-                                    label={localize("com_subscription.share")}
-                                    successMessage={localize("com_subscription.share_link_copied")}
-                                    errorMessage={localize("com_subscription.copy_failed_retry")}
-                                    iconOnly
-                                    aria-label={localize("com_subscription.share")}
-                                    icon={<Outlined.Share className="size-4 shrink-0 text-[#4e5969]" />}
-                                />
-                            ) : null}
                         </div>
                     </div>
 
@@ -749,9 +727,34 @@ export function ArticleList({
                                     "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-transparent bg-primary/20 text-primary"
-                                        : "border-[#E5E6EB] bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
+                                        : "border-[#ECECEC] bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>
+
+                            {/* Divider separating the article filters from the channel-level actions */}
+                            <div className="h-5 w-px shrink-0 bg-[#ECECEC]" aria-hidden />
+
+                            {canOpenChannelShare ? (
+                                <CopyShareLinkButton
+                                    sharePath={`/channel/share/${channel.id}`}
+                                    label={localize("com_subscription.share")}
+                                    successMessage={localize("com_subscription.share_link_copied")}
+                                    errorMessage={localize("com_subscription.copy_failed_retry")}
+                                    iconOnly
+                                    className="border-[#ECECEC]"
+                                    aria-label={localize("com_subscription.share")}
+                                    icon={<Outlined.Share className="size-4 shrink-0 text-[#4e5969]" />}
+                                />
+                            ) : null}
+                            {onChannelSelect ? (
+                                <ChannelActionsMenu
+                                    channel={channel}
+                                    onChannelSelect={onChannelSelect}
+                                    onManageMembers={onManageMembers}
+                                    onChannelSettings={onChannelSettings}
+                                    triggerClassName="border-[#ECECEC]"
+                                />
+                            ) : null}
                         </div>
                     </div>
                 </div>
@@ -819,8 +822,10 @@ export function ArticleList({
                                                     className={cn(
                                                         "grid gap-x-4",
                                                         rowDivider,
-                                                        // minmax(0,1fr) keeps both columns strictly equal width.
-                                                        row[1] ? "grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)]" : "grid-cols-1",
+                                                        // minmax(0,1fr) keeps both columns strictly equal width. Always use the
+                                                        // two-column template so a lone last article stays half-width (first
+                                                        // column) instead of stretching across the full row.
+                                                        "grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)]",
                                                     )}
                                                 >
                                                     <div>

@@ -14,6 +14,8 @@ import type { BrandAsset, BrandAssetOption, BrandConfig, BrandText } from "@/con
 import { getBrandAssetOptionsApi, getBrandConfigApi, saveBrandConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { withBrandBaseUrl } from "@/utils/brand";
+import { LoadingIcon } from "@/components/bs-icons/loading";
+import BuiltinLoadingIcon from "@/components/bs-icons/loading/Loading.svg?react";
 import { Eye, RefreshCw, Save } from "lucide-react";
 import { ChangeEvent, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -145,21 +147,6 @@ const normalizeLoadingUrlOptions = (options: BrandAsset[] = []) => {
         file_name: option.file_name || "",
     }));
 };
-
-function StaticLoadingBarsIcon({ className = "" }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 36 36" fill="none" className={className} aria-hidden="true">
-            <rect x="10" y="8" width="3" height="2" rx="1" fill="currentColor" />
-            <rect x="14" y="8" width="10" height="2" rx="1" fill="currentColor" />
-            <rect x="11" y="11.5" width="16" height="2" rx="1" fill="currentColor" />
-            <rect x="11" y="15" width="12" height="2" rx="1" fill="currentColor" />
-            <rect x="11" y="18.5" width="14" height="2" rx="1" fill="currentColor" />
-            <rect x="11" y="22" width="16" height="2" rx="1" fill="currentColor" />
-            <rect x="10" y="25.5" width="10" height="2" rx="1" fill="currentColor" />
-            <rect x="21" y="25.5" width="3" height="2" rx="1" fill="currentColor" />
-        </svg>
-    );
-}
 
 function BrandTextField({
     label,
@@ -324,10 +311,18 @@ export default function BrandCustomization() {
     }, []);
     const loadingIconOptions = useMemo<BrandAssetOption[]>(() => (
         mergeAssetOptions([
+            // 1. Built-in <Loading> SVG component — empty url renders the emptyPreview component. Default.
             {
                 ...defaultLoadingAsset,
                 file_name: t("theme.brandDefaultLoadingIcon"),
                 is_default: true,
+            },
+            // 2. Built-in static loading image preset (the classic /assets/bisheng/loading.svg). Selectable, not default.
+            {
+                url: "/assets/bisheng/loading.svg",
+                relative_path: "",
+                file_name: t("theme.brandStaticLoadingIcon"),
+                is_default: false,
             },
             ...loadingIconUploadOptions.map((option) => ({ ...option, is_default: false })),
             ...(config.loading.iconOptions || []).map((option) => ({ ...option, is_default: false })),
@@ -454,6 +449,13 @@ export default function BrandCustomization() {
 
     return (
         <div className="h-full min-h-0 overflow-y-auto border-t bg-accent">
+            {loading ? (
+                // Wait for the API before rendering, so the BISHENG defaults
+                // don't flash in before the saved config arrives.
+                <div className="flex h-full items-center justify-center">
+                    <LoadingIcon className="size-7" />
+                </div>
+            ) : (
             <div className="mx-auto grid max-w-[1480px] grid-cols-1 gap-6 px-6 py-5 xl:grid-cols-[minmax(0,1fr)_520px]">
                 <div className="min-w-0 space-y-6">
                     <div className="flex items-center justify-between gap-3">
@@ -526,7 +528,7 @@ export default function BrandCustomization() {
                             category="loadingIcon"
                             options={loadingIconOptions}
                             allowUrlOption
-                            emptyPreview={<StaticLoadingBarsIcon className="size-6 text-primary" />}
+                            emptyPreview={<BuiltinLoadingIcon className="size-6 text-primary" />}
                             previewActive={previewTarget === "loadingIcon"}
                             onChange={handleLoadingIconChange}
                             onPreview={() => setPreviewTarget("loadingIcon")}
@@ -563,6 +565,7 @@ export default function BrandCustomization() {
 
                 <BrandPreviewPanel config={config} target={previewTarget} dark={Boolean(dark)} />
             </div>
+            )}
         </div>
     );
 }

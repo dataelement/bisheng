@@ -131,11 +131,8 @@ export default function AppCenter() {
         >
             {isH5Layout ? (
                 <>
-                    {/* H5：一行 — 应用中心 | 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}
+                    {/* H5：标题已上移到顶栏（MainLayout）。此行只保留 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}
                     <header className="flex w-full max-w-[1000px] shrink-0 items-center gap-2 min-w-0">
-                        <h1 className="font-['PingFang_SC'] font-semibold leading-[28px] text-[#335cff] text-[20px] shrink-0">
-                            应用中心
-                        </h1>
                         <p
                             className="font-['PingFang_SC'] text-[#666] text-[13px] leading-[20px] min-w-0 flex-1 truncate"
                             title={RECENT_APPS_HINT}

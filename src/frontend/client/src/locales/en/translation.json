@@ -50,6 +50,7 @@
   "com_agents_search_name": "Search agents by name",
   "com_agents_update_error": "There was an error updating your agent.",
   "com_app_center_description": "You can choose the intelligent agents you need here for production and work~",
+  "com_app_center_title": "App Center",
   "com_app_center_welcome": "Explore $t(bisheng)'s Intelligent Agents",
   "com_app_explore_end_of_list": "— You've reached the end —",
   "com_app_explore_loading_more": "Loading more agents...",
@@ -1875,6 +1876,8 @@
     "confirm_delete_folder_name": "Are you sure you want to delete folder \"{{0}}\"?"
   },
   "com_subscription": {
+    "tab_channel": "Channels",
+    "tab_square": "Square",
     "add": "Add",
     "add_condition": "Add Condition",
     "add_official_accounts_and_webpages": "Official accounts and webpages can be added as information sources",

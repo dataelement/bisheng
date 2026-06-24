@@ -56,6 +56,10 @@ export function KnowledgeAiBottomDock({
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const { data: bsConfig } = useGetBsConfig();
+    // Admin-customizable assistant name; empty/absent falls back to the localized default.
+    const assistantTitle =
+        bsConfig?.knowledge_space?.assistant_name?.trim() ||
+        localize("com_knowledge.ai_assistant");
     const chatModel = useRecoilValue(store.chatModel);
 
     const [open, setOpen] = useState(false);
@@ -150,7 +154,7 @@ export function KnowledgeAiBottomDock({
         const messageHeader = (
             <div className="relative flex shrink-0 items-center px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3">
                 <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
-                    {localize("com_knowledge.ai_assistant")}
+                    {assistantTitle}
                 </h3>
                 {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
                 <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] flex items-center justify-end gap-3 py-1">
@@ -305,8 +309,11 @@ export function KnowledgeAiBottomDock({
                             "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {/* Floating expand button — appears only after a conversation exists. */}
-                    {!open && messages.length > 0 && (
+                    {/* Floating expand button — appears whenever any conversation exists.
+                        Gate on `sessions`, not `messages`: starting a new chat clears
+                        `messages` but the session history is still there, so the arrow
+                        must persist. Shared by desktop + mobile-collapsed docks. */}
+                    {!open && (sessions.length > 0 || messages.length > 0) && (
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -339,7 +346,7 @@ export function KnowledgeAiBottomDock({
                             {/* Header */}
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
                                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-[#212121]">
-                                    {localize("com_knowledge.ai_assistant")}
+                                    {assistantTitle}
                                 </h3>
                                 <div className="min-w-0 flex-1" aria-hidden />
                                 {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}

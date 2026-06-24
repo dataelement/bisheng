@@ -593,10 +593,18 @@ class LinsightWorkflowTask:
         resume path passes a Redis-backed ``checkpointer`` so the parked
         interrupt checkpoint (thread_id = session_version_id) is located.
         """
+        from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         minio = await get_minio_storage()
         backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+        # F035 Fork X: copy this run's allowed skill bundles into the workspace
+        # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
+        # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
+        # fresh agent each time. skills_present gates attaching the skills middleware.
+        copied_skills = await materialize_session_skills(
+            backend, session_model.tenant_id, getattr(session_model, "skills", None)
+        )
         return await create_linsight_agent(
             session_model=session_model,
             tools=tools,
@@ -605,6 +613,7 @@ class LinsightWorkflowTask:
             svid=session_model.id,
             checkpointer=checkpointer,
             backend=backend,
+            skills_present=bool(copied_skills),
         )
 
     async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:

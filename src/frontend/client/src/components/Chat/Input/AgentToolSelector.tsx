@@ -115,18 +115,15 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
     <Select disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-md border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
-          isActive && "border border-primary",
+          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
         )}
       >
         <div className="flex min-w-0 gap-1.5 items-center">
-          {/* Blue dot when any tool is selected — mirrors the knowledge-space
+          {/* Icon is neutral by default (matches the + button) and turns
+              brand-blue once a tool is selected — mirrors the knowledge-space
               selector (ChatKnowledge) so both pickers signal an active selection. */}
           <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0 text-[#165DFF]", isActive && "text-blue-600")} strokeWidth={1.5} />
-            {isActive && (
-              <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
-            )}
+            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-[#165DFF]" : "text-[#4E5969]")} strokeWidth={1.5} />
           </div>
           {/* Mobile: collapse to icon + chevron only to save horizontal space. */}
           <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)] touch-mobile:hidden">

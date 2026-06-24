@@ -61,9 +61,10 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transp
     const extension: string = file.name?.split('.').pop()?.toLowerCase() ?? '';
     const typeKey: FileTypeKey | undefined = EXTENSION_TO_TYPE[extension];
 
-    // Plain-text / structured-text formats (txt / md / csv) always render their
-    // colored placeholder icon — never a thumbnail, regardless of parse state.
-    if (typeKey === 'md' || typeKey === 'txt' || typeKey === 'csv') {
+    // Plain-text / structured-text formats (txt / md / csv) never render a
+    // thumbnail. Once parsed they show their colored placeholder icon; before
+    // parsing they fall through to the neutral line-art placeholder below.
+    if ((typeKey === 'md' || typeKey === 'txt' || typeKey === 'csv') && file.status === FileStatus.SUCCESS) {
         return (
             <div className={cn(wrapperClass, bgFor(typeKey))}>
                 {TYPE_TO_ICON[typeKey]}

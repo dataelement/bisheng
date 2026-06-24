@@ -572,6 +572,19 @@ export type BsConfig = {
      * Default: true. Set to false in deployments that prefer the original flat layout.
      */
     tree_structured_directory_display?: boolean;
+    /**
+     * Custom display name for the knowledge-space AI assistant panel header.
+     * Empty/absent → fall back to the localized default ("AI 助手").
+     */
+    assistant_name?: string;
+  };
+  /**
+   * Subscription/channel AI assistant config forwarded from the workbench config.
+   * Absent on legacy deployments → name falls back to the localized default.
+   */
+  subscription?: {
+    /** Custom display name for the subscription AI assistant panel header. */
+    assistant_name?: string;
   };
 };
 

@@ -11,8 +11,8 @@ features/v2.6.0/029-knowledge-qa-permission-filter/spec.md §4 (AD-01/02/03/08).
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Set
 
 from fastapi import Request
 from loguru import logger
@@ -39,10 +39,10 @@ class IndexFilter:
     """
 
     strategy: str
-    milvus_expr: Optional[str] = None
-    es_filter: Optional[list] = None
+    milvus_expr: str | None = None
+    es_filter: list | None = None
     accessible_size: int = 0
-    excluded_ids: List[int] = field(default_factory=list)
+    excluded_ids: list[int] = field(default_factory=list)
 
     @property
     def is_empty(self) -> bool:
@@ -78,9 +78,7 @@ class KnowledgeFileVisibilityService:
         )
 
         if not hasattr(self, "_knowledge_space_service"):
-            self._knowledge_space_service = KnowledgeSpaceService(
-                self.request, self.login_user
-            )
+            self._knowledge_space_service = KnowledgeSpaceService(self.request, self.login_user)
         return self._knowledge_space_service
 
     def _config(self) -> KnowledgeQAFilterConf:
@@ -108,9 +106,7 @@ class KnowledgeFileVisibilityService:
         svc = self._space_service()
         try:
             await svc._require_read_permission(space_id)
-            await svc._require_permission_id(
-                "knowledge_space", space_id, "view_space"
-            )
+            await svc._require_permission_id("knowledge_space", space_id, "view_space")
             return True
         except SpacePermissionDeniedError:
             return False
@@ -122,7 +118,7 @@ class KnowledgeFileVisibilityService:
     async def build_index_prefilter(
         self,
         space_id: int,
-        candidate_file_ids: Optional[List[int]],
+        candidate_file_ids: list[int] | None,
     ) -> IndexFilter:
         """Decide the Milvus / ES filter for the upcoming retrieval round.
 
@@ -139,18 +135,30 @@ class KnowledgeFileVisibilityService:
             login_user=self.login_user,
         )
 
-        # Admin: list_accessible_ids returns None → no filter pushdown.
-        if accessible_ids is None:
-            return IndexFilter(strategy="none")
+        # candidate_file_ids carries the explicit folder / tag business scope.
+        # Unlike the permission set, it has NO result-layer backstop
+        # (post_filter_visible_files only enforces view_file), so whenever it
+        # is provided it MUST be pushed down into the index — it can never be
+        # dropped via the admin or the both-sides-too-large 'none' shortcut.
+        has_business_scope = candidate_file_ids is not None
 
-        accessible_int = {int(x) for x in accessible_ids if str(x).isdigit()}
+        # Admin: list_accessible_ids returns None → unrestricted by permission.
+        # With no business scope there is nothing to push down (admin sees the
+        # whole space); with a folder / tag scope we still must enforce it.
+        if accessible_ids is None and not has_business_scope:
+            return IndexFilter(strategy="none")
 
         # Scope to this space — the user's full accessible set spans every
         # knowledge_file they can read tenant-wide. We only care about files
         # in the queried space.
         space_primary_ids = await self._list_primary_file_ids_in_space(space_id)
-        scoped = accessible_int & space_primary_ids
-        if candidate_file_ids is not None:
+        if accessible_ids is None:
+            # Admin: every file in the space is permission-visible.
+            scoped = set(space_primary_ids)
+        else:
+            accessible_int = {int(x) for x in accessible_ids if str(x).isdigit()}
+            scoped = accessible_int & space_primary_ids
+        if has_business_scope:
             scoped &= {int(x) for x in candidate_file_ids}
 
         if not scoped:
@@ -169,27 +177,34 @@ class KnowledgeFileVisibilityService:
                 accessible_size=k,
             )
 
-        # NOT IN path only beats IN when the complement is smaller than the
-        # configured threshold; otherwise fall through to no pushdown.
+        # NOT IN path beats IN when the complement is smaller than the
+        # configured threshold. When a business scope is in force we must still
+        # push down even past the threshold, so fall back to whichever of the
+        # IN / NOT-IN lists is smaller rather than dropping the scope.
         complement = sorted(space_primary_ids - scoped)
-        if n - k <= threshold and complement:
+        if complement and (n - k <= threshold or (has_business_scope and len(complement) <= k)):
             return IndexFilter(
                 strategy="notin",
                 milvus_expr=f"document_id not in {complement}",
-                es_filter=[
-                    {
-                        "bool": {
-                            "must_not": {
-                                "terms": {"metadata.document_id": complement}
-                            }
-                        }
-                    }
-                ],
+                es_filter=[{"bool": {"must_not": {"terms": {"metadata.document_id": complement}}}}],
                 accessible_size=k,
                 excluded_ids=complement,
             )
 
-        # Both sides too large — push the work entirely to the result layer.
+        if has_business_scope:
+            # Large explicit scope with a large complement: enforce via IN. The
+            # folder / tag boundary is correctness, not an optimisation, so a
+            # big IN list is preferable to leaking outside it.
+            sorted_ids = sorted(scoped)
+            return IndexFilter(
+                strategy="in",
+                milvus_expr=f"document_id in {sorted_ids}",
+                es_filter=[{"terms": {"metadata.document_id": sorted_ids}}],
+                accessible_size=k,
+            )
+
+        # Permission-only path, both sides too large — push the work entirely to
+        # the result layer (post_filter_visible_files is the backstop).
         return IndexFilter(strategy="none", accessible_size=k)
 
     # ------------------------------------------------------------------
@@ -200,7 +215,7 @@ class KnowledgeFileVisibilityService:
         self,
         space_id: int,
         file_ids: Iterable[int],
-    ) -> Set[int]:
+    ) -> set[int]:
         """Return the subset of ``file_ids`` for which the current user holds
         ``view_file`` in effective permissions.
 
@@ -223,7 +238,7 @@ class KnowledgeFileVisibilityService:
         return the union of all bindings, letting revoked files leak past
         the filter — exactly the bug the user reported.
         """
-        file_id_set: Set[int] = {int(x) for x in file_ids}
+        file_id_set: set[int] = {int(x) for x in file_ids}
         if not file_id_set:
             return set()
 
@@ -240,7 +255,7 @@ class KnowledgeFileVisibilityService:
         context = await space_svc._build_child_permission_context(space_id)
         semaphore = asyncio.Semaphore(self._config().fine_grained_concurrency)
 
-        async def resolve(item) -> Optional[int]:
+        async def resolve(item) -> int | None:
             async with semaphore:
                 try:
                     effective = await space_svc._get_child_item_effective_permission_ids(
@@ -248,8 +263,7 @@ class KnowledgeFileVisibilityService:
                     )
                 except Exception:
                     logger.exception(
-                        "post_filter_visible_files: fine-grained resolution failed for "
-                        "file_id=%s space_id=%s",
+                        "post_filter_visible_files: fine-grained resolution failed for file_id=%s space_id=%s",
                         item.id,
                         space_id,
                     )
@@ -271,26 +285,18 @@ class KnowledgeFileVisibilityService:
         non_primary = await self._non_primary_ids(space_id)
         return max(int(total or 0) - len(non_primary), 0)
 
-    async def _list_primary_file_ids_in_space(self, space_id: int) -> Set[int]:
+    async def _list_primary_file_ids_in_space(self, space_id: int) -> set[int]:
         """List the primary-version file ids in the space."""
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 
         async with get_async_db_session() as session:
-            rows = (
-                await session.exec(
-                    select(KnowledgeFile.id).where(
-                        KnowledgeFile.knowledge_id == space_id
-                    )
-                )
-            ).all()
+            rows = (await session.exec(select(KnowledgeFile.id).where(KnowledgeFile.knowledge_id == space_id))).all()
         all_ids = {int(row) for row in rows}
         return all_ids - await self._non_primary_ids(space_id)
 
-    async def _non_primary_ids(self, space_id: int) -> Set[int]:
+    async def _non_primary_ids(self, space_id: int) -> set[int]:
         """Resolve the set of non-primary file ids for the given space."""
         if self.version_repo is None:
             return set()
-        excluded = await self.version_repo.find_non_primary_file_ids_by_knowledge_ids(
-            [space_id]
-        )
+        excluded = await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id])
         return {int(x) for x in (excluded or [])}

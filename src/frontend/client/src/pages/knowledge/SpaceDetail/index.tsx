@@ -3,7 +3,7 @@ import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
@@ -77,6 +77,8 @@ interface KnowledgeSpaceContentProps {
     onDownloadFile: (fileId: string) => void;
     onRenameFile: (fileId: string, newName: string) => void;
     onDeleteFile: (fileId: string) => void;
+    /** Optimistic batch delete: removes the given ids in place. Resolves true on success. */
+    onBatchDeleteFiles: (ids: Array<string | number>) => Promise<boolean>;
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
     currentPath: Array<{ id?: string; name: string }>;
@@ -84,8 +86,8 @@ interface KnowledgeSpaceContentProps {
     onDragStateChange?: (isDragging: boolean, error?: string | null) => void;
     uploadingFiles?: KnowledgeFile[];
     creatingFolder?: KnowledgeFile | null;
-    /** True while a dragged/picked folder batch is uploading — shows a loading overlay. */
-    folderUploading?: boolean;
+    /** Placeholder folder card shown while a dragged/picked folder batch uploads. */
+    uploadingFolder?: KnowledgeFile | null;
     onCancelCreateFolder?: () => void;
     onCreateSpace?: () => void;
     onGoKnowledgeSquare?: () => void;
@@ -121,6 +123,7 @@ export function KnowledgeSpaceContent({
     onDownloadFile,
     onRenameFile,
     onDeleteFile,
+    onBatchDeleteFiles,
     onEditTags,
     onRetryFile,
     currentPath,
@@ -128,7 +131,7 @@ export function KnowledgeSpaceContent({
     onDragStateChange,
     uploadingFiles = [],
     creatingFolder,
-    folderUploading = false,
+    uploadingFolder = null,
     onCancelCreateFolder,
     onCreateSpace,
     onGoKnowledgeSquare,
@@ -147,6 +150,14 @@ export function KnowledgeSpaceContent({
     const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
+        // In-progress folder upload: show its placeholder card (keyed to the space +
+        // folder it was started in, like the file placeholders below) so it stays put
+        // when the user navigates elsewhere mid-upload.
+        ...(uploadingFolder &&
+            String(uploadingFolder.spaceId) === String(space.id) &&
+            String(uploadingFolder.parentId ?? "") === String(currentFolderId ?? "")
+            ? [uploadingFolder]
+            : []),
         // Uploading placeholders are keyed to the space AND folder they were
         // started in (placeholder.parentId = the folder at upload time). Filter to
         // the active space + current folder so an in-progress root upload does not
@@ -255,6 +266,14 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    // Delete is owner-only in the backend ReBAC model (can_delete maps to `owner`);
+    // a space manager (ADMIN) does NOT inherit it. Unlike read/edit/manage tiers,
+    // the delete probe must not short-circuit on the manager role — only the space
+    // creator is the implicit owner of every entry. Everyone else (managers, and
+    // platform super-admins for spaces they didn't create) falls through to the
+    // per-resource backend probe, which is the source of truth: it still grants
+    // delete on files the user owns, and on every file for a platform super-admin.
+    const isOwner = space.role === SpaceRole.CREATOR;
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions([space.id]);
     const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
         spaceActionPermissions,
@@ -548,7 +567,7 @@ export function KnowledgeSpaceContent({
             (file) => !file.isCreating && /^\d+$/.test(String(file.id))
         );
 
-        if (isAdmin) {
+        if (isOwner) {
             setDeleteEntryIds(new Set(candidates.map((file) => file.id)));
             return () => {
                 cancelled = true;
@@ -586,7 +605,7 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey]);
+    }, [isOwner, permissionEntryProbeKey]);
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);
@@ -705,7 +724,14 @@ export function KnowledgeSpaceContent({
         onSort(newSortBy, newDirection);
     };
 
+    // An uploading folder placeholder has only a temp id and no backend identity —
+    // it must not be selectable (neither individually nor via select-all).
+    const isFolderUploadPlaceholder = (f: KnowledgeFile) =>
+        f.type === FileType.FOLDER && isKnowledgeItemUploading(f);
+
     const handleSelectFile = (fileId: string, selected: boolean) => {
+        const target = displayFiles.find((f) => f.id === fileId);
+        if (target && isFolderUploadPlaceholder(target)) return;
         const newSelected = new Set(selectedFiles);
         if (selected) {
             newSelected.add(fileId);
@@ -730,10 +756,12 @@ export function KnowledgeSpaceContent({
 
     const handleSelectAll = (isAllSelectedOnPage: boolean) => {
         const newSelected = new Set(selectedFiles);
+        // Skip uploading folder placeholders so select-all never picks them up.
+        const selectable = displayFiles.filter((f) => !isFolderUploadPlaceholder(f));
         if (isAllSelectedOnPage) {
-            displayFiles.forEach(f => newSelected.delete(f.id));
+            selectable.forEach(f => newSelected.delete(f.id));
         } else {
-            displayFiles.forEach(f => newSelected.add(f.id));
+            selectable.forEach(f => newSelected.add(f.id));
         }
         setSelectedFiles(newSelected);
     };
@@ -882,20 +910,15 @@ export function KnowledgeSpaceContent({
             return;
         }
 
-        const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
-        const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
-
-        try {
-            await batchDeleteApi(space.id, {
-                file_ids: fileIds.length ? fileIds : undefined,
-                folder_ids: folderIds.length ? folderIds : undefined,
-            });
-            setSelectedFiles(new Set());
+        // Optimistic batch delete (handled by the parent): rows are dropped from
+        // the list in place — keeps the scroll position and works regardless of
+        // which page they were loaded from. The parent rolls back on API failure.
+        const ids = selectedList.map(f => f.id);
+        setSelectedFiles(new Set());
+        const ok = await onBatchDeleteFiles(ids);
+        if (ok) {
             showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
-            dispatchKnowledgeSpaceFilesRefresh(space.id);
-            // Notify parent to refresh the list
-            onDeleteFile("");
-        } catch {
+        } else {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
         }
     };
@@ -1133,7 +1156,7 @@ export function KnowledgeSpaceContent({
                             aria-expanded={spaceListOpen}
                             className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
                         >
-                            <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                            <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
                                 {currentPath.length > 0 ? currentPath[currentPath.length - 1].name : space.name}
                             </span>
                             <Outlined.Down className={cn("size-5 shrink-0 text-[#86909C] transition-transform", spaceListOpen && "rotate-180")} />
@@ -1306,15 +1329,14 @@ export function KnowledgeSpaceContent({
                     {suppressList ? (
                         // Search page before any query — intentionally empty.
                         <div className="min-h-0 flex-1" />
-                    ) : (loading && displayFiles.length === 0) || folderUploading ? (
+                    ) : (loading && displayFiles.length === 0) ? (
                         // Space switching / first load: show a spinner instead of the
                         // "no files here" empty illustration. The fileManager hook clears
                         // `files` immediately on activeSpace change, so this branch fires
                         // for the entire fetch window — the right pane no longer keeps
                         // showing the previous space's contents while the API responds.
-                        // Also covers a dragged/picked folder upload (folderUploading), so
-                        // the drop shows immediate feedback instead of appearing frozen
-                        // until the folder finally lands.
+                        // A folder upload no longer hits this branch: its placeholder card
+                        // lives in the grid (displayFiles), keeping the rest interactive.
                         <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
                             <LoadingIcon className="size-20 text-primary" />
                         </div>

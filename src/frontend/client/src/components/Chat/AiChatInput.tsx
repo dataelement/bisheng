@@ -418,7 +418,7 @@ const AiChatInput = memo(
 
         const hasSelectionTags = ((selectedOrgKbs && selectedOrgKbs.length > 0) || (chatFiles && chatFiles.length > 0) || uploadingFiles.length > 0 || (taskMode && dailySkills.length > 0)) && !isLingsi;
         return (
-            <div className="px-4 sm:px-0 pb-2 touch-mobile:px-0 touch-mobile:pb-2 shrink-0 relative">
+            <div className="px-4 sm:px-0 pb-1 touch-mobile:px-0 touch-mobile:pb-1 shrink-0 relative">
                 {/* Drag-drop overlay */}
                 {isDragging && <DragDropOverlay />}
 
@@ -437,9 +437,9 @@ const AiChatInput = memo(
 
                 <div
                     className={cn(
-                        // Figma 12669:66966 — white surface, 12px radius, hairline
+                        // Figma 12669:66966 — white surface, 16px radius, hairline
                         // border (replaces the legacy gray fill).
-                        "relative flex w-full flex-col items-start gap-0 overflow-hidden rounded-xl border border-[#ECECEC] bg-white p-3",
+                        "relative flex w-full flex-col items-start gap-0 overflow-hidden rounded-2xl border border-[#ECECEC] bg-white p-3",
                         // Soft drop shadow only on the landing page; in-conversation
                         // inputs stay flat against the message list.
                         elevated && "shadow-[0_0_8px_rgba(3,7,117,0.05)]",
@@ -545,7 +545,7 @@ const AiChatInput = memo(
                         style={{ height: 52, overflowY: isTextareaScrollable ? "auto" : "hidden" }}
                         className={cn(
                             "m-0 w-full resize-none bg-transparent text-sm mb-2.5 pb-0 pt-0",
-                            "placeholder-black/50 dark:placeholder-white/50",
+                            "placeholder:text-[#999999]",
                             "max-h-[240px] scrollbar-gutter-stable",
                             size === 'mini' ? 'min-h-0' : 'min-h-12',
                             removeFocusRings,
@@ -590,13 +590,18 @@ const AiChatInput = memo(
                                             onChange={(next) => {
                                                 setDailySkills(next);
                                                 close();
-                                                // Picking a skill enters task mode. On the daily
-                                                // welcome page do it in place (callback); otherwise
-                                                // fall back to navigating to the linsight landing.
-                                                if (onToggleTaskMode) {
-                                                    onToggleTaskMode();
-                                                } else {
-                                                    navigate('/linsight/new');
+                                                // Picking a skill ENTERS task mode only when not
+                                                // already in it. onToggleTaskMode is a toggle, so
+                                                // calling it while task mode is already active flips
+                                                // it OFF — selecting a skill must never exit task
+                                                // mode. On the daily welcome page enter in place
+                                                // (callback); otherwise navigate to the linsight landing.
+                                                if (!taskMode) {
+                                                    if (onToggleTaskMode) {
+                                                        onToggleTaskMode();
+                                                    } else {
+                                                        navigate('/linsight/new');
+                                                    }
                                                 }
                                             }}
                                         />

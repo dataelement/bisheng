@@ -14,6 +14,7 @@
 import { useMemo } from 'react';
 import { DeepStepGroup } from './DeepStepGroup';
 import { useExecutionLive } from './executionLive';
+import { IntentRow } from './IntentRow';
 import { KnowledgeRow } from './KnowledgeRow';
 import { ToolRowLite } from './ToolRowLite';
 import type { ExecStepEventData } from './stepUtils';
@@ -49,6 +50,12 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
         <div className="flex flex-col gap-3">
             {nodes.map((node, idx) => {
                 const active = live && idx === lastIdx;
+                // Inline answered clarify (时序内联): an "已经明确用户意图" summary row
+                // sitting between the pre-question thinking and the resumed thinking.
+                // Always collapsed (no `active`) — it is a record, not a live episode.
+                if (node.kind === 'intent') {
+                    return <IntentRow key={`intent_${idx}`} data={node.data} />;
+                }
                 if (node.kind === 'deep_step_group') {
                     // Stable key: first step's callId; fall back to index when an
                     // episode somehow has no steps (defensive — flush() never emits

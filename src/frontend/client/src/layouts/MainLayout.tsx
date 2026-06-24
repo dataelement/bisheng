@@ -281,7 +281,7 @@ function Sidebar({
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 items-center">
+      <div className="flex flex-col gap-2 items-center">
         {!isMobile && showAdminEntry && (
           <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
             <div
@@ -505,7 +505,10 @@ export default function MainLayout() {
             ref={!isMobile && !innerScrollShell ? outletScrollRevealRef : undefined}
             className={cn(
               'bg-white shadow-[0px_0px_20px_0px_#07225808]',
-              (!isMobile || systemMenuRevealing) && 'rounded-xl',
+              !isMobile && 'rounded-xl',
+              // When the left system menu is revealed, the panel slides right and
+              // exposes its left edge — round the left corners to 24px.
+              systemMenuRevealing && 'rounded-l-[24px]',
               isMobile
                 ? innerScrollShell
                   ? 'flex h-[100dvh] min-h-0 w-full flex-col overflow-hidden'
@@ -526,7 +529,7 @@ export default function MainLayout() {
               <div
                 className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]"
               >
-                <div className="flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
+                <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
                   <button
                     type="button"
                     aria-label={localize('com_nav_open_sidebar')}
@@ -535,6 +538,10 @@ export default function MainLayout() {
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
+                  {/* Centered title — same style as the chat / knowledge / subscription headers. */}
+                  <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-[#212121]">
+                    {localize('com_app_center_title')}
+                  </span>
                   <div className="min-w-0 flex-1" aria-hidden />
                 </div>
               </div>

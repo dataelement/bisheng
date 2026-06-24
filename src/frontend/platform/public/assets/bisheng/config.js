@@ -1,27 +1,6 @@
-window.BRAND_CONFIG = {
-    brandName: {
-        zh: "BISHENG",
-        en: "BISHENG"
-    },
-    linsightAgentName: {
-        zh: "灵思",
-        en: "Linsight"
-    },
-    URLLoadingIcon: "/assets/bisheng/loading.svg",
-    loadingIcon: "/assets/bisheng/loading.svg",
-    loadingAnimation: "",
-    loading: {
-        icon: {
-            url: "/assets/bisheng/loading.svg",
-            relative_path: "",
-            file_name: "loading.svg"
-        },
-        iconOptions: [],
-        animation: ""
-    }
-};
-
-// Application-wide runtime config (separate from BRAND_CONFIG above).
+// Application-wide runtime config (NOT branding).
+// Branding now comes from the backend (/api/v1/brand/runtime-config) and is
+// applied + cached by brand-runtime.js; there is no static BRAND_CONFIG here.
 // Read by both the platform admin app and the client chat app.
 window.APP_CONFIG = {
     // Hide Japanese from the language switcher and prevent it from being

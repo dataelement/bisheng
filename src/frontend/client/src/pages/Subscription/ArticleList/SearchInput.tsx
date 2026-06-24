@@ -15,7 +15,12 @@ export function SearchInput({ value, onChange, placeholder, className }: SearchI
     // Only <=768 stays always expanded; >768 uses icon-collapsed interaction.
     const isMobileAndTablet = useMediaQuery("(max-width: 768px)");
     const shouldUseCollapsedSearch = !isMobileAndTablet;
-    const resolvedContainerClassName = cn("rounded-[6px]", shouldUseCollapsedSearch ? "min-w-0" : className);
+    // Only recolor the resting border to #ECECEC; leave the focused border
+    // (#DDDDDD) untouched so focus still shows a border-color change.
+    const resolvedContainerClassName = cn(
+        "rounded-[6px] [&:not(:focus-within)]:border-[#ECECEC]",
+        shouldUseCollapsedSearch ? "min-w-0" : className,
+    );
 
     return (
         <ExpandableSearchField

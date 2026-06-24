@@ -157,11 +157,14 @@ export function AiAssistantPanel({
                 )}
             >
                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-6 text-gray-900">
-                    {localize(
-                        fileChat
-                            ? "com_knowledge.ai_assistant"
-                            : "com_subscription.ai_assistant",
-                    )}
+                    {/* Admin-customizable assistant name per surface; empty/absent
+                        falls back to the localized default. fileChat is a
+                        knowledge-space surface, otherwise it's the subscription surface. */}
+                    {fileChat
+                        ? bsConfig?.knowledge_space?.assistant_name?.trim() ||
+                          localize("com_knowledge.ai_assistant")
+                        : bsConfig?.subscription?.assistant_name?.trim() ||
+                          localize("com_subscription.ai_assistant")}
                 </h3>
                 <div className="min-w-0 flex-1" aria-hidden />
                 <div className="flex shrink-0 items-center gap-2">

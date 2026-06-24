@@ -131,10 +131,13 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
     const running = active;
     // Group-level fold: ONE stable open state per group, persisted to
     // sessionStorage so a manual toggle survives refresh / session switch.
-    // Default = active (the live tail episode stays expanded to watch progress;
-    // collapsed to a single summary line once superseded / for history review).
+    // Default = collapsed for every group (live or done): even the live tail
+    // episode starts folded to its single summary + narration line, so task mode
+    // opens quiet instead of dumping the full reasoning. The user expands a group
+    // manually to read the full thinking; the collapsed header still streams the
+    // latest thought via the NarrationTicker below.
     const persistKey = group.steps[0]?.callId ?? '';
-    const [open, setOpen] = useCollapseState(persistKey, running);
+    const [open, setOpen] = useCollapseState(persistKey, false);
 
     // Sticky-header pin detection. A zero-height sentinel sits just above the
     // header; once it scrolls past the TOP edge of the chat scroll container, the
