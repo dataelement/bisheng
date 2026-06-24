@@ -1245,6 +1245,7 @@
   "subscribed": "Joined",
   "website": "Website",
   "api_errors": {
+    "11001": "The software license has expired. Please contact your administrator to renew.",
     "403": "No permission to perform this action",
     "404": "Resource not found",
     "429": "System is busy, please wait.",

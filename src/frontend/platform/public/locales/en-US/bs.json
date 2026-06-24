@@ -1,4 +1,9 @@
 {
+  "license": {
+    "warning": "Your license will expire in {{days}} days. Please contact your administrator to renew.",
+    "critical": "Your license expires in {{days}} days. Please renew as soon as possible!",
+    "expired": "Your license has expired. Please contact your administrator to renew."
+  },
   "title": "BISHENG",
   "bisheng": "{{bisheng}}",
   "linsight": "{{linsight}}",

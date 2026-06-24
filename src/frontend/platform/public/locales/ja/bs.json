@@ -1,4 +1,9 @@
 {
+  "license": {
+    "warning": "ライセンスは {{days}} 日後に期限切れになります。管理者に更新を依頼してください。",
+    "critical": "ライセンスの有効期限まで残り {{days}} 日です。早急に更新してください！",
+    "expired": "ライセンスの有効期限が切れています。管理者に更新を依頼してください。"
+  },
   "title": "BISHENG",
   "bisheng": "{{bisheng}}",
   "linsight": "{{linsight}}",
