@@ -267,6 +267,14 @@ export function KnowledgeSpaceContent({
     }, [space.id]);
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
+    // Delete is owner-only in the backend ReBAC model (can_delete maps to `owner`);
+    // a space manager (ADMIN) does NOT inherit it. Unlike read/edit/manage tiers,
+    // the delete probe must not short-circuit on the manager role — only the space
+    // creator is the implicit owner of every entry. Everyone else (managers, and
+    // platform super-admins for spaces they didn't create) falls through to the
+    // per-resource backend probe, which is the source of truth: it still grants
+    // delete on files the user owns, and on every file for a platform super-admin.
+    const isOwner = space.role === SpaceRole.CREATOR;
     const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions([space.id]);
     const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
         spaceActionPermissions,
@@ -560,7 +568,7 @@ export function KnowledgeSpaceContent({
             (file) => !file.isCreating && /^\d+$/.test(String(file.id))
         );
 
-        if (isAdmin) {
+        if (isOwner) {
             setDeleteEntryIds(new Set(candidates.map((file) => file.id)));
             return () => {
                 cancelled = true;
@@ -598,7 +606,7 @@ export function KnowledgeSpaceContent({
             cancelled = true;
             controller.abort();
         };
-    }, [isAdmin, permissionEntryProbeKey]);
+    }, [isOwner, permissionEntryProbeKey]);
 
     // Read max file size from env config (MB), fallback to default 200MB
     const bishengConfig = useRecoilValue(bishengConfState);

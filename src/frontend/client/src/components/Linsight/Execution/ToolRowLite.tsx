@@ -11,7 +11,7 @@
  * bare-string output never degrades into a single result chip).
  */
 import { Outlined } from 'bisheng-icons';
-import { useState, type FC } from 'react';
+import { memo, useState, type FC } from 'react';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import CollapsibleTimelineItem from './CollapsibleTimelineItem';
@@ -62,7 +62,7 @@ function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>
     return `已使用 ${step.name || localize('com_tools_generic_fallback')}`;
 }
 
-const ToolRowLite: FC<ToolRowLiteProps> = ({ step }) => {
+const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     const localize = useLocalize();
     // Default COLLAPSED to a single verb-phrase line (入参/结果 on demand). The
     // parent group already stays expanded while it's the active episode; keeping
@@ -109,6 +109,29 @@ const ToolRowLite: FC<ToolRowLiteProps> = ({ step }) => {
     );
 };
 
+ToolRowLiteBase.displayName = 'ToolRowLite';
+
+/**
+ * React.memo comparator. ExecutionTimeline rebuilds the node tree (fresh MergedStep
+ * objects) on every WS frame, so within the active group each thinking-delta frame
+ * would otherwise re-render every sibling tool row even though none of them changed.
+ * Skip when the rendered fields are unchanged; `params` reference traces back to the
+ * stable raw frame and streaming `output` only grows, so length is a safe signal.
+ */
+export function toolRowLitePropsEqual(prev: ToolRowLiteProps, next: ToolRowLiteProps): boolean {
+    const a = prev.step;
+    const b = next.step;
+    return (
+        a.callId === b.callId &&
+        a.running === b.running &&
+        a.name === b.name &&
+        a.output.length === b.output.length &&
+        a.params === b.params &&
+        a.callReason === b.callReason
+    );
+}
+
+const ToolRowLite = memo(ToolRowLiteBase, toolRowLitePropsEqual);
 ToolRowLite.displayName = 'ToolRowLite';
 
 // Exported both ways: the Execution primitives (CollapsibleTimelineItem etc.)

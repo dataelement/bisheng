@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { Channel, SortType, canManageChannelPermissions, getChannelsApi } from "~/api/channels";
+import { Channel, SortType, canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, getChannelsApi } from "~/api/channels";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -84,10 +84,17 @@ export function ChannelActionsMenu({
         onChannelSelect,
     });
 
-    // Use the shared permission helper (role + ReBAC permissionIds) so the entry stays
-    // visible in permissionIds-based deployments, matching the channel-sidebar gating.
+    // Gate every management entry by the actual role/ReBAC permission (not by which
+    // list the channel sits in), mirroring the channel-sidebar (ChannelItem). A user
+    // granted ownership rather than being the original creator has the channel in the
+    // followed list, yet must still see 频道设置 / 解散频道.
+    const canEditSettings = canEditChannelSettings(liveChannel.role, liveChannel.permissionIds);
     const canManageMembers = canManageChannelPermissions(liveChannel.role, liveChannel.permissionIds);
-    const isCreated = type === "created";
+    // Dissolving deletes the channel for everyone — gate on the delete permission, not
+    // on creation. Unsubscribe is independent: any subscriber can leave (a granted owner
+    // who is also a subscriber may see both).
+    const canDissolve = canDeleteChannel(liveChannel.role, liveChannel.permissionIds);
+    const canUnsubscribe = type === "subscribed";
     const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] text-[#212121]";
     const iconCls = "size-4 text-[#4E5969]";
 
@@ -126,7 +133,7 @@ export function ChannelActionsMenu({
                         {localize("com_subscription.source_filter")}
                     </DropdownMenuItem>
                 ) : null}
-                {isCreated && onChannelSettings ? (
+                {canEditSettings && onChannelSettings ? (
                     <DropdownMenuItem className={itemCls} onClick={() => onChannelSettings(liveChannel)}>
                         <Outlined.Edit className={iconCls} />
                         {isMobile
@@ -140,31 +147,44 @@ export function ChannelActionsMenu({
                         {localize("com_subscription.permission_management")}
                     </DropdownMenuItem>
                 ) : null}
-                <DropdownMenuItem
-                    className={cn(itemCls, "text-[#F53F3F] data-[highlighted]:bg-[#F53F3F]/10 data-[highlighted]:text-[#F53F3F]")}
-                    onClick={async () => {
-                        const ok = await confirm({
-                            title: localize("com_subscription.prompt_tip"),
-                            description: isCreated
-                                ? localize("com_subscription.confirm_delete_channel_for_all")
-                                : localize("com_subscription.confirm_unsubscribe_channel_and_subs"),
-                            confirmText: localize("com_subscription.confirm"),
-                            cancelText: localize("com_subscription.cancel"),
-                        });
-                        if (!ok) return;
-                        if (isCreated) handleDeleteChannel(liveChannel.id);
-                        else handleUnsubscribeChannel(liveChannel.id);
-                    }}
-                >
-                    {isCreated
-                        ? <Outlined.Delete className="size-4 text-[#F53F3F]" />
-                        : <LogOut className="size-4 text-[#F53F3F]" />}
-                    {isCreated
-                        ? (isMobile
+                {canDissolve ? (
+                    <DropdownMenuItem
+                        className={cn(itemCls, "text-[#F53F3F] data-[highlighted]:bg-[#F53F3F]/10 data-[highlighted]:text-[#F53F3F]")}
+                        onClick={async () => {
+                            const ok = await confirm({
+                                title: localize("com_subscription.prompt_tip"),
+                                description: localize("com_subscription.confirm_delete_channel_for_all"),
+                                confirmText: localize("com_subscription.confirm"),
+                                cancelText: localize("com_subscription.cancel"),
+                            });
+                            if (!ok) return;
+                            handleDeleteChannel(liveChannel.id);
+                        }}
+                    >
+                        <Outlined.Delete className="size-4 text-[#F53F3F]" />
+                        {isMobile
                             ? localize("com_subscription.delete_channel")
-                            : localize("com_subscription.dissolve_channel"))
-                        : localize("com_subscription.unsubscribe")}
-                </DropdownMenuItem>
+                            : localize("com_subscription.dissolve_channel")}
+                    </DropdownMenuItem>
+                ) : null}
+                {canUnsubscribe ? (
+                    <DropdownMenuItem
+                        className={cn(itemCls, "text-[#F53F3F] data-[highlighted]:bg-[#F53F3F]/10 data-[highlighted]:text-[#F53F3F]")}
+                        onClick={async () => {
+                            const ok = await confirm({
+                                title: localize("com_subscription.prompt_tip"),
+                                description: localize("com_subscription.confirm_unsubscribe_channel_and_subs"),
+                                confirmText: localize("com_subscription.confirm"),
+                                cancelText: localize("com_subscription.cancel"),
+                            });
+                            if (!ok) return;
+                            handleUnsubscribeChannel(liveChannel.id);
+                        }}
+                    >
+                        <LogOut className="size-4 text-[#F53F3F]" />
+                        {localize("com_subscription.unsubscribe")}
+                    </DropdownMenuItem>
+                ) : null}
             </DropdownMenuContent>
         </DropdownMenu>
     );

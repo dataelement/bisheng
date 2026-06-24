@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
+from json_repair import json_repair
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool, tool
 from langgraph.types import interrupt
@@ -219,6 +220,65 @@ def _build_researcher_prompt(has_knowledge_base: bool) -> str:
     return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line)
 
 
+def _loads_tolerant(s: str) -> object | None:
+    """``json.loads`` first; on failure fall back to ``json_repair`` (which fixes
+    unescaped quotes, missing brackets, trailing junk, …). Returns the parsed
+    object, or ``None`` when even the repair yields nothing usable."""
+    s = s.strip()
+    if not s:
+        return None
+    try:
+        return json.loads(s)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    try:
+        return json_repair.loads(s)
+    except Exception:
+        return None
+
+
+def _recover_question_items(s: str) -> list[dict]:
+    """Recover one or more question dicts from a single string element.
+
+    A well-behaved model puts each question object (or a plain question string)
+    as its own list element. A misbehaving one (observed live, session
+    9aef4773…) stringifies the WHOLE remaining ``questions`` array into a single
+    element AND drops its opening ``[{"question": "`` while leaving inner quotes
+    unescaped — so ``json.loads`` fails and the old code wrapped the entire 500‑char
+    blob as one bogus question's text (the user then saw raw JSON). Here we:
+      - treat a marker-free string as a legitimate open-ended question (unchanged);
+      - otherwise try a few reconstructions (raw / bracket-wrapped / opening-prefix
+        restored) through ``_loads_tolerant`` and keep the variant yielding the most
+        question-bearing dicts. Recovers nothing usable ⇒ ``[]`` (degrade, never a blob).
+    """
+    s = s.strip()
+    if not s:
+        return []
+    # No JSON structure at all → a plain prose question.
+    if not any(marker in s for marker in ('"question"', '"options"', "{", "[")):
+        return [{"question": s}]
+    candidates = [s, "[" + s + "]"]
+    # Only restore a dropped opening ``[{"question": "`` when the blob actually
+    # looks like it lost its head (starts mid-value, not with ``{``/``[``). This
+    # targets the observed failure precisely without corrupting a complete dict
+    # that merely lacks a ``question`` key into a bogus one.
+    if not s.startswith(("{", "[")):
+        candidates.append('[{"question": "' + s)
+    best: list[dict] = []
+    for cand in candidates:
+        parsed = _loads_tolerant(cand)
+        if isinstance(parsed, list):
+            items = parsed
+        elif isinstance(parsed, dict):
+            items = [parsed]
+        else:
+            items = []
+        qs = [q for q in items if isinstance(q, dict) and str(q.get("question", "")).strip()]
+        if len(qs) > len(best):
+            best = qs
+    return best
+
+
 def _coerce_questions(value: object) -> list[dict]:
     """Normalize the ``questions`` arg into a clean ``list[dict]``, tolerating
     models that stringify nested tool arguments.
@@ -229,9 +289,13 @@ def _coerce_questions(value: object) -> list[dict]:
     then rejects it ("Input should be a valid list") before ``ask_user`` ever
     runs, so the model retries the same malformed call forever and never parks.
 
-    This coercion recovers the intended structure. Every step degrades rather
-    than raises: an unparseable payload becomes ``[]`` (ask_user still parks
-    with reason only) instead of hard-failing the HITL flow.
+    This coercion recovers the intended structure. Beyond valid-JSON strings it
+    also salvages MALFORMED ones via ``_recover_question_items`` (``json_repair``)
+    — e.g. a whole array crammed into one list element with unescaped quotes and a
+    missing opening bracket. Every step degrades rather than raises: an
+    unrecoverable payload becomes ``[]`` (ask_user still parks with reason only),
+    and a partially-recovered item that yields no real question is dropped — the
+    user never sees a raw JSON blob as a question.
     """
     if value is None:
         return []
@@ -239,6 +303,8 @@ def _coerce_questions(value: object) -> list[dict]:
         stripped = value.strip()
         if not stripped:
             return []
+        # A malformed top-level string degrades to [] (park with reason only) — the
+        # observed failure mode is a malformed element INSIDE a list, handled below.
         try:
             value = json.loads(stripped)
         except (json.JSONDecodeError, ValueError):
@@ -248,16 +314,16 @@ def _coerce_questions(value: object) -> list[dict]:
 
     out: list[dict] = []
     for item in value:
-        if isinstance(item, str):
-            stripped_item = item.strip()
-            try:
-                item = json.loads(stripped_item)
-            except (json.JSONDecodeError, ValueError):
-                # Not JSON — treat the raw string as an open-ended question.
-                item = {"question": stripped_item}
         if isinstance(item, dict):
             out.append(item)
-    return out
+        elif isinstance(item, str):
+            out.extend(_recover_question_items(item))
+        elif isinstance(item, list):
+            # a smuggled nested array of question dicts
+            out.extend(q for q in item if isinstance(q, dict))
+    # Keep only real questions: drops salvage debris (e.g. a bare options list with
+    # no question text) so a malformed input can never surface as an empty/garbage row.
+    return [q for q in out if isinstance(q, dict) and str(q.get("question", "")).strip()]
 
 
 @tool
@@ -352,6 +418,7 @@ async def create_linsight_agent(
     svid: str | None = None,
     backend=None,
     checkpointer=None,
+    skills_present: bool = False,
 ):
     """Build the deepagents-backed Linsight agent (design §2.1).
 
@@ -382,15 +449,6 @@ async def create_linsight_agent(
 
         checkpointer = InMemorySaver()
 
-    # F035 Track D — skills middleware DISABLED (2026-06-16): TenantSkillsMiddleware
-    # carries its OWN FilesystemBackend (SKILLS_ROOT, virtual_mode). Added after the
-    # workspace FilesystemMiddleware it SHADOWS the agent's write_file/read_file, so
-    # deliverables written by the agent landed in the skills store instead of the
-    # workspace — the workspace ended up empty and no result document was produced.
-    # Re-enable only once skills compose without hijacking the workspace filesystem
-    # (separate file-tool namespaces). Skills are coarse/optional; the deliverable
-    # pipeline is core, so it wins.
-    #
     # The `task` tool (subagent delegation) is now RE-ENABLED (design #1). The
     # earlier _ToolExclusionMiddleware({"task"}) that stripped it has been removed;
     # the over-delegation + HITL-bubbling root causes are now defused by
@@ -404,6 +462,32 @@ async def create_linsight_agent(
     # its OWN instance (is_subagent=True) that DEGRADES instead — see below.
     linsight_conf = settings.get_linsight_conf()
     middlewares: list = [build_resilience_middleware(linsight_conf, is_subagent=False)]
+
+    # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
+    # bundles were copied into the workspace /skills/ subtree before this call (see
+    # task_exec._create_agent → materialize_session_skills); ``skills_present`` says
+    # at least one landed. Attach deepagents' SkillsMiddleware for progressive
+    # disclosure. It ENUMERATES /skills/ via its OWN FilesystemBackend over the local
+    # write-through cache — FilesystemBackend.ls is non-recursive + dir-aware, whereas
+    # the MinIO-backed WorkspaceBackend.ls returns only file entries, so the native
+    # ``skills=`` param (which would reuse the workspace backend) discovers nothing.
+    # SkillsMiddleware registers NO file tools, so this second backend does NOT shadow
+    # the workspace read_file/write_file (the 2026-06-16 disable concern does not hold
+    # in deepagents 0.6.8); the model reads the same /skills/<name>/SKILL.md paths back
+    # through the WorkspaceBackend. The copy is the whitelist gate — no per-run
+    # active_skills config is threaded.
+    if skills_present and file_dir:
+        from deepagents.backends.filesystem import FilesystemBackend
+        from deepagents.middleware.skills import SkillsMiddleware
+
+        from bisheng.linsight.domain.services.skill_provisioning import WORKSPACE_SKILLS_DIR
+
+        middlewares.append(
+            SkillsMiddleware(
+                backend=FilesystemBackend(root_dir=file_dir, virtual_mode=True),
+                sources=[(f"/{WORKSPACE_SKILLS_DIR}/", "Skills")],
+            )
+        )
 
     # No custom history-compression middleware: deepagents already ships a
     # built-in summarization middleware (deepagents.middleware.summarization),

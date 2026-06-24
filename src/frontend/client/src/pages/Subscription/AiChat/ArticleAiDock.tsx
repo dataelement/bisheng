@@ -190,6 +190,10 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
     const confirm = useConfirm();
     const { user } = useAuthContext();
     const { data: bsConfig } = useGetBsConfig();
+    // Admin-customizable assistant name; empty/absent falls back to the localized default.
+    const assistantTitle =
+        bsConfig?.subscription?.assistant_name?.trim() ||
+        localize("com_subscription.ai_assistant");
     const [chatModel, setChatModel] = useRecoilState(store.chatModel);
     const [open, setOpen] = useState(false);
     const [inputText, setInputText] = useState("");
@@ -297,7 +301,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                 className="relative flex shrink-0 items-center px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3"
             >
                 <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
-                    {localize("com_subscription.ai_assistant")}
+                    {assistantTitle}
                 </h3>
                 <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] flex items-center justify-end gap-3 py-1">
                     <button
@@ -468,7 +472,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                             {/* Header: title left, clear + collapse-down right */}
                             <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
                                 <h3 className="pointer-events-none min-w-0 shrink truncate text-left text-sm font-medium leading-[22px] text-[#212121]">
-                                    {localize("com_subscription.ai_assistant")}
+                                    {assistantTitle}
                                 </h3>
                                 <div className="min-w-0 flex-1" aria-hidden />
                             {/* Clear · DoubleDown — bare 16px icons, 12px gap, right-aligned (matches the knowledge dock). */}

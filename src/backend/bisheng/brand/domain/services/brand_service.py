@@ -35,6 +35,10 @@ DEFAULT_ASSET_URLS = {
     "headerLogoLight": "/assets/bisheng/login-logo-small.png",
     "headerLogoDark": "/assets/bisheng/logo-small-dark.png",
 }
+# Empty by default so the frontend falls back to the built-in <Loading> spinner
+# SVG component (bs-icons/loading) instead of a static asset. Admin preview reads
+# the same empty URLLoadingIcon, so live and preview stay consistent.
+DEFAULT_LOADING_ICON_URL = ""
 ASSET_CATEGORY_PREFIXES: dict[BrandAssetCategory, str] = {
     "favicon": "brand-assets/favicon",
     "loginHeroLight": "brand-assets/login-hero-light",
@@ -55,6 +59,12 @@ def _builtin_config() -> BrandConfig:
     config = BrandConfig()
     for key, url in DEFAULT_ASSET_URLS.items():
         setattr(config.assets, key, BrandAsset(url=url, relative_path="", file_name=""))
+    # Leave the loading icon empty by default so both the live app and the admin
+    # preview fall back to the built-in <Loading> spinner SVG component (consistent
+    # on a fresh, unconfigured instance). Configuring a brand loading icon in the
+    # admin overrides this and renders it via <img>.
+    config.loading.icon = BrandAsset(url=DEFAULT_LOADING_ICON_URL, relative_path="", file_name="")
+    config.URLLoadingIcon = DEFAULT_LOADING_ICON_URL
     return config
 
 

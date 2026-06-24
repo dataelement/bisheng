@@ -590,13 +590,18 @@ const AiChatInput = memo(
                                             onChange={(next) => {
                                                 setDailySkills(next);
                                                 close();
-                                                // Picking a skill enters task mode. On the daily
-                                                // welcome page do it in place (callback); otherwise
-                                                // fall back to navigating to the linsight landing.
-                                                if (onToggleTaskMode) {
-                                                    onToggleTaskMode();
-                                                } else {
-                                                    navigate('/linsight/new');
+                                                // Picking a skill ENTERS task mode only when not
+                                                // already in it. onToggleTaskMode is a toggle, so
+                                                // calling it while task mode is already active flips
+                                                // it OFF — selecting a skill must never exit task
+                                                // mode. On the daily welcome page enter in place
+                                                // (callback); otherwise navigate to the linsight landing.
+                                                if (!taskMode) {
+                                                    if (onToggleTaskMode) {
+                                                        onToggleTaskMode();
+                                                    } else {
+                                                        navigate('/linsight/new');
+                                                    }
                                                 }
                                             }}
                                         />

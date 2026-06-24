@@ -24,7 +24,6 @@ from bisheng.knowledge.domain.services.knowledge_file_visibility_service import 
     KnowledgeFileVisibilityService,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -60,9 +59,7 @@ async def test_is_space_visible_true_when_view_space_granted(monkeypatch):
 
     assert await svc.is_space_visible(space_id=10) is True
     space_svc_mock._require_read_permission.assert_awaited_once_with(10)
-    space_svc_mock._require_permission_id.assert_awaited_once_with(
-        "knowledge_space", 10, "view_space"
-    )
+    space_svc_mock._require_permission_id.assert_awaited_once_with("knowledge_space", 10, "view_space")
 
 
 @pytest.mark.asyncio
@@ -72,9 +69,7 @@ async def test_is_space_visible_false_on_permission_denied(monkeypatch):
 
     svc = _make_service()
     space_svc_mock = MagicMock()
-    space_svc_mock._require_read_permission = AsyncMock(
-        side_effect=SpacePermissionDeniedError()
-    )
+    space_svc_mock._require_read_permission = AsyncMock(side_effect=SpacePermissionDeniedError())
     space_svc_mock._require_permission_id = AsyncMock()
     monkeypatch.setattr(svc, "_space_service", lambda: space_svc_mock)
 
@@ -105,17 +100,16 @@ def _patch_accessible_ids(monkeypatch, ids):
     """Patch PermissionService.list_accessible_ids to return ``ids`` (or None)."""
     from bisheng.permission.domain.services import permission_service
 
-    async def fake(user_id, relation, object_type, login_user=None):  # noqa: ARG001
+    async def fake(user_id, relation, object_type, login_user=None):
         return ids
 
-    monkeypatch.setattr(
-        permission_service.PermissionService, "list_accessible_ids", fake
-    )
+    monkeypatch.setattr(permission_service.PermissionService, "list_accessible_ids", fake)
 
 
 def _patch_space_primary_total(monkeypatch, total):
     """Patch the helper that counts primary file_ids in the space."""
-    async def fake(self, space_id):  # noqa: ARG001
+
+    async def fake(self, space_id):
         return total
 
     monkeypatch.setattr(
@@ -129,7 +123,8 @@ def _patch_space_primary_ids(monkeypatch, ids):
     """Patch helper that lists primary file_ids in space (used when scoping
     the user's accessible_ids to the queried space).
     """
-    async def fake(self, space_id):  # noqa: ARG001
+
+    async def fake(self, space_id):
         return set(ids)
 
     monkeypatch.setattr(
@@ -249,15 +244,78 @@ async def test_build_index_prefilter_intersects_candidate_ids(monkeypatch):
     _patch_space_primary_ids(monkeypatch, set(range(1, 1001)))
 
     # Candidate only includes 3 ids → K reduced to 3
-    result = await svc.build_index_prefilter(
-        space_id=10, candidate_file_ids=[5, 6, 7]
-    )
+    result = await svc.build_index_prefilter(space_id=10, candidate_file_ids=[5, 6, 7])
 
     assert result.strategy == "in"
     assert result.accessible_size == 3
     assert "5" in result.milvus_expr
     assert "6" in result.milvus_expr
     assert "7" in result.milvus_expr
+
+
+@pytest.mark.asyncio
+async def test_build_index_prefilter_admin_still_scopes_to_candidate(monkeypatch):
+    """Fix 1: admin (`list_accessible_ids` → None) must STILL push down the
+    folder / tag business scope. The folder/tag boundary has no result-layer
+    backstop, so dropping it (the old ``strategy='none'`` short-circuit) made
+    directory- and tag-scoped Q&A search the whole space.
+    """
+    svc = _make_service(is_admin=True)
+    _patch_accessible_ids(monkeypatch, None)
+    _patch_space_primary_total(monkeypatch, 1000)
+    _patch_space_primary_ids(monkeypatch, set(range(1, 1001)))
+
+    # Folder/tag scope: only files 5, 6, 7.
+    result = await svc.build_index_prefilter(space_id=10, candidate_file_ids=[5, 6, 7])
+
+    assert result.strategy == "in"
+    assert result.accessible_size == 3
+    assert result.milvus_expr is not None
+    for vid in (5, 6, 7):
+        assert str(vid) in result.milvus_expr
+    # An out-of-scope id must not leak into the pushed-down filter.
+    assert " 999" not in result.milvus_expr
+
+
+@pytest.mark.asyncio
+async def test_build_index_prefilter_admin_no_candidate_stays_none(monkeypatch):
+    """Fix 1 must not regress the pure-permission admin path: with no explicit
+    folder/tag scope, admin still gets ``strategy='none'`` (sees everything,
+    no pushdown) and never touches the space-id DB helpers.
+    """
+    svc = _make_service(is_admin=True)
+    _patch_accessible_ids(monkeypatch, None)
+
+    result = await svc.build_index_prefilter(space_id=10, candidate_file_ids=None)
+
+    assert result.strategy == "none"
+    assert result.milvus_expr is None
+    assert result.es_filter is None
+
+
+@pytest.mark.asyncio
+async def test_build_index_prefilter_large_candidate_never_falls_to_none(monkeypatch):
+    """Fix 2: when a folder/tag scope is provided, retrieval must always be
+    constrained to it, even when both the scoped set and its complement exceed
+    the IN/NOT-IN threshold. The old ``both sides too large → strategy='none'``
+    fallback silently dropped the business scope (no result-layer backstop
+    enforces it), letting Q&A leak outside the chosen directory / tag.
+    """
+    svc = _make_service()
+    # Everything accessible; huge space; candidate (folder) is itself large.
+    _patch_accessible_ids(monkeypatch, [str(i) for i in range(1, 100001)])
+    _patch_space_primary_total(monkeypatch, 100000)
+    _patch_space_primary_ids(monkeypatch, set(range(1, 100001)))
+
+    # scoped = 1..20000 (k=20000 > 5000) and complement = 80000 > 5000 → the
+    # old code returned 'none'. The smaller of the two lists is the IN set.
+    candidate = list(range(1, 20001))
+    result = await svc.build_index_prefilter(space_id=10, candidate_file_ids=candidate)
+
+    assert result.strategy != "none"
+    assert result.accessible_size == 20000
+    # Scope is enforced at the index layer one way or another.
+    assert result.milvus_expr is not None or result.es_filter is not None
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +336,7 @@ def _patch_effective_permissions(
     """
     from bisheng.knowledge.domain.models import knowledge_file as kf_module
 
-    async def fake_aget(cls, file_ids):  # noqa: ARG001
+    async def fake_aget(cls, file_ids):
         return [MagicMock(id=int(fid), file_type=1) for fid in file_ids]
 
     monkeypatch.setattr(
@@ -287,12 +345,10 @@ def _patch_effective_permissions(
         classmethod(fake_aget),
     )
 
-    async def fake_effective(item, *, space_id, context):  # noqa: ARG001
+    async def fake_effective(item, *, space_id, context):
         return {"view_file"} if int(item.id) in allowed_file_ids else set()
 
-    space_svc_mock._get_child_item_effective_permission_ids = AsyncMock(
-        side_effect=fake_effective
-    )
+    space_svc_mock._get_child_item_effective_permission_ids = AsyncMock(side_effect=fake_effective)
 
 
 @pytest.mark.asyncio
@@ -383,9 +439,7 @@ async def test_post_filter_visible_files_regression_revoke_overrides_membership(
     # _get_child_item_effective_permission_ids returns {'view_file'} only for 5.
     _patch_effective_permissions(monkeypatch, space_svc_mock, {5})
 
-    result = await svc.post_filter_visible_files(
-        space_id=3565, file_ids={1, 2, 3, 4, 5}
-    )
+    result = await svc.post_filter_visible_files(space_id=3565, file_ids={1, 2, 3, 4, 5})
 
     assert result == {5}, (
         "Expected only the non-revoked file to survive; got "

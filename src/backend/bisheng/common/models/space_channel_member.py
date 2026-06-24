@@ -624,23 +624,6 @@ class SpaceChannelMemberDao:
             await session.commit()
 
     @classmethod
-    async def pin_space_id(cls, space_id: int, user_id=int, is_pinned: bool = True) -> bool:
-        statement = (
-            update(SpaceChannelMember)
-            .where(
-                col(SpaceChannelMember.business_id) == str(space_id),
-                col(SpaceChannelMember.business_type) == BusinessTypeEnum.SPACE,
-                col(SpaceChannelMember.user_id) == user_id,
-                col(SpaceChannelMember.status) == MembershipStatusEnum.ACTIVE,
-            )
-            .values(is_pinned=is_pinned)
-        )
-        async with get_async_db_session() as session:
-            await session.execute(statement)
-            await session.commit()
-            return True
-
-    @classmethod
     async def delete_space_member(cls, space_id: int, user_id) -> bool:
         statement = delete(SpaceChannelMember).where(
             col(SpaceChannelMember.business_id) == str(space_id),

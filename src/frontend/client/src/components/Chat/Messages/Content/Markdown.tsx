@@ -347,9 +347,13 @@ function CitationPreviewCard({
 
   const formattedSourceMeta = isWeb ? formatSourceMeta(preview.sourceMeta) : '';
   const ragTitleParts = splitRagTitle(preview.title);
-  // RAG snippets come from Markdown and often carry blank lines that waste the
-  // line-clamp budget. Drop whitespace-only lines so more real text fits.
+  // RAG snippets come from Markdown. Strip Markdown image syntax (![alt](url))
+  // and raw HTML tags (e.g. <div><img src=...>) — both render as link/markup
+  // noise in this plain-text snippet — then drop whitespace-only lines so the
+  // line-clamp budget is spent on real text.
   const ragSnippetText = String(preview.snippet || '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/<\/?[a-zA-Z][^>]*>/g, '')
     .split('\n')
     .filter((line) => line.trim() !== '')
     .join('\n');
@@ -947,6 +951,12 @@ const Markdown = memo(({
     );
   }
 
+  // The same chunk ref is reused across markers, and matchIndex is only unique
+  // within a single text node — so two markers can collide on the same
+  // popoverKey. A render-scoped sequence guarantees a globally-unique key per
+  // marker (the single activeCitationPopoverKey can then track each one).
+  let citationKeySeq = 0;
+
   return (
     <ArtifactProvider>
       <CodeBlockProvider>
@@ -970,6 +980,7 @@ const Markdown = memo(({
                   for (const match of children.matchAll(citationPattern)) {
                     const matchText = match[0];
                     const matchIndex = match.index ?? 0;
+                    const citationKeyId = citationKeySeq++;
 
                     if (matchIndex > lastIndex) {
                       nodes.push(children.slice(lastIndex, matchIndex));
@@ -983,10 +994,10 @@ const Markdown = memo(({
                       if (webContent?.[legacyIndex - 1]) {
                         nodes.push(
                           <Citation
-                            key={`legacy-${legacyIndexValue}-${matchIndex}`}
+                            key={`legacy-${legacyIndexValue}-${matchIndex}-${citationKeyId}`}
                             webContent={webContent}
                             loadCitationDetail={loadCitationDetail}
-                            popoverKey={`legacy-${legacyIndexValue}-${matchIndex}`}
+                            popoverKey={`legacy-${legacyIndexValue}-${matchIndex}-${citationKeyId}`}
                             activePopoverKey={activeCitationPopoverKey}
                             onActivePopoverKeyChange={setActiveCitationPopoverKey}
                             onClosePopover={handleCloseCitationPopover}
@@ -1021,12 +1032,12 @@ const Markdown = memo(({
                         if (citationData) {
                           nodes.push(
                             <Citation
-                              key={`rag-legacy-${citationData.ref}-${matchIndex}`}
+                              key={`rag-legacy-${citationData.ref}-${matchIndex}-${citationKeyId}`}
                               data={citationData}
                               initialDetail={citationDetailMap[citationData.citationId] ?? citationDetail}
                               initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
                               loadCitationDetail={loadCitationDetail}
-                              popoverKey={`rag-legacy-${citationData.ref}-${matchIndex}`}
+                              popoverKey={`rag-legacy-${citationData.ref}-${matchIndex}-${citationKeyId}`}
                               activePopoverKey={activeCitationPopoverKey}
                               onActivePopoverKeyChange={setActiveCitationPopoverKey}
                               onClosePopover={handleCloseCitationPopover}
@@ -1043,12 +1054,12 @@ const Markdown = memo(({
                       if (citationData) {
                         nodes.push(
                           <Citation
-                            key={`private-${privateRef}-${matchIndex}`}
+                            key={`private-${privateRef}-${matchIndex}-${citationKeyId}`}
                             data={citationData}
                             initialDetail={citationDetailMap[citationData.citationId]}
                             initialNotPermitted={forbiddenCitationIds.has(citationData.citationId)}
                             loadCitationDetail={loadCitationDetail}
-                            popoverKey={`private-${privateRef}-${matchIndex}`}
+                            popoverKey={`private-${privateRef}-${matchIndex}-${citationKeyId}`}
                             activePopoverKey={activeCitationPopoverKey}
                             onActivePopoverKeyChange={setActiveCitationPopoverKey}
                             onClosePopover={handleCloseCitationPopover}

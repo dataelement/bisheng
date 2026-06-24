@@ -11,6 +11,13 @@ interface UseResizablePanelOptions {
     minRightWidth: number;
     /** Ref to the container element for calculating bounds */
     containerRef: React.RefObject<HTMLDivElement>;
+    /**
+     * Optional: compute the default left width (px) from the container width,
+     * used only while the user hasn't dragged the splitter (no persisted ratio).
+     * Takes precedence over `defaultRatio`. Lets the default split match an
+     * external layout (e.g. the two-column browse grid) instead of a fixed ratio.
+     */
+    defaultLeftWidth?: (containerWidth: number) => number;
 }
 
 /**
@@ -24,15 +31,18 @@ export function useResizablePanel({
     minLeftWidth,
     minRightWidth,
     containerRef,
+    defaultLeftWidth,
 }: UseResizablePanelOptions) {
-    // Store ratio (0–1) internally; derive pixel width on render
-    const [ratio, setRatio] = useState<number>(() => {
+    // Store ratio (0–1) internally; derive pixel width on render.
+    // `null` means the user hasn't dragged yet → fall back to the default
+    // width (defaultLeftWidth(containerWidth) or defaultRatio).
+    const [ratio, setRatio] = useState<number | null>(() => {
         const saved = localStorage.getItem(storageKey);
         if (saved) {
             const parsed = parseFloat(saved);
             if (!isNaN(parsed) && parsed > 0 && parsed < 1) return parsed;
         }
-        return defaultRatio;
+        return null;
     });
     const [isResizing, setIsResizing] = useState(false);
 
@@ -45,13 +55,20 @@ export function useResizablePanel({
         const containerWidth = containerRef.current?.getBoundingClientRect().width ?? 0;
         if (containerWidth === 0) return minLeftWidth;
 
-        let px = Math.round(ratio * containerWidth);
+        // No persisted ratio → use the computed default width, else the default ratio.
+        const basePx = ratio !== null
+            ? ratio * containerWidth
+            : defaultLeftWidth
+                ? defaultLeftWidth(containerWidth)
+                : defaultRatio * containerWidth;
+
+        let px = Math.round(basePx);
         // Enforce minimum constraints
         px = Math.max(px, minLeftWidth);
         px = Math.min(px, containerWidth - minRightWidth);
         return px;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ratio, containerRef, minLeftWidth, minRightWidth, mounted]);
+    }, [ratio, containerRef, minLeftWidth, minRightWidth, mounted, defaultLeftWidth, defaultRatio]);
 
     const leftWidth = getLeftWidth();
 
@@ -69,7 +86,8 @@ export function useResizablePanel({
         document.body.style.userSelect = "";
         document.body.style.cursor = "";
         setRatio((r) => {
-            localStorage.setItem(storageKey, r.toFixed(4));
+            // r stays null if the user clicked the splitter without dragging.
+            if (r !== null) localStorage.setItem(storageKey, r.toFixed(4));
             return r;
         });
     }, [storageKey]);
