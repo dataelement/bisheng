@@ -1,12 +1,14 @@
-import { Check, X } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, X } from "lucide-react"
 import React, { useEffect, useRef, useState } from "react"
 import { Select, SelectContent, SelectTrigger } from "."
 import { Badge } from "../badge"
 import { SearchInput } from "../input"
 import { cname, useDebounce } from "../utils"
 
+type OptionValue = string | number;
+
 const MultiItem: React.FC<
-    { active: boolean; children: React.ReactNode; value: string; onClick: (value: string, label: string) => void }
+    { active: boolean; children: React.ReactNode; value: OptionValue; onClick: (value: OptionValue, label: string) => void }
 > = ({ active, children, value, onClick }) => {
 
     return <div
@@ -23,7 +25,13 @@ const MultiItem: React.FC<
 }
 interface Option {
     label: string;
+    value: OptionValue;
+}
+
+interface OptionGroup {
+    label: string;
     value: string;
+    options: Option[];
 }
 
 interface BaseProps<T> {
@@ -38,6 +46,10 @@ interface BaseProps<T> {
     className?: string;
     contentClassName?: string;
     options: Option[];
+    groupedOptions?: OptionGroup[];
+    loading?: boolean;
+    loadingText?: string;
+    emptyText?: string;
     children?: React.ReactNode;
     placeholder?: string;
     searchPlaceholder?: string;
@@ -78,6 +90,10 @@ const MultiSelect = ({
     close = false,
     defaultValue = [],
     options = [],
+    groupedOptions = [],
+    loading = false,
+    loadingText = '',
+    emptyText = '',
     children = null,
     placeholder = '',
     searchPlaceholder = '',
@@ -105,8 +121,17 @@ const MultiSelect = ({
         // }
     }, [options]);
 
+    const [expandedGroups, setExpandedGroups] = React.useState<Record<string, boolean>>({})
+    useEffect(() => {
+        if (!groupedOptions.length) return;
+        setExpandedGroups((prev) => groupedOptions.reduce((acc, group) => {
+            acc[group.value] = prev[group.value] ?? true;
+            return acc;
+        }, {} as Record<string, boolean>))
+    }, [groupedOptions]);
+
     // delete 
-    const handleDelete = (value: string) => {
+    const handleDelete = (value: OptionValue) => {
         const newValues = (values as any[]).filter((item) => {
             const _value = onScrollLoad ? (item as Option).value : item;
             return _value !== value
@@ -116,8 +141,8 @@ const MultiSelect = ({
     }
     // add
     const triggerRef = useRef(null)
-    const handleSwitch = (value: string, label: string) => {
-        if (lockedValues.includes(value)) {
+    const handleSwitch = (value: OptionValue, label: string) => {
+        if (lockedValues.includes(value as string)) {
             return
         }
 
@@ -175,6 +200,7 @@ const MultiSelect = ({
         if (!created) return
         if (!footerRef.current) return
         if (!onScrollLoad) return // 不绑定滚动事件
+        const footer = footerRef.current;
 
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
@@ -190,9 +216,9 @@ const MultiSelect = ({
         });
 
         // 开始观察目标元素
-        observer.observe(footerRef.current);
+        observer.observe(footer);
 
-        return () => observer.unobserve(footerRef.current);
+        return () => observer.unobserve(footer);
     }, [created])
 
     const handleClearClick = () => {
@@ -223,7 +249,7 @@ const MultiSelect = ({
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={item.value}
                                     className={`flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all ${errorKeys.includes(item.value) && 'bg-red-100 border-red-600'}`}>
                                     {item.label}
-                                    {lockedValues.includes(item.value) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item.value)}></X>}
+                                    {lockedValues.includes(item.value as string) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(item.value)}></X>}
                                 </Badge>
                             )
                         }
@@ -233,7 +259,7 @@ const MultiSelect = ({
                             options.filter(option => (values as string[]).includes(option.value)).map(option =>
                                 <Badge onPointerDown={(e) => e.stopPropagation()} key={option.value} className="flex whitespace-normal items-center gap-1 select-none bg-primary/20 text-primary hover:bg-primary/15 m-[2px] break-all  11">
                                     {option.label}
-                                    {lockedValues.includes(option.value) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(option.value)}></X>}
+                                    {lockedValues.includes(option.value as string) || <X className="h-3 w-3 min-w-3" onClick={() => handleDelete(option.value)}></X>}
                                 </Badge>
                             )
                         }
@@ -260,13 +286,42 @@ const MultiSelect = ({
         >
             <div className="mt-2 w-full min-w-[var(--radix-select-trigger-width)]">
                 {
-                    optionFilter.map((item) => (
+                    groupedOptions.length ? groupedOptions.map((group) => (
+                        <div key={group.value} className="mb-1">
+                            <button
+                                type="button"
+                                className="flex w-full items-center gap-1 rounded-sm px-1 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-muted/60"
+                                onClick={() => setExpandedGroups((prev) => ({ ...prev, [group.value]: !prev[group.value] }))}
+                            >
+                                {expandedGroups[group.value] === false ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                                <span>{group.label}</span>
+                                <span className="text-[11px] text-muted-foreground/70">({group.options.length})</span>
+                            </button>
+                            {expandedGroups[group.value] !== false && group.options.map((item) => (
+                                <div className="pl-4" key={item.value}>
+                                    <MultiItem
+                                        active={values.some(val => val === item.value || val.value === item.value)}
+                                        value={item.value}
+                                        onClick={handleSwitch}
+                                    >{item.label}</MultiItem>
+                                </div>
+                            ))}
+                        </div>
+                    )) : optionFilter.map((item) => (
                         <MultiItem
+                            key={item.value}
                             active={values.some(val => val === item.value || val.value === item.value)}
                             value={item.value}
                             onClick={handleSwitch}
                         >{item.label}</MultiItem>
                     ))
+                }
+                {
+                    loading && <div className="py-2 text-center text-xs text-muted-foreground">{loadingText}</div>
+                }
+                {
+                    emptyText && !loading && (groupedOptions.length ? !groupedOptions.some(group => group.options.length) : optionFilter.length === 0)
+                    && <div className="py-2 text-center text-xs text-muted-foreground">{emptyText}</div>
                 }
                 <div ref={footerRef} style={{ height: 20 }}></div>
             </div>

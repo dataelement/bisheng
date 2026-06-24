@@ -53,10 +53,14 @@ class KnowledgeRetriever(RagUtils):
                         }
                     } for one in question_answer]
                 except Exception as e:
+                    if self._knowledge_type == 'space':
+                        raise
                     question_answer = str(e)
                 ret[output_key] = question_answer
         except Exception as e:
             logger.exception(f"KnowledgeRetriever node run error: {e}")
+            if self._knowledge_type == 'space':
+                raise
             ret = {
                 one: str(e) for one in self._output_keys
             }

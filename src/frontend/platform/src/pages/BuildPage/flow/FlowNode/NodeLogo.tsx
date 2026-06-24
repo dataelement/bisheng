@@ -12,7 +12,9 @@ export const Icons = {
     'end': FlagTriangleRight,
     'condition': Split,
     'report': FileDown,
-    'knowledge_retriever':BookOpenCheck
+    'knowledge_retriever':BookOpenCheck,
+    'user_selected_knowledge_rag': BookOpenTextIcon,
+    'user_selected_knowledge_retriever': BookOpenCheck
 }
 export const Colors = {
     'start': 'bg-[#FFD89A]',
@@ -26,7 +28,9 @@ export const Colors = {
     'end': 'bg-red-400',
     'condition': 'bg-[#EDC9E9]',
     'report': 'bg-[#9CE4F4]',
-    'knowledge_retriever':'bg-[#B8EEDF]'
+    'knowledge_retriever':'bg-[#B8EEDF]',
+    'user_selected_knowledge_rag': 'bg-[#BBDBFF]',
+    'user_selected_knowledge_retriever': 'bg-[#B8EEDF]'
 
 }
 

@@ -231,6 +231,19 @@ export interface GroupedKnowledgeSpaces {
     personalSpaces: KnowledgeSpace[];
 }
 
+export interface WorkflowKnowledgeBase {
+    id: string;
+    name: string;
+}
+
+export interface WorkflowKnowledgeFile {
+    id: string;
+    name: string;
+    status?: number | string;
+    fileType?: number | string;
+    fileLevelPath?: string;
+}
+
 export type SpaceSubscribeStatus = "subscribed" | "pending";
 
 export interface SubscribeSpaceResult {
@@ -984,6 +997,47 @@ export async function getGroupedSpacesApi(params?: {
         teamSpaces: asArray<RawKnowledgeSpace>(payload.team_spaces).map(mapSpace),
         personalSpaces: asArray<RawKnowledgeSpace>(payload.personal_spaces).map(mapSpace),
     };
+}
+
+export async function getWorkflowKnowledgeBasesApi(params?: {
+    keyword?: string;
+    page_size?: number;
+}): Promise<WorkflowKnowledgeBase[]> {
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge`, {
+        params: {
+            permission_id: "use_kb",
+            page_size: params?.page_size ?? 80,
+            name: params?.keyword ?? "",
+            type: 0,
+        },
+    });
+    const payload: any = res?.data ?? res ?? {};
+    return extractList<any>(payload).map((item) => ({
+        id: String(item?.id ?? ""),
+        name: String(item?.name ?? ""),
+    })).filter((item) => item.id && item.name);
+}
+
+export async function getWorkflowKnowledgeFilesApi(params: {
+    knowledge_id: string;
+    page_size?: number;
+}): Promise<WorkflowKnowledgeFile[]> {
+    if (!params.knowledge_id) return [];
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/file_list/${params.knowledge_id}`, {
+        params: {
+            page_num: 1,
+            page_size: params.page_size ?? 1000,
+        },
+        paramsSerializer: request.paramsSerializer,
+    });
+    const payload: any = res?.data ?? res ?? {};
+    return extractList<any>(payload).map((item) => ({
+        id: String(item?.id ?? ""),
+        name: String(item?.file_name ?? item?.name ?? ""),
+        status: item?.status,
+        fileType: item?.file_type,
+        fileLevelPath: item?.file_level_path ?? "",
+    })).filter((item) => item.id && item.name);
 }
 
 export async function getCreateSpaceOptionsApi(): Promise<KnowledgeSpaceCreateOptions> {

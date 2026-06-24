@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from bisheng.workflow.common.node import NodeType
 from bisheng.workflow.nodes.agent.agent import AgentNode
 from bisheng.workflow.nodes.code.code import CodeNode
@@ -12,6 +14,13 @@ from bisheng.workflow.nodes.rag.rag import RagNode
 from bisheng.workflow.nodes.report.report import ReportNode
 from bisheng.workflow.nodes.start.start import StartNode
 from bisheng.workflow.nodes.tool.tool import ToolNode
+from bisheng.workflow.nodes.user_selected_knowledge_rag.user_selected_knowledge_rag import UserSelectedKnowledgeRagNode
+from bisheng.workflow.nodes.user_selected_knowledge_retriever.user_selected_knowledge_retriever import (
+    UserSelectedKnowledgeRetriever,
+)
+
+if TYPE_CHECKING:
+    from bisheng.workflow.nodes.base import BaseNode
 
 NODE_CLASS_MAP = {
     NodeType.START.value: StartNode,
@@ -20,6 +29,7 @@ NODE_CLASS_MAP = {
     NodeType.OUTPUT.value: OutputNode,
     NodeType.TOOL.value: ToolNode,
     NodeType.RAG.value: RagNode,
+    NodeType.USER_SELECTED_KNOWLEDGE_RAG.value: UserSelectedKnowledgeRagNode,
     NodeType.REPORT.value: ReportNode,
     NodeType.QA_RETRIEVER.value: QARetrieverNode,
     NodeType.CONDITION.value: ConditionNode,
@@ -27,17 +37,18 @@ NODE_CLASS_MAP = {
     NodeType.CODE.value: CodeNode,
     NodeType.LLM.value: LLMNode,
     NodeType.KNOWLEDGE_RETRIEVER.value: KnowledgeRetriever,
+    NodeType.USER_SELECTED_KNOWLEDGE_RETRIEVER.value: UserSelectedKnowledgeRetriever,
 }
 
 
 class NodeFactory:
     @classmethod
-    def get_node_class(cls, node_type: str) -> 'BaseNode':
+    def get_node_class(cls, node_type: str) -> "BaseNode":
         return NODE_CLASS_MAP.get(node_type)
 
     @classmethod
-    def instance_node(cls, node_type: str, **kwargs) -> 'BaseNode':
+    def instance_node(cls, node_type: str, **kwargs) -> "BaseNode":
         node_class = cls.get_node_class(node_type)
         if node_class is None:
-            raise Exception(f'Unknown node type:{node_type}')
+            raise Exception(f"Unknown node type:{node_type}")
         return node_class(**kwargs)

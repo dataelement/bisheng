@@ -4573,6 +4573,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 grouped.personal_spaces.append(space)
         return grouped
 
+    async def get_authorized_space_options(
+        self,
+        keyword: str = "",
+        page: int = 1,
+        page_size: int = 20,
+        order_by: str = "name",
+    ) -> dict:
+        """Return spaces the current user can use in workflow selectors."""
+        grouped = await self.get_grouped_spaces(order_by=order_by)
+        spaces = (
+            grouped.public_spaces
+            + grouped.department_spaces
+            + grouped.team_spaces
+            + grouped.personal_spaces
+        )
+        normalized_keyword = (keyword or "").strip().lower()
+        if normalized_keyword:
+            spaces = [
+                space for space in spaces
+                if normalized_keyword in (space.name or "").lower()
+            ]
+
+        total = len(spaces)
+        start = max(page - 1, 0) * page_size
+        end = start + page_size
+        return {
+            "data": spaces[start:end],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": end < total,
+        }
+
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
 

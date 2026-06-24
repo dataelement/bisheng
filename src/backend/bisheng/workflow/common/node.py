@@ -1,12 +1,13 @@
 import copy
 from enum import Enum
-from typing import Optional, Any, List
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
 
 class NodeType(Enum):
-    """ Node type """
+    """Node type"""
+
     START = "start"
     END = "end"
     INPUT = "input"
@@ -18,44 +19,46 @@ class NodeType(Enum):
     FAKE_OUTPUT = "fake_output"
     QA_RETRIEVER = "qa_retriever"
     RAG = "rag"
+    USER_SELECTED_KNOWLEDGE_RAG = "user_selected_knowledge_rag"
     REPORT = "report"
     TOOL = "tool"
     KNOWLEDGE_RETRIEVER = "knowledge_retriever"
+    USER_SELECTED_KNOWLEDGE_RETRIEVER = "user_selected_knowledge_retriever"
 
-    NOTE = 'note'  # Notes node Knowledge is used to display annotations, not actual execution nodes
+    NOTE = "note"  # Notes node Knowledge is used to display annotations, not actual execution nodes
 
 
 class NodeParams(BaseModel):
     key: str = Field(default="", description="Variablekey")
-    label: Optional[str] = Field("", description="Variable description text")
-    value: Optional[Any] = Field(None, description="Value of the variable")
+    label: str | None = Field("", description="Variable description text")
+    value: Any | None = Field(None, description="Value of the variable")
 
     # Variable type -> Detailed reference for data format https://dataelem.feishu.cn/wiki/IfBvwwvfFiHjuQkjFJgcxzoGnxb
-    type: Optional[str] = Field("", description="Variable type")
-    help: Optional[str] = Field("", description="Variable Help Text")
-    tab: Optional[str] = Field("", description="Variable belongs totab, empty to show all")
-    placeholder: Optional[str] = Field("", description="Variable placeholder text")
-    required: Optional[bool] = Field(False, description="Required?")
-    options: Optional[Any] = Field(None, description="Variable options")
+    type: str | None = Field("", description="Variable type")
+    help: str | None = Field("", description="Variable Help Text")
+    tab: str | None = Field("", description="Variable belongs totab, empty to show all")
+    placeholder: str | None = Field("", description="Variable placeholder text")
+    required: bool | None = Field(False, description="Required?")
+    options: Any | None = Field(None, description="Variable options")
 
 
 class NodeGroupParams(BaseModel):
-    name: Optional[str] = Field(default="", description="Group name")
-    params: List[NodeParams] = Field(..., description="Group params")
-    description: Optional[str] = Field(default="", description="Node description")
+    name: str | None = Field(default="", description="Group name")
+    params: list[NodeParams] = Field(..., description="Group params")
+    description: str | None = Field(default="", description="Node description")
 
 
 class BaseNodeData(BaseModel):
     id: str = Field(default="", description="Unique id for node")
     type: str = Field(..., description="Node type")
-    name: Optional[str] = Field(default="", description="Node name")
-    description: Optional[str] = Field(default="", description="Node description")
-    group_params: Optional[List[NodeGroupParams]] = Field(default=None, description="Node group params")
-    tab: Optional[dict] = Field({}, description="tab config")
-    tool_key: Optional[str] = Field("", description="unique tool id, only for tool node")
-    v: Optional[int] = Field(default=0, description="node version")
+    name: str | None = Field(default="", description="Node name")
+    description: str | None = Field(default="", description="Node description")
+    group_params: list[NodeGroupParams] | None = Field(default=None, description="Node group params")
+    tab: dict | None = Field({}, description="tab config")
+    tool_key: str | None = Field("", description="unique tool id, only for tool node")
+    v: int | None = Field(default=0, description="node version")
 
-    @field_validator('v', mode='before')
+    @field_validator("v", mode="before")
     @classmethod
     def convert_v_to_int(cls, v: str | int | None) -> int:
         if isinstance(v, str):
