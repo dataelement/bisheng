@@ -188,7 +188,7 @@ export default function MobileNav({
                     title={chatMobileHeader.title}
                     className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
                   >
-                    <span className="truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                    <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
                       {chatMobileHeader.title}
                     </span>
                     <Outlined.Down
@@ -201,7 +201,7 @@ export default function MobileNav({
                 ) : (
                   <span
                     id="app-title"
-                    className="truncate text-center text-[14px] font-medium leading-[22px] text-[#212121]"
+                    className="truncate text-center text-[16px] font-medium leading-6 text-[#212121]"
                     title={chatMobileHeader.title}
                   >
                     {chatMobileHeader.title}
@@ -218,7 +218,7 @@ export default function MobileNav({
                   title={chatMobileHeader.title}
                   className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
                 >
-                  <span className="truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                  <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
                     {chatMobileHeader.title}
                   </span>
                   <Outlined.Down
@@ -280,7 +280,7 @@ export default function MobileNav({
                   aria-expanded={historyDropdownOpen}
                   className="flex min-w-0 max-w-full items-center justify-center gap-1 outline-none"
                 >
-                  <span className="truncate text-[14px] font-medium leading-[22px] text-[#212121]">
+                  <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
                     {localize('com_ui_chat_list')}
                   </span>
                   <Outlined.Down

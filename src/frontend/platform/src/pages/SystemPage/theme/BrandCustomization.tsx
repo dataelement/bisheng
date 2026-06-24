@@ -14,6 +14,7 @@ import type { BrandAsset, BrandAssetOption, BrandConfig, BrandText } from "@/con
 import { getBrandAssetOptionsApi, getBrandConfigApi, saveBrandConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { withBrandBaseUrl } from "@/utils/brand";
+import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Eye, RefreshCw, Save } from "lucide-react";
 import { ChangeEvent, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -454,6 +455,13 @@ export default function BrandCustomization() {
 
     return (
         <div className="h-full min-h-0 overflow-y-auto border-t bg-accent">
+            {loading ? (
+                // Wait for the API before rendering, so the BISHENG defaults
+                // don't flash in before the saved config arrives.
+                <div className="flex h-full items-center justify-center">
+                    <LoadingIcon className="size-7" />
+                </div>
+            ) : (
             <div className="mx-auto grid max-w-[1480px] grid-cols-1 gap-6 px-6 py-5 xl:grid-cols-[minmax(0,1fr)_520px]">
                 <div className="min-w-0 space-y-6">
                     <div className="flex items-center justify-between gap-3">
@@ -563,6 +571,7 @@ export default function BrandCustomization() {
 
                 <BrandPreviewPanel config={config} target={previewTarget} dark={Boolean(dark)} />
             </div>
+            )}
         </div>
     );
 }

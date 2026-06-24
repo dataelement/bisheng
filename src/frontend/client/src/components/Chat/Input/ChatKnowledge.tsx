@@ -526,7 +526,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
+                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
@@ -559,7 +559,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-[#f8f8f8] transition-colors outline-none",
+                    "flex h-8 w-8 items-center justify-center rounded-lg text-[#4E5969] cursor-pointer hover:bg-[#f8f8f8] transition-colors outline-none",
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
                   aria-label={localize('com_knowledge_add_file')}
@@ -593,7 +593,7 @@ export const ChatKnowledge = ({
           // compact for its short action items.
           variant === 'knowledge'
             ? 'w-[240px] overflow-hidden p-2'
-            : 'w-[200px] p-2',
+            : 'w-[160px] p-2',
           isMobile && 'touch-mobile:w-[min(calc(100vw-24px),320px)] touch-mobile:p-2',
           isMobile &&
           mobileTallPanel &&
@@ -619,7 +619,7 @@ export const ChatKnowledge = ({
             }}
             className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <Outlined.Attachment size={18} className="text-[#999]" />
+            <Outlined.Attachment size={16} className="text-[#999]" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
@@ -682,7 +682,7 @@ export const ChatKnowledge = ({
               <div className="flex items-center gap-2">
                 <div className="relative">
                   {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                  <Outlined.Books size={18} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
+                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
                 </div>
                 <span className="text-[14px] font-normal text-slate-700">
                   {localize('com_tools_org_knowledge')}
@@ -733,7 +733,7 @@ export const ChatKnowledge = ({
             <div className="flex min-w-0 items-center gap-2">
               <div className="relative shrink-0">
                 {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                <Outlined.Books size={18} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
+                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
               </div>
               <span className="truncate text-[14px] font-normal text-slate-700">
                 {localize('com_tools_org_knowledge')}
@@ -793,7 +793,7 @@ export const ChatKnowledge = ({
               }}
               className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none"
             >
-              <Outlined.Binoculars size={18} className={taskModeActive ? 'text-blue-600' : 'text-[#999]'} />
+              <Outlined.Binoculars size={16} className={taskModeActive ? 'text-blue-600' : 'text-[#999]'} />
               <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-600' : 'text-slate-700')}>
                 {localize('com_linsight_task_mode')}
               </span>

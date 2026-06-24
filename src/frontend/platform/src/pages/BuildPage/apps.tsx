@@ -383,7 +383,7 @@ export default function apps() {
                     ? <div className="absolute w-full h-full top-0 left-0 flex justify-center items-center z-10 bg-[rgba(255,255,255,0.6)] dark:bg-blur-shared">
                         <LoadingIcon />
                     </div>
-                    : <div className="mt-6 flex gap-2 flex-wrap pb-20 min-w-[980px]">
+                    : <div className="mt-6 flex gap-2 flex-wrap pb-20">
                         {canCreateApp && (
                             <AppTempSheet onSelect={handleCreateApp} onCustomCreate={handleCreateApp}>
                                 <CardComponent<FlowType>

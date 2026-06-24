@@ -5,7 +5,7 @@ declare global {
         SearchSkillsPage: any;
         errorAlerts: (errorList: string[]) => void
         _flow: any
-        /** Branding fields injected at runtime by public/assets/bisheng/config.js. */
+        /** Branding fields injected at runtime by brand-runtime.js (from /api/v1/brand/runtime-config, cached in localStorage). */
         BRAND_CONFIG?: {
             brandName?: { zh?: string; en?: string };
             linsightAgentName?: { zh?: string; en?: string };

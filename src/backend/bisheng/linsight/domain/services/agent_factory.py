@@ -21,6 +21,7 @@ this factory's signature.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 
 from langchain_core.language_models import BaseChatModel
@@ -218,22 +219,64 @@ def _build_researcher_prompt(has_knowledge_base: bool) -> str:
     return _LINSIGHT_RESEARCHER_PROMPT_TEMPLATE_ZH.replace("__KB_RESEARCH_LINE__", research_line)
 
 
+def _coerce_questions(value: object) -> list[dict]:
+    """Normalize the ``questions`` arg into a clean ``list[dict]``, tolerating
+    models that stringify nested tool arguments.
+
+    Some non-OpenAI models (observed with qwen3.7-max) serialize the whole
+    ``questions`` array — or each question object — as a JSON *string* on the
+    OpenAI-compatible function-calling path. Strict ``list[dict]`` validation
+    then rejects it ("Input should be a valid list") before ``ask_user`` ever
+    runs, so the model retries the same malformed call forever and never parks.
+
+    This coercion recovers the intended structure. Every step degrades rather
+    than raises: an unparseable payload becomes ``[]`` (ask_user still parks
+    with reason only) instead of hard-failing the HITL flow.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        try:
+            value = json.loads(stripped)
+        except (json.JSONDecodeError, ValueError):
+            return []
+    if not isinstance(value, list):
+        return []
+
+    out: list[dict] = []
+    for item in value:
+        if isinstance(item, str):
+            stripped_item = item.strip()
+            try:
+                item = json.loads(stripped_item)
+            except (json.JSONDecodeError, ValueError):
+                # Not JSON — treat the raw string as an open-ended question.
+                item = {"question": stripped_item}
+        if isinstance(item, dict):
+            out.append(item)
+    return out
+
+
 @tool
-async def ask_user(reason: str, questions: list[dict] | None = None) -> str:
+async def ask_user(reason: str, questions: list[dict] | str | None = None) -> str:
     """需要用户补充信息、做选择或确认时调用本工具暂停任务并向用户提问；用户回答后任务自动继续。
 
     只有调用本工具才会真正暂停等待用户输入——不要直接用普通文字提问后就结束任务。
 
     Args:
         reason: 总体说明，使用与用户输入一致的语言（例如“为了制定计划，请先确认以下问题”）。
-        questions: 结构化问题列表，每项形如
+        questions: 结构化问题数组（务必作为 JSON 数组传入，不要序列化成字符串），每项形如
             {"question": "问题标题", "options": ["选项1", "选项2"], "multiple": false}。
-            options 为空表示开放式自由输入；multiple=true 表示多选。没有具体选项时
-            questions 可留空，只给 reason。
+            options 为空表示开放式自由输入；multiple=true 表示多选。仅当确实没有任何
+            结构化问题、只需给一句总体说明时，才省略 questions。
 
     Returns:
         用户的回答文本。
     """
+    questions = _coerce_questions(questions)
     tool_calls = [
         {
             "id": f"q_{i}",

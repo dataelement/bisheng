@@ -81,7 +81,9 @@ export default function KnowledgeSpaceItem({
     // inside it is selected — folders take over the active styling once chosen
     // so only one row in the tree appears active at a time.
     const isFolderSelectedHere = isActive && !!urlFolderId;
-    const showSpaceHighlight = isActive && !isFolderSelectedHere;
+    // In compact mode (mobile switcher) there's no folder tree to take over the
+    // active styling, so the space row stays highlighted even inside a sub-folder.
+    const showSpaceHighlight = isActive && (compact || !isFolderSelectedHere);
 
     const handleSelectFolder = (folder: FolderSelectPayload | null) => {
         if (folder) {
@@ -112,7 +114,7 @@ export default function KnowledgeSpaceItem({
             {/* Space row */}
             <div
                 data-ee-row
-                className={`group flex items-center justify-between h-7 rounded-md cursor-pointer border ${showSpaceHighlight
+                className={`group flex items-center justify-between ${compact ? "h-9 px-2 rounded-lg" : "h-7 rounded-md"} cursor-pointer border ${showSpaceHighlight
                     ? "bg-[#EEEEEE] border-transparent"
                     : "border-transparent hover:bg-[#F4F4F4]"
                     }`}
@@ -124,8 +126,10 @@ export default function KnowledgeSpaceItem({
                 onClick={() => onSelect(space)}
             >
                 <div className="flex items-center flex-1">
-                    {/* Expand/collapse chevron — only shown when treeEnabled */}
-                    {treeEnabled && (
+                    {/* Expand/collapse chevron — only shown when treeEnabled.
+                        Hidden in compact (mobile switcher): there the whole row just
+                        navigates into the space, with no folder tree. */}
+                    {treeEnabled && !compact && (
                         <button
                             type="button"
                             className="flex size-5 shrink-0 items-center justify-center"
@@ -145,15 +149,15 @@ export default function KnowledgeSpaceItem({
 
                     <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
                         {type === "department" ? (
-                            <Outlined.City className={`${compact ? "size-3.5" : "size-4"} ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.City className={`size-4 ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         ) : (
-                            <Outlined.Notebook className={`${compact ? "size-3.5" : "size-4"} ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.Notebook className={`size-4 ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
                         )}
                     </div>
 
                     <DynamicEllipsisName
                         name={space.name}
-                        textClassName={`text-[12px] leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}
+                        textClassName={`${compact ? "text-[14px]" : "text-[12px]"} leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}
                         trailing={
                             space.isPinned ? (
                                 <Outlined.Pin className="size-3 shrink-0 text-[#86909C]" aria-hidden />
@@ -278,7 +282,7 @@ export default function KnowledgeSpaceItem({
                 No wrapper indent: each tree node uses its own paddingLeft
                 ((depth+1)*20) so depth-0 folders align with the space row's
                 icon position, matching the design's 20px-per-level structure. */}
-            {expanded && treeEnabled && (
+            {expanded && treeEnabled && !compact && (
                 <div>
                     <KnowledgeFolderTree
                         compact={compact}

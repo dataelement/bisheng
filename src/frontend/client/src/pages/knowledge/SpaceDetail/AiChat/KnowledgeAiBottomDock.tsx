@@ -305,8 +305,11 @@ export function KnowledgeAiBottomDock({
                             "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {/* Floating expand button — appears only after a conversation exists. */}
-                    {!open && messages.length > 0 && (
+                    {/* Floating expand button — appears whenever any conversation exists.
+                        Gate on `sessions`, not `messages`: starting a new chat clears
+                        `messages` but the session history is still there, so the arrow
+                        must persist. Shared by desktop + mobile-collapsed docks. */}
+                    {!open && (sessions.length > 0 || messages.length > 0) && (
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>

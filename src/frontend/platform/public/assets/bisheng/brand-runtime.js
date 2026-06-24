@@ -77,10 +77,16 @@
       : ((brandName && (brandName.en || brandName.zh)) || "");
   }
 
-  function applyDocumentBrand(config) {
-    var title = getBrandTitle(config && config.brandName);
-    if (title) {
-      document.title = title;
+  function applyDocumentBrand(config, applyTitle) {
+    // Only set the document title from the async runtime-config (applyTitle=true).
+    // The synchronous static config.js pass must NOT touch the title, otherwise
+    // its hardcoded default brand name flashes in the tab before the real brand
+    // arrives from /api/v1/brand/runtime-config.
+    if (applyTitle) {
+      var title = getBrandTitle(config && config.brandName);
+      if (title) {
+        document.title = title;
+      }
     }
 
     var favicon = config && config.assets && config.assets.favicon && config.assets.favicon.url;
@@ -92,7 +98,7 @@
     }
   }
 
-  function applyBrandConfig(incoming) {
+  function applyBrandConfig(incoming, applyTitle) {
     var previous = window.BRAND_CONFIG || {};
     var next = mergeObject(previous, incoming);
     next.brandName = mergeObject(previous.brandName, incoming && incoming.brandName);
@@ -124,7 +130,7 @@
     next.loadingAnimation = (next.loading && next.loading.animation) || previous.loadingAnimation || "";
 
     window.BRAND_CONFIG = next;
-    applyDocumentBrand(next);
+    applyDocumentBrand(next, applyTitle);
     return next;
   }
 
@@ -137,17 +143,60 @@
     });
   }
 
-  applyBrandConfig(window.BRAND_CONFIG || {});
+  var BRAND_CACHE_KEY = "bs_brand_runtime_config";
+
+  function readCachedBrandConfig() {
+    try {
+      var raw = window.localStorage && window.localStorage.getItem(BRAND_CACHE_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeCachedBrandConfig(config) {
+    try {
+      if (window.localStorage && config && typeof config === "object" && Object.keys(config).length) {
+        window.localStorage.setItem(BRAND_CACHE_KEY, JSON.stringify(config));
+      }
+    } catch (error) {
+      // localStorage may be unavailable (private mode) or over quota — ignore.
+    }
+  }
+
+  // Synchronous pass. A returning visitor has the last fetched brand cached in
+  // localStorage, so paint it immediately (favicon + title + loading icon) for
+  // an instant correct first frame. The cache only ever holds real fetched
+  // results, so applying the title here can never flash a generic default.
+  // First visit (empty cache): seed favicon/assets from the static config.js
+  // defaults but NOT the title, so the default brand name never flashes in the
+  // tab before the async fetch lands.
+  var cachedBrandConfig = readCachedBrandConfig();
+  if (cachedBrandConfig) {
+    applyBrandConfig(cachedBrandConfig, true);
+  } else {
+    applyBrandConfig(window.BRAND_CONFIG || {});
+  }
 
   window.__BRAND_CONFIG_READY__ = (window.fetch
     ? fetch(withRuntimeBaseUrl(RUNTIME_CONFIG_PATH), { cache: "no-store" }).then(readRuntimeConfig)
-    : Promise.resolve({})
+    : Promise.resolve(null)
   )
     .then(function (config) {
-      return applyBrandConfig(config || {});
+      // Fresh brand arrived — apply it (title + favicon) and cache it so the
+      // next visit paints instantly from the synchronous pass above.
+      if (config && typeof config === "object") {
+        writeCachedBrandConfig(config);
+        return applyBrandConfig(config, true);
+      }
+      return window.BRAND_CONFIG || {};
     })
     .catch(function () {
-      applyDocumentBrand(window.BRAND_CONFIG || {});
+      // Fetch failed — keep whatever the synchronous pass already applied
+      // (cached brand, or the static config.js favicon). Never write a title
+      // here, so a failed fetch can't flash the generic default brand name.
       return window.BRAND_CONFIG || {};
     });
 })();

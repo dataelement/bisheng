@@ -20,6 +20,7 @@ import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
+import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
@@ -481,11 +482,21 @@ export default function Subscription() {
 
     return (
         <div className="relative flex min-h-0 flex-1 flex-col touch-desktop:flex-row">
+            {/* 频道 / 广场 切换 — 提升到两个视图之上常驻，切换时同一滑块平滑移动，
+                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。 */}
+            {!isH5 && (activeChannel || showChannelSquare) ? (
+                <div className="absolute right-10 top-5 z-20">
+                    <ChannelSquareTabs
+                        active={showChannelSquare ? "square" : "channel"}
+                        onChannelClick={handleSquareBack}
+                        onSquareClick={handleChannelSquare}
+                    />
+                </div>
+            ) : null}
             {showChannelSquare ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <ChannelSquare
                         refreshKey={channelSquareRefreshKey}
-                        onBack={handleSquareBack}
                         onPreviewChannel={handleSquarePreview}
                     />
                 </div>
@@ -579,21 +590,22 @@ export default function Subscription() {
                         ) : channelsResolving ? (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center text-[#86909c]">
                                 {isH5 ? (
-                                    <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center px-4 pt-[env(safe-area-inset-top,0px)]">
-                                        <button
-                                            type="button"
-                                            aria-label={localize("com_nav_open_sidebar")}
-                                            onClick={() => setSystemMenuOpen(true)}
-                                            className={mobileHeadIconBtnClassName}
-                                        >
-                                            <Outlined.SidebarMenu className="size-4" />
-                                        </button>
-                                        <h1
-                                            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[24px] leading-8 text-[#212121]"
-                                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
-                                        >
-                                            {localize("com_subscription.subscribe")}
-                                        </h1>
+                                    <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                                        {/* Match the loaded ArticleList header: safe-area+8px top
+                                            padding on the wrapper, a separate h-11 row, size-5 icon. */}
+                                        <div className="relative flex h-11 items-center px-4">
+                                            <button
+                                                type="button"
+                                                aria-label={localize("com_nav_open_sidebar")}
+                                                onClick={() => setSystemMenuOpen(true)}
+                                                className={mobileHeadIconBtnClassName}
+                                            >
+                                                <Outlined.SidebarMenu className="size-5" />
+                                            </button>
+                                            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
+                                                {localize("com_subscription.subscribe")}
+                                            </h1>
+                                        </div>
                                     </div>
                                 ) : null}
                                 <LoadingIcon className="size-20 text-primary" />
@@ -601,21 +613,22 @@ export default function Subscription() {
                         ) : (
                             <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center">
                                 {isH5 ? (
-                                    <div className="absolute inset-x-0 top-0 z-10 flex h-11 items-center px-4 pt-[env(safe-area-inset-top,0px)]">
-                                        <button
-                                            type="button"
-                                            aria-label={localize("com_nav_open_sidebar")}
-                                            onClick={() => setSystemMenuOpen(true)}
-                                            className={mobileHeadIconBtnClassName}
-                                        >
-                                            <Outlined.SidebarMenu className="size-4" />
-                                        </button>
-                                        <h1
-                                            className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[24px] leading-8 text-[#212121]"
-                                            style={{ fontFamily: '"Source Han Serif SC", "Noto Serif SC", serif' }}
-                                        >
-                                            {localize("com_subscription.subscribe")}
-                                        </h1>
+                                    <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                                        {/* Match the loaded ArticleList header: safe-area+8px top
+                                            padding on the wrapper, a separate h-11 row, size-5 icon. */}
+                                        <div className="relative flex h-11 items-center px-4">
+                                            <button
+                                                type="button"
+                                                aria-label={localize("com_nav_open_sidebar")}
+                                                onClick={() => setSystemMenuOpen(true)}
+                                                className={mobileHeadIconBtnClassName}
+                                            >
+                                                <Outlined.SidebarMenu className="size-5" />
+                                            </button>
+                                            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
+                                                {localize("com_subscription.subscribe")}
+                                            </h1>
+                                        </div>
                                     </div>
                                 ) : null}
                                 <img

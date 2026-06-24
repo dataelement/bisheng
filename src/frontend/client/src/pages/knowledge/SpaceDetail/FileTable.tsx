@@ -640,8 +640,11 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
         }
     };
 
-    const isAllSelected = files.length > 0 && files.every((f) => selectedFiles.has(f.id));
-    const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
+    // Uploading folder placeholders aren't selectable — exclude them so the header
+    // checkbox can still reach the "all selected" state and select-all skips them.
+    const selectableFiles = files.filter((f) => !(f.type === FileType.FOLDER && isKnowledgeItemUploading(f)));
+    const isAllSelected = selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
+    const isIndeterminate = !isAllSelected && selectableFiles.some((f) => selectedFiles.has(f.id));
 
     return (
         <div className="relative flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
@@ -832,6 +835,9 @@ function FileRow({
     const isCreating = !!file.isCreating;
     // Uploading placeholder rows have no backend identity yet — not movable.
     const isUploading = isKnowledgeItemUploading(file);
+    // A folder still uploading its batch: masked (50% faded content), shows an
+    // "uploading" tag, not clickable, checkbox greyed-out — mirrors the card view.
+    const isUploadingFolderPlaceholder = isFolder && isUploading;
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
     // F034: 拖拽悬停的目标文件夹整行高亮（比选中态更深的蓝，明确"放到这里"）
     const rowBg = isFolderDragOver
@@ -866,10 +872,11 @@ function FileRow({
     const showMoveItem = Boolean(onMove) && !isCreating;
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
-    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory;
+    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
+    const showMoreMenu = !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
     const namePreviewable = isKnowledgeItemPreviewable(file);
     const [rowHovered, setRowHovered] = useState(false);
-    const showRowActions = rowHovered || moreMenuOpen;
+    const showRowActions = (rowHovered || moreMenuOpen) && !isUploadingFolderPlaceholder;
     const rowActions = (
         <div
             className="absolute right-3 top-1/2 z-[35] flex -translate-y-1/2 items-center gap-1"
@@ -988,9 +995,9 @@ function FileRow({
             data-knowledge-file-item
             draggable={rowDraggable && !isCreating && !isRenaming && !isUploading}
             onDragStart={rowDraggable ? onRowDragStart : undefined}
-            onDragOver={isFolder ? onFolderDragOver : undefined}
-            onDragLeave={isFolder ? onFolderDragLeave : undefined}
-            onDrop={isFolder ? onFolderDrop : undefined}
+            onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
+            onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
+            onDrop={isFolder && !isUploadingFolderPlaceholder ? onFolderDrop : undefined}
             className={cn(
                 // border-separate on the table means <tr>.border-b doesn't paint —
                 // push the row separator onto each direct <td> instead.
@@ -1010,7 +1017,12 @@ function FileRow({
                     <Checkbox
                         checked={isSelected}
                         onCheckedChange={onSelect}
-                        className={`size-4 border-gray-400 ${isSelected ? "border-primary" : ""}`}
+                        disabled={isUploadingFolderPlaceholder}
+                        className={cn(
+                            "size-4 border-gray-400",
+                            isSelected && "border-primary",
+                            isUploadingFolderPlaceholder && "cursor-not-allowed opacity-50",
+                        )}
                     />
                 </div>
             </TableCell>
@@ -1029,6 +1041,7 @@ function FileRow({
                     <div className={cn(
                         "flex size-4 shrink-0 items-center justify-center",
                         namePreviewable ? "text-[#212121]" : "text-[#999]",
+                        isUploadingFolderPlaceholder && "opacity-50",
                     )}>
                         {isFolder
                             ? <Outlined.FolderClose className="size-[14px]" />
@@ -1058,12 +1071,14 @@ function FileRow({
                             <span
                                 className={cn(
                                     "text-sm truncate flex-1",
-                                    namePreviewable
+                                    namePreviewable && !isUploadingFolderPlaceholder
                                         ? "cursor-pointer text-[#212121] hover:text-blue-400"
-                                        : "cursor-default text-[#999]"
+                                        : "cursor-default text-[#999]",
+                                    isUploadingFolderPlaceholder && "opacity-50",
                                 )}
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    if (isUploadingFolderPlaceholder) return;
                                     if (isFolder) {
                                         onNavigateFolder?.();
                                         return;
@@ -1076,8 +1091,9 @@ function FileRow({
                             </span>
                         </>
                     )}
-                    {/* Inline status tag — non-folder files in any non-success state. */}
-                    {!isFolder && file.status && file.status !== FileStatus.SUCCESS && (
+                    {/* Inline status tag — non-folder files in any non-success state,
+                        plus the uploading-folder placeholder ("上传中"). */}
+                    {file.status && ((!isFolder && file.status !== FileStatus.SUCCESS) || isUploadingFolderPlaceholder) && (
                         <StatusBadge status={file.status} file={file} />
                     )}
                     {/* Similar-document tag — occupies the same slot as the status tag
@@ -1106,7 +1122,7 @@ function FileRow({
                 className={cn("py-3 text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.fileType, minWidth: columnWidths.fileType, maxWidth: columnWidths.fileType }}
             >
-                <span className="truncate block">
+                <span className={cn("truncate block", isUploadingFolderPlaceholder && "opacity-50")}>
                     {isFolder ? localize("com_knowledge.folder") : (file.name.split('.').pop()?.toLowerCase() || "--")}
                 </span>
             </TableCell>
@@ -1116,7 +1132,7 @@ function FileRow({
                 className={cn("py-3 text-right text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.size, minWidth: columnWidths.size, maxWidth: columnWidths.size }}
             >
-                <span className="block truncate">
+                <span className={cn("block truncate", isUploadingFolderPlaceholder && "opacity-50")}>
                     {isFolder ? "--" : (file.size ? formatBytes(file.size, 2, true) : "--")}
                 </span>
             </TableCell>
@@ -1197,7 +1213,7 @@ function FileRow({
                 className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
                 style={{ width: columnWidths.updateTime, minWidth: columnWidths.updateTime, maxWidth: columnWidths.updateTime }}
             >
-                <span className="block truncate whitespace-nowrap">{formatTime(file.updatedAt)}</span>
+                <span className={cn("block truncate whitespace-nowrap", isUploadingFolderPlaceholder && "opacity-50")}>{formatTime(file.updatedAt)}</span>
             </TableCell>
 
             {/* Status column removed; non-success pills now render inline next to the file name. */}

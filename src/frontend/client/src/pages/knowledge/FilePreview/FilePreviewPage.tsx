@@ -251,6 +251,7 @@ export default function FilePreviewPage() {
                         allowDownload={canDownload}
                         onDownloadFile={handleDownloadFile}
                         hideHeader
+                        hideSidebar
                     />
                 </div>
 

@@ -79,10 +79,11 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect, compact
         <>
             <div
                 className={cn(
-                    // h-7 = 28px row, matching design and other items below the section title.
+                    // Row height: 28px on desktop; 32px (compact) on the mobile switcher.
                     // pr-1 matches design's 4px right padding; left padding comes from per-depth
                     // inline style so each nested level indents 20px (one 20×20 switcher slot).
-                    "group flex h-7 cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-[#1d2129] transition-colors hover:bg-[#F4F4F4]",
+                    "group flex cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-[#1d2129] transition-colors hover:bg-[#F4F4F4]",
+                    compact ? "h-8" : "h-7",
                     // Per design: selected folder = gray bg + semibold (600) title + dark folder icon.
                     isSelected && "bg-[#EEEEEE] font-semibold hover:bg-[#EEEEEE]"
                 )}

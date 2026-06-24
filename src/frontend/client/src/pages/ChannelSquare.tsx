@@ -1,7 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
-import { Search, ArrowLeft } from "lucide-react";
+import { Search } from "lucide-react";
 import { Input } from "~/components/ui/Input";
-import { Button } from "~/components/ui/Button";
 import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -43,7 +42,6 @@ interface ChannelSquareProps {
 }
 
 function ChannelSquare({
-  onBack,
   title,
   subtitle,
   searchPlaceholder,
@@ -260,19 +258,6 @@ function ChannelSquare({
             maskRepeat: "no-repeat",
           }}
         />
-
-        {/* 返回按钮：固定在头部左上，不跟随居中容器偏移 */}
-        {onBack && (
-          <div className="absolute left-4 top-4 z-10">
-            <Button
-              variant="ghost"
-              onClick={onBack}
-              className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-blue-500"
-            >
-              <ArrowLeft className="size-3.5" />
-            </Button>
-          </div>
-        )}
 
         {/* 主要内容 */}
         <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">

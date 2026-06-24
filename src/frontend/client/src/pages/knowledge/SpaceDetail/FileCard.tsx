@@ -141,6 +141,9 @@ export function FileCard({
 
     const isAdmin = userRole === SpaceRole.CREATOR || userRole === SpaceRole.ADMIN;
     const isFolder = file.type === FileType.FOLDER;
+    // A folder still uploading its batch: shown only as a name with a translucent
+    // "uploading" overlay, not clickable, not a drag source / drop target.
+    const isUploadingFolderPlaceholder = isFolder && isUploading;
     /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
     const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
     /** Subset of isNotParsed that should show the "In progress" overlay tag. */
@@ -179,6 +182,20 @@ export function FileCard({
      * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
      */
     const renderStatusOverlayTag = (inline = false) => {
+        // Uploading folder placeholder: a neutral "uploading" pill in the same
+        // bottom-left slot as the file status tags — no spinner over the icon.
+        if (isUploadingFolderPlaceholder) {
+            const pill = (
+                <div className="inline-flex items-center justify-center gap-1 rounded-[4px] bg-[#f2f4f7] px-2">
+                    <span className="size-1 shrink-0 rounded-full bg-[#6b7785]" />
+                    <span className="whitespace-nowrap text-xs leading-5 text-[#6b7785]">
+                        {localize("com_knowledge.uploading_status")}
+                    </span>
+                </div>
+            );
+            // z-20 keeps the tag crisp above the translucent uploading scrim (z-10).
+            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+        }
         if (!isAdmin || isFolder) return null;
         if (file.status === FileStatus.SUCCESS) return null;
 
@@ -299,7 +316,7 @@ export function FileCard({
     };
 
     const handleCardClick = () => {
-        if (isCreating || isRenaming) return;
+        if (isCreating || isRenaming || isUploadingFolderPlaceholder) return;
         // Folder click is treated as "enter folder"/"navigate directory"
         // (depending on the parent component's onNavigateFolder implementation).
         if (isFolder) {
@@ -326,7 +343,8 @@ export function FileCard({
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
     const showMoveItem = Boolean(onMove) && !isCreating;
-    const showMoreMenu = canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory;
+    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
+    const showMoreMenu = !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
     const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
@@ -334,6 +352,7 @@ export function FileCard({
     const cardOpensPreviewOrFolder =
         !isCreating &&
         !isRenaming &&
+        !isUploadingFolderPlaceholder &&
         (isFolder || isKnowledgeItemPreviewable(file));
 
     // H5 mobile list row: flat row (no border / shadow / card background) with
@@ -426,7 +445,7 @@ export function FileCard({
                 </div>
 
                 {/* Circular selection checkbox on the far right */}
-                {!hideSelectionCheckbox && (
+                {!hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
                     <RoundCheckbox
                         className="shrink-0"
                         checked={isSelected}
@@ -441,11 +460,11 @@ export function FileCard({
         <Card
             draggable={cardDraggable && !isCreating && !isUploading}
             onDragStart={cardDraggable ? onCardDragStart : undefined}
-            onDragOver={isFolder ? onFolderDragOver : undefined}
-            onDragLeave={isFolder ? onFolderDragLeave : undefined}
-            onDrop={isFolder ? onFolderDrop : undefined}
+            onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
+            onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
+            onDrop={isFolder && !isUploadingFolderPlaceholder ? onFolderDrop : undefined}
             className={cn(
-                "group rounded-[6px] overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
+                "group relative rounded-[6px] overflow-hidden border-[0.5px] p-0 gap-0 py-0 shadow-none max-[767px]:rounded-[6px]",
                 !mobileListMode && "h-[160px]",
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
@@ -479,6 +498,11 @@ export function FileCard({
                 !mobileListMode && "h-full",
                 mobileListMode && "max-[767px]:flex-row max-[767px]:items-center max-[767px]:gap-2 max-[767px]:p-1"
             )}>
+                {/* Uploading-folder scrim: 50% white mask over the whole card so it reads
+                    as "in progress". The "上传中" status tag sits above it (z-20). */}
+                {isUploadingFolderPlaceholder && (
+                    <div className="pointer-events-none absolute inset-0 z-10 bg-white/50" />
+                )}
                 {!hideSelectionCheckbox && mobileListMode && (
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
@@ -511,7 +535,7 @@ export function FileCard({
                         {renderSimilarTag(true)}
                     </div>
 
-                    {!hideSelectionCheckbox && (
+                    {!hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
                         <div
                             className={cn(
                                 "absolute left-2 top-2 z-10 transition-opacity",

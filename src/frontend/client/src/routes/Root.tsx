@@ -59,10 +59,19 @@ export default function Root() {
           <AssistantsMapContext.Provider value={assistantsMap}>
             <AgentsMapContext.Provider value={agentsMap}>
               {/*
-                与 MainLayout 白卡 min-h-[calc(100dvh-16px)]（main p-2）对齐，占满卡片高度；
-                内层 flex-1 min-h-0 overflow-hidden 把高度传给 ChatView，避免整页滚动把输入框卷出视口。
+                与 MainLayout 白卡对齐，占满卡片高度；内层 flex-1 min-h-0 overflow-hidden
+                把高度传给 ChatView，避免整页滚动把输入框卷出视口。
+                桌面端 main 有 p-2 留白，卡片高度为 100dvh-16px；移动端 main 无内边距
+                (min-h-[100dvh])，须占满 100dvh，否则底部会多出 16px 空白条。
               */}
-              <div className="flex h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)] flex-col overflow-hidden min-w-0">
+              <div
+                className={cn(
+                  'flex flex-col overflow-hidden min-w-0',
+                  isSmallScreen
+                    ? 'h-[100dvh] max-h-[100dvh]'
+                    : 'h-[calc(100dvh-16px)] max-h-[calc(100dvh-16px)]',
+                )}
+              >
                 <Banner onHeightChange={setBannerHeight} />
                 <div className="flex min-h-0 flex-1 overflow-hidden">
                   <div className="relative z-0 flex min-h-0 w-full flex-1 overflow-hidden">
@@ -79,12 +88,7 @@ export default function Root() {
                           />
                         </div>
                       ) : null}
-                      <div
-                        className={cn(
-                          'flex min-h-0 flex-1 flex-col overflow-hidden',
-                          showMobileNav && isSmallScreen ? 'px-2' : '',
-                        )}
-                      >
+                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                         <Outlet context={{ navVisible, setNavVisible } satisfies ContextType} />
                       </div>
                     </div>

@@ -232,32 +232,32 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                     <div className="w-full h-6 flex items-center gap-4">
                         <button
                             onClick={() => window.open(article.url)}
-                            className="flex items-center gap-1 text-xs transition-colors text-gray-900"
+                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                         >
-                            <Outlined.ViewOnNewTab className="size-3.5 text-[#999]" />{localize("com_subscription.original_webpage")}</button>
+                            <Outlined.ViewOnNewTab className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.original_webpage")}</button>
 
                         <button
-                            className="flex items-center gap-1 text-xs transition-colors text-gray-900"
+                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                             onClick={() => handleShare(article)}
                         >
-                            <Outlined.Share className="size-3.5 text-[#999]" />{localize("com_subscription.share")}</button>
+                            <Outlined.Share className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.share")}</button>
 
                         {hasKnowledge && <button
-                            className="flex items-center gap-1 text-xs transition-colors text-gray-900"
+                            className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                             onClick={() => setShowKnowledgeModal(true)}
                         >
-                            <Outlined.AddToKnowledgeBase className="size-3.5 text-[#999]" />{localize("com_subscription.add_to_knowledge_space")}</button>}
+                            <Outlined.AddToKnowledgeBase className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.add_to_knowledge_space")}</button>}
 
                         {!isNarrowShell && (!screenFull || (showFullScreenBtn && aiAssistantOpen)) ? (
                             <button
                                 type="button"
-                                className="flex items-center gap-1 text-xs transition-colors text-gray-900"
+                                className="group flex items-center gap-1 text-xs transition-colors text-gray-900 hover:text-[#333]"
                                 onClick={() => {
                                     screenFull && showFullScreenBtn ? onExitAiAssistant?.() :
                                         onFullScreen?.();
                                 }}
                             >
-                                <Outlined.FullScreen className="size-3.5 text-[#999]" />{localize("com_subscription.fullscreen")}
+                                <Outlined.FullScreen className="size-3.5 text-[#999] transition-colors group-hover:text-[#333]" />{localize("com_subscription.fullscreen")}
                             </button>
                         ) : null}
 
@@ -301,7 +301,7 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                 {showBackTop && (
                     <button
                         onClick={handleBackToTop}
-                        className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-[#e5e6eb] rounded-full flex items-center justify-center text-[#4e5969] hover:text-primary transition-all animate-in fade-in slide-in-from-bottom-4"
+                        className="absolute bottom-32 right-8 size-10 bg-white shadow-lg border border-[#e5e6eb] rounded-full flex items-center justify-center text-[#4e5969] hover:text-[#333] transition-all animate-in fade-in slide-in-from-bottom-4"
                     >
                         <ArrowUp className="size-5" />
                     </button>

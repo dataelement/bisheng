@@ -186,10 +186,11 @@ export default function Conversation({
   return (
     <div
       className={cn(
-        "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors",
+        "group relative w-full content-stretch flex gap-[8px] items-center mb-1 rounded-lg shrink-0 transition-colors",
+        // Mobile rows: 8px left / 6px right, 8px vertical (desktop nav uses 12px/6px).
+        isSmallScreen ? "pl-[8px] pr-[6px] py-[8px]" : "px-[12px] py-[6px]",
         isActiveConvo ? "bg-[#EEE]" : "hover:bg-[#f7f7f7]",
         renaming ? "bg-[#EEE]" : "",
-        isSmallScreen ? "py-[8px]" : ""
       )}
     >
       {renaming ? (

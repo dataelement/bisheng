@@ -319,7 +319,7 @@ export function KnowledgeAiInput({
             className={cn(
                 "relative flex w-full bg-white p-3",
                 variant === "box"
-                    ? "rounded-[20px] border border-[#E5E6EB] shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+                    ? "rounded-[20px] touch-mobile:rounded-2xl border border-[#E5E6EB] shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
                     : "border-t border-[#EBEBEB]",
                 stacked ? "flex-col gap-2" : "items-center gap-2",
             )}

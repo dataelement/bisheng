@@ -508,7 +508,7 @@ function UserPopMenuRail() {
                     </ActionMenuItem>
 
                     <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className={cn(actionMenuItemClassName, "data-[state=open]:bg-[#f2f3f5]")}>
+                        <DropdownMenuSubTrigger className={cn(actionMenuItemClassName, "font-normal data-[state=open]:bg-[#f2f3f5]")}>
                             <Outlined.Earth className={actionMenuItemIconClassName} />
                             <span className={cn(actionMenuLabelClassName, "flex-1")}>{localize('com_nav_language')}</span>
                         </DropdownMenuSubTrigger>
