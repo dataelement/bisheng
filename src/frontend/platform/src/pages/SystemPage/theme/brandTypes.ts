@@ -37,15 +37,14 @@ export const DEFAULT_BRAND_CONFIG: BrandConfig = {
         },
     },
     loading: {
-        icon: {
-            url: "/assets/bisheng/loading.svg",
-            relative_path: "",
-            file_name: "loading.svg",
-        },
+        // Empty by default: an empty loading icon makes the app render the
+        // built-in <Loading> SVG component (see bs-icons/loading). Mirrors the
+        // backend DEFAULT_LOADING_ICON_URL='' so admin default == live default.
+        icon: null,
         iconOptions: [],
         animation: "",
     },
-    URLLoadingIcon: "/assets/bisheng/loading.svg",
+    URLLoadingIcon: "",
 };
 
 export const cloneBrandConfig = (config: BrandConfig): BrandConfig => (

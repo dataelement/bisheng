@@ -768,7 +768,7 @@ export default function Knowledge() {
                             />
                         </div>
                         {/* Fixed bottom go-to-square — same as the mobile homepage */}
-                        <div className="shrink-0 bg-white px-3 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+8px)]">
+                        <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
                             <Button
                                 variant="secondary"
                                 onClick={() => {
@@ -827,6 +827,7 @@ export default function Knowledge() {
                             onDownloadFile={() => showToast({ message: localize("com_knowledge.start_download"), severity: NotificationSeverity.SUCCESS })}
                             onRenameFile={fileUpload.handleRenameFile}
                             onDeleteFile={fileUpload.handleDeleteFile}
+                            onBatchDeleteFiles={fileUpload.handleBatchDelete}
                             onEditTags={fileUpload.handleEditTags}
                             onRetryFile={() => showToast({ message: localize("com_knowledge.retry_feature_dev"), severity: NotificationSeverity.INFO })}
                             currentPath={fileManager.currentPath}
@@ -873,7 +874,7 @@ export default function Knowledge() {
                             >
                                 <Outlined.SidebarMenu className="size-5" />
                             </button>
-                            <span className="min-w-0 flex-1 truncate text-center text-base font-medium leading-6 text-[#212121]">
+                            <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-[#212121]">
                                 {localize("com_knowledge.knowledge_space")}
                             </span>
                             <span className="size-5 shrink-0" aria-hidden />
@@ -890,7 +891,7 @@ export default function Knowledge() {
                         />
                     </div>
                     {/* Fixed bottom go-to-square — reuses the PC sidebar button style */}
-                    <div className="shrink-0 bg-white px-3 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+8px)]">
+                    <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
                         <Button
                             variant="secondary"
                             onClick={() => setShowKnowledgeSquare(true)}

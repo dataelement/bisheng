@@ -118,11 +118,13 @@
     }
     normalizeLoading(next.loading);
 
+    // Loading icon is authoritative from the incoming config (a successful fetch, or
+    // the cached config on first paint). Do NOT fall back to the previous in-memory
+    // value: once a static icon got cached, an empty backend response could never reset
+    // it back to the built-in <Loading> component (it would stay sticky forever).
     var loadingIcon = withRuntimeBaseUrl(
       (incoming && incoming.URLLoadingIcon)
-      || (next.loading && next.loading.icon && next.loading.icon.url)
-      || previous.loadingIcon
-      || previous.URLLoadingIcon
+      || (incoming && incoming.loading && incoming.loading.icon && incoming.loading.icon.url)
       || ""
     );
     next.URLLoadingIcon = loadingIcon;

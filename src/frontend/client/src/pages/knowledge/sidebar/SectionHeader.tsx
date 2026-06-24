@@ -111,7 +111,7 @@ export function SectionHeader({
                     } ${collapsed ? "-rotate-90" : ""}`}
                 />
             </div>
-            <div className={mobile ? "flex items-center gap-2" : "flex items-center gap-1"}>
+            <div className={mobile ? "flex items-center gap-2" : compact ? "flex items-center gap-3" : "flex items-center gap-1"}>
                 {onAdd && (
                     <button
                         onClick={(e) => {

@@ -3,7 +3,7 @@ import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
-import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDeleteApi, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
+import { FileStatus, FileType, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceRole, VisibilityType, batchDownloadApi, batchRetryApi, getFileDownloadApi } from "~/api/knowledge";
 import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
 import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
@@ -77,6 +77,8 @@ interface KnowledgeSpaceContentProps {
     onDownloadFile: (fileId: string) => void;
     onRenameFile: (fileId: string, newName: string) => void;
     onDeleteFile: (fileId: string) => void;
+    /** Optimistic batch delete: removes the given ids in place. Resolves true on success. */
+    onBatchDeleteFiles: (ids: Array<string | number>) => Promise<boolean>;
     onEditTags: (fileId: string) => void;
     onRetryFile: (fileId: string) => void;
     currentPath: Array<{ id?: string; name: string }>;
@@ -121,6 +123,7 @@ export function KnowledgeSpaceContent({
     onDownloadFile,
     onRenameFile,
     onDeleteFile,
+    onBatchDeleteFiles,
     onEditTags,
     onRetryFile,
     currentPath,
@@ -899,20 +902,15 @@ export function KnowledgeSpaceContent({
             return;
         }
 
-        const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
-        const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
-
-        try {
-            await batchDeleteApi(space.id, {
-                file_ids: fileIds.length ? fileIds : undefined,
-                folder_ids: folderIds.length ? folderIds : undefined,
-            });
-            setSelectedFiles(new Set());
+        // Optimistic batch delete (handled by the parent): rows are dropped from
+        // the list in place — keeps the scroll position and works regardless of
+        // which page they were loaded from. The parent rolls back on API failure.
+        const ids = selectedList.map(f => f.id);
+        setSelectedFiles(new Set());
+        const ok = await onBatchDeleteFiles(ids);
+        if (ok) {
             showToast({ message: localize("com_knowledge.batch_delete_success"), status: "success" });
-            dispatchKnowledgeSpaceFilesRefresh(space.id);
-            // Notify parent to refresh the list
-            onDeleteFile("");
-        } catch {
+        } else {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
         }
     };
@@ -1150,7 +1148,7 @@ export function KnowledgeSpaceContent({
                             aria-expanded={spaceListOpen}
                             className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
                         >
-                            <span className="truncate text-base font-medium leading-6 text-[#212121]">
+                            <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
                                 {currentPath.length > 0 ? currentPath[currentPath.length - 1].name : space.name}
                             </span>
                             <Outlined.Down className={cn("size-5 shrink-0 text-[#86909C] transition-transform", spaceListOpen && "rotate-180")} />

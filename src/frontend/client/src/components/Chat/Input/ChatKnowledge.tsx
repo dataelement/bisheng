@@ -526,7 +526,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
+                    "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[13px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
@@ -559,7 +559,7 @@ export const ChatKnowledge = ({
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-md text-[#4E5969] cursor-pointer hover:bg-[#f8f8f8] transition-colors outline-none",
+                    "flex h-8 w-8 items-center justify-center rounded-lg text-[#4E5969] cursor-pointer hover:bg-[#f8f8f8] transition-colors outline-none",
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
                   aria-label={localize('com_knowledge_add_file')}

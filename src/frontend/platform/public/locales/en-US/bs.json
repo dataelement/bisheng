@@ -103,6 +103,7 @@
     "brandAssetUrlAddSuccess": "URL added",
     "brandUrlAssetName": "URL asset",
     "brandDefaultLoadingIcon": "Default loading icon",
+    "brandStaticLoadingIcon": "Default loading image",
     "brandResetDefault": "Reset",
     "brandSave": "Save",
     "brandTextSection": "Copy",

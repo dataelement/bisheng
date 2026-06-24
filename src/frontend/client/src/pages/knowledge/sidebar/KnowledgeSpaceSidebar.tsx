@@ -435,7 +435,7 @@ export function KnowledgeSpaceSidebar({
                                                 compact
                                             />
                                             {!departmentCollapsed && (
-                                                <div className="space-y-2 px-3">
+                                                <div className="space-y-1 px-3">
                                                     {departmentSpaces.map(s => renderCompactItem(s, "department"))}
                                                 </div>
                                             )}
@@ -455,7 +455,7 @@ export function KnowledgeSpaceSidebar({
                                             compact
                                         />
                                         {!createdCollapsed && (
-                                            <div className="space-y-2 px-3">
+                                            <div className="space-y-1 px-3">
                                                 {filteredCreatedSpaces.map(s => renderCompactItem(s, "created"))}
                                                 {!filteredCreatedSpaces.length && (
                                                     <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>
@@ -477,7 +477,7 @@ export function KnowledgeSpaceSidebar({
                                             compact
                                         />
                                         {!joinedCollapsed && (
-                                            <div className="space-y-2 px-3">
+                                            <div className="space-y-1 px-3">
                                                 {filteredJoinedSpaces.map(s => renderCompactItem(s, "joined"))}
                                                 {!filteredJoinedSpaces.length && (
                                                     <div className="py-6 text-center text-sm text-[#818181]">{localize("com_knowledge.no_data")}</div>
