@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable, List, Sequence
+from collections.abc import Iterable, Sequence
 
 from fastapi import Request
 
@@ -16,8 +16,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
-from bisheng.database.models.department import DepartmentDao
-from bisheng.database.models.department import UserDepartmentDao
+from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
 from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
@@ -35,7 +34,6 @@ from bisheng.knowledge.domain.services.knowledge_space_service import (
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.services.permission_service import PermissionService
 
-
 _logger = logging.getLogger(__name__)
 
 
@@ -50,19 +48,19 @@ class DepartmentKnowledgeSpaceService:
 
     @classmethod
     def _build_default_name(cls, department_name: str) -> str:
-        return f'{department_name}的知识空间'
+        return f"{department_name}的知识空间"
 
     @classmethod
     def _build_default_description(cls, department_name: str) -> str:
-        return f'{department_name}的知识空间'
+        return f"{department_name}的知识空间"
 
     @classmethod
     async def _load_departments(cls, department_ids: Sequence[int]):
         deduped = list(dict.fromkeys(int(i) for i in department_ids))
         rows = await DepartmentDao.aget_by_ids(deduped)
-        dept_map = {row.id: row for row in rows if getattr(row, 'status', 'active') == 'active'}
+        dept_map = {row.id: row for row in rows if getattr(row, "status", "active") == "active"}
         if len(dept_map) != len(deduped):
-            raise DepartmentNotFoundError(msg='One or more departments do not exist or are archived')
+            raise DepartmentNotFoundError(msg="One or more departments do not exist or are archived")
         return dept_map
 
     @classmethod
@@ -79,7 +77,7 @@ class DepartmentKnowledgeSpaceService:
             if existing is not None:
                 if existing.user_role == UserRoleEnum.CREATOR:
                     continue
-                if existing.membership_source == 'department_admin':
+                if existing.membership_source == "department_admin":
                     if existing.user_role != UserRoleEnum.ADMIN:
                         existing.user_role = UserRoleEnum.ADMIN
                         existing.status = MembershipStatusEnum.ACTIVE
@@ -95,7 +93,7 @@ class DepartmentKnowledgeSpaceService:
                 existing.department_admin_promoted_from_role = existing.user_role.value
                 existing.user_role = UserRoleEnum.ADMIN
                 existing.status = MembershipStatusEnum.ACTIVE
-                existing.membership_source = 'department_admin'
+                existing.membership_source = "department_admin"
                 await SpaceChannelMemberDao.update(existing)
                 await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
                 continue
@@ -106,7 +104,7 @@ class DepartmentKnowledgeSpaceService:
                 user_id=admin_user_id,
                 user_role=UserRoleEnum.ADMIN,
                 status=MembershipStatusEnum.ACTIVE,
-                membership_source='department_admin',
+                membership_source="department_admin",
             )
             await SpaceChannelMemberDao.async_insert_member(member)
             await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
@@ -115,20 +113,20 @@ class DepartmentKnowledgeSpaceService:
     async def _grant_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
         try:
             await PermissionService.authorize(
-                object_type='knowledge_space',
+                object_type="knowledge_space",
                 object_id=str(space_id),
                 grants=[
                     AuthorizeGrantItem(
-                        subject_type='user',
+                        subject_type="user",
                         subject_id=user_id,
-                        relation='manager',
+                        relation="manager",
                         include_children=False,
                     ),
                 ],
             )
         except Exception as e:
             _logger.warning(
-                'Failed to write department admin manager tuple for space %s user %s: %s',
+                "Failed to write department admin manager tuple for space %s user %s: %s",
                 space_id,
                 user_id,
                 e,
@@ -138,20 +136,20 @@ class DepartmentKnowledgeSpaceService:
     async def _revoke_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
         try:
             await PermissionService.authorize(
-                object_type='knowledge_space',
+                object_type="knowledge_space",
                 object_id=str(space_id),
                 revokes=[
                     AuthorizeRevokeItem(
-                        subject_type='user',
+                        subject_type="user",
                         subject_id=user_id,
-                        relation='manager',
+                        relation="manager",
                         include_children=False,
                     ),
                 ],
             )
         except Exception as e:
             _logger.warning(
-                'Failed to delete department admin manager tuple for space %s user %s: %s',
+                "Failed to delete department admin manager tuple for space %s user %s: %s",
                 space_id,
                 user_id,
                 e,
@@ -166,20 +164,20 @@ class DepartmentKnowledgeSpaceService:
     ) -> None:
         try:
             await PermissionService.authorize(
-                object_type='knowledge_space',
+                object_type="knowledge_space",
                 object_id=str(space_id),
                 grants=[
                     AuthorizeGrantItem(
-                        subject_type='department',
+                        subject_type="department",
                         subject_id=department_id,
-                        relation='viewer',
+                        relation="viewer",
                         include_children=False,
                     ),
                 ],
             )
         except Exception as e:
             _logger.warning(
-                'Failed to write department viewer tuple for space %s department %s: %s',
+                "Failed to write department viewer tuple for space %s department %s: %s",
                 space_id,
                 department_id,
                 e,
@@ -200,7 +198,7 @@ class DepartmentKnowledgeSpaceService:
         if existing is not None:
             if existing.user_role == UserRoleEnum.CREATOR:
                 return
-            if existing.membership_source == 'department_admin':
+            if existing.membership_source == "department_admin":
                 existing.user_role = UserRoleEnum.ADMIN
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
@@ -215,7 +213,7 @@ class DepartmentKnowledgeSpaceService:
             existing.department_admin_promoted_from_role = existing.user_role.value
             existing.user_role = UserRoleEnum.ADMIN
             existing.status = MembershipStatusEnum.ACTIVE
-            existing.membership_source = 'department_admin'
+            existing.membership_source = "department_admin"
             await SpaceChannelMemberDao.update(existing)
             await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
             return
@@ -226,7 +224,7 @@ class DepartmentKnowledgeSpaceService:
             user_id=user_id,
             user_role=UserRoleEnum.ADMIN,
             status=MembershipStatusEnum.ACTIVE,
-            membership_source='department_admin',
+            membership_source="department_admin",
         )
         await SpaceChannelMemberDao.async_insert_member(member)
         await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
@@ -242,11 +240,11 @@ class DepartmentKnowledgeSpaceService:
         existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
         if existing is None or existing.user_role == UserRoleEnum.CREATOR:
             return
-        if existing.membership_source == 'department_admin':
+        if existing.membership_source == "department_admin":
             previous_role = existing.department_admin_promoted_from_role
             if previous_role:
                 existing.user_role = UserRoleEnum(previous_role)
-                existing.membership_source = 'manual'
+                existing.membership_source = "manual"
                 existing.department_admin_promoted_from_role = None
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
@@ -280,25 +278,25 @@ class DepartmentKnowledgeSpaceService:
         request: Request,
         login_user: UserPayload,
         req: DepartmentKnowledgeSpaceBatchCreateReq,
-    ) -> List[KnowledgeSpaceInfoResp]:
+    ) -> list[KnowledgeSpaceInfoResp]:
         cls._ensure_super_admin(login_user)
         if not req.items:
             return []
         dept_ids = [int(item.department_id) for item in req.items]
         if len(set(dept_ids)) != len(dept_ids):
             raise DepartmentKnowledgeSpaceExistsError(
-                msg=f'Department ids are duplicated in request: {sorted(dept_ids)}'
+                msg=f"Department ids are duplicated in request: {sorted(dept_ids)}"
             )
 
         dept_map = await cls._load_departments(dept_ids)
         existing = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(list(dept_map.keys()))
         if existing:
             raise DepartmentKnowledgeSpaceExistsError(
-                msg=f'Department knowledge space already exists: {sorted({row.department_id for row in existing})}'
+                msg=f"Department knowledge space already exists: {sorted({row.department_id for row in existing})}"
             )
 
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
-        created_spaces: List[KnowledgeSpaceInfoResp] = []
+        created_spaces: list[KnowledgeSpaceInfoResp] = []
         for item in req.items:
             dept = dept_map[int(item.department_id)]
             space = await space_service.create_knowledge_space(
@@ -324,7 +322,7 @@ class DepartmentKnowledgeSpaceService:
                 request=request,
                 login_user=login_user,
                 space_id=space.id,
-                admin_user_ids=[row['user_id'] for row in admin_rows],
+                admin_user_ids=[row["user_id"] for row in admin_rows],
             )
             created_spaces.append(await space_service.get_space_info(space.id))
         return created_spaces
@@ -344,7 +342,7 @@ class DepartmentKnowledgeSpaceService:
             return
 
         if request is None:
-            request = Request(scope={'type': 'http'})
+            request = Request(scope={"type": "http"})
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
         for user_id in sorted(set(int(uid) for uid in added_user_ids)):
             await cls._sync_added_admin(
@@ -367,35 +365,42 @@ class DepartmentKnowledgeSpaceService:
         *,
         request: Request,
         login_user: UserPayload,
-        order_by: str = 'update_time',
-    ) -> List[KnowledgeSpaceInfoResp]:
-        user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
-        department_ids = [
-            int(row.department_id)
-            for row in user_departments
-            if getattr(row, 'department_id', None) is not None
-        ]
-        department_bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(department_ids)
-        department_space_ids = {int(binding.space_id) for binding in department_bindings}
-
+        order_by: str = "update_time",
+    ) -> list[KnowledgeSpaceInfoResp]:
+        is_admin = login_user.is_admin()
         members = await SpaceChannelMemberDao.async_get_user_space_members(login_user.user_id)
-        member_space_ids = [int(member.business_id) for member in members]
-        member_bound_space_ids = set(
-            (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(member_space_ids)).keys()
-        )
 
-        space_ids = department_space_ids | member_bound_space_ids
+        if is_admin:
+            # Super admin sees every department knowledge space, not only the
+            # ones bound to their own departments. The view_space pre-filter is
+            # disabled below because admin passes every gate; keeping it would
+            # wrongly drop spaces the admin has no explicit binding to.
+            all_bindings = await DepartmentKnowledgeSpaceDao.aget_all()
+            space_ids = {int(binding.space_id) for binding in all_bindings}
+        else:
+            user_departments = await UserDepartmentDao.aget_user_departments(login_user.user_id)
+            department_ids = [
+                int(row.department_id) for row in user_departments if getattr(row, "department_id", None) is not None
+            ]
+            department_bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(department_ids)
+            department_space_ids = {int(binding.space_id) for binding in department_bindings}
+
+            member_space_ids = [int(member.business_id) for member in members]
+            member_bound_space_ids = set(
+                (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(member_space_ids)).keys()
+            )
+
+            space_ids = department_space_ids | member_bound_space_ids
+
         if not space_ids:
             return []
-        filtered_members = [
-            member for member in members if int(member.business_id) in space_ids
-        ]
+        filtered_members = [member for member in members if int(member.business_id) in space_ids]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
         return await svc._format_accessible_spaces(
             list(space_ids),
             order_by,
             memberships=filtered_members,
-            required_permission_id='view_space',
+            required_permission_id=None if is_admin else "view_space",
         )
 
     @classmethod
@@ -404,8 +409,8 @@ class DepartmentKnowledgeSpaceService:
         *,
         request: Request,
         login_user: UserPayload,
-        order_by: str = 'update_time',
-    ) -> List[KnowledgeSpaceInfoResp]:
+        order_by: str = "update_time",
+    ) -> list[KnowledgeSpaceInfoResp]:
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
         cls._ensure_super_admin(login_user)
