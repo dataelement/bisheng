@@ -7,6 +7,14 @@ import {
 } from '~/components/ui/Tooltip2';
 import { FileTag } from '~/api/knowledge';
 
+const TAG_TYPE_LABELS: Record<string, string> = {
+    system_tag: '系统：',
+    ai_auto_tag: 'AI生成：',
+    manual_tag: '人工：',
+};
+
+const getTagTypeLabel = (resourceType?: string) => TAG_TYPE_LABELS[resourceType || ''] || '';
+
 const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: ReactNode }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [visibleCount, setVisibleCount] = useState(1); // 初始默认显示1个
@@ -76,12 +84,34 @@ const TagGroup = ({ tags, actionButton }: { tags: FileTag[], actionButton?: Reac
                             </div>
                         </TooltipTrigger>
                         <TooltipContent side="top" noArrow className="bg-white p-2 border border-gray-100 shadow-md">
-                            <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                {hiddenTags.map((tag) => (
-                                    <span key={tag.id} className="bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm">
-                                        {tag.name}
-                                    </span>
-                                ))}
+                            <div className="flex flex-col gap-1.5 max-w-[240px]">
+                                {(() => {
+                                    const systemTags = hiddenTags.filter((t) => t.resource_type === 'system_tag');
+                                    const aiTags = hiddenTags.filter((t) => t.resource_type === 'ai_auto_tag');
+                                    const manualTags = hiddenTags.filter((t) => !t.resource_type || t.resource_type === 'manual_tag');
+
+                                    const renderGroup = (label: string, groupTags: FileTag[]) => {
+                                        if (groupTags.length === 0) return null;
+                                        return (
+                                            <div key={label} className="flex flex-wrap items-start gap-1">
+                                                <span className="text-[#86909c] text-xs shrink-0 leading-5">{label}</span>
+                                                {groupTags.map((tag) => (
+                                                    <span key={tag.id} className="bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm">
+                                                        {tag.name}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        );
+                                    };
+
+                                    return (
+                                        <>
+                                            {renderGroup(getTagTypeLabel('system_tag'), systemTags)}
+                                            {renderGroup(getTagTypeLabel('ai_auto_tag'), aiTags)}
+                                            {renderGroup(getTagTypeLabel('manual_tag'), manualTags)}
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </TooltipContent>
                     </Tooltip>

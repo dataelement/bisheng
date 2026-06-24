@@ -258,6 +258,7 @@ export interface SpaceMember {
 export interface FileTag {
     id: number;
     name: string;
+    resource_type?: string;
 }
 
 export interface SensitiveWordHit {
@@ -760,8 +761,12 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
                 if (typeof t === "string") return { id: -1, name: t as string };
                 const id = t?.id !== undefined && t?.id !== null ? Number(t.id) : -1;
                 const name = t?.name !== undefined && t?.name !== null ? String(t.name) : "";
+                const resource_type =
+                    t?.resource_type !== undefined && t?.resource_type !== null
+                        ? String(t.resource_type)
+                        : undefined;
                 if (!name) return null;
-                return { id, name };
+                return { id, name, resource_type };
             })
             .filter((v: FileTag | null): v is FileTag => v !== null)
         : [];
@@ -1442,12 +1447,21 @@ export async function deleteSpaceTagApi(space_id: string, tag_id: number): Promi
  * Overwrite tags for a single file.
  * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag
  */
-export async function updateFileTagsApi(space_id: string, file_id: string, tag_ids: number[]): Promise<void> {
+export async function updateFileTagsApi(
+    space_id: string,
+    file_id: string,
+    tag_ids: number[],
+    review_tag_ids?: number[],
+): Promise<void> {
     return withKnowledgeMutationLog(
         "update-file-tags",
-        { method: "POST", space_id, file_id, tag_ids },
+        { method: "POST", space_id, file_id, tag_ids, review_tag_ids },
         async () => {
-            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`, { tag_ids });
+            const payload: Record<string, number[]> = { tag_ids };
+            if (review_tag_ids && review_tag_ids.length > 0) {
+                payload.review_tag_ids = review_tag_ids;
+            }
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`, payload);
         }
     );
 }

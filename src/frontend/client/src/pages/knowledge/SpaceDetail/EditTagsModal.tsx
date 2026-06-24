@@ -48,6 +48,8 @@ export function EditTagsModal({
     const [spaceTags, setSpaceTags] = useState<SpaceTag[]>([]);
     // IDs of tags selected for this file
     const [selectedTagIds, setSelectedTagIds] = useState<Set<number>>(new Set());
+    // IDs of newly created manual tags that need review (picked during this dialog session)
+    const [selectedReviewTagIds, setSelectedReviewTagIds] = useState<Set<number>>(new Set());
     const [inputValue, setInputValue] = useState("");
     const [loading, setLoading] = useState(false);
     const [deletingTagId, setDeletingTagId] = useState<number | null>(null);
@@ -61,6 +63,7 @@ export function EditTagsModal({
         if (!isOpen || !spaceId) return;
         setInputValue("");
         setSelectedTagIds(new Set(initialTagIds));
+        setSelectedReviewTagIds(new Set());
         getSpaceTagsApi(spaceId)
             .then(setSpaceTags)
             .catch(() => {
@@ -125,11 +128,12 @@ export function EditTagsModal({
             }
             setSpaceTags((prev) => [...prev, newTag]);
             setSelectedTagIds((prev) => new Set(prev).add(newTag.id));
+            setSelectedReviewTagIds((prev) => new Set(prev).add(newTag.id));
             setInputValue("");
             // Invalidate shared cache so search dropdown updates
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
-        } catch {
-            showToast({ message: localize("com_knowledge.create_tag_failed"), status: "error" });
+        } catch (err: any) {
+            showToast({ message: err?.status_message || localize("com_knowledge.create_tag_failed"), status: "error" });
         }
     };
 
@@ -140,7 +144,8 @@ export function EditTagsModal({
         setLoading(true);
 
         try {
-            const tagIds = Array.from(selectedTagIds);
+            const tagIds = Array.from(selectedTagIds) as number[];
+            const newReviewTagIds = Array.from(selectedReviewTagIds) as number[];
             if (isBatchMode && fileIds) {
                 // Batch append mode
                 await batchUpdateTagsApi(spaceId, {
@@ -150,7 +155,7 @@ export function EditTagsModal({
                 showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
             } else if (fileId) {
                 // Single file overwrite mode
-                await updateFileTagsApi(spaceId, fileId, tagIds);
+                await updateFileTagsApi(spaceId, fileId, tagIds, newReviewTagIds);
                 !pendingText && showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
             }
             onSaved?.();
@@ -215,8 +220,11 @@ export function EditTagsModal({
                         <X className="size-4" />
                     </button>
                 </DialogHeader>
-
-                <div className="flex flex-1 flex-col gap-4 px-6 py-6 pb-2 touch-mobile:px-4 touch-mobile:py-4">
+                <div className="flex items-start gap-0.5 px-6 text-[12px] leading-5 text-[#F53F3F]">
+                        <span className="shrink-0">***</span>
+                        <span>手动新增加的标签，需要后台管理员审核通过之后才能生效。</span>
+                </div>
+                <div className="flex flex-1 flex-col gap-0.5 px-6 py-2 pb-2 touch-mobile:px-4 touch-mobile:py-4">
                     {/* Tags Input Box */}
                     <div
                         className="relative flex min-h-8 cursor-text flex-wrap items-center gap-1 rounded-[8px] border border-[#EBECF0] bg-white px-3 py-[5px] pr-[40px] transition-colors focus-within:border-primary"

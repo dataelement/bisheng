@@ -4,7 +4,7 @@ from bisheng.database.models.tag import Tag, TagLink, TagResourceTypeEnum
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibrary
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-from sqlmodel import select, func, update
+from sqlmodel import select, func, update, delete
 
 
 
@@ -49,7 +49,7 @@ class TagRepositoryImpl:
             if resource_type == TagResourceTypeEnum.SYSTEM_TAG:
                 tag_library.tags = [*tag_library.tags, tag_name]
                 tag_library.tag_count += 1
-            else:
+            elif resource_type == TagResourceTypeEnum.AI_AUTO_TAG:
                 tag_library.ai_tags = [*tag_library.ai_tags, tag_name]
                 tag_library.ai_tag_count += 1
             tag_library.update_time = datetime.now()
@@ -61,7 +61,7 @@ class TagRepositoryImpl:
             if resource_type == TagResourceTypeEnum.SYSTEM_TAG:
                 tag_library.tags = [t for t in tag_library.tags if t != tag_name]
                 tag_library.tag_count -= 1
-            else:
+            elif resource_type == TagResourceTypeEnum.AI_AUTO_TAG:
                 tag_library.ai_tags = [t for t in tag_library.ai_tags if t != tag_name]
                 tag_library.ai_tag_count -= 1
             tag_library.update_time = datetime.now()
@@ -87,12 +87,16 @@ class TagRepositoryImpl:
         return await self.session.exec(update_statement)
 
     async def get_tag_count_by_tag_name(self, tag_name: str, tenant_id: int):
-        statement = select(func.count(Tag.id)).where(Tag.name == tag_name, Tag.tenant_id == tenant_id)
+        statement = select(func.count(Tag.id)).where(
+            Tag.name == tag_name,
+            Tag.tenant_id == tenant_id,
+            Tag.resource_type.in_([TagResourceTypeEnum.SYSTEM_TAG, TagResourceTypeEnum.AI_AUTO_TAG]),
+        )
         result = await self.session.exec(statement)
         return result.one()
 
-    async def get_tag_list_by_tag_name(self, tag_name: str, tenant_id: int):
-        statement = select(Tag).where(Tag.name == tag_name, Tag.tenant_id == tenant_id)
+    async def get_tag_list_by_tag_name(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
+        statement = select(Tag).where(Tag.name == tag_name, Tag.tenant_id == tenant_id, Tag.resource_type == resource_type)
         result = await self.session.exec(statement)
         return result.all()
 
@@ -126,3 +130,44 @@ class TagRepositoryImpl:
         statement = select(KnowledgeFile).where(KnowledgeFile.id == resource_id, KnowledgeFile.tenant_id == tenant_id)
         knowledgefile = await self.session.exec(statement)
         return knowledgefile.first()
+
+
+    async def list_all_tags_by_page(self, page: int, page_size: int, keyword: str, tenant_id: int):
+        stmt = (
+            select(Tag.name, Tag.resource_type)
+            .where(Tag.tenant_id == tenant_id)
+        )
+        if keyword:
+            stmt = stmt.where(Tag.name.like(f"%{keyword}%"))
+        stmt = stmt.group_by(Tag.name, Tag.resource_type).order_by(Tag.name, Tag.resource_type).offset((page - 1) * page_size).limit(page_size)
+        result = await self.session.exec(stmt)
+        rows = result.all()
+        return [{"name": row.name, "resource_type": row.resource_type} for row in rows]
+
+
+    async def get_all_tag_library_count_by_page(self, keyword: str, tenant_id: int):
+        subq = (
+                    select(1)
+                    .select_from(Tag)
+                    .where(Tag.tenant_id == tenant_id)
+                )
+        if keyword:
+            subq = subq.where(Tag.name.like(f"%{keyword}%"))
+        subq = subq.group_by(Tag.name, Tag.resource_type)
+        stmt = select(func.count()).select_from(subq.subquery())
+        result = await self.session.exec(stmt)
+        count = result.first()
+        if count is None:
+            return 0
+        if isinstance(count, int):
+            return count
+        return int(count[0])
+
+    async def delete_tag_library_by_name(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
+        delete_statement = delete(Tag).where(Tag.name == tag_name, Tag.tenant_id == tenant_id, Tag.resource_type == resource_type)
+        return await self.session.exec(delete_statement)
+
+    async def query_existed_tag_by_review_tag(self, review_tag: ReviewTag):
+        stmt = select(Tag).where(Tag.name == review_tag.name, Tag.tenant_id == review_tag.tenant_id, Tag.business_type == review_tag.business_type, Tag.business_id == review_tag.business_id)
+        result = await self.session.exec(stmt)
+        return result.first()

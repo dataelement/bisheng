@@ -22,7 +22,7 @@ from ..dependencies import LoginUserDep
 router = APIRouter(prefix='/tags', tags=['Tags'])
 
 
-# 查询标签库中的标签
+# 查询标签库中的标签 -- 废弃
 @router.get('/list', summary='List tag library', response_model=UnifiedResponseModel)
 async def list_tag_library(
     request: Request,
@@ -33,6 +33,17 @@ async def list_tag_library(
     tags_list = await tags_service.list_tag_library_by_name(keyword, login_user.tenant_id)
     return resp_200(tags_list)
 
+@router.post('/list_tags', summary='List tags', response_model=UnifiedResponseModel)
+async def list_tags(
+    request: Request,
+    page: int = Body(default=1, description="页码"),
+    page_size: int = Body(default=10, description="每页数量"),
+    keyword: str = Body(default="", description="标签名称"),
+    tags_service: WorkStationTagsService = Depends(get_workstation_tags_service),
+    login_user=LoginUserDep
+):
+    tags_list = await tags_service.list_all_tags_library_by_page(keyword, page, page_size, login_user.tenant_id)
+    return resp_200(tags_list)
 
 # 新增标签库中的标签
 @router.post('/create', summary='Create tag library', response_model=UnifiedResponseModel)
@@ -86,8 +97,8 @@ async def approve_or_reject_review_tags(
 ):
     if not data or not data.tag_name or not data.status:
         raise ReviewTagParamIsEmptyError.http_exception()
-    await tags_service.approve_or_reject_review_tag(data, login_user.tenant_id)
-    return resp_200(True)
+    existed_tag_list = await tags_service.approve_or_reject_review_tag(data, login_user.tenant_id)
+    return resp_200(existed_tag_list)
 
 
 # 删除-待审核标签
@@ -95,10 +106,11 @@ async def approve_or_reject_review_tags(
 async def delete_review_tags(
     request: Request,
     tag_name: str = Body(..., embed=True, description="标签名称"),
+    resource_type: TagResourceTypeEnum = Body(..., description="标签资源类型"),
     tags_service: WorkStationTagsService = Depends(get_workstation_tags_service),
     login_user=LoginUserDep
 ):
-    await tags_service.delete_review_tag(tag_name, TagBusinessTypeEnum.KNOWLEDGE_SPACE, login_user.tenant_id)
+    await tags_service.delete_review_tag(tag_name, TagBusinessTypeEnum.KNOWLEDGE_SPACE, resource_type, login_user.tenant_id)
     return resp_200(True)
 
 # 分页查询-待审核标签

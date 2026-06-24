@@ -32,7 +32,7 @@ async def list_tag_libraries(
     svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
 ) -> Any:
     return resp_200(
-        await svc.list_libraries(page=page, page_size=page_size, keyword=keyword)
+        await svc.list_libraries_by_one(keyword="通用标签库")
     )
 
 
