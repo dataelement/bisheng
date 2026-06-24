@@ -166,12 +166,38 @@ export const taskModeState = atom<boolean>({
 });
 
 /**
+ * True if a linsight session is parked on an UNANSWERED ask_user clarify — the
+ * agent is suspended on an interrupt, waiting for the user to reply, so nothing is
+ * executing. Park is not a distinct top-level status (it stays `running` during a
+ * live park), so we detect it from the data: an unanswered `call_user_input` step
+ * in the session-level steps or any task/subtask history. Mirrors
+ * findPendingUserInput's contract (kept inline so the store stays free of a
+ * components/ import); the `call_user_input` + `is_completed` shape is a stable
+ * contract, so the small duplication won't drift.
+ */
+export function isLinsightParked(info: { sessionSteps?: any[]; tasks?: any[] }): boolean {
+    const open = (steps?: any[]) =>
+        (steps || []).some((s) => s?.step_type === 'call_user_input' && !s?.is_completed);
+    if (open(info.sessionSteps)) return true;
+    return (info.tasks || []).some(
+        (t: any) => open(t?.history) || (t?.children || []).some((c: any) => open(c?.history)),
+    );
+}
+
+/**
  * Whether a conversation (chat_id) currently owns a task-mode session that is
  * still executing — drives the per-conversation running spinner in the sidebar
  * list. A linsight session stores its owning chat_id in `session_id` (see
  * useAiChat `onTaskHandoff`), so we match the conversation against that. The
  * "running" set mirrors ChatView's `taskRunning` (startup → execution) so the
  * spinner is live for exactly the window the stop button is.
+ *
+ * EXCEPT a park (waiting for the user to answer an ask_user): the top-level status
+ * stays `running` during a live park, but nothing is executing — the agent is
+ * waiting for the user. The open conversation already shows the ClarifyCard, and a
+ * parked session the user navigated away from must not spin forever (it reads as
+ * "still working" when it is actually waiting on the user). So a parked session
+ * does NOT drive the spinner.
  */
 export const conversationTaskRunningState = selectorFamily<boolean, string>({
     key: 'conversationTaskRunningState',
@@ -183,12 +209,12 @@ export const conversationTaskRunningState = selectorFamily<boolean, string>({
             for (const info of map.values()) {
                 if (info.session_id !== conversationId) continue;
                 const s = info.status;
-                if (
+                const running =
                     s === SopStatus.NotStarted ||
                     s === SopStatus.SopGenerating ||
                     s === SopStatus.SopGenerated ||
-                    s === SopStatus.Running
-                ) {
+                    s === SopStatus.Running;
+                if (running && !isLinsightParked(info)) {
                     return true;
                 }
             }
