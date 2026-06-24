@@ -57,7 +57,7 @@ function MoveUndoToastView({
                 <button
                     type="button"
                     onClick={onAction}
-                    className="shrink-0 text-sm text-[#86909c] transition-colors hover:text-[#165dff]"
+                    className="shrink-0 text-sm text-[#86909c] transition-colors hover:text-blue-500"
                 >
                     {actionLabel}
                 </button>

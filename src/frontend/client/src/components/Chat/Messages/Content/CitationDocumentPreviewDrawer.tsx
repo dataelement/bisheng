@@ -260,7 +260,7 @@ export default function CitationDocumentPreviewDrawer({
         )}
       >
         <div className="flex min-w-0 items-center gap-2">
-          {(!isNarrowLayout || isFullBleedMobile) && <FileText className="size-4 shrink-0 text-[#165DFF]" />}
+          {(!isNarrowLayout || isFullBleedMobile) && <FileText className="size-4 shrink-0 text-blue-500" />}
           <h2
             className={cn(
               'min-w-0 truncate font-semibold text-[#1D2129]',
@@ -276,7 +276,7 @@ export default function CitationDocumentPreviewDrawer({
               onClick={handleDownload}
               disabled={!fileUrl}
               className={cn(
-                'shrink-0 items-center justify-center text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]',
+                'shrink-0 items-center justify-center text-[#86909C] hover:bg-[#F2F3F5] hover:text-blue-500 disabled:cursor-not-allowed disabled:text-[#C9CDD4]',
                 isFullBleedMobile
                   ? 'inline-flex size-8 rounded-md'
                   : 'inline-flex size-6 rounded-[6px]',

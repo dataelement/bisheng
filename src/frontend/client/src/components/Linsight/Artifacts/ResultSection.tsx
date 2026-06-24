@@ -84,7 +84,7 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                             >
                                 <button
                                     type="button"
-                                    className="min-w-0 flex-1 truncate text-left text-[14px] text-[#1A1A1A] hover:text-[#335CFF] transition-colors"
+                                    className="min-w-0 flex-1 truncate text-left text-[14px] text-[#1A1A1A] hover:text-blue-500 transition-colors"
                                     onClick={() => onPreview(file)}
                                 >
                                     {file.file_name}

@@ -1,4 +1,5 @@
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import useMediaQuery from "~/hooks/useMediaQuery";
 import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -820,21 +821,13 @@ export function AddToKnowledgeModal({
                         </div>
                     ) : isEmpty ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
-                            <img
-                                className="size-[120px] mb-4 object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
-                            />
-                            <p className="text-sm">{localize("com_subscription.no_selectable_knowledge_space")}</p>
+                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_selectable_knowledge_space")}</p>
                         </div>
                     ) : displayTree.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-gray-800">
-                            <img
-                                className="size-[120px] mb-4 object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
-                            />
-                            <p className="text-sm">{localize("com_subscription.no_matching_knowledge_space")}</p>
+                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_matching_knowledge_space")}</p>
                         </div>
                     ) : (
                         <div className="w-full min-w-0 max-w-full py-1">
@@ -898,7 +891,7 @@ export function AddToKnowledgeModal({
                         className={cn(
                             "h-8 min-h-[32px] min-w-[64px] shrink-0 px-3 text-sm rounded-md font-normal",
                             isChannelSyncMobileFooter &&
-                            "rounded-lg text-[14px] enabled:bg-[#165DFF] enabled:text-white enabled:hover:bg-[#4080FF] disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
+                            "rounded-lg text-[14px] enabled:bg-blue-500 enabled:text-white enabled:hover:bg-blue-400 disabled:bg-[#E5E6EB] disabled:text-[#C9CDD4] disabled:hover:bg-[#E5E6EB]",
                             isChannelSyncMobileFooter && "flex-1",
                             embedInChannelSheet && "flex-1",
                             mode === "article" && isH5 && "touch-mobile:flex-1",

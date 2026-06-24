@@ -25,7 +25,7 @@ const SubmitButton = React.memo(
             disabled={props.disabled}
             className={cn(
               'rounded-full bg-primary p-1 text-text-primary outline-offset-4 transition-all duration-200 disabled:cursor-not-allowed disabled:text-text-secondary disabled:opacity-10',
-              props.isLingsi && 'bg-gradient-to-b from-[#143BFF] to-[#99BCFF]',
+              props.isLingsi && 'bg-gradient-to-b from-blue-500 to-blue-200',
             )}
             data-testid="send-button"
             type="submit"

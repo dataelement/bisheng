@@ -115,7 +115,8 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: '0.0.0.0',
       port: 4001,
-      strictPort: false,
+      // Pin to 4001: fail loudly if the port is taken instead of drifting to 4002+.
+      strictPort: true,
       proxy: {
         '^(/workspace)?/bisheng': {
           target: minioTarget,

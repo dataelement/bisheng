@@ -87,7 +87,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
                         onClick={() => onSelect(tag)}
                     >
                         <span className="inline-flex items-center gap-1">
-                            <span className="text-[#165dff]">#</span>
+                            <span className="text-blue-500">#</span>
                             {tag}
                         </span>
                     </button>

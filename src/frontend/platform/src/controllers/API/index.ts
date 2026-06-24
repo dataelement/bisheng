@@ -216,12 +216,16 @@ export interface BrandLoading {
     animation: "" | "animate-spin" | "animate-pulse" | "animate-bounce";
 }
 
+export type WorkbenchTheme = "blue" | "green";
+
 export interface BrandConfig {
     brandName: BrandText;
     linsightAgentName: BrandText;
     assets: BrandAssets;
     loading: BrandLoading;
     URLLoadingIcon?: string;
+    /** Workbench (end-user app) accent theme preset. */
+    workbenchTheme?: WorkbenchTheme;
 }
 
 export type BrandConfigUpdate = Omit<BrandConfig, "linsightAgentName">;

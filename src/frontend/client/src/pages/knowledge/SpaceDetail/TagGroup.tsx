@@ -45,7 +45,7 @@ const VARIANT_STYLES: Record<TagVariant, {
     pill: {
         container: 'min-h-[24px] gap-1.5',
         tag: 'bg-[#f2f3f5] text-[#4e5969] text-xs px-1.5 py-0.5 rounded-sm',
-        tagHighlighted: 'bg-[#E6EDFC] text-[#3a74e9] font-semibold text-xs px-1.5 py-0.5 rounded-sm',
+        tagHighlighted: 'bg-blue-500/[0.07] text-blue-500 font-semibold text-xs px-1.5 py-0.5 rounded-sm',
         tagFirst: 'min-w-[30px] truncate flex-shrink',
         moreBadge: 'bg-[#f2f3f5] text-[#4e5969] font-medium text-xs px-1.5 py-0.5 rounded-sm cursor-pointer flex-shrink-0',
         measure: 'px-1.5 py-0.5 text-xs',
@@ -54,7 +54,7 @@ const VARIANT_STYLES: Record<TagVariant, {
     text: {
         container: 'min-h-[20px] gap-1',
         tag: 'text-[10px] leading-5 text-[#999] whitespace-nowrap',
-        tagHighlighted: 'text-[10px] leading-5 font-semibold text-[#3a74e9] whitespace-nowrap',
+        tagHighlighted: 'text-[10px] leading-5 font-semibold text-blue-500 whitespace-nowrap',
         tagFirst: 'min-w-[20px] truncate flex-shrink',
         moreBadge: 'text-[10px] leading-5 text-[#999] cursor-pointer flex-shrink-0',
         measure: 'text-[10px] leading-5',
@@ -64,7 +64,7 @@ const VARIANT_STYLES: Record<TagVariant, {
     'text-h5': {
         container: 'min-h-[20px] gap-1',
         tag: 'text-xs leading-5 text-[#999999] whitespace-nowrap',
-        tagHighlighted: 'text-xs leading-5 font-semibold text-[#3a74e9] whitespace-nowrap',
+        tagHighlighted: 'text-xs leading-5 font-semibold text-blue-500 whitespace-nowrap',
         tagFirst: 'min-w-[20px] truncate flex-shrink',
         moreBadge: 'bg-[#F2F3F5] text-[#999999] text-xs leading-5 px-1.5 rounded-[4px] cursor-pointer flex-shrink-0',
         measure: 'text-xs leading-5',

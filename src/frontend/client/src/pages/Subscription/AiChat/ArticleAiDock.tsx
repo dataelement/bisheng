@@ -9,6 +9,7 @@ import {
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { ArticleQAIllustration } from "~/components/illustrations";
 import AiModelSelect from "~/components/Chat/AiModelSelect";
 import SpeechToTextComponent from "~/components/Voice/SpeechToText";
 import { SendIcon } from "~/components/svg";
@@ -359,6 +360,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                         flatMode
                         knowledgeChatLayout
                         contentWidthClassName="max-w-none px-4"
+                        emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
                         onPresetClick={(q) => setInputText(q)}
                         onRegenerate={regenerate}
                     />
@@ -527,6 +529,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                             flatMode
                             knowledgeChatLayout
                             contentWidthClassName="max-w-none px-4"
+                            emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
                             onPresetClick={(q) => setInputText(q)}
                             onRegenerate={regenerate}
                         />

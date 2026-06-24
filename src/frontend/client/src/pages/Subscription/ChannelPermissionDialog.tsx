@@ -143,7 +143,7 @@ export function ChannelPermissionDialog({
                                         <TabsTrigger
                                             key={tab.value}
                                             value={tab.value}
-                                            className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:bg-[rgba(51,92,255,0.15)] data-[state=active]:font-medium data-[state=active]:text-[#335CFF] data-[state=active]:shadow-none"
+                                            className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:bg-[rgb(var(--brand-500)/0.15)] data-[state=active]:font-medium data-[state=active]:text-blue-500 data-[state=active]:shadow-none"
                                         >
                                             {localize(tab.labelKey)}
                                         </TabsTrigger>
@@ -202,7 +202,7 @@ export function ChannelPermissionDialog({
                                         className={[
                                             "min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors",
                                             grantSubjectType === tab.value
-                                                ? "bg-[rgba(51,92,255,0.15)] font-medium text-[#335CFF]"
+                                                ? "bg-[rgb(var(--brand-500)/0.15)] font-medium text-blue-500"
                                                 : "font-normal text-[#818181]",
                                         ].join(" ")}
                                         onClick={() => setGrantSubjectType(tab.value)}

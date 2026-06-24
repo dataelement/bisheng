@@ -1,4 +1,5 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     Article,
@@ -141,7 +142,7 @@ function SubChannelTab({
                 <button type="button" onClick={onClick} className={className}>
                     <span ref={labelRef} className="block max-w-[240px] truncate">{sub.name}</span>
                     {sub.unreadCount && sub.unreadCount > 0 ? (
-                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
                             {sub.unreadCount}
                         </span>
                     ) : null}
@@ -562,13 +563,13 @@ export function ArticleList({
                                         className={cn(
                                             "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
                                             !selectedSubChannelName
-                                                ? "border-[#335CFF] text-[#335CFF]"
+                                                ? "border-blue-500 text-blue-500"
                                                 : "border-transparent text-[#212121]",
                                         )}
                                     >
                                         <span>{localize("com_subscription.all")}</span>
                                         {channel.unreadCount > 0 && (
-                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
                                                 {channel.unreadCount}
                                             </span>
                                         )}
@@ -581,7 +582,7 @@ export function ArticleList({
                                             className={cn(
                                                 "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
                                                 selectedSubChannelName === sub.name
-                                                    ? "border-[#335CFF] text-[#335CFF]"
+                                                    ? "border-blue-500 text-blue-500"
                                                     : "border-transparent text-[#212121]",
                                             )}
                                         />
@@ -676,13 +677,13 @@ export function ArticleList({
                                     className={cn(
                                         "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
                                         !selectedSubChannelName
-                                            ? "border-[#335CFF] text-[#335CFF]"
-                                            : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
+                                            ? "border-blue-500 text-blue-500"
+                                            : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
                                     )}
                                 >
                                     <span>{localize("com_subscription.all")}</span>
                                     {channel.unreadCount > 0 && (
-                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgba(51,92,255,0.05)] px-1 text-[10px] font-semibold leading-[18px] text-[#335CFF]">
+                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
                                             {channel.unreadCount}
                                         </span>
                                     )}
@@ -695,8 +696,8 @@ export function ArticleList({
                                         className={cn(
                                             "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
                                             selectedSubChannelName === sub.name
-                                                ? "border-[#335CFF] text-[#335CFF]"
-                                                : "border-transparent text-[#212121] fine-pointer:hover:text-[#335CFF]",
+                                                ? "border-blue-500 text-blue-500"
+                                                : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
                                         )}
                                     />
                                 ))}
@@ -780,15 +781,14 @@ export function ArticleList({
                     ) : articles.length === 0 ? (
                         <div className="flex flex-1 flex-col items-center justify-center py-60 text-center">
                             {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
-                                <p className="text-[14px] leading-6 text-[#86909c]">{localize("com_subscription.no_results")}</p>
+                                <>
+                                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                    <p className="text-[14px] font-normal leading-6 text-[#999999]">{localize("com_subscription.no_results")}</p>
+                                </>
                             ) : (
                                 <>
-                                    <img
-                                        className="size-[120px] mb-4 object-contain opacity-90"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                        alt="empty"
-                                    />
-                                    <p className="text-[14px] leading-6 text-[#4E5969]">
+                                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                    <p className="text-[14px] font-normal leading-6 text-[#999999]">
                                         {localize("com_subscription.no_related_content")}
                                     </p>
                                 </>

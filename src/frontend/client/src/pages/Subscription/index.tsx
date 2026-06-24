@@ -1,5 +1,6 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -29,8 +30,9 @@ import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer"
 import { buildCreateChannelPayload } from "./channelUtils";
 import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 import { Outlined } from "bisheng-icons";
-import { useSetRecoilState } from "recoil";
+import { useSetRecoilState, useRecoilValue } from "recoil";
 import store from "~/store";
+import { subscriptionDetailPaneWidthState } from "~/store/subscriptionLayout";
 import { ChannelShareDialog } from "./ChannelShareDialog";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
@@ -87,6 +89,9 @@ export default function Subscription() {
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
+    // Right-area width (detail panel + splitter) published by ChannelLayout; offsets
+    // the persistent 频道/广场 tab so it tracks the article-list column's right edge.
+    const detailPaneWidth = useRecoilValue(subscriptionDetailPaneWidthState);
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
     const openChannelPermissionDialog = (channel: Channel) => {
@@ -485,7 +490,7 @@ export default function Subscription() {
             {/* 频道 / 广场 切换 — 提升到两个视图之上常驻，切换时同一滑块平滑移动，
                 位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。 */}
             {!isH5 && (activeChannel || showChannelSquare) ? (
-                <div className="absolute right-10 top-5 z-20">
+                <div className="absolute top-5 z-20" style={{ right: `${detailPaneWidth + 40}px` }}>
                     <ChannelSquareTabs
                         active={showChannelSquare ? "square" : "channel"}
                         onChannelClick={handleSquareBack}
@@ -631,13 +636,9 @@ export default function Subscription() {
                                         </div>
                                     </div>
                                 ) : null}
-                                <img
-                                    className="size-[120px] mb-4 object-contain opacity-90"
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                    alt="empty"
-                                />
-                                <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
-                                    className="ml-1.5 cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                                <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                <p className="text-[14px] font-normal leading-6 text-[#999999]">{localize("com_subscription.no_related_content_please")}<span
+                                    className="ml-1.5 cursor-pointer text-blue-500 transition-colors hover:text-blue-400 active:text-blue-700"
                                     onClick={handleCreateChannel}
                                 >{localize("com_subscription.create_channel")}</span>
                                 </p>
