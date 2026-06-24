@@ -1761,6 +1761,16 @@ class DepartmentService:
             ) + DepartmentChangeHandler.on_admin_removed(old_dept_id_for_fga, [user_id])
             await DepartmentChangeHandler.execute_async(ops_rm)
             await DepartmentAdminGrantDao.adelete(user_id, int(old_dept_id_for_fga))
+            # 撤销部门管理员后，清理其在原部门知识空间的派生绑定
+            # (space_channel_member 行 + knowledge_space#manager 元组)，否则越权残留。
+            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                DepartmentKnowledgeSpaceService,
+            )
+
+            await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
+                department_id=int(old_dept_id_for_fga),
+                user_ids=[user_id],
+            )
         if fga_add_new:
             ops_add = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
             await DepartmentChangeHandler.execute_async(ops_add)
