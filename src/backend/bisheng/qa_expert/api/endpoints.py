@@ -28,6 +28,7 @@ from bisheng.qa_expert.domain.schemas import (
     CommentCreateRequest,
     CommentDetailResponse,
     CommentPageData,
+    QuestionUpdateRequest,
     VoteRequest,
     AdoptAnswerRequest,
     QANotificationResponse,
@@ -142,6 +143,17 @@ async def expertsinfo(
     return resp_200(data=experinfo)
   
 
+@router.get("/experts/{user_id}")
+async def expertsinfo_id(
+    user_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """删除专家"""
+   
+    experinfo = await service.get_expertinfobyid(user_id)
+    return resp_200(data=experinfo)
+
 
 # ==================== 问题管理 Endpoints ====================
 
@@ -192,6 +204,19 @@ async def list_questions(
     )
 
 
+@router.put("/questions/{question_id}", response_model=ExpertResponse)
+async def update_question(
+    question_id: int,
+    request: QuestionUpdateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_question_service),
+):
+    """更新专家信息"""
+   
+    expert = await service.update_question(question_id, request)
+    return resp_200(data=expert)
+
+
 @router.get("/questions/{question_id}", response_model=QuestionDetailResponse)
 async def get_question_detail(
     question_id: int,
@@ -214,6 +239,21 @@ async def adopt_answer(
   
     question = await service.adopt_answer(question_id, request.answer_id, user.user_id)
     return resp_200(data=question)
+
+
+@router.delete("/questions/{question_id}")
+async def delete_question(
+    question_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: QuestionService = Depends(get_question_service),
+):
+    """删除回答"""
+    try:
+        success = await service.delete_question(question_id)
+
+        return resp_200(data={"success": success})
+    except Exception as e:
+        return resp_500(code=500, msg=str(e))
 
 
 
@@ -326,6 +366,7 @@ async def create_comment(
     comment = await service.create_comment(user.user_id,user.user_name, request)
 
     return resp_200(data=comment)
+
 
 @router.post("/allcomments", )
 async def get_allcomments(

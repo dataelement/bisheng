@@ -131,6 +131,13 @@ class ExpertRepository:
             stmt = select(Expert).where(Expert.expert_name == expert_name)
             result = await session.exec(stmt)
             return result.first()
+        
+    async def  get_expertinfo_userid(self, user_id: int):
+        """获取专家userid"""
+        async with get_async_db_session() as session:
+            stmt = select(Expert).where(Expert.user_id == user_id)
+            result = await session.exec(stmt)
+            return result.first()
 
 class QuestionRepository:
     """问题仓储"""
@@ -150,6 +157,17 @@ class QuestionRepository:
             stmt = select(Question).where(Question.id == question_id)
             result = await session.exec(stmt)
             return result.first()
+        
+    async def delete(self, question_id: int) -> bool:
+        """删除问题"""
+        async with get_async_db_session() as session:
+            question = await self.get_by_id(question_id)
+            if not question:
+                return False
+            await session.delete(question)
+            await session.commit()
+            await session.flush()
+            return True
 
     async def list_all(
         self,

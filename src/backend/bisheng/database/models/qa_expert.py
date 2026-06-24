@@ -27,6 +27,11 @@ class Expert(SQLModel, table=True):
         default=None,
         description="所属部门，JSON 格式"
     )
+    major: Optional[str] = Field(
+        default=None,
+        description="所属专业"
+    )
+    
     # 统计字段
     answer_count: int = Field(default=0)
     adoption_count: int = Field(default=0)

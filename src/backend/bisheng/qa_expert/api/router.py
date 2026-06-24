@@ -22,12 +22,15 @@ router.add_api_route("/experts", endpoints.create_expert, methods=["POST"])
 router.add_api_route("/experts/{expert_id}", endpoints.update_expert, methods=["PUT"])
 router.add_api_route("/experts/{expert_id}", endpoints.delete_expert, methods=["DELETE"])
 router.add_api_route("/experts/{expert_name}", endpoints.expertsinfo, methods=["GET"])
+router.add_api_route("/experts/{user_id}", endpoints.expertsinfo_id, methods=["GET"])
 
 # 问题管理
 router.add_api_route("/questions", endpoints.create_question, methods=["POST"])
 router.add_api_route("/questions", endpoints.list_questions, methods=["GET"])
+router.add_api_route("/questions/{question_id}", endpoints.update_question, methods=["PUT"])
 router.add_api_route("/questions/{question_id}", endpoints.get_question_detail, methods=["GET"])
 router.add_api_route("/questions/{question_id}/adopt", endpoints.adopt_answer, methods=["POST"])
+router.add_api_route("/questions/{question_id}", endpoints.delete_question, methods=["DELETE"])
 
 # 回答管理
 router.add_api_route("/answers", endpoints.create_answer, methods=["POST"])
