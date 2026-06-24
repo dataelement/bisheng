@@ -42,7 +42,7 @@ import { GroupHeaderLabel } from './GroupHeaderLabel';
 import { KnowledgeRow } from './KnowledgeRow';
 import { NarrationTicker } from './NarrationTicker';
 import ToolRowLite from './ToolRowLite';
-import { narrationFromSteps, summarizeActivity } from './stepUtils';
+import { mergedStepRenderEqual, narrationFromSteps, summarizeActivity } from './stepUtils';
 import type { DeepStepGroup as DeepStepGroupData, MergedStep } from './stepUtils';
 
 export interface DeepStepGroupProps {
@@ -320,13 +320,8 @@ DeepStepGroupBase.displayName = 'DeepStepGroup';
  * episode is semantically immutable, so skip its re-render when nothing it renders
  * changed; the active tail (new output / a new step / a step closing) always
  * compares unequal and re-renders. Cost is O(steps) — far below re-rendering the
- * thinking-text + tool-row subtree it guards.
- *
- * Reference comparisons are sound across rebuilds: `params` traces back to the
- * stable raw history frame (same object reference for an unchanged step), and
- * streaming `output` only ever grows, so its length is a reliable change signal.
- * `extraInfo` is intentionally NOT compared — mergeStepFrames spreads a new object
- * each rebuild (always unequal) and nothing in the render path reads it.
+ * thinking-text + tool-row subtree it guards. The per-step "did it change?" check
+ * is mergedStepRenderEqual (shared with ToolRowLite so the two gates can't drift).
  */
 export function deepStepGroupPropsEqual(prev: DeepStepGroupProps, next: DeepStepGroupProps): boolean {
     if (prev.active !== next.active || prev.compact !== next.compact) return false;
@@ -336,19 +331,7 @@ export function deepStepGroupPropsEqual(prev: DeepStepGroupProps, next: DeepStep
     if (a.running !== b.running || a.startedAt !== b.startedAt || a.endedAt !== b.endedAt) return false;
     if (a.steps.length !== b.steps.length) return false;
     for (let i = 0; i < a.steps.length; i++) {
-        const sa = a.steps[i];
-        const sb = b.steps[i];
-        if (
-            sa.callId !== sb.callId ||
-            sa.running !== sb.running ||
-            sa.name !== sb.name ||
-            sa.stepType !== sb.stepType ||
-            sa.output.length !== sb.output.length ||
-            sa.params !== sb.params ||
-            sa.callReason !== sb.callReason
-        ) {
-            return false;
-        }
+        if (!mergedStepRenderEqual(a.steps[i], b.steps[i])) return false;
     }
     return true;
 }

@@ -17,7 +17,7 @@ import { cn } from '~/utils';
 import CollapsibleTimelineItem from './CollapsibleTimelineItem';
 import { ACCENT, BODY, MUTED } from './execTokens';
 import { detailTextCls, formatStepParams, stepTypeIcon } from './StepRow';
-import type { MergedStep } from './stepUtils';
+import { mergedStepRenderEqual, type MergedStep } from './stepUtils';
 
 export interface ToolRowLiteProps {
     step: MergedStep;
@@ -115,20 +115,11 @@ ToolRowLiteBase.displayName = 'ToolRowLite';
  * React.memo comparator. ExecutionTimeline rebuilds the node tree (fresh MergedStep
  * objects) on every WS frame, so within the active group each thinking-delta frame
  * would otherwise re-render every sibling tool row even though none of them changed.
- * Skip when the rendered fields are unchanged; `params` reference traces back to the
- * stable raw frame and streaming `output` only grows, so length is a safe signal.
+ * Delegates to mergedStepRenderEqual — the shared "did this step change?" predicate
+ * (also used by DeepStepGroup's gate) so the two memo comparators can't drift.
  */
 export function toolRowLitePropsEqual(prev: ToolRowLiteProps, next: ToolRowLiteProps): boolean {
-    const a = prev.step;
-    const b = next.step;
-    return (
-        a.callId === b.callId &&
-        a.running === b.running &&
-        a.name === b.name &&
-        a.output.length === b.output.length &&
-        a.params === b.params &&
-        a.callReason === b.callReason
-    );
+    return mergedStepRenderEqual(prev.step, next.step);
 }
 
 const ToolRowLite = memo(ToolRowLiteBase, toolRowLitePropsEqual);
