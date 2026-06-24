@@ -20,6 +20,7 @@ import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
+import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
@@ -481,11 +482,21 @@ export default function Subscription() {
 
     return (
         <div className="relative flex min-h-0 flex-1 flex-col touch-desktop:flex-row">
+            {/* 频道 / 广场 切换 — 提升到两个视图之上常驻，切换时同一滑块平滑移动，
+                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。 */}
+            {!isH5 && (activeChannel || showChannelSquare) ? (
+                <div className="absolute right-10 top-5 z-20">
+                    <ChannelSquareTabs
+                        active={showChannelSquare ? "square" : "channel"}
+                        onChannelClick={handleSquareBack}
+                        onSquareClick={handleChannelSquare}
+                    />
+                </div>
+            ) : null}
             {showChannelSquare ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <ChannelSquare
                         refreshKey={channelSquareRefreshKey}
-                        onBack={handleSquareBack}
                         onPreviewChannel={handleSquarePreview}
                     />
                 </div>

@@ -120,7 +120,7 @@ export function MultiSourceSelect({
                 <Button
                     variant="outline"
                     className={cn(
-                        "w-auto min-w-[160px] h-9 justify-between px-3 font-normal",
+                        "w-auto min-w-[160px] h-9 justify-between rounded-[6px] border-[#ECECEC] px-3 font-normal",
                         hasEmptyError && "border-[#F53F3F] bg-[#F53F3F]/10",
                         hideTrigger && "pointer-events-none inline-block size-0 min-w-0 overflow-hidden border-0 p-0 opacity-0",
                         className

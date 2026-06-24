@@ -1876,6 +1876,8 @@
     "confirm_delete_folder_name": "Are you sure you want to delete folder \"{{0}}\"?"
   },
   "com_subscription": {
+    "tab_channel": "Channels",
+    "tab_square": "Square",
     "add": "Add",
     "add_condition": "Add Condition",
     "add_official_accounts_and_webpages": "Official accounts and webpages can be added as information sources",

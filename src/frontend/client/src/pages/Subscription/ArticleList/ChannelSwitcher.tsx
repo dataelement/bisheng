@@ -321,7 +321,6 @@ export function ChannelSwitcher({
                 >
                     {renderSectionHeader()}
                     {renderChannelList()}
-                    {renderChannelSquareButton()}
                 </PopoverContent>
             </Popover>
         </div>

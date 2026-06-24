@@ -1799,6 +1799,8 @@
     "confirm_delete_folder_name": "フォルダ「{{0}}」を削除してもよろしいですか？"
   },
   "com_subscription": {
+    "tab_channel": "チャンネル",
+    "tab_square": "広場",
     "add": "追加",
     "add_condition": "条件を追加",
     "add_official_accounts_and_webpages": "公式アカウントとウェブページを情報源として追加できます",
