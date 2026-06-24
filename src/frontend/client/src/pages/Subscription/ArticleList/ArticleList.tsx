@@ -1,4 +1,5 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     Article,
@@ -780,15 +781,14 @@ export function ArticleList({
                     ) : articles.length === 0 ? (
                         <div className="flex flex-1 flex-col items-center justify-center py-60 text-center">
                             {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
-                                <p className="text-[14px] leading-6 text-[#86909c]">{localize("com_subscription.no_results")}</p>
+                                <>
+                                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                    <p className="text-[14px] font-normal leading-6 text-[#999999]">{localize("com_subscription.no_results")}</p>
+                                </>
                             ) : (
                                 <>
-                                    <img
-                                        className="size-[120px] mb-4 object-contain opacity-90"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                        alt="empty"
-                                    />
-                                    <p className="text-[14px] leading-6 text-[#4E5969]">
+                                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                    <p className="text-[14px] font-normal leading-6 text-[#999999]">
                                         {localize("com_subscription.no_related_content")}
                                     </p>
                                 </>

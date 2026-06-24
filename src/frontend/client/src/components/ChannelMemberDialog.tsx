@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import {
     getChannelMembersApi,
     removeChannelMemberApi,
@@ -366,12 +367,8 @@ export function ChannelMemberDialog({
                                 </div>
                             ) : members.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center py-8 text-center">
-                                    <img
-                                        className="size-[120px] mb-2 object-contain opacity-90"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                        alt="empty"
-                                    />
-                                    <p className="text-[13px] text-[#86909C]">
+                                    <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                    <p className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_subscription.nofound_mathcing_member")}
                                     </p>
                                 </div>

@@ -102,6 +102,56 @@ blue: { 50:'rgb(var(--brand-50) / <alpha-value>)', ... 900:'rgb(var(--brand-900)
 
 **给新对话的起手式**：把这批 SVG 源码贴给我（或给路径），我按上表映射逐个做成主题化组件并替换。
 
+### 5.1 进度（2026-06-24）
+
+已把用户新画的 6 张 SVG 做成主题化内联组件，放在 `src/components/illustrations/`（统一从 `index.ts` 导出）。颜色按 §5 映射：`#19B476→rgb(var(--brand-500))`、`#BDE6D3→rgb(var(--brand-100))`、`#7CD0B1→rgb(var(--brand-300))`，white / black-opacity / `#D9D9D9`(mask) 保持原样；带 mask 的两张用 `useId()` 唯一化。
+
+| 组件 | 来源 SVG | 备注 |
+|---|---|---|
+| `EmptyStateIllustration` | 空状态 | 通用空状态（mask uid 已唯一化） |
+| `NoPermissionIllustration` | 无权限访问数据 | 适合 `MenuUnavailablePage` |
+| `ArticleQAIllustration` | 文章问答 | |
+| `ListWebLinkIllustration` | 列表网页链接 | |
+| `CrawlingIllustration` | 爬取中 | mask uid 已唯一化 |
+| `SuccessIllustration` | 成功态 | **跟随品牌主题**（用户已确认，非固定语义成功绿） |
+
+**通用空状态已替换（2026-06-24）**：10 处通用 `assets/channel/empty.png` 的 `<img>` 已换成 `<EmptyStateIllustration className="size-[120px] mb-X opacity-90" />`（去掉对内联 SVG 无意义的 `object-contain`）：ChannelMemberManagementPanel、ChannelMemberDialog、KnowledgeSpaceMemberManagementPanel、KnowledgeSpaceMemberDialog、ChannelSquare、Subscription/index、knowledge/index、KnowledgeSquare、SpaceDetail/index、apps/AppEmptyState。
+
+**`AddSourceDropdown.tsx` 两个空态已接（2026-06-24）**：
+- `viewMode === "noResultNonUrl"`（按名称搜无收录，文案「输入正确名称或完整的网址」）：`ChannelBookIcon` → `ListWebLinkIllustration`（顺手删掉本文件已无引用的 `ChannelBookIcon` import）。
+- `viewMode === "noResultUrl"`（网站尚未入库·待爬取，带「暂不爬取/确认爬取」按钮）：`empty.png` → `EmptyStateIllustration`。
+
+**`CrawlingIllustration` 已接（2026-06-24）**：`Subscription/CreateChannel/CrawlPreviewDialog.tsx` 的 `PreviewBody` `status === "loading"`（爬取中，文案 crawling_waiting/crawling_please_wait）原本用 `ChannelLoadingIcon`（写死蓝 #4D6DFD，静态、不跟随主题）→ 换成 `CrawlingIllustration`。`PreviewBody` 同时被弹窗 `CrawlPreviewDialog`（点队列进行中条目弹出）和内联 `CrawlPreviewPanel` 复用，两处一起生效。`ChannelLoadingIcon` 本文件已无引用，移除 import。
+
+**`NoPermissionIllustration` 已接（2026-06-24）**：频道广场 / 知识广场预览抽屉里「内容不可见」空态（原本写死 `assets/channel/review.png`）共 3 处换成 `NoPermissionIllustration`：
+- `Subscription/ChannelPreviewDrawer.tsx`（频道待审核，channel_content_needs_approval）
+- `knowledge/KnowledgeSpacePreviewDrawer.tsx`（APPROVAL 可见性 space_view_requires_approval + 需加入 space_view_requires_join，两处同一张图一起换）
+
+> 注：`MenuUnavailablePage`（经 `WorkbenchEmptyIllustration` 用 ai... 实为 empty.png）也是无权限语境，但仍走旧 `WorkbenchEmptyIllustration`，未动（见下）。
+
+**`SuccessIllustration` 已接（2026-06-24）**：创建成功界面（原 `ChannelSuccessIcon`，写死蓝）→ `SuccessIllustration`（跟随品牌主题）：
+- `Subscription/CreateChannel/CreateChannelSuccess.tsx`（频道创建成功）
+- `knowledge/CreateKnowledgeSpaceDrawer.tsx`（知识空间创建成功）
+
+→ **6 张插画全部有落地槽位。**
+
+**`AddToKnowledgeModal` 已接（2026-06-24）**：「加入知识空间」弹窗（标题 key `add_to_knowledge_space`，挂在 `ArticlePage`）两个空态（`no_selectable_knowledge_space` + `no_matching_knowledge_space`，原 `empty.png` 渲染为旧六边形图）→ `EmptyStateIllustration`。（注：原计划接 ListWebLink，用户改为 empty。）
+
+**`ArticleList` 两空态已接（2026-06-24）**：`Subscription/ArticleList/ArticleList.tsx` 频道内文章列表——搜索/筛选无匹配态（`no_results`，原纯文字，**新增**插画）+ 频道无文章态（`no_related_content`，原 `empty.png`，**替换**）均用 `EmptyStateIllustration`，各自保留原文案。
+
+**`WorkbenchEmptyIllustration` 已接（2026-06-24）**：菜单无权限页 `MenuUnavailablePage`（路由 `/workspace/menu-unavailable`，菜单审批模式下访问无权限菜单时跳转）。`WorkbenchEmptyIllustration.tsx` 内部从 `empty.png` 改为渲染 `NoPermissionIllustration`（仅此一处引用，一改全跟）。
+
+**→ 全仓 `assets/channel/empty.png` 实际引用已清零；6 张插画全部落地完成。** （`illustrations/index.ts` 注释里还提到 empty.png 一词，仅为说明文字。）
+
+`CrawlingIllustration` / `SuccessIllustration` 暂无槽位。
+
+**AI 问答前置插画已接 `ArticleQAIllustration`（2026-06-24）**：知识空间 + 订阅模块的 AI 助手空状态原本是 `assets/channel/ai-home.png`，现统一换成 `ArticleQAIllustration`（`size-[80px]`）。
+- 知识空间：`KnowledgeAiBottomDock.tsx` 自带的两处空态 `<img>`（移动 drawer + PC 变体，覆盖文件夹提问与单文件提问——该 dock 浮在 SpaceDetail/文件预览之上）已直接替换。
+- 订阅模块：`ArticleAiDock`(2)、`FileAiDock`(2)、`AiAssistantPanel`(1) 通过 `AiChatMessages` 渲染空态——给 `AiChatMessages` 新增可选 prop `emptyStateIllustration?: ReactNode`（默认仍是 ai-home.png），这些 dock 传入 `<ArticleQAIllustration/>`。
+- **后续也统一了（2026-06-24）**：`appChat/ChatEmptyState.tsx`（应用对话空态，appChat + AppChatEntry 删除态 + standaloneChat 共用）和 `AiChatMessages` 默认值（ShareView 空分享会话）也从 `ai-home.png` 换成 `ArticleQAIllustration`。这两处是低频兜底空态（应用配了开场白/引导问题就不会出现；对话基本删不空）。→ 全仓 `ai-home.png` 引用清零。
+
+`tsc --noEmit` 基线 559 未增加。
+
 ---
 
 ## 6. 验证命令

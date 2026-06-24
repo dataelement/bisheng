@@ -30,6 +30,7 @@ import {
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { ArticleQAIllustration } from "~/components/illustrations";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
 import { ConversationHistory } from "./ConversationHistory";
 import useFolderChat from "~/hooks/useFolderChat";
@@ -202,12 +203,8 @@ export function KnowledgeAiBottomDock({
                 <div className="relative min-h-0 flex-1">
                     {messages.length === 0 && !activeChatId ? (
                         <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-                            <img
-                                className="mx-auto block size-[80px] object-contain"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                                alt="AI Assistant"
-                            />
-                            <p className="text-sm text-[#86909c]">{folderQaHint}</p>
+                            <ArticleQAIllustration className="mx-auto block size-[80px]" />
+                            <p className="text-[14px] font-normal text-[#999999]">{folderQaHint}</p>
                         </div>
                     ) : (
                         <AiChatMessages
@@ -223,6 +220,7 @@ export function KnowledgeAiBottomDock({
                             knowledgeChatLayout
                             contentWidthClassName="max-w-none px-4"
                             emptyStateHint={folderQaHint}
+                            emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
                             onPresetClick={() => { }}
                             onRegenerate={regenerate}
                         />
@@ -406,12 +404,8 @@ export function KnowledgeAiBottomDock({
 
                             {messages.length === 0 && !activeChatId ? (
                                 <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-                                    <img
-                                        className="mx-auto block size-[80px] object-contain"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                                        alt="AI Assistant"
-                                    />
-                                    <p className="text-sm text-[#86909c]">{folderQaHint}</p>
+                                    <ArticleQAIllustration className="mx-auto block size-[80px]" />
+                                    <p className="text-[14px] font-normal text-[#999999]">{folderQaHint}</p>
                                 </div>
                             ) : (
                                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -428,6 +422,7 @@ export function KnowledgeAiBottomDock({
                                         knowledgeChatLayout
                                         contentWidthClassName="max-w-none px-4"
                                         emptyStateHint={folderQaHint}
+                                        emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
                                         onPresetClick={() => { }}
                                         onRegenerate={regenerate}
                                     />

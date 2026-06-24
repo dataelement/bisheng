@@ -24,7 +24,8 @@ import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/
 import { CrawlFeedbackDialog } from "./CrawlFeedbackDialog";
 import type { InformationSource } from "~/api/channels";
 import type { CrawlPreview } from "../hooks/useCrawlQueue";
-import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
+import { ChannelBookIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
+import { CrawlingIllustration } from "~/components/illustrations";
 import { cn } from "~/utils";
 import { extractApiStatusCode } from "../errorUtils";
 import { crawlErrorMessageKey } from "./crawlErrorUtils";
@@ -64,8 +65,8 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
 
             {status === "loading" && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
-                    <ChannelLoadingIcon className="w-[120px] h-[120px]" />
-                    <p className="text-[14px] text-[#4E5969]">
+                    <CrawlingIllustration className="w-[120px] h-[120px]" />
+                    <p className="text-[14px] font-normal text-[#999999]">
                         {localize("com_subscription.crawling_waiting") || localize("com_subscription.crawling_please_wait")}
                     </p>
                 </div>

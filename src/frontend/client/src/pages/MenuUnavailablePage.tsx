@@ -97,10 +97,10 @@ export default function MenuUnavailablePage() {
 
   return (
     <div className="flex h-full min-h-[320px] w-full flex-1 flex-col items-center justify-center bg-white px-6 py-12">
-      <div className="mb-6 opacity-80">
+      <div className="mb-4 opacity-80">
         <WorkbenchEmptyIllustration />
       </div>
-      <p className="max-w-xl text-center text-sm leading-relaxed text-gray-500" role="status">
+      <p className="max-w-xl text-center text-[14px] font-normal leading-relaxed text-[#999999]" role="status">
         {localize('com_menu_unavailable_no_permission')}
       </p>
       {canApply && (

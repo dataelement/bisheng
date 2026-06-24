@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { Search } from "lucide-react";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { Input } from "~/components/ui/Input";
 import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
@@ -303,12 +304,8 @@ function ChannelSquare({
             </div>
           ) : visibleChannels.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
-              <img
-                className="size-[120px] mb-3 object-contain opacity-90"
-                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                alt="empty"
-              />
-              <p className="text-[14px] text-[#86909C]">{tEmptyText}</p>
+              <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+              <p className="text-[14px] font-normal text-[#999999]">{tEmptyText}</p>
             </div>
           ) : (
             <div className="space-y-3">

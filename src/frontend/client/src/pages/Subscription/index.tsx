@@ -1,5 +1,6 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -631,12 +632,8 @@ export default function Subscription() {
                                         </div>
                                     </div>
                                 ) : null}
-                                <img
-                                    className="size-[120px] mb-4 object-contain opacity-90"
-                                    src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                    alt="empty"
-                                />
-                                <p className="text-[14px] leading-6 text-[#4E5969]">{localize("com_subscription.no_related_content_please")}<span
+                                <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                                <p className="text-[14px] font-normal leading-6 text-[#999999]">{localize("com_subscription.no_related_content_please")}<span
                                     className="ml-1.5 cursor-pointer text-blue-500 transition-colors hover:text-blue-400 active:text-blue-700"
                                     onClick={handleCreateChannel}
                                 >{localize("com_subscription.create_channel")}</span>

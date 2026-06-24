@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { NoPermissionIllustration } from "~/components/illustrations";
 import { ChevronRight, X } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "~/components/ui/Sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
@@ -577,23 +578,15 @@ export function KnowledgeSpacePreviewDrawer({
                                 </div>
                             ) : space?.visibility === VisibilityType.APPROVAL ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
-                                    <img
-                                        className="size-[140px] object-contain mb-4"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
-                                        alt="Locked"
-                                    />
-                                    <div className="text-[#1d2129] text-[14px]">
+                                    <NoPermissionIllustration className="size-[140px] mb-4" />
+                                    <div className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_knowledge.space_view_requires_approval")}
                                     </div>
                                 </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[360px]">
-                                    <img
-                                        className="size-[140px] object-contain mb-4"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
-                                        alt="Locked"
-                                    />
-                                    <div className="text-[#1d2129] text-[14px]">
+                                    <NoPermissionIllustration className="size-[140px] mb-4" />
+                                    <div className="text-[14px] font-normal text-[#999999]">
                                         {localize("com_knowledge.space_view_requires_join")}
                                     </div>
                                 </div>

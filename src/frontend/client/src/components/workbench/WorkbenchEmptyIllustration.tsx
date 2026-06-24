@@ -1,15 +1,10 @@
+import { NoPermissionIllustration } from '~/components/illustrations';
+
 /**
- * Shared illustration for workstation empty placeholder (channel empty.png).
+ * Illustration for the menu-unavailable (no-permission) workstation placeholder.
+ * Uses the brand-themed NoPermissionIllustration so it follows the blue ⇄ green
+ * theme switch (was the legacy static channel/empty.png).
  */
 export function WorkbenchEmptyIllustration() {
-  const src = `${__APP_ENV__.BASE_URL || ''}/assets/channel/empty.png`;
-  return (
-    <img
-      src={src}
-      alt=""
-      className="h-[120px] w-[120px] object-contain"
-      width={120}
-      height={120}
-    />
-  );
+  return <NoPermissionIllustration className="h-[120px] w-[120px]" />;
 }

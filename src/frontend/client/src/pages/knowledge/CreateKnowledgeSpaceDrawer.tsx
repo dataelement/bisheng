@@ -26,7 +26,7 @@ import {
     VisibilityType
 } from "~/api/knowledge";
 import { cn, getFullWidthLength, truncateByFullWidth } from "~/utils";
-import { ChannelSuccessIcon } from "~/components/icons/channels";
+import { SuccessIllustration } from "~/components/illustrations";
 
 const MAX_SPACE_NAME = 50;
 const MAX_SPACE_DESC = 200;
@@ -361,8 +361,8 @@ export function CreateKnowledgeSpaceDrawer({
                 {showSuccess ? (
                     <div className="flex flex-1 flex-col items-center justify-center py-16">
                         <div className="flex flex-col items-center">
-                            <ChannelSuccessIcon className="h-[120px] w-[120px] mb-5" />
-                            <div className="mb-8 text-center text-[20px] font-normal text-[#1D2129]">
+                            <SuccessIllustration className="h-[120px] w-[120px] mb-4" />
+                            <div className="mb-8 text-center text-[18px] font-semibold text-[#1D2129]">
                                 {localize("com_subscription.create_knowledge_space_success")}
                             </div>
                             <div className="flex gap-3">

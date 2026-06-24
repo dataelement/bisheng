@@ -1,4 +1,5 @@
 import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { NoPermissionIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -349,12 +350,8 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                         <div ref={previewListScrollRevealRef} className="flex-1 min-h-0 overflow-y-auto scrollbar-on-scroll px-4 pt-2">
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-                                    <img
-                                        className="size-[120px] object-contain mb-4"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/review.png`}
-                                        alt="Review Pending"
-                                    />
-                                    <div className="text-[#1d2129] text-[14px]">{localize("com_subscription.channel_content_needs_approval")}</div>
+                                    <NoPermissionIllustration className="size-[120px] mb-4" />
+                                    <div className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.channel_content_needs_approval")}</div>
                                 </div>
                             ) : articles.length > 0 ? (
                                 <InfiniteScroll
