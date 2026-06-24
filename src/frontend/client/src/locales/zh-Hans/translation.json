@@ -1803,6 +1803,8 @@
     "confirm_delete_folder_name": "确认删除文件夹 \"{{0}}\" 吗？"
   },
   "com_subscription": {
+    "tab_channel": "频道",
+    "tab_square": "广场",
     "add": "加入",
     "add_condition": "新增条件",
     "add_official_accounts_and_webpages": "可添加公众号和网页作为该频道的信息源",
