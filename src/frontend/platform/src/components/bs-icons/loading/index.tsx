@@ -1,8 +1,8 @@
 import React, { forwardRef } from "react";
 import Load from "./Load.svg?react";
-import Loading from "./Loading.svg?react";
 import { cname } from "../../bs-ui/utils";
-import { getBrandLoadingIconUrl } from "@/utils/brand";
+import { withBrandBaseUrl } from "@/utils/brand";
+import { BrandTickSpinner, isBuiltinLoadingIcon } from "./BrandTickSpinner";
 
 export const LoadIcon = forwardRef<
     SVGSVGElement & { className: any },
@@ -13,12 +13,14 @@ export const LoadIcon = forwardRef<
 
 
 export const LoadingIcon = forwardRef<
-    SVGSVGElement & { className: any },
+    (SVGSVGElement | HTMLImageElement) & { className: any },
     React.PropsWithChildren<{ className?: string }>
 >(({ className, ...props }, ref) => {
-    const loadingIcon = getBrandLoadingIconUrl();
-    if (loadingIcon) {
-        return <img src={loadingIcon} ref={ref} {...props} className={cname('text-primary max-w-14', className, window.BRAND_CONFIG?.loadingAnimation)} />;
+    const rawIcon = window.BRAND_CONFIG?.URLLoadingIcon || window.BRAND_CONFIG?.loadingIcon || "";
+    // Custom uploaded icon → <img> (cannot follow currentColor; intentional).
+    if (rawIcon && !isBuiltinLoadingIcon(rawIcon)) {
+        return <img src={withBrandBaseUrl(rawIcon)} ref={ref as React.ForwardedRef<HTMLImageElement>} {...props} className={cname('text-primary max-w-14', className, window.BRAND_CONFIG?.loadingAnimation)} />;
     }
-    return <Loading ref={ref} {...props} className={cname('text-primary', className)} />;
+    // Built-in default → inline spinner that follows --primary (admin theme).
+    return <BrandTickSpinner ref={ref as React.ForwardedRef<SVGSVGElement>} {...props} className={cname('text-primary', className)} />;
 });

@@ -1,25 +1,23 @@
 import { atom } from 'recoil';
 import { applyBrandTheme, getInitialBrand, type BrandTheme } from '~/utils/theme';
 
-const BRAND_STORAGE_KEY = 'brand-theme';
-
 /**
- * Brand (accent) color theme — frontend-only switch (blue | green).
- * The atom owns persistence + DOM application so any setter stays in sync:
- * on init it reads localStorage and applies the class, and every change
- * re-persists and re-applies.
+ * Workbench accent theme (blue | green). Admin-configured and delivered via
+ * window.BRAND_CONFIG.workbenchTheme; brand-runtime.js applies the class before
+ * paint. This atom just mirrors that value into React state and re-applies on
+ * set — no per-user localStorage persistence (source of truth = backend brand
+ * config).
  */
 const brandTheme = atom<BrandTheme>({
   key: 'brandTheme',
   default: getInitialBrand(),
   effects_UNSTABLE: [
     ({ setSelf, onSet }) => {
-      const saved = getInitialBrand();
-      setSelf(saved);
-      applyBrandTheme(saved);
+      const initial = getInitialBrand();
+      setSelf(initial);
+      applyBrandTheme(initial);
 
       onSet((newValue: BrandTheme) => {
-        localStorage.setItem(BRAND_STORAGE_KEY, JSON.stringify(newValue));
         applyBrandTheme(newValue);
       });
     },

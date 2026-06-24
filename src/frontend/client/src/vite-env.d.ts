@@ -30,6 +30,8 @@ interface Window {
     loadingIcon?: string;
     URLLoadingIcon?: string;
     loadingAnimation?: string;
+    /** Admin-set workbench accent theme preset; applied by brand-runtime.js. */
+    workbenchTheme?: "blue" | "green";
     loading?: {
       icon?: { url?: string; relative_path?: string; file_name?: string } | null;
       iconOptions?: Array<{ url?: string; relative_path?: string; file_name?: string }>;

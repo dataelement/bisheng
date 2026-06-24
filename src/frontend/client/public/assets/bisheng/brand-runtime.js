@@ -77,6 +77,19 @@
       : ((brandName && (brandName.en || brandName.zh)) || "");
   }
 
+  // Apply the admin-configured workbench accent theme (blue | green) by toggling
+  // the `theme-green` class on <html>. Runs in both the synchronous cached pass
+  // and the async fetch pass, i.e. before first paint — so the loading spinner
+  // (which follows --primary via currentColor) is already the right color.
+  function applyWorkbenchTheme(theme) {
+    try {
+      var root = document.documentElement;
+      if (root) root.classList.toggle("theme-green", theme === "green");
+    } catch (error) {
+      // documentElement always exists at runtime; guard purely defensively.
+    }
+  }
+
   function applyDocumentBrand(config, applyTitle) {
     // Only set the document title from the async runtime-config (applyTitle=true).
     // The synchronous static config.js pass must NOT touch the title, otherwise
@@ -129,8 +142,11 @@
     next.loadingIcon = loadingIcon;
     next.loadingAnimation = (next.loading && next.loading.animation) || previous.loadingAnimation || "";
 
+    next.workbenchTheme = (incoming && incoming.workbenchTheme) || previous.workbenchTheme || "blue";
+
     window.BRAND_CONFIG = next;
     applyDocumentBrand(next, applyTitle);
+    applyWorkbenchTheme(next.workbenchTheme);
     return next;
   }
 
