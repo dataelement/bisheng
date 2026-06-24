@@ -1,9 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
+import { NotificationSeverity } from "~/common";
+import { useToast } from "~/hooks";
 import { FLOW_TYPES } from ".";
 import { SkillMethod } from "./appUtils/skillMethod";
-import { chatFileState, chatIdState, currentChatState, runningState, submitDataState, tabsState } from "./store/atoms";
+import {
+    chatFileState,
+    chatIdState,
+    currentChatState,
+    runningState,
+    runtimeKnowledgeSelectionState,
+    submitDataState,
+    tabsState,
+} from "./store/atoms";
 import { ActionType } from "./useWebsocket";
+import {
+    hasUserSelectedKnowledgeNode,
+    RuntimeKnowledgeSelection,
+    validateRuntimeKnowledgeSelection,
+} from "./userSelectedKnowledge";
 
 const eventTarget = new EventTarget();
 const AREA_TEXT_EVENT = 'AREA_TEXT_EVENT'
@@ -30,10 +45,24 @@ export const useAreaText = () => {
     const [__, setRunningState] = useRecoilState(runningState)
     const [chatFile, setChatFileState] = useRecoilState(chatFileState)
     const chatState = useRecoilValue(currentChatState)
+    const runtimeKnowledgeSelectionStateValue = useRecoilValue(runtimeKnowledgeSelectionState)
     const [chatId] = useRecoilState(chatIdState)
     const [tabs] = useRecoilState(tabsState)
+    const { showToast } = useToast()
 
     const [accepts, setAccepts] = useState('')
+
+    const guardRuntimeKnowledgeSelection = () => {
+        const selectionError = hasUserSelectedKnowledgeNode(chatState?.flow)
+            ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelectionStateValue)
+            : ""
+        if (!selectionError) return true
+        showToast({
+            message: selectionError,
+            severity: NotificationSeverity.ERROR,
+        })
+        return false
+    }
 
     const handleInput = () => {
         const textarea = textareaRef.current
@@ -44,17 +73,19 @@ export const useAreaText = () => {
     }
 
     // 发送输入(引导词)
-    const handleSendClick = (msg = '') => {
+    const handleSendClick = (msg = '', runtimeKnowledgeSelection?: RuntimeKnowledgeSelection | null) => {
         if (!msg && textareaRef.current?.value.trim() === "" && chatFile.length === 0) return
         const message = msg || textareaRef.current?.value || ""
 
         if (chatState.flow.flow_type === FLOW_TYPES.WORK_FLOW) {
+            if (!guardRuntimeKnowledgeSelection()) return
             setSubmitDataState({
                 input: message,
                 action: ActionType.INPUT,
                 chatId,
                 flow: chatState!.flow,
                 files: chatFile,
+                runtimeKnowledgeSelection: runtimeKnowledgeSelection || runtimeKnowledgeSelectionStateValue || undefined,
             })
         } else {
             const data = SkillMethod.getSendParam({ tabs, flow: chatState.flow, chatId, message })
@@ -110,6 +141,7 @@ export const useAreaText = () => {
                 data: _data
             })
         } else {
+            if (!guardRuntimeKnowledgeSelection()) return
             setSubmitDataState({
                 input: message,
                 action: ActionType.FORM_SUBMIT,
@@ -117,6 +149,7 @@ export const useAreaText = () => {
                 nodeId,
                 chatId,
                 flowId: chatState.flow.id,
+                runtimeKnowledgeSelection: runtimeKnowledgeSelectionStateValue || undefined,
             })
         }
 

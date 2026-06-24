@@ -68,7 +68,8 @@ export interface SubmitData {
   msgId?: string,
   data?: any,
   flow?: FlowData,
-  files?: any[]
+  files?: any[],
+  runtimeKnowledgeSelection?: any
 }
 
 export interface WebSocketStatus {

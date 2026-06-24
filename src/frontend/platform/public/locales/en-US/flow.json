@@ -572,6 +572,64 @@
         "label": "Retrieved Result"
       }
     },
+    "user_selected_knowledge_rag": {
+      "name": "User-selected Knowledge QA",
+      "description": "Lets the workflow user select a knowledge base, knowledge space, or file scope at runtime, then generates an answer from that scope.",
+      "知识库检索设置": "Retrieval Settings",
+      "AI回复生成设置": "AI Response Settings",
+      "输出": "Output",
+      "user_question": {
+        "label": "User Question",
+        "placeholder": "Select user question",
+        "help": "For multiple questions, the node executes once per question."
+      },
+      "advanced_retrieval_switch": {
+        "label": "Advanced Retrieval Settings"
+      },
+      "retrieved_result": {
+        "label": "Retrieved Result"
+      },
+      "system_prompt": {
+        "label": "System Prompt",
+        "value": "You are a knowledge base Q&A assistant. Follow these rules to answer the questions:\n1. Answer the user's questions in a formal and professional manner in English.\n2. Your answers must be strictly based on the content in the [Reference Text]:\n\n- If the [Reference Text] contains specific content relevant to the user's question, use that content to answer. If no relevant content exists, simply reply: 'No relevant content found'.\n- If the content in the [Reference Text] includes markdown-formatted images (e.g., ![image](path/IMAGE_1.png)), it must strictly preserve its original markdown format, without adding quotes, code blocks (` or ```) or other special symbols. The image path must not be altered, ensuring proper rendering of the markdown image.\n3. When the content in the [Reference Text] comes from multiple sources and there are obvious differences or conflicts, list each answer separately to reflect these differences. If no conflicts exist, provide a unified answer."
+      },
+      "user_prompt": {
+        "label": "User Prompt",
+        "value": "User Question: ```{{#user_question#}}```\nReference Text: ```{{#retrieved_result#}}```\nYour Answer:"
+      },
+      "model_id": {
+        "label": "Model",
+        "placeholder": "Configure an LLM model"
+      },
+      "temperature": {
+        "label": "Temperature"
+      },
+      "output_user": {
+        "label": "Show Output in Chat",
+        "help": "Enable in Q&A; disable in automated workflows."
+      },
+      "output_user_input": {
+        "label": "Output Variable",
+        "help": "Stores model output."
+      }
+    },
+    "user_selected_knowledge_retriever": {
+      "name": "User-selected Knowledge Retrieval",
+      "description": "Lets the workflow user select a knowledge base, knowledge space, or file scope at runtime, then returns retrieved content from that scope.",
+      "知识库检索设置": "Retrieval Settings",
+      "输出": "Output",
+      "user_question": {
+        "label": "User Question",
+        "placeholder": "Select user question",
+        "help": "Executes once per question when batch enabled."
+      },
+      "advanced_retrieval_switch": {
+        "label": "Advanced Retrieval Settings"
+      },
+      "retrieved_result": {
+        "label": "Retrieved Result"
+      }
+    },
     "report": {
       "name": "Report",
       "description": "Generates a report based on a predefined Word template.",

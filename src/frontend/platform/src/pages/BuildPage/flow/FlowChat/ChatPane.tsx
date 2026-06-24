@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import Chat from "./Chat";
 import { useMessageStore } from "./messageStore";
 import AppAvator from "@/components/bs-comp/cardComponent/avatar";
+import { RUNTIME_KNOWLEDGE_SELECTION_FIELD } from "./userSelectedKnowledge";
 
 export default function ChatPane({ debug = false, autoRun = false, chatId, flow, wsUrl = '',version }: { debug?: boolean, autoRun?: boolean, chatId: string, flow: any, wsUrl?: string }) {
     const { changeChatId } = useMessageStore()
@@ -11,7 +12,7 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
         changeChatId(chatId)
     }, [chatId])
 
-    const getMessage = (action, { nodeId, msg, category, extra, files, source, message_id }) => {
+    const getMessage = (action, { nodeId, msg, category, extra, files, source, message_id, runtimeKnowledgeSelection }) => {
         if (action === 'refresh_flow') {
             // return getFlowApi(flow.id, 'v1').then(f => {
             const { data, ...other } = flow
@@ -69,7 +70,8 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
                     [nodeId]: {
                         data: {
                             [variable]: msg,
-                            dialog_files_content: files
+                            dialog_files_content: files,
+                            ...(runtimeKnowledgeSelection ? { [RUNTIME_KNOWLEDGE_SELECTION_FIELD]: runtimeKnowledgeSelection } : {})
                         },
                         message: msg,
                         message_id,
@@ -103,6 +105,7 @@ export default function ChatPane({ debug = false, autoRun = false, chatId, flow,
         wsUrl={wsUrl}
         onBeforSend={getMessage}
         version = {version}
+        flow={flow}
     ></Chat>
 
 };

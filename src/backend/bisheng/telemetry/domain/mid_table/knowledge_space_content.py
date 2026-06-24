@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Any, ClassVar
@@ -39,6 +40,7 @@ class KnowledgeSpaceContentRecord(BaseRecord):
 class KnowledgeSpaceContentStat(BaseMidTable):
     _index_name: str = "mid_knowledge_space_content_stat"
     FILE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:file_pending"
+    PREVIEW_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:preview_pending"
     SPACE_RENAME_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:space_rename_pending"
     SPACE_DELETE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:space_delete_pending"
     SCHEDULED_KEY: ClassVar[str] = "telemetry:knowledge_space_content:scheduled"
@@ -47,6 +49,7 @@ class KnowledgeSpaceContentStat(BaseMidTable):
     SCHEDULE_TTL_SECONDS: ClassVar[int] = 10
     LOCK_TTL_SECONDS: ClassVar[int] = 60
     FILE_BATCH_SIZE: ClassVar[int] = 500
+    PREVIEW_BATCH_SIZE: ClassVar[int] = 500
     _mappings: dict[str, Any] = {
         "record_type": {"type": "keyword"},
         "sync_run_id": {"type": "keyword"},
@@ -115,6 +118,14 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         await redis_client.acluster_nodes(key)
         await redis_client.async_connection.sadd(key, *values)
 
+    @classmethod
+    async def _sadd_values_async(cls, redis_client, key: str, values: Iterable[str]) -> None:
+        values = [value for value in values if value]
+        if not values:
+            return
+        await redis_client.acluster_nodes(key)
+        await redis_client.async_connection.sadd(key, *values)
+
     @staticmethod
     def _decode_redis_member(value) -> int | None:
         if value is None:
@@ -143,6 +154,54 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             if item_id is not None:
                 ids.append(item_id)
         return ids
+
+    @staticmethod
+    def _decode_redis_text(value) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, bytes):
+            return value.decode("utf-8")
+        return str(value)
+
+    @classmethod
+    def _srandmember_sync(cls, redis_client, key: str, count: int | None = None) -> list[str]:
+        redis_client.cluster_nodes(key)
+        if count is None:
+            raw_values = redis_client.connection.srandmember(key)
+        else:
+            raw_values = redis_client.connection.srandmember(key, count)
+        if raw_values is None:
+            return []
+        if isinstance(raw_values, (bytes, str, int)):
+            raw_values = [raw_values]
+        values = []
+        for raw_value in raw_values:
+            value = cls._decode_redis_text(raw_value)
+            if value is not None:
+                values.append(value)
+        return values
+
+    @classmethod
+    def _srandmember_ids_sync(cls, redis_client, key: str, count: int | None = None) -> list[int]:
+        ids = []
+        for value in cls._srandmember_sync(redis_client, key, count):
+            item_id = cls._decode_redis_member(value)
+            if item_id is not None:
+                ids.append(item_id)
+        return ids
+
+    @classmethod
+    def _srem_values_sync(cls, redis_client, key: str, values: Iterable[str]) -> None:
+        values = [str(value) for value in values if value is not None]
+        if not values:
+            return
+        redis_client.cluster_nodes(key)
+        redis_client.connection.srem(key, *values)
+
+    @classmethod
+    def _srem_ids_sync(cls, redis_client, key: str, ids: Iterable[int]) -> None:
+        values = [str(item_id) for item_id in cls._normalize_ids(ids)]
+        cls._srem_values_sync(redis_client, key, values)
 
     @classmethod
     def _scard_sync(cls, redis_client, key: str) -> int:
@@ -192,6 +251,15 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             logger.exception("Failed to enqueue knowledge space content file telemetry sync.")
 
     @classmethod
+    async def enqueue_preview_record_async(cls, record: KnowledgeSpaceContentRecord) -> None:
+        try:
+            redis_client = await get_redis_client()
+            await cls._sadd_values_async(redis_client, cls.PREVIEW_PENDING_KEY, [cls._serialize_preview_record(record)])
+            await cls._schedule_pending_async(redis_client)
+        except Exception:
+            logger.exception("Failed to enqueue knowledge space content preview telemetry sync.")
+
+    @classmethod
     async def enqueue_space_rename_stat_async(cls, space_id: int) -> None:
         ids = cls._normalize_ids([space_id])
         if not ids:
@@ -220,16 +288,52 @@ class KnowledgeSpaceContentStat(BaseMidTable):
         return cls._spop_ids_sync(get_redis_client_sync(), cls.FILE_PENDING_KEY, batch_size)
 
     @classmethod
+    def peek_pending_file_ids_sync(cls, batch_size: int = FILE_BATCH_SIZE) -> list[int]:
+        return cls._srandmember_ids_sync(get_redis_client_sync(), cls.FILE_PENDING_KEY, batch_size)
+
+    @classmethod
+    def ack_pending_file_ids_sync(cls, file_ids: Iterable[int]) -> None:
+        cls._srem_ids_sync(get_redis_client_sync(), cls.FILE_PENDING_KEY, file_ids)
+
+    @classmethod
+    def peek_pending_preview_payloads_sync(cls, batch_size: int = PREVIEW_BATCH_SIZE) -> list[str]:
+        return cls._srandmember_sync(get_redis_client_sync(), cls.PREVIEW_PENDING_KEY, batch_size)
+
+    @classmethod
+    def ack_pending_preview_payloads_sync(cls, payloads: Iterable[str]) -> None:
+        cls._srem_values_sync(get_redis_client_sync(), cls.PREVIEW_PENDING_KEY, payloads)
+
+    @classmethod
     def pop_pending_space_rename_ids_sync(cls) -> list[int]:
         redis_client = get_redis_client_sync()
         count = cls._scard_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY)
         return cls._spop_ids_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY, count) if count else []
 
     @classmethod
+    def peek_pending_space_rename_ids_sync(cls) -> list[int]:
+        redis_client = get_redis_client_sync()
+        count = cls._scard_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY)
+        return cls._srandmember_ids_sync(redis_client, cls.SPACE_RENAME_PENDING_KEY, count) if count else []
+
+    @classmethod
+    def ack_pending_space_rename_ids_sync(cls, space_ids: Iterable[int]) -> None:
+        cls._srem_ids_sync(get_redis_client_sync(), cls.SPACE_RENAME_PENDING_KEY, space_ids)
+
+    @classmethod
     def pop_pending_space_delete_ids_sync(cls) -> list[int]:
         redis_client = get_redis_client_sync()
         count = cls._scard_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY)
         return cls._spop_ids_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY, count) if count else []
+
+    @classmethod
+    def peek_pending_space_delete_ids_sync(cls) -> list[int]:
+        redis_client = get_redis_client_sync()
+        count = cls._scard_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY)
+        return cls._srandmember_ids_sync(redis_client, cls.SPACE_DELETE_PENDING_KEY, count) if count else []
+
+    @classmethod
+    def ack_pending_space_delete_ids_sync(cls, space_ids: Iterable[int]) -> None:
+        cls._srem_ids_sync(get_redis_client_sync(), cls.SPACE_DELETE_PENDING_KEY, space_ids)
 
     @classmethod
     def clear_scheduled_sync(cls) -> None:
@@ -261,6 +365,7 @@ class KnowledgeSpaceContentStat(BaseMidTable):
                 cls._scard_sync(redis_client, key) > 0
                 for key in (
                     cls.FILE_PENDING_KEY,
+                    cls.PREVIEW_PENDING_KEY,
                     cls.SPACE_RENAME_PENDING_KEY,
                     cls.SPACE_DELETE_PENDING_KEY,
                 )
@@ -275,6 +380,18 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             cls._schedule_pending_sync(countdown=0)
         except Exception:
             logger.exception("Failed to reschedule knowledge space content telemetry sync.")
+
+    @staticmethod
+    def _serialize_preview_record(record: KnowledgeSpaceContentRecord) -> str:
+        return json.dumps(record.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
+
+    @staticmethod
+    def deserialize_preview_payload(payload: str) -> KnowledgeSpaceContentRecord | None:
+        try:
+            return KnowledgeSpaceContentRecord.model_validate(json.loads(payload))
+        except Exception:
+            logger.exception("Failed to deserialize knowledge space preview telemetry payload.")
+            return None
 
     @staticmethod
     def build_file_record(
@@ -372,7 +489,11 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             viewer_user_name=viewer_user_name or str(viewer_user_id or ""),
             action_result="success",
         )
-        await cls(ensure_sync_index=False).insert_record(record)
+        try:
+            await cls(ensure_sync_index=False).insert_record(record)
+        except Exception:
+            logger.exception("Failed to write knowledge space preview telemetry, enqueueing retry.")
+            await cls.enqueue_preview_record_async(record)
 
     def delete_file_records_sync(self, file_ids: Iterable[int]) -> int:
         ids = self._normalize_ids(file_ids)
@@ -387,7 +508,9 @@ class KnowledgeSpaceContentStat(BaseMidTable):
             }
             for file_id in ids
         ]
-        success, _errors = helpers.bulk(self._es_client_sync, actions, raise_on_error=False)
+        success, errors = helpers.bulk(self._es_client_sync, actions, raise_on_error=False)
+        if errors:
+            raise RuntimeError(f"Failed to delete {len(errors)} knowledge space content file telemetry records.")
         return int(success or 0)
 
     def delete_space_file_records_sync(self, space_ids: Iterable[int]) -> int:

@@ -62,6 +62,26 @@ class _FakeRedisSetClient:
             popped.add(value.encode())
         return popped
 
+    def srandmember(self, key, count=None):
+        target = self.sets.setdefault(key, set())
+        if count is None:
+            if not target:
+                return None
+            return next(iter(target)).encode()
+        return {value.encode() for value in list(target)[:count]}
+
+    def srem(self, key, *values):
+        target = self.sets.setdefault(key, set())
+        removed = 0
+        for value in values:
+            if isinstance(value, bytes):
+                value = value.decode()
+            value = str(value)
+            if value in target:
+                target.remove(value)
+                removed += 1
+        return removed
+
     def scard(self, key):
         return len(self.sets.get(key, set()))
 
@@ -162,6 +182,46 @@ async def test_knowledge_space_content_log_preview_success_builds_preview_record
     assert call["document"]["action_result"] == "success"
 
 
+@pytest.mark.asyncio
+async def test_knowledge_space_content_log_preview_success_enqueues_retry_on_es_failure(monkeypatch):
+    from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+
+    class _FailingAsyncIndexClient(_FakeAsyncIndexClient):
+        async def index(self, **kwargs):
+            raise RuntimeError("es unavailable")
+
+    async def fake_get_es_connection():
+        return _FailingAsyncIndexClient()
+
+    retry_records = []
+
+    async def fake_enqueue_preview_record(record):
+        retry_records.append(record)
+
+    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection", fake_get_es_connection)
+    monkeypatch.setattr(module.KnowledgeSpaceContentStat, "_get_user_departments", AsyncMock(return_value=[]))
+    monkeypatch.setattr(module.KnowledgeSpaceContentStat, "enqueue_preview_record_async", fake_enqueue_preview_record)
+    monkeypatch.setattr(module, "generate_uuid", lambda: "event-retry")
+
+    file_record = SimpleNamespace(
+        id=11,
+        user_id=7,
+        user_name="上传人",
+        file_name="方案.pdf",
+        file_type=1,
+    )
+    space = SimpleNamespace(id=3, name="知识空间")
+
+    await module.KnowledgeSpaceContentStat.log_preview_success(
+        file_record=file_record,
+        space=space,
+        viewer_user_id=9,
+        viewer_user_name="查看人",
+    )
+
+    assert [record.es_id for record in retry_records] == ["preview_event-retry"]
+
+
 def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
 
@@ -247,18 +307,21 @@ def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monk
     space = SimpleNamespace(id=3, name="空间", type=3)
     upserted = []
     deleted = []
+    acked_file_ids = []
 
     monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
     monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
     monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
     monkeypatch.setattr(
         stat_cls,
-        "pop_pending_file_ids_sync",
+        "peek_pending_file_ids_sync",
         lambda batch_size=500: [21, 22, 404],
         raising=False,
     )
-    monkeypatch.setattr(stat_cls, "pop_pending_space_rename_ids_sync", lambda: [], raising=False)
-    monkeypatch.setattr(stat_cls, "pop_pending_space_delete_ids_sync", lambda: [], raising=False)
+    monkeypatch.setattr(stat_cls, "ack_pending_file_ids_sync", lambda file_ids: acked_file_ids.extend(file_ids))
+    monkeypatch.setattr(stat_cls, "peek_pending_preview_payloads_sync", lambda batch_size=500: [], raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_space_rename_ids_sync", lambda: [], raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_space_delete_ids_sync", lambda: [], raising=False)
     monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
     monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
     monkeypatch.setattr(
@@ -279,6 +342,109 @@ def test_sync_pending_knowledge_space_content_stat_uses_mysql_current_state(monk
 
     assert [record.es_id for record in upserted] == ["file_21"]
     assert deleted == [22, 404]
+    assert acked_file_ids == [21, 22, 404]
+
+
+def test_sync_pending_knowledge_space_content_stat_keeps_file_ids_when_upsert_fails(monkeypatch):
+    from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
+
+    worker_module = _import_worker_mid_table()
+    stat_cls = worker_module.KnowledgeSpaceContentStat
+
+    success_file = SimpleNamespace(
+        id=21,
+        user_id=7,
+        user_name="上传人",
+        create_time=None,
+        knowledge_id=3,
+        file_name="成功.pdf",
+        file_type=FileType.FILE.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+    space = SimpleNamespace(id=3, name="空间", type=3)
+    acked_file_ids = []
+
+    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
+    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
+    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_file_ids_sync", lambda batch_size=500: [21], raising=False)
+    monkeypatch.setattr(stat_cls, "ack_pending_file_ids_sync", lambda file_ids: acked_file_ids.extend(file_ids))
+    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
+    monkeypatch.setattr(
+        stat_cls,
+        "insert_records_sync",
+        lambda self, records: (_ for _ in ()).throw(RuntimeError("es down")),
+    )
+    monkeypatch.setattr(
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient()
+    )
+    monkeypatch.setattr(
+        worker_module,
+        "_get_knowledge_space_content_rows_by_file_ids",
+        lambda file_ids: [(success_file, space)],
+        raising=False,
+    )
+    monkeypatch.setattr(worker_module, "get_user_from_ids_with_cache", lambda user_ids, user_map: user_map)
+
+    worker_module.sync_pending_knowledge_space_content_stat.run()
+
+    assert acked_file_ids == []
+
+
+def test_sync_pending_knowledge_space_content_stat_processes_preview_payloads(monkeypatch):
+    from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentRecord
+
+    worker_module = _import_worker_mid_table()
+    stat_cls = worker_module.KnowledgeSpaceContentStat
+
+    record = KnowledgeSpaceContentRecord(
+        es_id="preview_event-1",
+        record_type="preview",
+        timestamp=1,
+        user_id=9,
+        user_name="查看人",
+        user_group_infos=[],
+        user_role_infos=[],
+        user_department_infos=[],
+        space_id=3,
+        space_name="空间",
+        file_id=21,
+        file_name="成功.pdf",
+        file_type=1,
+        uploader_user_id=7,
+        uploader_user_name="上传人",
+        uploader_department_infos=[],
+        event_id="event-1",
+        viewer_user_id=9,
+        viewer_user_name="查看人",
+        action_result="success",
+    )
+    payload = stat_cls._serialize_preview_record(record)
+    upserted = []
+    acked_payloads = []
+
+    monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
+    monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
+    monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_file_ids_sync", lambda batch_size=500: [], raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_preview_payloads_sync", lambda batch_size=500: [payload], raising=False)
+    monkeypatch.setattr(
+        stat_cls,
+        "ack_pending_preview_payloads_sync",
+        lambda payloads: acked_payloads.extend(payloads),
+    )
+    monkeypatch.setattr(stat_cls, "peek_pending_space_rename_ids_sync", lambda: [], raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_space_delete_ids_sync", lambda: [], raising=False)
+    monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
+    monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
+    monkeypatch.setattr(
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync", lambda: _FakeSyncIndexClient()
+    )
+
+    worker_module.sync_pending_knowledge_space_content_stat.run()
+
+    assert [one.es_id for one in upserted] == ["preview_event-1"]
+    assert acked_payloads == [payload]
 
 
 def test_sync_pending_knowledge_space_content_stat_handles_space_rename_and_delete(monkeypatch):
@@ -298,13 +464,26 @@ def test_sync_pending_knowledge_space_content_stat_handles_space_rename_and_dele
     renamed_space = SimpleNamespace(id=5, name="新空间", type=3)
     upserted = []
     deleted_spaces = []
+    acked_rename_ids = []
+    acked_delete_ids = []
 
     monkeypatch.setattr(stat_cls, "clear_scheduled_sync", lambda: None, raising=False)
     monkeypatch.setattr(stat_cls, "acquire_lock_sync", lambda: True, raising=False)
     monkeypatch.setattr(stat_cls, "release_lock_sync", lambda: None, raising=False)
-    monkeypatch.setattr(stat_cls, "pop_pending_file_ids_sync", lambda batch_size=500: [], raising=False)
-    monkeypatch.setattr(stat_cls, "pop_pending_space_rename_ids_sync", lambda: [5], raising=False)
-    monkeypatch.setattr(stat_cls, "pop_pending_space_delete_ids_sync", lambda: [6], raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_file_ids_sync", lambda batch_size=500: [], raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_preview_payloads_sync", lambda batch_size=500: [], raising=False)
+    monkeypatch.setattr(stat_cls, "peek_pending_space_rename_ids_sync", lambda: [5], raising=False)
+    monkeypatch.setattr(
+        stat_cls,
+        "ack_pending_space_rename_ids_sync",
+        lambda space_ids: acked_rename_ids.extend(space_ids),
+    )
+    monkeypatch.setattr(stat_cls, "peek_pending_space_delete_ids_sync", lambda: [6], raising=False)
+    monkeypatch.setattr(
+        stat_cls,
+        "ack_pending_space_delete_ids_sync",
+        lambda space_ids: acked_delete_ids.extend(space_ids),
+    )
     monkeypatch.setattr(stat_cls, "has_pending_sync", lambda: False, raising=False)
     monkeypatch.setattr(stat_cls, "insert_records_sync", lambda self, records: upserted.extend(records))
     monkeypatch.setattr(
@@ -328,10 +507,13 @@ def test_sync_pending_knowledge_space_content_stat_handles_space_rename_and_dele
 
     assert [(record.es_id, record.space_name) for record in upserted] == [("file_31", "新空间")]
     assert deleted_spaces == [6]
+    assert acked_rename_ids == [5]
+    assert acked_delete_ids == [6]
 
 
 def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):
     from bisheng.api.services import knowledge_imp
+    from bisheng.api.services import workstation as workstation_api
     from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
     from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
 
@@ -382,6 +564,18 @@ def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):
         knowledge_imp.settings,
         "get_knowledge",
         lambda: SimpleNamespace(version_management=None),
+    )
+    monkeypatch.setattr(
+        workstation_api.WorkStationService,
+        "query_knowledge_space_config_with_meta",
+        lambda: (SimpleNamespace(review_tag_visible=False), False, 1, False),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        knowledge_imp.KnowledgeSpaceReviewTagService,
+        "apply_after_review_upload_parse",
+        classmethod(lambda cls, **_kwargs: None),
+        raising=False,
     )
     monkeypatch.setattr(
         knowledge_imp.KnowledgeFileDao,

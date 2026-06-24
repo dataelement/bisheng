@@ -118,7 +118,7 @@ function CustomNode({ data: node, selected, isConnectable }: { data: WorkflowNod
         if (knowledgeGroup && knowledgeGroup.params) {
             const thirdItem = knowledgeGroup.params[2]; // 第三项（索引为2）
 
-            return thirdItem.value && thirdItem.value?.conditions?.length > 0 && thirdItem.value?.enabled;
+            return thirdItem?.value && thirdItem.value?.conditions?.length > 0 && thirdItem.value?.enabled;
         }
         return false;
     }, [

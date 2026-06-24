@@ -1,5 +1,5 @@
 import operator
-from typing import Annotated, Any, Dict
+from typing import Annotated, Any
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import END, START
@@ -11,6 +11,12 @@ from bisheng.utils.exceptions import IgnoreException
 from bisheng.workflow.callback.base_callback import BaseCallback
 from bisheng.workflow.callback.event import UserInputData
 from bisheng.workflow.common.node import BaseNodeData, NodeType
+from bisheng.workflow.common.runtime_knowledge import (
+    RUNTIME_KNOWLEDGE_SELECTION_FIELD,
+    RUNTIME_STATE_NODE_ID,
+    RUNTIME_USER_SELECTED_KNOWLEDGE_KEY,
+    parse_runtime_knowledge_selection,
+)
 from bisheng.workflow.common.workflow import WorkflowStatus
 from bisheng.workflow.edges.edges import EdgeManage
 from bisheng.workflow.graph.graph_state import GraphState
@@ -25,16 +31,17 @@ class TempState(TypedDict):
 
 
 class GraphEngine:
-
-    def __init__(self,
-                 user_id: int = None,
-                 workflow_id: str = None,
-                 workflow_name: str = '',
-                 workflow_data: Dict = None,
-                 async_mode: bool = False,
-                 max_steps: int = 0,
-                 callback: BaseCallback = None,
-                 tenant_id: int = None):
+    def __init__(
+        self,
+        user_id: int = None,
+        workflow_id: str = None,
+        workflow_name: str = "",
+        workflow_data: dict = None,
+        async_mode: bool = False,
+        max_steps: int = 0,
+        callback: BaseCallback = None,
+        tenant_id: int = None,
+    ):
         self.user_id = user_id
         self.workflow_id = workflow_id
         self.workflow_name = workflow_name
@@ -65,20 +72,20 @@ class GraphEngine:
         # init langgraph state graph
         self.graph_builder = StateGraph(TempState)
         self.graph = None
-        self.graph_config = {'configurable': {'thread_id': '1'}, 'recursion_limit': 50}
+        self.graph_config = {"configurable": {"thread_id": "1"}, "recursion_limit": 50}
 
         self.status = WorkflowStatus.RUNNING.value
-        self.reason = ''  # Failure Reason
+        self.reason = ""  # Failure Reason
 
         self.build_edges()
         self.build_nodes()
 
     def build_edges(self):
         # init edges
-        self.edges = EdgeManage(self.workflow_data.get('edges', []))
+        self.edges = EdgeManage(self.workflow_data.get("edges", []))
 
     def add_node_edge(self, node_instance: BaseNode):
-        """  Link edges of nodes  """
+        """Link edges of nodes"""
         if node_instance.type == NodeType.END.value or node_instance.type == NodeType.FAKE_OUTPUT.value:
             return
         # get target nodes
@@ -86,35 +93,32 @@ class GraphEngine:
         source_node_ids = self.edges.get_source_node(node_instance.id)
         # There are no linked nodes reporting errors
         if not target_node_ids and not source_node_ids:
-            raise Exception(
-                f'node {node_instance.name} {node_instance.id} must have at least one edge')
+            raise Exception(f"node {node_instance.name} {node_instance.id} must have at least one edge")
 
         # output Node followed by afake Nodes are used to handle interrupts
         if node_instance.type == NodeType.OUTPUT.value:
-            fake_node = self.nodes_map[f'{node_instance.id}_fake']
+            fake_node = self.nodes_map[f"{node_instance.id}_fake"]
             if self.async_mode:
                 self.graph_builder.add_node(fake_node.id, fake_node.arun)
             else:
                 self.graph_builder.add_node(fake_node.id, fake_node.run)
             self.graph_builder.add_edge(node_instance.id, fake_node.id)
             self.graph_builder.add_conditional_edges(
-                fake_node.id, node_instance.route_node,
-                {node_id: node_id
-                 for node_id in target_node_ids})
+                fake_node.id, node_instance.route_node, {node_id: node_id for node_id in target_node_ids}
+            )
             return
 
         # condition And output Need to connect behind the node langgraphright of privacy edge_condition
         if node_instance.type == NodeType.CONDITION.value:
             self.graph_builder.add_conditional_edges(
-                node_instance.id, node_instance.route_node,
-                {node_id: node_id
-                 for node_id in target_node_ids})
+                node_instance.id, node_instance.route_node, {node_id: node_id for node_id in target_node_ids}
+            )
             return
 
         # Links Totargetnode_amb
         for node_id in target_node_ids:
             if node_id not in self.nodes_map:
-                raise Exception(f'target node {node_id} not found')
+                raise Exception(f"target node {node_id} not found")
             if self.nodes_fan_in.get(node_id) and len(self.nodes_fan_in.get(node_id)) > 1:
                 # need wait all fan in node exec over
                 continue
@@ -126,7 +130,7 @@ class GraphEngine:
                 continue
             # There are multiple fan-in nodes to determine if this node needs to wait
             wait_nodes, no_wait_nodes = self.parse_fan_in_node(node_id)
-            logger.debug(f'node {node_id} wait nodes {wait_nodes}, no wait nodes {no_wait_nodes}')
+            logger.debug(f"node {node_id} wait nodes {wait_nodes}, no wait nodes {no_wait_nodes}")
             if wait_nodes:
                 self.graph_builder.add_edge(wait_nodes, node_id)
             if no_wait_nodes:
@@ -145,7 +149,7 @@ class GraphEngine:
 
         # in the precursor node Contains The downstream node of this node does not need to wait, it needs to be excludedoutputAndconditionNode, because the two nodes are connected to this node through the conditional edge
         if not all_source_node_prev:
-            return [], [one for one in source_ids if not one.startswith(('output_', 'condition_'))]
+            return [], [one for one in source_ids if not one.startswith(("output_", "condition_"))]
 
         # Determine if there is aconditionNode oroutputNode (selective interaction) to this node Two unique paths
         all_branches = []
@@ -170,18 +174,18 @@ class GraphEngine:
 
         # Explain that it is a mutually exclusive ending node, there is no need to wait
         if judge_not_same_branch():
-            return [], [one for one in source_ids if not one.startswith(('output_', 'condition_'))]
+            return [], [one for one in source_ids if not one.startswith(("output_", "condition_"))]
 
         # Explain that it is not a mutually exclusive closing node, and you need to wait for all the predecessor nodes to finish executing before executing
         wait_nodes = []
         for one in source_ids:
-            if one.startswith('output_'):
-                one = f'{one}_fake'
+            if one.startswith("output_"):
+                one = f"{one}_fake"
             wait_nodes.append(one)
         return wait_nodes, []
 
     def build_node_level(self, start_node: str):
-        """ Calculate hierarchy for all nodes """
+        """Calculate hierarchy for all nodes"""
 
         # Hierarchy of marker nodes
         def mark_node_level(node_id, node_map: dict, level: int):
@@ -202,35 +206,35 @@ class GraphEngine:
         mark_node_level(start_node, {}, 0)
 
     def init_nodes(self, nodes):
-        """ return node id """
+        """return node id"""
         start_node = None
         end_nodes = []
         interrupt_nodes = []
         for node in nodes:
-            node_data = BaseNodeData(**node.get('data', {}))
+            node_data = BaseNodeData(**node.get("data", {}))
             if not node_data.id:
-                raise Exception('node must have attribute id')
+                raise Exception("node must have attribute id")
             if node_data.type == NodeType.NOTE.value:
                 continue
 
-            node_instance = NodeFactory.instance_node(node_type=node_data.type,
-                                                      node_data=node_data,
-                                                      user_id=self.user_id,
-                                                      workflow_id=self.workflow_id,
-                                                      graph_state=self.graph_state,
-                                                      target_edges=self.edges.get_target_edges(
-                                                          node_data.id),
-                                                      max_steps=self.max_steps,
-                                                      callback=self.callback,
-                                                      workflow_name=self.workflow_name,
-                                                      tenant_id=self.tenant_id)
+            node_instance = NodeFactory.instance_node(
+                node_type=node_data.type,
+                node_data=node_data,
+                user_id=self.user_id,
+                workflow_id=self.workflow_id,
+                graph_state=self.graph_state,
+                target_edges=self.edges.get_target_edges(node_data.id),
+                max_steps=self.max_steps,
+                callback=self.callback,
+                workflow_name=self.workflow_name,
+                tenant_id=self.tenant_id,
+            )
             if node_instance.is_condition_node():
                 self.condition_nodes.append(node_instance.id)
             self.nodes_map[node_data.id] = node_instance
             self.nodes_fan_in[node_instance.id] = self.edges.get_source_node(node_instance.id)
             if node_instance.type not in [NodeType.START.value]:
-                self.nodes_next_nodes[node_instance.id] = self.edges.get_next_nodes(
-                    node_instance.id)
+                self.nodes_next_nodes[node_instance.id] = self.edges.get_next_nodes(node_instance.id)
 
             # add node into langgraph
             if self.async_mode:
@@ -248,22 +252,22 @@ class GraphEngine:
                 interrupt_nodes.append(node_instance.id)
             elif node_instance.type == NodeType.OUTPUT.value:
                 # Node that needs to abort receiving user input
-                fake_node = OutputFakeNode(id=f'{node_instance.id}_fake',
-                                           output_node=node_instance,
-                                           type=NodeType.FAKE_OUTPUT.value)
+                fake_node = OutputFakeNode(
+                    id=f"{node_instance.id}_fake", output_node=node_instance, type=NodeType.FAKE_OUTPUT.value
+                )
                 self.nodes_map[fake_node.id] = fake_node
                 interrupt_nodes.append(fake_node.id)
         return start_node, end_nodes, interrupt_nodes
 
     def build_nodes(self):
-        nodes = self.workflow_data.get('nodes', [])
+        nodes = self.workflow_data.get("nodes", [])
         if not nodes:
-            raise Exception('workflow must have at least one node')
+            raise Exception("workflow must have at least one node")
 
         start_node, end_nodes, interrupt_nodes = self.init_nodes(nodes)
 
         if not start_node:
-            raise Exception('workflow must have start node')
+            raise Exception("workflow must have start node")
         self.graph_builder.add_edge(START, start_node)
         if end_nodes:
             for end_node in end_nodes:
@@ -280,10 +284,10 @@ class GraphEngine:
         self.build_more_fan_in_node()
 
         # compile langgraph
-        self.graph = self.graph_builder.compile(checkpointer=MemorySaver(),
-                                                interrupt_before=interrupt_nodes)
-        self.graph_config['recursion_limit'] = max(
-            (len(nodes) - len(end_nodes) - 1) * self.max_steps, 1) + len(end_nodes) + 1
+        self.graph = self.graph_builder.compile(checkpointer=MemorySaver(), interrupt_before=interrupt_nodes)
+        self.graph_config["recursion_limit"] = (
+            max((len(nodes) - len(end_nodes) - 1) * self.max_steps, 1) + len(end_nodes) + 1
+        )
 
         # import datetime
         # with open(f"./bisheng/data/graph/graph_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png",
@@ -297,11 +301,11 @@ class GraphEngine:
                 pass
             self.judge_status()
         except IgnoreException as e:
-            logger.warning(f'graph ignore error: {e}')
+            logger.warning(f"graph ignore error: {e}")
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
         except Exception as e:
-            logger.exception('graph run error')
+            logger.exception("graph run error")
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
 
@@ -312,19 +316,19 @@ class GraphEngine:
                 pass
             self.judge_status()
         except IgnoreException as e:
-            logger.warning(f'graph ignore error: {e}')
+            logger.warning(f"graph ignore error: {e}")
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
         except Exception as e:
-            logger.exception('graph arun error')
+            logger.exception("graph arun error")
             self.status = WorkflowStatus.FAILED.value
             self.reason = str(e)
 
     def run(self):
-        self._run({'flag': True})
+        self._run({"flag": True})
 
     async def arun(self):
-        await self._arun({'flag': True})
+        await self._arun({"flag": True})
 
     def continue_run(self, data: Any = None):
         """
@@ -338,6 +342,7 @@ class GraphEngine:
         # Assign user input to the corresponding node
         for node_id, node_params in data.items():
             node_instance = self.nodes_map[node_id]
+            node_params = self._extract_runtime_input(node_params)
             node_instance.handle_input(node_params)
 
         # Resumegraph
@@ -355,10 +360,23 @@ class GraphEngine:
         # Assign user input to the corresponding node
         for node_id, node_params in data.items():
             node_instance = self.nodes_map[node_id]
+            node_params = self._extract_runtime_input(node_params)
             node_instance.handle_input(node_params)
 
         # Resumegraph
         await self._arun(None)
+
+    def _extract_runtime_input(self, node_params: Any) -> Any:
+        if not isinstance(node_params, dict) or RUNTIME_KNOWLEDGE_SELECTION_FIELD not in node_params:
+            return node_params
+        node_params = dict(node_params)
+        selection = parse_runtime_knowledge_selection(node_params.pop(RUNTIME_KNOWLEDGE_SELECTION_FIELD))
+        self.graph_state.set_variable(
+            RUNTIME_STATE_NODE_ID,
+            RUNTIME_USER_SELECTED_KNOWLEDGE_KEY,
+            selection.model_dump(mode="json"),
+        )
+        return node_params
 
     def judge_status(self):
         # Judgment Status
@@ -378,7 +396,8 @@ class GraphEngine:
                     # Callback events requiring user input
                     self.status = WorkflowStatus.INPUT.value
                     self.callback.on_user_input(
-                        UserInputData(node_id=node_id, name=node_instance.name, input_schema=input_schema))
+                        UserInputData(node_id=node_id, name=node_instance.name, input_schema=input_schema)
+                    )
                     return
             elif node_instance.type == NodeType.FAKE_OUTPUT.value:
                 intput_schema = node_instance.get_input_schema()

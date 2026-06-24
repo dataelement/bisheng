@@ -572,6 +572,64 @@
         "label": "检索结果"
       }
     },
+    "user_selected_knowledge_rag": {
+      "name": "自选知识问答",
+      "description": "运行工作流时由用户选择知识库、知识空间或文件范围，并基于所选范围生成问答结果。",
+      "知识库检索设置": "知识库检索设置",
+      "AI回复生成设置": "AI回复生成设置",
+      "输出": "输出",
+      "user_question": {
+        "label": "用户问题",
+        "placeholder": "请选择用户问题",
+        "help": "当选择多个问题时，将会多次运行本节点，每次运行时从批量问题中取一项进行处理。"
+      },
+      "advanced_retrieval_switch": {
+        "label": "高级检索配置"
+      },
+      "retrieved_result": {
+        "label": "检索结果"
+      },
+      "system_prompt": {
+        "label": "系统提示词",
+        "value": "你是一位知识库问答助手，遵守以下规则回答问题：\n1. 请用中文严谨、专业地回答用户的问题。\n2. 回答时须严格基于【参考文本】中的内容：\n\n- 如果【参考文本】中有明确与用户问题相关的文字内容，请依据相关内容进行回答；如果【参考文本】中没有任何与用户问题相关的内容，则直接回复：“没有找到相关内容”。\n- 如果相关内容中包含 markdown 格式的图片（例如 ![image](路径/IMAGE_1.png)），必须严格保留其原始 markdown 格式，不得添加引号、代码块（`或```）或其他特殊符号，也不得修改图片路径，保证可以正常渲染 markdown 图片。\n3. 当【参考文本】中的内容来源于多个不同的信息源时，若相关内容存在明显差异或冲突，请分别列出这些差异或冲突的答案；若无差异或冲突，只给出一个统一的回答即可。"
+      },
+      "user_prompt": {
+        "label": "用户提示词",
+        "value": "用户问题：```{{#user_question#}}```\n参考文本：```{{#retrieved_result#}}```\n你的回答："
+      },
+      "model_id": {
+        "label": "模型",
+        "placeholder": "请在模型管理中配置 LLM 模型"
+      },
+      "temperature": {
+        "label": "温度"
+      },
+      "output_user": {
+        "label": "将输出结果展示在会话中",
+        "help": "一般在问答等场景开启，文档审核、报告生成等场景可关闭。"
+      },
+      "output_user_input": {
+        "label": "输出变量",
+        "help": "模型输出内容将会存储在该变量中。"
+      }
+    },
+    "user_selected_knowledge_retriever": {
+      "name": "自选知识检索",
+      "description": "运行工作流时由用户选择知识库、知识空间或文件范围，并返回所选范围内的检索结果。",
+      "知识库检索设置": "知识库检索设置",
+      "输出": "输出",
+      "user_question": {
+        "label": "用户问题",
+        "placeholder": "请选择用户问题",
+        "help": "当选择多个问题时，将会多次运行本节点，每次运行时从批量问题中取一项进行处理。"
+      },
+      "advanced_retrieval_switch": {
+        "label": "高级检索配置"
+      },
+      "retrieved_result": {
+        "label": "检索结果"
+      }
+    },
     "report": {
       "name": "报告",
       "description": "按照预设的word模板生成报告。",

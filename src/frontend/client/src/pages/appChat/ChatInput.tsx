@@ -6,22 +6,50 @@ import { useRecordingAudioLoading } from "~/components/Voice/textToSpeechStore";
 import { useGetWorkbenchModelsQuery } from "~/hooks/queries/data-provider";
 import { useLocalize } from "~/hooks";
 import InputFiles from "./components/InputFiles";
-import { bishengConfState, currentRunningState } from "./store/atoms";
+import { bishengConfState, currentRunningState, runtimeKnowledgeSelectionState } from "./store/atoms";
 import { useAreaText } from "./useAreaText";
 import DragDropOverlay from "~/components/Chat/Input/Files/DragDropOverlay";
 import { useFileDropAndPaste } from "./useFileDropAndPaste";
+import { NotificationSeverity } from "~/common";
+import { useToast } from "~/hooks";
+import UserSelectedKnowledgePicker from "./UserSelectedKnowledgePicker";
+import {
+    hasUserSelectedKnowledgeNode,
+    isRuntimeKnowledgePickerDisabled,
+    RuntimeKnowledgeSelection,
+    shouldRenderRuntimeKnowledgePicker,
+    validateRuntimeKnowledgeSelection,
+} from "./userSelectedKnowledge";
 
 export default function ChatInput({ readOnly, v }) {
     const [bishengConfig] = useRecoilState(bishengConfState);
-    const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun } = useRecoilValue(currentRunningState);
+    const { inputDisabled, error: inputMsg, showUpload, showStop, showReRun, inputForm } = useRecoilValue(currentRunningState);
     // useAreaText
-    const { accepts, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick } = useAreaText();
+    const { accepts, inputRef, setChatFiles, handleInput, handleRestart, handleSendClick, handleStopClick, chatState } = useAreaText();
 
     const [fileUploading, setFileUploading] = useState(false);
     const [audioOpening] = useRecordingAudioLoading();
     const localize = useLocalize();
+    const { showToast } = useToast();
     const { data: modelData } = useGetWorkbenchModelsQuery();
     const showVoice = modelData?.asr_model.id;
+    const [runtimeKnowledgeSelection, setRuntimeKnowledgeSelection] = useRecoilState<RuntimeKnowledgeSelection | null>(runtimeKnowledgeSelectionState);
+    const requiresRuntimeKnowledge = useMemo(
+        () => hasUserSelectedKnowledgeNode(chatState?.flow),
+        [chatState?.flow],
+    );
+    const hasActiveInputForm = Boolean(inputForm);
+    const showRuntimeKnowledgePicker = shouldRenderRuntimeKnowledgePicker({
+        requiresRuntimeKnowledge,
+        inputDisabled,
+        hasInputForm: hasActiveInputForm,
+        readOnly,
+    });
+    const runtimeKnowledgePickerDisabled = isRuntimeKnowledgePickerDisabled({
+        inputDisabled,
+        hasInputForm: hasActiveInputForm,
+        readOnly,
+    });
 
     const inputFilesRef = useRef(null);
 
@@ -46,11 +74,35 @@ export default function ChatInput({ readOnly, v }) {
         }, 60)
     }, [inputDisabled]);
 
+    useEffect(() => {
+        setRuntimeKnowledgeSelection(null);
+    }, [chatState?.flow?.id]);
+
+    const handleRuntimeSend = () => {
+        const selectionError = requiresRuntimeKnowledge ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelection) : "";
+        if (selectionError) {
+            showToast({
+                message: selectionError,
+                severity: NotificationSeverity.ERROR,
+            });
+            return;
+        }
+        handleSendClick("", runtimeKnowledgeSelection);
+    };
+
     return (
         <div className="z-10 w-full shrink-0 bg-[#fff] dark:bg-[#1B1B1B]">
             <div className="mx-auto w-full max-w-[800px] px-4 pt-1">
                 {/* drag upload overlay */}
                 {isDragging && <DragDropOverlay />}
+
+                {showRuntimeKnowledgePicker && (
+                    <UserSelectedKnowledgePicker
+                        disabled={runtimeKnowledgePickerDisabled}
+                        value={runtimeKnowledgeSelection}
+                        onChange={setRuntimeKnowledgeSelection}
+                    />
+                )}
 
                 <div className="relative px-4 rounded-3xl bg-surface-tertiary">
                 {/* attr file */}
@@ -80,14 +132,14 @@ export default function ChatInput({ readOnly, v }) {
                             id="bs-send-btn"
                             className="size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
                             disabled={inputDisabled || fileUploading || readOnly || audioOpening}
-                            onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
+                            onClick={() => { !inputDisabled && !fileUploading && handleRuntimeSend() }}>
                             <SendIcon size={24} />
                         </button>
                     }
                 </div>
 
-                {/* 
-                    stop & 重置 
+                {/*
+                    stop & 重置
                     is工作流 & 未展示停止按钮 & 没有错误消息
                 */}
                 <div className="absolute w-full flex justify-center left-0 -top-14">
@@ -114,7 +166,7 @@ export default function ChatInput({ readOnly, v }) {
                     onKeyDown={(event) => {
                         if (event.key === "Enter" && !event.shiftKey) {
                             event.preventDefault();
-                            !inputDisabled && handleSendClick()
+                            !inputDisabled && handleRuntimeSend()
                         }
                     }}
                     placeholder={placholder}
