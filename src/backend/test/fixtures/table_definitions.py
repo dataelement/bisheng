@@ -273,6 +273,15 @@ CREATE TABLE IF NOT EXISTS space_channel_member (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
 
+TABLE_KNOWLEDGE_SPACE_USER_PIN = """\
+CREATE TABLE IF NOT EXISTS knowledge_space_user_pin (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    space_id INTEGER NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE (user_id, space_id)
+)"""
+
 TABLE_KNOWLEDGE_FILE = """\
 CREATE TABLE IF NOT EXISTS knowledgefile (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -463,33 +472,35 @@ CREATE INDEX IF NOT EXISTS idx_conflict_lookup
 # ---------------------------------------------------------------------------
 
 TABLE_DEFINITIONS: dict[str, str] = {
-    'tenant': TABLE_TENANT,
-    'user_tenant': TABLE_USER_TENANT,
-    'user': TABLE_USER,
-    'group': TABLE_GROUP,
-    'usergroup': TABLE_USERGROUP,
-    'role': TABLE_ROLE,
-    'roleaccess': TABLE_ROLE_ACCESS,
-    'groupresource': TABLE_GROUP_RESOURCE,
-    'flow': TABLE_FLOW,
-    'knowledge': TABLE_KNOWLEDGE,
-    'department': TABLE_DEPARTMENT,
-    'user_department': TABLE_USER_DEPARTMENT,
-    'auditlog': TABLE_AUDIT_LOG,
-    'failed_tuple': TABLE_FAILED_TUPLE,
+    "tenant": TABLE_TENANT,
+    "user_tenant": TABLE_USER_TENANT,
+    "user": TABLE_USER,
+    "group": TABLE_GROUP,
+    "usergroup": TABLE_USERGROUP,
+    "role": TABLE_ROLE,
+    "roleaccess": TABLE_ROLE_ACCESS,
+    "groupresource": TABLE_GROUP_RESOURCE,
+    "flow": TABLE_FLOW,
+    "knowledge": TABLE_KNOWLEDGE,
+    "department": TABLE_DEPARTMENT,
+    "user_department": TABLE_USER_DEPARTMENT,
+    "auditlog": TABLE_AUDIT_LOG,
+    "failed_tuple": TABLE_FAILED_TUPLE,
     # F006 migration source tables
-    'userrole': TABLE_USER_ROLE,
-    'space_channel_member': TABLE_SPACE_CHANNEL_MEMBER,
-    'knowledgefile': TABLE_KNOWLEDGE_FILE,
-    'knowledge_document': TABLE_KNOWLEDGE_DOCUMENT,
-    'knowledge_document_version': TABLE_KNOWLEDGE_DOCUMENT_VERSION,
-    't_gpts_tools': TABLE_GPTS_TOOLS,
-    'channel': TABLE_CHANNEL,
+    "userrole": TABLE_USER_ROLE,
+    "space_channel_member": TABLE_SPACE_CHANNEL_MEMBER,
+    "knowledgefile": TABLE_KNOWLEDGE_FILE,
+    "knowledge_document": TABLE_KNOWLEDGE_DOCUMENT,
+    "knowledge_document_version": TABLE_KNOWLEDGE_DOCUMENT_VERSION,
+    "t_gpts_tools": TABLE_GPTS_TOOLS,
+    "channel": TABLE_CHANNEL,
     # F018: owner transfer targets the standalone assistant table.
-    'assistant': TABLE_ASSISTANT,
+    "assistant": TABLE_ASSISTANT,
     # F009 + F015: organization sync config + event-scoped log rows.
-    'org_sync_config': TABLE_ORG_SYNC_CONFIG,
-    'org_sync_log': TABLE_ORG_SYNC_LOG,
+    "org_sync_config": TABLE_ORG_SYNC_CONFIG,
+    "org_sync_log": TABLE_ORG_SYNC_LOG,
+    # F037: per-user knowledge-space pin, decoupled from membership.
+    "knowledge_space_user_pin": TABLE_KNOWLEDGE_SPACE_USER_PIN,
 }
 
 # Indexes emitted after CREATE TABLE via create_all_tables.
@@ -516,5 +527,5 @@ def create_tables(engine: Engine, *table_names: str) -> None:
         for name in table_names:
             conn.execute(text(TABLE_DEFINITIONS[name]))
         # Also emit indexes whose underlying table was just created.
-        if 'org_sync_log' in table_names:
+        if "org_sync_log" in table_names:
             conn.execute(text(INDEX_ORG_SYNC_LOG_CONFLICT))

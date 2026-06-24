@@ -382,3 +382,22 @@ apply 干净后再手动加约束：
 ```sql
 ALTER TABLE t_gpts_tools ADD CONSTRAINT uk_gpts_tools_key_tenant UNIQUE (tool_key, tenant_id);
 ```
+
+### `backfill_knowledge_space_user_pin.py`
+
+F037：知识空间置顶从 `space_channel_member.is_pinned` 解耦到独立的 `knowledge_space_user_pin` 表（置顶是纯个人偏好，不再寄生在成员关系上）。本脚本把历史置顶迁移到新表，让升级后用户保留已置顶的空间。
+
+来源行：`space_channel_member` 中 `business_type='space'` 且 `is_pinned` 为真且 `status='ACTIVE'`，每条转成 `knowledge_space_user_pin(user_id, space_id=business_id)`。幂等：已存在的 `(user_id, space_id)` 跳过，可重复运行。
+
+> 前置：先 `alembic upgrade head`（建好 `knowledge_space_user_pin` 表，迁移 `f044_knowledge_space_user_pin`）。
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_user_pin.py            # dry-run（默认，不写库）
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_space_user_pin.py --apply    # 写入
+
+# 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
+bash scripts/backfill_knowledge_space_user_pin.sh          # dry-run
+bash scripts/backfill_knowledge_space_user_pin.sh apply    # 写入
+```
