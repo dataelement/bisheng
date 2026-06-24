@@ -104,6 +104,7 @@
     "brandAssetUrlAddSuccess": "URL 已添加",
     "brandUrlAssetName": "URL 素材",
     "brandDefaultLoadingIcon": "内置默认 Loading 图标",
+    "brandStaticLoadingIcon": "默认 Loading 图标（图片）",
     "brandResetDefault": "重置默认",
     "brandSave": "保存",
     "brandTextSection": "文案配置",
