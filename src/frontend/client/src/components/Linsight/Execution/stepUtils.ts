@@ -552,6 +552,32 @@ export function mergeStepFrames(history: ExecStepEventData[] | null | undefined)
 }
 
 /**
+ * True when two MergedStep snapshots render IDENTICALLY — the single "did this step
+ * change?" predicate behind the timeline's React.memo gates (DeepStepGroup's
+ * per-step loop + ToolRowLite). Centralized here so the two memo comparators can't
+ * drift apart as the render path gains a field.
+ *
+ * The WS pump rebuilds fresh MergedStep objects every frame (see mergeStepFrames),
+ * so the comparators must work on values, not identity — yet two reference checks
+ * are sound: `params` traces back to the stable raw history frame (same object for
+ * an unchanged step), and streaming `output` only ever grows so its length is a
+ * reliable change signal. `extraInfo` is intentionally NOT compared — mergeStepFrames
+ * spreads a new object each rebuild (always unequal) and nothing in the render path
+ * reads it.
+ */
+export function mergedStepRenderEqual(a: MergedStep, b: MergedStep): boolean {
+    return (
+        a.callId === b.callId &&
+        a.running === b.running &&
+        a.name === b.name &&
+        a.stepType === b.stepType &&
+        a.output.length === b.output.length &&
+        a.params === b.params &&
+        a.callReason === b.callReason
+    );
+}
+
+/**
  * (C) Merge consecutive thinking steps that share the same namespace (null==null
  * counts as same) into one rendered thinking step. The backend persists thinking
  * as many tiny token-delta frames (technical debt; see §7 open decision 1) — the

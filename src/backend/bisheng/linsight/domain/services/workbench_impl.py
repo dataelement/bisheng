@@ -227,6 +227,7 @@ class LinsightWorkbenchImpl:
                 knowledge_space_ids=submit_obj.knowledge_space_ids,
                 files=processed_files,
                 model=submit_obj.model,
+                skills=submit_obj.skills,
             )
             linsight_session_version = await LinsightSessionVersionDao.insert_one(linsight_session_version)
 

@@ -220,6 +220,19 @@ class SkillStore:
             raise FileNotFoundError(str(target))
         return target.read_text(encoding="utf-8", errors="replace")
 
+    def read_bytes(self, tenant_id: int, name: str, rel: str) -> bytes:
+        """Read a bundle file as raw bytes (binary-safe).
+
+        ``read_text`` decodes utf-8 with ``errors="replace"`` and is lossy for
+        binary assets (images, fonts) bundled alongside SKILL.md. The skill
+        copy-into-workspace path (skill_provisioning) needs faithful bytes, so it
+        reads through here instead.
+        """
+        target = self.skill_dir(tenant_id, name) / _safe_rel_path(rel)
+        if not target.is_file():
+            raise FileNotFoundError(str(target))
+        return target.read_bytes()
+
     def list_files(self, tenant_id: int, name: str) -> list[dict]:
         """Bundle file tree as [{path, size}], SKILL.md first, then sorted."""
         base = self.skill_dir(tenant_id, name)

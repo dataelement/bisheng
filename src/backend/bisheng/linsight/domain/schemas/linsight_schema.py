@@ -48,6 +48,12 @@ class LinsightQuestionSubmitSchema(BaseModel):
     # F035: per-task selected execution model id; None falls back to the tenant
     # ``linsight_default_model_id`` at resolve time (agent_factory._resolve_model).
     model: str | None = Field(None, description="Per-task selected execution model id")
+    # F035 Track D: skill names the user picked for this run. The worker copies the
+    # matched (governance-enabled ∩ selected) bundles into the session workspace at
+    # startup (skill_provisioning.materialize_session_skills) — the copy IS the
+    # whitelist gate, so unselected skills never reach the agent. [] disables all;
+    # None (non-UI callers) means "no per-run constraint" → every enabled skill.
+    skills: list[str] | None = Field(None, description="Selected skill names for this run")
     # F035: continue an existing session (a follow-up round in the same 会话).
     # None creates a brand-new session.
     session_id: str | None = Field(None, description="Existing session id to continue; None creates a new session")

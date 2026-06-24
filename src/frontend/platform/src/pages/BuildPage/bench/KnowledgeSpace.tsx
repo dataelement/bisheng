@@ -11,7 +11,7 @@ import {
 import { userContext } from "@/contexts/userContext";
 import { getKnowledgeConfigApi, setKnowledgeConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { NonNegativeInput, Textarea } from "@/components/bs-ui/input";
+import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
 import { canManageWorkbenchConfig, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import Preview from "./Preview";
 import { resolveConfigString } from "./configValue";
@@ -35,6 +35,8 @@ interface KnowledgeConfigForm {
     maxChunkSize: number;
     /** 租户级"自动生成标签"功能可见性，对应接口 auto_tag_visible */
     autoTagVisible: boolean;
+    /** 知识空间侧 AI 助手自定义名称，对应接口 assistant_name；空表示用客户端默认文案 */
+    assistantName: string;
 }
 
 export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: number }) {
@@ -98,6 +100,21 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                         <span>{t("chatConfig.prompts")}</span>
                                     </p>
                                 </div>
+                                {/* AI 助手名称：留空则客户端回退到本地化默认文案 */}
+                                <>
+                                    <Label className="bisheng-label">{t('chatConfig.aiAssistantName')}</Label>
+                                    <div className="mt-3 mb-4">
+                                        <Input
+                                            value={formData.assistantName}
+                                            placeholder={t('chatConfig.aiAssistantNamePlaceholder')}
+                                            maxLength={50}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setFormData(prev => ({ ...prev, assistantName: val }));
+                                            }}
+                                        />
+                                    </div>
+                                </>
                                 {/* 系统提示词 */}
                                 <>
                                     <Label className="bisheng-label">{t('chatConfig.sysPrompts')}</Label>
@@ -278,6 +295,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         userPrompt: '',
         maxChunkSize: 15000,
         autoTagVisible: false,
+        assistantName: '',
     });
 
     const [errors, setErrors] = useState<{ systemPrompt: string; userPrompt: string }>({
@@ -297,6 +315,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
             const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
             const autoTagVisibleFromRes = cfg?.auto_tag_visible ?? cfg?.autoTagVisible;
+            const assistantNameFromRes = cfg?.assistant_name ?? cfg?.assistantName;
             // When backend returns no saved value, seed the textarea with the
             // localized default template so it is editable as a real value.
             const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
@@ -307,6 +326,8 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
                 userPrompt: resolvedUserPrompt || t('chatConfig.retrievedAndQuestion'),
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
                 autoTagVisible: Boolean(autoTagVisibleFromRes),
+                // Keep blank when unset — empty means "use client i18n default".
+                assistantName: resolveConfigString(assistantNameFromRes, ''),
             }));
         });
     }, [scopeVersion, t]);
@@ -350,6 +371,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             user_prompt: finalUserPrompt,
             max_chunk_size: formData.maxChunkSize,
             auto_tag_visible: formData.autoTagVisible,
+            assistant_name: (formData.assistantName || '').trim(),
         };
 
         const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi(dataToSave));
