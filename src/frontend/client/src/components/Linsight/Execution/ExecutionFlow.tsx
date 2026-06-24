@@ -32,7 +32,7 @@ import { TaskPanel } from './TaskPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import { ExecutionLiveContext } from './executionLive';
-import { findPendingUserInput, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
+import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 import type { ExecStepEventData } from './stepUtils';
 
 interface ExecutionFlowProps {
@@ -99,8 +99,20 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     // sessionSteps).
     const realTasks = useMemo(() => tasks.filter((t: any) => t.id !== versionId), [tasks, versionId]);
 
-    // planning row: running, todo list not generated yet, nothing else pending
-    const planning = running && !queueing && !pendingInput && !realTasks.length;
+    // Does the session timeline already have content to render? Once deep-thinking
+    // starts streaming, ExecutionTimeline owns the "working" signal (+ live-tail
+    // through the gap), so the planning row must not run concurrently. Memo keyed
+    // on a composite signature because the WS pump mutates sessionSteps in place.
+    const hasSessionTimeline = useMemo(
+        () => hasRenderableTimeline(sessionSteps),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
+        [sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
+    );
+
+    // planning row: running, todo list not generated yet, nothing else pending, and
+    // the session timeline has no content yet (deep-thinking hasn't started — else
+    // it would render concurrently with "正在深度思考").
+    const planning = running && !queueing && !pendingInput && !realTasks.length && !hasSessionTimeline;
     // generating row: todos exist but no task is actively streaming a spinner
     // right now — bridges the gaps before the first task, between tasks, AND the
     // final report-generation phase (status stays Running with no step events
@@ -124,14 +136,14 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     });
 
     return (
-        // Provide turn liveness so timeline groups never stay stuck "running"
-        // (ticking clock) after the turn completes — a dangling step that never
-        // got its end frame (e.g. a safety-blocked subagent) would otherwise loop.
-        // A park (ask_user awaiting the user) also counts as NOT live: the agent
-        // is suspended on an interrupt, nothing is executing, so the clock must
-        // freeze (the thinking that led to the question is done) until the user
-        // answers and a fresh episode starts streaming.
-        <ExecutionLiveContext.Provider value={running && !pendingInput}>
+        // Liveness for the SESSION-LEVEL timeline (the active round's planning
+        // thinking). This context only reaches that ExecutionTimeline — ConversationRound
+        // (history) and TaskStepRow re-provide their own. Live ⇒ NOT a dangling step
+        // after the turn ends, NOT a park (ask_user suspends the agent), AND no task
+        // has started yet (!realTasks.length). Once the first task appears the
+        // planning is done, so the planning thinking collapses to "已深度思考" instead
+        // of lingering as a pulsing "正在深度思考" concurrent with the running task.
+        <ExecutionLiveContext.Provider value={running && !pendingInput && !realTasks.length}>
         <div className="relative flex h-full w-full flex-col">
             {/* Soft top fade: content dissolves into the page as it scrolls under the
                 top edge, instead of a hard cut. Sits ABOVE normal scroll content

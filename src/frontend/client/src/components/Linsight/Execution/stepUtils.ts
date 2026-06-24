@@ -817,6 +817,22 @@ export function buildTimelineGroups(steps: MergedStep[]): TimelineNode[] {
     return out;
 }
 
+/**
+ * True if `history` produces at least one renderable timeline node (深度思考组 /
+ * subagent_group / intent). Carriers use this to suppress the "正在规划任务"
+ * planning row once the session timeline has content: the moment deep-thinking
+ * starts streaming, ExecutionTimeline shows it (and the live-tail keeps the last
+ * node "正在深度思考" through the gap until the first task / clarify), so a
+ * concurrent planning row is both redundant and misleading ("跳过澄清就规划"). We
+ * test for ANY node, not a *running* one (isTimelineNodeRunning) — after a
+ * thinking frame ends its step.running is false, yet planning should still defer
+ * to the live-tail rather than reappear. Reuses the same build path as the
+ * renderer so the "is there content" judgement can never drift from what shows.
+ */
+export function hasRenderableTimeline(history: ExecStepEventData[] | null | undefined): boolean {
+    return buildTimelineGroups(mergeStepFrames(history)).length > 0;
+}
+
 /** True if a timeline node is still running (any agent / any step / the step). */
 export function isTimelineNodeRunning(node: TimelineNode): boolean {
     if (node.kind === 'subagent_group') return node.agents.some((a) => a.step.running);

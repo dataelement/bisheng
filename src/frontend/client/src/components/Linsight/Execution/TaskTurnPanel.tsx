@@ -42,7 +42,7 @@ import { ResultPanel } from './ResultPanel';
 import { TaskErrorCard } from './TaskErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
-import { findPendingUserInput, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
+import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
 
 interface TaskTurnPanelProps {
     /** linsight session_version id holding this turn's execution detail */
@@ -124,7 +124,17 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     // from lingering next to real task rows.
     const queueing = running && noProgressYet && (linsight?.queueCount || 0) > 0;
 
-    const planning = running && !queueing && !tasks.length && !pendingInput;
+    // Does the session timeline already have content to render? Once deep-thinking
+    // starts streaming, ExecutionTimeline owns the "working" signal (+ live-tail
+    // through the gap), so the planning row must not run concurrently. Memo keyed
+    // on a composite signature because the WS pump mutates sessionSteps in place.
+    const hasSessionTimeline = useMemo(
+        () => hasRenderableTimeline(sessionSteps),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- composite key over the in-place-mutated sessionSteps array
+        [sessionSteps.length, sessionSteps[sessionSteps.length - 1]?.status, sessionSteps[sessionSteps.length - 1]?.call_id],
+    );
+
+    const planning = running && !queueing && !tasks.length && !pendingInput && !hasSessionTimeline;
 
     const handleClarifySubmit = (taskId: string, ans: string) => {
         sendInput({ task_id: taskId || versionId, user_input: ans, files: [] });
@@ -170,12 +180,15 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     }
 
     return (
-        // Provide turn liveness so a dangling/blocked step can't keep a group
-        // ticking "running" after this turn completes (see ExecutionLiveContext).
-        // A park (pendingInput: ask_user awaiting the user) is also NOT live — the
-        // agent is suspended on an interrupt, so freeze the clock until the user
-        // answers and execution resumes with a fresh episode.
-        <ExecutionLiveContext.Provider value={running && !pendingInput}>
+        // Liveness for the SESSION-LEVEL timeline (the planning thinking). This
+        // context only reaches the session ExecutionTimeline below — TaskStepRow and
+        // ConversationRound re-provide their own. So it answers exactly: "is the
+        // planning phase still live?" Live ⇒ NOT a dangling step after the turn ends,
+        // NOT a park (pendingInput: agent suspended on ask_user), AND no task has
+        // started yet (!tasks.length). Once the first task appears the planning is
+        // done, so the planning thinking must collapse to "已深度思考" instead of
+        // lingering as a pulsing "正在深度思考" concurrent with the running task.
+        <ExecutionLiveContext.Provider value={running && !pendingInput && !tasks.length}>
         <div ref={rootRef} className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
             {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
@@ -219,11 +232,19 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
                 above the input (ChatView) — not inline in the message stream. */}
 
             {/* Persistent "still working" indicator — covers the quiet windows
-                between steps and, crucially, the final report-generation phase
+                between tasks and, crucially, the final report-generation phase
                 (status stays Running with no step events while the backend
                 synthesizes get_final_result_file / the report), so the user does
-                not mistake an in-progress task for a finished one. */}
-            {running && !queueing && !planning && !pendingInput && <BreathingRow state="generating" />}
+                not mistake an in-progress task for a finished one. Gated on the
+                TASK phase (tasks.length > 0) and no actively-running task — mirrors
+                ExecutionFlow's `generating`. NOT `!planning`: once the planning row
+                defers to the live deep-thinking node (时序内联), `!planning` would
+                let this row surface concurrently with 正在深度思考 during the
+                pre-task thinking phase. The deep-thinking node's live-tail owns the
+                "working" signal until the first task arrives. */}
+            {running && !queueing && !pendingInput && tasks.length > 0 && !tasks.some((t) => isTaskRunning(t.status)) && (
+                <BreathingRow state="generating" />
+            )}
 
             {/* artifacts: report link / answer markdown / file card. Clicking a
                 document link opens it directly in ChatView's inline workspace

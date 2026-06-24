@@ -6,6 +6,7 @@ import {
     extractNarration,
     findPendingUserInput,
     firstLine,
+    hasRenderableTimeline,
     mergeStepFrames,
     narrationFromSteps,
     parseClarifyRequest,
@@ -504,6 +505,47 @@ describe('stepUtils — call_user_input inline IntentRow (时序内联)', () => 
         // falls back to the last NON-clarify node, not the clarify boundary
         expect(node!.kind === 'step' && node!.step.stepType === 'call_user_input').toBe(false);
         expect(node!.kind === 'step' && node!.step.name === 'web_search').toBe(true);
+    });
+});
+
+describe('stepUtils — hasRenderableTimeline (suppress 正在规划任务 once thinking streams)', () => {
+    it('returns false for empty / nullish history (启动空窗 — planning row may show)', () => {
+        expect(hasRenderableTimeline([])).toBe(false);
+        expect(hasRenderableTimeline(null)).toBe(false);
+        expect(hasRenderableTimeline(undefined)).toBe(false);
+    });
+
+    it('returns true once a deep-thinking step streams (planning row must defer)', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 't', name: 'thinking', step_type: 'thinking', output: '用户想要…', status: 'start', timestamp: 1 }),
+        ];
+        expect(hasRenderableTimeline(history)).toBe(true);
+    });
+
+    it('returns true for a tool step too', () => {
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'k', name: 'web_search', step_type: 'tool', output: 'hit', timestamp: 1 }),
+        ];
+        expect(hasRenderableTimeline(history)).toBe(true);
+    });
+
+    it('returns true when an answered clarify yields an inline intent node', () => {
+        const history: ExecStepEventData[] = [
+            frame({ step_type: 'call_user_input', status: undefined, call_reason: 'q', params: { tool_calls: [{ id: 'c', name: 'ask_user', args: { question: 'q?' } }] }, is_completed: true, user_input: 'a', timestamp: 1 }),
+        ];
+        expect(hasRenderableTimeline(history)).toBe(true);
+    });
+
+    it('returns false when every frame is dropped by mergeStepFrames (only ask_user / ls noise + a parked clarify)', () => {
+        // ask_user/ls are dropped; a parked (unanswered) call_user_input emits no
+        // node (it surfaces as the active ClarifyCard) -> no renderable timeline,
+        // so planning may still bridge the gap before any real step arrives.
+        const history: ExecStepEventData[] = [
+            frame({ call_id: 'a', name: 'ask_user', step_type: 'tool', status: 'start', timestamp: 1 }),
+            frame({ call_id: 'b', name: 'ls', step_type: 'tool', output: '', timestamp: 2 }),
+            frame({ step_type: 'call_user_input', status: 'start', call_reason: 'q', params: { tool_calls: [] }, timestamp: 3 }),
+        ];
+        expect(hasRenderableTimeline(history)).toBe(false);
     });
 });
 
