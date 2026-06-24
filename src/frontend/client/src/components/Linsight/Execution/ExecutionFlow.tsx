@@ -136,14 +136,14 @@ export function ExecutionFlow({ versionId, conversationId, isSharePage = false, 
     });
 
     return (
-        // Provide turn liveness so timeline groups never stay stuck "running"
-        // (ticking clock) after the turn completes — a dangling step that never
-        // got its end frame (e.g. a safety-blocked subagent) would otherwise loop.
-        // A park (ask_user awaiting the user) also counts as NOT live: the agent
-        // is suspended on an interrupt, nothing is executing, so the clock must
-        // freeze (the thinking that led to the question is done) until the user
-        // answers and a fresh episode starts streaming.
-        <ExecutionLiveContext.Provider value={running && !pendingInput}>
+        // Liveness for the SESSION-LEVEL timeline (the active round's planning
+        // thinking). This context only reaches that ExecutionTimeline — ConversationRound
+        // (history) and TaskStepRow re-provide their own. Live ⇒ NOT a dangling step
+        // after the turn ends, NOT a park (ask_user suspends the agent), AND no task
+        // has started yet (!realTasks.length). Once the first task appears the
+        // planning is done, so the planning thinking collapses to "已深度思考" instead
+        // of lingering as a pulsing "正在深度思考" concurrent with the running task.
+        <ExecutionLiveContext.Provider value={running && !pendingInput && !realTasks.length}>
         <div className="relative flex h-full w-full flex-col">
             {/* Soft top fade: content dissolves into the page as it scrolls under the
                 top edge, instead of a hard cut. Sits ABOVE normal scroll content

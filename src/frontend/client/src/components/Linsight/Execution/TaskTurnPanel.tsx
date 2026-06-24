@@ -180,12 +180,15 @@ export function TaskTurnPanel({ versionId, conversationId, answer, readOnly = fa
     }
 
     return (
-        // Provide turn liveness so a dangling/blocked step can't keep a group
-        // ticking "running" after this turn completes (see ExecutionLiveContext).
-        // A park (pendingInput: ask_user awaiting the user) is also NOT live — the
-        // agent is suspended on an interrupt, so freeze the clock until the user
-        // answers and execution resumes with a fresh episode.
-        <ExecutionLiveContext.Provider value={running && !pendingInput}>
+        // Liveness for the SESSION-LEVEL timeline (the planning thinking). This
+        // context only reaches the session ExecutionTimeline below — TaskStepRow and
+        // ConversationRound re-provide their own. So it answers exactly: "is the
+        // planning phase still live?" Live ⇒ NOT a dangling step after the turn ends,
+        // NOT a park (pendingInput: agent suspended on ask_user), AND no task has
+        // started yet (!tasks.length). Once the first task appears the planning is
+        // done, so the planning thinking must collapse to "已深度思考" instead of
+        // lingering as a pulsing "正在深度思考" concurrent with the running task.
+        <ExecutionLiveContext.Provider value={running && !pendingInput && !tasks.length}>
         <div ref={rootRef} className="w-full">
             {/* queueing card (auto-disappears when the worker picks us up) */}
             {queueing && <QueueCard position={linsight!.queueCount} onCancel={stop} />}
