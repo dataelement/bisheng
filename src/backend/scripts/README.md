@@ -401,3 +401,18 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_spa
 bash scripts/backfill_knowledge_space_user_pin.sh          # dry-run
 bash scripts/backfill_knowledge_space_user_pin.sh apply    # 写入
 ```
+
+### `backfill_departments_under_single_root.py`
+
+把所有"误挂为根"的部门收编到默认组织根部门(`BS@root`)下，保证全平台只有一个根部门。
+
+背景：历史上 SSO 网关同步的顶层部门(`parent_external_id` 为空)被挂为 `parent_id=None`，变成与"默认组织"平级的兄弟根，导致出现多个根、且其 `path` 不以默认组织根 path 为前缀(按 `path LIKE '{root_path}%'` 圈定租户成员时被漏算)。同步逻辑已修复(顶层部门改挂默认组织根下)，但增量推送未重推的存量部门需本脚本一次性收编。
+
+做什么：默认租户下、除默认组织根外的所有 active 根部门(`parent_id IS NULL`)，设 `parent_id=默认组织根.id` 并级联重写整棵子树 `path`。不区分 source，不触碰挂载状态。幂等：收编后 `parent_id` 不再为空，重复运行被自然跳过。
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_departments_under_single_root.py            # dry-run（默认，不写库）
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_departments_under_single_root.py --apply    # 写入
+```

@@ -9,25 +9,44 @@ of downstream calls and on the aggregated :class:`BatchResult` shape.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, call, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from bisheng.sso_sync.domain.schemas.payloads import (
-    DepartmentUpsertItem,
     DepartmentsSyncRequest,
+    DepartmentUpsertItem,
 )
 
+MODULE = "bisheng.sso_sync.domain.services.departments_sync_service"
 
-MODULE = 'bisheng.sso_sync.domain.services.departments_sync_service'
+
+@pytest.fixture(autouse=True)
+def _no_default_root():
+    """These orchestration tests predate the single-root invariant and
+    assert on batch counters only, not on parent resolution. Stub the
+    default-root lookup to None so ``execute`` never touches a real DB and
+    top-level items keep their original ``parent_id=None`` semantics.
+    """
+    with patch(
+        f"{MODULE}.DepartmentDao.aget_tenant_root_via_pointer",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        yield
 
 
-def _dept(ext='D1', *, id=11, last_sync_ts=0, is_deleted=0,
-          mounted_tenant_id=None):
+def _dept(ext="D1", *, id=11, last_sync_ts=0, is_deleted=0, mounted_tenant_id=None):
     return SimpleNamespace(
-        id=id, external_id=ext, last_sync_ts=last_sync_ts,
-        is_deleted=is_deleted, mounted_tenant_id=mounted_tenant_id,
-        source='sso', path='/', parent_id=None, is_tenant_root=0,
+        id=id,
+        external_id=ext,
+        last_sync_ts=last_sync_ts,
+        is_deleted=is_deleted,
+        mounted_tenant_id=mounted_tenant_id,
+        source="sso",
+        path="/",
+        parent_id=None,
+        is_tenant_root=0,
     )
 
 
@@ -35,28 +54,33 @@ def _dept(ext='D1', *, id=11, last_sync_ts=0, is_deleted=0,
 # Upsert flow
 # =========================================================================
 
+
 @pytest.mark.asyncio
 class TestUpsertBatch:
-
     async def test_happy_path_new_items_applied(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
+
         payload = DepartmentsSyncRequest(
             upsert=[
-                DepartmentUpsertItem(external_id='D1', name='Eng', ts=100),
-                DepartmentUpsertItem(external_id='D2', name='Mkt', ts=101,
-                                     parent_external_id='D1'),
+                DepartmentUpsertItem(external_id="D1", name="Eng", ts=100),
+                DepartmentUpsertItem(external_id="D2", name="Mkt", ts=101, parent_external_id="D1"),
             ],
-            remove=[], source_ts=200,
+            remove=[],
+            source_ts=200,
         )
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new_callable=AsyncMock, return_value=None,
-        ), patch(
-            f'{MODULE}.DeptUpsertService.upsert_from_sync_payload',
-            new_callable=AsyncMock,
-        ) as upsert:
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
+                new_callable=AsyncMock,
+            ) as upsert,
+        ):
             result = await DepartmentsSyncService.execute(payload)
 
         assert result.applied_upsert == 2
@@ -65,24 +89,65 @@ class TestUpsertBatch:
         assert result.errors == []
         assert upsert.await_count == 2
 
+    async def test_resolved_root_is_passed_to_each_upsert(self):
+        """Single-root wiring: ``execute`` resolves the default-org root
+        once and forwards it to every per-item upsert so top-level
+        departments hang under it.
+        """
+        from bisheng.sso_sync.domain.services.departments_sync_service import (
+            DepartmentsSyncService,
+        )
+
+        root = _dept("ROOT", id=1)
+        payload = DepartmentsSyncRequest(
+            upsert=[DepartmentUpsertItem(external_id="D1", name="Eng", ts=100)],
+            remove=[],
+            source_ts=200,
+        )
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_tenant_root_via_pointer",
+                new_callable=AsyncMock,
+                return_value=root,
+            ),
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
+                new_callable=AsyncMock,
+            ) as upsert,
+        ):
+            await DepartmentsSyncService.execute(payload)
+
+        assert upsert.await_args.kwargs["default_root"] is root
+
     async def test_stale_ts_counts_as_skipped(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
-        existing = _dept('D1', id=11, last_sync_ts=500)
+
+        existing = _dept("D1", id=11, last_sync_ts=500)
         payload = DepartmentsSyncRequest(
             upsert=[
-                DepartmentUpsertItem(external_id='D1', name='Eng', ts=100),
+                DepartmentUpsertItem(external_id="D1", name="Eng", ts=100),
             ],
-            remove=[], source_ts=100,
+            remove=[],
+            source_ts=100,
         )
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new_callable=AsyncMock, return_value=existing,
-        ), patch(
-            f'{MODULE}.DeptUpsertService.upsert_from_sync_payload',
-            new_callable=AsyncMock,
-        ) as upsert:
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=existing,
+            ),
+            patch(
+                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
+                new_callable=AsyncMock,
+            ) as upsert,
+        ):
             result = await DepartmentsSyncService.execute(payload)
 
         assert result.applied_upsert == 0
@@ -95,115 +160,151 @@ class TestUpsertBatch:
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
+
         payload = DepartmentsSyncRequest(
-            upsert=[DepartmentUpsertItem(external_id='D1', name='Eng')],
-            remove=[], source_ts=777,
+            upsert=[DepartmentUpsertItem(external_id="D1", name="Eng")],
+            remove=[],
+            source_ts=777,
         )
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new_callable=AsyncMock, return_value=None,
-        ), patch(
-            f'{MODULE}.DeptUpsertService.upsert_from_sync_payload',
-            new_callable=AsyncMock,
-        ) as upsert:
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
+                new_callable=AsyncMock,
+            ) as upsert,
+        ):
             await DepartmentsSyncService.execute(payload)
 
         kwargs = upsert.await_args.kwargs
-        assert kwargs['last_sync_ts'] == 777
+        assert kwargs["last_sync_ts"] == 777
 
     async def test_single_item_failure_does_not_abort_batch(self):
         """AC-11: one error → other items still processed."""
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
+
         payload = DepartmentsSyncRequest(
             upsert=[
-                DepartmentUpsertItem(external_id='GOOD', name='Eng', ts=100),
+                DepartmentUpsertItem(external_id="GOOD", name="Eng", ts=100),
                 DepartmentUpsertItem(
-                    external_id='BAD', name='X',
-                    parent_external_id='GHOST', ts=100,
+                    external_id="BAD",
+                    name="X",
+                    parent_external_id="GHOST",
+                    ts=100,
                 ),
-                DepartmentUpsertItem(external_id='ALSO_GOOD', name='Mkt',
-                                     ts=100),
+                DepartmentUpsertItem(external_id="ALSO_GOOD", name="Mkt", ts=100),
             ],
             remove=[],
         )
 
         # First and third upserts succeed; second blows up.
-        async def fake_upsert(*, existing, item, source, last_sync_ts,
-                              parent_cache=None):
-            if item.external_id == 'BAD':
-                raise RuntimeError('parent missing')
+        async def fake_upsert(
+            *,
+            existing,
+            item,
+            source,
+            last_sync_ts,
+            parent_cache=None,
+            default_root=None,
+        ):
+            if item.external_id == "BAD":
+                raise RuntimeError("parent missing")
             return _dept(item.external_id)
 
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new_callable=AsyncMock, return_value=None,
-        ), patch(
-            f'{MODULE}.DeptUpsertService.upsert_from_sync_payload',
-            new=fake_upsert,
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
+                new=fake_upsert,
+            ),
         ):
             result = await DepartmentsSyncService.execute(payload)
 
         assert result.applied_upsert == 2
         assert len(result.errors) == 1
-        assert result.errors[0]['external_id'] == 'BAD'
-        assert 'parent missing' in result.errors[0]['error']
+        assert result.errors[0]["external_id"] == "BAD"
+        assert "parent missing" in result.errors[0]["error"]
 
 
 # =========================================================================
 # Remove flow (AC-04 — triggers DepartmentDeletionHandler)
 # =========================================================================
 
+
 @pytest.mark.asyncio
 class TestRemoveBatch:
-
     async def test_remove_mounted_triggers_deletion_handler(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
         from bisheng.tenant.domain.constants import DeletionSource
 
-        dept = _dept('D99', id=99, last_sync_ts=10, mounted_tenant_id=42)
+        dept = _dept("D99", id=99, last_sync_ts=10, mounted_tenant_id=42)
         payload = DepartmentsSyncRequest(
-            upsert=[], remove=['D99'], source_ts=100,
+            upsert=[],
+            remove=["D99"],
+            source_ts=100,
         )
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new_callable=AsyncMock, return_value=dept,
-        ), patch(
-            f'{MODULE}.DepartmentDao.aarchive_by_external_id',
-            new_callable=AsyncMock, return_value=dept,
-        ), patch(
-            f'{MODULE}.DepartmentDeletionHandler.on_deleted',
-            new_callable=AsyncMock,
-        ) as on_deleted:
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch(
+                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch(
+                f"{MODULE}.DepartmentDeletionHandler.on_deleted",
+                new_callable=AsyncMock,
+            ) as on_deleted,
+        ):
             result = await DepartmentsSyncService.execute(payload)
 
         assert result.applied_remove == 1
         assert result.orphan_triggered == [42]
         on_deleted.assert_awaited_once()
         kwargs = on_deleted.await_args.kwargs
-        assert kwargs['dept_id'] == 99
-        assert kwargs['deletion_source'] == DeletionSource.SSO_REALTIME
+        assert kwargs["dept_id"] == 99
+        assert kwargs["deletion_source"] == DeletionSource.SSO_REALTIME
 
     async def test_remove_unmounted_no_orphan(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
-        dept = _dept('D50', id=50, last_sync_ts=10)
+
+        dept = _dept("D50", id=50, last_sync_ts=10)
         payload = DepartmentsSyncRequest(
-            upsert=[], remove=['D50'], source_ts=100,
+            upsert=[],
+            remove=["D50"],
+            source_ts=100,
         )
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new_callable=AsyncMock, return_value=dept,
-        ), patch(
-            f'{MODULE}.DepartmentDao.aarchive_by_external_id',
-            new_callable=AsyncMock, return_value=dept,
-        ), patch(
-            f'{MODULE}.DepartmentDeletionHandler.on_deleted',
-            new_callable=AsyncMock,
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch(
+                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch(
+                f"{MODULE}.DepartmentDeletionHandler.on_deleted",
+                new_callable=AsyncMock,
+            ),
         ):
             result = await DepartmentsSyncService.execute(payload)
 
@@ -214,19 +315,27 @@ class TestRemoveBatch:
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
+
         payload = DepartmentsSyncRequest(
-            upsert=[], remove=['GHOST'], source_ts=100,
+            upsert=[],
+            remove=["GHOST"],
+            source_ts=100,
         )
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new_callable=AsyncMock, return_value=None,
-        ), patch(
-            f'{MODULE}.DepartmentDao.aarchive_by_external_id',
-            new_callable=AsyncMock,
-        ) as archive, patch(
-            f'{MODULE}.DepartmentDeletionHandler.on_deleted',
-            new_callable=AsyncMock,
-        ) as on_deleted:
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                new_callable=AsyncMock,
+            ) as archive,
+            patch(
+                f"{MODULE}.DepartmentDeletionHandler.on_deleted",
+                new_callable=AsyncMock,
+            ) as on_deleted,
+        ):
             result = await DepartmentsSyncService.execute(payload)
 
         assert result.applied_remove == 0
@@ -240,18 +349,24 @@ class TestRemoveBatch:
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
-        existing = _dept('D1', id=11, last_sync_ts=100, is_deleted=1)
+
+        existing = _dept("D1", id=11, last_sync_ts=100, is_deleted=1)
         payload = DepartmentsSyncRequest(
-            upsert=[DepartmentUpsertItem(external_id='D1', name='Eng', ts=100)],
-            remove=[], source_ts=100,
+            upsert=[DepartmentUpsertItem(external_id="D1", name="Eng", ts=100)],
+            remove=[],
+            source_ts=100,
         )
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new_callable=AsyncMock, return_value=existing,
-        ), patch(
-            f'{MODULE}.DeptUpsertService.upsert_from_sync_payload',
-            new_callable=AsyncMock,
-        ) as upsert:
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new_callable=AsyncMock,
+                return_value=existing,
+            ),
+            patch(
+                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
+                new_callable=AsyncMock,
+            ) as upsert,
+        ):
             result = await DepartmentsSyncService.execute(payload)
 
         assert result.skipped_ts_conflict == 1
@@ -262,29 +377,36 @@ class TestRemoveBatch:
         from bisheng.sso_sync.domain.services.departments_sync_service import (
             DepartmentsSyncService,
         )
+
         upsert_existing = None
-        remove_dept = _dept('D99', id=99, last_sync_ts=10,
-                            mounted_tenant_id=None)
+        remove_dept = _dept("D99", id=99, last_sync_ts=10, mounted_tenant_id=None)
 
         async def fake_get(source, ext):
-            return {'D1': upsert_existing, 'D99': remove_dept}.get(ext)
+            return {"D1": upsert_existing, "D99": remove_dept}.get(ext)
 
         payload = DepartmentsSyncRequest(
-            upsert=[DepartmentUpsertItem(external_id='D1', name='Eng', ts=500)],
-            remove=['D99'], source_ts=500,
+            upsert=[DepartmentUpsertItem(external_id="D1", name="Eng", ts=500)],
+            remove=["D99"],
+            source_ts=500,
         )
-        with patch(
-            f'{MODULE}.DepartmentDao.aget_by_source_external_id',
-            new=fake_get,
-        ), patch(
-            f'{MODULE}.DeptUpsertService.upsert_from_sync_payload',
-            new_callable=AsyncMock,
-        ), patch(
-            f'{MODULE}.DepartmentDao.aarchive_by_external_id',
-            new_callable=AsyncMock, return_value=remove_dept,
-        ), patch(
-            f'{MODULE}.DepartmentDeletionHandler.on_deleted',
-            new_callable=AsyncMock,
+        with (
+            patch(
+                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
+                new=fake_get,
+            ),
+            patch(
+                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
+                new_callable=AsyncMock,
+                return_value=remove_dept,
+            ),
+            patch(
+                f"{MODULE}.DepartmentDeletionHandler.on_deleted",
+                new_callable=AsyncMock,
+            ),
         ):
             result = await DepartmentsSyncService.execute(payload)
 
