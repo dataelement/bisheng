@@ -192,7 +192,7 @@ export default function ExplorePlaza() {
             {/* 智能体网格 */}
             <main className="flex min-h-0 w-full max-w-[1000px] flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-on-scroll px-5 pb-5">
                 <div
-                    className="grid w-full items-start gap-x-3 gap-y-3.5"
+                    className="grid w-full items-start gap-4"
                     style={{ gridTemplateColumns: `repeat(${exploreCols}, minmax(0, 1fr))` }}
                 >
                     {agents.map((agent, idx) => (
