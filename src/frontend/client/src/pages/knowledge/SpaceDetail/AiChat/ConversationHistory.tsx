@@ -3,14 +3,9 @@
  * Displays server-backed session records with inline rename + delete support.
  */
 import { useEffect, useRef, useState } from "react";
-import {
-    HistoryIcon,
-    MessageSquareIcon,
-    XIcon,
-} from "lucide-react";
+import { MessageSquareIcon } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { NotificationSeverity } from "~/common";
-import { Button } from "~/components";
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -28,7 +23,12 @@ interface ConversationHistoryProps {
     onSelect: (chatId: string) => void;
     onDelete: (chatId: string) => void;
     onRename: (chatId: string, name: string) => Promise<boolean>;
-    onClose: () => void;
+    /** Back to the conversation view (leaves the panel open). */
+    onBack: () => void;
+    /** Start a fresh conversation and reveal it. */
+    onNewChat: () => void;
+    /** Collapse the whole dock. */
+    onCollapse: () => void;
 }
 
 export function ConversationHistory({
@@ -37,7 +37,9 @@ export function ConversationHistory({
     onSelect,
     onDelete,
     onRename,
-    onClose,
+    onBack,
+    onNewChat,
+    onCollapse,
 }: ConversationHistoryProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -131,22 +133,44 @@ export function ConversationHistory({
 
     return (
         <div className="absolute inset-0 z-30 flex flex-col bg-white animate-in slide-in-from-right duration-200">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e6eb] shrink-0">
-                <div className="flex items-center gap-2">
-                    <HistoryIcon className="size-4 text-[#4e5969]" />
-                    <h3 className="text-sm font-medium text-[#1d2129]">
+            {/* Header — mirrors the AI assistant header exactly (px-4 py-3, no bottom
+                border, leading-[22px] title row, right icon group in py-1) so both panels
+                line up. Left: back to the conversation; right: new chat + collapse. */}
+            <div className="relative flex shrink-0 items-center gap-2 px-4 py-3">
+                {/* Back arrow · divider · title — 12px gap between all three. */}
+                <div className="flex shrink-0 items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={onBack}
+                        aria-label={localize("com_ui_go_back")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                    >
+                        <Outlined.ArrowLeft className="size-4" />
+                    </button>
+                    <span className="h-3.5 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
+                    <h3 className="text-sm font-medium leading-[22px] text-[#212121]">
                         {localize("com_knowledge.history_chat")}
                     </h3>
                 </div>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-7 h-7 text-[#86909c] hover:text-[#4e5969]"
-                    onClick={onClose}
-                >
-                    <XIcon className="size-4" />
-                </Button>
+                <div className="min-w-0 flex-1" aria-hidden />
+                <div className="flex shrink-0 items-center justify-end gap-3 py-1">
+                    <button
+                        type="button"
+                        onClick={onNewChat}
+                        aria-label={localize("com_knowledge.create_chat")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                    >
+                        <Outlined.MessagePlus className="size-4" />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onCollapse}
+                        aria-label={localize("com_ui_collapse")}
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                    >
+                        <Outlined.DoubleDown className="size-4" />
+                    </button>
+                </div>
             </div>
 
             {/* Session list */}

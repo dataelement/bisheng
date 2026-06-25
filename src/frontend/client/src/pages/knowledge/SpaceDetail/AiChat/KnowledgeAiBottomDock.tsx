@@ -144,9 +144,39 @@ export function KnowledgeAiBottomDock({
         await createSession();
     };
 
+    // Collapsed-state entry points (the floating buttons shown when history exists).
+    // History opens the panel straight into the history list; the expand arrow opens
+    // a fresh conversation — existing history stays in `sessions`, reachable via history.
+    const handleOpenHistory = () => {
+        setShowHistory(true);
+        setOpen(true);
+    };
+
+    const handleExpandNew = async () => {
+        setShowHistory(false);
+        // Reuse the current view if it's already an empty new chat; otherwise spin up a
+        // fresh session so expanding never resurfaces the conversation last viewed.
+        if (messages.length > 0) await createSession();
+        setOpen(true);
+    };
+
     const handleHistorySelect = (chatId: string) => {
         switchSession(chatId);
         setShowHistory(false);
+    };
+
+    // History-panel header actions. Back returns to the conversation view; new chat
+    // starts a fresh conversation and reveals it; collapse folds the whole dock.
+    const handleHistoryBack = () => setShowHistory(false);
+
+    const handleHistoryNewChat = async () => {
+        setShowHistory(false);
+        await createSession();
+    };
+
+    const handleHistoryCollapse = () => {
+        setShowHistory(false);
+        setOpen(false);
     };
 
     // ─── Mobile + expanded: take over the full visual viewport ─────────────
@@ -268,7 +298,9 @@ export function KnowledgeAiBottomDock({
                         onSelect={handleHistorySelect}
                         onDelete={deleteSession}
                         onRename={renameSession}
-                        onClose={() => setShowHistory(false)}
+                        onBack={handleHistoryBack}
+                        onNewChat={handleHistoryNewChat}
+                        onCollapse={handleHistoryCollapse}
                     />
                 )}
             </div>
@@ -289,7 +321,10 @@ export function KnowledgeAiBottomDock({
                 className={cn(
                     // z-40 sits above the file table's sticky header (z-30) and its sticky cells
                     // (up to z-[35]); otherwise the expanded dialog's top is covered by the column header.
-                    "absolute inset-x-0 bottom-0 z-40 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
+                    // pointer-events-none keeps the gradient backdrop visually masking the list while
+                    // letting clicks fall through to the file rows behind it; the chat card below
+                    // re-enables pointer events on its own box so it stays interactive.
+                    "pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
                     // pt-10 always — the fade backdrop hides on focus but the input
                     // shouldn't jump when the keyboard opens.
                     !open && "pt-10",
@@ -304,32 +339,52 @@ export function KnowledgeAiBottomDock({
             >
                 <div
                     className={cn(
-                        "relative mx-auto flex w-full max-w-[800px] flex-col",
+                        // pointer-events-auto restores interactivity on the card itself (its parent
+                        // backdrop is pointer-events-none so the file list behind stays clickable).
+                        "pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col",
                         open &&
                             "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {/* Floating expand button — appears whenever any conversation exists.
-                        Gate on `sessions`, not `messages`: starting a new chat clears
-                        `messages` but the session history is still there, so the arrow
-                        must persist. Shared by desktop + mobile-collapsed docks. */}
+                    {/* Floating collapsed-state controls — shown whenever any conversation
+                        exists. Gate on `sessions`, not `messages`: starting a new chat clears
+                        `messages` but the session history is still there, so the controls must
+                        persist. Left = history (opens the history list), right = expand (opens a
+                        fresh conversation). 12px gap. Shared by desktop + mobile-collapsed docks. */}
                     {!open && (sessions.length > 0 || messages.length > 0) && (
                         <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        type="button"
-                                        onClick={() => setOpen(true)}
-                                        aria-label={localize("com_ui_expand")}
-                                        className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
-                                    >
-                                        <Outlined.DoubleDown className="size-4 rotate-180" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{localize("com_ui_expand")}</p>
-                                </TooltipContent>
-                            </Tooltip>
+                            <div className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex items-center justify-end gap-2">
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={handleOpenHistory}
+                                            aria-label={localize("com_knowledge.history_chat")}
+                                            className="flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                        >
+                                            <Outlined.History className="size-4" />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>{localize("com_knowledge.history_chat")}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={handleExpandNew}
+                                            aria-label={localize("com_ui_expand")}
+                                            className="flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                        >
+                                            <Outlined.DoubleDown className="size-4 rotate-180" />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>{localize("com_ui_expand")}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
                         </TooltipProvider>
                     )}
 
@@ -461,7 +516,9 @@ export function KnowledgeAiBottomDock({
                             onSelect={handleHistorySelect}
                             onDelete={deleteSession}
                             onRename={renameSession}
-                            onClose={() => setShowHistory(false)}
+                            onBack={handleHistoryBack}
+                            onNewChat={handleHistoryNewChat}
+                            onCollapse={handleHistoryCollapse}
                         />
                     )}
                 </div>
