@@ -76,6 +76,9 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [selectedAgentTools, setSelectedAgentTools] = useRecoilState(store.selectedAgentTools);
   const [agentToolsInitialized, setAgentToolsInitialized] = useRecoilState(store.agentToolsInitialized);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
+  // Landing-only: the input box reports whether its attachment bar is showing
+  // so the welcome subtitle can hide without shifting the title / input box.
+  const [landingHasSelection, setLandingHasSelection] = useState(false);
 
   // v2.5 interaction memory — per-user localStorage snapshots for the input
   // bar. The model selection is shared across chat surfaces (ChatView and
@@ -818,11 +821,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                       {/* F035 Track H (P5): daily/task mode switch removed —
                           task mode is reached via the sidebar "new task" entry
                           and the input-bar task-mode button. */}
-                      <Landing isNew={isNew} />
+                      <Landing isNew={isNew} hideSubtitle={landingHasSelection} />
 
                       {/* Input area for landing page */}
                       {!shareToken && (
-                        <div className="w-full max-w-[800px] mx-auto px-4 mt-6 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
+                        <div className="w-full max-w-[800px] mx-auto px-4 mt-10 touch-mobile:mt-2 touch-mobile:max-w-full pb-3">
                           <AiChatInput
                             elevated
                             disabled={!bsConfig?.models?.length || !!shareToken}
@@ -852,6 +855,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                             onSelectedOrgKbsChange={setSelectedOrgKbs}
                             searchType={searchType}
                             onSearchTypeChange={setSearchType}
+                            onSelectionPresenceChange={setLandingHasSelection}
                           />
                         </div>
                       )}
