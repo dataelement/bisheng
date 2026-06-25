@@ -182,39 +182,43 @@ export function KnowledgeAiBottomDock({
     // ─── Mobile + expanded: take over the full visual viewport ─────────────
     if (isH5 && open) {
         const messageHeader = (
-            <div className="relative flex shrink-0 items-center px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3">
-                <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
-                    {assistantTitle}
-                </h3>
-                {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
-                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] flex items-center justify-end gap-3 py-1">
-                    <button
-                        type="button"
-                        onClick={() => setShowHistory((v) => !v)}
-                        aria-label={localize("com_knowledge.history_chat")}
-                        className={cn(
-                            "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                            showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
-                        )}
-                    >
-                        <Outlined.History className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleNewChat}
-                        aria-label={localize("com_knowledge.create_chat")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
-                    >
-                        <Outlined.MessagePlus className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setOpen(false)}
-                        aria-label={localize("com_ui_collapse")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
-                    >
-                        <Outlined.DoubleDown className="size-4" />
-                    </button>
+            // Mirror the knowledge-space file-list header so the dock top aligns with it:
+            // outer pt = safe-area + 8px, inner row is a fixed h-11 (44px) with the px-4 gutter.
+            <div className="shrink-0 pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                <div className="relative flex h-11 w-full min-w-0 items-center px-4">
+                    <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
+                        {assistantTitle}
+                    </h3>
+                    {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
+                    <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setShowHistory((v) => !v)}
+                            aria-label={localize("com_knowledge.history_chat")}
+                            className={cn(
+                                "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
+                                showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
+                            )}
+                        >
+                            <Outlined.History className="size-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleNewChat}
+                            aria-label={localize("com_knowledge.create_chat")}
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                        >
+                            <Outlined.MessagePlus className="size-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            aria-label={localize("com_ui_collapse")}
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                        >
+                            <Outlined.DoubleDown className="size-4" />
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -234,33 +238,24 @@ export function KnowledgeAiBottomDock({
                 {/* Messages — scrollable, with bottom fade-out under z-auto so the
                     focused-state grey overlay can stack above. */}
                 <div className="relative min-h-0 flex-1">
-                    {messages.length === 0 && !activeChatId ? (
-                        <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-                            <img
-                                className="mx-auto block size-[80px] object-contain"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                                alt="AI Assistant"
-                            />
-                            <p className="text-sm text-[#86909c]">{folderQaHint}</p>
-                        </div>
-                    ) : (
-                        <AiChatMessages
-                            messages={messages}
-                            conversationId={activeChatId}
-                            title=""
-                            isLoading={isLoading}
-                            isStreaming={isStreaming}
-                            presetQuestions={[]}
-                            hideShare
-                            hideHeaderTitle
-                            flatMode
-                            knowledgeChatLayout
-                            contentWidthClassName="max-w-none px-4"
-                            emptyStateHint={folderQaHint}
-                            onPresetClick={() => { }}
-                            onRegenerate={regenerate}
-                        />
-                    )}
+                    {/* AiChatMessages owns the empty state (centered AI-home illustration +
+                        folderQaHint) so it stays identical to the file/article docks. */}
+                    <AiChatMessages
+                        messages={messages}
+                        conversationId={activeChatId}
+                        title=""
+                        isLoading={isLoading}
+                        isStreaming={isStreaming}
+                        presetQuestions={[]}
+                        hideShare
+                        hideHeaderTitle
+                        flatMode
+                        knowledgeChatLayout
+                        contentWidthClassName="max-w-none px-4"
+                        emptyStateHint={folderQaHint}
+                        onPresetClick={() => { }}
+                        onRegenerate={regenerate}
+                    />
                     <div
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-10 bg-gradient-to-t from-white to-white/0"
@@ -463,35 +458,26 @@ export function KnowledgeAiBottomDock({
                                 </div>
                             </div>
 
-                            {messages.length === 0 && !activeChatId ? (
-                                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-                                    <img
-                                        className="mx-auto block size-[80px] object-contain"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                                        alt="AI Assistant"
-                                    />
-                                    <p className="text-sm text-[#86909c]">{folderQaHint}</p>
-                                </div>
-                            ) : (
-                                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                                    <AiChatMessages
-                                        messages={messages}
-                                        conversationId={activeChatId}
-                                        title=""
-                                        isLoading={isLoading}
-                                        isStreaming={isStreaming}
-                                        presetQuestions={[]}
-                                        hideShare
-                                        hideHeaderTitle
-                                        flatMode
-                                        knowledgeChatLayout
-                                        contentWidthClassName="max-w-none px-4"
-                                        emptyStateHint={folderQaHint}
-                                        onPresetClick={() => { }}
-                                        onRegenerate={regenerate}
-                                    />
-                                </div>
-                            )}
+                            {/* AiChatMessages owns the empty state (centered AI-home illustration +
+                                folderQaHint) so it stays identical to the file/article docks. */}
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                                <AiChatMessages
+                                    messages={messages}
+                                    conversationId={activeChatId}
+                                    title=""
+                                    isLoading={isLoading}
+                                    isStreaming={isStreaming}
+                                    presetQuestions={[]}
+                                    hideShare
+                                    hideHeaderTitle
+                                    flatMode
+                                    knowledgeChatLayout
+                                    contentWidthClassName="max-w-none px-4"
+                                    emptyStateHint={folderQaHint}
+                                    onPresetClick={() => { }}
+                                    onRegenerate={regenerate}
+                                />
+                            </div>
                         </div>
                     </div>
 

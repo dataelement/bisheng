@@ -273,7 +273,11 @@ export default function AiChatMessages({
         return (
             <div
                 ref={emptyScrollRevealRef}
-                className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-scroll"
+                // h-full (alongside flex-1) so the empty state fills its parent even when
+                // that parent is a plain block container (e.g. the dock's `relative` message
+                // area), keeping the illustration vertically centered instead of collapsing
+                // to the top. Mirrors the non-empty messages root below.
+                className="flex h-full min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-scroll"
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
