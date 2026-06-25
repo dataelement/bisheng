@@ -9,7 +9,7 @@ import {
     subscribeSpaceApi,
     type KnowledgeSpace,
 } from "~/api/knowledge";
-import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { useLocalize } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
@@ -53,7 +53,6 @@ export default function KnowledgeSquare({
     const [joiningIds, setJoiningIds] = useState<Set<string>>(() => new Set());
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
-    const scrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const searchImeComposingRef = useRef(false);
     // Larger page reduces the "subscribe reorders rows mid-pagination" issue:
     // the not-subscribed-first sort moves a space to the back the moment it's
@@ -251,11 +250,12 @@ export default function KnowledgeSquare({
             </div>
 
             <div
-                ref={(el) => {
-                    scrollRef.current = el;
-                    scrollRevealRef(el);
-                }}
-                className="flex-1 flex flex-col overflow-y-auto scrollbar-on-scroll bg-white"
+                ref={scrollRef}
+                // Native scrollbar (no custom ::-webkit-scrollbar styling) so it
+                // follows the OS preference — always-show or show-on-scroll-only.
+                // A styled webkit scrollbar would be treated as legacy/always-present
+                // and ignore the "show on scroll only" system setting.
+                className="flex-1 flex flex-col overflow-y-auto bg-white"
             >
                 {/* Outer holds width/centering + mobile side padding; inner `relative` anchors
                     the search icon so it stays aligned with the input after the padding inset. */}
