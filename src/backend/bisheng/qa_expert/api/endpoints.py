@@ -14,7 +14,11 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200, resp_500
 
-
+from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
+from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
+    SensitiveWordPolicyService,
+)
 from bisheng.qa_expert.domain.schemas import (
     ExpertCreateRequest,
     ExpertUpdateRequest,
@@ -36,6 +40,7 @@ from bisheng.qa_expert.domain.schemas import (
     QuestionPageData,
     QuestionStatsResponse,
     QAExpertStatsResponse,
+    QuestionCheckRequest,
 )
 from bisheng.qa_expert.domain.services import (
     ExpertService,
@@ -162,6 +167,19 @@ async def get_question_service() -> QuestionService:
     """依赖注入：问题服务"""
     return QuestionService()
 
+
+@router.post("/check_questions", response_model=QuestionDetailResponse)
+async def check_question(
+    request: QuestionCheckRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    result = SensitiveWordPolicyService.check_text(
+        tenant_id=user.tenant_id,
+        business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+        text=request.check_text,
+    )
+    if result.enabled and result.hits:
+        raise ContentSafetyViolation(result)
 
 @router.post("/questions", response_model=QuestionDetailResponse)
 async def create_question(

@@ -105,7 +105,9 @@ class ExpertResponse(BaseModel):
 
 
 # ==================== 问题 Schemas ====================
-
+class QuestionCheckRequest(BaseModel):
+    """检查问题 - 请求"""
+    check_text: str = Field(..., min_length=0, max_length=100, description="问题文本")
 
 class QuestionCreateRequest(BaseModel):
     """发起提问 - 请求"""
