@@ -31,7 +31,7 @@ type ChannelGroup = "created" | "subscribed";
 // Serif stack for the channel-name title. Songti SC (iOS/macOS) / SimSun 宋体 (Windows) /
 // Noto Serif CJK (Android & Linux), ending in the generic `serif` keyword so any device
 // without a named family still falls back to its system serif rather than sans-serif.
-const SERIF_FONT_STACK =
+export const SERIF_FONT_STACK =
     '"Songti SC", STSong, "SimSun", "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", serif';
 
 /**

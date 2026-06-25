@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { TransitionEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
 import { useLocalize } from "~/hooks";
@@ -8,6 +9,7 @@ import { getRecommendedChannelsApi, subscribeManagerChannelApi } from "~/api/cha
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { cn } from "~/utils";
 import { ChannelSquareCard } from "../ChannelSquareCard";
+import { SERIF_FONT_STACK } from "./ArticleList/ChannelSwitcher";
 
 type DiscoverStatus = "join" | "joined" | "pending" | "private" | "rejected";
 
@@ -27,6 +29,8 @@ interface ChannelDiscoveryHomeProps {
     /** Gate the recommend query — only fetch while the empty home state is shown. */
     enabled: boolean;
     isH5: boolean;
+    /** Pause auto-rotate while the preview drawer is open. */
+    previewOpen?: boolean;
     /** Open the mobile system menu (H5 header button). */
     onOpenMobileNav?: () => void;
     /** Open the preview drawer for a channel (card click). */
@@ -40,7 +44,7 @@ interface ChannelDiscoveryHomeProps {
 // Carousel card geometry — matches the Figma card (≈326w, 12 gap).
 const CARD_WIDTH = 326;
 const CARD_GAP = 12;
-const AUTO_ROTATE_MS = 4000;
+const AUTO_ROTATE_MS = 3000;
 // Minimum number of public channels required to show the carousel; below this we
 // fall back to the empty illustration (per spec).
 const MIN_CAROUSEL_CHANNELS = 3;
@@ -72,6 +76,7 @@ const mapRecommendItem = (item: any): DiscoverChannel | null => {
 export function ChannelDiscoveryHome({
     enabled,
     isH5,
+    previewOpen = false,
     onOpenMobileNav,
     onPreviewChannel,
     onGoSquare,
@@ -81,13 +86,18 @@ export function ChannelDiscoveryHome({
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const [channels, setChannels] = useState<DiscoverChannel[]>([]);
-    const [activeIndex, setActiveIndex] = useState(0);
     const [paused, setPaused] = useState(false);
     const [joiningId, setJoiningId] = useState<string | null>(null);
-    // Ping-pong direction for auto-rotate (+1 forward, -1 backward) — avoids the
-    // long "jump back to start" slide of a wrap-around carousel.
-    const dirRef = useRef(1);
+    // Infinite loop carousel. The track renders the ranked list three times; `pos`
+    // is the track index of the centered card and only ever increases. It starts in
+    // the MIDDLE copy so the left/right neighbours are always populated (initial
+    // window = [last, #1, #2, #3]). After scrolling one full period it snaps back by
+    // one copy with no animation — invisible because the content is identical.
+    const [pos, setPos] = useState(0);
+    // Off until the first centered frame has painted, so there's no entrance slide.
+    const [animate, setAnimate] = useState(false);
     const viewportRef = useRef<HTMLDivElement | null>(null);
+    const trackRef = useRef<HTMLDivElement | null>(null);
     const [viewportWidth, setViewportWidth] = useState(0);
 
     const { data, isLoading, isFetched } = useQuery({
@@ -105,15 +115,22 @@ export function ChannelDiscoveryHome({
         const list: any[] = (payload?.data || payload?.list || []) as any[];
         const mapped = list.map(mapRecommendItem).filter((c): c is DiscoverChannel => c !== null);
         setChannels(mapped);
-        setActiveIndex(0);
-        dirRef.current = 1;
+        // Start centered on the highest-ranked card in the middle copy (index N).
+        setPos(mapped.length);
     }, [data]);
 
     // Carousel only on PC with enough public channels (otherwise the empty illustration).
     const count = channels.length;
     const showCarousel = !isH5 && count >= MIN_CAROUSEL_CHANNELS;
 
-    // Measure the viewport so the active card can be centered precisely.
+    // Three concatenated copies so there are always neighbours on both sides while
+    // `pos` walks through the middle copy.
+    const looped = useMemo(
+        () => (showCarousel ? [...channels, ...channels, ...channels] : []),
+        [channels, showCarousel]
+    );
+
+    // Measure the viewport so the centered card can be positioned precisely.
     useLayoutEffect(() => {
         if (!showCarousel) return;
         const node = viewportRef.current;
@@ -124,24 +141,35 @@ export function ChannelDiscoveryHome({
         return () => window.removeEventListener("resize", measure);
     }, [showCarousel]);
 
-    // Auto-rotate the centered card, bouncing at the ends.
+    // Enable the slide transition only after the first centered frame is painted.
     useEffect(() => {
-        if (!showCarousel || paused || count < 2) return;
+        if (!showCarousel || !viewportWidth) return;
+        const id = requestAnimationFrame(() => setAnimate(true));
+        return () => cancelAnimationFrame(id);
+    }, [showCarousel, viewportWidth]);
+
+    // Auto-advance: move the centered card forward one step (scrolls right-to-left).
+    // Paused on hover or while the preview drawer is open.
+    useEffect(() => {
+        if (!showCarousel || paused || previewOpen || count < 1) return;
         const timer = window.setInterval(() => {
-            setActiveIndex((i) => {
-                let next = i + dirRef.current;
-                if (next >= count) {
-                    dirRef.current = -1;
-                    next = i - 1;
-                } else if (next < 0) {
-                    dirRef.current = 1;
-                    next = i + 1;
-                }
-                return next;
-            });
+            setAnimate(true);
+            setPos((p) => p + 1);
         }, AUTO_ROTATE_MS);
         return () => window.clearInterval(timer);
-    }, [showCarousel, paused, count]);
+    }, [showCarousel, paused, previewOpen, count]);
+
+    // Seamless loop: once a full period has scrolled (pos reaches the third copy),
+    // jump back by one copy with animation off — the content lines up exactly.
+    const handleTrackTransitionEnd = (e: TransitionEvent<HTMLDivElement>) => {
+        if (e.target !== trackRef.current || e.propertyName !== "transform") return;
+        if (count > 0 && pos >= 2 * count) {
+            setAnimate(false);
+            setPos((p) => p - count);
+            // Re-enable animation after the no-transition re-position has painted.
+            requestAnimationFrame(() => requestAnimationFrame(() => setAnimate(true)));
+        }
+    };
 
     const handleSubscribe = useCallback(
         (channelId: string) => {
@@ -203,8 +231,13 @@ export function ChannelDiscoveryHome({
                 </div>
             );
         }
+        // Match the content-view header title (ChannelSwitcher): same px-10/pt-5 offset,
+        // 32px bold serif #212121.
         return (
-            <h1 className="shrink-0 px-10 pt-5 text-[28px] font-semibold leading-10 text-[#1D2129]">
+            <h1
+                className="shrink-0 px-10 pt-5 pb-4 text-[32px] font-bold leading-[40px] text-[#212121]"
+                style={{ fontFamily: SERIF_FONT_STACK }}
+            >
                 {localize("com_subscription.subscribe")}
             </h1>
         );
@@ -212,7 +245,7 @@ export function ChannelDiscoveryHome({
 
     const renderBottomActions = () => (
         <div className="flex flex-col items-center gap-5">
-            <p className="text-[14px] leading-6 text-[#4E5969]">
+            <p className="text-[14px] leading-6 text-[#999999]">
                 {localize("com_subscription.no_subscription_content_you_can")}
             </p>
             <div className="flex items-center gap-4">
@@ -243,30 +276,36 @@ export function ChannelDiscoveryHome({
     );
 
     const renderCarousel = () => {
-        // Center the active card: viewportCenter - (active card's center within the track).
+        // Center the card at track index `pos`: viewportCenter - that card's center.
         const trackTranslate =
-            viewportWidth / 2 - (activeIndex * (CARD_WIDTH + CARD_GAP) + CARD_WIDTH / 2);
+            viewportWidth / 2 - (pos * (CARD_WIDTH + CARD_GAP) + CARD_WIDTH / 2);
         return (
             <div
                 ref={viewportRef}
-                className="relative h-[140px] w-full max-w-[1000px] overflow-hidden"
+                // overflow-hidden clips the side cards horizontally; CSS can't clip one
+                // axis only, so generous vertical padding (>= the hover shadow's ~28px
+                // reach) keeps the centered card's shadow from being cropped. Height
+                // follows the in-flow track so the card never gets cut off.
+                className="relative w-full max-w-[1000px] overflow-hidden py-8"
                 onMouseEnter={() => setPaused(true)}
                 onMouseLeave={() => setPaused(false)}
             >
                 <div
-                    className="absolute top-1/2 left-0 flex -translate-y-1/2 will-change-transform"
+                    ref={trackRef}
+                    className="flex items-center will-change-transform"
                     style={{
                         gap: CARD_GAP,
                         transform: `translateX(${trackTranslate}px)`,
-                        // Skip the entrance slide before the viewport width is measured.
-                        transition: viewportWidth ? "transform 500ms ease-out" : "none",
+                        // No transition before measuring, or during the seamless loop snap-back.
+                        transition: viewportWidth && animate ? "transform 500ms ease-out" : "none",
                     }}
+                    onTransitionEnd={handleTrackTransitionEnd}
                 >
-                    {channels.map((channel, index) => (
+                    {looped.map((channel, index) => (
                         <div
-                            key={channel.id}
+                            key={`${channel.id}-${index}`}
                             className="shrink-0 transition-opacity duration-500"
-                            style={{ width: CARD_WIDTH, opacity: index === activeIndex ? 1 : 0.55 }}
+                            style={{ width: CARD_WIDTH, opacity: index === pos ? 1 : 0.55 }}
                         >
                             <ChannelSquareCard
                                 title={channel.title}
@@ -277,7 +316,6 @@ export function ChannelDiscoveryHome({
                                 subscriberCount={channel.subscriberCount}
                                 status={channel.status}
                                 visibility={channel.visibility}
-                                isHighlighted={index === activeIndex}
                                 onPreview={() => onPreviewChannel(channel.id)}
                                 onAction={() => handleSubscribe(channel.id)}
                             />
@@ -304,7 +342,10 @@ export function ChannelDiscoveryHome({
             {renderHeader()}
             <div
                 className={cn(
-                    "flex min-h-0 flex-1 flex-col items-center justify-center gap-9 px-4 pb-16",
+                    "flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-16",
+                    // Carousel supplies its own spacing via the viewport's py-8; only the
+                    // empty illustration / loading states need the gap to the actions.
+                    !showCarousel && "gap-9",
                     isH5 && "pt-11"
                 )}
             >

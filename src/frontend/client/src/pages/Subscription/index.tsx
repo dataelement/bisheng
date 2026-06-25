@@ -488,8 +488,10 @@ export default function Subscription() {
     return (
         <div className="relative flex min-h-0 flex-1 flex-col touch-desktop:flex-row">
             {/* 频道 / 广场 切换 — 提升到两个视图之上常驻，切换时同一滑块平滑移动，
-                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。 */}
-            {!isH5 && (activeChannel || showChannelSquare) ? (
+                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。
+                覆盖频道页、广场页，以及无频道/无订阅的发现空页（!channelsResolving），
+                加载中（channelsResolving 且非广场）暂不显示。 */}
+            {!isH5 && (showChannelSquare || !channelsResolving) ? (
                 <div className="absolute top-5 z-20" style={{ right: `${detailPaneWidth + 40}px` }}>
                     <ChannelSquareTabs
                         active={showChannelSquare ? "square" : "channel"}
@@ -619,6 +621,7 @@ export default function Subscription() {
                             <ChannelDiscoveryHome
                                 enabled
                                 isH5={isH5}
+                                previewOpen={previewDrawerOpen}
                                 onOpenMobileNav={() => setSystemMenuOpen(true)}
                                 onPreviewChannel={handleSquarePreview}
                                 onGoSquare={handleChannelSquare}
