@@ -2119,6 +2119,7 @@
   "com_approval_my_tasks": "我的待办",
   "com_approval_my_requests": "我的申请",
   "com_approval_center_title": "审批中心",
+  "com_approval_back_to_list": "返回列表",
   "com_approval_status_pending": "审批中",
   "com_approval_status_approved": "已通过",
   "com_approval_status_rejected": "已拒绝",

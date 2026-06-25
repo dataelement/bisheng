@@ -2113,6 +2113,7 @@
   "com_approval_my_tasks": "自分のタスク",
   "com_approval_my_requests": "自分の申請",
   "com_approval_center_title": "承認センター",
+  "com_approval_back_to_list": "一覧に戻る",
   "com_approval_status_pending": "審査中",
   "com_approval_status_approved": "承認済み",
   "com_approval_status_rejected": "却下",
