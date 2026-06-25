@@ -459,4 +459,5 @@ class DepartmentKnowledgeSpaceService:
         )
         results = [KnowledgeSpaceInfoResp(**space.model_dump()) for space in spaces]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
+        await svc._populate_root_file_counts(results)
         return await svc._decorate_department_metadata(results)

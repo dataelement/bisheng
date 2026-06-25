@@ -32,7 +32,7 @@ import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState, useRecoilValue } from "recoil";
 import store from "~/store";
-import { subscriptionDetailPaneWidthState } from "~/store/subscriptionLayout";
+import { subscriptionDetailPaneWidthState, subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
 import { ChannelShareDialog } from "./ChannelShareDialog";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
@@ -92,6 +92,9 @@ export default function Subscription() {
     // Right-area width (detail panel + splitter) published by ChannelLayout; offsets
     // the persistent 频道/广场 tab so it tracks the article-list column's right edge.
     const detailPaneWidth = useRecoilValue(subscriptionDetailPaneWidthState);
+    // True while the H5 channel-switcher dropdown is open — greys out the persistent
+    // 频道/广场 tab, matching the header's left/right action buttons.
+    const mobileChannelDropdownOpen = useRecoilValue(subscriptionMobileChannelDropdownOpenState);
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
     const openChannelPermissionDialog = (channel: Channel) => {
@@ -488,8 +491,10 @@ export default function Subscription() {
     return (
         <div className="relative flex min-h-0 flex-1 flex-col touch-desktop:flex-row">
             {/* 频道 / 广场 切换 — 提升到两个视图之上常驻，切换时同一滑块平滑移动，
-                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。 */}
-            {!isH5 && (activeChannel || showChannelSquare) ? (
+                位置与频道页标题行右上（pt-5 / px-10）对齐。仅 PC。
+                覆盖频道页、广场页，以及无频道/无订阅的发现空页（!channelsResolving），
+                加载中（channelsResolving 且非广场）暂不显示。 */}
+            {!isH5 && (showChannelSquare || !channelsResolving) ? (
                 <div className="absolute top-5 z-20" style={{ right: `${detailPaneWidth + 40}px` }}>
                     <ChannelSquareTabs
                         active={showChannelSquare ? "square" : "channel"}
@@ -498,11 +503,30 @@ export default function Subscription() {
                     />
                 </div>
             ) : null}
+            {/* H5：同一个切换器常驻在两个视图之上（不随 showChannelSquare 卸载），
+                所以频道⇄广场切换时蓝色下划线平滑滑动。各视图头部不再各自渲染切换器，
+                中间留空给它。屏幕居中，与各视图头部行（pt+h-11）垂直对齐；
+                外层 pointer-events-none 让两侧的侧栏/搜索按钮仍可点击，仅切换器本体接收点击。 */}
+            {isH5 && (showChannelSquare || !channelsResolving) ? (
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-center pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                    <div className="pointer-events-auto flex h-11 items-center">
+                        <ChannelSquareTabs
+                            variant="underline"
+                            active={showChannelSquare ? "square" : "channel"}
+                            onChannelClick={handleSquareBack}
+                            onSquareClick={handleChannelSquare}
+                            disabled={mobileChannelDropdownOpen}
+                        />
+                    </div>
+                </div>
+            ) : null}
             {showChannelSquare ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <ChannelSquare
                         refreshKey={channelSquareRefreshKey}
                         onPreviewChannel={handleSquarePreview}
+                        isH5={isH5}
+                        onOpenMobileNav={() => setSystemMenuOpen(true)}
                     />
                 </div>
             ) : (
@@ -619,6 +643,7 @@ export default function Subscription() {
                             <ChannelDiscoveryHome
                                 enabled
                                 isH5={isH5}
+                                previewOpen={previewDrawerOpen}
                                 onOpenMobileNav={() => setSystemMenuOpen(true)}
                                 onPreviewChannel={handleSquarePreview}
                                 onGoSquare={handleChannelSquare}
