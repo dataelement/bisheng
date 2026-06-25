@@ -435,20 +435,3 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_user_tenant_a
 bash scripts/backfill_user_tenant_associations.sh          # dry-run
 bash scripts/backfill_user_tenant_associations.sh apply    # 写入
 ```
-
-### `backfill_department_parent_tuples.py`
-
-把 DB 部门树的父子关系回填成 OpenFGA 的 `department#parent` 继承边（additive，只加不删，幂等）。
-
-背景：写 `department:{parent}#parent@department:{child}` 边的只有 F002 手动建/移部门；SSO 同步及早期 f006 迁移进来的部门在 FGA 里没有这条边，导致部门 admin 的 FGA 继承对其失效。SSO 同步链路已修复为实时维护 parent 边，本脚本按 DB 当前树形一次性补齐**存量**部门的边。
-
-遍历所有 `status='active'` 且 `parent_id` 非空的部门（全租户、全来源），每个发一条 `write department:{parent_id}#parent department:{id}`。`batch_write_tuples` 对重复写幂等，可反复跑。
-
-> 运行顺序：在 `backfill_departments_under_single_root.py`（定型 parent_id）**之后**运行，会一并补上被收编部门的 root→顶层 边。
-
-Usage (from `src/backend/`):
-
-```bash
-config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_department_parent_tuples.py            # dry-run（默认）
-config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_department_parent_tuples.py --apply     # 写入
-```

@@ -26,33 +26,17 @@ def _no_default_root():
     """These orchestration tests predate the single-root invariant and
     assert on batch counters only, not on parent resolution. Stub the
     default-root lookup to None so ``execute`` never touches a real DB and
-    top-level items keep their original ``parent_id=None`` semantics, and
-    stub the OpenFGA flush so the batch never reaches a real FGA client.
+    top-level items keep their original ``parent_id=None`` semantics.
     """
-    with (
-        patch(
-            f"{MODULE}.DepartmentDao.aget_tenant_root_via_pointer",
-            new_callable=AsyncMock,
-            return_value=None,
-        ),
-        patch(
-            f"{MODULE}.DepartmentChangeHandler.execute_async",
-            new_callable=AsyncMock,
-        ),
+    with patch(
+        f"{MODULE}.DepartmentDao.aget_tenant_root_via_pointer",
+        new_callable=AsyncMock,
+        return_value=None,
     ):
         yield
 
 
-def _dept(
-    ext="D1",
-    *,
-    id=11,
-    last_sync_ts=0,
-    is_deleted=0,
-    mounted_tenant_id=None,
-    parent_id=None,
-    path="/",
-):
+def _dept(ext="D1", *, id=11, last_sync_ts=0, is_deleted=0, mounted_tenant_id=None):
     return SimpleNamespace(
         id=id,
         external_id=ext,
@@ -60,8 +44,8 @@ def _dept(
         is_deleted=is_deleted,
         mounted_tenant_id=mounted_tenant_id,
         source="sso",
-        path=path,
-        parent_id=parent_id,
+        path="/",
+        parent_id=None,
         is_tenant_root=0,
     )
 
@@ -139,50 +123,6 @@ class TestUpsertBatch:
             await DepartmentsSyncService.execute(payload)
 
         assert upsert.await_args.kwargs["default_root"] is root
-
-    async def test_upsert_writes_parent_edge_to_fga(self):
-        """A newly synced top-level dept under the root emits a single
-        ``write department:{root}#parent department:{dept}`` flushed once.
-        """
-        from bisheng.sso_sync.domain.services.departments_sync_service import (
-            DepartmentsSyncService,
-        )
-
-        root = _dept("ROOT", id=1)
-        child = _dept("D1", id=5, parent_id=1, path="/1/5/")
-        payload = DepartmentsSyncRequest(
-            upsert=[DepartmentUpsertItem(external_id="D1", name="Eng", ts=100)],
-            remove=[],
-            source_ts=200,
-        )
-        with (
-            patch(
-                f"{MODULE}.DepartmentDao.aget_tenant_root_via_pointer",
-                new_callable=AsyncMock,
-                return_value=root,
-            ),
-            patch(
-                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
-                new_callable=AsyncMock,
-                return_value=None,
-            ),
-            patch(
-                f"{MODULE}.DeptUpsertService.upsert_from_sync_payload",
-                new_callable=AsyncMock,
-                return_value=child,
-            ),
-            patch(
-                f"{MODULE}.DepartmentChangeHandler.execute_async",
-                new_callable=AsyncMock,
-            ) as flush,
-        ):
-            await DepartmentsSyncService.execute(payload)
-
-        flush.assert_awaited_once()
-        ops = flush.await_args.args[0]
-        assert [(o.action, o.user, o.relation, o.object) for o in ops] == [
-            ("write", "department:1", "parent", "department:5"),
-        ]
 
     async def test_stale_ts_counts_as_skipped(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
@@ -338,47 +278,6 @@ class TestRemoveBatch:
         kwargs = on_deleted.await_args.kwargs
         assert kwargs["dept_id"] == 99
         assert kwargs["deletion_source"] == DeletionSource.SSO_REALTIME
-
-    async def test_remove_breaks_parent_edge_in_fga(self):
-        """Archiving a dept emits a single ``delete`` of its parent edge."""
-        from bisheng.sso_sync.domain.services.departments_sync_service import (
-            DepartmentsSyncService,
-        )
-
-        dept = _dept("D50", id=50, last_sync_ts=10, parent_id=7)
-        payload = DepartmentsSyncRequest(
-            upsert=[],
-            remove=["D50"],
-            source_ts=100,
-        )
-        with (
-            patch(
-                f"{MODULE}.DepartmentDao.aget_by_source_external_id",
-                new_callable=AsyncMock,
-                return_value=dept,
-            ),
-            patch(
-                f"{MODULE}.DepartmentDao.aarchive_by_external_id",
-                new_callable=AsyncMock,
-                return_value=dept,
-            ),
-            patch(
-                f"{MODULE}.DepartmentDeletionHandler.on_deleted",
-                new_callable=AsyncMock,
-            ),
-            patch(
-                f"{MODULE}.DepartmentChangeHandler.execute_async",
-                new_callable=AsyncMock,
-            ) as flush,
-        ):
-            await DepartmentsSyncService.execute(payload)
-
-        # execute_async may also be awaited by the archive-cleanup service
-        # for member/admin tuples; scan every flushed op for the parent edge.
-        all_ops = [(o.action, o.user, o.relation, o.object) for call in flush.await_args_list for o in call.args[0]]
-        assert ("delete", "department:7", "parent", "department:50") in all_ops
-        # never a bogus department:None edge
-        assert all("department:None" not in o[1] for o in all_ops)
 
     async def test_remove_unmounted_no_orphan(self):
         from bisheng.sso_sync.domain.services.departments_sync_service import (
