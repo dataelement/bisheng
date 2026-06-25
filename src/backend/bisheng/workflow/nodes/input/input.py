@@ -2,11 +2,11 @@ import copy
 import json
 import time
 from enum import Enum
-from typing import Any, List, Dict
-from urllib.parse import urlparse, unquote
+from typing import Any
+from urllib.parse import unquote, urlparse
 
 from json_repair import json_repair
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from loguru import logger
 
 from bisheng.api.v1.schemas import FileProcessBase
@@ -24,19 +24,18 @@ from bisheng.workflow.nodes.input.const import InputFileMetadata
 
 
 class ParseModeEnum(str, Enum):
-    KEEP_RAW = 'keep_raw'
-    EXTRACT_TEXT = 'extract_text'
-    INGEST_TO_KNOWLEDGE_BASE = 'ingest_to_temp_kb'
+    KEEP_RAW = "keep_raw"
+    EXTRACT_TEXT = "extract_text"
+    INGEST_TO_KNOWLEDGE_BASE = "ingest_to_temp_kb"
 
 
 class InputNode(BaseNode):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Node Current Version
         self._current_v = 2
         # Whether the record is a conversation or a form
-        self._tab = self.node_data.tab['value']
+        self._tab = self.node_data.tab["value"]
 
         # Record what type of variable this is
         self._node_params_map = {}
@@ -44,7 +43,7 @@ class InputNode(BaseNode):
         # The maximum length of the input file in the dialog box, more than this length will be truncated
 
         if self.node_data.v < self._current_v:
-            raise IgnoreException(f'{self.name} -- workflow node is update')
+            raise IgnoreException(f"{self.name} -- workflow node is update")
 
         self._original_node_params = copy.deepcopy(self.node_params)
 
@@ -52,62 +51,62 @@ class InputNode(BaseNode):
         self._file_key_map = {}
 
         if self.is_dialog_input():
-            new_node_params['user_input'] = self.node_params['user_input']
-            new_node_params['dialog_files_content'] = self.node_params.get('dialog_files_content', [])
+            new_node_params["user_input"] = self.node_params["user_input"]
+            new_node_params["dialog_files_content"] = self.node_params.get("dialog_files_content", [])
         else:
-            for value_info in self.node_params['form_input']:
-                value_key = value_info['key']
+            for value_info in self.node_params["form_input"]:
+                value_key = value_info["key"]
                 # The file key needs to be re-generated to avoid parse type not ingest to knowledge base
                 if value_info["type"] == "file":
                     value_key = f"file_{generate_uuid()[:8]}"
-                    self._file_key_map[value_info['key']] = value_info
-                new_node_params[value_key] = value_info['value']
+                    self._file_key_map[value_info["key"]] = value_info
+                new_node_params[value_key] = value_info["value"]
                 self._node_params_map[value_key] = value_info
 
         self.node_params = new_node_params
-        self._image_ext = ['png', 'jpg', 'jpeg', 'bmp']
+        self._image_ext = ["png", "jpg", "jpeg", "bmp"]
 
         self._vector_client = None
         self._es_client = None
 
     def is_dialog_input(self):
-        """ Whether the input is in the form of a conversation """
-        if self._tab == 'dialog_input':
+        """Whether the input is in the form of a conversation"""
+        if self._tab == "dialog_input":
             return True
-        elif self._tab == 'form_input':
+        elif self._tab == "form_input":
             return False
-        raise IgnoreException(f'{self.name} -- workflow node is update')
+        raise IgnoreException(f"{self.name} -- workflow node is update")
 
     def get_input_schema(self) -> Any:
         if self.is_dialog_input():
             try:
                 self.handle_recommended_questions()
-            except Exception as e:
+            except Exception:
                 logger.exception("handle recommended questions error")
-            user_input_info = self.node_data.get_variable_info('user_input')
+            user_input_info = self.node_data.get_variable_info("user_input")
             user_input_info.value = [
-                self.node_data.get_variable_info('dialog_files_content'),
-                self.node_data.get_variable_info('dialog_file_accept'),
-                self.node_data.get_variable_info('user_input_file'),
+                self.node_data.get_variable_info("dialog_files_content"),
+                self.node_data.get_variable_info("dialog_file_accept"),
+                self.node_data.get_variable_info("user_input_file"),
             ]
             return user_input_info
-        form_input_info = self.node_data.get_variable_info('form_input')
+        form_input_info = self.node_data.get_variable_info("form_input")
         form_variables = copy.deepcopy(self._node_params_map)
         res = []
         for one_key, one in form_variables.items():
-            one['key'] = one_key
-            one['value'], _ = self.parse_msg_with_variables(one['value'])
+            one["key"] = one_key
+            one["value"], _ = self.parse_msg_with_variables(one["value"])
             res.append(one)
         form_input_info.value = res
         return form_input_info
 
     def handle_recommended_questions(self):
-        recommended_questions_flag = self._original_node_params.get('recommended_questions_flag', False)
+        recommended_questions_flag = self._original_node_params.get("recommended_questions_flag", False)
         if not recommended_questions_flag:
             return
-        recommended_llm = self._original_node_params.get('recommended_llm', 0)
-        recommended_system_prompt = self._original_node_params.get('recommended_system_prompt', '')
-        recommended_history_num = self._original_node_params.get('recommended_history_num', 3)
+        recommended_llm = self._original_node_params.get("recommended_llm", 0)
+        recommended_system_prompt = self._original_node_params.get("recommended_system_prompt", "")
+        recommended_history_num = self._original_node_params.get("recommended_history_num", 3)
         if not recommended_llm or not recommended_system_prompt or not recommended_history_num:
             logger.debug(f"{self.name} recommended questions config incomplete")
             return
@@ -116,11 +115,13 @@ class InputNode(BaseNode):
             logger.debug(f"{self.name} recommended questions chat history is empty")
             return
         recommended_system_prompt, _ = self.parse_msg_with_variables(recommended_system_prompt)
-        llm_obj = LLMService.get_bisheng_llm_sync(model_id=recommended_llm,
-                                                  app_id=self.workflow_id,
-                                                  app_name=self.workflow_name,
-                                                  app_type=ApplicationTypeEnum.WORKFLOW,
-                                                  user_id=self.user_id)
+        llm_obj = LLMService.get_bisheng_llm_sync(
+            model_id=recommended_llm,
+            app_id=self.workflow_id,
+            app_name=self.workflow_name,
+            app_type=ApplicationTypeEnum.WORKFLOW,
+            user_id=self.user_id,
+        )
         user_prompt = f"# Current Conversation Context\n{chat_history}"
         result = llm_obj.invoke([SystemMessage(content=recommended_system_prompt), HumanMessage(content=user_prompt)])
         result = result.content
@@ -143,14 +144,57 @@ class InputNode(BaseNode):
                 break
         if not questions:
             return
-        self.callback_manager.on_guide_question(data=GuideQuestionData(node_id=self.id, name=self.name,
-                                                                       unique_id=generate_uuid(),
-                                                                       guide_question=questions[:3]))
+        self.callback_manager.on_guide_question(
+            data=GuideQuestionData(
+                node_id=self.id, name=self.name, unique_id=generate_uuid(), guide_question=questions[:3]
+            )
+        )
 
-    def _parse_upload_file_variables(self, key_info: Dict, key_value: Dict) -> Dict:
+    @staticmethod
+    def _modes_for_file(file_parse_mode, file_kind: str) -> set:
+        """Resolve the set of parse modes applying to a single uploaded file (F038).
+
+        file_parse_mode may be a per-type map ``{"doc":.., "image":..}`` (dialog input),
+        a list of modes (form input, multi-select), or a legacy single string. file_kind
+        is ``'image'`` or ``'doc'`` (by extension). Falls back to extract_text.
         """
-         parse upload_file variables
-         Documented metadataData, full-text files, minio file paths, image files path
+        if isinstance(file_parse_mode, dict):
+            mode = file_parse_mode.get(file_kind)
+            return {mode} if mode else set()
+        if isinstance(file_parse_mode, (list, tuple, set)):
+            return {m for m in file_parse_mode if m}
+        if isinstance(file_parse_mode, str) and file_parse_mode:
+            return {file_parse_mode}
+        # Missing value only happens for legacy v2 form items (predate file_parse_mode);
+        # their original default was ingest-to-temp-KB — preserve it to avoid regressing
+        # old flows whose downstream retrieves from the temp KB.
+        return {ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE.value}
+
+    @staticmethod
+    def _active_modes(file_parse_mode) -> tuple[set, bool]:
+        """Union of all configured modes, plus whether the image group chose keep_raw.
+
+        For a dialog per-type map, the image-group keep_raw flag drives whether the image
+        file variable is exposed; for form/legacy values it follows the union.
+        """
+        if isinstance(file_parse_mode, dict):
+            doc_mode = file_parse_mode.get("doc")
+            image_mode = file_parse_mode.get("image")
+            active = {m for m in (doc_mode, image_mode) if m}
+            return active, image_mode == ParseModeEnum.KEEP_RAW.value
+        if isinstance(file_parse_mode, (list, tuple, set)):
+            active = {m for m in file_parse_mode if m}
+        elif isinstance(file_parse_mode, str) and file_parse_mode:
+            active = {file_parse_mode}
+        else:
+            # Legacy v2 form items had no file_parse_mode; their default was ingest.
+            active = {ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE.value}
+        return active, ParseModeEnum.KEEP_RAW.value in active
+
+    def _parse_upload_file_variables(self, key_info: dict, key_value: dict) -> dict:
+        """
+        parse upload_file variables
+        Documented metadataData, full-text files, minio file paths, image files path
         """
         # Compatible processing of historical versions of nodes
         if self.node_data.v <= self._current_v:
@@ -158,16 +202,18 @@ class InputNode(BaseNode):
                 key_value.pop("dialog_file_paths", None)
             return key_value
 
-        file_parse_mode = key_info.get('file_parse_mode', ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE)
+        # F038: file_parse_mode is now multi-select (dialog per-type map / form array /
+        # legacy string). Expose the union of variables for all selected modes.
+        active, image_keep_raw = self._active_modes(key_info.get("file_parse_mode"))
         ret = {}
-        if file_parse_mode == ParseModeEnum.KEEP_RAW:
-            if key_info.get("file_type") in ["image", "all"]:
-                ret[key_info['image_file']] = key_value.get(key_info['image_file'], [])
-            ret[key_info['file_path']] = key_value.get(key_info['file_path'], [])
-        elif file_parse_mode == ParseModeEnum.EXTRACT_TEXT:
-            ret[key_info['file_content']] = key_value.get(key_info['file_content'], "")
-        else:
-            ret[key_info['key']] = key_value.get(key_info['key'], [])
+        if ParseModeEnum.EXTRACT_TEXT.value in active:
+            ret[key_info["file_content"]] = key_value.get(key_info["file_content"], "")
+        if ParseModeEnum.KEEP_RAW.value in active:
+            ret[key_info["file_path"]] = key_value.get(key_info["file_path"], [])
+            if image_keep_raw and key_info.get("file_type") in ["image", "all"]:
+                ret[key_info["image_file"]] = key_value.get(key_info["image_file"], [])
+        if ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE.value in active:
+            ret[key_info["key"]] = key_value.get(key_info["key"], [])
         return ret
 
     def _run(self, unique_id: str):
@@ -179,18 +225,19 @@ class InputNode(BaseNode):
                 "image_file": "dialog_image_files",
                 "file_type": self._original_node_params.get("dialog_file_accept"),
                 "file_parse_mode": self._original_node_params.get("file_parse_mode", ParseModeEnum.EXTRACT_TEXT),
-                "file_content_size": self._original_node_params.get("dialog_files_content_size", 15000)
+                "file_content_size": self._original_node_params.get("dialog_files_content_size", 15000),
             }
             # Input in the form of a dialog
-            result = self.parse_upload_file("dialog_files", key_info, self.node_params.get('dialog_files_content', []))
+            result = self.parse_upload_file("dialog_files", key_info, self.node_params.get("dialog_files_content", []))
             res = {
-                'user_input': self.node_params['user_input'],
+                "user_input": self.node_params["user_input"],
             }
             result.pop("dialog_files", None)
             res.update(self._parse_upload_file_variables(key_info, result))
 
-            self.graph_state.save_context(content=f'{res.get("dialog_files_content", "")}\n{res["user_input"]}',
-                                          msg_sender='human')
+            self.graph_state.save_context(
+                content=f"{res.get('dialog_files_content', '')}\n{res['user_input']}", msg_sender="human"
+            )
             return res
 
         ret = {}
@@ -198,29 +245,30 @@ class InputNode(BaseNode):
         # The corresponding file upload needs to be processed in the form
         for key, value in self.node_params.items():
             key_info = self._node_params_map[key]
-            label, _ = self.parse_msg_with_variables(key_info.get('value')) if key_info.get('value') else key
-            if key_info['type'] == 'file':
+            label, _ = self.parse_msg_with_variables(key_info.get("value")) if key_info.get("value") else key
+            if key_info["type"] == "file":
                 new_params = self.parse_upload_file(key, key_info, value)
                 ret.update(self._parse_upload_file_variables(key_info, new_params))
 
-                if new_params[key_info['key']]:
+                if new_params[key_info["key"]]:
                     content = ""
-                    for one in new_params[key_info['key']]:
+                    for one in new_params[key_info["key"]]:
                         content += f"{one.get('document_name', '')},"
                     human_input += f"{label}: {content.rstrip(',')}\n"
             else:
                 ret[key] = value
                 human_input += f"{label}: {value}\n"
-        self.graph_state.save_context(content=f'{human_input}', msg_sender='human')
+        self.graph_state.save_context(content=f"{human_input}", msg_sender="human")
         return ret
 
     def parse_log(self, unique_id: str, result: dict) -> Any:
         ret = []
         for k, v in result.items():
-            if (self._node_params_map.get(k) and self._node_params_map[k]['type'] == 'file') or (
-                    self._file_key_map.get(k) and self._file_key_map[k]['type'] == 'file'):
+            if (self._node_params_map.get(k) and self._node_params_map[k]["type"] == "file") or (
+                self._file_key_map.get(k) and self._file_key_map[k]["type"] == "file"
+            ):
                 continue
-            ret.append({"key": f'{self.id}.{k}', "value": v, "type": "variable"})
+            ret.append({"key": f"{self.id}.{k}", "value": v, "type": "variable"})
         return [ret]
 
     def get_upload_file_path_content(self, file_url: str) -> (list, list):
@@ -237,26 +285,25 @@ class InputNode(BaseNode):
         metadatas = []
         try:
             file_rule = FileProcessBase(knowledge_id=0)
-            from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
             from bisheng.knowledge.rag.pipeline.types import PipelineConfig
+            from bisheng.knowledge.rag.temp_file_pipeline import TempFilePipeline
 
             pipeline = TempFilePipeline(
-                invoke_user_id=self.user_id,
-                local_file_path=filepath,
-                file_name=file_name,
-                file_rule=file_rule
+                invoke_user_id=self.user_id, local_file_path=filepath, file_name=file_name, file_rule=file_rule
             )
             result = pipeline.run(PipelineConfig())
 
             for doc in result.documents:
                 texts.append(doc.page_content)
-                metadata_dict = doc.metadata.copy() if isinstance(doc.metadata, dict) else getattr(doc.metadata,
-                                                                                                   "model_dump",
-                                                                                                   lambda: {})()
+                metadata_dict = (
+                    doc.metadata.copy()
+                    if isinstance(doc.metadata, dict)
+                    else getattr(doc.metadata, "model_dump", lambda: {})()
+                )
                 metadatas.append(metadata_dict)
 
-        except KnowledgeFileNotSupportedError as e:
-            logger.warning('input node file type is not support')
+        except KnowledgeFileNotSupportedError:
+            logger.warning("input node file type is not support")
             pass
 
         return texts, metadatas
@@ -265,34 +312,36 @@ class InputNode(BaseNode):
         if self._vector_client is None:
             embedding = LLMService.get_knowledge_default_embedding(self.user_id, tenant_id=self.tenant_id)
             if not embedding:
-                raise Exception('No default configured embedding Models')
-            milvus_collection_name = self.get_milvus_collection_name(getattr(embedding, 'model_id'))
-            self._vector_client = KnowledgeRag.init_milvus_vectorstore(milvus_collection_name, embedding,
-                                                                       metadata_schemas=InputFileMetadata)
-            self._es_client = KnowledgeRag.init_es_vectorstore_sync(self.tmp_collection_name,
-                                                                    metadata_schemas=InputFileMetadata)
+                raise Exception("No default configured embedding Models")
+            milvus_collection_name = self.get_milvus_collection_name(embedding.model_id)
+            self._vector_client = KnowledgeRag.init_milvus_vectorstore(
+                milvus_collection_name, embedding, metadata_schemas=InputFileMetadata
+            )
+            self._es_client = KnowledgeRag.init_es_vectorstore_sync(
+                self.tmp_collection_name, metadata_schemas=InputFileMetadata
+            )
 
-    def parse_upload_file(self, key: str, key_info: dict, value: List[str]) -> dict | None:
+    def parse_upload_file(self, key: str, key_info: dict, value: list[str]) -> dict | None:
         """
-         parse upload_file
-         Documented metadataData, full-text files, minio file paths, image files path
+        parse upload_file
+        Documented metadataData, full-text files, minio file paths, image files path
         """
         # Parsing the file. need return values
         all_metadata = []
-        all_file_content = ''
+        all_file_content = ""
         original_file_path = []
         image_files_path = []
         if not value:
             logger.warning(f"{self.id}.{key} value is None")
             return {
-                key_info['key']: all_metadata,
-                key_info['file_content']: all_file_content,
-                key_info['file_path']: original_file_path,
-                key_info['image_file']: image_files_path
+                key_info["key"]: all_metadata,
+                key_info["file_content"]: all_file_content,
+                key_info["file_path"]: original_file_path,
+                key_info["image_file"]: image_files_path,
             }
 
-        file_parse_mode = key_info.get('file_parse_mode', ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE)
-        file_content_max_size = int(key_info.get('file_content_size', 15000))
+        file_parse_mode = key_info.get("file_parse_mode")
+        file_content_max_size = int(key_info.get("file_content_size", 15000))
 
         file_id = generate_uuid()
 
@@ -302,40 +351,52 @@ class InputNode(BaseNode):
                 logger.warning(f"{self.id}.{key} one_file_url is None")
                 continue
             url_obj = urlparse(one_file_url)
-            file_name = unquote(url_obj.path.split('/')[-1])
+            file_name = unquote(url_obj.path.split("/")[-1])
             # get file original name
             file_name = KnowledgeService.get_upload_file_original_name(file_name)
-            all_metadata.append({
-                "document_id": file_id,
-                "document_name": file_name,
-                "knowledge_id": self.workflow_id,
-                "upload_time": int(time.time()),
-                "update_time": int(time.time()),
-                "uploader": "",
-                "updater": "",
-                "user_metadata": {},
-                "bbox": '',  # Temporary files cannot be traced because the source files are not persisted
-            })
+            all_metadata.append(
+                {
+                    "document_id": file_id,
+                    "document_name": file_name,
+                    "knowledge_id": self.workflow_id,
+                    "upload_time": int(time.time()),
+                    "update_time": int(time.time()),
+                    "uploader": "",
+                    "updater": "",
+                    "user_metadata": {},
+                    "bbox": "",  # Temporary files cannot be traced because the source files are not persisted
+                }
+            )
 
-            file_ext = file_name.split('.')[-1].lower()
-            logger.debug(f"{self.id}.{key} file_parse_mode is {file_parse_mode}")
+            file_ext = file_name.split(".")[-1].lower()
+            file_kind = "image" if file_ext in self._image_ext else "doc"
+            modes = self._modes_for_file(file_parse_mode, file_kind)
+            logger.debug(f"{self.id}.{key} modes for {file_name} is {modes}")
             original_file_path.append(one_file_url)
             if file_ext in self._image_ext:
                 image_files_path.append(one_file_url)
 
-            if file_parse_mode == ParseModeEnum.KEEP_RAW:
+            # F038: only parse text when this file's mode set extracts content or ingests
+            # to the temp KB; a keep_raw-only file just keeps its path / image entry.
+            if (
+                ParseModeEnum.EXTRACT_TEXT.value not in modes
+                and ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE.value not in modes
+            ):
                 continue
 
             texts, metadatas = self.get_upload_file_path_content(one_file_url)
             if file_content_length < file_content_max_size:
                 file_content = "\n".join(texts)
-                file_content = file_content[:file_content_max_size - file_content_length]
+                file_content = file_content[: file_content_max_size - file_content_length]
                 file_content_length += len(file_content)
-                all_file_content += f"[file name]: {file_name}\n[file content begin]\n{file_content}\n[file content end]\n"
+                all_file_content += (
+                    f"[file name]: {file_name}\n[file content begin]\n{file_content}\n[file content end]\n"
+                )
             if not texts:
                 logger.debug(f"{self.id}.{key} extract file text is empty")
                 continue
-            if file_parse_mode == ParseModeEnum.EXTRACT_TEXT:
+            # Ingest to the temp knowledge base only when that mode is selected.
+            if ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE.value not in modes:
                 continue
 
             self.init_vector_clients()
@@ -349,18 +410,18 @@ class InputNode(BaseNode):
                 new_metadata.append(one)
 
             # Uploaded to milvus And es
-            logger.debug(f'workflow_add_vectordb file={key} file_name={file_name} file_id={file_id}')
+            logger.debug(f"workflow_add_vectordb file={key} file_name={file_name} file_id={file_id}")
             self._vector_client.add_texts(texts=texts, metadatas=new_metadata)
 
-            logger.debug(f'workflow_add_es file={key} file_name={file_name} file_id={file_id}')
+            logger.debug(f"workflow_add_es file={key} file_name={file_name} file_id={file_id}")
             self._es_client.add_texts(texts=texts, metadatas=new_metadata)
 
-            logger.debug(f'workflow_record_file_metadata file={key} file_name={file_name}')
+            logger.debug(f"workflow_record_file_metadata file={key} file_name={file_name}")
             all_metadata[-1] = new_metadata[0]
         # Documentation metadata, other nodes according to metadataData to retrieve corresponding files
         return {
-            key_info['key']: all_metadata,
-            key_info['file_content']: all_file_content,
-            key_info['file_path']: original_file_path,
-            key_info['image_file']: image_files_path
+            key_info["key"]: all_metadata,
+            key_info["file_content"]: all_file_content,
+            key_info["file_path"]: original_file_path,
+            key_info["image_file"]: image_files_path,
         }

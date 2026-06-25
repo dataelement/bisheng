@@ -31,7 +31,12 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
     switch (type) {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
-                const { file_type, file_parse_mode: mode } = item;
+                const { file_type, file_parse_mode } = item;
+                // F038: file_parse_mode is now an array of strategies (legacy single
+                // string tolerated). Accumulate the union of exposed variables.
+                const modes = Array.isArray(file_parse_mode)
+                    ? file_parse_mode
+                    : (file_parse_mode ? [file_parse_mode] : []);
 
                 const add = (propKey) => res.push({ label: item[propKey], value: item[propKey] });
                 // 文本use key
@@ -40,33 +45,19 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
                     return res
                 }
                 // 1. 优先处理图片 (这是唯一在 onlyImg=true 时可能被添加的项)
-                // 当模式为 keep_raw 且类型不为 file 时，包含图片变量
-                if (mode === 'keep_raw' && file_type !== 'file') {
+                // 当模式包含 keep_raw 且类型不为 file 时，包含图片变量
+                if (modes.includes('keep_raw') && file_type !== 'file') {
                     add('image_file');
                 }
 
                 // 2. 如果只需要图片，此时直接结束本次循环
-                // 后续所有逻辑默认都处于 !onlyImg 的上下文中，无需重复判断
                 if (onlyImg) return res;
 
-                // 3. 处理文件/文本逻辑 (已隐含 !onlyImg 条件)
-                switch (mode) {
-                    case 'ingest_to_temp_kb':
-                        add('key');
-                        break;
-                    case 'extract_text':
-                        add('file_content');
-                        break;
-                    case 'keep_raw':
-                        // 无论是 'all' 还是 'file'，只要不是 onlyImg (已在上面拦截)，都推入 file_path
-                        // if (file_type === 'all' || file_type === 'file') {
-                            add('file_path');
-                        // }
-                        break;
-                    default:
-                        add('key');
-                        break;
-                }
+                // 3. 处理文件/文本逻辑 (已隐含 !onlyImg 条件)；多策略并集累加
+                if (modes.includes('ingest_to_temp_kb')) add('key');
+                if (modes.includes('extract_text')) add('file_content');
+                if (modes.includes('keep_raw')) add('file_path');
+                if (modes.length === 0) add('key'); // 兜底：无策略时退回 key
 
                 return res;
             }, []);
@@ -244,8 +235,18 @@ const SelectVar = forwardRef(({
                 }
             }
 
-            // Get the parse mode if it exists in this group
-            const parseMode = group.params.find(p => p.key === 'file_parse_mode')?.value;
+            // Get the parse mode if it exists in this group.
+            // F038: dialog file_parse_mode is a per-kind map {doc,image} (legacy
+            // single string tolerated). Expose variables by the union of kinds.
+            const parseModeRaw = group.params.find(p => p.key === 'file_parse_mode')?.value;
+            const dialogModes = parseModeRaw && typeof parseModeRaw === 'object'
+                ? Object.values(parseModeRaw)
+                : (parseModeRaw ? [parseModeRaw] : []);
+            const anyExtract = dialogModes.includes('extract_text');
+            const anyKeepRaw = dialogModes.includes('keep_raw');
+            const imageKeepRaw = typeof parseModeRaw === 'object' && parseModeRaw !== null
+                ? parseModeRaw.image === 'keep_raw'
+                : parseModeRaw === 'keep_raw';
 
             group.params = group.params.filter(param => {
                 // HIGHEST PRIORITY: If the parameter does NOT have 'global', keep it (no filtering)
@@ -257,16 +258,16 @@ const SelectVar = forwardRef(({
 
                 // --- INTERNAL LOGIC: Specific to 'inputfile' group variables ---
                 if (group.groupKey === 'inputfile') {
-                    // Filter based on file_parse_mode
-                    if (parseMode === 'extract_text' && ['dialog_image_files', 'dialog_file_paths'].includes(key)) {
+                    // Parsed text only when some kind extracts
+                    if (key === 'dialog_files_content' && !anyExtract) {
                         return false;
                     }
-                    if (parseMode === 'keep_raw' && key === 'dialog_files_content') {
+                    // Raw file paths only when some kind keeps raw
+                    if (key === 'dialog_file_paths' && !anyKeepRaw) {
                         return false;
                     }
-
-                    // Filter based on dialog_file_accept type
-                    if (acceptType === 'file' && key === 'dialog_image_files') {
+                    // Image variable only when the image kind keeps raw and type allows images
+                    if (key === 'dialog_image_files' && (!imageKeepRaw || acceptType === 'file')) {
                         return false;
                     }
                 }

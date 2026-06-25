@@ -127,6 +127,18 @@ export function filterParamByinputCheck(group) {
         const parseMode = group.params.find(p => p.key === 'file_parse_mode')?.value;
         const acceptType = group.params.find(p => p.key === 'dialog_file_accept')?.value;
 
+        // F038: file_parse_mode is a per-type map {doc, image} (legacy: a single string).
+        // Output variables follow the union of the visible groups' choices.
+        const kinds = acceptType === 'file' ? ['doc'] : acceptType === 'image' ? ['image'] : ['doc', 'image'];
+        const modeOf = (kind) => {
+            if (parseMode && typeof parseMode === 'object') return parseMode[kind];
+            if (typeof parseMode === 'string') return parseMode;
+            return undefined;
+        };
+        const anyExtract = kinds.some(k => modeOf(k) === 'extract_text');
+        const anyKeepRaw = kinds.some(k => modeOf(k) === 'keep_raw');
+        const imageKeepRaw = kinds.includes('image') && modeOf('image') === 'keep_raw';
+
         return group.params.filter(param => {
             const { key } = param;
 
@@ -134,13 +146,13 @@ export function filterParamByinputCheck(group) {
                 return false;
             }
 
-            if (parseMode === 'extract_text' && ['dialog_image_files', 'dialog_file_paths'].includes(key)) {
+            if (key === 'dialog_files_content' && !anyExtract) {
                 return false;
             }
-            if (parseMode === 'keep_raw' && key === 'dialog_files_content') {
+            if (key === 'dialog_file_paths' && !anyKeepRaw) {
                 return false;
             }
-            if (acceptType === 'file' && key === 'dialog_image_files') {
+            if (key === 'dialog_image_files' && !(imageKeepRaw && (acceptType === 'image' || acceptType === 'all'))) {
                 return false;
             }
 
