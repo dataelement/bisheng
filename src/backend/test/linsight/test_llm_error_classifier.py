@@ -10,7 +10,7 @@ and the cross-vendor content-filter signatures.
 import openai
 import pytest
 
-from bisheng.linsight.domain.services.llm_error_classifier import (
+from bisheng.common.services.llm_error_classifier import (
     Behavior,
     ErrorType,
     classify_behavior,
@@ -148,6 +148,69 @@ def test_label_text_best_effort():
     assert label_text("Output data may contain inappropriate content") is ErrorType.CONTENT_FILTER
     assert label_text("insufficient_quota: pay up") is ErrorType.QUOTA_EXHAUSTED
     assert label_text("some random failure") is ErrorType.UNKNOWN
+
+
+# --------------------------------------------------------------------------- #
+# Rate-limit / throttling — RPM / TPM / burst signatures (限流友好文案)
+# --------------------------------------------------------------------------- #
+
+# The five provider strings the product flagged as "limit reached, try later".
+# All must land on RATE_LIMIT + RETRYABLE whether they arrive as a standard
+# RateLimitError, a non-standard BadRequestError, or a bare string.
+_RATE_LIMIT_STRINGS = [
+    "Requests rate limit exceeded",
+    "You exceeded your current requests list",
+    "Allocated quota exceeded",
+    "You exceeded your current quota",
+    "Request rate increased too quickly",
+]
+
+
+@pytest.mark.parametrize("message", _RATE_LIMIT_STRINGS)
+def test_rate_limit_strings_label_rate_limit(message):
+    # standard 429 RateLimitError
+    assert label_error(make_exc(openai.RateLimitError, message=message, status_code=429)) is ErrorType.RATE_LIMIT
+    # non-standard: throttling text carried by a BadRequestError / 200 body
+    assert label_error(make_exc(openai.BadRequestError, message=message, status_code=400)) is ErrorType.RATE_LIMIT
+
+
+@pytest.mark.parametrize("message", _RATE_LIMIT_STRINGS)
+def test_rate_limit_strings_label_text(message):
+    assert label_text(message) is ErrorType.RATE_LIMIT
+
+
+@pytest.mark.parametrize("message", _RATE_LIMIT_STRINGS)
+def test_rate_limit_strings_are_retryable(message):
+    # body-embedded throttling (not a RateLimitError) must still retry, not degrade
+    assert classify_behavior(make_exc(openai.BadRequestError, message=message, status_code=400)) is Behavior.RETRYABLE
+
+
+def test_exceeded_current_quota_is_throttling_not_billing():
+    """Regression: 'exceeded your current quota' moved out of the quota bucket to
+    rate-limit (product decision: TPM throttling, not unrecoverable billing)."""
+    exc = make_exc(openai.BadRequestError, message="You exceeded your current quota", status_code=400)
+    assert label_error(exc) is ErrorType.RATE_LIMIT
+    assert classify_behavior(exc) is Behavior.RETRYABLE
+
+
+def test_genuine_billing_exhaustion_stays_quota():
+    """Balance / credit exhaustion must still FAIL_FAST + QUOTA_EXHAUSTED."""
+    for msg in ("insufficient_quota", "账户余额不足", "您已欠费", "额度不足"):
+        exc = make_exc(openai.RateLimitError, message=msg, status_code=429)
+        assert classify_behavior(exc) is Behavior.FAIL_FAST, msg
+        assert label_error(exc) is ErrorType.QUOTA_EXHAUSTED, msg
+
+
+def test_quota_beats_rate_limit_when_both_present():
+    """Order invariant: a message carrying BOTH a billing signal and a throttle
+    word must FAIL_FAST as quota, never retry as a transient rate limit."""
+    exc = make_exc(
+        openai.RateLimitError,
+        message="rate limit hit; also insufficient_quota — please top up",
+        status_code=429,
+    )
+    assert classify_behavior(exc) is Behavior.FAIL_FAST
+    assert label_error(exc) is ErrorType.QUOTA_EXHAUSTED
 
 
 # --------------------------------------------------------------------------- #

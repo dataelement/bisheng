@@ -37,10 +37,11 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
     const nodes = useMemo(() => buildTimelineGroups(mergeStepFrames(history)), [sig]);
     // Container liveness (session turn / running task), provided by the carrier via
     // ExecutionLiveContext. The ACTIVE episode is the LAST node while the container
-    // is live — that one stays steadily expanded (正在 label, ticking clock); every
-    // earlier node is done (collapsed summary). Passing this `active` down (instead
-    // of letting each group read the volatile per-tool group.running) is what stops
-    // a group from flickering open/closed on every tool call within one episode.
+    // is live — that one carries the live facets (正在 label, header pulse, ticking
+    // clock); every earlier node is done. (The fold itself opens collapsed for all
+    // groups — see DeepStepGroup.) Passing this stable `active` down (instead of
+    // letting each group read the volatile per-tool group.running) is what stops the
+    // label/pulse from flickering on every tool call within one episode.
     const live = useExecutionLive();
     if (!nodes.length) return null;
     const lastIdx = nodes.length - 1;

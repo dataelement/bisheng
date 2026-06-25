@@ -15,7 +15,6 @@
  * the subagent-goal / activity-summary / pure-reasoning branches, the noDuration
  * gate), so the rendered text — and the DeepStepGroup label tests — are identical.
  */
-import { useMemo } from 'react';
 import { useLocalize } from '~/hooks';
 import { formatSeconds } from '~/utils';
 import { firstLine } from './stepUtils';
@@ -49,40 +48,37 @@ export function GroupHeaderLabel({ activityText, subagent, compact, startMs, end
     // running group's "用时" advances without re-rendering the group body.
     const { elapsedMs } = useElapsedTicker(startMs, endMs, running);
 
-    const label = useMemo<string>(() => {
-        const seconds = formatSeconds(elapsedMs);
-        // Drop the duration clause when nested (compact) OR when the measured span
-        // is 0 (a single second-level frame would read a misleading "用时 0 秒").
-        const noDuration = compact || elapsedMs <= 0;
+    // No useMemo: elapsedMs advances on every 100ms tick (and reads Date.now()
+    // fresh each render), so a memo keyed on it would never hit — the label is
+    // recomputed every render regardless. Inline string-building is cheaper.
+    const seconds = formatSeconds(elapsedMs);
+    // Drop the duration clause when nested (compact) OR when the measured span is 0
+    // (a single second-level frame would read a misleading "用时 0 秒").
+    const noDuration = compact || elapsedMs <= 0;
+    let label: string;
+    if (subagent) {
         // R3 完全拆平: a subagent segment is headed by its delegation GOAL + 用时.
-        if (subagent) {
-            // The goal is the subagent's identity, so it OWNS the header line — show
-            // only its GIST (firstLine), falling back to the activity summary and
-            // finally the "子智能体 N" label for a goal-less (degraded) subagent.
-            const goalGist = firstLine(subagent.goal, SUBAGENT_GOAL_TITLE_MAX);
-            const core =
-                goalGist || activityText || localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
-            return noDuration ? core : localize('com_linsight_act_summary', { 0: core, 1: seconds });
-        }
+        // The goal is the subagent's identity, so it OWNS the header line — show
+        // only its GIST (firstLine), falling back to the activity summary and
+        // finally the "子智能体 N" label for a goal-less (degraded) subagent.
+        const goalGist = firstLine(subagent.goal, SUBAGENT_GOAL_TITLE_MAX);
+        const core = goalGist || activityText || localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
+        label = noDuration ? core : localize('com_linsight_act_summary', { 0: core, 1: seconds });
+    } else if (activityText) {
         // Activity-summary header (verbs + counts), the primary case.
-        if (activityText) {
-            return noDuration
-                ? activityText
-                : localize('com_linsight_act_summary', { 0: activityText, 1: seconds });
-        }
-        // Pure-reasoning fallback: the plain 深度思考 duration label.
-        if (noDuration) {
-            return localize(
-                running
-                    ? 'com_linsight_deep_thinking_running_compact'
-                    : 'com_linsight_deep_thinking_done_compact',
-            );
-        }
-        return localize(
+        label = noDuration ? activityText : localize('com_linsight_act_summary', { 0: activityText, 1: seconds });
+    } else if (noDuration) {
+        // Pure-reasoning fallback (no measurable span): the compact 深度思考 label.
+        label = localize(
+            running ? 'com_linsight_deep_thinking_running_compact' : 'com_linsight_deep_thinking_done_compact',
+        );
+    } else {
+        // Pure-reasoning fallback with a duration.
+        label = localize(
             running ? 'com_linsight_deep_thinking_running' : 'com_linsight_deep_thinking_done',
             { 0: seconds },
         );
-    }, [subagent, activityText, compact, elapsedMs, running, localize]);
+    }
 
     return <>{label}</>;
 }

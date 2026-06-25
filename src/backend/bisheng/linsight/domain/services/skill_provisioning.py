@@ -25,6 +25,8 @@ replaces the dormant ``TenantSkillsMiddleware`` runtime whitelist.
 
 from __future__ import annotations
 
+import asyncio
+
 from loguru import logger
 
 from bisheng.linsight.domain.models.linsight_skill import LinsightSkillDao
@@ -32,6 +34,14 @@ from bisheng.linsight.domain.services.skill_store import SkillStore
 
 WORKSPACE_SKILLS_DIR = "skills"
 """Workspace subtree the copied bundles live under (``/skills/<name>/...``)."""
+
+
+def _collect_bundle_pairs(store: SkillStore, tenant_id: int, name: str) -> list[tuple[str, bytes]]:
+    """Read a bundle's files as ``(workspace_path, bytes)`` upload pairs (sync disk I/O)."""
+    return [
+        (f"/{WORKSPACE_SKILLS_DIR}/{name}/{entry['path']}", store.read_bytes(tenant_id, name, entry["path"]))
+        for entry in store.list_files(tenant_id, name)
+    ]
 
 
 async def materialize_session_skills(
@@ -69,13 +79,9 @@ async def materialize_session_skills(
     copied: list[str] = []
     for name in sorted(wanted):
         try:
-            pairs = [
-                (
-                    f"/{WORKSPACE_SKILLS_DIR}/{name}/{entry['path']}",
-                    store.read_bytes(tenant_id, name, entry["path"]),
-                )
-                for entry in store.list_files(tenant_id, name)
-            ]
+            # Bundle reads (rglob + per-file read_bytes) are sync disk I/O — run them
+            # off the worker's event loop so concurrent tasks aren't stalled.
+            pairs = await asyncio.to_thread(_collect_bundle_pairs, store, tenant_id, name)
             if not pairs:
                 logger.warning("linsight skill %r (tenant %s) has no files on disk; skipping", name, tenant_id)
                 continue

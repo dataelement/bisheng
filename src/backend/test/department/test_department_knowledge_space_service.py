@@ -355,7 +355,6 @@ async def test_sync_removed_admin_restores_promoted_manual_member_role():
         membership_source="department_admin",
         department_admin_promoted_from_role=UserRoleEnum.MEMBER.value,
     )
-    space_service = SimpleNamespace()
 
     with (
         patch(
@@ -373,7 +372,7 @@ async def test_sync_removed_admin_restores_promoted_manual_member_role():
         ) as mock_authorize,
     ):
         await DepartmentKnowledgeSpaceService._sync_removed_admin(
-            space_service=space_service,
+            space_service=None,
             space_id=101,
             user_id=2,
         )

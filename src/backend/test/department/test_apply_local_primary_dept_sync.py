@@ -52,6 +52,17 @@ def patches(monkeypatch):
     monkeypatch.setattr(
         ds_module.DepartmentAdminGrantDao, 'adelete', admin_grant_delete,
     )
+    # Space-binding cleanup is lazy-imported inside the service; patch it on the
+    # source class so the leaving-old-dept path can be asserted without DB/FGA.
+    from bisheng.knowledge.domain.services import (
+        department_knowledge_space_service as ks_module,
+    )
+    space_cleanup = AsyncMock(name='cleanup_removed_department_admins')
+    monkeypatch.setattr(
+        ks_module.DepartmentKnowledgeSpaceService,
+        'cleanup_removed_department_admins',
+        space_cleanup,
+    )
 
     session_calls = {
         'exec': [], 'add': [], 'delete': [], 'commit': 0,
@@ -94,6 +105,7 @@ def patches(monkeypatch):
         sync=sync_mock,
         dept_execute=dept_execute,
         admin_grant_delete=admin_grant_delete,
+        space_cleanup=space_cleanup,
         session_calls=session_calls,
     )
 
@@ -114,6 +126,7 @@ def test_same_primary_dept_is_noop(patches):
     patches.sync.assert_not_awaited()
     patches.dept_execute.assert_not_awaited()
     patches.admin_grant_delete.assert_not_awaited()
+    patches.space_cleanup.assert_not_awaited()
     assert patches.session_calls['commit'] == 0
     assert patches.session_calls['delete'] == []
     assert patches.session_calls['add'] == []
@@ -147,6 +160,8 @@ def test_no_old_primary_inserts_and_syncs(patches):
     # FGA "member added" dispatched once (no removal — no old dept).
     patches.dept_execute.assert_awaited_once()
     patches.admin_grant_delete.assert_not_awaited()
+    # No old dept → no department-admin binding to clean up.
+    patches.space_cleanup.assert_not_awaited()
 
     # sync_user invoked with DEPT_CHANGE trigger.
     patches.sync.assert_awaited_once()
@@ -186,6 +201,13 @@ def test_cross_tenant_swap_dispatches_fga_and_syncs(patches):
     patches.admin_grant_delete.assert_awaited_once()
     grant_args, _ = patches.admin_grant_delete.call_args
     assert grant_args == (102, 5)
+
+    # Leaving the old dept must clean the department-admin space binding
+    # (space_channel_member row + knowledge_space#manager tuple) for that dept.
+    patches.space_cleanup.assert_awaited_once()
+    _, cleanup_kwargs = patches.space_cleanup.call_args
+    assert cleanup_kwargs.get('department_id') == 5
+    assert list(cleanup_kwargs.get('user_ids')) == [102]
 
     # sync_user invoked exactly once with DEPT_CHANGE.
     patches.sync.assert_awaited_once()
