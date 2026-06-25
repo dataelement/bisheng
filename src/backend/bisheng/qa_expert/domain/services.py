@@ -20,6 +20,7 @@ from bisheng.qa_expert.domain.schemas import (
     AnswerCreateRequest,
     CommentCreateRequest,
     AdoptAnswerRequest,
+    QuestionUpdateRequest,
 )
 from bisheng.qa_expert.domain.repositories import (
     ExpertRepository,
@@ -99,6 +100,7 @@ class ExpertService:
             introduction=request.introduction,
             depart_ment=request.depart_ment,
             user_id=request.user_id,
+            major = request.major
         )
         return await self.repository.create(expert)
 
@@ -125,6 +127,11 @@ class ExpertService:
     async def get_expertinfo(self, expert_name: str) -> bool:
         """获取专家信息"""
         return await self.repository.get_expertinfo(expert_name)
+    
+        
+    async def get_expertinfobyid(self, user_id: int) -> bool:
+        """获取专家信息"""
+        return await self.repository.get_expertinfo_userid(user_id)
 
 
 # ==================== 问题服务 ====================
@@ -268,6 +275,20 @@ class QuestionService:
             # tenant_id=tenant_id
         )
         await self.notification_repo.create(notification)
+
+    
+    async def delete_question(self, question_id: int) -> bool:
+        """删除问题"""
+        return await self.repository.delete(question_id)
+    
+    async def update_question(self, question_id: int, request: QuestionUpdateRequest) -> Expert:
+        """更新问题信息"""
+        question = await self.repository.get_by_id(question_id)
+        if not question:
+            raise ExpertNotFoundError()
+
+        update_data = request.dict(exclude_unset=True)
+        return await self.repository.update(question_id, **update_data)
 
 
 # ==================== 回答服务 ====================

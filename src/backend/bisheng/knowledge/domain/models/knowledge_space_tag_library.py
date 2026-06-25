@@ -112,6 +112,22 @@ class KnowledgeSpaceTagLibraryDao:
             return await session.scalar(statement) or 0
 
     @classmethod
+    async def alist_by_one(
+        cls, keyword: Optional[str] = None
+    ) -> List[KnowledgeSpaceTagLibrary]:
+        statement = select(KnowledgeSpaceTagLibrary).where(
+            KnowledgeSpaceTagLibrary.owner_knowledge_id.is_(None),
+            KnowledgeSpaceTagLibrary.is_builtin == True,
+            KnowledgeSpaceTagLibrary.tenant_id == 1,
+        )
+        if keyword:
+            statement = statement.where(
+                        KnowledgeSpaceTagLibrary.name == keyword,
+                        )
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
     async def alist(
         cls, page: int = 1, page_size: int = 20, keyword: Optional[str] = None
     ) -> List[KnowledgeSpaceTagLibrary]:

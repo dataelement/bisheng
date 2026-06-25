@@ -847,7 +847,7 @@ export function CreateKnowledgeSpaceDrawer({
                                                 <Select
                                                     value={autoTagLibraryId ? String(autoTagLibraryId) : undefined}
                                                     onValueChange={(value) => setAutoTagLibraryId(Number(value))}
-                                                    disabled={tagLibrariesLoading || tagLibraries.length === 0}
+                                                    disabled={true}
                                                 >
                                                     <SelectTrigger className="h-8 border-[#E5E6EB] bg-white text-[14px]">
                                                         <SelectValue

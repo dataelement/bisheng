@@ -68,7 +68,7 @@ export default function KnowledgeSpaceReviewTagSection({
     const handleApprove = async (row: ReviewTagItem) => {
         if (!row.tag_name?.length) return;
         const res = await captureAndAlertRequestErrorHoc(
-            approveOrRejectReviewTagApi({ tag_name: row.tag_name || '', status: 1 }),
+            approveOrRejectReviewTagApi({ tag_name: row.tag_name || '', status: 1, resource_type: row.resource_type || '' }),
         );
         if (res) {
             toast({ variant: "success", description: t("build.approved", "已通过") });
@@ -79,7 +79,7 @@ export default function KnowledgeSpaceReviewTagSection({
     const handleReject = async (row: ReviewTagItem) => {
         if (!row.tag_name?.length) return;
         const res = await captureAndAlertRequestErrorHoc(
-            approveOrRejectReviewTagApi({ tag_name: row.tag_name || '', status: 2 }),
+            approveOrRejectReviewTagApi({ tag_name: row.tag_name || '', status: 2, resource_type: row.resource_type || '' }),
         );
         if (res) {
             toast({ variant: "success", description: t("build.rejected", "已拒绝") });
@@ -97,7 +97,7 @@ export default function KnowledgeSpaceReviewTagSection({
             canelTxt: t("cancel", { ns: "bs" }),
             async onOk(next) {
                 const res = await captureAndAlertRequestErrorHoc(
-                    deleteReviewTagApi({ tag_name: row.tag_name || '' }),
+                    deleteReviewTagApi({ tag_name: row.tag_name || '', resource_type: row.resource_type || '' }),
                 );
                 if (res) {
                     toast({ variant: "success", description: t("build.deleted", "已删除") });
@@ -140,6 +140,9 @@ export default function KnowledgeSpaceReviewTagSection({
                                         <th className="w-[20%] px-4 py-3 font-medium">
                                             {t("build.reviewTagName", "建议标签")}
                                         </th>
+                                        <th className="w-[20%] px-4 py-3 font-medium">
+                                            {t("build.reviewTagSource", "标签来源")}
+                                        </th>
                                         <th className="w-[40%] px-4 py-3 font-medium">
                                             {t("build.fileResource", "文件来源")}
                                         </th>
@@ -170,6 +173,7 @@ export default function KnowledgeSpaceReviewTagSection({
                                                 return (
                                                     <tr key={group.tag_name} className="border-t text-sm">
                                                         <td className="truncate px-4 py-3 font-medium">{group.tag_name}</td>
+                                                        <td className="truncate px-4 py-3 font-medium">{group.resource_type === "system_tag" ? "系统标签" : (group.resource_type === "ai_auto_tag" ? "AI标签" : "人工标签")}</td>
                                                         <td className="truncate px-4 py-3 text-muted-foreground">-</td>
                                                         <td className="px-4 py-3 text-muted-foreground">-</td>
                                                         <td className="px-4 py-3">
@@ -193,6 +197,11 @@ export default function KnowledgeSpaceReviewTagSection({
                                                     {idx === 0 && (
                                                         <td rowSpan={group.resource_files.length} className="truncate px-4 py-3 font-medium align-top">
                                                             {group.tag_name}
+                                                        </td>
+                                                    )}
+                                                    {idx === 0 && (
+                                                        <td rowSpan={group.resource_files.length} className="truncate px-4 py-3 font-medium align-top">
+                                                            {group.resource_type === "system_tag" ? "系统标签" : (group.resource_type === "ai_auto_tag" ? "AI标签" : "人工标签")}
                                                         </td>
                                                     )}
                                                     <td className="truncate px-4 py-3">

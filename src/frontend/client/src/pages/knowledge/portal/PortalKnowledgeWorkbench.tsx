@@ -575,6 +575,16 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [activeSpace?.id, loadFolderStats, showToast, sortBy, sortDirection, statusFilterNumbers]);
 
+    // Always-current ref to loadRootTree so the space/sort/filter reset effect
+    // below can call it WITHOUT listing it as a dependency. loadRootTree's
+    // identity changes whenever any of its deps change (including the unstable
+    // showToast, which is recreated every time a toast is shown). Depending on
+    // its identity made the reset effect fire spuriously — e.g. after saving a
+    // file's tags (which shows a success toast), wiping state and refetching the
+    // whole list. The effect should only react to real data changes.
+    const loadRootTreeRef = useRef(loadRootTree);
+    loadRootTreeRef.current = loadRootTree;
+
     const reloadFiles = useCallback(async () => {
         setSearchMode(false);
         setSearchResults([]);
@@ -863,10 +873,16 @@ export default function PortalKnowledgeWorkbench() {
         setCurrentFolderId(undefined);
         setCanCreateFolder(false);
         setCanUploadFile(false);
-        if (activeSpace) {
-            void loadRootTree(1, false, activeSpace.id);
+        if (activeSpace?.id) {
+            void loadRootTreeRef.current(1, false, activeSpace.id);
         }
-    }, [activeSpace?.id, loadRootTree]);
+        // Reset + reload ONLY when the space or the sort/filter actually change.
+        // Intentionally NOT depending on loadRootTree's identity (see loadRootTreeRef
+        // above): it changes for unrelated reasons such as showToast being recreated
+        // after a toast, which previously triggered a spurious full reload + list
+        // refetch right after editing a file's tags.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeSpace?.id, sortBy, sortDirection, statusFilterNumbers]);
 
     usePortalDeepLink({
         searchParams,
@@ -1955,9 +1971,14 @@ export default function PortalKnowledgeWorkbench() {
                 documentPath={documentPath}
                 tagModalOpen={tagModalOpen}
                 onTagModalOpenChange={setTagModalOpen}
-                onTagsSaved={() => {
+                onTagsSaved={(tags) => {
                     setTagModalOpen(false);
-                    void loadRootTree(1);
+                    // 编辑单个文件标签后，只就地更新该文件的标签状态，不刷新整个文件列表。
+                    if (tags && selectedFile) {
+                        patchFileById(selectedFile.id, (file) => ({ ...file, tags }));
+                    } else {
+                        void loadRootTree(1);
+                    }
                 }}
                 permissionResourceType={permissionTarget && isFolder(permissionTarget) ? "folder" : "knowledge_file"}
                 permissionOpen={permissionOpen}

@@ -14,7 +14,11 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200, resp_500
 
-
+from bisheng.sensitive_word.domain.schemas import SensitiveWordBusinessType
+from bisheng.sensitive_word.domain.services.exceptions import ContentSafetyViolation
+from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import (
+    SensitiveWordPolicyService,
+)
 from bisheng.qa_expert.domain.schemas import (
     ExpertCreateRequest,
     ExpertUpdateRequest,
@@ -28,6 +32,7 @@ from bisheng.qa_expert.domain.schemas import (
     CommentCreateRequest,
     CommentDetailResponse,
     CommentPageData,
+    QuestionUpdateRequest,
     VoteRequest,
     AdoptAnswerRequest,
     QANotificationResponse,
@@ -35,6 +40,7 @@ from bisheng.qa_expert.domain.schemas import (
     QuestionPageData,
     QuestionStatsResponse,
     QAExpertStatsResponse,
+    QuestionCheckRequest,
 )
 from bisheng.qa_expert.domain.services import (
     ExpertService,
@@ -142,6 +148,17 @@ async def expertsinfo(
     return resp_200(data=experinfo)
   
 
+@router.get("/experts/{user_id}")
+async def expertsinfo_id(
+    user_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """删除专家"""
+   
+    experinfo = await service.get_expertinfobyid(user_id)
+    return resp_200(data=experinfo)
+
 
 # ==================== 问题管理 Endpoints ====================
 
@@ -150,6 +167,19 @@ async def get_question_service() -> QuestionService:
     """依赖注入：问题服务"""
     return QuestionService()
 
+
+@router.post("/check_questions", response_model=QuestionDetailResponse)
+async def check_question(
+    request: QuestionCheckRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    result = SensitiveWordPolicyService.check_text(
+        tenant_id=user.tenant_id,
+        business_type=SensitiveWordBusinessType.KNOWLEDGE_SPACE_FILE_PARSE,
+        text=request.check_text,
+    )
+    if result.enabled and result.hits:
+        raise ContentSafetyViolation(result)
 
 @router.post("/questions", response_model=QuestionDetailResponse)
 async def create_question(
@@ -192,6 +222,19 @@ async def list_questions(
     )
 
 
+@router.put("/questions/{question_id}", response_model=ExpertResponse)
+async def update_question(
+    question_id: int,
+    request: QuestionUpdateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_question_service),
+):
+    """更新专家信息"""
+   
+    expert = await service.update_question(question_id, request)
+    return resp_200(data=expert)
+
+
 @router.get("/questions/{question_id}", response_model=QuestionDetailResponse)
 async def get_question_detail(
     question_id: int,
@@ -214,6 +257,21 @@ async def adopt_answer(
   
     question = await service.adopt_answer(question_id, request.answer_id, user.user_id)
     return resp_200(data=question)
+
+
+@router.delete("/questions/{question_id}")
+async def delete_question(
+    question_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: QuestionService = Depends(get_question_service),
+):
+    """删除回答"""
+    try:
+        success = await service.delete_question(question_id)
+
+        return resp_200(data={"success": success})
+    except Exception as e:
+        return resp_500(code=500, msg=str(e))
 
 
 
@@ -326,6 +384,7 @@ async def create_comment(
     comment = await service.create_comment(user.user_id,user.user_name, request)
 
     return resp_200(data=comment)
+
 
 @router.post("/allcomments", )
 async def get_allcomments(

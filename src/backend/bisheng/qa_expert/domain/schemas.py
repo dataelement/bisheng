@@ -72,16 +72,17 @@ class ExpertCreateRequest(BaseModel):
 
     expert_name: str = Field(..., description="专家名称")
     introduction: Optional[str] = Field(None, description="专家介绍")
-    depart_ment: Optional[str] = Field(default=[], description="所属业务域")
+    depart_ment: Optional[str] = Field(default=[], description="所属部门")
     user_id: Optional[int] = Field(None, description="关联用户ID（可选）")
-
-
+    major: Optional[str]= Field(None, description="所属专业")
+    
 class ExpertUpdateRequest(BaseModel):
     """更新专家 - 请求"""
 
     expert_name: Optional[str] = None
     introduction: Optional[str] = None
     depart_ment: Optional[str] = None
+    major: Optional[str]= Field(None, description="所属专业")
 
 
 class ExpertResponse(BaseModel):
@@ -104,7 +105,9 @@ class ExpertResponse(BaseModel):
 
 
 # ==================== 问题 Schemas ====================
-
+class QuestionCheckRequest(BaseModel):
+    """检查问题 - 请求"""
+    check_text: str = Field(..., min_length=0, max_length=100, description="问题文本")
 
 class QuestionCreateRequest(BaseModel):
     """发起提问 - 请求"""
@@ -143,16 +146,16 @@ class QuestionUpdateRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     business_domain: Optional[str] = None
-    attachments: Optional[List[str]] = None
-    related_docs: Optional[List[int]] = None
-    invited_experts: Optional[List[int]] = None
+    # attachments: Optional[List[str]] = None
+    # related_docs: Optional[List[int]] = None
+    # invited_experts: Optional[List[int]] = None
 
-    @field_validator("invited_experts")
-    @classmethod
-    def validate_experts(cls, v):
-        if v and len(v) > 3:
-            raise ValueError("最多只能邀请 3 位专家")
-        return v
+    # @field_validator("invited_experts")
+    # @classmethod
+    # def validate_experts(cls, v):
+    #     if v and len(v) > 3:
+    #         raise ValueError("最多只能邀请 3 位专家")
+    #     return v
 
 
 class QuestionSimpleResponse(BaseModel):

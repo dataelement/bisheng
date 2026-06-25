@@ -145,6 +145,7 @@ class KnowledgeSpaceReviewTagService:
                 tag_names=matched,
                 user_id=db_file.user_id or 0,
                 tenant_id=db_file.tenant_id,
+                library=library,
             )
             logger.info(
                 "auto_tag_success space_id={} file_id={} tags={}",
@@ -264,6 +265,7 @@ class KnowledgeSpaceReviewTagService:
         tag_names: List[str],
         user_id: int,
         tenant_id: Optional[int],
+        library=None,
     ) -> None:
         if not tag_names:
             return
@@ -276,13 +278,21 @@ class KnowledgeSpaceReviewTagService:
                 )
             ).all()
             tag_by_name = {tag.name: tag for tag in existing_tags}
+            system_tags = set(library.tags or []) if library else set()
+            ai_tags = set(library.ai_tags or []) if library else set()
             for tag_name in tag_names:
                 if tag_name not in tag_by_name:
+                    if tag_name in system_tags:
+                        resource_type = TagResourceTypeEnum.SYSTEM_TAG
+                    elif tag_name in ai_tags:
+                        resource_type = TagResourceTypeEnum.AI_AUTO_TAG
+                    else:
+                        resource_type = TagResourceTypeEnum.AI_AUTO_TAG
                     tag = ReviewTag(
                         name=tag_name,
                         business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
                         business_id=str(space_id),
-                        resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+                        resource_type=resource_type,
                         user_id=user_id,
                         tenant_id=tenant_id,
                     )
