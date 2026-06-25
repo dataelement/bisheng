@@ -195,6 +195,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // Matches the CSS `touch-mobile` variant (≤1023px) so the JS-measured apps
   // offset stays in sync with the CSS-based welcome-block centering.
   const isTouchLayout = useMediaQuery('(max-width: 1023px)');
+  // F035: task-mode workspace panel responsive tiers — mirror the daily-mode
+  // citation panel (useCitationReferencePanel): ≤576 full-screen overlay,
+  // 577–767 right drawer, 768–1023 portaled right drawer, ≥1024 in-flow docked.
+  // isH5 (above) = ≤767; isTouchLayout = ≤1023.
+  const isPhoneViewport = useMediaQuery('(max-width: 576px)');
   const { showToast } = useToastContext();
   const [exportSheetOpen, setExportSheetOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -369,7 +374,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
-  const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
+  const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel, closeCitationPanel } = useCitationReferencePanel({ hasMessages });
 
   // F035: the task checklist is pinned above the input (Figma 12221-39902 /
   // 12221-40080) for the conversation's latest task turn — it tracks that turn's
@@ -465,6 +470,15 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     return () => clearTimeout(t);
   }, [taskArtifacts.fullscreen]);
 
+  // F035: the fullscreen overlay is desktop-only. Resizing into the touch layout
+  // (≤1023px) while it's open would otherwise leave `fullscreen` true with the
+  // overlay suppressed; clear it so the mobile overlay/drawer branch renders.
+  useEffect(() => {
+    if (isTouchLayout && taskArtifacts.fullscreen) {
+      taskArtifacts.setFullscreen(false);
+    }
+  }, [isTouchLayout, taskArtifacts.fullscreen, taskArtifacts.setFullscreen]);
+
   // KeepAlive freezes (but doesn't unmount) ChatView when the user switches to
   // another sidebar section, so the <body>-portaled fullscreen overlay would keep
   // floating over the new page. Collapse the workspace + force-unmount the overlay
@@ -473,6 +487,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     taskArtifacts.closeWorkspace();
     setFsExpanded(false);
     setFsMounted(false);
+    // The citation panel portals to <body> in the 768–1023 / mobile tiers, so it
+    // also outlives the cached view — collapse it so it doesn't hang over the
+    // section the user switched to.
+    closeCitationPanel();
   });
 
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
@@ -683,8 +701,12 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         flash two toolbars during the fullscreen transition. The
                         wrapper still reserves its docked width throughout (so the
                         chat column doesn't reflow), it's just emptied — the overlay
-                        collapses back onto exactly this box before unmounting. */}
-                    {latestTaskVersionId && (
+                        collapses back onto exactly this box before unmounting.
+
+                        ≤1023px is handled by the mobile branch below instead — the
+                        docked clamp() width would otherwise squeeze the chat column
+                        on small screens instead of taking over the viewport. */}
+                    {latestTaskVersionId && !isTouchLayout && (
                       <div
                         className={cn(
                           'min-h-0 shrink-0 overflow-hidden transition-[width,opacity,padding] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
@@ -708,6 +730,59 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                         )}
                       </div>
                     )}
+
+                    {/* F035: mobile (≤1023px) workspace panel — mirrors the daily-mode
+                        citation panel's responsive tiers. Renders only while open
+                        (hard mount/unmount, no width reservation, so the chat column
+                        keeps full width behind it). The fullscreen toggle is hidden
+                        (`hideFullscreenToggle`) since the panel already takes over the
+                        screen / docks as a drawer here. `fullscreen` is passed so the
+                        inner card drops its own border/radius — the overlay/drawer
+                        container provides the chrome. */}
+                    {latestTaskVersionId && isTouchLayout && taskArtifacts.open && (() => {
+                      const mobilePanel = (
+                        <WorkspacePanel
+                          files={taskWorkspaceFiles}
+                          versionId={latestTaskVersionId}
+                          previewFile={taskArtifacts.previewFile}
+                          fullscreen
+                          hideFullscreenToggle
+                          onPreview={taskArtifacts.openPreview}
+                          onBack={taskArtifacts.backToList}
+                          onClose={taskArtifacts.closeWorkspace}
+                          onToggleFullscreen={taskArtifacts.toggleFullscreen}
+                        />
+                      );
+
+                      // ≤576: full-screen overlay flush to the viewport edges.
+                      if (isPhoneViewport) {
+                        return (
+                          <div className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-[#FBFBFB]">
+                            {mobilePanel}
+                          </div>
+                        );
+                      }
+
+                      // 768–1023: flex-inline would interleave with HeaderTitle / main
+                      // stacking contexts; portal a fixed right drawer to <body> at a
+                      // higher z so it clears the chrome (mirrors the citation panel).
+                      if (!isH5) {
+                        return createPortal(
+                          <div className="fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300 w-[min(480px,100vw)]">
+                            {mobilePanel}
+                          </div>,
+                          document.body,
+                        );
+                      }
+
+                      // 577–767: right drawer docked to the viewport edge (z above
+                      // MobileNav z-60), full height, slide-in from the right.
+                      return (
+                        <div className="fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden rounded-tl-xl border-l border-[#ECECEC] bg-[#FBFBFB] shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300 min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]">
+                          {mobilePanel}
+                        </div>
+                      );
+                    })()}
 
                     {citationPanelElement}
                   </div>
@@ -812,8 +887,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
               the card edge while the inner content — and the toolbar buttons — stay
               fixed (box grows +4px exactly as padding grows +4px). Fills the card
               edge-to-edge in #FBFBFB (the 4px is overlay bg, not a white ring) with
-              the border on the outermost ring. Unmounts on transitionEnd. */}
-          {latestTaskVersionId && fsMounted && fsBox && createPortal(
+              the border on the outermost ring. Unmounts on transitionEnd.
+              Desktop-only (≥1024px): below that the panel is already an overlay /
+              drawer (mobile branch above), so the fullscreen overlay is suppressed
+              and resizing desktop→mobile tears any open overlay down cleanly. */}
+          {latestTaskVersionId && !isTouchLayout && fsMounted && fsBox && createPortal(
             <div
               className="fixed z-[100] overflow-hidden border border-[#ECECEC] bg-[#FBFBFB] transition-[top,left,right,bottom,padding,border-radius] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]"
               style={{ ...(fsExpanded ? fsBox.expanded : fsBox.collapsed), padding: fsExpanded ? 4 : 0, borderRadius: 12 }}

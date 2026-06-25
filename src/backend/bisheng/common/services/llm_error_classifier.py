@@ -1,4 +1,8 @@
-"""Classify LLM / provider exceptions for Linsight task-mode fault tolerance.
+"""Classify LLM / provider exceptions for fault tolerance + user-facing copy.
+
+Shared by Linsight task mode (resilience middleware + ``TaskErrorCard``) and
+daily-mode chat (workstation), so it lives in ``common`` rather than under any
+single domain module.
 
 Two intentionally decoupled layers (design: 灵思LLM容错与失败态友好交互):
 
@@ -61,19 +65,41 @@ class ErrorType(str, enum.Enum):
 # Flat shared signatures — extend these (and only these) for a new vendor.
 # ---------------------------------------------------------------------------
 
-# Quota / billing exhaustion. MUST be checked before rate-limit, because a quota
-# error can surface as HTTP 429 just like a transient rate limit.
+# Quota / billing EXHAUSTION (balance/credit run out — will NOT recover). MUST be
+# checked before rate-limit, because a quota error can surface as HTTP 429 just
+# like a transient rate limit, but its remedy is "top up", not "retry later".
+# Kept narrow so transient quota *throttling* (see _RATE_LIMIT_SIGNATURES) is not
+# mislabeled as an unrecoverable billing error.
 _QUOTA_SIGNATURES: tuple[str, ...] = (
     "insufficient_quota",
     "insufficient quota",
     "arrearage",
-    "exceeded your current quota",
     "quota used up",
     "quota_used_up",
     "余额不足",
     "欠费",
     "额度不足",
     "配额",
+)
+
+# Transient throttling — RPM (requests/min), TPM (tokens/min) and burst-rate
+# protection. Recovers on its own → RETRYABLE + "service busy, try again later"
+# copy. Distinct from quota EXHAUSTION above: "exceeded your current quota" /
+# "allocated quota exceeded" are treated as throttling (product decision), while
+# "insufficient_quota" / 余额不足 / 欠费 stay in the exhaustion bucket. Checked
+# AFTER _is_quota so genuine billing exhaustion is never retried.
+_RATE_LIMIT_SIGNATURES: tuple[str, ...] = (
+    "rate limit",
+    "rate_limit",
+    "ratelimit",
+    "requests rate limit",
+    "exceeded your current requests",  # "You exceeded your current requests list"
+    "request rate increased too quickly",
+    "allocated quota exceeded",
+    "exceeded your current quota",  # throttling, not billing (per product decision)
+    "too many requests",
+    "请求过于频繁",
+    "限流",
 )
 
 # Content-moderation / safety-guardrail codes across mainstream vendors:
@@ -184,6 +210,13 @@ def _is_quota(exc: BaseException) -> bool:
     return any(sig in text for sig in _QUOTA_SIGNATURES)
 
 
+def _is_rate_limit(exc: BaseException) -> bool:
+    """Keyword rate-limit/throttle signal — catches non-standard 429s and limits
+    embedded in a 200 body that never surface as ``openai.RateLimitError``."""
+    text = _exc_text(exc)
+    return any(sig in text for sig in _RATE_LIMIT_SIGNATURES)
+
+
 def _is_content_filter(exc: BaseException) -> bool:
     if isinstance(exc, openai.ContentFilterFinishReasonError):
         return True
@@ -233,6 +266,8 @@ def classify_behavior(exc: BaseException) -> Behavior:
         return Behavior.RETRYABLE
     if isinstance(exc, openai.RateLimitError):  # 429, non-quota (quota handled above)
         return Behavior.RETRYABLE
+    if _is_rate_limit(exc):  # keyword rate-limit: non-standard 429 / body-embedded
+        return Behavior.RETRYABLE
     if isinstance(exc, openai.InternalServerError):
         return Behavior.RETRYABLE
     status = _status_code(exc)
@@ -262,6 +297,8 @@ def label_text(text: str) -> ErrorType:
         return ErrorType.CONTENT_FILTER
     if any(sig in lowered for sig in _QUOTA_SIGNATURES):
         return ErrorType.QUOTA_EXHAUSTED
+    if any(sig in lowered for sig in _RATE_LIMIT_SIGNATURES):
+        return ErrorType.RATE_LIMIT
     return ErrorType.UNKNOWN
 
 
@@ -278,7 +315,7 @@ def label_error(exc: BaseException) -> ErrorType:
         return ErrorType.QUOTA_EXHAUSTED
     if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)) or _status_code(exc) in (401, 403):
         return ErrorType.AUTH_ERROR
-    if isinstance(exc, openai.RateLimitError):
+    if isinstance(exc, openai.RateLimitError) or _is_rate_limit(exc):
         return ErrorType.RATE_LIMIT
     if isinstance(exc, (openai.APITimeoutError, openai.APIConnectionError, TimeoutError, ConnectionError)):
         return ErrorType.NETWORK_TIMEOUT

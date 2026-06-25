@@ -113,6 +113,18 @@ async def get_online_chat(*,
         end_index = start_index + limit
         data = data[start_index:end_index]
 
+    # Enrich ``can_share`` for the current page only (ReBAC ``share_app``).
+    # get_all_flows() intentionally skips this (called by many list endpoints, costly);
+    # here we run it on the already-paginated slice so the app-square share button works.
+    enrich_can_share_start = perf_counter()
+    data = await WorkFlowService.aenrich_apps_can_share(user, data)
+    logger.info(
+        '[perf][chat.online.can_share] user_id={} rows={} took_ms={:.2f}',
+        user.user_id,
+        len(data),
+        (perf_counter() - enrich_can_share_start) * 1000,
+    )
+
     logger.info(
         '[perf][chat.online.total] user_id={} flow_type={} sort_by={} page={} limit={} total={} rows={} '
         'permission_id={} took_ms={:.2f}',

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSetRecoilState } from "recoil";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
@@ -72,7 +72,7 @@ export function ChannelLayout({
 
     const setDetailPaneWidth = useSetRecoilState(subscriptionDetailPaneWidthState);
 
-    const { leftWidth, isResizing, startResizing } = useResizablePanel({
+    const { leftWidth, isResizing, startResizing, resetToDefault } = useResizablePanel({
         // v2: the default is now derived from the two-column grid geometry
         // (getDefaultLeftWidth) instead of a fixed 0.5 ratio. Bump the key so any
         // stale ratio persisted under the old default is ignored, letting the new
@@ -127,6 +127,17 @@ export function ChannelLayout({
             setDetailLoading(false);
         }
     }, []);
+
+    // Each time the panel goes from closed → open, re-assert the geometry-aligned
+    // default width so the left column matches the two-column browse layout. A
+    // width the user dragged earlier doesn't leak into the next open — satisfies
+    // "left column width stays consistent when not manually resized".
+    const wasOpenRef = useRef(false);
+    useLayoutEffect(() => {
+        const isOpen = !isH5 && !!selectedArticle;
+        if (isOpen && !wasOpenRef.current) resetToDefault();
+        wasOpenRef.current = isOpen;
+    }, [isH5, selectedArticle, resetToDefault]);
 
     // Publish the right-area width (detail panel + splitter) so the page-level
     // 频道/广场 tab can pin to the article-list column's right edge and slide left

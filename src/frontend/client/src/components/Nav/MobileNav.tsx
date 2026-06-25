@@ -81,6 +81,10 @@ export default function MobileNav({
   };
 
   const handleNewChat = () => {
+    // Starting a new chat always dismisses an open history list first, so the
+    // freshly-created conversation isn't hidden behind the expanded dropdown.
+    setHistoryDropdownOpen(false);
+    if (appHistoryDropdownOpen) onToggleAppHistoryDropdown?.();
     if (onNewChat) {
       onNewChat();
       return;
@@ -99,6 +103,13 @@ export default function MobileNav({
     showWorkbenchMergedBar && chatMobileHeader
       ? shareChatTypes[chatMobileHeader.flowType as keyof typeof shareChatTypes]
       : undefined;
+
+  // Merged-bar header: whether the relevant history dropdown is currently expanded.
+  // Main-chat dropdown only counts outside the app surface; app-history dropdown only
+  // inside it. Used to grey the share button in step with the greyed left menu.
+  const mergedHistoryActive =
+    (historyDropdownOpen && !appSurfaceBackAction) ||
+    (appHistoryDropdownOpen && Boolean(appSurfaceBackAction));
 
   /** 应用内对话：有合并标题时顶栏与主站对话一致（左仅抽屉、中标题、右分享+新建）；无标题时保留「菜单+返回」 */
   const appSurfaceShowBackWithMenu =
@@ -230,26 +241,21 @@ export default function MobileNav({
                 </button>
               )}
             </div>
-            <div
-              className={cn(
-                // 12px gap between the share and new-chat icon buttons.
-                'flex shrink-0 items-center gap-3',
-                // Match the non-merged branch: while either history dropdown is open, dim
-                // and disable adjacent icons so the only available action is selecting/
-                // closing the list. Main-chat dropdown only applies outside app surface;
-                // app-history dropdown only applies inside app surface.
-                ((historyDropdownOpen && !appSurfaceBackAction) ||
-                  (appHistoryDropdownOpen && appSurfaceBackAction)) &&
-                  'pointer-events-none text-[#C9CDD4]',
-              )}
-            >
+            <div className="flex shrink-0 items-center gap-3">
+              {/* While the matching history dropdown is open, dim+disable only the share
+                  button (mirrors the greyed left menu). The new-chat button stays active so
+                  it can always start a conversation — handleNewChat closes the list first. */}
               {!chatMobileHeader.readOnly && !chatMobileHeader.hideShare && shareType && (
                 <ShareChat
                   type={shareType}
                   flowId={chatMobileHeader.flowId || undefined}
                   chatId={chatMobileHeader.conversationId}
                   iconClassName="size-5 shrink-0"
-                  buttonClassName={cn(mobileHeadIconBtnClassName, 'p-0 hover:bg-transparent')}
+                  buttonClassName={cn(
+                    mobileHeadIconBtnClassName,
+                    'p-0 hover:bg-transparent',
+                    mergedHistoryActive && 'pointer-events-none text-[#C9CDD4]',
+                  )}
                 />
               )}
               <button
@@ -292,14 +298,13 @@ export default function MobileNav({
                 </button>
               </div>
             )}
+            {/* New-chat button stays active even while the list is open (handleNewChat
+                closes the list first), so a new conversation can always be started. */}
             <button
               type="button"
               data-testid="mobile-header-new-chat-button"
               aria-label={localize('com_ui_new_chat')}
-              className={cn(
-                mobileHeadIconBtnClassName,
-                (historyDropdownOpen || appHistoryDropdownOpen) && 'pointer-events-none text-[#C9CDD4]',
-              )}
+              className={mobileHeadIconBtnClassName}
               onClick={handleNewChat}
             >
               <Outlined.Plus className="size-5" />
