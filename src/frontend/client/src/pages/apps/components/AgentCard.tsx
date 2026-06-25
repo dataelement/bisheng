@@ -185,8 +185,9 @@ export function AgentCard({
         ) : null}
       </div>
 
-      {/* Description — clamp to 3 lines with ellipsis (not a hard cut). */}
-      <div className="mt-2 font-['PingFang_SC'] font-normal text-[12px] text-[#a9aeb8] leading-[19.5px] break-words line-clamp-3">
+      {/* Description — always reserve 3 lines (min-h) so cards keep a uniform
+          height; clamp to 3 lines with ellipsis (not a hard cut). */}
+      <div className="mt-2 min-h-[58.5px] font-['PingFang_SC'] font-normal text-[12px] text-[#a9aeb8] leading-[19.5px] break-words line-clamp-3">
         {agent.description || localize('com_app_no_description_placeholder')}
       </div>
 
