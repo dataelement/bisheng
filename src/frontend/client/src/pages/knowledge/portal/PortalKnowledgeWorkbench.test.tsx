@@ -165,7 +165,7 @@ jest.mock("../SpaceDetail/EditTagsModal", () => ({
                     type="button"
                     onClick={async () => {
                         await mockUpdateFileTagsApi(spaceId, fileId, [3]);
-                        await onSaved?.();
+                        await onSaved?.([{ id: 3, name: "新标签" }]);
                     }}
                 >
                     保存标签
@@ -2342,6 +2342,58 @@ describe("PortalKnowledgeWorkbench", () => {
 
         fireEvent.click(within(actions).getByRole("button", { name: "权限管理" }));
         expect(screen.getByTestId("space-share-dialog")).toHaveTextContent("成员管理:knowledge_file:后端开发.md");
+    });
+
+    test("updates tags in place after editing without refetching the file list", async () => {
+        const teamSpace = makeSpace("team-1", "我的技术文档", {
+            spaceLevel: SpaceLevel.TEAM,
+            role: SpaceRole.ADMIN,
+        });
+        const file = makeFile("201", "后端开发.md", {
+            spaceId: "team-1",
+            fileEncoding: "RPT-PP-00000001",
+            size: 2048,
+            tags: [{ id: 1, name: "技术文档" }],
+            updatedAt: "2026-05-20T12:30:00",
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [],
+            teamSpaces: [teamSpace],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [file],
+            total: 1,
+        } as any);
+
+        renderWorkbench();
+
+        const fileRow = await screen.findByTestId("file-tree-row-201");
+        fireEvent.click(within(fileRow).getByRole("button", { name: "打开后端开发.md" }));
+
+        const actions = await screen.findByTestId("portal-document-actions");
+        fireEvent.click(within(actions).getByRole("button", { name: "编辑标签" }));
+
+        const modal = await screen.findByTestId("edit-tags-modal");
+        expect(within(modal).getByTestId("edit-tags-initial-ids")).toHaveTextContent("1");
+
+        // The initial list load happened on mount; ignore it and watch for any refetch.
+        jest.mocked(getSpaceChildrenApi).mockClear();
+
+        fireEvent.click(within(modal).getByRole("button", { name: "保存标签" }));
+
+        await waitFor(() => {
+            expect(mockUpdateFileTagsApi).toHaveBeenCalledWith("team-1", "201", [3]);
+        });
+
+        // Editing a single file's tags must not reload the whole file list.
+        expect(getSpaceChildrenApi).not.toHaveBeenCalled();
+
+        // The file's tag state is patched in place: re-opening shows the new tag.
+        fireEvent.click(within(actions).getByRole("button", { name: "编辑标签" }));
+        const reopened = await screen.findByTestId("edit-tags-modal");
+        expect(within(reopened).getByTestId("edit-tags-initial-ids")).toHaveTextContent("3");
     });
 
     test("opens document AI from the right rail as a drawer and hides left panes until closed", async () => {
