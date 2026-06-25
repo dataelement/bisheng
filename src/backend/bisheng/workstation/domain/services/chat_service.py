@@ -22,6 +22,7 @@ from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
 from bisheng.common.errcode.workstation import (
     ConversationNotFoundError,
     DepartmentDailyChatConcurrentLimitError,
+    LLMRateLimitError,
 )
 from bisheng.common.schemas.telemetry.event_data_schema import (
     ApplicationAliveEventData,
@@ -29,6 +30,7 @@ from bisheng.common.schemas.telemetry.event_data_schema import (
     NewMessageSessionEventData,
 )
 from bisheng.common.services import telemetry_service
+from bisheng.common.services.llm_error_classifier import ErrorType, label_error, unwrap
 from bisheng.core.cache.utils import async_file_download
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import FlowType
@@ -1652,7 +1654,12 @@ async def _agent_stream_chat_completion(
             error_flag = True
             error_msg = str(exc)
             logger.exception("Agent chat execution error")
-            yield ServerError(exception=exc).to_sse_event_instance_str()
+            # Upstream LLM throttling (RPM/TPM/burst) → friendly "service busy"
+            # copy instead of dumping the raw provider 500 on the user.
+            if label_error(unwrap(exc)) == ErrorType.RATE_LIMIT:
+                yield LLMRateLimitError().to_sse_event_instance_str()
+            else:
+                yield ServerError(exception=exc).to_sse_event_instance_str()
 
         # Finalise any dangling thinking event (e.g. stream interrupted mid-reasoning).
         close_thinking()

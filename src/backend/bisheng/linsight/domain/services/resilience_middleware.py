@@ -37,7 +37,7 @@ from langchain.agents.middleware.types import AgentMiddleware, ModelRequest, Mod
 from langchain_core.messages import AIMessage
 from loguru import logger
 
-from bisheng.linsight.domain.services.llm_error_classifier import Behavior, classify_behavior
+from bisheng.common.services.llm_error_classifier import Behavior, classify_behavior
 
 # Synthetic reply substituted for a degraded subagent step. Read by the PARENT
 # planner as a control note ("this leg failed — continue with what you have"),
