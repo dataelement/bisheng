@@ -244,7 +244,7 @@ export function SubjectSearchUser({
                 />
                 {/* Name column: username + user id (external_id) after it; the next
                     column shows only the org/department path. */}
-                <div className="flex w-[220px] shrink-0 items-center gap-1.5">
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
                   <UserIcon className="h-4 w-4 shrink-0 text-gray-400" />
                   <span className="min-w-0 truncate text-sm" title={user.user_name}>{user.user_name}</span>
                   {showUserId && (
@@ -253,13 +253,16 @@ export function SubjectSearchUser({
                       <span className="shrink-0 truncate text-xs text-[#999999]" title={user.external_id ?? undefined}>{user.external_id}</span>
                     </>
                   )}
+                  {/* "Already granted" badge sits right after the name/id; it stays at
+                      full width while the username truncates, so it never crowds the
+                      department column on the right. */}
+                  {isDisabled && (
+                    <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+                      {localize("com_permission.already_granted")}
+                    </span>
+                  )}
                 </div>
-                <span className="min-w-0 flex-1 truncate text-xs text-[#999999]" title={departmentPath}>{departmentPath}</span>
-                {isDisabled && (
-                  <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-                    {localize("com_permission.already_granted")}
-                  </span>
-                )}
+                <span className="max-w-[45%] shrink-0 truncate text-xs text-[#999999]" title={departmentPath}>{departmentPath}</span>
               </div>
             );
           })}
