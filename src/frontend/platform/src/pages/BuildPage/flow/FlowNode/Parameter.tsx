@@ -36,6 +36,7 @@ export default function Parameter({
     onStatusChange,
     onVarEvent,
     onAddSysPrompt,
+    onFouceUpdate,
     selectedKnowledgeIds
 }: {
     nodeId: string;
@@ -67,7 +68,28 @@ export default function Parameter({
         }
     }
 
+    const getParamByKey = (key: string) => {
+        return node.group_params
+            ?.flatMap(group => group.params || [])
+            .find(param => param.key === key);
+    };
+
+    const clearMetadataFilter = () => {
+        const metadataFilterParam = getParamByKey('metadata_filter');
+        if (metadataFilterParam) {
+            metadataFilterParam.value = {};
+        }
+    };
+
+    const activeKnowledgeScope = getParamByKey('knowledge')?.value?.type;
+    const isDocumentRetrievalNode = ['knowledge_retriever', 'rag'].includes(node.type);
+
     const i18nPrefix = `node.${node.type}.${item.key}.`
+
+    if (isDocumentRetrievalNode && item.key === 'metadata_filter' && activeKnowledgeScope === 'space') {
+        clearMetadataFilter();
+        return null;
+    }
 
     if (item.hidden) return null;
 
@@ -161,6 +183,12 @@ export default function Parameter({
                 data={item}
                 onChange={(val) => {
                     handleOnNewValue(val)
+                    if (isDocumentRetrievalNode && val?.type) {
+                        if (val.type === 'space') {
+                            clearMetadataFilter()
+                        }
+                        onFouceUpdate?.()
+                    }
                     addSysPrompt('knowledge')
                 }}
                 onValidate={bindValidate}

@@ -24,10 +24,17 @@ export interface KnowledgeSpaceTagPage {
   status_message: string
 }
 
+export interface KnowledgeSpaceTagListPage {
+  data: KnowledgeSpaceTagListItem[]
+  total: number
+}
+
 export async function getKnowledgeSpaceTagListApi(params?: {
+  page?: number
+  page_size?: number
   keyword?: string
-}): Promise<KnowledgeSpaceTagListItem[]> {
-  return await axios.get("/api/v1/workstation/tags/list", { params })
+}): Promise<KnowledgeSpaceTagListPage> {
+  return await axios.post("/api/v1/workstation/tags/list_tags", params)
 }
 
 export async function deleteKnowledgeSpaceTagApi(
@@ -114,6 +121,7 @@ export interface ReviewTagResourceItem {
 
 export interface ReviewTagItem {
   tag_name: string
+  resource_type: string
   tags_total: number
   resource_files: ReviewTagResourceItem[]
 }
@@ -133,6 +141,7 @@ export async function getKnowledgeSpaceReviewTagListApi(params: {
 export async function approveOrRejectReviewTagApi(data: {
   tag_name: string
   status: number
+  resource_type: string
   reject_reason?: string
 }): Promise<boolean> {
   return await axios.post("/api/v1/workstation/tags/approve_or_reject", data)
@@ -140,6 +149,7 @@ export async function approveOrRejectReviewTagApi(data: {
 
 export async function deleteReviewTagApi(data: {
   tag_name: string
+  resource_type: string
 }): Promise<boolean> {
   return await axios.post("/api/v1/workstation/tags/delete_review", data)
 }

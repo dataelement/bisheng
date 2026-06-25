@@ -8,7 +8,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType
 from bisheng.common.errcode.http_error import ServerError
-from bisheng.common.schemas.api import resp_200, SSEResponse
+from bisheng.common.schemas.api import resp_200, SSEResponse, resp_500
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_service,
     get_knowledge_space_chat_service,
@@ -130,6 +130,23 @@ async def get_auto_tag_visibility(
     ) = await WorkStationService.get_knowledge_space_config_with_meta()
     visible = bool(getattr(cfg, "auto_tag_visible", True)) if cfg else True
     return resp_200({"visible": visible})
+
+
+@router.get("/options")
+async def get_authorized_space_options(
+    keyword: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    order_by: str = Query(default="name"),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    options = await svc.get_authorized_space_options(
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        order_by=order_by,
+    )
+    return resp_200(options)
 
 
 @router.get("/{space_id}/info")
@@ -650,10 +667,13 @@ async def get_file_download(
 async def update_file_tags(
     space_id: int,
     file_id: int,
-    tag_ids: List[int] = Body(..., embed=True, description="标签ID列表"),
+    tag_ids: List[int] = Body(default=[], embed=True, description="标签ID列表"),
+    review_tag_ids: List[int] = Body(default=[], embed=True, description="审核标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
-    result = await svc.update_file_tags(space_id, file_id, tag_ids)
+    if not tag_ids and not review_tag_ids and len(tag_ids) == 0 and len(review_tag_ids) == 0:
+        return resp_500("tag_ids or review_tag_ids is required")
+    result = await svc.update_file_tags(space_id, file_id, tag_ids, review_tag_ids)
     return resp_200(result)
 
 
@@ -684,10 +704,13 @@ async def batch_delete(
 async def batch_update_tags(
     space_id: int,
     file_ids: List[int] = Body(..., embed=True, description="文件ID列表"),
-    tag_ids: List[int] = Body(..., embed=True, description="标签ID列表"),
+    tag_ids: List[int] = Body(default=[], embed=True, description="标签ID列表"),
+    review_tag_ids: List[int] = Body(default=[], embed=True, description="审核标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
-    result = await svc.batch_add_file_tags(space_id, file_ids, tag_ids)
+    if not tag_ids and not review_tag_ids and len(tag_ids) == 0 and len(review_tag_ids) == 0:
+        return resp_500("tag_ids or review_tag_ids is required")
+    result = await svc.batch_add_file_tags(space_id, file_ids, tag_ids, review_tag_ids)
     return resp_200(result)
 
 

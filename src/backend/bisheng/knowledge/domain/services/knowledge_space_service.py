@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, update
 from sqlmodel import select
 
+from bisheng.database.models.review_tags import ReviewTagDao, ReviewTag
 from bisheng.api.v1.schemas import KnowledgeFileOne, FileProcessBase, ExcelRule
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload  # noqa: F401 – kept for type hints
@@ -4573,6 +4574,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 grouped.personal_spaces.append(space)
         return grouped
 
+    async def get_authorized_space_options(
+        self,
+        keyword: str = "",
+        page: int = 1,
+        page_size: int = 20,
+        order_by: str = "name",
+    ) -> dict:
+        """Return spaces the current user can use in workflow selectors."""
+        grouped = await self.get_grouped_spaces(order_by=order_by)
+        spaces = (
+            grouped.public_spaces
+            + grouped.department_spaces
+            + grouped.team_spaces
+            + grouped.personal_spaces
+        )
+        normalized_keyword = (keyword or "").strip().lower()
+        if normalized_keyword:
+            spaces = [
+                space for space in spaces
+                if normalized_keyword in (space.name or "").lower()
+            ]
+
+        total = len(spaces)
+        start = max(page - 1, 0) * page_size
+        end = start + page_size
+        return {
+            "data": spaces[start:end],
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "has_more": end < total,
+        }
+
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
         return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
 
@@ -7131,14 +7165,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if any(t.name == tag_name for t in existing_tags):
             raise SpaceTagExistsError()
 
-        new_tag = Tag(
+        existing_review_tags = await ReviewTagDao.get_tags_by_business(
+            business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
+            business_id=str(space_id),
+            name=tag_name,
+        )
+        if any(tr.name == tag_name for tr in existing_review_tags):
+            raise SpaceTagExistsError()
+
+        new_tag = ReviewTag(
             name=tag_name,
             user_id=self.login_user.user_id,
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
             business_id=str(space_id),
             resource_type=TagResourceTypeEnum.MANUAL_TAG,
+            is_deleted=False,
+            create_time=datetime.now(),
+            update_time=datetime.now(),
         )
-        return await TagDao.ainsert_tag(new_tag)
+        return await ReviewTagDao.ainsert_review_tag(new_tag)
 
     async def delete_space_tag(self, space_id: int, tag_id: int):
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
@@ -7148,20 +7193,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE,
         )
 
-    async def update_file_tags(self, space_id: int, file_id: int, tag_ids: List[int]):
+    async def update_file_tags(self, space_id: int, file_id: int, tag_ids: List[int], review_tag_ids: List[int]):
         """2：支持对单文件的标签管理: Overwrite tags for a single file."""
         await self._get_file_for_action(file_id, space_id=space_id)
         await self._require_permission_id("knowledge_file", file_id, "rename_file", space_id=space_id)
 
         resource_id = str(file_id)
         resource_type = ResourceTypeEnum.SPACE_FILE
-        await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
+        if tag_ids and len(tag_ids) > 0:
+            await TagDao.aupdate_resource_tags(tag_ids, resource_id, resource_type, self.login_user.user_id)
+        if review_tag_ids and len(review_tag_ids) > 0:
+            await ReviewTagDao.aupdate_resource_tags(review_tag_ids, resource_id, resource_type, self.login_user.user_id)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 
-    async def batch_add_file_tags(self, space_id: int, file_ids: List[int], tag_ids: List[int]):
+    async def batch_add_file_tags(self, space_id: int, file_ids: List[int], tag_ids: List[int], review_tag_ids: List[int]):
         """1：支持对文件批量添加标签: Batch add tags to files."""
         await self._require_read_permission(space_id)
-        if not file_ids or not tag_ids:
+        if not file_ids or not tag_ids or not review_tag_ids:
             return
 
         files = await self._get_space_files_or_raise(space_id, file_ids)
@@ -7169,7 +7217,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_type = ResourceTypeEnum.SPACE_FILE
         for file_record in files:
             await self._require_permission_id("knowledge_file", file_record.id, "rename_file", space_id=space_id)
-            await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
+            if tag_ids and len(tag_ids) > 0:
+                await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
+            if review_tag_ids and len(review_tag_ids) > 0:
+                await ReviewTagDao.add_tags(review_tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
 

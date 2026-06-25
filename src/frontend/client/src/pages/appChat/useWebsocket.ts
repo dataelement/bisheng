@@ -7,6 +7,7 @@ import { SkillMethod } from "./appUtils/skillMethod"
 import { chatApiVersionState, submitDataState } from "./store/atoms"
 import { appConversationsState } from "./store/appSidebarAtoms"
 import { genTitle } from "~/api/chat/data-service"
+import { RUNTIME_KNOWLEDGE_SELECTION_FIELD } from "./userSelectedKnowledge"
 
 export const AppLostMessage = '11111'
 const wsMap = new Map<string, WebSocket>()
@@ -359,7 +360,8 @@ export const useWebSocket = (helpers) => {
                             [sessionInfo?.node_id]: {
                                 data: {
                                     [variable]: message,
-                                    dialog_files_content: filePath
+                                    dialog_files_content: filePath,
+                                    ...(submitData.runtimeKnowledgeSelection ? { [RUNTIME_KNOWLEDGE_SELECTION_FIELD]: submitData.runtimeKnowledgeSelection } : {})
                                 },
                                 message,
                                 message_id: sessionInfo.message_id,
@@ -383,7 +385,10 @@ export const useWebSocket = (helpers) => {
                         flow_id: submitData.flowId,
                         data: {
                             [submitData.nodeId!]: {
-                                data: submitData.data,
+                                data: {
+                                    ...submitData.data,
+                                    ...(submitData.runtimeKnowledgeSelection ? { [RUNTIME_KNOWLEDGE_SELECTION_FIELD]: submitData.runtimeKnowledgeSelection } : {})
+                                },
                                 message: submitData.input,
                                 message_id: sessionInfoMap.get(helpers.chatId).message_id,
                                 category: 'question',
@@ -434,4 +439,3 @@ const useCurrentChatId = (chatId) => {
 
     return currentChatIdRef.current
 }
-

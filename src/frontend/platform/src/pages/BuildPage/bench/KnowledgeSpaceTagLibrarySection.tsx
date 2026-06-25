@@ -292,6 +292,8 @@ function TagDialog({ open, mode, initial, onOpenChange, onSaved }: TagDialogProp
 }
 
 
+const PAGE_SIZE = 10;
+
 export default function KnowledgeSpaceTagSection({
     visible,
     onToggle,
@@ -301,28 +303,40 @@ export default function KnowledgeSpaceTagSection({
     const [keyword, setKeyword] = useState("");
     const [rows, setRows] = useState<KnowledgeSpaceTagListItem[]>([]);
     const [loading, setLoading] = useState(false);
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
     const [dialogOpen, setDialogOpen] = useState(false);
     const [dialogMode, setDialogMode] = useState<"create" | "edit">("create");
     const [editing, setEditing] = useState<KnowledgeSpaceTagDetail | null>(null);
 
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (targetPage: number) => {
         setLoading(true);
         const res = await captureAndAlertRequestErrorHoc(
-            getKnowledgeSpaceTagListApi({ keyword: null }),
+            getKnowledgeSpaceTagListApi({ page: targetPage, page_size: PAGE_SIZE, keyword: keyword }),
         );
-        if (res) setRows(res || []);
+        if (res) {
+            setRows(res.data || []);
+            setTotal(res.total || 0);
+        }
         setLoading(false);
-    }, []);
+    }, [keyword]);
 
     useEffect(() => {
-        if (visible) loadData();
-    }, [visible, loadData]);
+        if (visible) {
+            setPage(1);
+            loadData(1);
+        }
+    }, [visible, keyword]);
+
+    const handlePageChange = (newPage: number) => {
+        setPage(newPage);
+        loadData(newPage);
+    };
 
     const filteredRows = useMemo(() => {
-        const trimmed = (keyword || '').trim().toLowerCase();
-        if (!trimmed) return rows;
-        return rows.filter((row) => (row.tag_name || '').toLowerCase().includes(trimmed));
-    }, [rows, keyword]);
+        return rows;
+    }, [rows]);
 
     const openCreate = () => {
         setDialogMode("create");
@@ -364,7 +378,7 @@ export default function KnowledgeSpaceTagSection({
                 );
                 if (res) {
                     toast({ variant: "success", description: t("build.deleted", "已删除") });
-                    loadData();
+                    loadData(page);
                 }
                 next?.();
             },
@@ -413,6 +427,9 @@ export default function KnowledgeSpaceTagSection({
                                         <th className="w-[28%] px-4 py-3 font-medium">
                                             {t("build.tagName", "标签名称")}
                                         </th>
+                                        <th className="w-[28%] px-4 py-3 font-medium">
+                                            {t("build.tagSource", "标签来源")}
+                                        </th>
                                         <th className="w-[200px] px-4 py-3 font-medium">
                                             {t("build.tagUsedCount", "使用知识数")}
                                         </th>
@@ -438,6 +455,7 @@ export default function KnowledgeSpaceTagSection({
                                         filteredRows.map((row) => (
                                             <tr key={row.tag_name} className="border-t text-sm">
                                                 <td className="truncate px-4 py-3 font-medium">{row.tag_name}</td>
+                                                <td className="truncate px-4 py-3 font-medium">{row.resource_type === "system_tag" ? "系统标签" : (row.resource_type === "ai_auto_tag" ? "AI标签" : "人工标签")}</td>
                                                 <td className="px-4 py-3">{row.resource_count}</td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-1">
@@ -459,6 +477,29 @@ export default function KnowledgeSpaceTagSection({
                                 </tbody>
                             </table>
                         </div>
+                        {filteredRows.length > 0 && (
+                            <div className="mt-2 flex items-center justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page <= 1}
+                                    onClick={() => handlePageChange(page - 1)}
+                                >
+                                    {t("build.prevPage", "上一页")}
+                                </Button>
+                                <span className="text-sm text-muted-foreground">
+                                    {page} / {totalPages}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={page >= totalPages}
+                                    onClick={() => handlePageChange(page + 1)}
+                                >
+                                    {t("build.nextPage", "下一页")}
+                                </Button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -468,7 +509,7 @@ export default function KnowledgeSpaceTagSection({
                 mode={dialogMode}
                 initial={editing}
                 onOpenChange={setDialogOpen}
-                onSaved={loadData}
+                onSaved={() => loadData(page)}
             />
         </div>
     );

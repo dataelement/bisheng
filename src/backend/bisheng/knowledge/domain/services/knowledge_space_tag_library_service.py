@@ -72,6 +72,14 @@ class KnowledgeSpaceTagLibraryService:
             tags=library.tags or [],
         )
 
+    async def list_libraries_by_one(
+        self, keyword: Optional[str] = None
+    ) -> PageData[KnowledgeSpaceTagLibraryListItem]:
+        rows = await KnowledgeSpaceTagLibraryDao.alist_by_one(
+            keyword=keyword
+        )
+        return PageData(data=[self.to_list_item(row) for row in rows], total=1)
+
     async def list_libraries(
         self, page: int = 1, page_size: int = 20, keyword: Optional[str] = None
     ) -> PageData[KnowledgeSpaceTagLibraryListItem]:

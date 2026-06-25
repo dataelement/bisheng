@@ -163,6 +163,17 @@
   "required": "必須",
   "isRequired": "必須入力項目",
   "documentKnowledgeBase": "ドキュメント知識ベース",
+  "knowledgeSpace": "ナレッジスペース",
+  "searchKnowledgeSpaceName": "ナレッジスペース名を検索",
+  "noKnowledgeSpace": "利用可能なナレッジスペースはありません",
+  "loadingKnowledgeSpaces": "ナレッジスペースを読み込み中...",
+  "emptyKnowledgeSpaces": "一致するナレッジスペースはありません",
+  "knowledgeSpaceLevel": {
+    "public": "公共スペース",
+    "department": "部門スペース",
+    "team": "チームスペース",
+    "personal": "個人スペース"
+  },
   "temporarySessionFiles": "一時セッションファイル",
   "storeFilesSentInCurrentSession": "現在のセッションで送信されたファイルを保存",
   "displayNameTooltip": "ユーザーセッションページにこの名前が表示されます",
@@ -553,6 +564,64 @@
       },
       "metadata_filter": {
         "label": "メタデータフィルタ"
+      },
+      "advanced_retrieval_switch": {
+        "label": "高度な検索設定"
+      },
+      "retrieved_result": {
+        "label": "検索結果"
+      }
+    },
+    "user_selected_knowledge_rag": {
+      "name": "ユーザー選択知識QA",
+      "description": "ワークフロー実行時にユーザーが知識ベース、知識空間、またはファイル範囲を選択し、その範囲から回答を生成します。",
+      "知识库检索设置": "知識ベース検索設定",
+      "AI回复生成设置": "AI応答生成設定",
+      "输出": "出力",
+      "user_question": {
+        "label": "ユーザーの質問",
+        "placeholder": "ユーザーの質問を選択してください",
+        "help": "複数の質問を選択すると、このノードは何度も実行されます。毎回バッチの質問から1つを取り出して処理します。"
+      },
+      "advanced_retrieval_switch": {
+        "label": "高度な検索設定"
+      },
+      "retrieved_result": {
+        "label": "検索結果"
+      },
+      "system_prompt": {
+        "label": "システムプロンプト",
+        "value": "あなたは知識ベースQAアシスタントです。以下のルールに従って質問に答えてください：\n1. 日本語で正確かつ専門的に答えてください。\n2. 回答は必ず【参考テキスト】の内容に基づいて行ってください：\n\n- 【参考テキスト】に明確に関連する内容がある場合、それに基づいて回答してください；もし関連する内容がない場合は、「関連する内容は見つかりませんでした」と回答してください。\n- 【参考テキスト】にMarkdown形式の画像（例：![image](パス/IMAGE_1.png)）が含まれている場合、そのMarkdown形式をそのまま保持し、引用符やコードブロック（`または```）などの特殊文字を加えず、画像パスを変更しないでください。"
+      },
+      "user_prompt": {
+        "label": "ユーザープロンプト",
+        "value": "ユーザーの質問：```{{#user_question#}}```\n参考テキスト：```{{#retrieved_result#}}```\nあなたの回答："
+      },
+      "model_id": {
+        "label": "モデル",
+        "placeholder": "モデル管理でLLMモデルを設定してください"
+      },
+      "temperature": {
+        "label": "温度"
+      },
+      "output_user": {
+        "label": "出力結果を会話に表示",
+        "help": "通常はQ&Aなどで有効、文書レビューやレポート生成などでは無効にします"
+      },
+      "output_user_input": {
+        "label": "出力変数",
+        "help": "モデルの出力内容がこの変数に保存されます"
+      }
+    },
+    "user_selected_knowledge_retriever": {
+      "name": "ユーザー選択知識検索",
+      "description": "ワークフロー実行時にユーザーが知識ベース、知識空間、またはファイル範囲を選択し、その範囲の検索結果を返します。",
+      "知识库检索设置": "知識ベース検索設定",
+      "输出": "出力",
+      "user_question": {
+        "label": "ユーザーの質問",
+        "placeholder": "検索する質問を選択してください",
+        "help": "複数の質問を選択すると、このノードは何度も実行されます。毎回バッチから1つの質問を取り出して処理します。"
       },
       "advanced_retrieval_switch": {
         "label": "高度な検索設定"

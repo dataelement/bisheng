@@ -231,6 +231,19 @@ export interface GroupedKnowledgeSpaces {
     personalSpaces: KnowledgeSpace[];
 }
 
+export interface WorkflowKnowledgeBase {
+    id: string;
+    name: string;
+}
+
+export interface WorkflowKnowledgeFile {
+    id: string;
+    name: string;
+    status?: number | string;
+    fileType?: number | string;
+    fileLevelPath?: string;
+}
+
 export type SpaceSubscribeStatus = "subscribed" | "pending";
 
 export interface SubscribeSpaceResult {
@@ -258,6 +271,7 @@ export interface SpaceMember {
 export interface FileTag {
     id: number;
     name: string;
+    resource_type?: string;
 }
 
 export interface SensitiveWordHit {
@@ -760,8 +774,12 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
                 if (typeof t === "string") return { id: -1, name: t as string };
                 const id = t?.id !== undefined && t?.id !== null ? Number(t.id) : -1;
                 const name = t?.name !== undefined && t?.name !== null ? String(t.name) : "";
+                const resource_type =
+                    t?.resource_type !== undefined && t?.resource_type !== null
+                        ? String(t.resource_type)
+                        : undefined;
                 if (!name) return null;
-                return { id, name };
+                return { id, name, resource_type };
             })
             .filter((v: FileTag | null): v is FileTag => v !== null)
         : [];
@@ -979,6 +997,47 @@ export async function getGroupedSpacesApi(params?: {
         teamSpaces: asArray<RawKnowledgeSpace>(payload.team_spaces).map(mapSpace),
         personalSpaces: asArray<RawKnowledgeSpace>(payload.personal_spaces).map(mapSpace),
     };
+}
+
+export async function getWorkflowKnowledgeBasesApi(params?: {
+    keyword?: string;
+    page_size?: number;
+}): Promise<WorkflowKnowledgeBase[]> {
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge`, {
+        params: {
+            permission_id: "use_kb",
+            page_size: params?.page_size ?? 80,
+            name: params?.keyword ?? "",
+            type: 0,
+        },
+    });
+    const payload: any = res?.data ?? res ?? {};
+    return extractList<any>(payload).map((item) => ({
+        id: String(item?.id ?? ""),
+        name: String(item?.name ?? ""),
+    })).filter((item) => item.id && item.name);
+}
+
+export async function getWorkflowKnowledgeFilesApi(params: {
+    knowledge_id: string;
+    page_size?: number;
+}): Promise<WorkflowKnowledgeFile[]> {
+    if (!params.knowledge_id) return [];
+    const res = await request.get<ApiResponse<any>>(`/api/v1/knowledge/file_list/${params.knowledge_id}`, {
+        params: {
+            page_num: 1,
+            page_size: params.page_size ?? 1000,
+        },
+        paramsSerializer: request.paramsSerializer,
+    });
+    const payload: any = res?.data ?? res ?? {};
+    return extractList<any>(payload).map((item) => ({
+        id: String(item?.id ?? ""),
+        name: String(item?.file_name ?? item?.name ?? ""),
+        status: item?.status,
+        fileType: item?.file_type,
+        fileLevelPath: item?.file_level_path ?? "",
+    })).filter((item) => item.id && item.name);
 }
 
 export async function getCreateSpaceOptionsApi(): Promise<KnowledgeSpaceCreateOptions> {
@@ -1442,12 +1501,21 @@ export async function deleteSpaceTagApi(space_id: string, tag_id: number): Promi
  * Overwrite tags for a single file.
  * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag
  */
-export async function updateFileTagsApi(space_id: string, file_id: string, tag_ids: number[]): Promise<void> {
+export async function updateFileTagsApi(
+    space_id: string,
+    file_id: string,
+    tag_ids: number[],
+    review_tag_ids?: number[],
+): Promise<void> {
     return withKnowledgeMutationLog(
         "update-file-tags",
-        { method: "POST", space_id, file_id, tag_ids },
+        { method: "POST", space_id, file_id, tag_ids, review_tag_ids },
         async () => {
-            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`, { tag_ids });
+            const payload: Record<string, number[]> = { tag_ids };
+            if (review_tag_ids && review_tag_ids.length > 0) {
+                payload.review_tag_ids = review_tag_ids;
+            }
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/${file_id}/tag`, payload);
         }
     );
 }

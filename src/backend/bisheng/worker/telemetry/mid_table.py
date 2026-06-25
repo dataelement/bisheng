@@ -17,10 +17,7 @@ from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.telemetry.domain.mid_table.app_increment import AppIncrement, AppIncrementRecord
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
 from bisheng.telemetry.domain.mid_table.knowledge_increment import KnowledgeIncrement, KnowledgeIncrementRecord
-from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
-    KnowledgeSpaceContentRecord,
-    KnowledgeSpaceContentStat,
-)
+from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
 from bisheng.telemetry.domain.mid_table.user_increment import UserIncrement, UserIncrementRecord
 from bisheng.telemetry.domain.mid_table.user_interact import UserInteract, UserInteractRecord
 from bisheng.user.domain.services.user import UserService
@@ -229,7 +226,7 @@ def sync_pending_knowledge_space_content_stat():
         mid_table = KnowledgeSpaceContentStat()
         user_map = {}
 
-        file_ids = KnowledgeSpaceContentStat.pop_pending_file_ids_sync(
+        file_ids = KnowledgeSpaceContentStat.peek_pending_file_ids_sync(
             KnowledgeSpaceContentStat.FILE_BATCH_SIZE
         )
         if file_ids:
@@ -253,6 +250,7 @@ def sync_pending_knowledge_space_content_stat():
                 mid_table.insert_records_sync(records)
             if stale_file_ids:
                 mid_table.delete_file_records_sync(stale_file_ids)
+            KnowledgeSpaceContentStat.ack_pending_file_ids_sync(file_ids)
 
             logger.info(
                 "Synced pending knowledge space content file stats. upserted={}, deleted={}",
@@ -260,7 +258,32 @@ def sync_pending_knowledge_space_content_stat():
                 len(stale_file_ids),
             )
 
-        space_rename_ids = KnowledgeSpaceContentStat.pop_pending_space_rename_ids_sync()
+        preview_payloads = KnowledgeSpaceContentStat.peek_pending_preview_payloads_sync(
+            KnowledgeSpaceContentStat.PREVIEW_BATCH_SIZE
+        )
+        if preview_payloads:
+            preview_records = []
+            valid_payloads = []
+            invalid_payloads = []
+            for payload in preview_payloads:
+                record = KnowledgeSpaceContentStat.deserialize_preview_payload(payload)
+                if record is None:
+                    invalid_payloads.append(payload)
+                    continue
+                preview_records.append(record)
+                valid_payloads.append(payload)
+            if invalid_payloads:
+                KnowledgeSpaceContentStat.ack_pending_preview_payloads_sync(invalid_payloads)
+            if preview_records:
+                mid_table.insert_records_sync(preview_records)
+                KnowledgeSpaceContentStat.ack_pending_preview_payloads_sync(valid_payloads)
+            logger.info(
+                "Synced pending knowledge space preview stats. upserted={}, invalid={}",
+                len(preview_records),
+                len(invalid_payloads),
+            )
+
+        space_rename_ids = KnowledgeSpaceContentStat.peek_pending_space_rename_ids_sync()
         for space_id in space_rename_ids:
             page, page_size = 1, 500
             space_synced_count = 0
@@ -273,15 +296,17 @@ def sync_pending_knowledge_space_content_stat():
                 if records:
                     mid_table.insert_records_sync(records)
                     space_synced_count += len(records)
+            KnowledgeSpaceContentStat.ack_pending_space_rename_ids_sync([space_id])
             logger.info(
                 "Synced pending knowledge space rename content stats. space_id={}, upserted={}",
                 space_id,
                 space_synced_count,
             )
 
-        space_delete_ids = KnowledgeSpaceContentStat.pop_pending_space_delete_ids_sync()
+        space_delete_ids = KnowledgeSpaceContentStat.peek_pending_space_delete_ids_sync()
         if space_delete_ids:
             deleted_count = mid_table.delete_space_file_records_sync(space_delete_ids)
+            KnowledgeSpaceContentStat.ack_pending_space_delete_ids_sync(space_delete_ids)
             logger.info(
                 "Deleted pending knowledge space content stats. space_ids={}, deleted={}",
                 space_delete_ids,

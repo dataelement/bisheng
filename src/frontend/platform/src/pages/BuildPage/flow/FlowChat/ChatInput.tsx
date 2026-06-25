@@ -18,7 +18,16 @@ import ChatFiles from "./ChatFiles";
 import GuideQuestions from "./GuideQuestions";
 import { useMessageStore } from "./messageStore";
 import DragDropOverlay from "./DragDropOverlay";
+import UserSelectedKnowledgePicker from "./UserSelectedKnowledgePicker";
 import { useFileDropAndPaste } from "./useFileDropAndPaste";
+import {
+    hasUserSelectedKnowledgeNode,
+    isRuntimeKnowledgePickerDisabled,
+    RUNTIME_KNOWLEDGE_SELECTION_FIELD,
+    RuntimeKnowledgeSelection,
+    shouldRenderRuntimeKnowledgePicker,
+    validateRuntimeKnowledgeSelection,
+} from "./userSelectedKnowledge";
 const GuideQuestionsAny = GuideQuestions as any;
 
 export const FileTypes = {
@@ -27,7 +36,7 @@ export const FileTypes = {
     FILE: ['.PDF', '.TXT', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.DOCX', '.PPT', '.PPTX'],
 }
 
-export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBeforSend, onLoad }) {
+export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBeforSend, onLoad, flow }) {
     const { toast } = useToast()
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
@@ -64,6 +73,18 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     const currentChatIdRef = useRef(null)
     const inputRef = useRef(null)
     const continueRef = useRef(false)
+    const [runtimeKnowledgeSelection, setRuntimeKnowledgeSelection] = useState<RuntimeKnowledgeSelection | null>(null)
+    const requiresRuntimeKnowledge = useMemo(() => hasUserSelectedKnowledgeNode(flow), [flow])
+    const hasActiveInputForm = Boolean(inputForm)
+    const showRuntimeKnowledgePicker = shouldRenderRuntimeKnowledgePicker({
+        requiresRuntimeKnowledge,
+        inputDisabled: inputLock.locked,
+        hasInputForm: hasActiveInputForm,
+    })
+    const runtimeKnowledgePickerDisabled = isRuntimeKnowledgePickerDisabled({
+        inputDisabled: inputLock.locked,
+        hasInputForm: hasActiveInputForm,
+    })
     // 停止状态
     const [stop, setStop] = useState({
         show: true,
@@ -132,6 +153,13 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         // 文件拼接入消息
         const _value = inputRef.current.value
         if (_value.trim() === '' && filePath.length === 0) return
+        const selectionError = requiresRuntimeKnowledge ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelection) : ''
+        if (selectionError) {
+            return toast({
+                variant: 'error',
+                description: selectionError
+            })
+        }
         const value = fileNames.length > 0 ? fileNames.join('\n') + '\n' + _value : _value;
 
         const event = new Event('input', { bubbles: true, cancelable: true });
@@ -146,7 +174,8 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             category: "question",
             extra: '',
             message_id: messageIdRef.current,
-            source: 0
+            source: 0,
+            runtimeKnowledgeSelection
         })
         // msg to store
         createSendMsg(value)
@@ -397,6 +426,13 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
         }
         const handleSendForm = async (e) => {
             const { data, msg } = e.detail
+            const selectionError = requiresRuntimeKnowledge ? validateRuntimeKnowledgeSelection(runtimeKnowledgeSelection) : ''
+            if (selectionError) {
+                return toast({
+                    variant: 'error',
+                    description: selectionError
+                })
+            }
             setInputForm(null)
             createSendMsg(msg)
             await createWebSocket()
@@ -407,7 +443,10 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 chat_id,
                 data: {
                     [inputNodeIdRef.current]: {
-                        data,
+                        data: {
+                            ...data,
+                            ...(runtimeKnowledgeSelection ? { [RUNTIME_KNOWLEDGE_SELECTION_FIELD]: runtimeKnowledgeSelection } : {})
+                        },
                         message: msg,
                         message_id: messageIdRef.current,
                         category: 'question',
@@ -425,7 +464,7 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
             document.removeEventListener('outputMsgEvent', handleOutPutEvent)
             document.removeEventListener('userResendMsgEvent', handleCustomEvent)
         }
-    }, [inputLock.locked, showWhenLocked])
+    }, [inputLock.locked, showWhenLocked, requiresRuntimeKnowledge, runtimeKnowledgeSelection])
 
     // 点击引导词
     const handleClickGuideWord = (message) => {
@@ -514,6 +553,15 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
     return <div className="absolute bottom-0 w-full pt-1 bg-[#fff] dark:bg-[#1B1B1B] z-10">
         {isDragging && <DragDropOverlay />}
         <div className={`relative pr-4 ${clear && 'pl-9'}`}>
+            {showRuntimeKnowledgePicker && (
+                <div className="px-1 pb-2">
+                    <UserSelectedKnowledgePicker
+                        disabled={runtimeKnowledgePickerDisabled}
+                        value={runtimeKnowledgeSelection}
+                        onChange={setRuntimeKnowledgeSelection}
+                    />
+                </div>
+            )}
 
             {/* 引导问题 */}
             <GuideQuestionsAny

@@ -59,6 +59,11 @@ export const submitDataState = atom<SubmitData | null>({
     default: null,
 })
 
+export const runtimeKnowledgeSelectionState = atom<any>({
+    key: "runtimeKnowledgeSelectionState",
+    default: null,
+})
+
 // 会话文件
 export const chatFileState = atom<{ name: string, path: string }[]>({
     key: "chatFileState",

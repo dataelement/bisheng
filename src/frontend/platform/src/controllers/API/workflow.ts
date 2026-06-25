@@ -732,7 +732,10 @@ const workflowTemplate = [
                         "key": "qa_knowledge_id",
                         "label": "true",
                         "type": "qa_select_multi",
-                        "value": [],
+                        "value": {
+                            "type": "qa",
+                            "value": []
+                        },
                         "required": true,
                         "placeholder": "true"
                     },
@@ -916,6 +919,147 @@ const workflowTemplate = [
                         "label": "true",
                         "type": "metadata_filter",
                         "value": {},
+                    },
+                    {
+                        "key": "advanced_retrieval_switch",
+                        "label": "true",
+                        "type": "search_switch",
+                        "value": {},
+                    },
+                ]
+            },
+            {
+                "name": "输出",
+                "params": [
+                    {
+                        "key": "retrieved_result",
+                        "label": "true",
+                        "type": "var",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "user_selected_knowledge_rag_xxx",
+        "name": "true",
+        "description": "true",
+        "type": "user_selected_knowledge_rag",
+        "v": "1",
+        "group_params": [
+            {
+                "name": "知识库检索设置",
+                "params": [
+                    {
+                        "key": "user_question",
+                        "label": "true",
+                        "global": "self=user_prompt",
+                        "type": "user_question",
+                        "test": "var",
+                        "help": "true",
+                        "linkage": "output_user_input",
+                        "value": [],
+                        "placeholder": "true",
+                        "required": true
+                    },
+                    {
+                        "key": "advanced_retrieval_switch",
+                        "label": "true",
+                        "type": "search_switch",
+                        "value": {},
+                    },
+                    {
+                        "key": "retrieved_result",
+                        "label": "true",
+                        "type": "var",
+                        "global": "self=user_prompt"
+                    }
+                ]
+            },
+            {
+                "name": "AI回复生成设置",
+                "params": [
+                    {
+                        "key": "system_prompt",
+                        "label": "true",
+                        "type": "var_textarea",
+                        "value": "true",
+                        "required": true
+                    },
+                    {
+                        "key": "user_prompt",
+                        "label": "true",
+                        "type": "var_textarea",
+                        "value": "true",
+                        "test": "var",
+                        "required": true
+                    },
+                    {
+                        "key": "model_id",
+                        "label": "true",
+                        "type": "bisheng_model",
+                        "value": "",
+                        "required": true,
+                        "placeholder": "true"
+                    },
+                    {
+                        "key": "temperature",
+                        "label": "true",
+                        "type": "slide",
+                        "scope": [
+                            0,
+                            2
+                        ],
+                        "step": 0.1,
+                        "value": 1
+                    }
+                ]
+            },
+            {
+                "name": "输出",
+                "params": [
+                    {
+                        "key": "output_user",
+                        "label": "true",
+                        "type": "switch",
+                        "value": true,
+                        "help": "true"
+                    },
+                    {
+                        "key": "output_user_input",
+                        "label": "true",
+                        "type": "var",
+                        "help": "true",
+                        "global": "code:value.map(el => ({ label: el.label, value: el.key }))",
+                        "value": []
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "id": "user_selected_knowledge_retriever_xxx",
+        "name": "true",
+        "description": "true",
+        "type": "user_selected_knowledge_retriever",
+        "v": "1",
+        "group_params": [
+            {
+                "name": "知识库检索设置",
+                "params": [
+                    {
+                        "key": "user_question",
+                        "label": "true",
+                        "global": "self=user_prompt",
+                        "type": "user_question",
+                        "test": "var",
+                        "help": "true",
+                        "linkage": "retrieved_result",
+                        "value": [],
+                        "placeholder": "true",
+                        "required": true
                     },
                     {
                         "key": "advanced_retrieval_switch",
