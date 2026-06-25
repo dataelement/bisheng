@@ -13,6 +13,8 @@ import svgr from "vite-plugin-svgr";
  */
 const app_env = { BASE_URL: '' } // /custom
 
+const fileServiceTarget = "http://192.168.106.171:9100";
+
 const commonProxyOptions = {
   changeOrigin: true,
   withCredentials: true,
@@ -41,7 +43,6 @@ export default defineConfig(({ mode }) => {
   // 导致 /api/department-limit/*（仅 Gateway 提供）打到 bisheng 出现 404。
   const env = loadEnv(mode, path.resolve(__dirname), "");
   const target = env.VITE_PROXY_TARGET || "http://127.0.0.1:7860";
-  const fileServiceTarget = env.VITE_MINIO_PROXY_TARGET || "http://127.0.0.1:9100";
   const app_env_define = {
     ...app_env,
     WORKSPACE_ORIGIN: env.VITE_WORKSPACE_ORIGIN || '',

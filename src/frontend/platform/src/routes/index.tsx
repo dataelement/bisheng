@@ -24,6 +24,7 @@ const SkillChatPage = lazy(() => import("@/pages/ChatAppPage"));
 const ChatAssitantShare = lazy(() => import("@/pages/ChatAppPage/chatAssitantShare"));
 const ChatShare = lazy(() => import("@/pages/ChatAppPage/chatShare"));
 const ChatPro = lazy(() => import("@/pages/ChatAppPage/chatWebview"));
+const PortalWorkflowChat = lazy(() => import("@/pages/ChatAppPage/portalWorkflowChat"));
 const DataSetPage = lazy(() => import("@/pages/DataSetPage"));
 const DiffFlowPage = lazy(() => import("@/pages/DiffFlowPage"));
 const EvaluatingPage = lazy(() => import("@/pages/EvaluationPage"));
@@ -150,6 +151,8 @@ const privateRouter = [
   // Standalone chat pages — redirect to client app (/workspace)
   { path: "/chat/assistant/auth/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/auth/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/portal-chat/workflow/auth/:id/", element: <PortalWorkflowChat />, errorElement: <RouteErrorBoundary /> },
+  { path: "/portal-chat/workflow/auth/:id", element: <PortalWorkflowChat />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat", element: <SkillChatPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/assistant/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
@@ -244,6 +247,8 @@ export const publicRouter = createBrowserRouter([
   { path: "/chat/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/flow/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
   { path: "/chat/assistant/:id/", element: <RedirectToClient />, errorElement: <RouteErrorBoundary /> },
+  { path: "/portal-chat/workflow/auth/:id/", element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
+  { path: "/portal-chat/workflow/auth/:id", element: <LoginPage />, errorElement: <RouteErrorBoundary /> },
   { path: "/resouce/:cid/:mid", element: <ResoucePage />, errorElement: <RouteErrorBoundary /> },
   { path: "/tenant-select", element: <TenantSelect />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },

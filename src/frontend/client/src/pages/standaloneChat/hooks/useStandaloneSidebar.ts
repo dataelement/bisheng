@@ -31,13 +31,21 @@ const draftChatIds = new Set<string>();
 const FLOW_TYPE_ASSISTANT = 5;
 const FLOW_TYPE_WORKFLOW = 10;
 
+interface StandaloneSidebarOptions {
+  forceNewChatOnLoad?: boolean;
+}
+
 /**
  * Hook for standalone chat sidebar.
  * Guest mode: conversations from localStorage, no server API calls for list/rename/delete.
  * Auth mode: delegates to server APIs (same as useAppSidebar but with different URL scheme).
  */
-export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
+export function useStandaloneSidebar(
+  ctx: StandaloneChatContextValue,
+  options: StandaloneSidebarOptions = {},
+) {
   const { mode, flowType, flowId, apiVersion } = ctx;
+  const { forceNewChatOnLoad = false } = options;
   const localize = useLocalize();
   const navigate = useNavigate();
   const isGuest = mode === 'guest';
@@ -121,7 +129,7 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
 
   // Create new conversation (as draft — not persisted until first user message)
   const createNewChat = useCallback(() => {
-    if (!flowId) return;
+    if (!flowId) return '';
     const chatId = generateUUID(32);
     const now = new Date().toISOString();
     const title = localize('com_ui_new_chat');
@@ -142,6 +150,7 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
     draftChatIds.add(chatId);
     setConversations((prev) => [conv, ...prev]);
     setActiveChatId(chatId);
+    return chatId;
   }, [flowId, numericFlowType, setConversations, setActiveChatId, localize]);
 
   // Switch to a conversation
@@ -248,6 +257,12 @@ export function useStandaloneSidebar(ctx: StandaloneChatContextValue) {
   useEffect(() => {
     if (initializedRef.current || !flowId) return;
     initializedRef.current = true;
+
+    if (forceNewChatOnLoad) {
+      createNewChat();
+      setHistoryLoaded(true);
+      return;
+    }
 
     fetchConversations().then((list) => {
       if (list.length > 0) {

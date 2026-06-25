@@ -17,6 +17,8 @@ import { useStandaloneSidebar } from './hooks/useStandaloneSidebar';
 interface StandaloneChatPageProps {
   mode: 'guest' | 'auth';
   flowType: 'workflow' | 'assistant';
+  hideSidebar?: boolean;
+  forceNewChatOnLoad?: boolean;
 }
 
 const FLOW_TYPE_MAP = {
@@ -39,7 +41,14 @@ const guestAuthValue = {
   roles: {},
 };
 
-export default function StandaloneChatPage({ mode, flowType }: StandaloneChatPageProps) {
+export default function StandaloneChatPage({
+  mode,
+  flowType,
+  hideSidebar = false,
+  forceNewChatOnLoad = false,
+}: StandaloneChatPageProps) {
+  const pageProps = { mode, flowType, hideSidebar, forceNewChatOnLoad };
+
   // Guest mode: wrap in a lightweight AuthContext that provides "not authenticated"
   // values so child components (ChatView, MessageUser) that call useAuthContext()
   // don't throw. This avoids using AuthContextProvider which makes API calls and
@@ -47,17 +56,17 @@ export default function StandaloneChatPage({ mode, flowType }: StandaloneChatPag
   if (mode === 'guest') {
     return (
       <AuthContext.Provider value={guestAuthValue}>
-        <StandaloneChatInner mode={mode} flowType={flowType} />
+        <StandaloneChatInner {...pageProps} />
       </AuthContext.Provider>
     );
   }
 
   // Auth mode: AuthContextProvider is already provided by the parent AuthLayout
-  return <AuthStandaloneChatInner mode={mode} flowType={flowType} />;
+  return <AuthStandaloneChatInner {...pageProps} />;
 }
 
 // Auth mode wrapper: redirect to login when user is not authenticated
-function AuthStandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
+function AuthStandaloneChatInner(props: StandaloneChatPageProps) {
   const { user, isUserLoading, logout } = useAuthContext();
 
   useEffect(() => {
@@ -68,10 +77,15 @@ function AuthStandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
   if (!user) return null;
 
-  return <StandaloneChatInner mode={mode} flowType={flowType} />;
+  return <StandaloneChatInner {...props} />;
 }
 
-function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
+function StandaloneChatInner({
+  mode,
+  flowType,
+  hideSidebar = false,
+  forceNewChatOnLoad = false,
+}: StandaloneChatPageProps) {
   const { flowId } = useParams<{ flowId: string }>();
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
   const [isHovering, setIsHovering] = useState(false);
@@ -92,8 +106,9 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
   // Lifted to page level so both sidebar and chat panel share one instance
   // (single init, single draft registry, shared createNewChat for CTA).
-  const sidebar = useStandaloneSidebar(contextValue);
+  const sidebar = useStandaloneSidebar(contextValue, { forceNewChatOnLoad });
   const { activeChatId, historyLoaded, createNewChat } = sidebar;
+  const showSidebarControls = !hideSidebar;
 
   const toggleSidebar = () => setSidebarVisible((prev) => !prev);
 
@@ -117,7 +132,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
           )}
         >
           {/* Mobile overlay sidebar (covers full area; stays outside the guest rounded shell) */}
-          {isTabletOrMobile && sidebarVisible && (
+          {isTabletOrMobile && showSidebarControls && sidebarVisible && (
             <div className="absolute inset-0 z-[70] flex">
               <div className="h-full w-[240px] max-w-[240px] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)] pt-[env(safe-area-inset-top,0px)]">
                 <StandaloneSideNav sidebar={sidebar} onCloseSidebar={toggleSidebar} />
@@ -133,7 +148,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
 
           <div className={guestOuterShell}>
             {/* Desktop sidebar */}
-            {!isTabletOrMobile && (
+            {!isTabletOrMobile && showSidebarControls && (
               <div
                 className={cn(
                   'transition-all duration-300 overflow-hidden flex-shrink-0',
@@ -145,7 +160,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
             )}
 
             {/* Toggle button (desktop) */}
-            {!isTabletOrMobile && !isChatShellCompact && (
+            {!isTabletOrMobile && !isChatShellCompact && showSidebarControls && (
               <NavToggle
                 navVisible={sidebarVisible}
                 onToggle={toggleSidebar}
@@ -163,7 +178,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                 'p-0',
               )}
             >
-              {isChatShellCompact && (
+              {isChatShellCompact && showSidebarControls && (
                 <div className="shrink-0 overflow-hidden rounded-t-xl bg-white">
                   <MobileNav
                     variant="chat"

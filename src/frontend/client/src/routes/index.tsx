@@ -27,6 +27,7 @@ import Knowledge from '~/pages/knowledge';
 import FilePreviewPage from '~/pages/knowledge/FilePreview/FilePreviewPage';
 import PortalKnowledgeWorkbench from '~/pages/knowledge/portal/PortalKnowledgeWorkbench';
 import PortalDialogsEmbed from '~/pages/knowledge/portal/PortalDialogsEmbed';
+import PortalWorkflowChatPage from '~/pages/portalWorkflowChat/PortalWorkflowChatPage';
 import DevLogin from '~/pages/DevLogin';
 import StandaloneChatPage from '~/pages/standaloneChat/StandaloneChatPage';
 import MenuUnavailablePage from '@/pages/MenuUnavailablePage';
@@ -205,6 +206,8 @@ export const router = createBrowserRouter([
       // by the portal in a hidden iframe so the dialogs open from any page.
       { path: 'portal-dialogs', element: <PortalDialogsEmbed />, errorElement: <RouteErrorBoundary /> },
       // Standalone chat — auth (login required, inside AuthLayout)
+      { path: 'portal-chat/workflow/auth/:flowId/', element: <PortalWorkflowChatPage /> },
+      { path: 'portal-chat/workflow/auth/:flowId', element: <PortalWorkflowChatPage /> },
       { path: 'chat/flow/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="workflow" /> },
       { path: 'chat/assistant/auth/:flowId', element: <StandaloneChatPage mode="auth" flowType="assistant" /> },
 
