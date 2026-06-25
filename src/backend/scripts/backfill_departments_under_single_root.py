@@ -116,7 +116,7 @@ async def run(apply: bool) -> int:
         root_path = root.path or ""
         if not root_path.startswith("/"):
             logger.error(
-                "默认组织根部门 path 异常: id={} path={!r}，中止。",
+                "默认组织根部门 path 异常: id=%s path=%r，中止。",
                 root.id,
                 root_path,
             )
@@ -124,11 +124,11 @@ async def run(apply: bool) -> int:
 
         extras = await _collect_extra_roots(root)
         if not extras:
-            logger.info("没有需要收编的根部门，全平台已是单根（root id={}）。", root.id)
+            logger.info("没有需要收编的根部门，全平台已是单根（root id=%s）。", root.id)
             return 0
 
         logger.info(
-            "默认组织根: id={} path={}。发现 {} 个误挂为根的部门待收编:",
+            "默认组织根: id=%s path=%s。发现 %d 个误挂为根的部门待收编:",
             root.id,
             root_path,
             len(extras),
@@ -142,7 +142,7 @@ async def run(apply: bool) -> int:
                 # malformed root path means descendants can't be rebased
                 # reliably. Surface it instead of silently corrupting.
                 logger.warning(
-                    "跳过 path 异常的根部门 id={} name={!r} path={!r}（期望 {!r}），请人工核查。",
+                    "跳过 path 异常的根部门 id=%s name=%r path=%r（期望 %r），请人工核查。",
                     d.id,
                     d.name,
                     old_path,
@@ -152,7 +152,7 @@ async def run(apply: bool) -> int:
             new_path = _rebased_path(root_path, old_path)
             plan.append((d, old_path, new_path))
             logger.info(
-                "  - id={} name={!r} source={}  path {} -> {}, parent_id None -> {}",
+                "  - id=%s name=%r source=%s  path %s -> %s, parent_id None -> %s",
                 d.id,
                 d.name,
                 getattr(d, "source", None),
@@ -163,7 +163,7 @@ async def run(apply: bool) -> int:
 
         if not apply:
             logger.info(
-                "[dry-run] 未写库。确认无误后追加 --apply 执行（共 {} 个）。",
+                "[dry-run] 未写库。确认无误后追加 --apply 执行（共 %d 个）。",
                 len(plan),
             )
             return 0
@@ -177,8 +177,8 @@ async def run(apply: bool) -> int:
                 new_parent_id=int(root.id),
             )
             collapsed += 1
-            logger.info("已收编 id={}（含子树 {} 行 path 重写）。", d.id, changed)
-        logger.info("完成。共收编 {} 个根部门到默认组织根下。", collapsed)
+            logger.info("已收编 id=%s（含子树 %d 行 path 重写）。", d.id, changed)
+        logger.info("完成。共收编 %d 个根部门到默认组织根下。", collapsed)
         return 0
 
 
