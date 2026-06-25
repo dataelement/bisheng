@@ -6,15 +6,14 @@ Part of F002-department-tree.
 from __future__ import annotations
 
 import logging
-import re
 import secrets
-from typing import List, Optional, Set
 
 from sqlalchemy import and_, delete, func, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 
 from bisheng.common.errcode.department import (
+    DepartmentArchivedReadonlyError,
     DepartmentCircularMoveError,
     DepartmentHasChildrenError,
     DepartmentHasMembersError,
@@ -26,13 +25,12 @@ from bisheng.common.errcode.department import (
     DepartmentMemberNotFoundError,
     DepartmentNameDuplicateError,
     DepartmentNotArchivedError,
-    DepartmentArchivedReadonlyError,
-    DepartmentParentArchivedError,
     DepartmentNotFoundError,
+    DepartmentParentArchivedError,
+    DepartmentPermissionDeniedError,
     DepartmentPersonIdDeletedAccountError,
     DepartmentPersonIdDuplicateError,
     DepartmentPersonIdRequiredError,
-    DepartmentPermissionDeniedError,
     DepartmentRootExistsError,
     DepartmentSourceReadonlyError,
 )
@@ -83,15 +81,16 @@ def _is_admin(login_user) -> bool:
 
     Checks if AdminRole (id=1) is in login_user.user_role.
     """
-    if bool(getattr(login_user, 'is_global_super', False)):
+    if bool(getattr(login_user, "is_global_super", False)):
         return True
-    if hasattr(login_user, 'user_role') and isinstance(login_user.user_role, list):
+    if hasattr(login_user, "user_role") and isinstance(login_user.user_role, list):
         return _ADMIN_ROLE_ID in login_user.user_role
     return False
 
 
 async def _check_permission(
-    login_user, dept_internal_id: Optional[int] = None,
+    login_user,
+    dept_internal_id: int | None = None,
 ) -> None:
     """Two-tier permission check: system admin OR department admin via OpenFGA.
 
@@ -117,17 +116,18 @@ async def _check_permission(
             from bisheng.permission.domain.services.permission_service import (
                 PermissionService,
             )
+
             is_dept_admin = await PermissionService.check(
                 user_id=login_user.user_id,
-                relation='admin',
-                object_type='department',
+                relation="admin",
+                object_type="department",
                 object_id=str(dept_internal_id),
                 login_user=login_user,
             )
             if is_dept_admin:
                 return
             # L2b: DB parent chain — tolerate missing FGA ``parent`` edges on some nodes
-            seen: Set[int] = {int(dept_internal_id)}
+            seen: set[int] = {int(dept_internal_id)}
             row = await DepartmentDao.aget_by_id(int(dept_internal_id))
             while row is not None and row.parent_id is not None:
                 pid = int(row.parent_id)
@@ -136,8 +136,8 @@ async def _check_permission(
                 seen.add(pid)
                 if await PermissionService.check(
                     user_id=login_user.user_id,
-                    relation='admin',
-                    object_type='department',
+                    relation="admin",
+                    object_type="department",
                     object_id=str(pid),
                     login_user=login_user,
                 ):
@@ -145,8 +145,9 @@ async def _check_permission(
                 row = await DepartmentDao.aget_by_id(pid)
         except Exception:
             logger.warning(
-                'PermissionService.check failed for dept admin, user=%d dept=%d',
-                login_user.user_id, dept_internal_id,
+                "PermissionService.check failed for dept admin, user=%d dept=%d",
+                login_user.user_id,
+                dept_internal_id,
             )
     # L3: Tenant admin → permitted within the user's mount-subtree (Child Admin
     # reach per PRD §4.5). Root tenant returns None from
@@ -156,49 +157,46 @@ async def _check_permission(
         tenant_root_path = await _aget_user_tenant_root_path(login_user)
         if tenant_root_path:
             target = await DepartmentDao.aget_by_id(int(dept_internal_id))
-            if (
-                target is not None
-                and target.path
-                and target.path.startswith(tenant_root_path)
-            ):
+            if target is not None and target.path and target.path.startswith(tenant_root_path):
                 return
     raise DepartmentPermissionDeniedError()
 
 
 async def _is_tenant_admin(login_user) -> bool:
     """Check whether the current user has tenant-admin rights."""
-    tenant_id = getattr(login_user, 'tenant_id', None)
+    tenant_id = getattr(login_user, "tenant_id", None)
     if tenant_id is None:
         return False
     try:
         from bisheng.permission.domain.services.permission_service import (
             PermissionService,
         )
+
         return await PermissionService.check(
             user_id=login_user.user_id,
-            relation='admin',
-            object_type='tenant',
+            relation="admin",
+            object_type="tenant",
             object_id=str(tenant_id),
             login_user=login_user,
         )
     except Exception as e:
         logger.warning(
-            'PermissionService.check failed for tenant admin, user=%s tenant=%s: %s',
-            getattr(login_user, 'user_id', None),
+            "PermissionService.check failed for tenant admin, user=%s tenant=%s: %s",
+            getattr(login_user, "user_id", None),
             tenant_id,
             e,
         )
         return False
 
 
-async def _aget_user_tenant_root_path(login_user) -> Optional[str]:
+async def _aget_user_tenant_root_path(login_user) -> str | None:
     """Path of the user's leaf-tenant mount department, or None.
 
     Used by the tenant-admin scope check: a Child Admin reaches departments
     under (and including) their tenant's mount point. Returns ``None`` for
     Root tenant — Root admins are super admins and bypass the path filter.
     """
-    tenant_id = getattr(login_user, 'tenant_id', None)
+    tenant_id = getattr(login_user, "tenant_id", None)
     if tenant_id is None:
         return None
     from bisheng.database.models.tenant import ROOT_TENANT_ID, TenantDao
@@ -216,41 +214,41 @@ async def _aget_user_tenant_root_path(login_user) -> Optional[str]:
 
 def _get_dept_id_prefix() -> str:
     from bisheng.common.services.config_service import settings
-    prefix = settings.get_from_db('dept_id_prefix')
-    return prefix if isinstance(prefix, str) and prefix else 'BS'
+
+    prefix = settings.get_from_db("dept_id_prefix")
+    return prefix if isinstance(prefix, str) and prefix else "BS"
 
 
 def _is_registration_enabled() -> bool:
     """Whether self-registration is enabled in system config."""
     from bisheng.common.services.config_service import settings
 
-    env_conf = settings.get_from_db('env') or {}
+    env_conf = settings.get_from_db("env") or {}
     if not isinstance(env_conf, dict):
         return True
 
-    raw = env_conf.get('enable_registration', True)
+    raw = env_conf.get("enable_registration", True)
     if isinstance(raw, str):
-        return raw.strip().lower() in ('1', 'true', 'yes', 'on')
+        return raw.strip().lower() in ("1", "true", "yes", "on")
     return bool(raw)
 
 
-def generate_dept_id(prefix: str = 'BS') -> str:
+def generate_dept_id(prefix: str = "BS") -> str:
     """Generate a business key like 'BS@a3f7e9'."""
-    return f'{prefix}@{secrets.token_hex(3)}'
+    return f"{prefix}@{secrets.token_hex(3)}"
 
 
 def _password_meets_prd_policy(plain: str) -> bool:
     """至少 8 位，含大写、小写、数字、符号。复用 UserService 的统一规则与
     PASSWORD_STRENGTH_CHECK env 开关，避免与登录/改密处的校验出现分叉。"""
     from bisheng.user.domain.services.user import UserService
+
     return UserService.password_meets_policy(plain)
 
 
 async def _get_dept_or_raise(session, dept_id: str) -> Department:
     """Look up department by business key, raise DepartmentNotFoundError if missing."""
-    result = await session.exec(
-        select(Department).where(Department.dept_id == dept_id)
-    )
+    result = await session.exec(select(Department).where(Department.dept_id == dept_id))
     dept = result.first()
     if not dept:
         raise DepartmentNotFoundError()
@@ -263,9 +261,7 @@ async def _get_dept_and_check_permission(session, dept_id: str, login_user) -> D
     Non-admin users get DepartmentPermissionDeniedError for both
     'not found' and 'no access' to prevent enumeration.
     """
-    result = await session.exec(
-        select(Department).where(Department.dept_id == dept_id)
-    )
+    result = await session.exec(select(Department).where(Department.dept_id == dept_id))
     dept = result.first()
     if not dept:
         if _is_admin(login_user):
@@ -291,12 +287,14 @@ async def _can_access_dept(login_user, dept_internal_id: int) -> bool:
 
 async def _ensure_department_can_archive(session, dept: Department) -> None:
     """Validate archive preconditions before mutating department state."""
-    children = (await session.exec(
-        select(Department).where(
-            Department.parent_id == dept.id,
-            Department.status == 'active',
+    children = (
+        await session.exec(
+            select(Department).where(
+                Department.parent_id == dept.id,
+                Department.status == "active",
+            )
         )
-    )).first()
+    ).first()
     if children:
         raise DepartmentHasChildrenError()
 
@@ -311,11 +309,13 @@ async def _ensure_department_can_archive(session, dept: Department) -> None:
 
 async def _ensure_department_can_purge(session, dept: Department) -> None:
     """Validate permanent-delete preconditions before deleting related rows."""
-    child = (await session.exec(
-        select(Department.id).where(
-            Department.parent_id == dept.id,
+    child = (
+        await session.exec(
+            select(Department.id).where(
+                Department.parent_id == dept.id,
+            )
         )
-    )).first()
+    ).first()
     if child is not None:
         raise DepartmentHasChildrenError()
 
@@ -329,29 +329,30 @@ async def _ensure_department_can_purge(session, dept: Department) -> None:
 
 
 class DepartmentService:
-
     @classmethod
     async def acreate_department(
-        cls, data: DepartmentCreate, login_user,
+        cls,
+        data: DepartmentCreate,
+        login_user,
     ) -> Department:
         await _check_permission(login_user, dept_internal_id=data.parent_id)
 
         async with get_async_db_session() as session:
             # Validate parent exists and is active
-            parent = (await session.exec(
-                select(Department).where(Department.id == data.parent_id)
-            )).first()
-            if not parent or parent.status != 'active':
-                raise DepartmentNotFoundError(msg='Parent department not found')
+            parent = (await session.exec(select(Department).where(Department.id == data.parent_id))).first()
+            if not parent or parent.status != "active":
+                raise DepartmentNotFoundError(msg="Parent department not found")
 
             # Check name duplicate at same level
-            dup = (await session.exec(
-                select(Department).where(
-                    Department.parent_id == data.parent_id,
-                    Department.name == data.name,
-                    Department.status == 'active',
+            dup = (
+                await session.exec(
+                    select(Department).where(
+                        Department.parent_id == data.parent_id,
+                        Department.name == data.name,
+                        Department.status == "active",
+                    )
                 )
-            )).first()
+            ).first()
             if dup:
                 raise DepartmentNameDuplicateError()
 
@@ -359,15 +360,13 @@ class DepartmentService:
             dept_id = None
             for _ in range(3):
                 candidate = generate_dept_id(_get_dept_id_prefix())
-                existing = (await session.exec(
-                    select(Department).where(Department.dept_id == candidate)
-                )).first()
+                existing = (await session.exec(select(Department).where(Department.dept_id == candidate))).first()
                 if not existing:
                     dept_id = candidate
                     break
             if dept_id is None:
                 # Fallback: longer hex to minimize collision
-                dept_id = f'BS@{secrets.token_hex(6)}'
+                dept_id = f"BS@{secrets.token_hex(6)}"
 
             # INSERT department
             dept = Department(
@@ -376,9 +375,9 @@ class DepartmentService:
                 parent_id=data.parent_id,
                 sort_order=data.sort_order,
                 default_role_ids=data.default_role_ids,
-                source='local',
+                source="local",
                 external_id=dept_id,
-                status='active',
+                status="active",
                 create_user=login_user.user_id,
             )
             session.add(dept)
@@ -386,7 +385,7 @@ class DepartmentService:
             await session.refresh(dept)
 
             # UPDATE path (two-phase: need auto_increment id first)
-            dept.path = f'{parent.path}{dept.id}/'
+            dept.path = f"{parent.path}{dept.id}/"
             session.add(dept)
             await session.commit()
             await session.refresh(dept)
@@ -401,13 +400,15 @@ class DepartmentService:
             await DepartmentChangeHandler.execute_async(ops)
             for uid in data.admin_user_ids:
                 await DepartmentAdminGrantDao.aupsert(
-                    int(uid), int(dept.id), DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
+                    int(uid),
+                    int(dept.id),
+                    DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
                 )
 
         return dept
 
     @classmethod
-    async def aget_tree(cls, login_user) -> List[DepartmentTreeNode]:
+    async def aget_tree(cls, login_user) -> list[DepartmentTreeNode]:
         # System admin → full tree. Otherwise return the union of
         # dept-admin subtrees and tenant-admin mount subtree (PRD §4.5).
         # Both flags are queried independently so a user who is both
@@ -425,11 +426,7 @@ class DepartmentService:
 
         async with get_async_db_session() as session:
             # Get all departments (including archived) for current tenant
-            result = await session.exec(
-                select(Department).where(
-                    Department.status.in_(['active', 'archived'])
-                )
-            )
+            result = await session.exec(select(Department).where(Department.status.in_(["active", "archived"])))
             depts = result.all()
 
             if not depts:
@@ -438,16 +435,13 @@ class DepartmentService:
             # Subtree filter for non-sys-admin: union of dept-admin subtrees
             # and the tenant-admin mount subtree (Child Admin per PRD §4.5).
             if not is_sys_admin:
-                admin_paths: Set[str] = {d.path for d in admin_depts if d.path}
+                admin_paths: set[str] = {d.path for d in admin_depts if d.path}
                 if is_tenant_admin:
                     tenant_root_path = await _aget_user_tenant_root_path(login_user)
                     if tenant_root_path:
                         admin_paths.add(tenant_root_path)
                 if admin_paths:
-                    depts = [
-                        d for d in depts
-                        if d.path and any(d.path.startswith(p) for p in admin_paths)
-                    ]
+                    depts = [d for d in depts if d.path and any(d.path.startswith(p) for p in admin_paths)]
                     if not depts:
                         return []
 
@@ -467,8 +461,8 @@ class DepartmentService:
                 sort_order=d.sort_order,
                 source=d.source,
                 status=d.status,
-                is_tenant_root=bool(getattr(d, 'is_tenant_root', 0)),
-                mounted_tenant_id=getattr(d, 'mounted_tenant_id', None),
+                is_tenant_root=bool(getattr(d, "is_tenant_root", 0)),
+                mounted_tenant_id=getattr(d, "mounted_tenant_id", None),
                 children=[],
             )
 
@@ -480,7 +474,7 @@ class DepartmentService:
                 roots.append(node)
 
         # Sort children by sort_order
-        def _sort(node_list: List[DepartmentTreeNode]):
+        def _sort(node_list: list[DepartmentTreeNode]):
             node_list.sort(key=lambda n: n.sort_order)
             for n in node_list:
                 _sort(n.children)
@@ -503,33 +497,38 @@ class DepartmentService:
         await _check_permission(login_user, dept_internal_id=dept.id)
 
         data = dept.model_dump()
-        data['member_count'] = member_count
+        data["member_count"] = member_count
         return data
 
     @classmethod
     async def aupdate_department(
-        cls, dept_id: str, data: DepartmentUpdate, login_user,
+        cls,
+        dept_id: str,
+        data: DepartmentUpdate,
+        login_user,
     ) -> Department:
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
-            if dept.status == 'archived':
+            if dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
 
             # Source-readonly check
-            if dept.source != 'local' and data.name is not None:
+            if dept.source != "local" and data.name is not None:
                 raise DepartmentSourceReadonlyError()
 
             # Name duplicate check
             if data.name is not None:
-                dup = (await session.exec(
-                    select(Department).where(
-                        Department.parent_id == dept.parent_id,
-                        Department.name == data.name,
-                        Department.status == 'active',
-                        Department.id != dept.id,
+                dup = (
+                    await session.exec(
+                        select(Department).where(
+                            Department.parent_id == dept.parent_id,
+                            Department.name == data.name,
+                            Department.status == "active",
+                            Department.id != dept.id,
+                        )
                     )
-                )).first()
+                ).first()
                 if dup:
                     raise DepartmentNameDuplicateError()
 
@@ -550,9 +549,7 @@ class DepartmentService:
 
         if data.apply_default_roles_to_existing_members:
             raw_grant = (
-                list(data.default_role_ids)
-                if data.default_role_ids is not None
-                else list(dept.default_role_ids or [])
+                list(data.default_role_ids) if data.default_role_ids is not None else list(dept.default_role_ids or [])
             )
             role_ids_for_grant = [int(x) for x in raw_grant if x is not None]
             async with get_async_db_session() as session:
@@ -563,7 +560,10 @@ class DepartmentService:
                 )
                 member_user_ids = [int(x) for x in member_rows.all()]
             await cls._grant_default_roles_to_users(
-                dept_id, member_user_ids, role_ids_for_grant, login_user,
+                dept_id,
+                member_user_ids,
+                role_ids_for_grant,
+                login_user,
             )
 
         return dept
@@ -572,13 +572,13 @@ class DepartmentService:
     async def adelete_department(cls, dept_id: str, login_user) -> None:
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.dept_id == 'BS@guest':
-                raise DepartmentPermissionDeniedError(msg='Guest department cannot be deleted')
+            if dept.dept_id == "BS@guest":
+                raise DepartmentPermissionDeniedError(msg="Guest department cannot be deleted")
 
             await _ensure_department_can_archive(session, dept)
 
             parent_id = dept.parent_id
-            dept.status = 'archived'
+            dept.status = "archived"
             session.add(dept)
             await session.commit()
 
@@ -589,24 +589,26 @@ class DepartmentService:
 
         # Notify Gateway to clean up traffic control rules
         import json
+
         from bisheng.core.cache.redis_manager import get_redis_client_sync
+
         try:
             redis_client = get_redis_client_sync()
-            msg = json.dumps({'id': dept.id})
-            redis_client.rpush('delete_department', msg, expiration=86400)
-            redis_client.publish('delete_department', msg)
+            msg = json.dumps({"id": dept.id})
+            redis_client.rpush("delete_department", msg, expiration=86400)
+            redis_client.publish("delete_department", msg)
         except Exception:
-            logger.warning('Failed to publish delete_department event for dept %s', dept.id)
+            logger.warning("Failed to publish delete_department event for dept %s", dept.id)
 
     @classmethod
     async def apurge_department(cls, dept_id: str, login_user) -> None:
         """Permanently delete an archived department and clean up all references."""
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.dept_id == 'BS@guest':
-                raise DepartmentPermissionDeniedError(msg='Guest department cannot be deleted')
+            if dept.dept_id == "BS@guest":
+                raise DepartmentPermissionDeniedError(msg="Guest department cannot be deleted")
 
-            if dept.status != 'archived':
+            if dept.status != "archived":
                 raise DepartmentNotArchivedError()
 
             await _ensure_department_can_purge(session, dept)
@@ -618,16 +620,11 @@ class DepartmentService:
             # Delete department-scoped roles and their user_role bindings
             from bisheng.database.models.role import Role
             from bisheng.user.domain.models.user_role import UserRole
-            scoped_role_ids = (await session.exec(
-                select(Role.id).where(Role.department_id == dept_internal_id)
-            )).all()
+
+            scoped_role_ids = (await session.exec(select(Role.id).where(Role.department_id == dept_internal_id))).all()
             if scoped_role_ids:
-                await session.exec(
-                    delete(UserRole).where(UserRole.role_id.in_(scoped_role_ids))
-                )
-                await session.exec(
-                    delete(Role).where(Role.department_id == dept_internal_id)
-                )
+                await session.exec(delete(UserRole).where(UserRole.role_id.in_(scoped_role_ids)))
+                await session.exec(delete(Role).where(Role.department_id == dept_internal_id))
 
             # Physical delete
             await session.delete(dept)
@@ -636,23 +633,25 @@ class DepartmentService:
         # Collect admin user_ids from OpenFGA
         admin_user_ids: list[int] = []
         from bisheng.core.openfga.manager import aget_fga_client
+
         fga = await aget_fga_client()
         if fga is not None:
             try:
                 tuples = await fga.read_tuples(
-                    relation='admin', object=f'department:{dept_internal_id}',
+                    relation="admin",
+                    object=f"department:{dept_internal_id}",
                 )
                 for t in tuples:
-                    user_str = t.get('user', '') if isinstance(t, dict) else ''
-                    if not user_str and isinstance(t.get('key'), dict):
-                        user_str = t['key'].get('user', '')
-                    if user_str.startswith('user:'):
+                    user_str = t.get("user", "") if isinstance(t, dict) else ""
+                    if not user_str and isinstance(t.get("key"), dict):
+                        user_str = t["key"].get("user", "")
+                    if user_str.startswith("user:"):
                         try:
-                            admin_user_ids.append(int(user_str.split(':', 1)[1]))
+                            admin_user_ids.append(int(user_str.split(":", 1)[1]))
                         except ValueError:
                             continue
             except Exception:
-                logger.warning('FGA read_tuples failed during purge of department %s', dept_id)
+                logger.warning("FGA read_tuples failed during purge of department %s", dept_id)
 
         # Clean up OpenFGA tuples
         ops = DepartmentChangeHandler.on_purged(dept_internal_id, member_user_ids, admin_user_ids)
@@ -663,31 +662,32 @@ class DepartmentService:
         """Restore an archived department to active status."""
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.status != 'archived':
-                raise DepartmentNotArchivedError(msg='Only archived departments can be restored')
+            if dept.status != "archived":
+                raise DepartmentNotArchivedError(msg="Only archived departments can be restored")
 
             if dept.parent_id is not None:
                 parent = await DepartmentDao.aget_by_id(dept.parent_id)
-                if parent and parent.status == 'archived':
+                if parent and parent.status == "archived":
                     raise DepartmentParentArchivedError()
 
-            dept.status = 'active'
+            dept.status = "active"
             session.add(dept)
             await session.commit()
 
     @classmethod
     async def amove_department(
-        cls, dept_id: str, data: DepartmentMoveRequest, login_user,
+        cls,
+        dept_id: str,
+        data: DepartmentMoveRequest,
+        login_user,
     ) -> Department:
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
             # Load new parent
-            new_parent = (await session.exec(
-                select(Department).where(Department.id == data.new_parent_id)
-            )).first()
-            if not new_parent or new_parent.status != 'active':
-                raise DepartmentNotFoundError(msg='New parent department not found')
+            new_parent = (await session.exec(select(Department).where(Department.id == data.new_parent_id))).first()
+            if not new_parent or new_parent.status != "active":
+                raise DepartmentNotFoundError(msg="New parent department not found")
 
             # Circular detection: can't move to self
             if data.new_parent_id == dept.id:
@@ -704,12 +704,12 @@ class DepartmentService:
 
             old_parent_id = dept.parent_id
             old_path = dept.path
-            new_path = f'{new_parent.path}{dept.id}/'
+            new_path = f"{new_parent.path}{dept.id}/"
 
             # Batch update subtree paths
             await session.execute(
                 update(Department)
-                .where(Department.path.like(f'{old_path}%'))
+                .where(Department.path.like(f"{old_path}%"))
                 .values(path=func.replace(Department.path, old_path, new_path))
             )
 
@@ -736,21 +736,26 @@ class DepartmentService:
                 from bisheng.tenant.domain.services.user_tenant_sync_service import (
                     UserTenantSyncService,
                 )
+
                 await UserTenantSyncService.sync_subtree_primary_users(
                     dept_path=dept.path,
                     trigger=UserTenantSyncTrigger.DEPT_MOVED,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
-                    'sync_subtree_primary_users on dept move %s→%s failed: %s',
-                    old_parent_id, data.new_parent_id, exc,
+                    "sync_subtree_primary_users on dept move %s→%s failed: %s",
+                    old_parent_id,
+                    data.new_parent_id,
+                    exc,
                 )
 
         return dept
 
     @classmethod
     async def acreate_root_department(
-        cls, tenant_id: int, name: str = '默认组织',
+        cls,
+        tenant_id: int,
+        name: str = "默认组织",
     ) -> Department:
         """Create the root department for a tenant.
 
@@ -763,13 +768,15 @@ class DepartmentService:
         async with get_async_db_session() as session:
             with bypass_tenant_filter():
                 # Check if root already exists
-                existing = (await session.exec(
-                    select(Department).where(
-                        Department.parent_id.is_(None),
-                        Department.tenant_id == tenant_id,
-                        Department.status == 'active',
+                existing = (
+                    await session.exec(
+                        select(Department).where(
+                            Department.parent_id.is_(None),
+                            Department.tenant_id == tenant_id,
+                            Department.status == "active",
+                        )
                     )
-                )).first()
+                ).first()
                 if existing:
                     raise DepartmentRootExistsError()
 
@@ -781,23 +788,21 @@ class DepartmentService:
                     name=name,
                     parent_id=None,
                     tenant_id=tenant_id,
-                    path='',
-                    source='local',
+                    path="",
+                    source="local",
                     external_id=dept_id,
-                    status='active',
+                    status="active",
                 )
                 session.add(dept)
                 await session.flush()
                 await session.refresh(dept)
 
                 # Set path to /{id}/
-                dept.path = f'/{dept.id}/'
+                dept.path = f"/{dept.id}/"
                 session.add(dept)
 
                 # Update tenant.root_dept_id
-                tenant = (await session.exec(
-                    select(Tenant).where(Tenant.id == tenant_id)
-                )).first()
+                tenant = (await session.exec(select(Tenant).where(Tenant.id == tenant_id))).first()
                 if tenant:
                     tenant.root_dept_id = dept.id
                     session.add(tenant)
@@ -811,8 +816,8 @@ class DepartmentService:
     async def _grant_default_roles_to_users(
         cls,
         dept_id: str,
-        user_ids: List[int],
-        default_role_ids: List[int],
+        user_ids: list[int],
+        default_role_ids: list[int],
         login_user,
     ) -> None:
         """Grant department default roles to users (assignable domain, skip AdminRole, idempotent)."""
@@ -822,11 +827,8 @@ class DepartmentService:
         from bisheng.user.domain.models.user_role import UserRoleDao
 
         assignable = await cls.aget_assignable_roles(dept_id, login_user)
-        allowed_ids = {r['id'] for r in assignable}
-        to_apply = [
-            rid for rid in default_role_ids
-            if rid != AdminRole and rid in allowed_ids
-        ]
+        allowed_ids = {r["id"] for r in assignable}
+        to_apply = [rid for rid in default_role_ids if rid != AdminRole and rid in allowed_ids]
         if not to_apply:
             return
         for uid in user_ids:
@@ -842,13 +844,16 @@ class DepartmentService:
 
     @classmethod
     async def aadd_members(
-        cls, dept_id: str, data: DepartmentMemberAdd, login_user,
+        cls,
+        dept_id: str,
+        data: DepartmentMemberAdd,
+        login_user,
     ) -> None:
-        default_role_ids_snapshot: List[int] = []
+        default_role_ids_snapshot: list[int] = []
         is_primary_add = int(data.is_primary or 0) == 1
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.status == 'archived':
+            if dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
             raw_defaults = dept.default_role_ids or []
             default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
@@ -863,19 +868,21 @@ class DepartmentService:
             existing_ids = existing_result.all()
             if existing_ids:
                 raise DepartmentMemberExistsError(
-                    msg=f'Users {existing_ids} are already members of this department',
+                    msg=f"Users {existing_ids} are already members of this department",
                 )
 
             if not is_primary_add:
                 # Secondary add: bulk insert + single FGA dispatch keeps the
                 # batch path cheap (no leaf-tenant change to sync).
                 for uid in data.user_ids:
-                    session.add(UserDepartment(
-                        user_id=uid,
-                        department_id=dept.id,
-                        is_primary=0,
-                        source='local',
-                    ))
+                    session.add(
+                        UserDepartment(
+                            user_id=uid,
+                            department_id=dept.id,
+                            is_primary=0,
+                            source="local",
+                        )
+                    )
                 await session.commit()
 
         if is_primary_add:
@@ -889,9 +896,11 @@ class DepartmentService:
             from bisheng.user.domain.services.user_department_service import (
                 UserDepartmentService,
             )
+
             for uid in data.user_ids:
                 await UserDepartmentService.change_primary_department(
-                    int(uid), int(dept.id),
+                    int(uid),
+                    int(dept.id),
                 )
         else:
             ops = DepartmentChangeHandler.on_members_added(dept.id, data.user_ids)
@@ -899,25 +908,33 @@ class DepartmentService:
 
         # 部门「默认角色」：加入本部门后自动授予（可分配域内、且用户尚未拥有）
         await cls._grant_default_roles_to_users(
-            dept_id, list(data.user_ids), default_role_ids_snapshot, login_user,
+            dept_id,
+            list(data.user_ids),
+            default_role_ids_snapshot,
+            login_user,
         )
 
     @classmethod
     async def aremove_member(
-        cls, dept_id: str, user_id: int, login_user,
+        cls,
+        dept_id: str,
+        user_id: int,
+        login_user,
     ) -> None:
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.status == 'archived':
+            if dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
 
             # Check member exists
-            ud = (await session.exec(
-                select(UserDepartment).where(
-                    UserDepartment.user_id == user_id,
-                    UserDepartment.department_id == dept.id,
+            ud = (
+                await session.exec(
+                    select(UserDepartment).where(
+                        UserDepartment.user_id == user_id,
+                        UserDepartment.department_id == dept.id,
+                    )
                 )
-            )).first()
+            ).first()
             if not ud:
                 raise DepartmentMemberNotFoundError()
 
@@ -925,15 +942,15 @@ class DepartmentService:
             await session.commit()
 
         # Fire change handler：移除成员同时卸掉该部门的部门管理员（FGA）
-        ops = (
-            DepartmentChangeHandler.on_member_removed(dept.id, user_id)
-            + DepartmentChangeHandler.on_admin_removed(dept.id, [user_id])
+        ops = DepartmentChangeHandler.on_member_removed(dept.id, user_id) + DepartmentChangeHandler.on_admin_removed(
+            dept.id, [user_id]
         )
         await DepartmentChangeHandler.execute_async(ops)
         await DepartmentAdminGrantDao.adelete(user_id, int(dept.id))
         from bisheng.knowledge.domain.services.department_knowledge_space_service import (
             DepartmentKnowledgeSpaceService,
         )
+
         await DepartmentKnowledgeSpaceService.sync_department_admin_memberships(
             request=None,
             login_user=login_user,
@@ -943,40 +960,48 @@ class DepartmentService:
         )
 
     @classmethod
-    async def _aget_department_admin_user_ids(cls, dept_internal_id: int) -> Set[int]:
+    async def _aget_department_admin_user_ids(cls, dept_internal_id: int) -> set[int]:
         """OpenFGA：在 department:{id} 上具有 admin 关系的用户 ID 集合。"""
         fga = await _aget_fga_client_with_fallback()
         if fga is None:
-            return set(await DepartmentAdminGrantDao.aget_user_ids_by_department(
-                int(dept_internal_id),
-            ))
+            return set(
+                await DepartmentAdminGrantDao.aget_user_ids_by_department(
+                    int(dept_internal_id),
+                )
+            )
         try:
             tuples = await fga.read_tuples(
-                relation='admin', object=f'department:{dept_internal_id}',
+                relation="admin",
+                object=f"department:{dept_internal_id}",
             )
         except Exception:
             logger.warning(
-                'FGA read_tuples failed for department admin ids dept=%s', dept_internal_id,
+                "FGA read_tuples failed for department admin ids dept=%s",
+                dept_internal_id,
             )
-            return set(await DepartmentAdminGrantDao.aget_user_ids_by_department(
-                int(dept_internal_id),
-            ))
-        user_ids: Set[int] = set()
+            return set(
+                await DepartmentAdminGrantDao.aget_user_ids_by_department(
+                    int(dept_internal_id),
+                )
+            )
+        user_ids: set[int] = set()
         for t in tuples:
-            user_str = t.get('user', '') if isinstance(t, dict) else ''
-            if not user_str and isinstance(t.get('key'), dict):
-                user_str = t['key'].get('user', '')
-            if user_str.startswith('user:'):
+            user_str = t.get("user", "") if isinstance(t, dict) else ""
+            if not user_str and isinstance(t.get("key"), dict):
+                user_str = t["key"].get("user", "")
+            if user_str.startswith("user:"):
                 try:
-                    user_ids.add(int(user_str.split(':', 1)[1]))
+                    user_ids.add(int(user_str.split(":", 1)[1]))
                 except ValueError:
                     continue
         return user_ids
 
     @classmethod
     async def aget_admins(
-        cls, dept_id: str, login_user,
-    ) -> List[dict]:
+        cls,
+        dept_id: str,
+        login_user,
+    ) -> list[dict]:
         """Get admin users of a department from OpenFGA."""
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
@@ -986,28 +1011,33 @@ class DepartmentService:
             return []
 
         from bisheng.user.domain.models.user import User
+
         async with get_async_db_session() as session:
             result = await session.exec(
                 select(User.user_id, User.user_name).where(
-                    User.user_id.in_(user_ids), User.delete == 0,
+                    User.user_id.in_(user_ids),
+                    User.delete == 0,
                 )
             )
-            return [{'user_id': r[0], 'user_name': r[1]} for r in result.all()]
+            return [{"user_id": r[0], "user_name": r[1]} for r in result.all()]
 
     @classmethod
     async def aset_admins(
-        cls, dept_id: str, user_ids: List[int], login_user,
-    ) -> List[dict]:
+        cls,
+        dept_id: str,
+        user_ids: list[int],
+        login_user,
+    ) -> list[dict]:
         """Set department admins (full replace). Returns updated admin list."""
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
 
-            if dept.status == 'archived':
+            if dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
 
         # Get current admins from FGA
         current_admins = await cls.aget_admins(dept_id, login_user)
-        current_ids = {a['user_id'] for a in current_admins}
+        current_ids = {a["user_id"] for a in current_admins}
         new_ids = set(user_ids)
 
         to_add = list(new_ids - current_ids)
@@ -1018,19 +1048,23 @@ class DepartmentService:
             await DepartmentChangeHandler.execute_async(ops)
             for uid in to_add:
                 await DepartmentAdminGrantDao.aupsert(
-                    int(uid), int(dept.id), DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
+                    int(uid),
+                    int(dept.id),
+                    DEPARTMENT_ADMIN_GRANT_SOURCE_MANUAL,
                 )
         if to_remove:
             ops = DepartmentChangeHandler.on_admin_removed(dept.id, to_remove)
             await DepartmentChangeHandler.execute_async(ops)
             await DepartmentAdminGrantDao.adelete_for_department_users(
-                int(dept.id), [int(u) for u in to_remove],
+                int(dept.id),
+                [int(u) for u in to_remove],
             )
 
         if to_add or to_remove:
             from bisheng.knowledge.domain.services.department_knowledge_space_service import (
                 DepartmentKnowledgeSpaceService,
             )
+
             await DepartmentKnowledgeSpaceService.sync_department_admin_memberships(
                 request=None,
                 login_user=login_user,
@@ -1043,9 +1077,13 @@ class DepartmentService:
 
     @classmethod
     async def aget_members(
-        cls, dept_id: str, page: int, limit: int,
-        keyword: str, login_user,
-        is_primary: Optional[int] = None,
+        cls,
+        dept_id: str,
+        page: int,
+        limit: int,
+        keyword: str,
+        login_user,
+        is_primary: int | None = None,
     ) -> dict:
 
         # Cap pagination params
@@ -1061,15 +1099,15 @@ class DepartmentService:
                 select(
                     UserDepartment.user_id,
                     User.user_name,
-                    User.external_id.label('user_external_id'),
+                    User.external_id.label("user_external_id"),
                     UserDepartment.department_id,
                     UserDepartment.is_primary,
                     UserDepartment.source,
-                    UserDepartment.create_time.label('member_join_time'),
-                    User.create_time.label('user_create_time'),
-                    User.update_time.label('user_update_time'),
-                    User.delete.label('user_deleted'),
-                    User.disable_source.label('user_disable_source'),
+                    UserDepartment.create_time.label("member_join_time"),
+                    User.create_time.label("user_create_time"),
+                    User.update_time.label("user_update_time"),
+                    User.delete.label("user_deleted"),
+                    User.disable_source.label("user_disable_source"),
                 )
                 .join(User, User.user_id == UserDepartment.user_id)
                 .where(
@@ -1077,18 +1115,14 @@ class DepartmentService:
                 )
             )
             if keyword:
-                base = base.where(User.user_name.like(f'%{keyword}%'))
+                base = base.where(User.user_name.like(f"%{keyword}%"))
             if is_primary is not None:
                 base = base.where(UserDepartment.is_primary == is_primary)
 
-            total_result = await session.exec(
-                select(func.count()).select_from(base.subquery())
-            )
+            total_result = await session.exec(select(func.count()).select_from(base.subquery()))
             total = total_result.one()
 
-            rows_result = await session.exec(
-                base.offset((page - 1) * limit).limit(limit)
-            )
+            rows_result = await session.exec(base.offset((page - 1) * limit).limit(limit))
             rows = rows_result.all()
 
         # Batch enrich: user_groups and roles
@@ -1130,7 +1164,7 @@ class DepartmentService:
                     if viewer_group_ids:
                         ug_stmt = ug_stmt.where(
                             or_(
-                                Group.visibility == 'public',
+                                Group.visibility == "public",
                                 Group.create_user == login_user.user_id,
                                 Group.id.in_(viewer_group_ids),
                             ),
@@ -1138,19 +1172,20 @@ class DepartmentService:
                     else:
                         ug_stmt = ug_stmt.where(
                             or_(
-                                Group.visibility == 'public',
+                                Group.visibility == "public",
                                 Group.create_user == login_user.user_id,
                             ),
                         )
                 ug_result = await session.exec(ug_stmt)
                 for uid, gid, gname in ug_result.all():
                     user_groups_map.setdefault(uid, []).append(
-                        {'id': gid, 'group_name': gname},
+                        {"id": gid, "group_name": gname},
                     )
 
                 # Roles
                 from bisheng.database.models.role import Role
                 from bisheng.user.domain.models.user_role import UserRole
+
                 role_result = await session.exec(
                     select(
                         UserRole.user_id,
@@ -1162,7 +1197,7 @@ class DepartmentService:
                 )
                 for uid, rid, rname in role_result.all():
                     roles_map.setdefault(uid, []).append(
-                        {'id': rid, 'role_name': rname},
+                        {"id": rid, "role_name": rname},
                     )
 
         admin_uids = await cls._aget_department_admin_user_ids(dept.id)
@@ -1177,51 +1212,55 @@ class DepartmentService:
             valid = [x for x in times if x is not None]
             return max(valid) if valid else None
 
-        def _person_id_for_row(row) -> Optional[str]:
-            ext = getattr(row, 'user_external_id', None)
+        def _person_id_for_row(row) -> str | None:
+            ext = getattr(row, "user_external_id", None)
             if ext:
                 return str(ext)
             return None
 
         data = [
             {
-                'user_id': r.user_id,
-                'user_name': r.user_name,
-                'person_id': _person_id_for_row(r),
-                'department_id': r.department_id,
-                'is_primary': r.is_primary,
-                'source': r.source,
-                'create_time': r.member_join_time,
-                'update_time': _last_modified(r),
-                'enabled': r.user_deleted == 0,
-                'disable_source': getattr(r, 'user_disable_source', None),
-                'user_groups': user_groups_map.get(r.user_id, []),
-                'roles': roles_map.get(r.user_id, []),
-                'is_department_admin': r.user_id in admin_uids,
+                "user_id": r.user_id,
+                "user_name": r.user_name,
+                "person_id": _person_id_for_row(r),
+                "department_id": r.department_id,
+                "is_primary": r.is_primary,
+                "source": r.source,
+                "create_time": r.member_join_time,
+                "update_time": _last_modified(r),
+                "enabled": r.user_deleted == 0,
+                "disable_source": getattr(r, "user_disable_source", None),
+                "user_groups": user_groups_map.get(r.user_id, []),
+                "roles": roles_map.get(r.user_id, []),
+                "is_department_admin": r.user_id in admin_uids,
             }
             for r in rows
         ]
-        return {'data': data, 'total': total}
+        return {"data": data, "total": total}
 
     @classmethod
     async def aget_global_members_search(
-        cls, keyword: str, page: int, limit: int, login_user,
+        cls,
+        keyword: str,
+        page: int,
+        limit: int,
+        login_user,
     ) -> dict:
         """Search members by username across visible org tree (primary department only).
 
         数据范围与左侧部门树一致：先取 :meth:`aget_tree` 的可见节点 id 集合，仅返回主属部门
         落在该集合内的用户（系统超管 / 租户管理员 / 部门管理员子树与树接口相同）。
         """
-        kw = (keyword or '').strip()
+        kw = (keyword or "").strip()
         if not kw:
-            return {'data': [], 'total': 0}
+            return {"data": [], "total": 0}
         page = max(1, page)
         limit = max(1, min(limit, 50))
 
         tree = await cls.aget_tree(login_user)
 
-        def _collect_visible_ids(nodes: List[DepartmentTreeNode]) -> Set[int]:
-            out: Set[int] = set()
+        def _collect_visible_ids(nodes: list[DepartmentTreeNode]) -> set[int]:
+            out: set[int] = set()
             for n in nodes:
                 out.add(int(n.id))
                 if n.children:
@@ -1230,14 +1269,14 @@ class DepartmentService:
 
         visible_ids = _collect_visible_ids(tree)
         if not visible_ids:
-            return {'data': [], 'total': 0}
+            return {"data": [], "total": 0}
 
         async with get_async_db_session() as session:
             from bisheng.user.domain.models.user import User
 
             name_rows = await session.exec(
                 select(Department.id, Department.name).where(
-                    Department.status == 'active',
+                    Department.status == "active",
                 )
             )
             id_to_name = {int(r.id): r.name for r in name_rows.all()}
@@ -1247,9 +1286,9 @@ class DepartmentService:
 
                 展示「自根到主属部门」的名称链，避免只显示父级或根路径解析为空。
                 """
-                labels: List[str] = []
-                ancestor_ids: List[int] = []
-                for part in (dept.path or '').split('/'):
+                labels: list[str] = []
+                ancestor_ids: list[int] = []
+                for part in (dept.path or "").split("/"):
                     if not part.strip():
                         continue
                     try:
@@ -1257,54 +1296,65 @@ class DepartmentService:
                     except ValueError:
                         continue
                     ancestor_ids.append(i)
-                    labels.append(id_to_name.get(i, f'#{i}'))
+                    labels.append(id_to_name.get(i, f"#{i}"))
                 self_id = int(dept.id)
-                self_nm = id_to_name.get(self_id) or (dept.name or '')
+                self_nm = id_to_name.get(self_id) or (dept.name or "")
                 if self_id not in ancestor_ids and self_nm:
                     labels.append(self_nm)
-                return '/'.join(labels) if labels else (self_nm or '')
+                return "/".join(labels) if labels else (self_nm or "")
 
             # Do not filter User.delete: 部门成员列表 aget_members 包含未启用用户，
             # 全组织搜索需一致，否则无法按姓名定位已禁用成员。
-            base_group = (
-                select(
-                    User.user_id,
-                    User.user_name,
-                    func.min(Department.id).label('dept_int_id'),
-                    func.max(User.delete).label('user_deleted'),
+            #
+            # 性能（10w+ 用户）三点优化，详见 perf 排查：
+            # 1) 前缀匹配 ``user_name LIKE 'kw%'`` 取代原前导通配 ``'%kw%'``——
+            #    前导通配让 user_name 索引失效、每次按键全表扫 user；前缀可走索引范围扫。
+            # 2) 去掉原 ``GROUP BY user_id``：主属部门唯一性由
+            #    :meth:`UserDepartmentService.change_primary_department` 维护（旧主置 0、
+            #    新主置 1），故 ``is_primary=1`` 的 JOIN 每个命中用户至多一行，分组冗余。
+            # 3) ``COUNT(*) OVER()`` 在分页查询里一次拿到命中总数，省掉原先把整套
+            #    JOIN+分组再跑一遍的独立 COUNT 子查询。
+            def _scoped(stmt):
+                return (
+                    stmt.join(
+                        UserDepartment,
+                        (UserDepartment.user_id == User.user_id) & (UserDepartment.is_primary == 1),
+                    )
+                    .join(Department, Department.id == UserDepartment.department_id)
+                    .where(
+                        Department.status == "active",
+                        col(Department.id).in_(visible_ids),
+                        User.user_name.like(f"{kw}%"),
+                    )
                 )
-                .join(
-                    UserDepartment,
-                    (UserDepartment.user_id == User.user_id)
-                    & (UserDepartment.is_primary == 1),
-                )
-                .join(Department, Department.id == UserDepartment.department_id)
-                .where(
-                    Department.status == 'active',
-                    col(Department.id).in_(visible_ids),
-                    User.user_name.like(f'%{kw}%'),
-                )
-                .group_by(User.user_id, User.user_name)
-            )
-            count_stmt = select(func.count()).select_from(base_group.subquery())
-            total = (await session.exec(count_stmt)).one()
 
             page_stmt = (
-                base_group.order_by(User.user_name)
+                _scoped(
+                    select(
+                        User.user_id,
+                        User.user_name,
+                        col(Department.id).label("dept_int_id"),
+                        col(User.delete).label("user_deleted"),
+                        func.count().over().label("match_total"),
+                    )
+                )
+                .order_by(User.user_name, User.user_id)
                 .offset((page - 1) * limit)
                 .limit(limit)
             )
             rows = (await session.exec(page_stmt)).all()
 
-            if not rows:
-                return {'data': [], 'total': int(total)}
+            if rows:
+                total = int(getattr(rows[0], "match_total", 0) or 0)
+            else:
+                # 命中页为空：可能无匹配（total=0），也可能请求页越界。窗口总数只存在于
+                # 返回行里，此时单独做一次轻量 COUNT 兜底（前缀走索引，成本低）。
+                count_stmt = _scoped(select(func.count()).select_from(User))
+                total = int((await session.exec(count_stmt)).one() or 0)
+                return {"data": [], "total": total}
 
             dept_int_ids = [int(r.dept_int_id) for r in rows]
-            dept_rows = (
-                await session.exec(
-                    select(Department).where(Department.id.in_(dept_int_ids))
-                )
-            ).all()
+            dept_rows = (await session.exec(select(Department).where(Department.id.in_(dept_int_ids)))).all()
             dept_by_id = {int(d.id): d for d in dept_rows}
 
         data = []
@@ -1312,28 +1362,28 @@ class DepartmentService:
             d = dept_by_id.get(int(r.dept_int_id))
             if not d:
                 continue
-            udel = int(getattr(r, 'user_deleted', 0) or 0)
+            udel = int(getattr(r, "user_deleted", 0) or 0)
             data.append(
                 {
-                    'user_id': int(r.user_id),
-                    'user_name': r.user_name,
-                    'primary_department_dept_id': d.dept_id,
-                    'primary_department_path': _primary_dept_display_path(d),
-                    'enabled': udel == 0,
+                    "user_id": int(r.user_id),
+                    "user_name": r.user_name,
+                    "primary_department_dept_id": d.dept_id,
+                    "primary_department_path": _primary_dept_display_path(d),
+                    "enabled": udel == 0,
                 }
             )
-        return {'data': data, 'total': int(total)}
+        return {"data": data, "total": int(total)}
 
     @staticmethod
-    async def _aget_ancestor_chain_ids(session, dept: Department) -> List[int]:
+    async def _aget_ancestor_chain_ids(session, dept: Department) -> list[int]:
         """沿 parent_id 自当前部门上至根，返回内部 id 列表（含当前与各级祖先）。
 
         用于角色可分配判定：作用域为部门 S 的角色，仅当「当前上下文部门 T 落在 S 的子树下」
         （即 S 为 T 的祖先或与 T 相同）时可授予；等价于 Role.department_id ∈ 本列表。
         """
-        chain: List[int] = []
-        seen: Set[int] = set()
-        current: Optional[Department] = dept
+        chain: list[int] = []
+        seen: set[int] = set()
+        current: Department | None = dept
         while current is not None and current.id is not None:
             cid = int(current.id)
             if cid in seen:
@@ -1343,23 +1393,23 @@ class DepartmentService:
             pid = current.parent_id
             if pid is None:
                 break
-            current = (
-                await session.exec(select(Department).where(Department.id == int(pid)))
-            ).first()
+            current = (await session.exec(select(Department).where(Department.id == int(pid)))).first()
         return chain
 
     @classmethod
     async def aget_assignable_roles(
-        cls, dept_id: str, login_user,
-    ) -> List[dict]:
+        cls,
+        dept_id: str,
+        login_user,
+    ) -> list[dict]:
         """当前部门上下文中可授予的角色：全局 + 作用域落在上级链（含本部门）上的角色（不含内置超管）。
 
         规则：角色若绑定作用域部门 S，则可在任意「当前成员所属/操作上下文部门 T」为 S 或 S 的下级时使用；
         实现为 Role.department_id 为空，或 Role.department_id 属于当前部门 T 的祖先链（含 T）。
         """
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.role import Role
-        from bisheng.core.context.tenant import bypass_tenant_filter
 
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
@@ -1379,41 +1429,45 @@ class DepartmentService:
             # scopes tenant roles; keep this catalog aligned with it while
             # leaving department lookup/permission checks under normal scoping.
             with bypass_tenant_filter():
-                stmt = select(Role).where(
-                    Role.id > AdminRole,
-                    or_(
-                        and_(Role.role_type == 'global', dept_scope),
-                        and_(
-                            Role.role_type == 'tenant',
-                            Role.tenant_id == login_user.tenant_id,
-                            dept_scope,
+                stmt = (
+                    select(Role)
+                    .where(
+                        Role.id > AdminRole,
+                        or_(
+                            and_(Role.role_type == "global", dept_scope),
+                            and_(
+                                Role.role_type == "tenant",
+                                Role.tenant_id == login_user.tenant_id,
+                                dept_scope,
+                            ),
+                            # 兼容旧数据：历史角色可能未写 role_type，默认按 tenant 角色处理
+                            and_(
+                                or_(Role.role_type.is_(None), Role.role_type == ""),
+                                Role.tenant_id == login_user.tenant_id,
+                                dept_scope,
+                            ),
                         ),
-                        # 兼容旧数据：历史角色可能未写 role_type，默认按 tenant 角色处理
-                        and_(
-                            or_(Role.role_type.is_(None), Role.role_type == ''),
-                            Role.tenant_id == login_user.tenant_id,
-                            dept_scope,
-                        ),
-                    ),
-                ).order_by(Role.role_name.asc())
+                    )
+                    .order_by(Role.role_name.asc())
+                )
                 roles = (await session.exec(stmt)).all()
 
         return [
             {
-                'id': r.id,
-                'role_name': r.role_name,
-                'role_type': r.role_type,
-                'department_id': r.department_id,
+                "id": r.id,
+                "role_name": r.role_name,
+                "role_type": r.role_type,
+                "department_id": r.department_id,
             }
             for r in roles
         ]
 
     @staticmethod
-    def _department_scope_chain_ids(dept: Department) -> List[int]:
+    def _department_scope_chain_ids(dept: Department) -> list[int]:
         """Return ancestor ids from materialized path plus the department itself."""
-        chain: List[int] = []
-        seen: Set[int] = set()
-        for part in (dept.path or '').split('/'):
+        chain: list[int] = []
+        seen: set[int] = set()
+        for part in (dept.path or "").split("/"):
             if not part.strip() or not part.isdigit():
                 continue
             did = int(part)
@@ -1428,19 +1482,21 @@ class DepartmentService:
 
     @classmethod
     async def _aget_assignable_roles_catalog(
-        cls, depts: List[Department], login_user,
+        cls,
+        depts: list[Department],
+        login_user,
     ) -> dict:
         """Batch build assignable-role catalogs for multiple departments."""
+        from bisheng.core.context.tenant import bypass_tenant_filter
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.role import Role
-        from bisheng.core.context.tenant import bypass_tenant_filter
 
         if not depts:
             return {}
 
         scope_by_dept_id: dict[str, set[int]] = {}
         all_scope_ids: set[int] = set()
-        accessible_depts: List[Department] = []
+        accessible_depts: list[Department] = []
         for dept in depts:
             # Soft-skip departments outside the operator's scope; member-edit
             # callers may pass the target user's full dept set (incl. foreign
@@ -1463,22 +1519,26 @@ class DepartmentService:
         )
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
-                stmt = select(Role).where(
-                    Role.id > AdminRole,
-                    or_(
-                        and_(Role.role_type == 'global', dept_scope),
-                        and_(
-                            Role.role_type == 'tenant',
-                            Role.tenant_id == login_user.tenant_id,
-                            dept_scope,
+                stmt = (
+                    select(Role)
+                    .where(
+                        Role.id > AdminRole,
+                        or_(
+                            and_(Role.role_type == "global", dept_scope),
+                            and_(
+                                Role.role_type == "tenant",
+                                Role.tenant_id == login_user.tenant_id,
+                                dept_scope,
+                            ),
+                            and_(
+                                or_(Role.role_type.is_(None), Role.role_type == ""),
+                                Role.tenant_id == login_user.tenant_id,
+                                dept_scope,
+                            ),
                         ),
-                        and_(
-                            or_(Role.role_type.is_(None), Role.role_type == ''),
-                            Role.tenant_id == login_user.tenant_id,
-                            dept_scope,
-                        ),
-                    ),
-                ).order_by(Role.role_name.asc())
+                    )
+                    .order_by(Role.role_name.asc())
+                )
                 roles = (await session.exec(stmt)).all()
 
         catalog: dict = {}
@@ -1486,10 +1546,10 @@ class DepartmentService:
             scope_ids = scope_by_dept_id.get(dept.dept_id, set())
             catalog[dept.dept_id] = [
                 {
-                    'id': role.id,
-                    'role_name': role.role_name,
-                    'role_type': role.role_type,
-                    'department_id': role.department_id,
+                    "id": role.id,
+                    "role_name": role.role_name,
+                    "role_type": role.role_type,
+                    "department_id": role.department_id,
                 }
                 for role in roles
                 if role.department_id is None or int(role.department_id) in scope_ids
@@ -1498,7 +1558,10 @@ class DepartmentService:
 
     @classmethod
     async def acreate_local_member(
-        cls, dept_id: str, data: DepartmentLocalMemberCreate, login_user,
+        cls,
+        dept_id: str,
+        data: DepartmentLocalMemberCreate,
+        login_user,
     ) -> dict:
         """在部门内创建本地账号：主属当前部门、指定角色、生成人员 ID（external_id）；用户组非必填。"""
         from bisheng.database.constants import AdminRole
@@ -1506,10 +1569,10 @@ class DepartmentService:
         from bisheng.user.domain.services.user import UserService
         from bisheng.utils import md5_hash
 
-        default_role_ids_snapshot: List[int] = []
+        default_role_ids_snapshot: list[int] = []
         async with get_async_db_session() as session:
             dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if dept.status == 'archived':
+            if dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
             raw_defaults = dept.default_role_ids or []
             default_role_ids_snapshot = [int(x) for x in raw_defaults if x is not None]
@@ -1518,7 +1581,7 @@ class DepartmentService:
         if not _password_meets_prd_policy(plain):
             raise DepartmentInvalidPasswordError()
 
-        person_id = (data.person_id or '').strip()
+        person_id = (data.person_id or "").strip()
         if not person_id:
             raise DepartmentPersonIdRequiredError()
         if await UserDao.aget_login_candidates_by_account(person_id):
@@ -1527,12 +1590,9 @@ class DepartmentService:
             raise DepartmentPersonIdDeletedAccountError()
 
         assignable = await cls.aget_assignable_roles(dept_id, login_user)
-        allowed_ids = {r['id'] for r in assignable}
+        allowed_ids = {r["id"] for r in assignable}
         explicit_ids = [int(x) for x in (data.role_ids or [])]
-        default_filtered = [
-            rid for rid in default_role_ids_snapshot
-            if rid != AdminRole and rid in allowed_ids
-        ]
+        default_filtered = [rid for rid in default_role_ids_snapshot if rid != AdminRole and rid in allowed_ids]
         final_role_ids = list(dict.fromkeys(explicit_ids + default_filtered))
         if AdminRole in final_role_ids or not set(final_role_ids).issubset(allowed_ids):
             raise DepartmentInvalidRolesError()
@@ -1541,12 +1601,14 @@ class DepartmentService:
         user = User(
             user_name=data.user_name,
             password=pwd_hash,
-            source='local',
+            source="local",
             external_id=person_id,
         )
         try:
             user = UserDao.add_user_with_groups_and_roles(
-                user, [], final_role_ids,
+                user,
+                [],
+                final_role_ids,
             )
         except IntegrityError:
             raise DepartmentPersonIdDuplicateError() from None
@@ -1561,7 +1623,7 @@ class DepartmentService:
                 user_id=user.user_id,
                 department_id=dept.id,
                 is_primary=1,
-                source='local',
+                source="local",
             )
             session.add(ud)
             await session.commit()
@@ -1579,47 +1641,53 @@ class DepartmentService:
         from bisheng.tenant.domain.services.user_tenant_sync_service import (
             UserTenantSyncService,
         )
+
         await UserTenantSyncService.sync_user(
-            user.user_id, trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+            user.user_id,
+            trigger=UserTenantSyncTrigger.DEPT_CHANGE,
         )
 
         return {
-            'user_id': user.user_id,
-            'user_name': user.user_name,
-            'person_id': person_id,
-            'dept_id': dept.dept_id,
+            "user_id": user.user_id,
+            "user_name": user.user_name,
+            "person_id": person_id,
+            "dept_id": dept.dept_id,
         }
 
     @classmethod
     def _person_display_id(cls, user) -> str:
         """PRD 人员 ID：本地为 external_id（BS@…）；同步侧优先 external_id。"""
-        if getattr(user, 'external_id', None):
+        if getattr(user, "external_id", None):
             return str(user.external_id)
-        return str(getattr(user, 'dept_id', None) or '')
+        return str(getattr(user, "dept_id", None) or "")
 
     @classmethod
-    async def _manageable_group_options(cls, login_user) -> List[dict]:
+    async def _manageable_group_options(cls, login_user) -> list[dict]:
         """Return groups the current user can actually mutate."""
         from bisheng.user_group.domain.services.user_group_service import UserGroupService
 
         res = await UserGroupService.alist_manageable_group_options(login_user)
         out = []
         for x in res or []:
-            out.append({
-                'id': x['id'],
-                'group_name': x.get('group_name', ''),
-                'visibility': x.get('visibility', 'public'),
-            })
+            out.append(
+                {
+                    "id": x["id"],
+                    "group_name": x.get("group_name", ""),
+                    "visibility": x.get("visibility", "public"),
+                }
+            )
         return out
 
     @classmethod
     async def _assignable_role_id_set(cls, dept_key: str, login_user) -> set:
         rows = await cls.aget_assignable_roles(dept_key, login_user)
-        return {int(r['id']) for r in rows}
+        return {int(r["id"]) for r in rows}
 
     @classmethod
     async def _department_in_admin_writable_scope(
-        cls, login_user, dept: Department,
+        cls,
+        login_user,
+        dept: Department,
     ) -> bool:
         """主部门可选范围：超管 / 部门管理员 / 子租户管理员（Child Admin）。
 
@@ -1627,13 +1695,15 @@ class DepartmentService:
         repoint a user's primary department anywhere inside their tenant
         mount-subtree, not only inside FGA dept-admin paths.
         """
-        if not dept or getattr(dept, 'status', '') != 'active' or dept.id is None:
+        if not dept or getattr(dept, "status", "") != "active" or dept.id is None:
             return False
         return await _can_access_dept(login_user, int(dept.id))
 
     @classmethod
     async def _apply_local_primary_department_change(
-        cls, user_id: int, new_dept_id: int,
+        cls,
+        user_id: int,
+        new_dept_id: int,
     ) -> None:
         """将本地用户主部门切到 new_dept_id：从原主部门移除，不再保留为附属。
 
@@ -1643,13 +1713,15 @@ class DepartmentService:
         ``TenantRelocateBlockedError`` when ``enforce_transfer_before_relocate``
         is on and the user owns resources under the old tenant.
         """
-        old_dept_id_for_fga: Optional[int] = None
+        old_dept_id_for_fga: int | None = None
         fga_add_new: bool = False
         async with get_async_db_session() as session:
             uds = list(
-                (await session.exec(
-                    select(UserDepartment).where(UserDepartment.user_id == user_id),
-                )).all()
+                (
+                    await session.exec(
+                        select(UserDepartment).where(UserDepartment.user_id == user_id),
+                    )
+                ).all()
             )
             primary_rows = [u for u in uds if int(u.is_primary or 0) == 1]
             old_primary = primary_rows[0] if primary_rows else None
@@ -1670,24 +1742,35 @@ class DepartmentService:
                 target_ud.is_primary = 1
                 session.add(target_ud)
             else:
-                session.add(UserDepartment(
-                    user_id=user_id,
-                    department_id=new_dept_id,
-                    is_primary=1,
-                    source='local',
-                ))
+                session.add(
+                    UserDepartment(
+                        user_id=user_id,
+                        department_id=new_dept_id,
+                        is_primary=1,
+                        source="local",
+                    )
+                )
                 fga_add_new = True
 
             await session.commit()
 
         if old_dept_id_for_fga is not None:
             # 离开原部门后不再担任该部门的部门管理员（仅 FGA admin 关系）
-            ops_rm = (
-                DepartmentChangeHandler.on_member_removed(old_dept_id_for_fga, user_id)
-                + DepartmentChangeHandler.on_admin_removed(old_dept_id_for_fga, [user_id])
-            )
+            ops_rm = DepartmentChangeHandler.on_member_removed(
+                old_dept_id_for_fga, user_id
+            ) + DepartmentChangeHandler.on_admin_removed(old_dept_id_for_fga, [user_id])
             await DepartmentChangeHandler.execute_async(ops_rm)
             await DepartmentAdminGrantDao.adelete(user_id, int(old_dept_id_for_fga))
+            # 撤销部门管理员后，清理其在原部门知识空间的派生绑定
+            # (space_channel_member 行 + knowledge_space#manager 元组)，否则越权残留。
+            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                DepartmentKnowledgeSpaceService,
+            )
+
+            await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
+                department_id=int(old_dept_id_for_fga),
+                user_ids=[user_id],
+            )
         if fga_add_new:
             ops_add = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
             await DepartmentChangeHandler.execute_async(ops_add)
@@ -1698,8 +1781,10 @@ class DepartmentService:
         from bisheng.tenant.domain.services.user_tenant_sync_service import (
             UserTenantSyncService,
         )
+
         await UserTenantSyncService.sync_user(
-            user_id, trigger=UserTenantSyncTrigger.DEPT_CHANGE,
+            user_id,
+            trigger=UserTenantSyncTrigger.DEPT_CHANGE,
         )
 
     @classmethod
@@ -1726,14 +1811,17 @@ class DepartmentService:
                 ),
             )
         return {
-            'knowledge_spaces': int(k or 0),
-            'flows': int(f or 0),
-            'assistants': int(a or 0),
+            "knowledge_spaces": int(k or 0),
+            "flows": int(f or 0),
+            "assistants": int(a or 0),
         }
 
     @classmethod
     async def acheck_local_member_delete(
-        cls, dept_id: str, user_id: int, login_user,
+        cls,
+        dept_id: str,
+        user_id: int,
+        login_user,
     ) -> dict:
         """删除人员前预检：是否挂载数据资产。"""
         from bisheng.database.constants import AdminRole
@@ -1742,7 +1830,7 @@ class DepartmentService:
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if ctx_dept.status == 'archived':
+            if ctx_dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
             mem = (
                 await session.exec(
@@ -1758,7 +1846,7 @@ class DepartmentService:
         user = await UserDao.aget_user(user_id)
         if not user or user.delete != 0:
             raise DepartmentMemberNotFoundError()
-        if getattr(user, 'source', 'local') != 'local':
+        if getattr(user, "source", "local") != "local":
             raise DepartmentMemberDeleteForbiddenError()
 
         old_roles = UserRoleDao.get_user_roles(user_id)
@@ -1767,23 +1855,26 @@ class DepartmentService:
 
         counts = await cls._count_user_owned_data_assets(user_id)
         total = sum(counts.values())
-        return {'has_assets': total > 0, 'counts': counts}
+        return {"has_assets": total > 0, "counts": counts}
 
     @classmethod
     async def adelete_local_organization_member(
-        cls, dept_id: str, user_id: int, login_user,
+        cls,
+        dept_id: str,
+        user_id: int,
+        login_user,
     ) -> None:
         """删除本地人员账号：清部门关系、角色（保留超管）、用户组，软删用户。"""
         from bisheng.database.constants import AdminRole
+        from bisheng.database.models.user_group import UserGroup
         from bisheng.user.domain.models.user import User
         from bisheng.user.domain.models.user_role import UserRole
-        from bisheng.database.models.user_group import UserGroup
 
         await cls.acheck_local_member_delete(dept_id, user_id, login_user)
         counts = await cls._count_user_owned_data_assets(user_id)
         if sum(counts.values()) > 0:
             raise DepartmentMemberDeleteBlockedError(
-                msg='User has data assets',
+                msg="User has data assets",
                 counts=counts,
             )
 
@@ -1807,6 +1898,7 @@ class DepartmentService:
 
         if db_user:
             from bisheng.user.domain.services.user import UserService
+
             await UserService.ainvalidate_jwt_after_account_disabled(user_id)
 
         for did in dept_ids:
@@ -1815,18 +1907,21 @@ class DepartmentService:
 
     @classmethod
     async def aget_member_edit_form(
-        cls, dept_id: str, user_id: int, login_user,
+        cls,
+        dept_id: str,
+        user_id: int,
+        login_user,
     ) -> dict:
         """PRD 3.2.2：编辑人员弹窗数据（区分主属本地/第三方/兼职）。"""
         from bisheng.database.constants import AdminRole
         from bisheng.database.models.group import GroupDao
+        from bisheng.database.models.user_group import UserGroupDao
         from bisheng.user.domain.models.user import UserDao
         from bisheng.user.domain.models.user_role import UserRoleDao
-        from bisheng.database.models.user_group import UserGroupDao
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if ctx_dept.status == 'archived':
+            if ctx_dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
             mem = (
                 await session.exec(
@@ -1863,27 +1958,27 @@ class DepartmentService:
         dept_by_id = {d.id: d for d in depts}
 
         if mem.is_primary == 0:
-            edit_mode = 'affiliate'
-        elif getattr(user, 'source', 'local') == 'local':
-            edit_mode = 'local_primary'
+            edit_mode = "affiliate"
+        elif getattr(user, "source", "local") == "local":
+            edit_mode = "local_primary"
         else:
-            edit_mode = 'synced_primary'
+            edit_mode = "synced_primary"
 
         catalog = await cls._aget_assignable_roles_catalog(depts, login_user)
 
         primary_ud = next((x for x in all_uds if x.is_primary == 1), None)
         primary_block = None
-        primary_role_ids: List[int] = []
+        primary_role_ids: list[int] = []
         if primary_ud:
             pd = dept_by_id.get(primary_ud.department_id)
             if pd:
-                ap = {int(r['id']) for r in catalog.get(pd.dept_id, [])}
+                ap = {int(r["id"]) for r in catalog.get(pd.dept_id, [])}
                 primary_role_ids = sorted(list(role_ids_user & ap))
                 primary_block = {
-                    'id': pd.id,
-                    'dept_id': pd.dept_id,
-                    'name': pd.name,
-                    'role_ids': primary_role_ids,
+                    "id": pd.id,
+                    "dept_id": pd.dept_id,
+                    "name": pd.name,
+                    "role_ids": primary_role_ids,
                 }
 
         affiliate_rows = []
@@ -1893,14 +1988,16 @@ class DepartmentService:
             d = dept_by_id.get(ud.department_id)
             if not d:
                 continue
-            ap = {int(r['id']) for r in catalog.get(d.dept_id, [])}
-            affiliate_rows.append({
-                'dept_id': d.dept_id,
-                'name': d.name,
-                'role_ids': sorted(list(role_ids_user & ap)),
-            })
+            ap = {int(r["id"]) for r in catalog.get(d.dept_id, [])}
+            affiliate_rows.append(
+                {
+                    "dept_id": d.dept_id,
+                    "name": d.name,
+                    "role_ids": sorted(list(role_ids_user & ap)),
+                }
+            )
 
-        ctx_assignable_ids = {int(r['id']) for r in catalog.get(ctx_dept.dept_id, [])}
+        ctx_assignable_ids = {int(r["id"]) for r in catalog.get(ctx_dept.dept_id, [])}
         context_role_ids = sorted(list(role_ids_user & ctx_assignable_ids))
 
         ug_links = await UserGroupDao.aget_user_group(user_id)
@@ -1909,50 +2006,49 @@ class DepartmentService:
         locked_group_ids = [int(x.group_id) for x in admin_group_links]
         current_group_ids = sorted(list(dict.fromkeys(member_group_ids + locked_group_ids)))
         manageable_groups = await cls._manageable_group_options(login_user)
-        manageable_group_ids = {
-            int(item['id'])
-            for item in manageable_groups
-            if item.get('id') is not None
-        }
-        missing_current_group_ids = [
-            group_id for group_id in current_group_ids
-            if group_id not in manageable_group_ids
-        ]
+        manageable_group_ids = {int(item["id"]) for item in manageable_groups if item.get("id") is not None}
+        missing_current_group_ids = [group_id for group_id in current_group_ids if group_id not in manageable_group_ids]
         if missing_current_group_ids:
             missing_groups = await GroupDao.aget_group_by_ids(missing_current_group_ids)
             for group in missing_groups:
-                manageable_groups.append({
-                    'id': group.id,
-                    'group_name': group.group_name,
-                    'visibility': group.visibility,
-                })
+                manageable_groups.append(
+                    {
+                        "id": group.id,
+                        "group_name": group.group_name,
+                        "visibility": group.visibility,
+                    }
+                )
 
         return {
-            'edit_mode': edit_mode,
-            'user': {
-                'user_id': user.user_id,
-                'user_name': user.user_name,
-                'person_id': cls._person_display_id(user),
-                'source': getattr(user, 'source', 'local') or 'local',
+            "edit_mode": edit_mode,
+            "user": {
+                "user_id": user.user_id,
+                "user_name": user.user_name,
+                "person_id": cls._person_display_id(user),
+                "source": getattr(user, "source", "local") or "local",
             },
-            'context': {
-                'dept_id': ctx_dept.dept_id,
-                'name': ctx_dept.name,
-                'is_primary': int(mem.is_primary or 0),
+            "context": {
+                "dept_id": ctx_dept.dept_id,
+                "name": ctx_dept.name,
+                "is_primary": int(mem.is_primary or 0),
             },
-            'primary_department': primary_block,
-            'affiliate_rows': affiliate_rows,
-            'assignable_roles_catalog': catalog,
-            'context_role_ids': context_role_ids,
-            'manageable_groups': manageable_groups,
-            'current_group_ids': current_group_ids,
-            'locked_group_ids': locked_group_ids,
-            'can_change_primary': edit_mode == 'local_primary',
+            "primary_department": primary_block,
+            "affiliate_rows": affiliate_rows,
+            "assignable_roles_catalog": catalog,
+            "context_role_ids": context_role_ids,
+            "manageable_groups": manageable_groups,
+            "current_group_ids": current_group_ids,
+            "locked_group_ids": locked_group_ids,
+            "can_change_primary": edit_mode == "local_primary",
         }
 
     @classmethod
     async def aapply_member_edit(
-        cls, dept_id: str, user_id: int, data: DepartmentMemberEditApply, login_user,
+        cls,
+        dept_id: str,
+        user_id: int,
+        data: DepartmentMemberEditApply,
+        login_user,
     ) -> None:
         """PRD 3.2.2：保存编辑（用户组合并替换 + 角色按部门可分配域合并）。"""
         from bisheng.database.constants import AdminRole
@@ -1961,7 +2057,7 @@ class DepartmentService:
 
         async with get_async_db_session() as session:
             ctx_dept = await _get_dept_and_check_permission(session, dept_id, login_user)
-            if ctx_dept.status == 'archived':
+            if ctx_dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
             mem = (
                 await session.exec(
@@ -1986,19 +2082,19 @@ class DepartmentService:
         role_ids_user = set(old_role_ids)
 
         if mem.is_primary == 0:
-            edit_mode = 'affiliate'
-        elif getattr(user, 'source', 'local') == 'local':
-            edit_mode = 'local_primary'
+            edit_mode = "affiliate"
+        elif getattr(user, "source", "local") == "local":
+            edit_mode = "local_primary"
         else:
-            edit_mode = 'synced_primary'
+            edit_mode = "synced_primary"
 
-        if data.user_name is not None and edit_mode == 'local_primary':
-            name = (data.user_name or '').strip()
+        if data.user_name is not None and edit_mode == "local_primary":
+            name = (data.user_name or "").strip()
             if name and name != user.user_name:
                 user.user_name = name
                 await UserDao.aupdate_user(user)
 
-        if edit_mode == 'local_primary' and data.primary_department_id is not None:
+        if edit_mode == "local_primary" and data.primary_department_id is not None:
             async with get_async_db_session() as session:
                 target = (
                     await session.exec(
@@ -2016,7 +2112,7 @@ class DepartmentService:
             if cur_pid is None or cur_pid != int(target.id):
                 await cls._apply_local_primary_department_change(user_id, int(target.id))
 
-        if edit_mode != 'affiliate' and data.group_ids is not None:
+        if edit_mode != "affiliate" and data.group_ids is not None:
             from bisheng.common.errcode.user_group import (
                 UserGroupPermissionDeniedError,
             )
@@ -2027,12 +2123,14 @@ class DepartmentService:
             req = [int(x) for x in data.group_ids]
             try:
                 await UserGroupService.areplace_user_memberships(
-                    user_id, req, login_user,
+                    user_id,
+                    req,
+                    login_user,
                 )
             except UserGroupPermissionDeniedError:
                 raise DepartmentPermissionDeniedError() from None
 
-        if edit_mode == 'affiliate':
+        if edit_mode == "affiliate":
             a_ctx = await cls._assignable_role_id_set(ctx_dept.dept_id, login_user)
             picked = {int(x) for x in (data.context_role_ids or [])}
             if not picked.issubset(a_ctx):
@@ -2049,10 +2147,7 @@ class DepartmentService:
             # operator's scope so a sub-tenant admin can save without 21009 on
             # foreign affiliates. Primary dept equals ctx_dept here (mem.is_primary
             # == 1) and is always accessible.
-            depts = [
-                d for d in depts
-                if d.id == ctx_dept.id or await _can_access_dept(login_user, int(d.id))
-            ]
+            depts = [d for d in depts if d.id == ctx_dept.id or await _can_access_dept(login_user, int(d.id))]
             dept_by_id = {d.id: d for d in depts}
             pdept = dept_by_id.get(primary_ud.department_id)
             if not pdept:

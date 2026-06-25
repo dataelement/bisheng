@@ -11,13 +11,13 @@
  * bare-string output never degrades into a single result chip).
  */
 import { Outlined } from 'bisheng-icons';
-import { useState, type FC } from 'react';
+import { memo, useState, type FC } from 'react';
 import { useLocalize } from '~/hooks';
 import { cn } from '~/utils';
 import CollapsibleTimelineItem from './CollapsibleTimelineItem';
 import { ACCENT, BODY, MUTED } from './execTokens';
 import { detailTextCls, formatStepParams, stepTypeIcon } from './StepRow';
-import type { MergedStep } from './stepUtils';
+import { mergedStepRenderEqual, type MergedStep } from './stepUtils';
 
 export interface ToolRowLiteProps {
     step: MergedStep;
@@ -62,7 +62,7 @@ function resolveTitle(step: MergedStep, localize: ReturnType<typeof useLocalize>
     return `已使用 ${step.name || localize('com_tools_generic_fallback')}`;
 }
 
-const ToolRowLite: FC<ToolRowLiteProps> = ({ step }) => {
+const ToolRowLiteBase: FC<ToolRowLiteProps> = ({ step }) => {
     const localize = useLocalize();
     // Default COLLAPSED to a single verb-phrase line (入参/结果 on demand). The
     // parent group already stays expanded while it's the active episode; keeping
@@ -109,6 +109,20 @@ const ToolRowLite: FC<ToolRowLiteProps> = ({ step }) => {
     );
 };
 
+ToolRowLiteBase.displayName = 'ToolRowLite';
+
+/**
+ * React.memo comparator. ExecutionTimeline rebuilds the node tree (fresh MergedStep
+ * objects) on every WS frame, so within the active group each thinking-delta frame
+ * would otherwise re-render every sibling tool row even though none of them changed.
+ * Delegates to mergedStepRenderEqual — the shared "did this step change?" predicate
+ * (also used by DeepStepGroup's gate) so the two memo comparators can't drift.
+ */
+export function toolRowLitePropsEqual(prev: ToolRowLiteProps, next: ToolRowLiteProps): boolean {
+    return mergedStepRenderEqual(prev.step, next.step);
+}
+
+const ToolRowLite = memo(ToolRowLiteBase, toolRowLitePropsEqual);
 ToolRowLite.displayName = 'ToolRowLite';
 
 // Exported both ways: the Execution primitives (CollapsibleTimelineItem etc.)

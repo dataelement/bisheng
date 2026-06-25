@@ -81,6 +81,13 @@ class LinsightSessionVersionBase(SQLModelSerializable):
     # F035: per-task execution model id chosen at submit time (nullable; falls
     # back to the tenant linsight_default_model_id when empty).
     model: str | None = Field(None, description="Per-task execution model id", sa_type=Text, nullable=True)
+    # F035 Track D: skill names the user picked for this run, persisted so resume /
+    # continue (which reload this row) materialize the same skills. The worker copies
+    # the matched bundles into the workspace at startup; unselected ones never load.
+    # Nullable for back-compat with sessions created before this column existed.
+    skills: list[str] | None = Field(
+        None, description="Selected skill names for this run", sa_column=Column(JsonType, nullable=True)
+    )
     sop: str | None = Field(None, description="SOPContents", sa_type=Text, nullable=True)
     output_result: dict | None = Field(None, description="Output Results", sa_column=Column(JsonType, nullable=True))
     status: SessionVersionStatusEnum = Field(

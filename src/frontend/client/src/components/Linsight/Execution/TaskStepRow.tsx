@@ -17,7 +17,6 @@
  */
 import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
-import { IntentRow } from './IntentRow';
 import type { ExecStepEventData } from './stepUtils';
 import { isTaskRunning, isTaskStarted, TASK_ERROR_STATUSES } from './stepUtils';
 
@@ -32,7 +31,9 @@ export interface ExecTask {
 }
 
 export function TaskStepRow({ task }: { task: ExecTask }) {
-    // Answered clarify entries collapse into intent-summary rows.
+    // Answered clarify entries render as inline IntentRows inside ExecutionTimeline
+    // (时序内联); kept here only to gate the "render nothing" guard below so a task
+    // whose only history is an answered clarify still surfaces that intent row.
     const answeredInputs = (task.history || []).filter((h) => h?.step_type === 'call_user_input' && h?.is_completed);
     // Legacy two-level tasks: nested children that execution has actually reached.
     const startedChildren = (task.children || []).filter((child) => isTaskStarted(child.status));
@@ -53,9 +54,6 @@ export function TaskStepRow({ task }: { task: ExecTask }) {
 
     return (
         <div className="flex flex-col">
-            {answeredInputs.map((entry, i) => (
-                <IntentRow key={`input_${i}`} data={entry} />
-            ))}
             {/* Scope liveness to THIS task: only a running task's tail episode is
                 "active" (expanded). A completed task — even though the session is
                 still live — passes false so its last episode collapses to a summary

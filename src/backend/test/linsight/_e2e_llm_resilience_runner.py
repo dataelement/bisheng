@@ -200,7 +200,7 @@ async def r2_main_content_filter_raises():
     # And the failure classifier turns that raised exception into a precise,
     # frontend-friendly error_type (this is what _handle_task_failure emits).
     if raised is not None:
-        from bisheng.linsight.domain.services.llm_error_classifier import classify_for_event
+        from bisheng.common.services.llm_error_classifier import classify_for_event
 
         try:
             wrapped = RuntimeError(f"Agent task execution failed: {raised}")

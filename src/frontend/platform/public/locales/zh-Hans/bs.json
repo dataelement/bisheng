@@ -986,6 +986,8 @@
     "deleteFailed": "删除失败",
     "batchDeleteSuccess": "成功删除 {{count}} 个 SOP",
     "prompts": "AI对话提示词",
+    "aiAssistantName": "AI 助手名称",
+    "aiAssistantNamePlaceholder": "AI 助手",
     "sysPrompts": "系统提示词",
     "userPrompts": "用户提示词",
     "articleMax": "单篇文章问答时最大长度",

@@ -17,19 +17,22 @@
  * Single-level fold: the expanded body lays out the thinking passages directly as
  * Body-colored text (no inner "思考内容" collapsible) interleaved with tool /
  * knowledge rows in original timeline order. The group shell owns the only
- * open/close state, persisted via useCollapseState. The default fold tracks the
- * `active` prop (the live tail episode → open; superseded / done → collapsed) —
- * deliberately NOT the per-tool group.running, which toggles on every tool call
- * and used to make the whole group flicker open/closed mid-episode.
+ * open/close state, persisted via useCollapseState; it defaults COLLAPSED for every
+ * group — even the live tail — so task mode opens quiet (the collapsed header still
+ * streams the latest thought via the NarrationTicker), and the user expands a group
+ * manually to read the full reasoning. The fold is bound to neither `active` nor the
+ * per-tool group.running (binding it to group.running used to make the whole group
+ * flicker open/closed on every tool call mid-episode).
  *
  * It does NOT import or modify any Chat/Messages (daily /c) component — all
- * tokens come from execTokens, the timer math from useElapsedTicker.
+ * tokens come from execTokens; the live 用时 ticker is isolated in GroupHeaderLabel
+ * so a 100ms tick re-renders only the header text, never the group body.
  */
 import { Outlined } from 'bisheng-icons';
-import { useEffect, useMemo, useRef, useState, type FC, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type FC, type ReactNode } from 'react';
 import { useLocalize } from '~/hooks';
 import { useCollapseState } from '~/store/linsightCollapse';
-import { cn, formatSeconds } from '~/utils';
+import { cn } from '~/utils';
 import { ACCENT, ACTIVITY_I18N, BODY, INK } from './execTokens';
 
 // Node-header palette, aligned with the blue-box IntentRow/StepRow: the static
@@ -37,11 +40,11 @@ import { ACCENT, ACTIVITY_I18N, BODY, INK } from './execTokens';
 // the single Accent (blue) highlight; the chevron is muted and darkens on hover;
 // the title + narration sit lighter as quiet meta.
 const NODE_TEXT = '#999999';
+import { GroupHeaderLabel } from './GroupHeaderLabel';
 import { KnowledgeRow } from './KnowledgeRow';
 import { NarrationTicker } from './NarrationTicker';
 import ToolRowLite from './ToolRowLite';
-import { useElapsedTicker } from './useElapsedTicker';
-import { firstLine, narrationFromSteps, summarizeActivity } from './stepUtils';
+import { mergedStepRenderEqual, narrationFromSteps, summarizeActivity } from './stepUtils';
 import type { DeepStepGroup as DeepStepGroupData, MergedStep } from './stepUtils';
 
 export interface DeepStepGroupProps {
@@ -62,31 +65,24 @@ export interface DeepStepGroupProps {
     subagent?: { goal: string; idx: number };
     /**
      * Whether this group is the ACTIVE (live tail) episode of a running container.
-     * It is the single source of truth for every live-vs-done UI facet — the
-     * open/collapse default, the 正在/已 label, the header pulse, the accent color,
-     * the elapsed ticker, and the narration mode.
+     * It is the single source of truth for the live-vs-done UI facets — the 正在/已
+     * label, the header pulse, the accent color, the elapsed ticker, and the
+     * narration mode. (The fold is NOT one of them: every group opens collapsed —
+     * see the file-header fold note.)
      *
      * It deliberately REPLACES the old `group.running && live` driver. `group.running`
      * is "any step in this episode currently mid-flight", which toggles true↔false
      * MANY times within one live episode: thinking frames ship as `status:'end'`
      * (never running), and a tool step is running only between its start and end
-     * frames — so binding the fold to it made the whole group expand on every tool
-     * call and collapse again the instant it finished ("上下反复跳跃"). `active` is
-     * stable for the episode's whole lifetime: the parent (ExecutionTimeline) sets
-     * it true for the last node while the container is live, so the group stays
-     * steadily expanded and collapses exactly once when a newer episode supersedes
-     * it. Default false ⇒ a done / historical group (collapsed summary, frozen clock).
+     * frames — so binding these facets to it made the label/pulse churn on every
+     * tool call ("上下反复跳跃"). `active` is stable for the episode's whole lifetime:
+     * the parent (ExecutionTimeline) sets it true for the last node while the
+     * container is live, and flips it to false exactly once when a newer episode
+     * supersedes it. Default false ⇒ a done / historical group (done label, frozen
+     * clock).
      */
     active?: boolean;
 }
-
-/**
- * Subagent header budget: the delegation goal is the `task` tool's `description`
- * arg, which the model writes as a long multi-sentence instruction. The header
- * renders only its first sentence/clause (firstLine), widened to ~one line's worth
- * so a typical goal stays intact instead of being chopped mid-word by `truncate`.
- */
-const SUBAGENT_GOAL_TITLE_MAX = 48;
 
 /** A render segment: a stitched thinking passage, or a single tool/knowledge step. */
 type Segment =
@@ -119,7 +115,7 @@ function buildSegments(steps: MergedStep[]): Segment[] {
     return out;
 }
 
-const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagent, active = false }) => {
+const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, subagent, active = false }) => {
     const localize = useLocalize();
     // `active` (the live tail episode) — NOT the volatile per-tool group.running —
     // is the live-vs-done signal for the entire group. Binding everything to active
@@ -171,7 +167,6 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
     // ticker math is in milliseconds, so scale up here.
     const startMs = group.startedAt != null ? group.startedAt * 1000 : null;
     const endMs = group.endedAt != null ? group.endedAt * 1000 : null;
-    const { elapsedMs } = useElapsedTicker(startMs, endMs, running);
 
     // R1 (段流重构 2026-06): the segment header is the ACTIVITY SUMMARY of what
     // this episode did ("检索知识库 3 次 · 读 2 文件") — built from summarizeActivity,
@@ -187,50 +182,6 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
     // A file-editing episode (dominant activity is write_file) carries the write
     // glyph instead of the generic reasoning bulb.
     const isWriteFile = activity[0]?.category === 'write_file';
-
-    // Stable header label. Activity summary + "（用时 N 秒）" suffix when measurable;
-    // the duration clause is dropped when nested (compact) OR when the measured span
-    // is 0 (a single second-level frame would read a misleading "用时 0.0 秒").
-    const label = useMemo<string>(() => {
-        const seconds = formatSeconds(elapsedMs);
-        const noDuration = compact || elapsedMs <= 0;
-        // R3 完全拆平: a subagent segment is headed by its delegation GOAL + 用时.
-        if (subagent) {
-            // The goal is the subagent's identity, so it OWNS the header line. Show
-            // only its GIST — the first sentence/clause, hard-capped to ~one line via
-            // firstLine — so a long multi-sentence instruction doesn't read as a
-            // run-on chopped mid-word by `truncate`.
-            //
-            // The activity summary (联网搜索 N 次 · 编辑 M 文件) is intentionally NOT
-            // appended here: it is process detail that competes with the goal for
-            // width (and collides with a truncated goal's open paren), and it is
-            // already visible when the card is expanded. It is kept only as a
-            // FALLBACK label for a goal-less (degraded) subagent — there it is more
-            // informative than a bare "子智能体 N".
-            const goalGist = firstLine(subagent.goal, SUBAGENT_GOAL_TITLE_MAX);
-            const core =
-                goalGist || activityText || localize('com_linsight_subagent_track', { 0: String(subagent.idx) });
-            return noDuration ? core : localize('com_linsight_act_summary', { 0: core, 1: seconds });
-        }
-        // R1: activity-summary header (verbs + counts), the primary case.
-        if (activityText) {
-            return noDuration
-                ? activityText
-                : localize('com_linsight_act_summary', { 0: activityText, 1: seconds });
-        }
-        // Pure-reasoning fallback: the plain 深度思考 duration label.
-        if (noDuration) {
-            return localize(
-                running
-                    ? 'com_linsight_deep_thinking_running_compact'
-                    : 'com_linsight_deep_thinking_done_compact',
-            );
-        }
-        return localize(
-            running ? 'com_linsight_deep_thinking_running' : 'com_linsight_deep_thinking_done',
-            { 0: seconds },
-        );
-    }, [subagent, activityText, compact, elapsedMs, running, localize]);
 
     // R2 旁白 (degraded path, 2026-06): the segment's last reasoning sentence,
     // surfaced as a quiet aside so the collapsed stack reads like a colleague
@@ -320,7 +271,14 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
                         running && 'animate-pulse group-hover:animate-none',
                     )}
                 >
-                    {label}
+                    <GroupHeaderLabel
+                        activityText={activityText}
+                        subagent={subagent}
+                        compact={compact}
+                        startMs={startMs}
+                        endMs={endMs}
+                        running={running}
+                    />
                 </span>
                 {/* Single chevron rotates right→down (collapsed → expanded), matching
                     the StepRow / daily "深度思考" toggle; muted, darkening on hover. */}
@@ -354,6 +312,34 @@ const DeepStepGroup: FC<DeepStepGroupProps> = ({ group, compact = false, subagen
     );
 };
 
+DeepStepGroupBase.displayName = 'DeepStepGroup';
+
+/**
+ * React.memo comparator. The WS pump rebuilds the WHOLE timeline node tree (fresh
+ * MergedStep / group objects) on EVERY appended frame — including the many thinking
+ * token-delta frames — so by default every历史 (frozen) episode re-renders dozens
+ * of times a second during streaming. That starves the live 100ms elapsed ticker
+ * and makes the "用时 N 秒" counter advance unevenly / skip seconds. A frozen
+ * episode is semantically immutable, so skip its re-render when nothing it renders
+ * changed; the active tail (new output / a new step / a step closing) always
+ * compares unequal and re-renders. Cost is O(steps) — far below re-rendering the
+ * thinking-text + tool-row subtree it guards. The per-step "did it change?" check
+ * is mergedStepRenderEqual (shared with ToolRowLite so the two gates can't drift).
+ */
+export function deepStepGroupPropsEqual(prev: DeepStepGroupProps, next: DeepStepGroupProps): boolean {
+    if (prev.active !== next.active || prev.compact !== next.compact) return false;
+    if (prev.subagent?.idx !== next.subagent?.idx || prev.subagent?.goal !== next.subagent?.goal) return false;
+    const a = prev.group;
+    const b = next.group;
+    if (a.running !== b.running || a.startedAt !== b.startedAt || a.endedAt !== b.endedAt) return false;
+    if (a.steps.length !== b.steps.length) return false;
+    for (let i = 0; i < a.steps.length; i++) {
+        if (!mergedStepRenderEqual(a.steps[i], b.steps[i])) return false;
+    }
+    return true;
+}
+
+const DeepStepGroup = memo(DeepStepGroupBase, deepStepGroupPropsEqual);
 DeepStepGroup.displayName = 'DeepStepGroup';
 
 // Exported both as a named member (ExecutionTimeline) and as default, kept for

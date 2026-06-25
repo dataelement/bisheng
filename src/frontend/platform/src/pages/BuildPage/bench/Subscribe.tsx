@@ -44,6 +44,8 @@ export interface ChatConfigForm {
     userPrompt: string;
     maxChunkSize: number;
     feedbackTips: string;
+    /** 订阅侧 AI 助手自定义名称，对应接口 assistant_name；空表示用客户端默认文案 */
+    assistantName: string;
 }
 export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number }) {
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
@@ -109,6 +111,21 @@ export default function Subscribe({ scopeVersion = 0 }: { scopeVersion?: number 
                                     <span>{t("chatConfig.prompts")}</span>
                                 </p>
                             </div>
+                            {/* AI 助手名称：留空则客户端回退到本地化默认文案 */}
+                            <>
+                                <Label className="bisheng-label">{t('chatConfig.aiAssistantName')}</Label>
+                                <div className="mt-3 mb-4">
+                                    <Input
+                                        value={formData.assistantName}
+                                        placeholder={t('chatConfig.aiAssistantNamePlaceholder')}
+                                        maxLength={50}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setFormData(prev => ({ ...prev, assistantName: val }));
+                                        }}
+                                    />
+                                </div>
+                            </>
                             <>
                                 <Label className="bisheng-label">{t('chatConfig.sysPrompts')}</Label>
                                 <div className="mt-3">
@@ -242,6 +259,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
         userPrompt: '',
         maxChunkSize: 15000,
         feedbackTips: '请将您的网站爬取需求发送至邮箱：XXXX@XX',
+        assistantName: '',
     });
     const [configMeta, setConfigMeta] = useState<any>(null);
 
@@ -256,6 +274,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
                 const userPromptFromRes = cfg?.userPrompt ?? cfg?.user_prompt;
                 const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
                 const feedbackTipsFromRes = cfg?.feedback_tips ?? cfg?.feedbackTips;
+                const assistantNameFromRes = cfg?.assistant_name ?? cfg?.assistantName;
                 // When backend returns no saved value, seed the textarea with the
                 // localized default template so it is editable as a real value.
                 const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
@@ -266,6 +285,8 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
                     userPrompt: resolvedUserPrompt || t('chatConfig.referenceAndQuestion'),
                     maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
                     feedbackTips: resolveConfigString(feedbackTipsFromRes, prev.feedbackTips),
+                    // Keep blank when unset — empty means "use client i18n default".
+                    assistantName: resolveConfigString(assistantNameFromRes, ''),
                 };
             });
         });
@@ -373,6 +394,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion = 0) => {
             user_prompt: finalUserPrompt,
             max_chunk_size: formData.maxChunkSize,
             feedback_tips: formData.feedbackTips,
+            assistant_name: (formData.assistantName || '').trim(),
         };
 
         const res = await captureAndAlertRequestErrorHoc(setSubConfigApi(dataToSave));

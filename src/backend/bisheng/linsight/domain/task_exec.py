@@ -12,6 +12,7 @@ from loguru import logger
 
 from bisheng.api.services.invite_code.invite_code import InviteCodeService
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.llm_error_classifier import classify_for_event
 from bisheng.core.cache.utils import CACHE_DIR, create_cache_folder_async
 from bisheng.core.context.tenant import bypass_tenant_filter, current_tenant_id, set_current_tenant_id
 from bisheng.core.external.http_client.http_client_manager import get_http_client
@@ -30,7 +31,6 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
-from bisheng.linsight.domain.services.llm_error_classifier import classify_for_event
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
@@ -593,10 +593,18 @@ class LinsightWorkflowTask:
         resume path passes a Redis-backed ``checkpointer`` so the parked
         interrupt checkpoint (thread_id = session_version_id) is located.
         """
+        from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
         minio = await get_minio_storage()
         backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+        # F035 Fork X: copy this run's allowed skill bundles into the workspace
+        # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
+        # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
+        # fresh agent each time. skills_present gates attaching the skills middleware.
+        copied_skills = await materialize_session_skills(
+            backend, session_model.tenant_id, getattr(session_model, "skills", None)
+        )
         return await create_linsight_agent(
             session_model=session_model,
             tools=tools,
@@ -605,6 +613,7 @@ class LinsightWorkflowTask:
             svid=session_model.id,
             checkpointer=checkpointer,
             backend=backend,
+            skills_present=bool(copied_skills),
         )
 
     async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:

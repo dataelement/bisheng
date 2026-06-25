@@ -980,6 +980,8 @@
     "deleteFailed": "削除に失敗しました",
     "batchDeleteSuccess": "{{count}} 個の SOP を削除しました",
     "prompts": "AI対話プロンプト",
+    "aiAssistantName": "AIアシスタント名",
+    "aiAssistantNamePlaceholder": "AIアシスタント",
     "sysPrompts": "システムプロンプト",
     "userPrompts": "ユーザープロンプト",
     "articleMax": "単一記事のQ&A時の最大長さ",

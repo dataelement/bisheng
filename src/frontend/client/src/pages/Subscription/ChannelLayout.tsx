@@ -1,6 +1,8 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSetRecoilState } from "recoil";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
+import { subscriptionDetailPaneWidthState } from "~/store/subscriptionLayout";
 import NavToggle from "~/components/Nav/NavToggle";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { AiAssistantPanel } from "./AiChat/AiAssistantPanel";
@@ -26,6 +28,28 @@ interface ChannelLayoutProps {
 const MIN_LEFT_WIDTH = 480;
 const MIN_RIGHT_WIDTH = 480;
 
+// Geometry of ArticleList's two-column browse grid. The default split width is
+// derived from these so the left column's article width stays identical whether
+// the detail panel is open or closed. Keep in sync with ArticleList: the grid
+// wrapper uses px-10 gutters, the row grid uses gap-x-4 with a 1px divider column.
+const LIST_GUTTER = 40; // px-10 horizontal padding on each side of the list
+const GRID_GAP = 16; // gap-x-4 between grid columns
+const GRID_DIVIDER = 1; // 1px vertical divider column between the two cards
+
+/**
+ * Width the left list should take so its single column matches the FIRST column
+ * of the two-column browse grid.
+ *
+ * Two-column card width = (containerWidth − 2·gutter − 2·gap − divider) / 2.
+ * In split mode the list keeps the same px-10 gutters, so the panel width is
+ * that card width plus both gutters back.
+ */
+const getDefaultLeftWidth = (containerWidth: number) => {
+    const columnWidth =
+        (containerWidth - LIST_GUTTER * 2 - GRID_GAP * 2 - GRID_DIVIDER) / 2;
+    return columnWidth + LIST_GUTTER * 2;
+};
+
 export function ChannelLayout({
     channel,
     onFullScreen,
@@ -46,12 +70,19 @@ export function ChannelLayout({
     const [isToggleHovering, setIsToggleHovering] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const { leftWidth, isResizing, startResizing } = useResizablePanel({
-        storageKey: "article-split-ratio",
+    const setDetailPaneWidth = useSetRecoilState(subscriptionDetailPaneWidthState);
+
+    const { leftWidth, isResizing, startResizing, resetToDefault } = useResizablePanel({
+        // v2: the default is now derived from the two-column grid geometry
+        // (getDefaultLeftWidth) instead of a fixed 0.5 ratio. Bump the key so any
+        // stale ratio persisted under the old default is ignored, letting the new
+        // geometry-aligned default take effect.
+        storageKey: "article-split-ratio-v2",
         defaultRatio: 0.5,
         minLeftWidth: MIN_LEFT_WIDTH,
         minRightWidth: MIN_RIGHT_WIDTH,
         containerRef,
+        defaultLeftWidth: getDefaultLeftWidth,
     });
 
     // 选中文章时加载详情
@@ -96,6 +127,33 @@ export function ChannelLayout({
             setDetailLoading(false);
         }
     }, []);
+
+    // Each time the panel goes from closed → open, re-assert the geometry-aligned
+    // default width so the left column matches the two-column browse layout. A
+    // width the user dragged earlier doesn't leak into the next open — satisfies
+    // "left column width stays consistent when not manually resized".
+    const wasOpenRef = useRef(false);
+    useLayoutEffect(() => {
+        const isOpen = !isH5 && !!selectedArticle;
+        if (isOpen && !wasOpenRef.current) resetToDefault();
+        wasOpenRef.current = isOpen;
+    }, [isH5, selectedArticle, resetToDefault]);
+
+    // Publish the right-area width (detail panel + splitter) so the page-level
+    // 频道/广场 tab can pin to the article-list column's right edge and slide left
+    // when the detail panel opens. 0 when closed / on H5.
+    useEffect(() => {
+        if (isH5 || !selectedArticle) {
+            setDetailPaneWidth(0);
+            return;
+        }
+        const containerWidth = containerRef.current?.getBoundingClientRect().width ?? 0;
+        setDetailPaneWidth(containerWidth > 0 ? Math.max(0, containerWidth - leftWidth) : 0);
+    }, [isH5, selectedArticle, leftWidth, setDetailPaneWidth]);
+
+    // Reset when leaving the channel view (unmount), e.g. switching to the square,
+    // so its tab returns to the full content-area right edge.
+    useEffect(() => () => setDetailPaneWidth(0), [setDetailPaneWidth]);
 
     return (
         <div

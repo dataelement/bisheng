@@ -611,6 +611,16 @@ class LoginSyncService:
             )
         for did in dict.fromkeys(delete_grant_dept_ids):
             await DepartmentAdminGrantDao.adelete(user_id, did)
+            # Revoking the admin grant must also clear the derived knowledge-space
+            # binding (space_channel_member row + knowledge_space#manager tuple),
+            # else the user keeps manage access after SSO sync (越权 residue).
+            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                DepartmentKnowledgeSpaceService,
+            )
+
+            await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
+                department_id=did, user_ids=[user_id],
+            )
 
     @classmethod
     async def _remove_sso_secondary_membership(
@@ -638,6 +648,15 @@ class LoginSyncService:
         )
         await DepartmentChangeHandler.execute_async(ops)
         await DepartmentAdminGrantDao.adelete(user_id, department_id)
+        # Clear the derived knowledge-space binding (space_channel_member row +
+        # knowledge_space#manager tuple) so admin access doesn't survive removal.
+        from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+            DepartmentKnowledgeSpaceService,
+        )
+
+        await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
+            department_id=department_id, user_ids=[user_id],
+        )
 
     @classmethod
     async def _reconcile_remove_sso_secondary_memberships(

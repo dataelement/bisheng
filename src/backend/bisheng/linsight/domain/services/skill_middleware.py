@@ -1,18 +1,21 @@
 """Skill loading + per-run whitelist middleware for the deepagents kernel.
 
-⚠️ CURRENTLY DISABLED / NOT WIRED (F035, 2026-06-16). The production agent
-assembly (``agent_factory.create_linsight_agent``) injects only
-``_ToolExclusionMiddleware`` — this middleware is intentionally NOT in that list,
-and ``make_skills_middleware`` has no production caller. Two independent reasons:
-(1) its own ``FilesystemBackend`` (below) shadows the workspace file tools, so
-deliverables would land in the skills store instead of ``output/`` (same hazard
-documented in ``agent_factory``); (2) the per-run whitelist key ``active_skills``
-is never written into the run config (``task_exec`` sets only ``thread_id``), so
-the second gate would be a no-op even if re-enabled. Re-enable preconditions
-(Track D Phase 2): give skills a file-tool namespace separate from the workspace
-AND thread ``active_skills`` into the worker run config. Kept as forward-compatible
-WIP — the Skill *management* CRUD/upload layer (skill_service / skill_store /
-``/api/v1/linsight/skill``) is live and independent of this runtime injection.
+⚠️ DORMANT / SUPERSEDED (F035, 2026-06-24). This subclass is no longer wired into
+``agent_factory.create_linsight_agent`` and ``make_skills_middleware`` has no
+production caller. The Skill runtime was restored via **Fork X (copy-time gate)**
+instead: at task startup ``skill_provisioning.materialize_session_skills`` copies
+only the ``governance-enabled ∩ user-selected`` bundles into the session workspace
+``/skills/`` subtree, then a plain ``deepagents.SkillsMiddleware`` (backed by a
+``FilesystemBackend`` over the workspace cache) enumerates them. Because the copy
+is the whitelist gate, the model physically cannot see an unselected skill — so
+the per-run ``active_skills`` config key and the runtime ``_skill_allowed`` filter
+below are NOT needed and NOT threaded. The whitelist *semantics* (built-in always
+on; tenant skills need ``enabled`` + per-run selection; ``[]`` disables all) now
+live in ``materialize_session_skills`` and are covered by its tests.
+
+This class is kept (not deleted) for reference and as a fallback should we ever
+move filtering back to runtime. The Skill *management* CRUD/upload layer
+(skill_service / skill_store / ``/api/v1/linsight/skill``) is live and orthogonal.
 
 F035 Track D (design §7.2, deviation D8): deepagents 0.6.x has no native
 whitelist hook — ``SkillsMiddleware`` only loads sources. We subclass it and

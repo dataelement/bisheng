@@ -77,6 +77,7 @@ from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
 )
+from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     KnowledgeSpaceFileResponse,
@@ -307,6 +308,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not spaces:
             return []
 
+        # Pin state is a per-user preference stored in knowledge_space_user_pin,
+        # decoupled from the membership row (a space may be pinned even when
+        # reached only via ReBAC / department authorization, with no member row).
+        pinned_ids = await KnowledgeSpaceUserPinDao.list_pinned_space_ids(self.login_user.user_id)
+
         permission_space_ids = [
             space.id for space in spaces if space.user_id != self.login_user.user_id and space.id not in membership_map
         ]
@@ -344,7 +350,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             member_conf = membership_map.get(space.id)
             result = KnowledgeSpaceInfoResp(
                 **space.model_dump(),
-                is_pinned=bool(member_conf and member_conf.is_pinned),
+                is_pinned=space.id in pinned_ids,
             )
 
             if space.user_id == self.login_user.user_id:
@@ -1721,6 +1727,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         members_map = {int(one.business_id): one for one in members}
         res = await KnowledgeDao.async_get_spaces_by_ids(list(members_map.keys()), order_by)
+        # Pin state comes from the per-user pin table, not the legacy member row.
+        pinned_ids = await KnowledgeSpaceUserPinDao.list_pinned_space_ids(self.login_user.user_id)
         pinned_spaces = []
         normal_spaces = []
         for one in res:
@@ -1728,7 +1736,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not member_conf:
                 continue
 
-            if member_conf.is_pinned:
+            if one.id in pinned_ids:
                 pinned_spaces.append(
                     KnowledgeSpaceInfoResp(
                         **one.model_dump(),
@@ -2010,7 +2018,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return spaces
 
     async def pin_space(self, space_id: int, is_pinned: bool = True) -> bool:
-        return await SpaceChannelMemberDao.pin_space_id(space_id, self.login_user.user_id, is_pinned)
+        """Pin/unpin a knowledge space for the current user.
+
+        Pin state lives in the decoupled ``knowledge_space_user_pin`` table, not
+        on the membership row — a user may pin a space reachable only via ReBAC /
+        department authorization (no membership row). We gate on ``view_space``
+        first so a pin can only be written for a space the user can actually see.
+        """
+        await self._require_read_permission(space_id)
+        if is_pinned:
+            await KnowledgeSpaceUserPinDao.pin(user_id=self.login_user.user_id, space_id=space_id)
+        else:
+            await KnowledgeSpaceUserPinDao.unpin(user_id=self.login_user.user_id, space_id=space_id)
+        return True
 
     async def get_knowledge_square(self, keyword: str = None, page: int = 1, page_size: int = 20) -> dict:
         from bisheng.user.domain.services.user import UserService

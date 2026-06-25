@@ -78,6 +78,47 @@ def test_coerce_degrades_to_empty():
     assert _coerce_questions('{"question": "single object not array"}') == []  # dict, not list
 
 
+# The harder live failure (session 9aef4773…, 福建古田7日游): the model crammed the
+# WHOLE 4-question array into ONE list element, dropped its opening `[{"question": "`,
+# and left inner quotes unescaped ("你指的"古田"是哪一个？"). json.loads fails, so the
+# OLD code wrapped the entire ~500-char blob as a single bogus question whose TEXT was
+# raw JSON (the user saw `..., "options": [...], "multiple": false}, {"question": ...`).
+# json_repair-based recovery now reconstructs the structured questions.
+_MALFORMED_ARRAY_CRAMMED = (
+    '你 "你指的"古田"是哪一个？", "options": ["龙岩·上杭古田镇", "宁德·古田县", "两个都串联", "不确定，请推荐"], '
+    '"multiple": false}, {"question": "出发城市与交通方式？", "options": ["从福州出发", "从厦门出发", "从其他城市"], '
+    '"multiple": false}, {"question": "你希望输出什么格式？", "options": ["仅 markdown", "markdown + Word"], '
+    '"multiple": true}]'
+)
+
+
+def test_coerce_malformed_crammed_array_is_never_a_raw_blob():
+    """The CONTRACT (the reported bug's fix): a whole array crammed into one
+    malformed-JSON string element must NEVER be dumped as a single bogus question
+    whose text is raw JSON. It is either RECOVERED into clean structured questions
+    (best-effort via json_repair — input/version-sensitive, so not asserted by
+    exact count) or DROPPED — but never a raw blob.
+
+    Note we assert the invariant, not the recovery count: json_repair is byte-
+    sensitive (the live DB blob recovers all 4 in the deployed env; a hand-typed
+    near-copy may recover fewer or none) — the guarantee that holds regardless is
+    "no raw blob". On the OLD code this element became one ~500-char 'question'.
+    """
+    out = _coerce_questions([_MALFORMED_ARRAY_CRAMMED])
+    # the old failure was exactly: len==1 with a giant raw-JSON question text
+    assert not (len(out) == 1 and len(str(out[0].get("question", ""))) > 200)
+    # whatever survives is a clean question dict with non-empty question text
+    assert all(isinstance(q, dict) and str(q.get("question", "")).strip() for q in out)
+
+
+def test_coerce_drops_unrecoverable_debris_not_a_blob():
+    """A structured-looking element with no question text yields nothing — it is
+    dropped, never surfaced to the user as a raw-JSON 'question'. Deterministic
+    (json.loads only; the opening-bracket restore is skipped for a string that
+    already starts with '{')."""
+    assert _coerce_questions(['{"options": ["a", "b"], "multiple": false}']) == []
+
+
 # --- ask_user tool: the stringified payload must now park, not ValidationError
 
 
