@@ -289,6 +289,23 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.sensitive_check_enabled = binding.sensitive_check_enabled
         return spaces
 
+    async def _populate_root_file_counts(self, spaces: list[KnowledgeSpaceInfoResp]) -> None:
+        """Set file_num to the number of files in each space's ROOT directory.
+
+        The space-list badges only reflect files sitting directly in the space
+        root, not those nested inside sub-folders. Counting is a single batched
+        GROUP BY over every space on the page (no N+1). file_num otherwise
+        defaults to 1 from the schema, which is why the list badges all showed
+        "1" before. Detail (`get_space_info`) and square keep their own
+        whole-space counts and must not call this.
+        """
+        if not spaces:
+            return
+        space_ids = [int(space.id) for space in spaces]
+        count_map = await KnowledgeFileDao.async_count_root_files_batch(space_ids)
+        for space in spaces:
+            space.file_num = count_map.get(int(space.id), 0)
+
     async def _format_accessible_spaces(
         self,
         space_ids: list[int],
@@ -376,7 +393,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else:
                 normal_spaces.append(result)
 
-        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
+        ordered = pinned_spaces + normal_spaces
+        await self._populate_root_file_counts(ordered)
+        return await self._decorate_department_metadata(ordered)
 
     async def _require_write_permission(self, space_id: int) -> None:
         """
@@ -1768,7 +1787,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         is_followed=True,
                     )
                 )
-        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
+        ordered = pinned_spaces + normal_spaces
+        await self._populate_root_file_counts(ordered)
+        return await self._decorate_department_metadata(ordered)
 
     async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)
