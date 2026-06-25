@@ -1033,6 +1033,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         object_id: int,
         *,
         space_id: int | None = None,
+        include_public_viewer: bool = True,
     ) -> set[str]:
         # F036: request-scoped memo. The /children entry does the same `view_space` evaluation
         # twice (read-permission + view_space checks) and the no-parent branch repeats it; this
@@ -1041,7 +1042,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # duplicates to one. Returned sets are read-only at all call sites; a copy is returned to
         # be defensive against accidental mutation.
         cache = self.__dict__.setdefault("_effective_permission_ids_cache", {})
-        cache_key = (object_type, str(object_id), space_id)
+        cache_key = (object_type, str(object_id), space_id, include_public_viewer)
         if cache_key in cache:
             return set(cache[cache_key])
         # Evaluate permissions across the resource lineage from child -> parent.
@@ -1074,7 +1075,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not (lineage_binding_can_override and matched_lineage_binding):
                     effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
                 break
-        effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
+        if include_public_viewer:
+            effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
         cache[cache_key] = set(effective_permissions)
         return effective_permissions
 
@@ -1483,7 +1485,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if member_info.is_active:
                     result.user_role = member_info.user_role
             elif has_content_permission and not self.login_user.is_admin():
-                self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+                # On a released PUBLIC space every user is synthetically granted view_space
+                # by _public_space_viewer_permission_ids, so has_content_permission alone
+                # cannot distinguish "subscribed" from "merely able to preview from the
+                # square". Mirror get_knowledge_square: only a *real* view_space grant
+                # (ReBAC tuple / membership), not the public-viewer synthesis, counts as
+                # subscribed.
+                real_permissions = await self._get_effective_permission_ids(
+                    "knowledge_space", space_id, include_public_viewer=False
+                )
+                if "view_space" in real_permissions:
+                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
             if result.user_role is None and has_content_permission:
                 level = await PermissionService.get_permission_level(
                     user_id=self.login_user.user_id,
