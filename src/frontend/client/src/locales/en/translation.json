@@ -2263,6 +2263,7 @@
   "com_approval_approver_label": "Approver",
   "com_approval_step_submitted": "Submitted",
   "com_approval_step_submitted_desc": "Request submitted",
+  "com_approval_back": "Back",
   "com_approval_my_approval": "My Approvals",
   "com_approval_my_approval_desc": "Handle business requests that need your approval",
   "com_approval_my_requests_desc": "View approval requests you have submitted",

@@ -2192,6 +2192,7 @@
   "com_approval_approver_label": "审批人",
   "com_approval_step_submitted": "提交申请",
   "com_approval_step_submitted_desc": "申请已提交",
+  "com_approval_back": "返回",
   "com_approval_my_approval": "我的审批",
   "com_approval_my_approval_desc": "处理需要我审批的业务申请",
   "com_approval_my_requests_desc": "查看我发起的审批申请",

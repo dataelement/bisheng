@@ -1,5 +1,5 @@
 import { Outlined } from "bisheng-icons";
-import { ChevronLeft, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   decideApprovalTaskApi,
@@ -170,6 +170,9 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const { showToast } = useToastContext();
 
   const [activeTab, setActiveTab] = useState<ApprovalCenterTab>(target?.tab ?? "my_tasks");
+  // Compact (<768px) is a master-detail flow: "list" shows the nav rail + list, "detail" shows the
+  // selected item full-screen with a back action. Ignored at >=768px where both panes are side-by-side.
+  const [compactView, setCompactView] = useState<"list" | "detail">("list");
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("pending_me");
   const [requestsFilter, setRequestsFilter] = useState<RequestsFilter>("in_progress");
 
@@ -188,10 +191,6 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   const [withdrawReason, setWithdrawReason] = useState("");
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
   const [revokeReason, setRevokeReason] = useState("");
-  // Mobile (touch-mobile, ≤1023px) is a single-column master/detail: the list and the detail
-  // can't sit side by side, so we navigate between them. Ignored on desktop, where both panels
-  // are always rendered side by side via the grid.
-  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
 
   const filteredTaskItems = useMemo(() => {
     const byStatus = taskFilter === "pending_me"
@@ -290,8 +289,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     setSelectedTaskId(target?.taskId ?? null);
     setSelectedInstanceId(target?.instanceId ?? null);
     setSearchQuery("");
-    // Jump straight to the detail on mobile when opened from a notification deep-link.
-    setMobileView(target?.taskId || target?.instanceId ? "detail" : "list");
+    // Deep-links (from a notification) open straight to the detail; otherwise land on the list.
+    setCompactView(target?.taskId || target?.instanceId ? "detail" : "list");
   }, [open, target?.instanceId, target?.tab, target?.taskId]);
 
   useEffect(() => {
@@ -318,11 +317,11 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   useEffect(() => { if (activeTab === "my_requests") autoSelectRequest(filteredRequestItems); }, [requestsFilter]);
 
   const openTask = async (id: number) => {
-    setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment(""); setMobileView("detail");
+    setSelectedTaskId(id); setLoadingDetail(true); setDecisionComment(""); setCompactView("detail");
     try { setTaskDetail(await getMyApprovalTaskDetailApi(id)); } finally { setLoadingDetail(false); }
   };
   const openRequest = async (id: number) => {
-    setSelectedInstanceId(id); setLoadingDetail(true); setMobileView("detail");
+    setSelectedInstanceId(id); setLoadingDetail(true); setCompactView("detail");
     try { setRequestDetail(await getApprovalInstanceDetailApi(id)); } finally { setLoadingDetail(false); }
   };
 
@@ -387,55 +386,44 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
       <DialogContent
         close={false}
         className={cn(
-          "h-[80vh] max-h-[820px] w-[calc(100vw-64px)] max-w-[1080px] rounded-xl sm:rounded-xl p-0",
-          // H5: full-screen page (touch-mobile = max-width 1023px), overriding the centered transform.
-          "touch-mobile:inset-x-0 touch-mobile:inset-y-0 touch-mobile:h-[100dvh] touch-mobile:max-h-[100dvh] touch-mobile:w-full touch-mobile:max-w-none touch-mobile:translate-x-0 touch-mobile:translate-y-0 touch-mobile:rounded-none",
+          // Compact mode (<768px): full-screen overlay — no rounding, no border, fills the viewport.
+          "h-screen max-h-none w-screen max-w-none rounded-none border-0 p-0 sm:rounded-none",
+          // Default mode (>=768px): centered dialog, 80vh (cap 800px) tall, 40px safe margin each side (cap 800px wide).
+          "md:h-[80vh] md:max-h-[800px] md:w-[calc(100vw-80px)] md:max-w-[800px] md:rounded-xl md:border",
         )}
       >
-        <div className="flex h-full flex-col overflow-hidden rounded-xl bg-white touch-mobile:rounded-none">
+        <div className="flex h-full flex-col overflow-hidden rounded-none bg-white md:rounded-xl">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-[#f2f3f5] px-5 py-3 touch-mobile:px-4">
-            <div className="flex min-w-0 items-center gap-1.5">
-              {/* Back to the list — only shown on mobile while viewing a detail. */}
-              <button
-                type="button"
-                onClick={() => setMobileView("list")}
-                aria-label={localize("com_approval_back_to_list")}
-                className={cn(
-                  "-ml-1.5 hidden shrink-0 rounded-lg p-1 text-text-primary",
-                  mobileView === "detail" && "touch-mobile:flex",
-                )}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              <h2 className="truncate text-[16px] font-semibold text-text-primary">{localize("com_approval_center_title")}</h2>
-            </div>
+          <div className="flex items-center justify-between border-b border-[#f2f3f5] px-5 py-3">
+            <h2 className="text-[16px] font-semibold text-text-primary">{localize("com_approval_center_title")}</h2>
             <button
               type="button"
               onClick={() => onOpenChange(false)}
               aria-label={localize("com_ui_close")}
-              className="shrink-0 rounded-lg text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
+              className="rounded-lg text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="grid min-h-0 flex-1 grid-cols-[72px_300px_minmax(0,1fr)] touch-mobile:flex touch-mobile:flex-col">
-            {/* Icon tabs (my_tasks / my_requests): a vertical rail on desktop, a horizontal top bar
-                on mobile. Hidden on mobile while viewing a detail (the detail goes full-screen). */}
-            <div className={cn(
-              "flex flex-col gap-0 border-r border-[#f2f3f5] bg-[#fafbfc] px-1 pb-2",
-              "touch-mobile:flex-row touch-mobile:border-b touch-mobile:border-r-0 touch-mobile:px-2 touch-mobile:pb-0",
-              mobileView === "detail" && "touch-mobile:hidden",
-            )}>
+          {/* Compact mode is a master-detail flow — the list view shows the nav rail + list, the detail
+              view replaces them full-width. >=768px always shows the 72px icon-rail + 300px list + detail. */}
+          <div
+            className={cn(
+              "grid min-h-0 flex-1",
+              compactView === "list" ? "grid-cols-[72px_minmax(0,1fr)]" : "grid-cols-1",
+              "md:grid-cols-[72px_300px_minmax(0,1fr)]",
+            )}
+          >
+            {/* Vertical icon tabs (my_tasks / my_requests) — hidden in compact detail view */}
+            <div className={cn("flex flex-col gap-0 border-r border-[#f2f3f5] bg-[#fafbfc] px-1 pb-2", compactView === "detail" && "hidden md:flex")}>
               {(["my_tasks", "my_requests"] as ApprovalCenterTab[]).map((tab) => {
                 const TabIcon = tab === "my_tasks" ? Outlined.ApprovalTodo : Outlined.ApprovalSubmitted;
                 return (
                   <button key={tab} type="button"
                     className={cn("flex w-16 flex-col items-center gap-2 rounded-lg px-1 py-5 text-[12px] leading-none transition-colors",
-                      "touch-mobile:w-auto touch-mobile:flex-1 touch-mobile:flex-row touch-mobile:justify-center touch-mobile:gap-1.5 touch-mobile:py-3.5",
                       activeTab === tab ? "text-[#212121] font-medium" : "text-[#999999] hover:bg-[#f7f8fa]")}
-                    onClick={() => { setActiveTab(tab); setSearchQuery(""); setMobileView("list"); }}>
+                    onClick={() => { setActiveTab(tab); setSearchQuery(""); setCompactView("list"); }}>
                     <TabIcon className="size-[18px]" />
                     {tab === "my_tasks" ? localize("com_approval_my_approval") : localize("com_approval_my_requests")}
                   </button>
@@ -443,11 +431,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               })}
             </div>
 
-            {/* Left list */}
-            <div className={cn(
-              "flex min-h-0 flex-col border-r border-[#f2f3f5] bg-white touch-mobile:min-h-0 touch-mobile:flex-1 touch-mobile:border-r-0",
-              mobileView === "detail" && "touch-mobile:hidden",
-            )}>
+            {/* Left list — hidden in compact detail view */}
+            <div className={cn("flex min-h-0 flex-col border-r border-[#f2f3f5] bg-white", compactView === "detail" && "hidden md:flex")}>
               <div className="flex gap-2 px-3 pt-3 pb-2">
                 {activeTab === "my_tasks"
                   ? (["pending_me", "processed"] as TaskFilter[]).map((f) => (
@@ -545,18 +530,15 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               )}
             </div>
 
-            {/* Right detail */}
-            <div className={cn(
-              "flex min-h-0 flex-col touch-mobile:min-h-0 touch-mobile:flex-1",
-              mobileView === "list" && "touch-mobile:hidden",
-            )}>
-              <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-5 py-3 touch-mobile:px-4">
+            {/* Right detail — hidden in compact list view (back control lives in the header) */}
+            <div className={cn("flex min-h-0 flex-col", compactView === "list" && "hidden md:flex")}>
+              <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-5 pb-3">
                 {loadingDetail ? (
                   <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_loading")}</div>
                 ) : activeTab === "my_tasks" && taskDetail ? (
-                  <TaskDetailPanel detail={taskDetail} localize={localize} />
+                  <TaskDetailPanel detail={taskDetail} localize={localize} onBack={() => setCompactView("list")} />
                 ) : activeTab === "my_requests" && requestDetail ? (
-                  <RequestDetailPanel detail={requestDetail} localize={localize} />
+                  <RequestDetailPanel detail={requestDetail} localize={localize} onBack={() => setCompactView("list")} />
                 ) : (
                   <div className="flex h-full items-center justify-center text-[14px] text-[#86909c]">{localize("com_approval_empty_detail")}</div>
                 )}
@@ -564,7 +546,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
               {/* Fixed footer buttons */}
               {(isTaskPending || isInstancePending || canRevoke) && (
-                <div className="flex flex-col gap-4 border-t border-[#f2f3f5] px-5 py-4 touch-mobile:px-4 touch-mobile:pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+                <div className="flex flex-col gap-4 border-t border-[#f2f3f5] px-5 py-4">
                   {isTaskPending && (
                     <textarea
                       value={decisionComment}
@@ -574,16 +556,16 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                       className="w-full resize-none rounded-lg border border-[#e5e6eb] px-3 py-2 text-[13px] text-text-primary placeholder:text-[#c9cdd4] outline-none transition-[border-color,box-shadow] focus:border-[#DDDDDD] focus:shadow-[0_0_0_2px_#F1F5F9]"
                     />
                   )}
-                  <div className="flex items-center justify-end gap-3 touch-mobile:justify-stretch">
+                  <div className="flex items-center justify-end gap-3">
                   {isTaskPending && (
                     <>
                       <button type="button" disabled={actionLoading}
-                        className="inline-flex h-8 items-center justify-center rounded-md border border-[#f53f3f] px-4 text-[14px] font-normal text-[#f53f3f] hover:bg-[#fff2f0] disabled:opacity-60 touch-mobile:h-11 touch-mobile:flex-1 touch-mobile:text-[15px]"
+                        className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-[#f53f3f] px-4 text-[14px] font-normal text-[#f53f3f] hover:bg-[#fff2f0] disabled:opacity-60 md:flex-none"
                         onClick={() => runTaskDecision("reject")}>
                         {localize("com_approval_action_reject")}
                       </button>
                       <button type="button" disabled={actionLoading}
-                        className="inline-flex h-8 items-center justify-center rounded-md bg-[#165dff] px-4 text-[14px] font-normal text-white hover:bg-[#1350e8] disabled:opacity-60 touch-mobile:h-11 touch-mobile:flex-1 touch-mobile:text-[15px]"
+                        className="inline-flex h-8 flex-1 items-center justify-center rounded-md bg-[#165dff] px-4 text-[14px] font-normal text-white hover:bg-[#1350e8] disabled:opacity-60 md:flex-none"
                         onClick={() => runTaskDecision("approve")}>
                         {localize("com_approval_action_approve")}
                       </button>
@@ -591,14 +573,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                   )}
                   {isInstancePending && (
                     <button type="button" disabled={actionLoading}
-                      className="inline-flex h-8 items-center justify-center rounded-md border border-[#165dff] px-4 text-[14px] font-normal text-[#165dff] hover:bg-[#f2f7ff] disabled:opacity-60 touch-mobile:h-11 touch-mobile:flex-1 touch-mobile:text-[15px]"
+                      className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-[#165dff] px-4 text-[14px] font-normal text-[#165dff] hover:bg-[#f2f7ff] disabled:opacity-60 md:flex-none"
                       onClick={runWithdraw}>
                       {localize("com_approval_action_withdraw")}
                     </button>
                   )}
                   {canRevoke && (
                     <button type="button" disabled={actionLoading}
-                      className="inline-flex h-8 items-center justify-center rounded-md border border-[#ff7d00] px-4 text-[14px] font-normal text-[#ff7d00] hover:bg-[#fff7e8] disabled:opacity-60 touch-mobile:h-11 touch-mobile:flex-1 touch-mobile:text-[15px]"
+                      className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-[#ff7d00] px-4 text-[14px] font-normal text-[#ff7d00] hover:bg-[#fff7e8] disabled:opacity-60 md:flex-none"
                       onClick={runRevokeGrant}>
                       {localize("com_approval_action_revoke_grant")}
                     </button>
@@ -611,7 +593,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
         </div>
       </DialogContent>
       <Dialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
-        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] w-[calc(100vw-32px)] max-w-[400px] rounded-lg">
+        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-lg">
           <div className="text-[16px] font-semibold text-text-primary">{localize("com_approval_revoke_dialog_title")}</div>
           <textarea
             rows={4}
@@ -637,7 +619,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
         </DialogContent>
       </Dialog>
       <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
-        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] w-[calc(100vw-32px)] max-w-[400px] rounded-lg">
+        <DialogContent close={false} overlayClassName="z-[150]" className="z-[200] max-w-[400px] rounded-lg">
           <div className="text-[16px] font-semibold text-text-primary">{localize("com_approval_withdraw_dialog_title")}</div>
           <textarea
             rows={4}
@@ -665,23 +647,39 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   );
 }
 
-function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenarioName, createTime, localize }: {
-  title?: string; status?: string; instanceStatus?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>;
+function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenarioName, createTime, localize, onBack }: {
+  title?: string; status?: string; instanceStatus?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>; onBack?: () => void;
 }) {
   return (
-    <div className="mb-5">
+    // Pinned to the top of the scrolling detail pane so the title/status/serial stay visible while the body scrolls.
+    <div className="sticky top-0 z-10 -mx-5 mb-5 border-b border-[#f2f3f5] bg-white px-5 pb-3 pt-3">
       <div className="flex items-start gap-3">
-        <h3 className="flex-1 text-[16px] font-semibold text-text-primary leading-snug">{title || "--"}</h3>
-        <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} />
+        {/* Compact-only back control — sits to the left of the detail title, split by a short vertical divider.
+            h-6 matches the title line so the arrow centers against it under items-start. */}
+        {onBack && (
+          <div className="flex h-6 shrink-0 items-center gap-3 md:hidden">
+            <button type="button" onClick={onBack} aria-label={localize("com_approval_back")} className="flex items-center text-[#999999]">
+              <Outlined.ArrowLeft className="h-4 w-4" />
+            </button>
+            <span className="h-4 w-px bg-[#e5e6eb]" />
+          </div>
+        )}
+        {/* Title + serial share one column so the serial line aligns with the title, not the back arrow. */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-3">
+            <h3 className="min-w-0 flex-1 text-[16px] font-semibold text-text-primary leading-snug">{title || "--"}</h3>
+            <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} />
+          </div>
+          <p className="mt-1.5 text-[13px] text-[#86909c]">
+            {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
+          </p>
+        </div>
       </div>
-      <p className="mt-1.5 text-[13px] text-[#86909c]">
-        {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
-      </p>
     </div>
   );
 }
 
-function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize> }) {
+function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void }) {
   const instanceId = detail.instance_id;
   const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
 
@@ -703,7 +701,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
   return (
     <div className="space-y-5">
       <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
-        serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
+        serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
 
       <div>
         <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
@@ -852,7 +850,7 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
   );
 }
 
-function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize> }) {
+function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void }) {
   const id = detail.instance_id ?? detail.id;
   const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
 
@@ -875,7 +873,7 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
   return (
     <div className="space-y-5">
       <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
-        scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
+        scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
 
       <div>
         <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>

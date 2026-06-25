@@ -2186,6 +2186,7 @@
   "com_approval_approver_label": "承認者",
   "com_approval_step_submitted": "申請提出",
   "com_approval_step_submitted_desc": "申請が提出されました",
+  "com_approval_back": "戻る",
   "com_approval_my_approval": "承認管理",
   "com_approval_my_approval_desc": "承認が必要なビジネス申請を処理します",
   "com_approval_my_requests_desc": "自分が提出した申請を確認します",
