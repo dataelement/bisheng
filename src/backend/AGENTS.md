@@ -22,6 +22,13 @@ return resp_500(code, msg)   # business error
 ```
 Error codes (MMMEE) & module numbers → constitution **C5**. Pagination: `PageData[T]` (new code, fields `data` + `total`); `PageList[T]` legacy-compat only.
 
+**Logging**: project logger is loguru (`from loguru import logger`), which formats with **str.format `{}`**, *not* printf. So:
+
+- Use `{}` / `{!r}` placeholders with each value passed as a separate arg — `logger.info("parsed {} files for kb={}", n, kb_id)`, `logger.debug("payload={!r}", obj)`. This is lazy (skipped when the level is off) and the loguru-native form.
+- **Never use printf `%s` / `%r` / `%d` with loguru.** It does not interpolate them — the placeholder is printed literally and the args are silently dropped (this is a real bug, not a style nit: it has burned dry-run scripts).
+- f-strings (`logger.info(f"...")`) are also safe and still common in the tree; acceptable, but prefer `{}` for new logs.
+- Never downgrade `logger.exception(...)` (auto-attaches the traceback) to `logger.error`.
+
 ---
 
 ## Error Handling
@@ -50,7 +57,7 @@ except Exception:
 try:
     cache.delete(key)
 except RedisError:
-    logger.warning("cache eviction failed for %s; will expire via TTL", key)  # main flow unaffected
+    logger.warning("cache eviction failed for {}; will expire via TTL", key)  # main flow unaffected
 ```
 
 Applies to async (`asyncio.gather(..., return_exceptions=True)` results must be inspected) and Celery tasks (raise to let retry/dead-letter handle it; only swallow with an explicit reason).
