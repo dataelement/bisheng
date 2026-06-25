@@ -164,6 +164,9 @@ export default function Knowledge() {
     useEffect(() => {
         if (!activeSpace) return;
         setSpaceListDrawerOpen(false);
+        // Reset full-page search when switching spaces, otherwise a space entered
+        // after leaving search mode would render the search page instead of its file list.
+        setKnowledgeSearchMode(false);
     }, [activeSpace?.id]);
 
     // Mobile: the space list is a standalone page at /knowledge. When the URL leaves a

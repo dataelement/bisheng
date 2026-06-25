@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { useUnactivate } from "react-activation";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useRecoilState, useRecoilValue } from "recoil";
 import AppAvator from "~/components/Avator";
@@ -145,7 +146,15 @@ export default function ChatView({ data, cid, v, readOnly, isGuestMode = false }
         },
         [cid, selectableMessages, getSelectedIds, showToast, localize, exitSelectionMode],
     );
-    const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
+    const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel, closeCitationPanel } = useCitationReferencePanel({ hasMessages });
+
+    // The citation panel portals to <body> in the 768–1023 / mobile tiers, so it
+    // survives this view being cached by KeepAlive on a left-tab switch and would
+    // otherwise float over the section the user navigated to — collapse it on
+    // deactivate (mirrors the workstation ChatView).
+    useUnactivate(() => {
+        closeCitationPanel();
+    });
     const activeConversation = useMemo(
         () => conversations.find((item) => item.id === cid),
         [conversations, cid]

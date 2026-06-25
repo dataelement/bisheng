@@ -297,29 +297,31 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
     // and a grey gradient overlay when the textarea is focused (keyboard-up state).
     if (isH5 && open) {
         const messageHeader = (
-            <div
-                className="relative flex shrink-0 items-center px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3"
-            >
-                <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
-                    {assistantTitle}
-                </h3>
-                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] flex items-center justify-end gap-3 py-1">
-                    <button
-                        type="button"
-                        onClick={handleClear}
-                        aria-label={localize("com_subscription.clear_chat")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
-                    >
-                        <Outlined.Delete className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setOpen(false)}
-                        aria-label={localize("com_ui_collapse")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
-                    >
-                        <Outlined.DoubleDown className="size-4" />
-                    </button>
+            // Mirror the knowledge-space file-list header so the dock top aligns with it:
+            // outer pt = safe-area + 8px, inner row is a fixed h-11 (44px) with the px-4 gutter.
+            <div className="shrink-0 pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                <div className="relative flex h-11 w-full min-w-0 items-center px-4">
+                    <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
+                        {assistantTitle}
+                    </h3>
+                    <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={handleClear}
+                            aria-label={localize("com_subscription.clear_chat")}
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                        >
+                            <Outlined.Delete className="size-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            aria-label={localize("com_ui_collapse")}
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                        >
+                            <Outlined.DoubleDown className="size-4" />
+                        </button>
+                    </div>
                 </div>
             </div>
         );

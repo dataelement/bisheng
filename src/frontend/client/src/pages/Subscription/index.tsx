@@ -1,6 +1,5 @@
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { EmptyStateIllustration } from "~/components/illustrations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
@@ -21,6 +20,7 @@ import { buildClientShareUrl } from "~/components/CopyShareLinkButton";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import ChannelSquare from "../ChannelSquare";
 import { ChannelLayout } from "./ChannelLayout";
+import { ChannelDiscoveryHome } from "./ChannelDiscoveryHome";
 import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import FullScreenArticle from "./Article/FullScreenArticle";
@@ -616,33 +616,14 @@ export default function Subscription() {
                                 <LoadingIcon className="size-20 text-primary" />
                             </div>
                         ) : (
-                            <div className="relative flex flex-1 flex-col items-center justify-center py-10 text-center">
-                                {isH5 ? (
-                                    <div className="absolute inset-x-0 top-0 z-10 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
-                                        {/* Match the loaded ArticleList header: safe-area+8px top
-                                            padding on the wrapper, a separate h-11 row, size-5 icon. */}
-                                        <div className="relative flex h-11 items-center px-4">
-                                            <button
-                                                type="button"
-                                                aria-label={localize("com_nav_open_sidebar")}
-                                                onClick={() => setSystemMenuOpen(true)}
-                                                className={mobileHeadIconBtnClassName}
-                                            >
-                                                <Outlined.SidebarMenu className="size-5" />
-                                            </button>
-                                            <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
-                                                {localize("com_subscription.subscribe")}
-                                            </h1>
-                                        </div>
-                                    </div>
-                                ) : null}
-                                <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
-                                <p className="text-[14px] font-normal leading-6 text-[#999999]">{localize("com_subscription.no_related_content_please")}<span
-                                    className="ml-1.5 cursor-pointer text-blue-500 transition-colors hover:text-blue-400 active:text-blue-700"
-                                    onClick={handleCreateChannel}
-                                >{localize("com_subscription.create_channel")}</span>
-                                </p>
-                            </div>
+                            <ChannelDiscoveryHome
+                                enabled
+                                isH5={isH5}
+                                onOpenMobileNav={() => setSystemMenuOpen(true)}
+                                onPreviewChannel={handleSquarePreview}
+                                onGoSquare={handleChannelSquare}
+                                onCreateChannel={handleCreateChannel}
+                            />
                         )}
                     </div>
                 </>

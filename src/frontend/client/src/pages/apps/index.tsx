@@ -187,7 +187,7 @@ export default function AppCenter() {
                 ) : (
                     <div
                         ref={appGridRef}
-                        className="grid w-full relative items-start gap-x-3 gap-y-3.5"
+                        className="grid w-full relative items-start gap-4"
                         style={{ gridTemplateColumns: `repeat(${appGridCols}, minmax(0, 1fr))` }}
                     >
                         {apps.map((agent) => (
