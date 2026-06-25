@@ -22,24 +22,26 @@ from bisheng.department.domain.services.department_change_handler import (
     TupleOperation,
 )
 
-if 'user' not in Department.metadata.tables:
-    Table('user', Department.metadata, Column('user_id', Integer, primary_key=True))
+if "user" not in Department.metadata.tables:
+    Table("user", Department.metadata, Column("user_id", Integer, primary_key=True))
 
 
 # =========================================================================
 # Fixtures
 # =========================================================================
 
-@pytest.fixture(scope='module')
+
+@pytest.fixture(scope="module")
 def svc_engine():
     """SQLite engine with department/user_department/user/tenant tables."""
     engine = create_engine(
-        'sqlite://',
-        connect_args={'check_same_thread': False},
+        "sqlite://",
+        connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     with engine.begin() as conn:
-        conn.execute(text("""
+        conn.execute(
+            text("""
                           CREATE TABLE IF NOT EXISTS department
                           (
                               id
@@ -89,8 +91,10 @@ def svc_engine():
                               external_id
                           )
                               )
-                          """))
-        conn.execute(text("""
+                          """)
+        )
+        conn.execute(
+            text("""
                           CREATE TABLE IF NOT EXISTS user_department
                           (
                               id
@@ -122,8 +126,10 @@ def svc_engine():
                               department_id
                           )
                               )
-                          """))
-        conn.execute(text("""
+                          """)
+        )
+        conn.execute(
+            text("""
                           CREATE TABLE IF NOT EXISTS user
                           (
                               user_id
@@ -145,8 +151,10 @@ def svc_engine():
                               update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                               password_update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
                               )
-                          """))
-        conn.execute(text("""
+                          """)
+        )
+        conn.execute(
+            text("""
                           CREATE TABLE IF NOT EXISTS tenant
                           (
                               id
@@ -190,7 +198,8 @@ def svc_engine():
                               create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
                               update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
                               )
-                          """))
+                          """)
+        )
     yield engine
     engine.dispose()
 
@@ -227,16 +236,21 @@ class _NonAdminUser:
         self.is_global_super = is_global_super
 
 
-def _create_root(session, dept_id='BS@root', tenant_id=1):
+def _create_root(session, dept_id="BS@root", tenant_id=1):
     """Helper: create a root department and set its path."""
     dept = Department(
-        dept_id=dept_id, name='Root', parent_id=None,
-        tenant_id=tenant_id, path='', source='local', status='active',
+        dept_id=dept_id,
+        name="Root",
+        parent_id=None,
+        tenant_id=tenant_id,
+        path="",
+        source="local",
+        status="active",
     )
     session.add(dept)
     session.commit()
     session.refresh(dept)
-    dept.path = f'/{dept.id}/'
+    dept.path = f"/{dept.id}/"
     session.add(dept)
     session.commit()
     session.refresh(dept)
@@ -245,16 +259,19 @@ def _create_root(session, dept_id='BS@root', tenant_id=1):
 
 def _create_child(session, parent, dept_id, name, **kwargs):
     """Helper: create a child department under parent."""
-    defaults = dict(source='local', status='active')
+    defaults = dict(source="local", status="active")
     defaults.update(kwargs)
     dept = Department(
-        dept_id=dept_id, name=name, parent_id=parent.id,
-        path='', **defaults,
+        dept_id=dept_id,
+        name=name,
+        parent_id=parent.id,
+        path="",
+        **defaults,
     )
     session.add(dept)
     session.commit()
     session.refresh(dept)
-    dept.path = f'{parent.path}{dept.id}/'
+    dept.path = f"{parent.path}{dept.id}/"
     session.add(dept)
     session.commit()
     session.refresh(dept)
@@ -263,13 +280,11 @@ def _create_child(session, parent, dept_id, name, **kwargs):
 
 def _create_user(session, user_name):
     """Helper: create a user record."""
-    session.execute(text(
-        "INSERT INTO user (user_name, password) VALUES (:name, 'hashed')"
-    ), {'name': user_name})
+    session.execute(text("INSERT INTO user (user_name, password) VALUES (:name, 'hashed')"), {"name": user_name})
     session.commit()
     row = session.execute(
-        text('SELECT user_id FROM user WHERE user_name = :name'),
-        {'name': user_name},
+        text("SELECT user_id FROM user WHERE user_name = :name"),
+        {"name": user_name},
     ).one()
     return row[0]
 
@@ -282,15 +297,15 @@ def _create_user(session, user_name):
 # since the Service methods are async wrappers around the same logic.
 # =========================================================================
 
-class TestCreateDepartment:
 
+class TestCreateDepartment:
     @pytest.mark.asyncio
     async def test_service_sets_local_external_id_to_dept_id(self):
         """Local department rows must have external_id for later org-sync match."""
         from bisheng.department.domain.schemas.department_schema import DepartmentCreate
         from bisheng.department.domain.services import department_service as m
 
-        parent = SimpleNamespace(id=1, path='/1/', status='active')
+        parent = SimpleNamespace(id=1, path="/1/", status="active")
         added = []
 
         class _Rows:
@@ -301,11 +316,13 @@ class TestCreateDepartment:
                 return self.value
 
         db_session = MagicMock()
-        db_session.exec = AsyncMock(side_effect=[
-            _Rows(parent),  # parent lookup
-            _Rows(None),  # duplicate-name lookup
-            _Rows(None),  # dept_id collision lookup
-        ])
+        db_session.exec = AsyncMock(
+            side_effect=[
+                _Rows(parent),  # parent lookup
+                _Rows(None),  # duplicate-name lookup
+                _Rows(None),  # dept_id collision lookup
+            ]
+        )
         db_session.add.side_effect = added.append
 
         async def _flush():
@@ -319,88 +336,101 @@ class TestCreateDepartment:
         async def fake_session():
             yield db_session
 
-        with patch.object(
-            m, 'get_async_db_session', fake_session,
-        ), patch.object(
-            m, '_get_dept_id_prefix', return_value='BS',
-        ), patch.object(
-            m, 'generate_dept_id', return_value='BS@child1',
-        ), patch.object(
-            m.DepartmentChangeHandler, 'execute_async', new_callable=AsyncMock,
+        with (
+            patch.object(
+                m,
+                "get_async_db_session",
+                fake_session,
+            ),
+            patch.object(
+                m,
+                "_get_dept_id_prefix",
+                return_value="BS",
+            ),
+            patch.object(
+                m,
+                "generate_dept_id",
+                return_value="BS@child1",
+            ),
+            patch.object(
+                m.DepartmentChangeHandler,
+                "execute_async",
+                new_callable=AsyncMock,
+            ),
         ):
             dept = await m.DepartmentService.acreate_department(
-                DepartmentCreate(name='Engineering', parent_id=1),
+                DepartmentCreate(name="Engineering", parent_id=1),
                 _MockLoginUser(),
             )
 
-        assert dept.dept_id == 'BS@child1'
-        assert dept.external_id == 'BS@child1'
+        assert dept.dept_id == "BS@child1"
+        assert dept.external_id == "BS@child1"
 
     def test_create_department_success(self, session):
         """AC-01: Create department with valid parent, verify path."""
         root = _create_root(session)
         dept = Department(
-            dept_id='BS@new1', name='Engineering', parent_id=root.id,
-            source='local', status='active', create_user=1,
+            dept_id="BS@new1",
+            name="Engineering",
+            parent_id=root.id,
+            source="local",
+            status="active",
+            create_user=1,
         )
         session.add(dept)
         session.commit()
         session.refresh(dept)
-        dept.path = f'{root.path}{dept.id}/'
+        dept.path = f"{root.path}{dept.id}/"
         session.add(dept)
         session.commit()
         session.refresh(dept)
 
         assert dept.id is not None
-        assert dept.path == f'/{root.id}/{dept.id}/'
-        assert dept.dept_id == 'BS@new1'
+        assert dept.path == f"/{root.id}/{dept.id}/"
+        assert dept.dept_id == "BS@new1"
 
     def test_create_department_name_duplicate(self, session):
         """AC-02: Same-level name collision detected."""
-        root = _create_root(session, dept_id='BS@dup_root')
-        _create_child(session, root, 'BS@dup_c1', 'SameName')
+        root = _create_root(session, dept_id="BS@dup_root")
+        _create_child(session, root, "BS@dup_c1", "SameName")
 
         # Check duplicate logic
         exists = session.exec(
             select(Department).where(
                 Department.parent_id == root.id,
-                Department.name == 'SameName',
-                Department.status == 'active',
+                Department.name == "SameName",
+                Department.status == "active",
             )
         ).first()
         assert exists is not None
 
     def test_create_department_parent_not_found(self, session):
         """Parent must exist, otherwise raise DepartmentNotFoundError."""
-        result = session.exec(
-            select(Department).where(Department.id == 99999)
-        ).first()
+        result = session.exec(select(Department).where(Department.id == 99999)).first()
         assert result is None  # parent doesn't exist
 
 
 class TestGetTree:
-
     def test_get_tree(self, session):
         """AC-03: Build nested tree from flat departments."""
         from bisheng.department.domain.schemas.department_schema import DepartmentTreeNode
 
-        root = _create_root(session, dept_id='BS@tree_root')
-        child_a = _create_child(session, root, 'BS@tree_a', 'Dept A', sort_order=2)
-        _child_b = _create_child(session, root, 'BS@tree_b', 'Dept B', sort_order=1)
-        _grandchild = _create_child(session, child_a, 'BS@tree_gc', 'Sub A')
+        root = _create_root(session, dept_id="BS@tree_root")
+        child_a = _create_child(session, root, "BS@tree_a", "Dept A", sort_order=2)
+        _child_b = _create_child(session, root, "BS@tree_b", "Dept B", sort_order=1)
+        _grandchild = _create_child(session, child_a, "BS@tree_gc", "Sub A")
 
         # Add members to child_a
-        uid = _create_user(session, 'tree_user')
+        uid = _create_user(session, "tree_user")
         session.add(UserDepartment(user_id=uid, department_id=child_a.id))
         session.commit()
 
         # Fetch all active departments
-        depts = session.exec(
-            select(Department).where(Department.status == 'active')
-        ).all()
+        depts = session.exec(select(Department).where(Department.status == "active")).all()
 
         # Build count map
         from sqlalchemy import func
+
         count_result = session.exec(
             select(
                 UserDepartment.department_id,
@@ -415,10 +445,16 @@ class TestGetTree:
         nodes = {}
         for d in depts:
             nodes[d.id] = DepartmentTreeNode(
-                id=d.id, dept_id=d.dept_id, name=d.name,
-                parent_id=d.parent_id, path=d.path,
-                sort_order=d.sort_order, source=d.source, status=d.status,
-                member_count=count_map.get(d.id, 0), children=[],
+                id=d.id,
+                dept_id=d.dept_id,
+                name=d.name,
+                parent_id=d.parent_id,
+                path=d.path,
+                sort_order=d.sort_order,
+                source=d.source,
+                status=d.status,
+                member_count=count_map.get(d.id, 0),
+                children=[],
             )
         roots = []
         for node in nodes.values():
@@ -428,58 +464,57 @@ class TestGetTree:
                 roots.append(node)
 
         # Find our test root
-        test_root = next((r for r in roots if r.dept_id == 'BS@tree_root'), None)
+        test_root = next((r for r in roots if r.dept_id == "BS@tree_root"), None)
         assert test_root is not None
         assert len(test_root.children) == 2
 
         # Sort by sort_order
         test_root.children.sort(key=lambda n: n.sort_order)
-        assert test_root.children[0].name == 'Dept B'  # sort_order=1
-        assert test_root.children[1].name == 'Dept A'  # sort_order=2
+        assert test_root.children[0].name == "Dept B"  # sort_order=1
+        assert test_root.children[1].name == "Dept A"  # sort_order=2
         assert test_root.children[1].member_count == 1
         assert len(test_root.children[1].children) == 1
 
 
 class TestUpdateDepartment:
-
     def test_update_department_name(self, session):
         """AC-05: Update name successfully."""
-        root = _create_root(session, dept_id='BS@upd_root')
-        child = _create_child(session, root, 'BS@upd_c1', 'OldName')
+        root = _create_root(session, dept_id="BS@upd_root")
+        child = _create_child(session, root, "BS@upd_c1", "OldName")
 
-        child.name = 'NewName'
+        child.name = "NewName"
         session.add(child)
         session.commit()
         session.refresh(child)
-        assert child.name == 'NewName'
+        assert child.name == "NewName"
 
     def test_update_department_source_readonly(self, session):
         """AC-06: source='feishu' department name cannot be modified."""
-        root = _create_root(session, dept_id='BS@ro_root')
-        child = _create_child(session, root, 'BS@ro_c1', 'FeishuDept', source='feishu')
+        root = _create_root(session, dept_id="BS@ro_root")
+        child = _create_child(session, root, "BS@ro_c1", "FeishuDept", source="feishu")
 
         # Service logic: if source != 'local' and name update requested -> error
-        assert child.source != 'local'
+        assert child.source != "local"
         # Would raise DepartmentSourceReadonlyError in service
 
 
 class TestDeleteDepartment:
-
     def test_delete_department_success(self, session):
         """AC-07: Archive department with no children and no members."""
-        root = _create_root(session, dept_id='BS@del_root')
-        child = _create_child(session, root, 'BS@del_c1', 'ToDelete')
+        root = _create_root(session, dept_id="BS@del_root")
+        child = _create_child(session, root, "BS@del_c1", "ToDelete")
 
         # No children, no members -> can archive
         children = session.exec(
             select(Department).where(
                 Department.parent_id == child.id,
-                Department.status == 'active',
+                Department.status == "active",
             )
         ).first()
         assert children is None
 
         from sqlalchemy import func
+
         count = session.exec(
             select(func.count(UserDepartment.id)).where(
                 UserDepartment.department_id == child.id,
@@ -487,35 +522,36 @@ class TestDeleteDepartment:
         ).one()
         assert count == 0
 
-        child.status = 'archived'
+        child.status = "archived"
         session.add(child)
         session.commit()
         session.refresh(child)
-        assert child.status == 'archived'
+        assert child.status == "archived"
 
     def test_delete_department_has_children(self, session):
         """AC-08: Cannot delete department with active children."""
-        root = _create_root(session, dept_id='BS@dhc_root')
-        parent = _create_child(session, root, 'BS@dhc_p', 'Parent')
-        _create_child(session, parent, 'BS@dhc_c', 'Child')
+        root = _create_root(session, dept_id="BS@dhc_root")
+        parent = _create_child(session, root, "BS@dhc_p", "Parent")
+        _create_child(session, parent, "BS@dhc_c", "Child")
 
         children = session.exec(
             select(Department).where(
                 Department.parent_id == parent.id,
-                Department.status == 'active',
+                Department.status == "active",
             )
         ).first()
         assert children is not None  # Has children, would raise error
 
     def test_delete_department_has_members(self, session):
         """AC-09: Cannot delete department with members."""
-        root = _create_root(session, dept_id='BS@dhm_root')
-        dept = _create_child(session, root, 'BS@dhm_c', 'HasMembers')
-        uid = _create_user(session, 'dhm_user')
+        root = _create_root(session, dept_id="BS@dhm_root")
+        dept = _create_child(session, root, "BS@dhm_c", "HasMembers")
+        uid = _create_user(session, "dhm_user")
         session.add(UserDepartment(user_id=uid, department_id=dept.id))
         session.commit()
 
         from sqlalchemy import func
+
         count = session.exec(
             select(func.count(UserDepartment.id)).where(
                 UserDepartment.department_id == dept.id,
@@ -525,23 +561,22 @@ class TestDeleteDepartment:
 
 
 class TestMoveDepartment:
-
     def test_move_department_success(self, session):
         """AC-10: Move department updates path for entire subtree."""
-        from sqlalchemy import update, func
+        from sqlalchemy import func, update
 
-        root = _create_root(session, dept_id='BS@mv_root')
-        branch_a = _create_child(session, root, 'BS@mv_a', 'Branch A')
-        branch_b = _create_child(session, root, 'BS@mv_b', 'Branch B')
-        leaf = _create_child(session, branch_a, 'BS@mv_leaf', 'Leaf')
+        root = _create_root(session, dept_id="BS@mv_root")
+        branch_a = _create_child(session, root, "BS@mv_a", "Branch A")
+        branch_b = _create_child(session, root, "BS@mv_b", "Branch B")
+        leaf = _create_child(session, branch_a, "BS@mv_leaf", "Leaf")
 
         # Move branch_a under branch_b
         old_path = branch_a.path
-        new_path = f'{branch_b.path}{branch_a.id}/'
+        new_path = f"{branch_b.path}{branch_a.id}/"
 
         session.execute(
             update(Department)
-            .where(Department.path.like(f'{old_path}%'))
+            .where(Department.path.like(f"{old_path}%"))
             .values(path=func.replace(Department.path, old_path, new_path))
         )
         branch_a.parent_id = branch_b.id
@@ -552,15 +587,15 @@ class TestMoveDepartment:
         session.refresh(branch_a)
         session.refresh(leaf)
 
-        assert branch_a.path == f'{branch_b.path}{branch_a.id}/'
-        assert leaf.path == f'{branch_b.path}{branch_a.id}/{leaf.id}/'
+        assert branch_a.path == f"{branch_b.path}{branch_a.id}/"
+        assert leaf.path == f"{branch_b.path}{branch_a.id}/{leaf.id}/"
         assert branch_a.parent_id == branch_b.id
 
     def test_move_department_circular(self, session):
         """AC-11: Cannot move to own subtree."""
-        root = _create_root(session, dept_id='BS@circ_root')
-        parent = _create_child(session, root, 'BS@circ_p', 'Parent')
-        child = _create_child(session, parent, 'BS@circ_c', 'Child')
+        root = _create_root(session, dept_id="BS@circ_root")
+        parent = _create_child(session, root, "BS@circ_p", "Parent")
+        child = _create_child(session, parent, "BS@circ_c", "Child")
 
         # Try to move parent under child -> circular
         assert child.path.startswith(parent.path)
@@ -571,21 +606,25 @@ class TestMoveDepartment:
 
 
 class TestMemberManagement:
-
     def test_add_members_batch(self, session):
         """AC-12: Batch add users as department members."""
-        root = _create_root(session, dept_id='BS@mbr_root')
-        dept = _create_child(session, root, 'BS@mbr_d', 'Team')
+        root = _create_root(session, dept_id="BS@mbr_root")
+        dept = _create_child(session, root, "BS@mbr_d", "Team")
 
         user_ids = []
         for i in range(3):
-            uid = _create_user(session, f'mbr_user_{i}')
+            uid = _create_user(session, f"mbr_user_{i}")
             user_ids.append(uid)
 
         for uid in user_ids:
-            session.add(UserDepartment(
-                user_id=uid, department_id=dept.id, is_primary=0, source='local',
-            ))
+            session.add(
+                UserDepartment(
+                    user_id=uid,
+                    department_id=dept.id,
+                    is_primary=0,
+                    source="local",
+                )
+            )
         session.commit()
 
         members = session.exec(
@@ -597,9 +636,9 @@ class TestMemberManagement:
 
     def test_add_members_duplicate(self, session):
         """AC-13: Adding existing member raises error."""
-        root = _create_root(session, dept_id='BS@mbd_root')
-        dept = _create_child(session, root, 'BS@mbd_d', 'Team')
-        uid = _create_user(session, 'mbd_user')
+        root = _create_root(session, dept_id="BS@mbd_root")
+        dept = _create_child(session, root, "BS@mbd_d", "Team")
+        uid = _create_user(session, "mbd_user")
         session.add(UserDepartment(user_id=uid, department_id=dept.id))
         session.commit()
 
@@ -614,14 +653,15 @@ class TestMemberManagement:
 
     def test_get_members_paged(self, session):
         """AC-14: Paginated member query."""
-        root = _create_root(session, dept_id='BS@pgm_root')
-        dept = _create_child(session, root, 'BS@pgm_d', 'Team')
+        root = _create_root(session, dept_id="BS@pgm_root")
+        dept = _create_child(session, root, "BS@pgm_d", "Team")
         for i in range(5):
-            uid = _create_user(session, f'pgm_user_{i}')
+            uid = _create_user(session, f"pgm_user_{i}")
             session.add(UserDepartment(user_id=uid, department_id=dept.id))
         session.commit()
 
         from sqlalchemy import func
+
         total = session.exec(
             select(func.count(UserDepartment.id)).where(
                 UserDepartment.department_id == dept.id,
@@ -631,17 +671,15 @@ class TestMemberManagement:
 
         # Page 1, limit 2
         rows = session.exec(
-            select(UserDepartment)
-            .where(UserDepartment.department_id == dept.id)
-            .offset(0).limit(2)
+            select(UserDepartment).where(UserDepartment.department_id == dept.id).offset(0).limit(2)
         ).all()
         assert len(rows) == 2
 
     def test_remove_member(self, session):
         """AC-15: Remove user from department."""
-        root = _create_root(session, dept_id='BS@rmm_root')
-        dept = _create_child(session, root, 'BS@rmm_d', 'Team')
-        uid = _create_user(session, 'rmm_user')
+        root = _create_root(session, dept_id="BS@rmm_root")
+        dept = _create_child(session, root, "BS@rmm_d", "Team")
+        uid = _create_user(session, "rmm_user")
         ud = UserDepartment(user_id=uid, department_id=dept.id)
         session.add(ud)
         session.commit()
@@ -659,8 +697,8 @@ class TestMemberManagement:
 
     def test_remove_member_not_found(self, session):
         """Member doesn't exist -> would raise DepartmentMemberNotFoundError."""
-        root = _create_root(session, dept_id='BS@rmnf_root')
-        dept = _create_child(session, root, 'BS@rmnf_d', 'Team')
+        root = _create_root(session, dept_id="BS@rmnf_root")
+        dept = _create_child(session, root, "BS@rmnf_d", "Team")
 
         result = session.exec(
             select(UserDepartment).where(
@@ -672,7 +710,6 @@ class TestMemberManagement:
 
 
 class TestPermission:
-
     def test_permission_denied(self):
         """AC-16: Non-admin user cannot access department operations."""
         from bisheng.department.domain.services.department_service import _is_admin
@@ -692,11 +729,11 @@ class TestPermission:
         dept = SimpleNamespace(id=10)
         user_row = SimpleNamespace(
             user_id=99,
-            user_name='Alice',
-            user_external_id='BS@alice',
+            user_name="Alice",
+            user_external_id="BS@alice",
             department_id=10,
             is_primary=1,
-            source='local',
+            source="local",
             member_join_time=None,
             user_create_time=None,
             user_update_time=None,
@@ -723,7 +760,7 @@ class TestPermission:
 
             async def exec(self, stmt):
                 nonlocal captured_ug_stmt
-                if 'group_name' in str(stmt):
+                if "group_name" in str(stmt):
                     captured_ug_stmt = stmt
                 return self._responses.pop(0)
 
@@ -735,26 +772,37 @@ class TestPermission:
 
         session_responses = [
             [_Rows(one=1), _Rows(all_rows=[user_row])],
-            [_Rows(all_rows=[(99, 5, 'Private Group')]), _Rows(all_rows=[])],
+            [_Rows(all_rows=[(99, 5, "Private Group")]), _Rows(all_rows=[])],
         ]
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            side_effect=lambda: _session_cm_factory(session_responses.pop(0)),
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new_callable=AsyncMock, return_value=dept,
-        ), patch.object(
-            DepartmentService, '_aget_department_admin_user_ids',
-            new_callable=AsyncMock, return_value=[],
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                side_effect=lambda: _session_cm_factory(session_responses.pop(0)),
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch.object(
+                DepartmentService,
+                "_aget_department_admin_user_ids",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
         ):
             result = await DepartmentService.aget_members(
-                'BS@test', 1, 20, '', _NonAdminUser(is_global_super=True),
+                "BS@test",
+                1,
+                20,
+                "",
+                _NonAdminUser(is_global_super=True),
             )
 
-        assert result['data'][0]['user_groups'] == [{'id': 5, 'group_name': 'Private Group'}]
+        assert result["data"][0]["user_groups"] == [{"id": 5, "group_name": "Private Group"}]
         assert captured_ug_stmt is not None
-        assert 'group.visibility' not in str(captured_ug_stmt).lower()
+        assert "group.visibility" not in str(captured_ug_stmt).lower()
 
     @pytest.mark.asyncio
     async def test_get_members_includes_user_group_admin_rows_for_display(self):
@@ -763,11 +811,11 @@ class TestPermission:
         dept = SimpleNamespace(id=10)
         user_row = SimpleNamespace(
             user_id=99,
-            user_name='Alice',
-            user_external_id='BS@alice',
+            user_name="Alice",
+            user_external_id="BS@alice",
             department_id=10,
             is_primary=1,
-            source='local',
+            source="local",
             member_join_time=None,
             user_create_time=None,
             user_update_time=None,
@@ -794,7 +842,7 @@ class TestPermission:
 
             async def exec(self, stmt):
                 nonlocal captured_ug_stmt
-                if 'group_name' in str(stmt):
+                if "group_name" in str(stmt):
                     captured_ug_stmt = stmt
                 return self._responses.pop(0)
 
@@ -806,29 +854,42 @@ class TestPermission:
 
         session_responses = [
             [_Rows(one=1), _Rows(all_rows=[user_row])],
-            [_Rows(all_rows=[(99, 5, 'Private Group')]), _Rows(all_rows=[])],
+            [_Rows(all_rows=[(99, 5, "Private Group")]), _Rows(all_rows=[])],
         ]
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            side_effect=lambda: _session_cm_factory(session_responses.pop(0)),
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new_callable=AsyncMock, return_value=dept,
-        ), patch.object(
-            DepartmentService, '_aget_department_admin_user_ids',
-            new_callable=AsyncMock, return_value=[],
-        ), patch(
-            'bisheng.user_group.domain.services.user_group_service._can_view_all_groups',
-            new_callable=AsyncMock, return_value=True,
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                side_effect=lambda: _session_cm_factory(session_responses.pop(0)),
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch.object(
+                DepartmentService,
+                "_aget_department_admin_user_ids",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.user_group.domain.services.user_group_service._can_view_all_groups",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
         ):
             result = await DepartmentService.aget_members(
-                'BS@test', 1, 20, '', _NonAdminUser(is_global_super=True),
+                "BS@test",
+                1,
+                20,
+                "",
+                _NonAdminUser(is_global_super=True),
             )
 
-        assert result['data'][0]['user_groups'] == [{'id': 5, 'group_name': 'Private Group'}]
+        assert result["data"][0]["user_groups"] == [{"id": 5, "group_name": "Private Group"}]
         assert captured_ug_stmt is not None
-        assert 'user_group.is_group_admin' not in str(captured_ug_stmt).lower()
+        assert "user_group.is_group_admin" not in str(captured_ug_stmt).lower()
 
     async def test_check_permission_raises(self):
         """_check_permission raises DepartmentPermissionDeniedError for non-admin.
@@ -854,23 +915,23 @@ class TestPermission:
         login_user = _MockLoginUser(user_id=7, user_role=[2], tenant_id=1)
         root = SimpleNamespace(
             id=1,
-            dept_id='BS@root',
-            name='Root',
+            dept_id="BS@root",
+            name="Root",
             parent_id=None,
-            path='/1/',
+            path="/1/",
             sort_order=0,
-            source='local',
-            status='active',
+            source="local",
+            status="active",
         )
         child = SimpleNamespace(
             id=2,
-            dept_id='BS@child',
-            name='Child',
+            dept_id="BS@child",
+            name="Child",
             parent_id=1,
-            path='/1/2/',
+            path="/1/2/",
             sort_order=0,
-            source='local',
-            status='active',
+            source="local",
+            status="active",
         )
 
         dept_result = MagicMock()
@@ -884,20 +945,26 @@ class TestPermission:
         async def fake_session():
             yield db_session
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch.object(
-            DepartmentDao, 'aget_user_admin_departments',
-            new_callable=AsyncMock,
-            return_value=[],
-        ), patch(
-            'bisheng.permission.domain.services.permission_service.PermissionService.check',
-            new_callable=AsyncMock,
-            return_value=True,
-        ) as mock_perm_check, patch(
-            'bisheng.department.domain.services.department_service._is_registration_enabled',
-            return_value=True,
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch.object(
+                DepartmentDao,
+                "aget_user_admin_departments",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.check",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_perm_check,
+            patch(
+                "bisheng.department.domain.services.department_service._is_registration_enabled",
+                return_value=True,
+            ),
         ):
             tree = await DepartmentService.aget_tree(login_user)
 
@@ -907,27 +974,26 @@ class TestPermission:
         assert tree[0].children[0].member_count == 1
         mock_perm_check.assert_awaited_once_with(
             user_id=login_user.user_id,
-            relation='admin',
-            object_type='tenant',
+            relation="admin",
+            object_type="tenant",
             object_id=str(login_user.tenant_id),
             login_user=login_user,
         )
 
 
 class TestLocalMemberCreate:
-
     @pytest.mark.asyncio
     async def test_assignable_roles_bypasses_tenant_filter_for_global_roles(self):
         from bisheng.department.domain.services.department_service import DepartmentService
 
-        entered = {'value': False}
+        entered = {"value": False}
         dept = MagicMock()
         dept.id = 10
         login_user = _MockLoginUser(user_id=1, user_role=[1], tenant_id=23)
         role = MagicMock()
         role.id = 2
-        role.role_name = '普通用户'
-        role.role_type = 'global'
+        role.role_name = "普通用户"
+        role.role_type = "global"
         role.department_id = None
 
         class _Rows:
@@ -944,7 +1010,7 @@ class TestLocalMemberCreate:
 
         class _Bypass:
             def __enter__(self):
-                entered['value'] = True
+                entered["value"] = True
 
             def __exit__(self, exc_type, exc, tb):
                 return False
@@ -979,43 +1045,52 @@ class TestLocalMemberCreate:
             def order_by(self, *_args):
                 return self
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new_callable=AsyncMock,
-            return_value=dept,
-        ), patch.object(
-            DepartmentService,
-            '_aget_ancestor_chain_ids',
-            new_callable=AsyncMock,
-            return_value=[10],
-        ), patch(
-            'bisheng.core.context.tenant.bypass_tenant_filter',
-            return_value=_Bypass(),
-        ), patch.dict(
-            'sys.modules',
-            {'bisheng.database.models.role': SimpleNamespace(Role=_Role)},
-        ), patch(
-            'bisheng.department.domain.services.department_service.select',
-            return_value=_Stmt(),
-        ), patch(
-            'bisheng.department.domain.services.department_service.and_',
-            return_value=object(),
-        ), patch(
-            'bisheng.department.domain.services.department_service.or_',
-            return_value=object(),
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch.object(
+                DepartmentService,
+                "_aget_ancestor_chain_ids",
+                new_callable=AsyncMock,
+                return_value=[10],
+            ),
+            patch(
+                "bisheng.core.context.tenant.bypass_tenant_filter",
+                return_value=_Bypass(),
+            ),
+            patch.dict(
+                "sys.modules",
+                {"bisheng.database.models.role": SimpleNamespace(Role=_Role)},
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.select",
+                return_value=_Stmt(),
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.and_",
+                return_value=object(),
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.or_",
+                return_value=object(),
+            ),
         ):
-            rows = await DepartmentService.aget_assignable_roles('BS@test', login_user)
+            rows = await DepartmentService.aget_assignable_roles("BS@test", login_user)
 
-        assert entered['value'] is True
+        assert entered["value"] is True
         assert rows == [
             {
-                'id': 2,
-                'role_name': '普通用户',
-                'role_type': 'global',
-                'department_id': None,
+                "id": 2,
+                "role_name": "普通用户",
+                "role_type": "global",
+                "department_id": None,
             }
         ]
 
@@ -1027,12 +1102,12 @@ class TestLocalMemberCreate:
         from bisheng.user.domain.services import user as user_service_module
 
         dept = MagicMock()
-        dept.status = 'archived'
+        dept.status = "archived"
         login_user = _MockLoginUser(user_id=1, user_role=[1])
         data = DepartmentLocalMemberCreate(
-            user_name='Alice',
-            person_id='person-001',
-            password='Aa123456!',
+            user_name="Alice",
+            person_id="person-001",
+            password="Aa123456!",
             role_ids=[],
         )
 
@@ -1040,19 +1115,24 @@ class TestLocalMemberCreate:
         async def fake_session():
             yield MagicMock()
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new_callable=AsyncMock,
-            return_value=dept,
-        ), patch.object(
-            user_service_module.UserService, 'decrypt_password_plain',
-            return_value='Aa123456!',
-        ) as decrypt:
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch.object(
+                user_service_module.UserService,
+                "decrypt_password_plain",
+                return_value="Aa123456!",
+            ) as decrypt,
+        ):
             with pytest.raises(DepartmentArchivedReadonlyError):
-                await DepartmentService.acreate_local_member('BS@test', data, login_user)
+                await DepartmentService.acreate_local_member("BS@test", data, login_user)
 
         decrypt.assert_not_called()
 
@@ -1068,9 +1148,9 @@ class TestLocalMemberCreate:
         dept.default_role_ids = []
         login_user = _MockLoginUser(user_id=1, user_role=[1])
         data = DepartmentLocalMemberCreate(
-            user_name='Alice',
-            person_id='person-001',
-            password='Aa123456!',
+            user_name="Alice",
+            person_id="person-001",
+            password="Aa123456!",
             role_ids=[],
         )
 
@@ -1078,31 +1158,43 @@ class TestLocalMemberCreate:
         async def fake_session():
             yield MagicMock()
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new_callable=AsyncMock,
-            return_value=dept,
-        ), patch.object(
-            user_service_module.UserService, 'decrypt_password_plain',
-            return_value='Aa123456!',
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentService.aget_assignable_roles',
-            new_callable=AsyncMock,
-            return_value=[],
-        ) as assignable_roles, patch.object(
-            user_model_module.UserDao, 'aget_login_candidates_by_account',
-            new_callable=AsyncMock, return_value=[],
-        ), patch.object(
-            user_model_module.UserDao, 'aexists_disabled_login_account',
-            new_callable=AsyncMock, return_value=True,
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch.object(
+                user_service_module.UserService,
+                "decrypt_password_plain",
+                return_value="Aa123456!",
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentService.aget_assignable_roles",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as assignable_roles,
+            patch.object(
+                user_model_module.UserDao,
+                "aget_login_candidates_by_account",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(
+                user_model_module.UserDao,
+                "aexists_disabled_login_account",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
         ):
             with pytest.raises(DepartmentPersonIdDeletedAccountError) as exc:
-                await DepartmentService.acreate_local_member('BS@test', data, login_user)
+                await DepartmentService.acreate_local_member("BS@test", data, login_user)
 
-        assert 'Please restore the original account' in exc.value.message
+        assert "Please restore the original account" in exc.value.message
         assignable_roles.assert_not_called()
 
     @pytest.mark.asyncio
@@ -1117,9 +1209,9 @@ class TestLocalMemberCreate:
         dept.default_role_ids = []
         login_user = _MockLoginUser(user_id=1, user_role=[1])
         data = DepartmentLocalMemberCreate(
-            user_name='Alice',
-            person_id='person-001',
-            password='Aa123456!',
+            user_name="Alice",
+            person_id="person-001",
+            password="Aa123456!",
             role_ids=[999],
         )
 
@@ -1127,98 +1219,177 @@ class TestLocalMemberCreate:
         async def fake_session():
             yield MagicMock()
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new_callable=AsyncMock,
-            return_value=dept,
-        ), patch.object(
-            user_service_module.UserService, 'decrypt_password_plain',
-            return_value='Aa123456!',
-        ), patch.object(
-            user_model_module.UserDao, 'aget_login_candidates_by_account',
-            new_callable=AsyncMock, return_value=[MagicMock()],
-        ), patch.object(
-            user_model_module.UserDao, 'aexists_disabled_login_account',
-            new_callable=AsyncMock,
-        ) as disabled_lookup, patch(
-            'bisheng.department.domain.services.department_service.DepartmentService.aget_assignable_roles',
-            new_callable=AsyncMock,
-            return_value=[],
-        ) as assignable_roles:
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new_callable=AsyncMock,
+                return_value=dept,
+            ),
+            patch.object(
+                user_service_module.UserService,
+                "decrypt_password_plain",
+                return_value="Aa123456!",
+            ),
+            patch.object(
+                user_model_module.UserDao,
+                "aget_login_candidates_by_account",
+                new_callable=AsyncMock,
+                return_value=[MagicMock()],
+            ),
+            patch.object(
+                user_model_module.UserDao,
+                "aexists_disabled_login_account",
+                new_callable=AsyncMock,
+            ) as disabled_lookup,
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentService.aget_assignable_roles",
+                new_callable=AsyncMock,
+                return_value=[],
+            ) as assignable_roles,
+        ):
             with pytest.raises(DepartmentPersonIdDuplicateError):
-                await DepartmentService.acreate_local_member('BS@test', data, login_user)
+                await DepartmentService.acreate_local_member("BS@test", data, login_user)
 
         disabled_lookup.assert_not_called()
         assignable_roles.assert_not_called()
 
 
 class TestRootDepartment:
-
     def test_create_root_department(self, session):
         """AC-18: Create root department with parent_id=None, path=/{id}/."""
-        root = _create_root(session, dept_id='BS@cr_root', tenant_id=1)
+        root = _create_root(session, dept_id="BS@cr_root", tenant_id=1)
         assert root.parent_id is None
-        assert root.path == f'/{root.id}/'
+        assert root.path == f"/{root.id}/"
 
         # Simulate tenant.root_dept_id writeback
-        session.execute(text(
-            'INSERT INTO tenant (tenant_code, tenant_name, root_dept_id) '
-            "VALUES ('cr_tenant', 'CR Tenant', :root_id)"
-        ), {'root_id': root.id})
+        session.execute(
+            text(
+                "INSERT INTO tenant (tenant_code, tenant_name, root_dept_id) "
+                "VALUES ('cr_tenant', 'CR Tenant', :root_id)"
+            ),
+            {"root_id": root.id},
+        )
         session.commit()
 
-        row = session.execute(
-            text("SELECT root_dept_id FROM tenant WHERE tenant_code = 'cr_tenant'")
-        ).one()
+        row = session.execute(text("SELECT root_dept_id FROM tenant WHERE tenant_code = 'cr_tenant'")).one()
         assert row[0] == root.id
 
     def test_create_root_department_exists(self, session):
         """AC-19: Duplicate root should be detected."""
-        _create_root(session, dept_id='BS@dup_rt', tenant_id=1)
+        _create_root(session, dept_id="BS@dup_rt", tenant_id=1)
 
         # Check if root already exists
         existing = session.exec(
             select(Department).where(
                 Department.parent_id.is_(None),
                 Department.tenant_id == 1,
-                Department.status == 'active',
+                Department.status == "active",
             )
         ).first()
         assert existing is not None  # Would raise DepartmentRootExistsError
 
 
 class TestChangeHandler:
-
     def test_change_handler_on_created(self):
         """AC-20: on_created returns correct TupleOperation."""
         ops = DepartmentChangeHandler.on_created(dept_id=5, parent_id=1)
         assert len(ops) == 1
         assert ops[0] == TupleOperation(
-            action='write', user='department:1',
-            relation='parent', object='department:5',
+            action="write",
+            user="department:1",
+            relation="parent",
+            object="department:5",
         )
 
     def test_change_handler_on_moved(self):
         """AC-20: on_moved returns delete old + write new."""
         ops = DepartmentChangeHandler.on_moved(
-            dept_id=5, old_parent_id=1, new_parent_id=3,
+            dept_id=5,
+            old_parent_id=1,
+            new_parent_id=3,
         )
         assert len(ops) == 2
-        assert ops[0].action == 'delete'
-        assert ops[0].user == 'department:1'
-        assert ops[1].action == 'write'
-        assert ops[1].user == 'department:3'
+        assert ops[0].action == "delete"
+        assert ops[0].user == "department:1"
+        assert ops[1].action == "write"
+        assert ops[1].user == "department:3"
 
     def test_change_handler_on_members_added(self):
         """AC-20: on_members_added returns one write per user."""
         ops = DepartmentChangeHandler.on_members_added(dept_id=5, user_ids=[1, 2, 3])
         assert len(ops) == 3
-        assert all(o.action == 'write' for o in ops)
-        assert all(o.relation == 'member' for o in ops)
-        assert {o.user for o in ops} == {'user:1', 'user:2', 'user:3'}
+        assert all(o.action == "write" for o in ops)
+        assert all(o.relation == "member" for o in ops)
+        assert {o.user for o in ops} == {"user:1", "user:2", "user:3"}
+
+    def test_on_reparented_new_top_level_attached_under_real_parent(self):
+        """None → real: only a write (no delete of a non-existent old edge)."""
+        ops = DepartmentChangeHandler.on_reparented(
+            dept_id=5,
+            old_parent_id=None,
+            new_parent_id=1,
+        )
+        assert ops == [
+            TupleOperation(
+                action="write",
+                user="department:1",
+                relation="parent",
+                object="department:5",
+            ),
+        ]
+
+    def test_on_reparented_detached_to_root(self):
+        """real → None (archive/remove): only a delete, never department:None."""
+        ops = DepartmentChangeHandler.on_reparented(
+            dept_id=5,
+            old_parent_id=1,
+            new_parent_id=None,
+        )
+        assert ops == [
+            TupleOperation(
+                action="delete",
+                user="department:1",
+                relation="parent",
+                object="department:5",
+            ),
+        ]
+
+    def test_on_reparented_moved_between_parents(self):
+        """real → real (changed): delete old + write new."""
+        ops = DepartmentChangeHandler.on_reparented(
+            dept_id=5,
+            old_parent_id=1,
+            new_parent_id=3,
+        )
+        assert [(o.action, o.user) for o in ops] == [
+            ("delete", "department:1"),
+            ("write", "department:3"),
+        ]
+
+    def test_on_reparented_unchanged_is_noop(self):
+        assert (
+            DepartmentChangeHandler.on_reparented(
+                dept_id=5,
+                old_parent_id=2,
+                new_parent_id=2,
+            )
+            == []
+        )
+
+    def test_on_reparented_both_none_is_noop(self):
+        """Root department: no parent edge ever."""
+        assert (
+            DepartmentChangeHandler.on_reparented(
+                dept_id=1,
+                old_parent_id=None,
+                new_parent_id=None,
+            )
+            == []
+        )
 
 
 class TestAdminDepartmentsBypassTenantFilter:
@@ -1233,35 +1404,41 @@ class TestAdminDepartmentsBypassTenantFilter:
     async def test_aget_user_admin_departments_bypasses_tenant_filter(self):
         from bisheng.database.models.department import DepartmentDao
 
-        entered = {'value': False}
+        entered = {"value": False}
 
         class _Bypass:
             def __enter__(self):
-                entered['value'] = True
+                entered["value"] = True
 
             def __exit__(self, exc_type, exc, tb):
                 return False
 
         fga = MagicMock()
-        fga.list_objects = AsyncMock(return_value=['department:4', 'department:7'])
+        fga.list_objects = AsyncMock(return_value=["department:4", "department:7"])
 
         async def _fake_aget_by_ids(dept_ids):
             assert dept_ids == [4, 7]
             return [SimpleNamespace(id=did) for did in dept_ids]
 
-        with patch(
-            'bisheng.core.openfga.manager.aget_fga_client',
-            new_callable=AsyncMock,
-            return_value=fga,
-        ), patch(
-            'bisheng.core.context.tenant.bypass_tenant_filter',
-            return_value=_Bypass(),
-        ), patch.object(
-            DepartmentDao, 'aget_by_ids', new=_fake_aget_by_ids,
+        with (
+            patch(
+                "bisheng.core.openfga.manager.aget_fga_client",
+                new_callable=AsyncMock,
+                return_value=fga,
+            ),
+            patch(
+                "bisheng.core.context.tenant.bypass_tenant_filter",
+                return_value=_Bypass(),
+            ),
+            patch.object(
+                DepartmentDao,
+                "aget_by_ids",
+                new=_fake_aget_by_ids,
+            ),
         ):
             depts = await DepartmentDao.aget_user_admin_departments(user_id=90017)
 
-        assert entered['value'] is True
+        assert entered["value"] is True
         assert [d.id for d in depts] == [4, 7]
 
     @pytest.mark.asyncio
@@ -1269,11 +1446,11 @@ class TestAdminDepartmentsBypassTenantFilter:
         """No FGA result → no DB fetch → bypass not entered (cheap exit path)."""
         from bisheng.database.models.department import DepartmentDao
 
-        entered = {'value': False}
+        entered = {"value": False}
 
         class _Bypass:
             def __enter__(self):
-                entered['value'] = True
+                entered["value"] = True
 
             def __exit__(self, exc_type, exc, tb):
                 return False
@@ -1281,17 +1458,20 @@ class TestAdminDepartmentsBypassTenantFilter:
         fga = MagicMock()
         fga.list_objects = AsyncMock(return_value=[])
 
-        with patch(
-            'bisheng.core.openfga.manager.aget_fga_client',
-            new_callable=AsyncMock,
-            return_value=fga,
-        ), patch(
-            'bisheng.core.context.tenant.bypass_tenant_filter',
-            return_value=_Bypass(),
+        with (
+            patch(
+                "bisheng.core.openfga.manager.aget_fga_client",
+                new_callable=AsyncMock,
+                return_value=fga,
+            ),
+            patch(
+                "bisheng.core.context.tenant.bypass_tenant_filter",
+                return_value=_Bypass(),
+            ),
         ):
             depts = await DepartmentDao.aget_user_admin_departments(user_id=42)
 
-        assert entered['value'] is False
+        assert entered["value"] is False
         assert depts == []
 
 
@@ -1302,10 +1482,10 @@ class TestAdminDepartmentsBypassTenantFilter:
 # downstream sync failure.
 # =========================================================================
 
-class TestMoveDepartmentSubtreeSync:
 
+class TestMoveDepartmentSubtreeSync:
     @staticmethod
-    def _move_test_setup(*, dept_path='/1/7/', new_parent_path='/1/9/', new_parent_id=9):
+    def _move_test_setup(*, dept_path="/1/7/", new_parent_path="/1/9/", new_parent_id=9):
         """Build the minimum mocks for amove_department to reach the sync hook.
 
         Returns (session, fake_session, dept) so each test can override what
@@ -1317,13 +1497,13 @@ class TestMoveDepartmentSubtreeSync:
         dept.id = 7
         dept.parent_id = 1
         dept.path = dept_path
-        dept.status = 'active'
+        dept.status = "active"
         dept.tenant_id = 1
 
         new_parent = MagicMock(spec=Department)
         new_parent.id = new_parent_id
         new_parent.path = new_parent_path
-        new_parent.status = 'active'
+        new_parent.status = "active"
 
         new_parent_result = MagicMock()
         new_parent_result.first.return_value = new_parent
@@ -1343,8 +1523,8 @@ class TestMoveDepartmentSubtreeSync:
 
     @pytest.mark.asyncio
     async def test_move_to_different_parent_triggers_sync(self):
-        from bisheng.department.domain.services.department_service import DepartmentService
         from bisheng.department.domain.schemas.department_schema import DepartmentMoveRequest
+        from bisheng.department.domain.services.department_service import DepartmentService
         from bisheng.tenant.domain.constants import UserTenantSyncTrigger
 
         session, fake_session, dept = self._move_test_setup()
@@ -1354,29 +1534,37 @@ class TestMoveDepartmentSubtreeSync:
             return dept
 
         login_user = _MockLoginUser(user_id=1, tenant_id=1)
-        sync_mock = AsyncMock(return_value={'synced': [101], 'failed': []})
+        sync_mock = AsyncMock(return_value={"synced": [101], "failed": []})
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new=_check_perm,
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved',
-            return_value=[],
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
-            new_callable=AsyncMock,
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal',
-            new_callable=AsyncMock, return_value=None,
-        ), patch(
-            'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
-            sync_mock,
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new=_check_perm,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved",
+                return_value=[],
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users",
+                sync_mock,
+            ),
         ):
             await DepartmentService.amove_department(
-                dept_id='7',
+                dept_id="7",
                 data=DepartmentMoveRequest(new_parent_id=9),
                 login_user=login_user,
             )
@@ -1384,18 +1572,19 @@ class TestMoveDepartmentSubtreeSync:
         sync_mock.assert_awaited_once()
         kwargs = sync_mock.call_args.kwargs
         # New path of moved dept = parent.path + dept.id + /
-        assert kwargs['dept_path'] == '/1/9/7/'
-        assert kwargs['trigger'] == UserTenantSyncTrigger.DEPT_MOVED
+        assert kwargs["dept_path"] == "/1/9/7/"
+        assert kwargs["trigger"] == UserTenantSyncTrigger.DEPT_MOVED
 
     @pytest.mark.asyncio
     async def test_move_to_same_parent_skips_sync(self):
         """new_parent_id == old_parent_id → no leaf change, no sync needed."""
-        from bisheng.department.domain.services.department_service import DepartmentService
         from bisheng.department.domain.schemas.department_schema import DepartmentMoveRequest
+        from bisheng.department.domain.services.department_service import DepartmentService
 
         # dept currently has parent_id=1; new parent will also be id=1.
         session, fake_session, dept = self._move_test_setup(
-            new_parent_path='/1/', new_parent_id=1,
+            new_parent_path="/1/",
+            new_parent_id=1,
         )
 
         async def _check_perm(_session, _dept_id, _login_user):
@@ -1404,27 +1593,35 @@ class TestMoveDepartmentSubtreeSync:
         login_user = _MockLoginUser(user_id=1, tenant_id=1)
         sync_mock = AsyncMock()
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new=_check_perm,
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved',
-            return_value=[],
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
-            new_callable=AsyncMock,
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal',
-            new_callable=AsyncMock, return_value=None,
-        ), patch(
-            'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
-            sync_mock,
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new=_check_perm,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved",
+                return_value=[],
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users",
+                sync_mock,
+            ),
         ):
             await DepartmentService.amove_department(
-                dept_id='7',
+                dept_id="7",
                 data=DepartmentMoveRequest(new_parent_id=1),
                 login_user=login_user,
             )
@@ -1433,8 +1630,8 @@ class TestMoveDepartmentSubtreeSync:
 
     @pytest.mark.asyncio
     async def test_sync_failure_does_not_propagate(self):
-        from bisheng.department.domain.services.department_service import DepartmentService
         from bisheng.department.domain.schemas.department_schema import DepartmentMoveRequest
+        from bisheng.department.domain.services.department_service import DepartmentService
 
         session, fake_session, dept = self._move_test_setup()
 
@@ -1442,30 +1639,38 @@ class TestMoveDepartmentSubtreeSync:
             return dept
 
         login_user = _MockLoginUser(user_id=1, tenant_id=1)
-        sync_mock = AsyncMock(side_effect=RuntimeError('downstream broken'))
+        sync_mock = AsyncMock(side_effect=RuntimeError("downstream broken"))
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new=_check_perm,
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved',
-            return_value=[],
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async',
-            new_callable=AsyncMock,
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal',
-            new_callable=AsyncMock, return_value=None,
-        ), patch(
-            'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
-            sync_mock,
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new=_check_perm,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentChangeHandler.on_moved",
+                return_value=[],
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentChangeHandler.execute_async",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users",
+                sync_mock,
+            ),
         ):
             # Must NOT raise — sync hiccup is best-effort.
             result = await DepartmentService.amove_department(
-                dept_id='7',
+                dept_id="7",
                 data=DepartmentMoveRequest(new_parent_id=9),
                 login_user=login_user,
             )
@@ -1482,11 +1687,11 @@ class TestMoveDepartmentSubtreeSync:
         from bisheng.common.errcode.tenant_tree import (
             TenantTreeNestingForbiddenError,
         )
-        from bisheng.department.domain.services.department_service import (
-            DepartmentService,
-        )
         from bisheng.department.domain.schemas.department_schema import (
             DepartmentMoveRequest,
+        )
+        from bisheng.department.domain.services.department_service import (
+            DepartmentService,
         )
 
         session, fake_session, dept = self._move_test_setup()
@@ -1501,22 +1706,27 @@ class TestMoveDepartmentSubtreeSync:
 
         sync_mock = AsyncMock()
 
-        with patch(
-            'bisheng.department.domain.services.department_service.get_async_db_session',
-            fake_session,
-        ), patch(
-            'bisheng.department.domain.services.department_service._get_dept_and_check_permission',
-            new=_check_perm,
-        ), patch(
-            'bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal',
-            new=_reject,
-        ), patch(
-            'bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users',
-            sync_mock,
+        with (
+            patch(
+                "bisheng.department.domain.services.department_service.get_async_db_session",
+                fake_session,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service._get_dept_and_check_permission",
+                new=_check_perm,
+            ),
+            patch(
+                "bisheng.department.domain.services.department_service.DepartmentDao.aassert_reparent_legal",
+                new=_reject,
+            ),
+            patch(
+                "bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users",
+                sync_mock,
+            ),
         ):
             with pytest.raises(TenantTreeNestingForbiddenError):
                 await DepartmentService.amove_department(
-                    dept_id='7',
+                    dept_id="7",
                     data=DepartmentMoveRequest(new_parent_id=9),
                     login_user=login_user,
                 )
