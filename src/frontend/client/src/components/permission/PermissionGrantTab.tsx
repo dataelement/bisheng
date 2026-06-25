@@ -20,7 +20,7 @@ import type {
 } from "~/api/permission";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocalize } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn } from "~/utils";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
@@ -158,6 +158,7 @@ export function PermissionGrantTab({
   permissionApi,
 }: PermissionGrantTabProps) {
   const localize = useLocalize();
+  const isMobile = usePrefersMobileLayout();
   const { showToast } = useToastContext();
   const activePermissionApi = permissionApi ?? DEFAULT_PERMISSION_API;
   const [subjectType, setSubjectType] = useState<SubjectType>(fixedSubjectType ?? "user");
@@ -421,7 +422,14 @@ export function PermissionGrantTab({
         )}
       </div>
 
-      <div className="mt-3 flex h-10 shrink-0 items-center gap-4 overflow-hidden">
+      <div
+        className={cn(
+          "mt-3 shrink-0 overflow-hidden",
+          // Mobile: stack "selected subjects" and "uniform grant" onto two rows
+          // so they don't crowd each other on a narrow dialog.
+          isMobile ? "flex flex-col gap-2" : "flex h-10 items-center gap-4",
+        )}
+      >
         <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
           <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
             {`${localize("com_permission.selected_prefix")}${subjectLabel(subjectType)}:`}
