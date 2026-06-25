@@ -12,6 +12,7 @@ import {
 import { useToastContext } from "~/Providers";
 import {
     SpaceTag,
+    FileTag,
     getSpaceTagsApi,
     addSpaceTagApi,
     deleteSpaceTagApi,
@@ -24,8 +25,12 @@ import { getFullWidthLength } from "~/utils";
 interface EditTagsModalProps {
     isOpen: boolean;
     onClose: (confirmClose: boolean) => void;
-    /** Called after tags are saved successfully so parent can refresh */
-    onSaved?: () => void;
+    /**
+     * Called after tags are saved successfully so parent can refresh.
+     * In single-file mode the updated tag list is passed so the parent can
+     * patch that file's tags in place instead of refetching the whole list.
+     */
+    onSaved?: (tags?: FileTag[]) => void;
     spaceId: string;
     /** Single file edit — mutually exclusive with fileIds */
     fileId?: string | null;
@@ -148,12 +153,19 @@ export function EditTagsModal({
                     tag_ids: tagIds,
                 });
                 showToast({ message: localize("com_knowledge.batch_add_tags_success"), status: "success" });
+                // Batch mode spans multiple files — let the parent decide how to refresh.
+                onSaved?.();
             } else if (fileId) {
                 // Single file overwrite mode
                 await updateFileTagsApi(spaceId, fileId, tagIds);
                 !pendingText && showToast({ message: localize("com_knowledge.tag_save_success"), status: "success" });
+                // Hand the updated tag list back so the parent can patch this
+                // file's tags in place without reloading the whole list.
+                const savedTags: FileTag[] = spaceTags
+                    .filter((t) => selectedTagIds.has(t.id))
+                    .map((t) => ({ id: t.id, name: t.name }));
+                onSaved?.(savedTags);
             }
-            onSaved?.();
             // Invalidate shared spaceTags cache so search dropdown picks up new tags
             queryClient.invalidateQueries({ queryKey: ['spaceTags', spaceId] });
             onClose(true);

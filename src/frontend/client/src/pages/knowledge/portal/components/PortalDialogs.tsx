@@ -3,7 +3,7 @@ import { ApprovalCenterDialog } from "~/components/approval/ApprovalCenterDialog
 import { NotificationsDialog } from "~/components/NotificationsDialog";
 import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui";
 import type { ApprovalCenterTab } from "~/api/approval";
-import type { KnowledgeFile, KnowledgeSpace, SpaceLevel } from "~/api/knowledge";
+import type { FileTag, KnowledgeFile, KnowledgeSpace, SpaceLevel } from "~/api/knowledge";
 import { CreateKnowledgeSpaceDrawer } from "../../CreateKnowledgeSpaceDrawer";
 import { EditTagsModal } from "../../SpaceDetail/EditTagsModal";
 import { FilePublishDialog } from "../../SpaceDetail/FilePublishDialog";
@@ -26,7 +26,7 @@ type PortalDialogsProps = {
     documentPath: string;
     tagModalOpen: boolean;
     onTagModalOpenChange: (open: boolean) => void;
-    onTagsSaved: () => void;
+    onTagsSaved: (tags?: FileTag[]) => void;
     permissionResourceType: ResourceType;
     permissionOpen: boolean;
     onPermissionOpenChange: (open: boolean) => void;
