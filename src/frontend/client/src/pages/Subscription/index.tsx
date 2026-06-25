@@ -32,7 +32,7 @@ import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState, useRecoilValue } from "recoil";
 import store from "~/store";
-import { subscriptionDetailPaneWidthState } from "~/store/subscriptionLayout";
+import { subscriptionDetailPaneWidthState, subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
 import { ChannelShareDialog } from "./ChannelShareDialog";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
@@ -92,6 +92,9 @@ export default function Subscription() {
     // Right-area width (detail panel + splitter) published by ChannelLayout; offsets
     // the persistent 频道/广场 tab so it tracks the article-list column's right edge.
     const detailPaneWidth = useRecoilValue(subscriptionDetailPaneWidthState);
+    // True while the H5 channel-switcher dropdown is open — greys out the persistent
+    // 频道/广场 tab, matching the header's left/right action buttons.
+    const mobileChannelDropdownOpen = useRecoilValue(subscriptionMobileChannelDropdownOpenState);
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
 
     const openChannelPermissionDialog = (channel: Channel) => {
@@ -500,11 +503,30 @@ export default function Subscription() {
                     />
                 </div>
             ) : null}
+            {/* H5：同一个切换器常驻在两个视图之上（不随 showChannelSquare 卸载），
+                所以频道⇄广场切换时蓝色下划线平滑滑动。各视图头部不再各自渲染切换器，
+                中间留空给它。屏幕居中，与各视图头部行（pt+h-11）垂直对齐；
+                外层 pointer-events-none 让两侧的侧栏/搜索按钮仍可点击，仅切换器本体接收点击。 */}
+            {isH5 && (showChannelSquare || !channelsResolving) ? (
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex justify-center pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                    <div className="pointer-events-auto flex h-11 items-center">
+                        <ChannelSquareTabs
+                            variant="underline"
+                            active={showChannelSquare ? "square" : "channel"}
+                            onChannelClick={handleSquareBack}
+                            onSquareClick={handleChannelSquare}
+                            disabled={mobileChannelDropdownOpen}
+                        />
+                    </div>
+                </div>
+            ) : null}
             {showChannelSquare ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <ChannelSquare
                         refreshKey={channelSquareRefreshKey}
                         onPreviewChannel={handleSquarePreview}
+                        isH5={isH5}
+                        onOpenMobileNav={() => setSystemMenuOpen(true)}
                     />
                 </div>
             ) : (

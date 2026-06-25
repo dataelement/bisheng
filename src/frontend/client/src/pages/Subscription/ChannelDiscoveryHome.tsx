@@ -85,9 +85,11 @@ export function ChannelDiscoveryHome({
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
-    const [channels, setChannels] = useState<DiscoverChannel[]>([]);
     const [paused, setPaused] = useState(false);
     const [joiningId, setJoiningId] = useState<string | null>(null);
+    // Optimistic subscribe status overrides, keyed by channel id (the list itself is
+    // derived from the query so a cached remount paints the carousel immediately).
+    const [statusOverrides, setStatusOverrides] = useState<Record<string, DiscoverStatus>>({});
     // Infinite loop carousel. The track renders the ranked list three times; `pos`
     // is the track index of the centered card and only ever increases. It starts in
     // the MIDDLE copy so the left/right neighbours are always populated (initial
@@ -107,17 +109,19 @@ export function ChannelDiscoveryHome({
         staleTime: 60_000,
     });
 
-    // Sync local list from the query (local copy reflects optimistic subscribe status).
-    useEffect(() => {
+    // Derive the list straight from the query (no post-paint state sync), so switching
+    // back from the plaza with cached data paints the carousel on the first frame —
+    // no empty-illustration flash that would shift the vertically centered content.
+    const channels = useMemo(() => {
         const root: any = data;
-        if (!root) return;
+        if (!root) return [] as DiscoverChannel[];
         const payload = root.data ?? root;
         const list: any[] = (payload?.data || payload?.list || []) as any[];
-        const mapped = list.map(mapRecommendItem).filter((c): c is DiscoverChannel => c !== null);
-        setChannels(mapped);
-        // Start centered on the highest-ranked card in the middle copy (index N).
-        setPos(mapped.length);
-    }, [data]);
+        return list
+            .map(mapRecommendItem)
+            .filter((c): c is DiscoverChannel => c !== null)
+            .map((c) => (statusOverrides[c.id] ? { ...c, status: statusOverrides[c.id] } : c));
+    }, [data, statusOverrides]);
 
     // Carousel only on PC with enough public channels (otherwise the empty illustration).
     const count = channels.length;
@@ -129,6 +133,12 @@ export function ChannelDiscoveryHome({
         () => (showCarousel ? [...channels, ...channels, ...channels] : []),
         [channels, showCarousel]
     );
+
+    // Center on the highest-ranked card in the middle copy (index N) before paint, so
+    // there's no horizontal settle on (re)mount. Only runs when the count changes.
+    useLayoutEffect(() => {
+        if (count > 0) setPos(count);
+    }, [count]);
 
     // Measure the viewport so the centered card can be positioned precisely.
     useLayoutEffect(() => {
@@ -179,9 +189,7 @@ export function ChannelDiscoveryHome({
                 try {
                     setJoiningId(channelId);
                     const nextStatus: DiscoverStatus = target.visibility === "public" ? "joined" : "pending";
-                    setChannels((prev) =>
-                        prev.map((c) => (c.id === channelId ? { ...c, status: nextStatus } : c))
-                    );
+                    setStatusOverrides((prev) => ({ ...prev, [channelId]: nextStatus }));
                     const res: any = await subscribeManagerChannelApi({ channel_id: channelId });
                     const statusCode = res?.status_code ?? res?.code;
                     if (statusCode && statusCode !== 200) {
@@ -200,9 +208,11 @@ export function ChannelDiscoveryHome({
                     queryClient.invalidateQueries({ queryKey: ["channels"] });
                 } catch {
                     // Roll back on failure (interceptor surfaces the toast).
-                    setChannels((prev) =>
-                        prev.map((c) => (c.id === channelId ? { ...c, status: target.status } : c))
-                    );
+                    setStatusOverrides((prev) => {
+                        const next = { ...prev };
+                        delete next[channelId];
+                        return next;
+                    });
                 } finally {
                     setJoiningId(null);
                 }
@@ -220,13 +230,12 @@ export function ChannelDiscoveryHome({
                             type="button"
                             aria-label={localize("com_nav_open_sidebar")}
                             onClick={onOpenMobileNav}
-                            className="inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]"
+                            className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
                         >
                             <Outlined.SidebarMenu className="size-5" />
                         </button>
-                        <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-[16px] font-medium leading-6 text-[#212121]">
-                            {localize("com_subscription.subscribe")}
-                        </h1>
+                        {/* 频道/广场 切换器为跨视图常驻单实例（见 Subscription/index），
+                            屏幕居中悬浮在此行之上，这里不再各自渲染。 */}
                     </div>
                 </div>
             );

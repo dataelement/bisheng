@@ -19,6 +19,9 @@ interface ChannelSwitcherProps {
     infoContent?: ReactNode;
     /** "default" = PC top-title popover. "mobile" = H5 below-titlebar fixed panel + backdrop. */
     variant?: "default" | "mobile";
+    /** Mobile: extra classes for the trigger button (e.g. left-align in a justify-between row).
+     *  Defaults to a centered, flex-1 trigger when omitted. */
+    mobileTriggerClassName?: string;
     /** Mobile: CSS `top` for the dropdown panel (just under the H5 title bar). */
     mobileTopOffset?: string;
     /** Optional controlled open state (callers can force-close, e.g. when search opens). */
@@ -48,6 +51,7 @@ export function ChannelSwitcher({
     onChannelSquare,
     infoContent,
     variant = "default",
+    mobileTriggerClassName,
     mobileTopOffset,
     open: openProp,
     onOpenChange,
@@ -177,16 +181,17 @@ export function ChannelSwitcher({
         </div>
     );
 
-    // Persistent "go to plaza" button shown at the bottom of both the PC popover and the H5 panel.
-    const renderChannelSquareButton = () =>
-        onChannelSquare ? (
+    // Persistent "create channel" button shown at the bottom of the H5 panel.
+    // (Plaza navigation now lives in the header 频道/广场 toggle.)
+    const renderCreateChannelButton = () =>
+        onCreateChannel ? (
             <button
                 type="button"
-                onClick={() => { onChannelSquare(); setOpen(false); }}
+                onClick={() => { onCreateChannel(); setOpen(false); }}
                 className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[8px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
             >
-                <Outlined.BlocksAndArrows className="size-4 text-[#86909C]" />
-                {localize("com_subscription.go_to_square")}
+                <Outlined.Plus className="size-4 text-[#86909C]" />
+                {localize("com_subscription.create_channel")}
             </button>
         ) : null;
 
@@ -243,7 +248,10 @@ export function ChannelSwitcher({
                     type="button"
                     onClick={() => handleOpenChange(!open)}
                     aria-expanded={open}
-                    className="flex min-w-0 flex-1 items-center justify-center gap-1 outline-none"
+                    className={cn(
+                        "flex min-w-0 items-center gap-1 outline-none",
+                        mobileTriggerClassName ?? "flex-1 justify-center",
+                    )}
                 >
                     <span className="truncate text-[16px] font-medium leading-6 text-[#212121]">
                         {channelName}
@@ -268,7 +276,7 @@ export function ChannelSwitcher({
                             {renderChannelList()}
                         </div>
                         <div className="shrink-0 bg-white px-4 pt-4 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
-                            {renderChannelSquareButton()}
+                            {renderCreateChannelButton()}
                         </div>
                     </div>
                 ) : null}
