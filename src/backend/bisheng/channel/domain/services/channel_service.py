@@ -1189,7 +1189,49 @@ class ChannelService:
         # 2. Count total matching channels
         total = await self.channel_repository.count_square_channels(keyword=keyword)
 
-        # 3. Map results to response items
+        # 3. Map rows to response items (ES article counts + top source infos)
+        result_list = await self._build_square_items(rows)
+
+        return ChannelSquarePageResponse(data=result_list, total=total)
+
+    async def get_recommended_channels(
+        self, login_user: UserPayload, limit: int = 12
+    ) -> ChannelSquarePageResponse:
+        """
+        Home-page discovery recommendations: released PUBLIC channels sorted by
+        content (article) count descending, for the empty-state carousel shown to
+        users with no created/subscribed channels.
+
+        Article count comes from Elasticsearch per channel, so it cannot be ordered
+        at the DB layer: we pull a bounded candidate set of public channels, compute
+        their counts in one ES batch, then sort in memory and return the top ``limit``.
+        ``total`` is the number of qualifying public channels (capped at the candidate
+        limit) so the frontend can fall back to the empty illustration when < 3.
+        """
+        rows = await self.channel_repository.find_public_recommend_channels(
+            user_id=login_user.user_id
+        )
+
+        items = await self._build_square_items(rows)
+
+        # Sort by content count desc; tie-break on subscriber count then name for stability.
+        items.sort(key=lambda x: (x.article_count, x.subscriber_count, x.name), reverse=True)
+
+        total = len(items)
+        return ChannelSquarePageResponse(data=items[:limit], total=total)
+
+    async def _build_square_items(self, rows) -> list[ChannelSquareItemResponse]:
+        """
+        Map channel-square repository rows
+        ``(Channel, user_subscription_status, user_subscription_update_time, subscriber_count)``
+        to ``ChannelSquareItemResponse`` items, preserving the input order.
+
+        Batches the per-channel ES article-count and the top-5 source lookups to avoid
+        N+1 queries. Shared by the channel square and the home-page recommendations.
+        """
+        if not rows:
+            return []
+
         # To avoid N+1 ES queries, build a batch request
         batch_requests = []
         for row in rows:
@@ -1265,7 +1307,7 @@ class ChannelService:
                 )
             )
 
-        return ChannelSquarePageResponse(data=result_list, total=total)
+        return result_list
 
     async def subscribe_channel(
         self,

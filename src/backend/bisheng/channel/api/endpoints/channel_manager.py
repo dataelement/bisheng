@@ -135,6 +135,19 @@ async def get_channel_square(
     return resp_200(data=result.model_dump())
 
 
+@router.get("/recommend")
+async def get_recommended_channels(
+    limit: int = Query(12, ge=1, le=50, description="Max number of channels to return, default 12"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    """Home-page discovery recommendations: released PUBLIC channels sorted by article
+    count descending, for the empty-state carousel. `total` is the qualifying public
+    channel count so the client can fall back to the empty illustration when < 3."""
+    result = await channel_service.get_recommended_channels(login_user=login_user, limit=limit)
+    return resp_200(data=result.model_dump())
+
+
 @router.post("/subscribe")
 async def subscribe_channel(
     request: Request,

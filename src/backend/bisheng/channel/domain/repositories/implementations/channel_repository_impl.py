@@ -111,6 +111,60 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         result = await self.session.exec(query)
         return list(result.all())
 
+    async def find_public_recommend_channels(
+        self, user_id: int, candidate_limit: int = 100
+    ) -> List[Tuple[Any, ...]]:
+        """
+        Find released PUBLIC channels for the home-page discovery carousel.
+
+        Same tuple shape as :meth:`find_square_channels`
+        ``(Channel, user_subscription_status, user_subscription_update_time, subscriber_count)``
+        but restricted to ``visibility == PUBLIC`` and unpaginated (capped at
+        ``candidate_limit``). The caller computes per-channel article counts via ES
+        and re-sorts by content count, so DB ordering here is only the candidate
+        pre-filter — newest channels first, bounded to keep the ES batch small.
+        """
+        subscriber_subq = (
+            select(
+                SpaceChannelMember.business_id,
+                func.count().label('subscriber_count')
+            )
+            .where(
+                SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL,
+                SpaceChannelMember.status == MembershipStatusEnum.ACTIVE
+            )
+            .group_by(SpaceChannelMember.business_id)
+            .subquery()
+        )
+
+        query = (
+            select(
+                Channel,
+                SpaceChannelMember.status.label('user_subscription_status'),
+                SpaceChannelMember.update_time.label('user_subscription_update_time'),
+                func.coalesce(subscriber_subq.c.subscriber_count, 0).label('subscriber_count')
+            )
+            .outerjoin(
+                SpaceChannelMember,
+                (SpaceChannelMember.business_id == Channel.id) &
+                (SpaceChannelMember.business_type == BusinessTypeEnum.CHANNEL) &
+                (SpaceChannelMember.user_id == user_id)
+            )
+            .outerjoin(
+                subscriber_subq,
+                subscriber_subq.c.business_id == Channel.id
+            )
+            .where(
+                Channel.is_released == True,
+                Channel.visibility == ChannelVisibilityEnum.PUBLIC
+            )
+            .order_by(func.coalesce(Channel.update_time, Channel.create_time).desc())
+            .limit(candidate_limit)
+        )
+
+        result = await self.session.exec(query)
+        return list(result.all())
+
     async def count_square_channels(self, keyword: Optional[str] = None) -> int:
         """Count total released channels matching the keyword filter."""
         query = (
