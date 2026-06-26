@@ -30,6 +30,8 @@ interface KnowledgeSpaceCardItemProps {
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
     onManageMembers?: (space: KnowledgeSpace) => void;
+    /** F040: lazily resolve this space's action permissions when its menu opens. */
+    onMenuOpen?: () => void;
     canEditSpace?: boolean;
     canDeleteSpace?: boolean;
     canManageMembers?: boolean;
@@ -50,6 +52,7 @@ export default function KnowledgeSpaceCardItem({
     onPin,
     onSettings,
     onManageMembers,
+    onMenuOpen,
     canEditSpace = false,
     canDeleteSpace = false,
     canManageMembers = false,
@@ -85,7 +88,7 @@ export default function KnowledgeSpaceCardItem({
                 </div>
             </div>
 
-            <DropdownMenu onOpenChange={setMenuOpen}>
+            <DropdownMenu onOpenChange={(open) => { setMenuOpen(open); if (open) onMenuOpen?.(); }}>
                 <DropdownMenuTrigger asChild>
                     <button
                         type="button"

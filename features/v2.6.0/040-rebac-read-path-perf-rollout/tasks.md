@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-25 用户确认通过（`/sdd-review spec`）。遗留观察：INV-6 豁免论证（B 组全返回）留待 design 给出；详见评审记录。 |
 | design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
 | tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
-| 实现 | 🚧 进行中 | T0·T1·T2·T3·T4·T5·T11 ✅ / 16（T1b·T5方案2 ⏸️）。偏差见下方「实际偏差记录」 |
+| 实现 | 🚧 进行中 | T0·T1·T2·T3·T4·T5·T9·T11 ✅ / 16（T1b·T5方案2 ⏸️）。偏差见下方「实际偏差记录」 |
 
 ---
 
@@ -56,8 +56,8 @@
 | T7 | **A 频道 ArticleList 改造**：详情不再读 `sub_channel_unread_counts`；进入频道后独立调 `…/unread-counts` 填角标；失败降级 0/不显示。验证：预览弹窗无未读请求、in-channel 角标正常 | **Client** | `src/frontend/client/`：`ArticleList.tsx`, `channels.ts` + TS 类型 | AC-05 | T4 | 🔲 |
 | T8a | **C 助手列表无限滚动**：`useInfiniteQuery` + cursor 触底加载 + cursor 错误码 reset + 去「共 X 个」文案 | **Platform** | `src/frontend/platform/`：助手列表组件 + API 封装 | AC-12, AC-13 | T6a | 🔲 |
 | T8b | **C 工作台列表 + 文件搜索无限滚动**：`useInfiniteQuery` + cursor 触底 + 错误码 reset | **Client** | `src/frontend/client/`：工作台/文件搜索组件 + API 封装 | AC-12, AC-13 | T6b, T6c | 🔲 |
-| T9a | **D 侧栏移除 mount 预取**：`useKnowledgeSpaceActionPermissions` 渲染期批量 `checkPermission` 移除；`KnowledgeSpaceSidebar` 不再首屏预判 | **Client** | `src/frontend/client/`：`useKnowledgeSpacePermissions.ts`, `KnowledgeSpaceSidebar.tsx` | AC-16, AC-29 | 无 | 🔲 |
-| T9b | **D 菜单按需查权限**：`KnowledgeSpaceItem`/`KnowledgeSpaceCardItem` 菜单 `onOpenChange` 触发该空间 `checkPermission` + 组件级缓存 + 加载/失败 fail-closed + 超管短路。验证：菜单打开才查、按钮集合与改造前一致 | **Client** | `src/frontend/client/`：`KnowledgeSpaceItem.tsx`, `KnowledgeSpaceCardItem.tsx` | AC-17, AC-18, AC-19, AC-20 | T9a | 🔲 |
+| T9a | **D 侧栏移除 mount 预取**：`useKnowledgeSpaceActionPermissions` 渲染期批量 `checkPermission` 移除；`KnowledgeSpaceSidebar` 不再首屏预判 | **Client** | `src/frontend/client/`：`useKnowledgeSpacePermissions.ts`, `KnowledgeSpaceSidebar.tsx` | AC-16, AC-29 | 无 | ✅ |
+| T9b | **D 菜单按需查权限**：`KnowledgeSpaceItem`/`KnowledgeSpaceCardItem` 菜单 `onOpenChange` 触发该空间 `checkPermission` + 组件级缓存 + 加载/失败 fail-closed + 超管短路。验证：菜单打开才查、按钮集合与改造前一致 | **Client** | `src/frontend/client/`：`KnowledgeSpaceItem.tsx`, `KnowledgeSpaceCardItem.tsx` | AC-17, AC-18, AC-19, AC-20 | T9a | ✅ |
 
 > **横切等价 AC**：AC-01（A/B/C 对象集/permission_ids 等价）由 T4·T5·T6a·T6b·T6c 等价测试覆盖；AC-02（INV-7）由 T6c 覆盖；AC-03（fail-closed）由 T1·T5 覆盖；AC-19·AC-20（D 组按钮等价）由 T9b 覆盖。
 

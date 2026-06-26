@@ -185,7 +185,7 @@ export function KnowledgeSpaceSidebar({
         ])),
         [departmentSpaces, filteredCreatedSpaces, filteredJoinedSpaces],
     );
-    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions(permissionSpaceIds);
+    const { permissions: spaceActionPermissions, ensureSpacePermissions } = useKnowledgeSpaceActionPermissions(permissionSpaceIds);
 
     const getItemPermissions = (space: KnowledgeSpace, type: "created" | "joined" | "department") => {
         const isCreator = type === "created" || space.role === SpaceRole.CREATOR;
@@ -280,6 +280,7 @@ export function KnowledgeSpaceSidebar({
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
                 onManageMembers={onManageMembers}
+                onMenuOpen={() => ensureSpacePermissions(s.id)}
                 {...getItemPermissions(s, sectionType)}
             />
         ) : (
@@ -295,6 +296,7 @@ export function KnowledgeSpaceSidebar({
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
                 onManageMembers={onManageMembers}
+                onMenuOpen={() => ensureSpacePermissions(s.id)}
                 {...getItemPermissions(s, sectionType)}
             />
         );

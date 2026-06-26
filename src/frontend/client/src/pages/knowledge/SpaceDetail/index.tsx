@@ -274,7 +274,7 @@ export function KnowledgeSpaceContent({
     // per-resource backend probe, which is the source of truth: it still grants
     // delete on files the user owns, and on every file for a platform super-admin.
     const isOwner = space.role === SpaceRole.CREATOR;
-    const { permissions: spaceActionPermissions } = useKnowledgeSpaceActionPermissions([space.id]);
+    const { permissions: spaceActionPermissions, ensureSpacePermissions } = useKnowledgeSpaceActionPermissions([space.id]);
     const canShareSpace = isAdmin || hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
@@ -1050,7 +1050,7 @@ export function KnowledgeSpaceContent({
                             >
                                 <Outlined.Search className="size-5" />
                             </button>
-                            <DropdownMenu>
+                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
                                         type="button"
@@ -1082,7 +1082,7 @@ export function KnowledgeSpaceContent({
                                     ))}
                                 </DropdownMenuContent>
                             </DropdownMenu>
-                            <DropdownMenu>
+                            <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
                                         type="button"
