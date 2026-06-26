@@ -101,6 +101,66 @@ class Milvus(_LangchainMilvus):
         self._ensure_fields_loaded()
         return await super().aadd_texts(*args, **kwargs)
 
+    @staticmethod
+    def _ensure_ef_covers_k(param: dict | None, k: int) -> dict | None:
+        """Raise HNSW ``ef`` to cover ``k`` so Milvus never rejects the search.
+
+        HNSW search requires ``ef >= k`` (topK); otherwise the QueryNode fails
+        with ``ef(110) should be larger than k(300)``. Some callers scale ``k``
+        independently of ``ef`` -- e.g. the knowledge-space permission-filter
+        recall loop fetches ``100 * multiplier`` candidates while leaving ``ef``
+        hard-coded at 110 -- which trips the constraint once the multiplier
+        pushes ``k`` past ``ef``. Bump ``ef`` to ``k`` here so any caller is
+        covered. ``ef`` may sit at the top level (``{"ef": N}``) or nested
+        (``{"params": {"ef": N}}``). Returns a corrected copy; never mutates the
+        input.
+        """
+        if not isinstance(param, dict):
+            return param
+        nested = param.get("params")
+        if isinstance(nested, dict) and isinstance(nested.get("ef"), int):
+            if nested["ef"] < k:
+                return {**param, "params": {**nested, "ef": k}}
+        elif isinstance(param.get("ef"), int) and param["ef"] < k:
+            return {**param, "ef": k}
+        return param
+
+    def _collection_search(
+        self,
+        embedding_or_text: Any,
+        k: int = 4,
+        param: dict | None = None,
+        expr: str | None = None,
+        timeout: float | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        return super()._collection_search(
+            embedding_or_text,
+            k=k,
+            param=self._ensure_ef_covers_k(param, k),
+            expr=expr,
+            timeout=timeout,
+            **kwargs,
+        )
+
+    async def _acollection_search(
+        self,
+        embedding_or_text: Any,
+        k: int = 4,
+        param: dict | None = None,
+        expr: str | None = None,
+        timeout: float | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        return await super()._acollection_search(
+            embedding_or_text,
+            k=k,
+            param=self._ensure_ef_covers_k(param, k),
+            expr=expr,
+            timeout=timeout,
+            **kwargs,
+        )
+
     def _select_relevance_score_fn(self) -> Callable[[float], float]:
         try:
             return super()._select_relevance_score_fn()

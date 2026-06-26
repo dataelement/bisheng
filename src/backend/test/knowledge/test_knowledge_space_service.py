@@ -470,6 +470,195 @@ class TestGetSpaceInfo:
         assert result.is_followed is False
 
     @pytest.mark.asyncio
+    async def test_public_square_synthetic_viewer_not_marked_subscribed(self, service):
+        """Regression: opening a released PUBLIC space the user has NOT joined must
+        not flip subscription to SUBSCRIBED.
+
+        On a released PUBLIC space ``_public_space_viewer_permission_ids`` synthesises
+        ``view_space`` for *every* user, so ``has_content_permission`` is True even with
+        no membership and no real ReBAC grant. The detail endpoint must mirror the square
+        list and only treat a *real* view_space grant as subscribed — not the synthetic
+        public-viewer permission. This exercises the real ``_get_effective_permission_ids``
+        path (empty FGA + empty bindings) instead of mocking it wholesale.
+        """
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, user_id=99, is_released=True)
+        empty_fga = _FakeReadTuplesFGA({})
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ),
+            patch.object(
+                service,
+                "_get_current_user_subject_strings",
+                new_callable=AsyncMock,
+                return_value={"user:7"},
+            ),
+            patch.object(
+                service,
+                "_get_relation_bindings",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(
+                service,
+                "_get_binding_department_paths",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch.object(
+                service,
+                "_get_relation_models_map",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga",
+                return_value=empty_fga,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members",
+                new_callable=AsyncMock,
+                return_value=3,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch",
+                new_callable=AsyncMock,
+                return_value={1: 5},
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(user_name="space-owner"),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+        ):
+            result = await service.get_space_info(1)
+
+        assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+        assert result.is_followed is False
+
+    @pytest.mark.asyncio
+    async def test_public_space_with_real_view_space_grant_marked_subscribed(self, service):
+        """Complement of the synthetic-viewer regression: a *real* ReBAC view_space grant
+        on a released PUBLIC space must still be reported as SUBSCRIBED. The fix only
+        strips the synthetic public-viewer permission from the subscribe decision; genuine
+        grants (here a viewer tuple for user:7) must survive it. Exercises the real
+        permission path and is DB-independent.
+        """
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC, user_id=99, is_released=True)
+        granted_fga = _FakeReadTuplesFGA(
+            {
+                "knowledge_space:1": [
+                    {"user": "user:7", "relation": "viewer", "object": "knowledge_space:1"},
+                ],
+            }
+        )
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ),
+            patch.object(
+                service,
+                "_get_current_user_subject_strings",
+                new_callable=AsyncMock,
+                return_value={"user:7"},
+            ),
+            patch.object(
+                service,
+                "_get_relation_bindings",
+                new_callable=AsyncMock,
+                return_value=[
+                    {
+                        "resource_type": "knowledge_space",
+                        "resource_id": "1",
+                        "subject_type": "user",
+                        "subject_id": 7,
+                        "relation": "viewer",
+                        "model_id": "custom_view_space",
+                        "include_children": None,
+                    }
+                ],
+            ),
+            patch.object(
+                service,
+                "_get_binding_department_paths",
+                new_callable=AsyncMock,
+                return_value={},
+            ),
+            patch.object(
+                service,
+                "_get_relation_models_map",
+                new_callable=AsyncMock,
+                return_value={
+                    "custom_view_space": {
+                        "id": "custom_view_space",
+                        "relation": "viewer",
+                        "permissions": ["view_space"],
+                        "is_system": False,
+                    },
+                },
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService._get_fga",
+                return_value=granted_fga,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members",
+                new_callable=AsyncMock,
+                return_value=0,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch",
+                new_callable=AsyncMock,
+                return_value={1: 0},
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(user_name="space-owner"),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_ids",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+        ):
+            result = await service.get_space_info(1)
+
+        assert result.subscription_status == SpaceSubscriptionStatusEnum.SUBSCRIBED
+        assert result.is_followed is True
+
+    @pytest.mark.asyncio
     async def test_minimal_view_space_bound_model_marks_space_info_subscribed(self, service):
         private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE, user_id=99)
         fake_fga = _FakeReadTuplesFGA(

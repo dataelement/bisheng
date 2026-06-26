@@ -89,12 +89,11 @@ TENANT_AWARE_MODELS: set[str] = {
 ALLOWLIST: set[tuple[str, int]] = {
     # ``_resource_ids_by_creator_user_ids`` deliberately walks resources
     # across tenants — it is a ReBAC reverse-lookup helper ("which resources
-    # did these users create?"). The two callers (``_finalize_accessible_ids``
-    # and ``_resource_ids_implicit_dept_admin_scope``) both fold the result
-    # into ``_filter_ids_by_tenant_gate``, which re-applies the tenant
-    # boundary. The helper itself must stay cross-tenant; tightening it
-    # would break dept-admin and child-tenant-admin scope union semantics.
-    ("permission/domain/services/permission_service.py", 1010),
+    # did these users create?"). Its caller (``_finalize_accessible_ids``)
+    # folds the result into ``_filter_ids_by_tenant_gate``, which re-applies
+    # the tenant boundary. The helper itself must stay cross-tenant; tightening
+    # it would break the owner / child-tenant-admin scope union semantics.
+    ("permission/domain/services/permission_service.py", 1048),
 }
 
 

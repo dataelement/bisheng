@@ -343,11 +343,13 @@ class KnowledgeQAFilterConf(BaseModel):
         ),
     )
     retrieval_expansion_multiplier: int = Field(
-        default=10,
+        default=6,
         ge=1,
         description=(
             "AD-03 capped expansion. When the first attempt fails to fill top_k, a "
-            "single retry recalls top_k * this multiplier; no further expansion."
+            "single retry recalls top_k * this multiplier; no further expansion. "
+            "Kept moderate (6 -> k=600 at base_k=100) to bound retry search cost; "
+            "the Milvus wrapper raises ef to cover whatever k this produces."
         ),
     )
     fine_grained_concurrency: int = Field(
