@@ -115,7 +115,8 @@ export default defineConfig(({ command, mode }) => {
     server: {
       host: '0.0.0.0',
       port: 4001,
-      strictPort: false,
+      // Pin to 4001: fail loudly if the port is taken instead of drifting to 4002+.
+      strictPort: true,
       proxy: {
         '^(/workspace)?/bisheng': {
           target: minioTarget,
@@ -409,6 +410,8 @@ export default defineConfig(({ command, mode }) => {
         '~': path.join(__dirname, 'src/'),
         '@': path.join(__dirname, 'src/'),
         $fonts: path.resolve(__dirname, 'public/fonts'),
+        // SUL-licensed nodebox is unused (only static/react-ts templates); stub it out of the bundle.
+        '@codesandbox/nodebox': path.resolve(__dirname, 'stubs/nodebox-stub.ts'),
       },
     },
   };

@@ -4,7 +4,7 @@
  * Each node with multiple children shows SiblingSwitch for navigation.
  */
 import { ArrowDownIcon, CornerDownRightIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSetRecoilState } from "recoil";
 import { Button } from "~/components";
@@ -17,6 +17,7 @@ import { useMessageSelection } from "~/hooks/useMessageSelection";
 import type { ChatMessage } from "~/api/chatApi";
 import { buildMessageTree } from "~/api/chatApi";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
+import { ArticleQAIllustration } from "~/components/illustrations";
 import store from "~/store";
 import HeaderTitle from "./HeaderTitle";
 import { QueryKeys } from "~/types/chat";
@@ -40,6 +41,9 @@ interface AiChatMessagesProps {
     knowledgeChatLayout?: boolean;
     /** Overrides empty-state line under the illustration (e.g. knowledge folder QA hint from parent) */
     emptyStateHint?: string;
+    /** Overrides the empty-state illustration (defaults to the AI-home image).
+        Subscription / knowledge AI docks pass the brand-themed ArticleQA SVG. */
+    emptyStateIllustration?: ReactNode;
     /** Skip the centered empty-state (AI-home image + article-assistant hint) and
         fall through to the normal layout (HeaderTitle + empty message area). Used
         by the daily/task conversation detail so an empty existing conversation
@@ -163,6 +167,7 @@ export default function AiChatMessages({
     flatMode = false,
     knowledgeChatLayout = false,
     emptyStateHint,
+    emptyStateIllustration,
     contentWidthClassName,
     onPresetClick,
     onRegenerate,
@@ -273,7 +278,11 @@ export default function AiChatMessages({
         return (
             <div
                 ref={emptyScrollRevealRef}
-                className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-scroll"
+                // h-full (alongside flex-1) so the empty state fills its parent even when
+                // that parent is a plain block container (e.g. the dock's `relative` message
+                // area), keeping the illustration vertically centered instead of collapsing
+                // to the top. Mirrors the non-empty messages root below.
+                className="flex h-full min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-4 scrollbar-on-scroll"
                 style={{
                     transitionProperty: 'background-color',
                     transitionDuration: '350ms',
@@ -281,12 +290,10 @@ export default function AiChatMessages({
                 }}
             >
                 <div className="mb-6">
-                    <img
-                        className="size-[80px] object-contain mx-auto block"
-                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                        alt="AI Assistant"
-                    />
-                    <p className="mt-[22px] text-center text-sm text-[#86909c]">
+                    {emptyStateIllustration ?? (
+                        <ArticleQAIllustration className="size-[80px] mx-auto block" />
+                    )}
+                    <p className="mt-4 text-center text-[14px] font-normal text-[#999999]">
                         {emptyStateHint ?? localize("com_knowledge.qa_current_article")}
                     </p>
                     {presetQuestions.length > 0 && (
@@ -295,7 +302,7 @@ export default function AiChatMessages({
                                 <Button
                                     key={i}
                                     variant="ghost"
-                                    className="bg-gray-50 px-3 py-1 text-left text-sm font-normal text-[#86909c] transition-colors hover:bg-[#E6EDFC] hover:text-[#165DFF] active:bg-[#E6EDFC] rounded-lg flex items-center gap-1 group w-fit"
+                                    className="bg-gray-50 px-3 py-1 text-left text-sm font-normal text-[#86909c] transition-colors hover:bg-blue-500/[0.07] hover:text-blue-500 active:bg-blue-500/[0.07] rounded-lg flex items-center gap-1 group w-fit"
                                     onClick={() => onPresetClick?.(q)}
                                 >
                                     <div className="size-4 flex items-center justify-center">

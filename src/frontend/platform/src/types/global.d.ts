@@ -12,6 +12,8 @@ declare global {
             loadingIcon?: string;
             URLLoadingIcon?: string;
             loadingAnimation?: string;
+            /** Admin-set workbench accent theme preset (drives the end-user app). */
+            workbenchTheme?: "blue" | "green";
             loading?: {
                 icon?: { url?: string; relative_path?: string; file_name?: string } | null;
                 iconOptions?: Array<{ url?: string; relative_path?: string; file_name?: string }>;

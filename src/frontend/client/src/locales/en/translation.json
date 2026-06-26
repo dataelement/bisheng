@@ -647,6 +647,9 @@
   "com_nav_lang_vietnamese": "Tiếng Việt",
   "com_nav_language": "Language",
   "com_nav_language_label": "Language",
+  "com_nav_theme_color": "Theme color",
+  "com_nav_theme_color_blue": "Blue",
+  "com_nav_theme_color_green": "Green",
   "com_nav_latex_parsing": "Parsing LaTeX in messages (may affect performance)",
   "com_nav_log_out": "Log out",
   "com_nav_long_audio_warning": "Longer texts will take longer to process.",
@@ -1129,6 +1132,7 @@
   "com_ui_reset_var": "Reset {{0}}",
   "com_ui_restart": "Restart",
   "com_ui_result": "Result",
+  "com_ui_retry": "Retry",
   "com_ui_revoke": "Revoke",
   "com_ui_revoke_info": "Revoke all user provided credentials",
   "com_ui_revoke_key_confirm": "Are you sure you want to revoke this key?",
@@ -1506,6 +1510,12 @@
     "19051": "Maximum limit for administrators reached (up to 5 admins)",
     "19052": "Maximum limit for subscribing channels reached (up to 20 channels)",
     "19053": "Knowledge space LLM is not configured. Please configure it in workbench settings first"
+  },
+  "com_app": {
+    "center_title": "App Center",
+    "empty_go_explore": "No apps used yet. Head to the app marketplace",
+    "explore_more": "Explore more apps",
+    "recent_apps_hint": "Your recently used apps are all here～"
   },
   "com_knowledge": {
     "add_new": "Add",
@@ -1991,6 +2001,7 @@
     "no_data": "No data",
     "no_matching_knowledge_space": "No matching knowledge space found",
     "no_related_content_please": "No related content, please",
+    "no_subscription_content_you_can": "No subscriptions yet. You can",
     "no_results": "No results",
     "no_original_link": "No original link available",
     "no_selectable_knowledge_space": "No selectable knowledge space",
@@ -2261,6 +2272,7 @@
   "com_approval_approver_label": "Approver",
   "com_approval_step_submitted": "Submitted",
   "com_approval_step_submitted_desc": "Request submitted",
+  "com_approval_back": "Back",
   "com_approval_my_approval": "My Approvals",
   "com_approval_my_approval_desc": "Handle business requests that need your approval",
   "com_approval_my_requests_desc": "View approval requests you have submitted",

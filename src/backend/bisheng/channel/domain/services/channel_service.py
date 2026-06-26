@@ -1250,10 +1250,49 @@ class ChannelService:
         # 2. Count total matching channels
         total = await self.channel_repository.count_square_channels(keyword=keyword)
 
-        # 3. Map results to response items.
+        # 3. Map rows to response items (ES article counts + top source infos)
+        result_list = await self._build_square_items(rows)
+
+        return ChannelSquarePageResponse(data=result_list, total=total)
+
+    async def get_recommended_channels(self, login_user: UserPayload, limit: int = 12) -> ChannelSquarePageResponse:
+        """
+        Home-page discovery recommendations: released PUBLIC channels sorted by
+        content (article) count descending, for the empty-state carousel shown to
+        users with no created/subscribed channels.
+
+        Article count comes from Elasticsearch per channel, so it cannot be ordered
+        at the DB layer: we pull a bounded candidate set of public channels, compute
+        their counts in one ES batch, then sort in memory and return the top ``limit``.
+        ``total`` is the number of qualifying public channels (capped at the candidate
+        limit) so the frontend can fall back to the empty illustration when < 3.
+        """
+        rows = await self.channel_repository.find_public_recommend_channels(user_id=login_user.user_id)
+
+        items = await self._build_square_items(rows)
+
+        # Sort by content count desc; tie-break on subscriber count then name for stability.
+        items.sort(key=lambda x: (x.article_count, x.subscriber_count, x.name), reverse=True)
+
+        total = len(items)
+        return ChannelSquarePageResponse(data=items[:limit], total=total)
+
+    async def _build_square_items(self, rows) -> list[ChannelSquareItemResponse]:
+        """
+        Map channel-square repository rows
+        ``(Channel, user_subscription_status, user_subscription_update_time, subscriber_count)``
+        to ``ChannelSquareItemResponse`` items, preserving the input order.
+
+        Batches the per-channel ES article-count and the top-5 source lookups to avoid
+        N+1 queries. Shared by the channel square and the home-page recommendations.
+        """
+        if not rows:
+            return []
+
         # F040: main article counts come from a short-TTL Redis cache; only the cache
         # *misses* go to ES (still batched into one msearch), then are written back.
-        # ``article_counts`` stays a list parallel to ``rows``.
+        # ``article_counts`` stays a list parallel to ``rows``. Shared by the square and
+        # the home-page recommendations, so both benefit from the cache.
         channels = [row[0] for row in rows]
         cached_counts = await ArticleCountCache.get_main_counts([c.id for c in channels])
 
@@ -1331,7 +1370,7 @@ class ChannelService:
                 )
             )
 
-        return ChannelSquarePageResponse(data=result_list, total=total)
+        return result_list
 
     async def subscribe_channel(
         self,
@@ -1558,19 +1597,12 @@ class ChannelService:
         if not channel:
             raise ChannelNotFoundError()
 
-        # 2. Verify current user can edit channel settings
-        current_membership = await self.space_channel_member_repository.find_membership(
-            business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
-        )
-        if not current_membership or current_membership.status != MembershipStatusEnum.ACTIVE:
-            raise ValueError("You are not a member of this channel")
-
-        current_relation = resolve_channel_relation(current_membership)
-        if current_relation not in {
-            ChannelRelationEnum.OWNER,
-            ChannelRelationEnum.MANAGER,
-            ChannelRelationEnum.EDITOR,
-        }:
+        # 2. Verify current user can edit channel settings. Super admins are always
+        # allowed; otherwise the ReBAC ``can_edit`` relation decides. ``can_edit`` is
+        # satisfied by owner / manager / editor (permission pyramid), and—unlike the
+        # membership table—also honours edit grants delivered through departments,
+        # user groups or direct OpenFGA tuples.
+        if not login_user.is_admin() and not await self._user_can_edit_channel(login_user.user_id, channel_id):
             raise ChannelPermissionDeniedError(
                 msg="Only the owner, manager, or editor can update the channel information"
             )
@@ -2037,8 +2069,8 @@ class ChannelService:
             raise ChannelNotFoundError()
         channel = channels[0]
 
-        # 2. Verify current user may dismiss the channel: either the creator, or
-        #    a user explicitly granted the `delete_channel` fine-grained permission.
+        # 2. Verify current user may dismiss the channel: a super admin, the creator,
+        #    or a user granted the `delete_channel` fine-grained permission via ReBAC.
         current_membership = await self.space_channel_member_repository.find_membership(
             business_id=channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
         )
@@ -2047,7 +2079,7 @@ class ChannelService:
             and current_membership.status == MembershipStatusEnum.ACTIVE
             and current_membership.user_role == UserRoleEnum.CREATOR
         )
-        if not is_active_creator:
+        if not login_user.is_admin() and not is_active_creator:
             permission_ids = await self._get_channel_permission_ids(channel_id, login_user, current_membership)
             if "delete_channel" not in permission_ids:
                 raise ChannelPermissionDeniedError(

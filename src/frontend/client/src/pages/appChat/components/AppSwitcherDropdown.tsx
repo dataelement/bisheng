@@ -111,7 +111,7 @@ export function AppSwitcherDropdown() {
 
                   {isPinned && (
                     <div className="shrink-0 size-[22px] flex items-center justify-center ml-[4px]">
-                      <Pin size={14} className="text-[#335cff] fill-[#335cff]" />
+                      <Pin size={14} className="text-blue-500 fill-blue-500" />
                     </div>
                   )}
                 </button>

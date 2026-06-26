@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import {
     getChannelMembersApi,
     removeChannelMemberApi,
@@ -38,7 +39,7 @@ const ROLE_SELECT_TRIGGER_CLASS = cn(
     ROLE_SELECT_WIDTH_CLASS,
     "box-border shrink-0 appearance-none rounded-[6px] border-[#EBECF0] bg-white shadow-none",
     "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-[#818181]",
-    "hover:border-[#CED4E0] hover:text-[#165DFF]",
+    "hover:border-[#CED4E0] hover:text-blue-500",
 );
 
 function getRoleLabel(role: ChannelMember["role"], localize: (key: string) => string) {
@@ -242,7 +243,7 @@ export function ChannelMemberManagementPanel({
                             className={cn(
                                 "cursor-default",
                                 member.role === "member" &&
-                                    "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]",
+                                    "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500",
                             )}
                             onClick={(e) => e.preventDefault()}
                         >
@@ -273,7 +274,7 @@ export function ChannelMemberManagementPanel({
                     <DropdownMenuItem
                         className={cn(
                             member.role === "admin" &&
-                                "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]",
+                                "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500",
                         )}
                         onClick={() => {
                             if (!canCreatorManage || member.role === "admin" || member.role === "creator") return;
@@ -285,7 +286,7 @@ export function ChannelMemberManagementPanel({
                     <DropdownMenuItem
                         className={cn(
                             member.role === "member" &&
-                                "bg-[#E8F3FF] text-[#165DFF] data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-[#165DFF]",
+                                "bg-[#E8F3FF] text-blue-500 data-[highlighted]:bg-[#E8F3FF] data-[highlighted]:text-blue-500",
                         )}
                         onClick={() => {
                             if (!canCreatorManage || member.role === "member") return;
@@ -327,12 +328,8 @@ export function ChannelMemberManagementPanel({
                         </div>
                     ) : members.length === 0 ? (
                         <div className="flex h-full flex-col items-center justify-center py-8 text-center">
-                            <img
-                                className="mb-2 size-[120px] object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
-                            />
-                            <p className="text-[13px] text-[#86909C]">
+                            <EmptyStateIllustration className="mb-4 size-[120px] opacity-90" />
+                            <p className="text-[14px] font-normal text-[#999999]">
                                 {localize("com_subscription.nofound_mathcing_member")}
                             </p>
                         </div>
@@ -374,7 +371,7 @@ export function ChannelMemberManagementPanel({
                 <div className="flex items-center gap-2">
                     <span className="shrink-0 leading-none text-[14px]">
                         <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_1")}</span>
-                        <span className="text-[#165DFF]">{total}</span>
+                        <span className="text-blue-500">{total}</span>
                         <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_2")}</span>
                         <span className="text-[#4E5969]">{PAGE_SIZE}</span>
                         <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_3")}</span>
@@ -382,7 +379,7 @@ export function ChannelMemberManagementPanel({
                     <div className="flex shrink-0 items-center gap-1.5">
                         <Button
                             variant="ghost"
-                            className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-[#165DFF] disabled:opacity-40"
+                            className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
                             disabled={page <= 1}
                             onClick={() => {
                                 void fetchMembers(Math.max(1, page - 1));
@@ -401,8 +398,8 @@ export function ChannelMemberManagementPanel({
                                         className={cn(
                                             "flex h-6 min-w-6 items-center justify-center px-1.5 text-[14px] transition-colors",
                                             pageNumber === page
-                                                ? "rounded-[8px] border border-[#165DFF] text-[#165DFF]"
-                                                : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-[#165DFF]",
+                                                ? "rounded-[8px] border border-blue-500 text-blue-500"
+                                                : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-blue-500",
                                         )}
                                         onClick={() => {
                                             void fetchMembers(pageNumber);
@@ -415,7 +412,7 @@ export function ChannelMemberManagementPanel({
                         })}
                         <Button
                             variant="ghost"
-                            className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-[#165DFF] disabled:opacity-40"
+                            className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
                             disabled={page >= totalPages}
                             onClick={() => {
                                 void fetchMembers(Math.min(totalPages, page + 1));

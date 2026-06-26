@@ -59,7 +59,7 @@ export function RelationSelect({
             key={model.id}
             value={model.id}
             showIndicator={false}
-            className="mb-1 min-h-[32px] rounded-[8px] px-2 py-[5px] pr-2 text-[14px] leading-[22px] text-[#212121] focus:bg-[#E6EDFC] focus:text-[#335CFF] data-[state=checked]:bg-[#E6EDFC] data-[state=checked]:font-normal data-[state=checked]:text-[#335CFF] last:mb-0"
+            className="mb-1 min-h-[32px] rounded-[8px] px-2 py-[5px] pr-2 text-[14px] leading-[22px] text-[#212121] focus:bg-blue-500/[0.07] focus:text-blue-500 data-[state=checked]:bg-blue-500/[0.07] data-[state=checked]:font-normal data-[state=checked]:text-blue-500 last:mb-0"
           >
             {model.name}
           </SelectItem>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
 import { ArrowLeft, Search } from "lucide-react";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { Input } from "~/components/ui/Input";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
@@ -9,7 +10,7 @@ import {
     subscribeSpaceApi,
     type KnowledgeSpace,
 } from "~/api/knowledge";
-import { useLocalize, useScrollRevealRef } from "~/hooks";
+import { useLocalize, useMediaQuery } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
@@ -41,6 +42,15 @@ export default function KnowledgeSquare({
     const { showToast } = useToastContext();
     const localize = useLocalize();
 
+    // 卡片每行列数自适应，与应用广场保持一致：lg+ 3 列，md 2 列，窄屏 1 列
+    const isAtLeast768 = useMediaQuery("(min-width: 768px)");
+    const isAtLeast1024 = useMediaQuery("(min-width: 1024px)");
+    const squareCols = useMemo(() => {
+        if (isAtLeast1024) return 3;
+        if (isAtLeast768) return 2;
+        return 1;
+    }, [isAtLeast768, isAtLeast1024]);
+
     const [searchQuery, setSearchQuery] = useState("");
     const [page, setPage] = useState(1);
     const [hasMorePage, setHasMorePage] = useState(true);
@@ -53,7 +63,6 @@ export default function KnowledgeSquare({
     const [joiningIds, setJoiningIds] = useState<Set<string>>(() => new Set());
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
-    const scrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const searchImeComposingRef = useRef(false);
     // Larger page reduces the "subscribe reorders rows mid-pagination" issue:
     // the not-subscribed-first sort moves a space to the back the moment it's
@@ -228,16 +237,31 @@ export default function KnowledgeSquare({
     return (
         <div className="h-full w-full flex flex-col bg-white overflow-hidden">
             <div
-                className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-center bg-no-repeat bg-cover"
-                style={{ backgroundImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg.svg)` }}
+                className="w-full relative overflow-hidden border-b border-[#F0F1F5] bg-blue-500/[0.05]"
             >
+                {/* Decorative scattered icons — kept from the original banner art, recolored
+                    via a brand-tinted mask layer so they follow the blue ⇄ green theme. */}
+                <div
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 bg-blue-200"
+                    style={{
+                        WebkitMaskImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg-icons.svg)`,
+                        maskImage: `url(${__APP_ENV__.BASE_URL}/assets/tabbg-icons.svg)`,
+                        WebkitMaskSize: "cover",
+                        maskSize: "cover",
+                        WebkitMaskPosition: "center",
+                        maskPosition: "center",
+                        WebkitMaskRepeat: "no-repeat",
+                        maskRepeat: "no-repeat",
+                    }}
+                />
 
                 {onBack && (
                     <div className="absolute left-4 top-4 z-10">
                         <Button
                             variant="ghost"
                             onClick={onBack}
-                            className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-[#165DFF]"
+                            className="h-7 w-7 p-0 rounded-md border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] hover:text-blue-500"
                         >
                             <ArrowLeft className="size-3.5" />
                         </Button>
@@ -245,17 +269,17 @@ export default function KnowledgeSquare({
                 )}
 
                 <div className="relative mx-auto flex w-full max-w-[1140px] flex-col items-center justify-center px-4 pb-6 pt-7">
-                    <h1 className="mb-1 text-[26px] font-semibold text-[#335CFF]">{tTitle}</h1>
+                    <h1 className="mb-1 text-[26px] font-semibold text-blue-500">{tTitle}</h1>
                     <p className="text-[13px] text-[#86909C]">{tSubtitle}</p>
                 </div>
             </div>
 
             <div
-                ref={(el) => {
-                    scrollRef.current = el;
-                    scrollRevealRef(el);
-                }}
-                className="flex-1 flex flex-col overflow-y-auto scrollbar-on-scroll bg-white"
+                ref={scrollRef}
+                // `scrollbar-os` opts out of the global custom ::-webkit-scrollbar so the
+                // native OS scrollbar setting (always-show vs show-on-scroll-only) is respected.
+                // Without it, the global :not(.scrollbar-os) rule forces an always-present bar.
+                className="flex-1 flex flex-col overflow-y-auto scrollbar-os bg-white"
             >
                 {/* Outer holds width/centering + mobile side padding; inner `relative` anchors
                     the search icon so it stays aligned with the input after the padding inset. */}
@@ -279,16 +303,15 @@ export default function KnowledgeSquare({
                         <div className="flex-1 flex items-center justify-center text-[#86909C]">{localize("com_knowledge.loading")}</div>
                     ) : visibleSpaces.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-[#86909c]">
-                            <img
-                                className="size-[120px] mb-3 object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
-                            />
-                            <p className="text-[14px] text-[#86909C]">{tEmptyText}</p>
+                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <p className="text-[14px] font-normal text-[#999999]">{tEmptyText}</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3 min-[768px]:grid-cols-3">
+                            <div
+                                className="grid gap-3"
+                                style={{ gridTemplateColumns: `repeat(${squareCols}, minmax(0, 1fr))` }}
+                            >
                                 {visibleSpaces.map((space) => (
                                     <KnowledgeSquareCard
                                         key={space.id}

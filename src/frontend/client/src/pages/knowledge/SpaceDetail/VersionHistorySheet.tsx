@@ -51,27 +51,27 @@ const STATUS_CONFIG: Record<
     },
     [FileStatus.PROCESSING]: {
         labelKey: "com_knowledge.parsing_status",
-        color: "text-[#165dff]",
+        color: "text-blue-500",
         bg: "bg-[#e8f3ff]",
-        dot: "bg-[#165dff]",
+        dot: "bg-blue-500",
     },
     [FileStatus.WAITING]: {
         labelKey: "com_knowledge.queueing_status",
-        color: "text-[#165dff]",
+        color: "text-blue-500",
         bg: "bg-[#e8f3ff]",
-        dot: "bg-[#165dff]",
+        dot: "bg-blue-500",
     },
     [FileStatus.REBUILDING]: {
         labelKey: "com_knowledge.rebuilding_status",
-        color: "text-[#165dff]",
+        color: "text-blue-500",
         bg: "bg-[#e8f3ff]",
-        dot: "bg-[#165dff]",
+        dot: "bg-blue-500",
     },
     [FileStatus.UPLOADING]: {
         labelKey: "com_knowledge.uploading_status",
-        color: "text-[#165dff]",
+        color: "text-blue-500",
         bg: "bg-[#e8f3ff]",
-        dot: "bg-[#165dff]",
+        dot: "bg-blue-500",
     },
     [FileStatus.FAILED]: {
         labelKey: "com_knowledge.fail",
@@ -201,7 +201,7 @@ function VersionTableRow({
                 <div className="flex items-center gap-2">
                     <span className="font-medium">V{version.version_no}</span>
                     {version.is_primary && (
-                        <span className="inline-flex items-center rounded bg-[#E8F3FF] px-1.5 py-0.5 text-[11px] font-medium text-[#165DFF]">
+                        <span className="inline-flex items-center rounded bg-[#E8F3FF] px-1.5 py-0.5 text-[11px] font-medium text-blue-500">
                             {localize("com_knowledge.version.history_primary_badge")}
                         </span>
                     )}
@@ -263,7 +263,7 @@ function VersionTableRow({
                             label={localize("com_knowledge.version.history_action_set_primary")}
                             onClick={() => onSetPrimary(version.version_id, version.version_no)}
                             disabled={anyPending}
-                            className="text-[#165dff] hover:text-[#165dff]"
+                            className="text-blue-500 hover:text-blue-500"
                         >
                             <CheckCircle className="size-4" />
                         </ActionButton>

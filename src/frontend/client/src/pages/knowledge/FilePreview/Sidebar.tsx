@@ -108,7 +108,7 @@ function ThumbnailItem({
             className={cn(
                 "cursor-pointer rounded-md overflow-hidden border-2 transition-colors flex flex-col items-center justify-center relative shrink-0",
                 isActive
-                    ? "border-[#165dff] shadow-sm"
+                    ? "border-blue-500 shadow-sm"
                     : "border-transparent hover:border-[#c9cdd4]"
             )}
             style={{ height: itemHeight }}
@@ -119,7 +119,7 @@ function ThumbnailItem({
             )}
             <span className={cn(
                 "text-xs py-0.5",
-                isActive ? "text-[#165dff] font-medium" : "text-[#86909c]"
+                isActive ? "text-blue-500 font-medium" : "text-[#86909c]"
             )}>
                 {pageNumber}
             </span>

@@ -1,5 +1,6 @@
 import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, type MouseEvent } from "react";
 import { useRecoilValue } from "recoil";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
@@ -280,7 +281,11 @@ export function KnowledgeSpaceContent({
         space.id,
         "share_space",
     );
-    const canDeleteSpace = isAdmin || hasKnowledgeSpacePermission(
+    // Delete-space gating mirrors the desktop sidebar (KnowledgeSpaceItem): only the
+    // creator/owner (or an explicit delete_space permission) may delete — a space ADMIN
+    // (manager / department admin) must NOT. Do not gate on isAdmin here (that includes
+    // the ADMIN role and would wrongly surface delete to managers).
+    const canDeleteSpace = isOwner || hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
         "delete_space",
@@ -1082,6 +1087,9 @@ export function KnowledgeSpaceContent({
                                     ))}
                                 </DropdownMenuContent>
                             </DropdownMenu>
+                            {/* Hide the whole "..." trigger when every item is permission-gated
+                                away — an empty menu is confusing on mobile. */}
+                            {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace) && (
                             <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
@@ -1128,6 +1136,7 @@ export function KnowledgeSpaceContent({
                                     )}
                                 </SidebarListMoreMenuContent>
                             </DropdownMenu>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1223,16 +1232,12 @@ export function KnowledgeSpaceContent({
                         // pb-[112px] reserves room for the floating AI dock so the empty state
                         // centers in the visible region above it, matching the card grid.
                         <div className="flex h-full flex-1 flex-col items-center justify-center pb-[112px] pt-10 text-center">
-                            <img
-                                className="size-[120px] mb-4 object-contain opacity-90"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                alt="empty"
-                            />
-                            <p className="text-[14px] leading-6 text-[#4E5969]">
+                            <EmptyStateIllustration className="size-[120px] mb-4 opacity-90" />
+                            <p className="text-[14px] font-normal leading-6 text-[#999999]">
                                 {searchQuery ? localize("com_knowledge.no_matched_file") : canUploadFile ? localize("com_knowledge.no_file_here_please") : localize("com_knowledge.no_file_here")}
                                 {canUploadFile && !searchQuery && (
                                     <span
-                                        className="cursor-pointer text-[#165DFF] transition-colors hover:text-[#4080FF] active:text-[#0E42D2]"
+                                        className="cursor-pointer text-blue-500 transition-colors hover:text-blue-400 active:text-blue-700"
                                         onClick={triggerUpload}
                                     >
                                         {localize("com_knowledge.upload_file")}

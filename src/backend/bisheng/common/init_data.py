@@ -200,17 +200,22 @@ def read_from_conf(file_path: str) -> str:
 
 
 async def _init_default_tenant(session):
-    """Idempotently create the default tenant (id=1) and backfill user_tenant.
+    """Idempotently create the default tenant (id=1).
 
-    Called during init_default_data() to ensure the default tenant exists.
-    Uses bypass_tenant_filter() since tenant filter events might be active.
+    Called during init_default_data() to keep startup lean: it only guarantees
+    the default tenant row exists. Uses bypass_tenant_filter() since tenant
+    filter events might be active.
 
-    Backfill runs whenever there are users with no ``user_tenant`` row, even if
-    the default tenant row already exists (e.g. first user registered after DB
-    was migrated with tenant but without associations).
+    Backfilling ``user_tenant`` associations for pre-existing users is a one-off
+    data task — it scans the whole ``users``/``user_tenant`` tables and must not
+    run on every boot. It now lives in
+    ``scripts/backfill_user_tenant_associations.py``. Runtime tenant scoping
+    already falls back to ``DEFAULT_TENANT_ID`` for users without a row (see
+    ``UserPayload`` tenant resolution), so a missing association never blocks
+    login or queries — the backfill is pure data hygiene.
     """
     from bisheng.core.context.tenant import DEFAULT_TENANT_ID, bypass_tenant_filter
-    from bisheng.database.models.tenant import Tenant, UserTenant
+    from bisheng.database.models.tenant import Tenant
 
     with bypass_tenant_filter():
         existing = (await session.exec(select(Tenant).where(Tenant.id == DEFAULT_TENANT_ID))).first()
@@ -224,49 +229,7 @@ async def _init_default_tenant(session):
             session.add(tenant)
             await session.commit()
 
-        # Backfill user_tenant for users without any tenant association (always)
-        users_without_tenant = (
-            await session.exec(select(User.user_id).where(User.user_id.notin_(select(UserTenant.user_id))))
-        ).all()
-
-        for uid in users_without_tenant:
-            session.add(
-                UserTenant(
-                    user_id=uid,
-                    tenant_id=DEFAULT_TENANT_ID,
-                    is_default=1,
-                    is_active=1,
-                    status="active",
-                )
-            )
-
-        active_user_ids = set((await session.exec(select(UserTenant.user_id).where(UserTenant.is_active == 1))).all())
-        inactive_default_rows = (
-            await session.exec(
-                select(UserTenant).where(
-                    UserTenant.tenant_id == DEFAULT_TENANT_ID,
-                    UserTenant.is_default == 1,
-                    UserTenant.status == "active",
-                    UserTenant.is_active.is_(None),
-                )
-            )
-        ).all()
-        activated_count = 0
-        for row in inactive_default_rows:
-            if row.user_id in active_user_ids:
-                continue
-            row.is_active = 1
-            session.add(row)
-            active_user_ids.add(row.user_id)
-            activated_count += 1
-
-        if users_without_tenant or activated_count:
-            await session.commit()
-
-    logger.info(
-        f"Default tenant ready (id={DEFAULT_TENANT_ID}); "
-        f"user_tenant backfill rows={len(users_without_tenant)} active_backfill rows={activated_count}",
-    )
+    logger.info(f"Default tenant ready (id={DEFAULT_TENANT_ID})")
 
 
 async def _init_default_root_department(session):

@@ -293,7 +293,7 @@ export function EditTagsModal({
                                         key={tag.id}
                                         onClick={() => toggleTag(tag)}
                                         className={`group h-5 flex items-center justify-center gap-1 px-2 text-[12px] leading-5 rounded-[4px] transition-colors ${isSelected
-                                            ? "text-[#165dff] cursor-default bg-primary/10"
+                                            ? "text-blue-500 cursor-default bg-primary/10"
                                             : "bg-[#f2f3f5] text-[#4e5969] hover:bg-[#e5e6eb] cursor-pointer"
                                             }`}
                                     >

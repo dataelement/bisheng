@@ -66,9 +66,7 @@ class KnowledgeFileBase(SQLModelSerializable):
     abstract: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     file_size: int | None = Field(default=None, index=False, description="File size inbytes")
     md5: str | None = Field(default=None, index=False)
-    parse_type: str | None = Field(
-        default=ParseType.LOCAL.value, index=False, description="Files parsed in what mode"
-    )
+    parse_type: str | None = Field(default=ParseType.LOCAL.value, index=False, description="Files parsed in what mode")
     split_rule: str | None = Field(default=None, sa_column=Column(Text), description="Files parsed in what mode")
     preview_file_object_name: str | None = Field(default=None, index=True, description="Preview File Object name")
     bbox_object_name: str | None = Field(default="", description="bboxFiles inminioStored object name")
@@ -252,6 +250,36 @@ class KnowledgeFileDao(KnowledgeFileBase):
                 KnowledgeFile.knowledge_id.in_(knowledge_ids),
                 KnowledgeFile.file_type == 1,
                 KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
+            )
+            .group_by(KnowledgeFile.knowledge_id)
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.exec(statement)).all()
+        return {row[0]: row[1] for row in rows}
+
+    @classmethod
+    async def async_count_root_files_batch(cls, knowledge_ids: list[int]) -> dict:
+        """Async: Batch count root-directory files for multiple knowledge spaces.
+
+        Counts files (file_type == 1) sitting directly in the space root —
+        file_level_path is "" or NULL — across all statuses, grouped by
+        knowledge_id. Folders and nested (sub-folder) files are excluded.
+        This is a raw count: it intentionally skips per-file ReBAC filtering,
+        matching the count semantics already used by the in-space folder badges.
+
+        Returns a dict mapping knowledge_id (int) -> root file count.
+        """
+        if not knowledge_ids:
+            return {}
+        statement = (
+            select(KnowledgeFile.knowledge_id, func.count().label("cnt"))
+            .where(
+                KnowledgeFile.knowledge_id.in_(knowledge_ids),
+                KnowledgeFile.file_type == 1,
+                or_(
+                    KnowledgeFile.file_level_path == "",
+                    KnowledgeFile.file_level_path.is_(None),
+                ),
             )
             .group_by(KnowledgeFile.knowledge_id)
         )

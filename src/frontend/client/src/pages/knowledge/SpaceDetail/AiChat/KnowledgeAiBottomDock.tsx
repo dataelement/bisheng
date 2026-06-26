@@ -30,6 +30,7 @@ import {
     TooltipTrigger,
 } from "~/components/ui/Tooltip2";
 import AiChatMessages from "~/components/Chat/AiChatMessages";
+import { ArticleQAIllustration } from "~/components/illustrations";
 import { KnowledgeAiInput } from "./KnowledgeAiInput";
 import { ConversationHistory } from "./ConversationHistory";
 import useFolderChat from "~/hooks/useFolderChat";
@@ -144,47 +145,81 @@ export function KnowledgeAiBottomDock({
         await createSession();
     };
 
+    // Collapsed-state entry points (the floating buttons shown when history exists).
+    // History opens the panel straight into the history list; the expand arrow opens
+    // a fresh conversation — existing history stays in `sessions`, reachable via history.
+    const handleOpenHistory = () => {
+        setShowHistory(true);
+        setOpen(true);
+    };
+
+    const handleExpandNew = async () => {
+        setShowHistory(false);
+        // Reuse the current view if it's already an empty new chat; otherwise spin up a
+        // fresh session so expanding never resurfaces the conversation last viewed.
+        if (messages.length > 0) await createSession();
+        setOpen(true);
+    };
+
     const handleHistorySelect = (chatId: string) => {
         switchSession(chatId);
         setShowHistory(false);
     };
 
+    // History-panel header actions. Back returns to the conversation view; new chat
+    // starts a fresh conversation and reveals it; collapse folds the whole dock.
+    const handleHistoryBack = () => setShowHistory(false);
+
+    const handleHistoryNewChat = async () => {
+        setShowHistory(false);
+        await createSession();
+    };
+
+    const handleHistoryCollapse = () => {
+        setShowHistory(false);
+        setOpen(false);
+    };
+
     // ─── Mobile + expanded: take over the full visual viewport ─────────────
     if (isH5 && open) {
         const messageHeader = (
-            <div className="relative flex shrink-0 items-center px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-3">
-                <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
-                    {assistantTitle}
-                </h3>
-                {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
-                <div className="absolute right-3 top-[calc(env(safe-area-inset-top,0px)+12px)] flex items-center justify-end gap-3 py-1">
-                    <button
-                        type="button"
-                        onClick={() => setShowHistory((v) => !v)}
-                        aria-label={localize("com_knowledge.history_chat")}
-                        className={cn(
-                            "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                            showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
-                        )}
-                    >
-                        <Outlined.History className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleNewChat}
-                        aria-label={localize("com_knowledge.create_chat")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
-                    >
-                        <Outlined.MessagePlus className="size-4" />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setOpen(false)}
-                        aria-label={localize("com_ui_collapse")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
-                    >
-                        <Outlined.DoubleDown className="size-4" />
-                    </button>
+            // Mirror the knowledge-space file-list header so the dock top aligns with it:
+            // outer pt = safe-area + 8px, inner row is a fixed h-11 (44px) with the px-4 gutter.
+            <div className="shrink-0 pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+                <div className="relative flex h-11 w-full min-w-0 items-center px-4">
+                    <h3 className="mx-auto truncate text-base font-medium leading-6 text-[#212121]">
+                        {assistantTitle}
+                    </h3>
+                    {/* History · MessagePlus · DoubleDown — bare 16px icons, 12px gap, right-aligned (per Figma 11495:13085). */}
+                    <div className="absolute right-4 top-1/2 flex -translate-y-1/2 items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setShowHistory((v) => !v)}
+                            aria-label={localize("com_knowledge.history_chat")}
+                            className={cn(
+                                "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
+                                showHistory ? "text-blue-500" : "text-[#212121] hover:text-[#4e5969]",
+                            )}
+                        >
+                            <Outlined.History className="size-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleNewChat}
+                            aria-label={localize("com_knowledge.create_chat")}
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#212121] transition-colors hover:text-[#4e5969]"
+                        >
+                            <Outlined.MessagePlus className="size-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            aria-label={localize("com_ui_collapse")}
+                            className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                        >
+                            <Outlined.DoubleDown className="size-4" />
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -204,33 +239,25 @@ export function KnowledgeAiBottomDock({
                 {/* Messages — scrollable, with bottom fade-out under z-auto so the
                     focused-state grey overlay can stack above. */}
                 <div className="relative min-h-0 flex-1">
-                    {messages.length === 0 && !activeChatId ? (
-                        <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
-                            <img
-                                className="mx-auto block size-[80px] object-contain"
-                                src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                                alt="AI Assistant"
-                            />
-                            <p className="text-sm text-[#86909c]">{folderQaHint}</p>
-                        </div>
-                    ) : (
-                        <AiChatMessages
-                            messages={messages}
-                            conversationId={activeChatId}
-                            title=""
-                            isLoading={isLoading}
-                            isStreaming={isStreaming}
-                            presetQuestions={[]}
-                            hideShare
-                            hideHeaderTitle
-                            flatMode
-                            knowledgeChatLayout
-                            contentWidthClassName="max-w-none px-4"
-                            emptyStateHint={folderQaHint}
-                            onPresetClick={() => { }}
-                            onRegenerate={regenerate}
-                        />
-                    )}
+                    {/* AiChatMessages owns the empty state; pass the brand ArticleQA
+                        illustration so it follows the blue ⇄ green theme. */}
+                    <AiChatMessages
+                        messages={messages}
+                        conversationId={activeChatId}
+                        title=""
+                        isLoading={isLoading}
+                        isStreaming={isStreaming}
+                        presetQuestions={[]}
+                        hideShare
+                        hideHeaderTitle
+                        flatMode
+                        knowledgeChatLayout
+                        contentWidthClassName="max-w-none px-4"
+                        emptyStateHint={folderQaHint}
+                        emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
+                        onPresetClick={() => { }}
+                        onRegenerate={regenerate}
+                    />
                     <div
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-10 bg-gradient-to-t from-white to-white/0"
@@ -268,7 +295,9 @@ export function KnowledgeAiBottomDock({
                         onSelect={handleHistorySelect}
                         onDelete={deleteSession}
                         onRename={renameSession}
-                        onClose={() => setShowHistory(false)}
+                        onBack={handleHistoryBack}
+                        onNewChat={handleHistoryNewChat}
+                        onCollapse={handleHistoryCollapse}
                     />
                 )}
             </div>
@@ -289,7 +318,10 @@ export function KnowledgeAiBottomDock({
                 className={cn(
                     // z-40 sits above the file table's sticky header (z-30) and its sticky cells
                     // (up to z-[35]); otherwise the expanded dialog's top is covered by the column header.
-                    "absolute inset-x-0 bottom-0 z-40 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
+                    // pointer-events-none keeps the gradient backdrop visually masking the list while
+                    // letting clicks fall through to the file rows behind it; the chat card below
+                    // re-enables pointer events on its own box so it stays interactive.
+                    "pointer-events-none absolute inset-x-0 bottom-0 z-40 flex flex-col px-4 pb-[max(16px,env(safe-area-inset-bottom))]",
                     // pt-10 always — the fade backdrop hides on focus but the input
                     // shouldn't jump when the keyboard opens.
                     !open && "pt-10",
@@ -304,32 +336,52 @@ export function KnowledgeAiBottomDock({
             >
                 <div
                     className={cn(
-                        "relative mx-auto flex w-full max-w-[800px] flex-col",
+                        // pointer-events-auto restores interactivity on the card itself (its parent
+                        // backdrop is pointer-events-none so the file list behind stays clickable).
+                        "pointer-events-auto relative mx-auto flex w-full max-w-[800px] flex-col",
                         open &&
                             "overflow-hidden rounded-[20px] border border-[#ECECEC] bg-white shadow-[0_4px_20px_0_rgba(3,7,117,0.05)]",
                     )}
                 >
-                    {/* Floating expand button — appears whenever any conversation exists.
-                        Gate on `sessions`, not `messages`: starting a new chat clears
-                        `messages` but the session history is still there, so the arrow
-                        must persist. Shared by desktop + mobile-collapsed docks. */}
+                    {/* Floating collapsed-state controls — shown whenever any conversation
+                        exists. Gate on `sessions`, not `messages`: starting a new chat clears
+                        `messages` but the session history is still there, so the controls must
+                        persist. Left = history (opens the history list), right = expand (opens a
+                        fresh conversation). 12px gap. Shared by desktop + mobile-collapsed docks. */}
                     {!open && (sessions.length > 0 || messages.length > 0) && (
                         <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <button
-                                        type="button"
-                                        onClick={() => setOpen(true)}
-                                        aria-label={localize("com_ui_expand")}
-                                        className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
-                                    >
-                                        <Outlined.DoubleDown className="size-4 rotate-180" />
-                                    </button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    <p>{localize("com_ui_expand")}</p>
-                                </TooltipContent>
-                            </Tooltip>
+                            <div className="absolute bottom-full right-0 z-10 mb-2 mr-2 flex items-center justify-end gap-2">
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={handleOpenHistory}
+                                            aria-label={localize("com_knowledge.history_chat")}
+                                            className="flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                        >
+                                            <Outlined.History className="size-4" />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>{localize("com_knowledge.history_chat")}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <button
+                                            type="button"
+                                            onClick={handleExpandNew}
+                                            aria-label={localize("com_ui_expand")}
+                                            className="flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                        >
+                                            <Outlined.DoubleDown className="size-4 rotate-180" />
+                                        </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <p>{localize("com_ui_expand")}</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
                         </TooltipProvider>
                     )}
 
@@ -360,7 +412,7 @@ export function KnowledgeAiBottomDock({
                                                     aria-label={localize("com_knowledge.history_chat")}
                                                     className={cn(
                                                         "inline-flex size-4 shrink-0 items-center justify-center transition-colors",
-                                                        showHistory ? "text-[#165dff]" : "text-[#212121] hover:text-[#4e5969]",
+                                                        showHistory ? "text-blue-500" : "text-[#212121] hover:text-[#4e5969]",
                                                     )}
                                                 >
                                                     <Outlined.History className="size-4 shrink-0" />
@@ -408,35 +460,27 @@ export function KnowledgeAiBottomDock({
                                 </div>
                             </div>
 
-                            {messages.length === 0 && !activeChatId ? (
-                                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-                                    <img
-                                        className="mx-auto block size-[80px] object-contain"
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/ai-home.png`}
-                                        alt="AI Assistant"
-                                    />
-                                    <p className="text-sm text-[#86909c]">{folderQaHint}</p>
-                                </div>
-                            ) : (
-                                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                                    <AiChatMessages
-                                        messages={messages}
-                                        conversationId={activeChatId}
-                                        title=""
-                                        isLoading={isLoading}
-                                        isStreaming={isStreaming}
-                                        presetQuestions={[]}
-                                        hideShare
-                                        hideHeaderTitle
-                                        flatMode
-                                        knowledgeChatLayout
-                                        contentWidthClassName="max-w-none px-4"
-                                        emptyStateHint={folderQaHint}
-                                        onPresetClick={() => { }}
-                                        onRegenerate={regenerate}
-                                    />
-                                </div>
-                            )}
+                            {/* AiChatMessages owns the empty state; pass the brand ArticleQA
+                                illustration so it follows the blue ⇄ green theme. */}
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                                <AiChatMessages
+                                    messages={messages}
+                                    conversationId={activeChatId}
+                                    title=""
+                                    isLoading={isLoading}
+                                    isStreaming={isStreaming}
+                                    presetQuestions={[]}
+                                    hideShare
+                                    hideHeaderTitle
+                                    flatMode
+                                    knowledgeChatLayout
+                                    contentWidthClassName="max-w-none px-4"
+                                    emptyStateHint={folderQaHint}
+                                    emptyStateIllustration={<ArticleQAIllustration className="mx-auto block size-[80px]" />}
+                                    onPresetClick={() => { }}
+                                    onRegenerate={regenerate}
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -461,7 +505,9 @@ export function KnowledgeAiBottomDock({
                             onSelect={handleHistorySelect}
                             onDelete={deleteSession}
                             onRename={renameSession}
-                            onClose={() => setShowHistory(false)}
+                            onBack={handleHistoryBack}
+                            onNewChat={handleHistoryNewChat}
+                            onCollapse={handleHistoryCollapse}
                         />
                     )}
                 </div>

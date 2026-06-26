@@ -120,7 +120,7 @@ export function MobileAppHistoryDropdown({
                     className="flex flex-col gap-3 rounded-[6px] border-[0.5px] border-[#ebecf0] p-2"
                     style={{
                         backgroundImage:
-                            'linear-gradient(128.789deg, rgb(249, 251, 254) 0%, rgb(255, 255, 255) 50%, rgb(249, 251, 254) 100%)',
+                            'linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)',
                     }}
                 >
                     <div className="flex items-center gap-2">

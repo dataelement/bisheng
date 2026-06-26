@@ -218,9 +218,15 @@ async def test_editor_can_update_channel_settings():
     member_repository = SimpleNamespace(find_membership=AsyncMock(return_value=current_member))
     service = _service(channel_repository, member_repository)
 
-    with patch(
-        "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
-        new=AsyncMock(return_value=SimpleNamespace()),
+    with (
+        patch(
+            "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
+            new=AsyncMock(return_value=SimpleNamespace()),
+        ),
+        patch(
+            "bisheng.channel.domain.services.channel_service.PermissionService.check",
+            new=AsyncMock(return_value=True),
+        ),
     ):
         result = await service.update_channel(
             "channel-1",
@@ -316,6 +322,55 @@ async def test_update_channel_denied_when_no_rebac_can_edit():
             )
 
     channel_repository.update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_super_admin_can_update_channel_without_membership():
+    """A super admin may edit any channel even without a membership row or a ReBAC
+    can_edit relation (``PermissionService.check`` L1 short-circuit returns True)."""
+
+    class _SuperAdmin(_LoginUser):
+        def is_admin(self):
+            return True
+
+    channel = SimpleNamespace(
+        id="channel-1",
+        name="旧频道",
+        description="旧描述",
+        source_list=[],
+        visibility=ChannelVisibilityEnum.PUBLIC,
+        filter_rules=[],
+        is_released=True,
+    )
+    channel_repository = SimpleNamespace(
+        find_by_id=AsyncMock(return_value=channel),
+        update=AsyncMock(side_effect=lambda item: item),
+    )
+    member_repository = SimpleNamespace(find_membership=AsyncMock(return_value=None))
+    service = _service(channel_repository, member_repository)
+
+    async def _check(*, user_id, relation, object_type, object_id, login_user=None):
+        # Mirror PermissionService.check's L1 super-admin short-circuit.
+        return bool(login_user and login_user.is_admin())
+
+    with (
+        patch(
+            "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
+            new=AsyncMock(return_value=SimpleNamespace()),
+        ),
+        patch(
+            "bisheng.channel.domain.services.channel_service.PermissionService.check",
+            new=AsyncMock(side_effect=_check),
+        ),
+    ):
+        result = await service.update_channel(
+            "channel-1",
+            UpdateChannelRequest(name="新频道"),
+            _SuperAdmin(),
+        )
+
+    assert result.name == "新频道"
+    channel_repository.update.assert_awaited_once_with(channel)
 
 
 @pytest.mark.asyncio
@@ -553,6 +608,10 @@ async def test_switch_private_revokes_all_non_owner_relations():
             "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
             new=AsyncMock(return_value=SimpleNamespace()),
         ),
+        patch(
+            "bisheng.channel.domain.services.channel_service.PermissionService.check",
+            new=AsyncMock(return_value=True),
+        ),
     ):
         await service.update_channel(
             "channel-1",
@@ -612,6 +671,10 @@ async def test_switch_review_to_private_revokes_all_non_owner_relations():
             "bisheng.channel.domain.services.channel_service.get_bisheng_information_client",
             new=AsyncMock(return_value=SimpleNamespace()),
         ),
+        patch(
+            "bisheng.channel.domain.services.channel_service.PermissionService.check",
+            new=AsyncMock(return_value=True),
+        ),
     ):
         await service.update_channel(
             "channel-1",
@@ -647,7 +710,13 @@ async def test_viewer_cannot_update_channel_settings():
     member_repository = SimpleNamespace(find_membership=AsyncMock(return_value=current_member))
     service = _service(channel_repository, member_repository)
 
-    with pytest.raises(ChannelPermissionDeniedError):
+    with (
+        patch(
+            "bisheng.channel.domain.services.channel_service.PermissionService.check",
+            new=AsyncMock(return_value=False),
+        ),
+        pytest.raises(ChannelPermissionDeniedError),
+    ):
         await service.update_channel(
             "channel-1",
             UpdateChannelRequest(name="新频道"),

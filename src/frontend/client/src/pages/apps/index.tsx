@@ -6,13 +6,13 @@ import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { useAppCenter } from './hooks/useAppCenter';
-import { useMediaQuery, usePrefersMobileLayout } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout } from '~/hooks';
 import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
 import { cn } from '~/utils';
 
-const RECENT_APPS_HINT = '最近使用过的应用都在这里～';
-
 export default function AppCenter() {
+    const localize = useLocalize();
+    const recentAppsHint = localize('com_app.recent_apps_hint');
     const {
         apps,
         loading,
@@ -24,7 +24,8 @@ export default function AppCenter() {
         shareApp,
     } = useAppCenter();
 
-    const isH5Layout = useMediaQuery('(max-width: 576px)');
+    // Mobile layout (≤767px) is when MainLayout shows its own centered top-bar
+    // title, so the page must drop its inline big title to avoid a duplicate.
     const isMobileLayout = usePrefersMobileLayout();
     const appLastOriginKey = 'app-last-origin';
     const appGridRef = useRef<HTMLDivElement | null>(null);
@@ -111,9 +112,9 @@ export default function AppCenter() {
             to="/apps/explore"
             className="backdrop-blur-[4px] flex shrink-0 items-center justify-center gap-[6px] rounded-[8px] px-[10px] py-[6px] transition-colors fine-pointer:hover:bg-gray-50"
         >
-            <ChannelBlocksArrowsIcon className="size-4 text-[#335cff]" />
+            <ChannelBlocksArrowsIcon className="size-4 text-blue-500" />
             <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px] whitespace-nowrap">
-                探索更多应用
+                {localize('com_app.explore_more')}
             </span>
         </Link>
     );
@@ -124,18 +125,18 @@ export default function AppCenter() {
                 // 填满 MainLayout 白卡片；正文区单独滚动 + scroll-on-scroll（含 PC 窄屏）
                 'bg-white flex h-full min-h-0 flex-1 w-full flex-col items-center relative overflow-hidden',
                 // 与首页 MobileNav（px-4）水平对齐；顶栏由 MainLayout 提供，正文略留底距
-                isH5Layout ? 'px-4 pb-5 pt-3' : 'px-[12px] py-[20px]',
+                isMobileLayout ? 'px-4 pb-5 pt-3' : 'px-[12px] py-[20px]',
             )}
         >
-            {isH5Layout ? (
+            {isMobileLayout ? (
                 <>
                     {/* H5：标题已上移到顶栏（MainLayout）。此行只保留 最近使用文案（可省略）| 探索；下一行搜索占满宽 */}
                     <header className="flex w-full max-w-[1000px] shrink-0 items-center gap-2 min-w-0">
                         <p
                             className="font-['PingFang_SC'] text-[#666] text-[13px] leading-[20px] min-w-0 flex-1 truncate"
-                            title={RECENT_APPS_HINT}
+                            title={recentAppsHint}
                         >
-                            {RECENT_APPS_HINT}
+                            {recentAppsHint}
                         </p>
                         {exploreLink}
                     </header>
@@ -146,8 +147,8 @@ export default function AppCenter() {
             ) : (
                 <>
                     <header className="relative flex w-full max-w-[1000px] shrink-0 items-center leading-8">
-                        <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-[#335cff] text-[24px]">
-                            应用中心
+                        <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-blue-500 text-[24px]">
+                            {localize('com_app.center_title')}
                         </h1>
                     </header>
 
@@ -156,9 +157,9 @@ export default function AppCenter() {
                             <div className="flex w-max max-w-full min-w-0 items-center gap-[24px]">
                                 <p
                                     className="font-['PingFang_SC'] text-[#666] text-[14px] leading-[22px] min-w-0 shrink truncate"
-                                    title={RECENT_APPS_HINT}
+                                    title={recentAppsHint}
                                 >
-                                    {RECENT_APPS_HINT}
+                                    {recentAppsHint}
                                 </p>
                                 {exploreLink}
                             </div>
@@ -170,38 +171,41 @@ export default function AppCenter() {
                 </>
             )}
 
-            {/* 内容区域：flex-1 内滚动，PC 窄屏与移动端一致用 scroll-on-scroll */}
+            {/* 内容区域：flex-1 内滚动，PC 窄屏与移动端一致用 scroll-on-scroll。
+                滚动区占满整宽（滚动条贴最右），内容居中约束在 1000px */}
             <main
-                className="relative flex min-h-0 w-full max-w-[1000px] flex-1 flex-col items-start gap-[14px] overflow-x-hidden overflow-y-auto scroll-on-scroll"
+                className="relative flex min-h-0 w-full flex-1 flex-col items-center overflow-x-hidden overflow-y-auto scroll-on-scroll"
                 onScroll={handleMainScroll}
                 data-scrolling={isMainScrolling ? 'true' : 'false'}
             >
-                {loading ? (
-                    <div className="flex w-full flex-1 items-center justify-center">
-                        <LoadingIcon className="size-20 text-primary" />
-                    </div>
-                ) : apps.length === 0 ? (
-                    <div className="w-full flex-1 flex items-center justify-center">
-                        <AppEmptyState />
-                    </div>
-                ) : (
-                    <div
-                        ref={appGridRef}
-                        className="grid w-full relative items-start gap-x-3 gap-y-3.5"
-                        style={{ gridTemplateColumns: `repeat(${appGridCols}, minmax(0, 1fr))` }}
-                    >
-                        {apps.map((agent) => (
-                            <AgentCard
-                                key={agent.id}
-                                agent={agent}
-                                isPinned={!!agent.is_pinned}
-                                onTogglePin={togglePin}
-                                onStartChat={continueChat}
-                                onShare={shareApp}
-                            />
-                        ))}
-                    </div>
-                )}
+                <div className="flex w-full max-w-[1000px] flex-1 flex-col items-start gap-[14px]">
+                    {loading ? (
+                        <div className="flex w-full flex-1 items-center justify-center">
+                            <LoadingIcon className="size-20 text-primary" />
+                        </div>
+                    ) : apps.length === 0 ? (
+                        <div className="w-full flex-1 flex items-center justify-center">
+                            <AppEmptyState />
+                        </div>
+                    ) : (
+                        <div
+                            ref={appGridRef}
+                            className="grid w-full relative items-start gap-4"
+                            style={{ gridTemplateColumns: `repeat(${appGridCols}, minmax(0, 1fr))` }}
+                        >
+                            {apps.map((agent) => (
+                                <AgentCard
+                                    key={agent.id}
+                                    agent={agent}
+                                    isPinned={!!agent.is_pinned}
+                                    onTogglePin={togglePin}
+                                    onStartChat={continueChat}
+                                    onShare={shareApp}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
             </main>
         </div>
     );

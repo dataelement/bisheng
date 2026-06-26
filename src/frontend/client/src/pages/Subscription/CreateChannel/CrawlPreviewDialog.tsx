@@ -24,7 +24,8 @@ import { addWebsiteSourceApi, crawlTempSourceApi, getFeedbackTips } from "~/api/
 import { CrawlFeedbackDialog } from "./CrawlFeedbackDialog";
 import type { InformationSource } from "~/api/channels";
 import type { CrawlPreview } from "../hooks/useCrawlQueue";
-import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
+import { ChannelBookIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
+import { CrawlingIllustration } from "~/components/illustrations";
 import { cn } from "~/utils";
 import { extractApiStatusCode } from "../errorUtils";
 import { crawlErrorMessageKey } from "./crawlErrorUtils";
@@ -64,8 +65,8 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
 
             {status === "loading" && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
-                    <ChannelLoadingIcon className="w-[120px] h-[120px]" />
-                    <p className="text-[14px] text-[#4E5969]">
+                    <CrawlingIllustration className="w-[120px] h-[120px]" />
+                    <p className="text-[14px] font-normal text-[#999999]">
                         {localize("com_subscription.crawling_waiting") || localize("com_subscription.crawling_please_wait")}
                     </p>
                 </div>
@@ -100,7 +101,7 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
                                     href={url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="break-all text-[12px] text-[#165DFF] hover:underline"
+                                    className="break-all text-[12px] text-blue-500 hover:underline"
                                 >
                                     {url}
                                 </a>
@@ -123,14 +124,14 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className={cn(
-                                                "flex min-w-0 items-center gap-1 text-[13px] text-[#165DFF]",
-                                                noHoverDevice ? "" : "group/item hover:text-[#335CFF]"
+                                                "flex min-w-0 items-center gap-1 text-[13px] text-blue-500",
+                                                noHoverDevice ? "" : "group/item hover:text-blue-500"
                                             )}
                                         >
                                             <span
                                                 className={cn(
                                                     "mr-2 h-[6px] w-[6px] flex-shrink-0 rounded-full",
-                                                    noHoverDevice ? "bg-[#165DFF]" : "bg-[#C9CDD4] group-hover/item:bg-[#165DFF]"
+                                                    noHoverDevice ? "bg-blue-500" : "bg-[#C9CDD4] group-hover/item:bg-blue-500"
                                                 )}
                                                 aria-hidden
                                             />
@@ -271,7 +272,7 @@ function FeedbackTrigger({ onOpen }: { onOpen: () => void }) {
             <span className="text-[#4E5969]">
                 {localize("com_subscription.unsatisfied_with_crawl_prompt")}
             </span>
-            <span className="font-normal text-[#165DFF]">
+            <span className="font-normal text-blue-500">
                 {localize("com_subscription.submit_manual_crawl_request")}
             </span>
         </button>
@@ -407,7 +408,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                             <Button
                                 onClick={handleAddSource}
                                 disabled={status !== "success" || adding}
-                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-[#165DFF] hover:bg-[#4080FF] border border-[#165DFF] text-white disabled:opacity-50 gap-2 touch-mobile:flex-1"
+                                className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 border border-blue-500 text-white disabled:opacity-50 gap-2 touch-mobile:flex-1"
                             >
                                 {adding && <Loader2 className="size-4 animate-spin" />}
                                 {localize("com_subscription.add_source")}
@@ -426,7 +427,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogAction className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-[#165DFF] hover:bg-[#4080FF]">
+                        <AlertDialogAction className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-blue-500 hover:bg-blue-400">
                             {localize("com_subscription.ok")}
                         </AlertDialogAction>
                     </AlertDialogFooter>
@@ -479,7 +480,7 @@ export function CrawlPreviewDialog({ open, onOpenChange, url, initialPreview }: 
                     <div className="flex justify-end">
                         <Button
                             onClick={() => onOpenChange(false)}
-                            className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-[#165DFF] hover:bg-[#4080FF] text-white"
+                            className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal bg-blue-500 hover:bg-blue-400 text-white"
                         >
                             {localize("com_subscription.ok")}
                         </Button>

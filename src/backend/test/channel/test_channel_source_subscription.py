@@ -21,7 +21,6 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.errcode.channel import InformationSourceSubscriptionLimitError
 from bisheng.common.models.space_channel_member import (
-    ChannelRelationEnum,
     MembershipStatusEnum,
     UserRoleEnum,
 )
@@ -282,7 +281,7 @@ async def test_update_add_subscribes_only_missing():
     )
 
     with (
-        patch(f"{_CS}.resolve_channel_relation", return_value=ChannelRelationEnum.OWNER),
+        patch(f"{_CS}.PermissionService.check", new=AsyncMock(return_value=True)),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.update_channel(
@@ -322,7 +321,7 @@ async def test_update_remove_does_not_unsubscribe():
     )
 
     with (
-        patch(f"{_CS}.resolve_channel_relation", return_value=ChannelRelationEnum.OWNER),
+        patch(f"{_CS}.PermissionService.check", new=AsyncMock(return_value=True)),
         patch(f"{_CS}.get_bisheng_information_client", new=AsyncMock(return_value=info_client)),
     ):
         await service.update_channel(

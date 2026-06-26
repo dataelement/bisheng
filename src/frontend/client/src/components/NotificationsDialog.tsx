@@ -822,12 +822,12 @@ export function NotificationsDialog({
                     </TooltipAnchor>
 
                     {/* Message text */}
-                    <div className={cn("flex min-w-0 flex-1 gap-1 text-[14px]", isTouchMobile ? "flex-col" : "flex-row flex-wrap items-center gap-1", textColor, canOpenApprovalCenter && "transition-colors group-hover:text-[#165dff]")}>
-                        <span className="shrink-0 font-medium hover:text-[#165dff]">@{userName}</span>
+                    <div className={cn("flex min-w-0 flex-1 gap-1 text-[14px]", isTouchMobile ? "flex-col" : "flex-row flex-wrap items-center gap-1", textColor, canOpenApprovalCenter && "transition-colors group-hover:text-blue-500")}>
+                        <span className="shrink-0 font-medium hover:text-blue-500">@{userName}</span>
                         <span className="min-w-0">
                             {!targetSplitMatch && canNavigateTarget && (
                                 <span
-                                    className="font-medium cursor-pointer hover:text-[#165dff]"
+                                    className="font-medium cursor-pointer hover:text-blue-500"
                                     onClick={() => {
                                         console.info("[NotificationsDialog] target click", {
                                             notificationId: notification.id,
@@ -882,7 +882,7 @@ export function NotificationsDialog({
                             )}
                             {targetSplitMatch && canNavigateTarget && (
                                 <span
-                                    className="font-medium cursor-pointer hover:text-[#165dff]"
+                                    className="font-medium cursor-pointer hover:text-blue-500"
                                     onClick={() => {
                                         console.info("[NotificationsDialog] target click", {
                                             notificationId: notification.id,
@@ -1049,7 +1049,7 @@ export function NotificationsDialog({
                                             <TabsTrigger
                                                 value="all"
                                                 className={cn(
-                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-[#335CFF] data-[state=active]:border-[#335CFF] data-[state=active]:bg-transparent data-[state=active]:text-[#335CFF] data-[state=active]:shadow-none",
+                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-blue-500 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-500 data-[state=active]:shadow-none",
                                                 )}
                                             >
                                                 {localize("com_notifications_tab_all")}
@@ -1057,7 +1057,7 @@ export function NotificationsDialog({
                                             <TabsTrigger
                                                 value="request"
                                                 className={cn(
-                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-[#335CFF] data-[state=active]:border-[#335CFF] data-[state=active]:bg-transparent data-[state=active]:text-[#335CFF] data-[state=active]:shadow-none",
+                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-blue-500 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-500 data-[state=active]:shadow-none",
                                                 )}
                                             >
                                                 {localize("com_notifications_tab_request")}
@@ -1079,7 +1079,7 @@ export function NotificationsDialog({
                                                     onClick={() => setOnlyUnread((v) => !v)}
                                                     className={
                                                         onlyUnread
-                                                            ? "h-8 rounded-[6px] border border-transparent bg-[rgba(51,92,255,0.2)] px-3 py-0 text-[14px] font-normal leading-none text-[#335CFF] [backdrop-filter:blur(4px)] hover:bg-[rgba(51,92,255,0.28)] hover:text-[#2236D9] active:translate-y-0"
+                                                            ? "h-8 rounded-[6px] border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-3 py-0 text-[14px] font-normal leading-none text-blue-500 [backdrop-filter:blur(4px)] hover:bg-[rgb(var(--brand-500)/0.28)] hover:text-blue-600 active:translate-y-0"
                                                             : "h-8 rounded-[6px] border border-[#e5e6eb] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] hover:bg-[#f7f8fa] active:translate-y-0"
                                                     }
                                                 >
@@ -1121,7 +1121,7 @@ export function NotificationsDialog({
                                             onClick={() => setOnlyUnread((v) => !v)}
                                             className={
                                                 onlyUnread
-                                                    ? "h-8 shrink-0 rounded-[6px] border border-[#335CFF] bg-[rgba(51,92,255,0.2)] px-4 py-[5px] text-[14px] font-normal text-[#335CFF] [backdrop-filter:blur(8px)]"
+                                                    ? "h-8 shrink-0 rounded-[6px] border border-blue-500 bg-[rgb(var(--brand-500)/0.2)] px-4 py-[5px] text-[14px] font-normal text-blue-500 [backdrop-filter:blur(8px)]"
                                                     : "h-8 shrink-0 rounded-[6px] border border-[#EBECF0] bg-white/50 px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
                                             }
                                         >

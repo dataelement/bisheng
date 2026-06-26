@@ -291,7 +291,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.department_name = department_name_map.get(binding.department_id)
             space.approval_enabled = binding.approval_enabled
             space.sensitive_check_enabled = binding.sensitive_check_enabled
+            space.is_hidden = binding.is_hidden
         return spaces
+
+    async def _populate_root_file_counts(self, spaces: list[KnowledgeSpaceInfoResp]) -> None:
+        """Set file_num to the number of files in each space's ROOT directory.
+
+        The space-list badges only reflect files sitting directly in the space
+        root, not those nested inside sub-folders. Counting is a single batched
+        GROUP BY over every space on the page (no N+1). file_num otherwise
+        defaults to 1 from the schema, which is why the list badges all showed
+        "1" before. Detail (`get_space_info`) and square keep their own
+        whole-space counts and must not call this.
+        """
+        if not spaces:
+            return
+        space_ids = [int(space.id) for space in spaces]
+        count_map = await KnowledgeFileDao.async_count_root_files_batch(space_ids)
+        for space in spaces:
+            space.file_num = count_map.get(int(space.id), 0)
 
     async def _format_accessible_spaces(
         self,
@@ -392,7 +410,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             else:
                 normal_spaces.append(result)
 
-        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
+        ordered = pinned_spaces + normal_spaces
+        await self._populate_root_file_counts(ordered)
+        return await self._decorate_department_metadata(ordered)
 
     async def _require_write_permission(self, space_id: int) -> None:
         """
@@ -1050,6 +1070,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         space_id: int | None = None,
         shared: dict | None = None,
+        include_public_viewer: bool = True,
     ) -> set[str]:
         # F036: request-scoped memo. The /children entry does the same `view_space` evaluation
         # twice (read-permission + view_space checks) and the no-parent branch repeats it; this
@@ -1058,7 +1079,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # duplicates to one. Returned sets are read-only at all call sites; a copy is returned to
         # be defensive against accidental mutation.
         cache = self.__dict__.setdefault("_effective_permission_ids_cache", {})
-        cache_key = (object_type, str(object_id), space_id)
+        cache_key = (object_type, str(object_id), space_id, include_public_viewer)
         if cache_key in cache:
             return set(cache[cache_key])
         # Evaluate permissions across the resource lineage from child -> parent.
@@ -1103,7 +1124,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not (lineage_binding_can_override and matched_lineage_binding):
                     effective_permissions.update(await self._membership_permission_ids(int(lineage_id)))
                 break
-        effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
+        if include_public_viewer:
+            effective_permissions.update(await self._public_space_viewer_permission_ids(lineage))
         cache[cache_key] = set(effective_permissions)
         return effective_permissions
 
@@ -1512,7 +1534,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if member_info.is_active:
                     result.user_role = member_info.user_role
             elif has_content_permission and not self.login_user.is_admin():
-                self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
+                # On a released PUBLIC space every user is synthetically granted view_space
+                # by _public_space_viewer_permission_ids, so has_content_permission alone
+                # cannot distinguish "subscribed" from "merely able to preview from the
+                # square". Mirror get_knowledge_square: only a *real* view_space grant
+                # (ReBAC tuple / membership), not the public-viewer synthesis, counts as
+                # subscribed.
+                real_permissions = await self._get_effective_permission_ids(
+                    "knowledge_space", space_id, include_public_viewer=False
+                )
+                if "view_space" in real_permissions:
+                    self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
             if result.user_role is None and has_content_permission:
                 level = await PermissionService.get_permission_level(
                     user_id=self.login_user.user_id,
@@ -1785,7 +1817,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         is_followed=True,
                     )
                 )
-        return await self._decorate_department_metadata(pinned_spaces + normal_spaces)
+        ordered = pinned_spaces + normal_spaces
+        await self._populate_root_file_counts(ordered)
+        return await self._decorate_department_metadata(ordered)
 
     async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
         members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)

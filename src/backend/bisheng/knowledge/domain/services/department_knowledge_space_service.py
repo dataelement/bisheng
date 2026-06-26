@@ -24,6 +24,7 @@ from bisheng.knowledge.domain.models.department_knowledge_space import (
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
+    DepartmentKnowledgeSpaceVisibilityReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     SPACE_ADMIN_REVOKED_MESSAGE,
@@ -39,7 +40,9 @@ _logger = logging.getLogger(__name__)
 
 class DepartmentKnowledgeSpaceService:
     DEFAULT_AUTH_TYPE = AuthTypeEnum.APPROVAL
-    DEFAULT_IS_RELEASED = True
+    # Department knowledge spaces are not published to the square by default;
+    # admins can opt in per-space via the edit dialog.
+    DEFAULT_IS_RELEASED = False
 
     @classmethod
     def _ensure_super_admin(cls, login_user: UserPayload) -> None:
@@ -445,11 +448,20 @@ class DepartmentKnowledgeSpaceService:
         request: Request,
         login_user: UserPayload,
         order_by: str = "update_time",
+        include_hidden: bool = False,
     ) -> list[KnowledgeSpaceInfoResp]:
+        """Return every department knowledge space for the management surface.
+
+        ``include_hidden`` is False for the "已创建知识空间" list (hidden spaces
+        are dropped) and True for the management dialog (which needs the hidden
+        ones so they can be restored).
+        """
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
         cls._ensure_super_admin(login_user)
         bindings = await DepartmentKnowledgeSpaceDao.aget_all()
+        if not include_hidden:
+            bindings = [binding for binding in bindings if not binding.is_hidden]
         if not bindings:
             return []
 
@@ -459,4 +471,28 @@ class DepartmentKnowledgeSpaceService:
         )
         results = [KnowledgeSpaceInfoResp(**space.model_dump()) for space in spaces]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
+        await svc._populate_root_file_counts(results)
         return await svc._decorate_department_metadata(results)
+
+    @classmethod
+    async def set_spaces_hidden(
+        cls,
+        *,
+        login_user: UserPayload,
+        req: DepartmentKnowledgeSpaceVisibilityReq,
+    ) -> int:
+        """Hide or restore department knowledge spaces (super admin only).
+
+        Only flips the ``is_hidden`` flag on the binding rows. The knowledge
+        spaces, their files and member permissions (OpenFGA tuples / space
+        members) are intentionally left untouched, so hiding is fully
+        reversible. Returns the number of rows whose state actually changed.
+        """
+        cls._ensure_super_admin(login_user)
+        department_ids = [int(dept_id) for dept_id in req.department_ids]
+        if not department_ids:
+            return 0
+        return await DepartmentKnowledgeSpaceDao.aset_hidden_by_department_ids(
+            department_ids,
+            req.is_hidden,
+        )

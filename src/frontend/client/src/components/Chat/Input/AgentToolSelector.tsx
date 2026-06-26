@@ -123,7 +123,7 @@ export default function AgentToolSelector({ availableTools, disabled }: Props) {
               brand-blue once a tool is selected — mirrors the knowledge-space
               selector (ChatKnowledge) so both pickers signal an active selection. */}
           <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-[#165DFF]" : "text-[#4E5969]")} strokeWidth={1.5} />
+            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-600" : "text-[#4E5969]")} strokeWidth={1.5} />
           </div>
           {/* Mobile: collapse to icon + chevron only to save horizontal space. */}
           <span className="text-[14px] font-normal truncate min-w-0 max-w-[min(20vw,60px)] touch-mobile:hidden">

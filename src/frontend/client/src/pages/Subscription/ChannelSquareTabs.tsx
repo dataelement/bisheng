@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
@@ -9,6 +10,10 @@ interface ChannelSquareTabsProps {
     onChannelClick?: () => void;
     onSquareClick?: () => void;
     className?: string;
+    /** "segmented" = PC grey pill toggle. "underline" = H5 text tabs with a blue underline bar. */
+    variant?: "segmented" | "underline";
+    /** Grey out + block interaction (H5: while the channel-switcher dropdown is open). */
+    disabled?: boolean;
 }
 
 /**
@@ -29,6 +34,8 @@ export function ChannelSquareTabs({
     onChannelClick,
     onSquareClick,
     className,
+    variant = "segmented",
+    disabled = false,
 }: ChannelSquareTabsProps) {
     const localize = useLocalize();
 
@@ -36,6 +43,94 @@ export function ChannelSquareTabs({
         { key: "channel", label: localize("com_subscription.tab_channel"), onClick: onChannelClick },
         { key: "square", label: localize("com_subscription.tab_square"), onClick: onSquareClick },
     ];
+
+    // --- Underline-variant sliding indicator (H5) ---
+    // A single blue bar slides between the two tabs. We measure the active tab's
+    // offset/width relative to the row so the bar tracks each label's real width
+    // (robust to longer non-CJK labels). transform+width are animated; the mount
+    // frame is non-animated so the bar appears in place without an entrance slide.
+    const rowRef = useRef<HTMLDivElement>(null);
+    const tabRefs = useRef<Partial<Record<ChannelSquareTab, HTMLButtonElement | null>>>({});
+    const [indicator, setIndicator] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
+    const [animate, setAnimate] = useState(false);
+
+    useLayoutEffect(() => {
+        if (variant !== "underline") return;
+        const row = rowRef.current;
+        const tab = tabRefs.current[active];
+        if (!row || !tab) return;
+        const measure = () => {
+            const r = row.getBoundingClientRect();
+            const t = tab.getBoundingClientRect();
+            setIndicator({ left: t.left - r.left, width: t.width });
+        };
+        measure();
+        // Label width can change with viewport/locale/font load — re-measure on resize.
+        const ro = new ResizeObserver(measure);
+        ro.observe(row);
+        ro.observe(tab);
+        return () => ro.disconnect();
+    }, [variant, active, segments[0].label, segments[1].label]);
+
+    // Enable the slide transition only after the first measured frame has painted.
+    useEffect(() => {
+        if (variant !== "underline") return;
+        const id = requestAnimationFrame(() => setAnimate(true));
+        return () => cancelAnimationFrame(id);
+    }, [variant]);
+
+    // H5 underline tabs — plain text on white, the active label medium-weight #212121,
+    // the inactive label grey/regular. The bar is absolutely positioned below the text
+    // so only the TEXT is vertically centered with the neighbouring header buttons.
+    if (variant === "underline") {
+        return (
+            <div
+                ref={rowRef}
+                className={cn(
+                    "relative flex items-center gap-4 transition-opacity",
+                    disabled && "pointer-events-none opacity-20",
+                    className,
+                )}
+            >
+                {segments.map((seg) => {
+                    const isActive = active === seg.key;
+                    return (
+                        <button
+                            key={seg.key}
+                            ref={(el) => { tabRefs.current[seg.key] = el; }}
+                            type="button"
+                            disabled={disabled}
+                            // Clicking the already-active segment is a no-op.
+                            onClick={() => { if (!isActive) seg.onClick?.(); }}
+                            className="relative flex items-center outline-none"
+                        >
+                            <span
+                                className={cn(
+                                    "text-base leading-6 whitespace-nowrap transition-colors duration-200",
+                                    isActive ? "font-medium text-[#212121]" : "font-normal text-[#C9CDD4]",
+                                )}
+                            >
+                                {seg.label}
+                            </span>
+                        </button>
+                    );
+                })}
+                {/* Single blue bar that slides between the two tabs. */}
+                <span
+                    aria-hidden
+                    className="pointer-events-none absolute -bottom-1.5 left-0 h-0.5 rounded-full bg-blue-500 motion-reduce:transition-none"
+                    style={{
+                        width: indicator.width,
+                        transform: `translateX(${indicator.left}px)`,
+                        opacity: indicator.width ? 1 : 0,
+                        transition: animate
+                            ? "transform 250ms ease-out, width 250ms ease-out"
+                            : "none",
+                    }}
+                />
+            </div>
+        );
+    }
 
     return (
         <div

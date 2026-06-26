@@ -1,7 +1,7 @@
 import React from 'react';
 import { Colored } from 'bisheng-icons';
 import { FileStatus } from '~/api/knowledge';
-import { TxtIcon } from '~/components/icons';
+import { TxtIcon, FolderIcon } from '~/components/icons';
 import { cn } from '~/utils';
 
 const iconSlotClass = 'size-16 shrink-0';
@@ -11,7 +11,7 @@ const wrapperClass = 'flex size-full items-center justify-center';
 // md shares the txt slate-grey palette (FileMd's main fill is #344054 = rgba(52,64,84)).
 // csv shares the xls parrot-green palette (FileCsv mixes #0072FF + #00C650).
 const FILE_TYPE_BG = {
-    folder: 'bg-[linear-gradient(180deg,rgba(240,246,253,0.05)_0%,rgba(0,114,255,0.05)_100%)]',
+    folder: 'bg-[linear-gradient(180deg,rgba(240,246,253,0.05)_0%,rgb(var(--brand-500)/0.05)_100%)]',
     doc: 'bg-[linear-gradient(180deg,rgba(223,238,255,0.05)_0%,rgba(0,114,255,0.05)_100%)]',
     ppt: 'bg-[linear-gradient(180deg,rgba(255,231,233,0.05)_0%,rgba(255,62,76,0.05)_100%)]',
     xls: 'bg-[linear-gradient(180deg,rgba(226,245,234,0.05)_0%,rgba(0,198,80,0.05)_100%)]',
@@ -36,7 +36,7 @@ const EXTENSION_TO_TYPE: Record<string, FileTypeKey> = {
 };
 
 const TYPE_TO_ICON: Record<FileTypeKey, React.ReactNode> = {
-    folder: <Colored.Folder className={iconSlotClass} />,
+    folder: <FolderIcon className={iconSlotClass} />,
     doc: <Colored.FileDoc className={iconSlotClass} />,
     ppt: <Colored.FilePptx className={iconSlotClass} />,
     xls: <Colored.FileXls className={iconSlotClass} />,
@@ -53,7 +53,7 @@ const FileIconRenderer = ({ file, isFolder, iconClassName, thumbBordered, transp
     if (isFolder) {
         return (
             <div className={cn(wrapperClass, bgFor('folder'))}>
-                <Colored.Folder className={iconClassName ?? iconSlotClass} />
+                <FolderIcon className={iconClassName ?? iconSlotClass} />
             </div>
         );
     }

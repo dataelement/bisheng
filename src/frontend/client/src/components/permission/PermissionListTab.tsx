@@ -587,16 +587,16 @@ export function PermissionListTab({
                     key={`${entry.subject_type}-${entry.subject_id}-${index}`}
                     className="flex items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
                   >
-                    <div className="flex w-[200px] shrink-0 items-center gap-2">
+                    <div className="flex w-[200px] min-w-0 shrink items-center gap-2">
                       {entry.subject_type === "user" ? (
-                        <Avatar className="h-8 w-8">
+                        <Avatar className="h-8 w-8 shrink-0">
                           <AvatarName
                             name={displayName}
                             className="text-[14px] font-bold leading-[14px]"
                           />
                         </Avatar>
                       ) : (
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-[#335CFF]">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#EEF2FF] text-blue-500">
                           <Icon className="h-4 w-4" />
                         </span>
                       )}
@@ -633,7 +633,7 @@ export function PermissionListTab({
                                   className={cn(
                                     "rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px]",
                                     active
-                                      ? "bg-[#E6EDFC] text-[#335CFF] data-[highlighted]:bg-[#E6EDFC] data-[highlighted]:text-[#335CFF]"
+                                      ? "bg-blue-500/[0.07] text-blue-500 data-[highlighted]:bg-blue-500/[0.07] data-[highlighted]:text-blue-500"
                                       : "text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]",
                                   )}
                                   onSelect={() => {
@@ -661,7 +661,7 @@ export function PermissionListTab({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       ) : (
-                        <span className="truncate text-[14px] leading-[22px] text-[#999999]">
+                        <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-[#999999]">
                           {getPermissionLabel(entry)}
                         </span>
                       )}

@@ -383,7 +383,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                 type="button"
                                 onClick={handleSend}
                                 disabled={disabled || fileUploading || filesParsing}
-                                className="flex size-8 items-center justify-center rounded-full bg-gradient-to-b from-[#143BFF] to-[#99BCFF] text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="flex size-8 items-center justify-center rounded-full bg-gradient-to-b from-blue-500 to-blue-200 text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40"
                                 aria-label="Send message"
                                 data-testid="send-button"
                             >
@@ -399,7 +399,7 @@ export function TaskModeInput({ conversationId = 'new', disabled = false, onFoll
                                     })
                                 }
                                 disabled={disabled}
-                                className="flex size-8 items-center justify-center rounded-full bg-gradient-to-b from-[#143BFF] to-[#99BCFF] text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40"
+                                className="flex size-8 items-center justify-center rounded-full bg-gradient-to-b from-blue-500 to-blue-200 text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-40"
                                 aria-label={localize('com_linsight_voice_coming_soon')}
                             >
                                 {/* Voice input is a visual placeholder this iteration */}

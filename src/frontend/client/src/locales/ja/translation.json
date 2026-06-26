@@ -629,6 +629,9 @@
   "com_nav_lang_vietnamese": "Tiếng Việt",
   "com_nav_language": "言語",
   "com_nav_language_label": "言語",
+  "com_nav_theme_color": "テーマカラー",
+  "com_nav_theme_color_blue": "ブルー",
+  "com_nav_theme_color_green": "グリーン",
   "com_nav_latex_parsing": "メッセージ内の LaTeX を描画（性能に影響する可能性）",
   "com_nav_log_out": "ログアウト",
   "com_nav_long_audio_warning": "長文は処理に時間がかかります。",
@@ -1062,6 +1065,7 @@
   "com_ui_reset_var": "{{0}} をリセット",
   "com_ui_restart": "再実行",
   "com_ui_result": "結果",
+  "com_ui_retry": "再試行",
   "com_ui_revoke": "取り消し",
   "com_ui_revoke_info": "ユーザーが提供したすべての資格情報を取り消す",
   "com_ui_revoke_key_confirm": "このキーを取り消しますか？",
@@ -1430,6 +1434,12 @@
     "19051": "管理者の最大制限に達しました（最大5人）",
     "19052": "購読チャンネルの最大制限に達しました（最大20チャンネル）",
     "19053": "ナレッジスペースのLLMが設定されていません。先にワークベンチ設定で設定してください"
+  },
+  "com_app": {
+    "center_title": "アプリセンター",
+    "empty_go_explore": "利用したアプリはまだありません。アプリ広場へどうぞ",
+    "explore_more": "さらにアプリを探す",
+    "recent_apps_hint": "最近使用したアプリはすべてここにあります～"
   },
   "com_knowledge": {
     "add_new": "新規追加",
@@ -1914,6 +1924,7 @@
     "no_data": "データなし",
     "no_matching_knowledge_space": "一致するナレッジスペースが見つかりません",
     "no_related_content_please": "関連コンテンツはありません。",
+    "no_subscription_content_you_can": "購読中のコンテンツはありません。次のことができます",
     "no_results": "結果なし",
     "no_original_link": "元のリンクがありません",
     "no_selectable_knowledge_space": "選択可能なナレッジスペースがありません",
@@ -2184,6 +2195,7 @@
   "com_approval_approver_label": "承認者",
   "com_approval_step_submitted": "申請提出",
   "com_approval_step_submitted_desc": "申請が提出されました",
+  "com_approval_back": "戻る",
   "com_approval_my_approval": "承認管理",
   "com_approval_my_approval_desc": "承認が必要なビジネス申請を処理します",
   "com_approval_my_requests_desc": "自分が提出した申請を確認します",

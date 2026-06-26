@@ -68,17 +68,17 @@ export function AgentCard({
   return (
     <div
       className={cn(
-        'group/card relative flex cursor-pointer flex-col overflow-hidden rounded-[6px] border border-solid p-2 transition-all',
+        'group/card relative flex cursor-pointer flex-col overflow-hidden rounded-[12px] border border-solid p-2 transition-all',
         'border-[#ebecf0] border-[0.5px] bg-white fine-pointer:hover:shadow-[0px_2.094px_8.796px_1.047px_rgba(117,145,212,0.12)]',
-        'after:pointer-events-none after:absolute after:inset-0 after:rounded-[6px] after:border after:border-[#335CFF] after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100',
-        'bg-[linear-gradient(123.519deg,_rgb(249,251,254)_0%,_rgb(255,255,255)_50%,_rgb(249,251,254)_100%)]',
+        'after:pointer-events-none after:absolute after:inset-0 after:rounded-[12px] after:border after:border-blue-500 after:opacity-0 after:transition-opacity fine-pointer:group-hover/card:after:opacity-100',
+        'bg-[linear-gradient(135deg,_rgb(var(--brand-500)/0.04)_0%,_rgb(255,255,255)_50%,_rgb(var(--brand-500)/0.04)_100%)]',
       )}
       onClick={() => onStartChat(agent)}
     >
       {/* Header Info */}
       <div className="flex items-start justify-between w-full relative z-10 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <AppAvator className="size-[32px] min-w-[20px] shrink-0 rounded-[4px]" url={agent.logo} id={agent.id as any} flowType={String(agent.flow_type)} />
+          <AppAvator className="size-[32px] min-w-[20px] shrink-0 rounded-[6px]" url={agent.logo} id={agent.id as any} flowType={String(agent.flow_type)} />
           <p className="font-['PingFang_SC'] font-normal leading-[22px] text-[#212121] text-[14px] truncate">
             {agent.name}
           </p>
@@ -96,7 +96,7 @@ export function AgentCard({
             >
               {showPin && isPinned ? (
                 <span
-                  className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#5773B4]"
+                  className="inline-flex size-6 items-center justify-center rounded-[6px] text-[#5C8A77]"
                   aria-label={localize('com_app_unpin_tooltip')}
                 >
                   <Outlined.Pin size={16} className="shrink-0" />
@@ -165,7 +165,7 @@ export function AgentCard({
                     <span className="relative inline-flex size-[18px] items-center justify-center">
                       <Outlined.Pin
                         size={18}
-                        className="absolute shrink-0 text-[#5773B4] transition-opacity fine-pointer:group-hover/pin:opacity-0"
+                        className="absolute shrink-0 text-[#5C8A77] transition-opacity fine-pointer:group-hover/pin:opacity-0"
                       />
                       <Outlined.PinOff
                         size={18}
@@ -185,9 +185,9 @@ export function AgentCard({
         ) : null}
       </div>
 
-      {/* Description — always reserve 3 lines (min-h) so cards keep a uniform
-          height; clamp to 3 lines with ellipsis (not a hard cut). */}
-      <div className="mt-2 min-h-[58.5px] font-['PingFang_SC'] font-normal text-[12px] text-[#a9aeb8] leading-[19.5px] break-words line-clamp-3">
+      {/* Description — fixed 3-line block (h = 3 × leading) so every card keeps a
+          uniform height regardless of text length; clamp to 3 lines with ellipsis. */}
+      <div className="mt-2 h-[58.5px] overflow-hidden font-['PingFang_SC'] font-normal text-[12px] text-[#a9aeb8] leading-[19.5px] break-words line-clamp-3">
         {agent.description || localize('com_app_no_description_placeholder')}
       </div>
 
@@ -235,7 +235,7 @@ export function AgentCard({
               : 'mt-2 block',
           )}
         >
-          <div className="flex h-[28px] w-full min-w-0 items-stretch justify-center gap-1">
+          <div className="flex h-[28px] w-full min-w-0 items-stretch justify-center gap-2">
             {actionButtons}
           </div>
         </div>

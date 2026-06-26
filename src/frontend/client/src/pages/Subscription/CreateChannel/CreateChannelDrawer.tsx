@@ -121,6 +121,13 @@ export function CreateChannelDrawer({
     const [isComposingName, setIsComposingName] = useState(false);
     const [isComposingDesc, setIsComposingDesc] = useState(false);
     const initedChannelIdRef = useRef<string | null>(null);
+    // Re-entrancy guard for the close flow. The unsaved-changes confirm is a
+    // separate Radix overlay stacked over this Sheet; on touch, the tap that
+    // dismisses the confirm can fall through (or both overlays' onOpenChange
+    // can fire) and run handleClose a second time. In edit mode the form is
+    // never "pristine", so that second pass would re-open the confirm — the
+    // visible flash. This flag swallows the duplicate close while one is in flight.
+    const closingRef = useRef(false);
     /** H5：「选择知识空间」下钻层挂载在此容器内，避免与抽屉叠加第二层全屏 Dialog */
     const knowledgePickerHostRef = useRef<HTMLDivElement>(null);
     // v2.5 Module D — owned here so the draft survives across renders of the
@@ -156,6 +163,8 @@ export function CreateChannelDrawer({
     useEffect(() => {
         if (!open) {
             setSyncDraft({ main: { enabled: false, spaces: [] }, subs: [] });
+            // Release the close guard so a freshly reopened drawer can close again.
+            closingRef.current = false;
         }
     }, [open]);
 
@@ -225,6 +234,9 @@ export function CreateChannelDrawer({
 
     const handleClose = async (nextOpen: boolean) => {
         if (!nextOpen) {
+            // A close is already being handled (e.g. confirm dialog is open) —
+            // ignore the duplicate trigger so the confirm can't flash back open.
+            if (closingRef.current) return;
             if (crawlQueue.inProgressCount > 0) {
                 showToast({
                     message: localize("com_subscription.wait_for_crawl_completion"),
@@ -243,6 +255,7 @@ export function CreateChannelDrawer({
                 onOpenChange(false);
                 return;
             }
+            closingRef.current = true;
             const confirmed = await confirm({
                 variant: "destructive",
                 icon: <XIcon className="size-5 shrink-0 text-[#f53f3f]" strokeWidth={2.5} />,
@@ -251,7 +264,11 @@ export function CreateChannelDrawer({
                 cancelText: localize("com_subscription.continue_editing"),
                 confirmText: localize("com_subscription.confirm_close"),
             });
-            if (!confirmed) return;
+            if (!confirmed) {
+                // User chose to keep editing — release the guard for the next close.
+                closingRef.current = false;
+                return;
+            }
             crawlQueue.clear();
             form.resetForm();
             onOpenChange(false);
@@ -507,7 +524,7 @@ export function CreateChannelDrawer({
 
                                                     <RadioGroup.Item
                                                         value={opt.value}
-                                                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                                        className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[#E5E6EB] bg-white data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                                     >
                                                         <RadioGroup.Indicator className="h-1.5 w-1.5 rounded-full bg-white" />
                                                     </RadioGroup.Item>
@@ -766,7 +783,7 @@ export function CreateChannelDrawer({
                                             form.setSubmitting(false);
                                         }
                                     }}
-                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-[#165DFF] px-4 text-[14px] leading-none !font-normal text-white hover:bg-[#4080FF] disabled:opacity-50 touch-mobile:flex-1"
+                                    className="inline-flex h-8 items-center justify-center rounded-[6px] border-none bg-blue-500 px-4 text-[14px] leading-none !font-normal text-white hover:bg-blue-400 disabled:opacity-50 touch-mobile:flex-1"
                                 >
                                     {isEditMode
                                         ? form.submitting ? localize("com_subscription.saving") : localize("com_subscription.save")

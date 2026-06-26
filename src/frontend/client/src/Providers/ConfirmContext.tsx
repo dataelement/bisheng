@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useCallback, useContext, useState } from "react"
+import React, { createContext, useCallback, useContext, useRef, useState } from "react"
 
 import { AlertCircle, Trash2 } from "lucide-react"
 import {
@@ -35,24 +35,45 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
     const localize = useLocalize()
     const [open, setOpen] = useState(false)
     const [options, setOptions] = useState<ConfirmOptions>({})
-    const [resolvePromise, setResolvePromise] = useState<(value: boolean) => void>()
+    // The pending promise resolver and the result chosen by a button. Held in
+    // refs so that every close path — buttons, Esc, overlay — resolves the
+    // promise exactly once. Leaving it on `onOpenChange={setOpen}` (the old
+    // code) meant an Esc/overlay dismissal never resolved, hanging the caller.
+    const resolveRef = useRef<((value: boolean) => void) | null>(null)
+    const resultRef = useRef(false)
+
+    const settle = useCallback(() => {
+        const resolve = resolveRef.current
+        if (!resolve) return
+        resolveRef.current = null
+        resolve(resultRef.current)
+    }, [])
 
     const confirm = useCallback((opts: ConfirmOptions) => {
         setOptions(opts)
+        resultRef.current = false
         setOpen(true)
         return new Promise<boolean>((resolve) => {
-            setResolvePromise(() => resolve)
+            resolveRef.current = resolve
         })
     }, [])
 
     const handleCancel = () => {
+        resultRef.current = false
         setOpen(false)
-        resolvePromise?.(false)
+        settle()
     }
 
     const handleConfirm = () => {
+        resultRef.current = true
         setOpen(false)
-        resolvePromise?.(true)
+        settle()
+    }
+
+    // Esc / overlay / any Radix-driven close: treat as "cancel" and resolve.
+    const handleOpenChange = (next: boolean) => {
+        setOpen(next)
+        if (!next) settle()
     }
 
     const isDestructive = options.variant === "destructive"
@@ -82,7 +103,7 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
     return (
         <ConfirmContext.Provider value={{ confirm }}>
             {children}
-            <AlertDialog open={open} onOpenChange={setOpen}>
+            <AlertDialog open={open} onOpenChange={handleOpenChange}>
                 {/* Screen-centered card (not a mobile bottom-sheet). Mobile: full-width
                     equal buttons. PC: left-aligned title + right-aligned hug buttons. */}
                 <AlertDialogContent

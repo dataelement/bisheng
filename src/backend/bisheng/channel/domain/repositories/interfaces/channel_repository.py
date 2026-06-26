@@ -24,6 +24,17 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
         pass
 
     @abstractmethod
+    async def find_public_recommend_channels(
+        self, user_id: int, candidate_limit: int = 100
+    ) -> List[Tuple[Any, ...]]:
+        """
+        Find released PUBLIC channels for the home-page discovery carousel.
+        Same tuple shape as find_square_channels, restricted to visibility=PUBLIC and
+        capped at candidate_limit (unpaginated). Caller re-sorts by ES article count.
+        """
+        pass
+
+    @abstractmethod
     async def count_square_channels(self, keyword: Optional[str] = None) -> int:
         """Count total released channels matching the keyword filter."""
         pass

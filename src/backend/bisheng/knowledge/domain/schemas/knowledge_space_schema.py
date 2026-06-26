@@ -58,6 +58,10 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         default=None,
         description="Whether department-space uploads require content safety check",
     )
+    is_hidden: bool | None = Field(
+        default=None,
+        description="Whether the department space is hidden from the management list (data preserved)",
+    )
     auto_tag_mode: Literal["library", "custom"] = Field(
         default="library",
         description="Discriminator: 'library' for an admin-managed tag library, 'custom' for a private library backed by user-entered tags.",
@@ -101,6 +105,17 @@ class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
     items: list[DepartmentKnowledgeSpaceBatchItem] = Field(
         default_factory=list,
         description="Department knowledge space batch create items",
+    )
+
+
+class DepartmentKnowledgeSpaceVisibilityReq(BaseModel):
+    department_ids: list[int] = Field(
+        default_factory=list,
+        description="Department ids whose knowledge space visibility is toggled",
+    )
+    is_hidden: bool = Field(
+        ...,
+        description="True hides the department spaces from the management list; False restores them",
     )
 
 

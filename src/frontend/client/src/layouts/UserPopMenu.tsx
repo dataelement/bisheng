@@ -250,6 +250,7 @@ function UserPopMenuDrawer() {
                         ) : null}
                     </div>
 
+
                     <button
                         type="button"
                         className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-1.5 text-left outline-none transition-colors hover:bg-red-50 text-[#f53f3f]"
@@ -471,16 +472,16 @@ function UserPopMenuRail() {
                         <DropdownMenuSubContent className={cn(actionMenuSurfaceClassName, "z-[100] ml-2 min-w-[140px] gap-0 p-2")}>
                             <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('zh-Hans'))}>
                                 <span className={cn(actionMenuLabelClassName, "flex-1")}>中文</span>
-                                {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                                {langcode === 'zh-Hans' && <Check className="ml-2 size-4 text-blue-500" />}
                             </ActionMenuItem>
                             <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('en'))}>
                                 <span className={cn(actionMenuLabelClassName, "flex-1")}>English</span>
-                                {langcode === 'en' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                                {langcode === 'en' && <Check className="ml-2 size-4 text-blue-500" />}
                             </ActionMenuItem>
                             {!window.APP_CONFIG?.disableJa && (
                                 <ActionMenuItem onSelect={runMenuItemSelect(() => changeLang('ja'))}>
                                     <span className={cn(actionMenuLabelClassName, "flex-1")}>日本語</span>
-                                    {langcode === 'ja' && <Check className="ml-2 size-4 text-[#165dff]" />}
+                                    {langcode === 'ja' && <Check className="ml-2 size-4 text-blue-500" />}
                                 </ActionMenuItem>
                             )}
                         </DropdownMenuSubContent>

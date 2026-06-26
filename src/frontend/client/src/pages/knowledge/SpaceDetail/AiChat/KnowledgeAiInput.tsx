@@ -46,7 +46,7 @@ interface KnowledgeAiInputProps {
 const TAG_TEXT_GAP_PX = 4;
 
 /** Tag chip: background #335CFF @ ~35% alpha; label text #212121 */
-const TAG_BG = "#335CFF59";
+const TAG_BG = "rgb(var(--brand-500)/0.35)";
 const TAG_TEXT_CLASS = "text-[#212121]";
 
 export function KnowledgeAiInput({
@@ -352,11 +352,11 @@ export function KnowledgeAiInput({
                                 style={{
                                     boxSizing: "border-box",
                                     backgroundColor: tagDeleteHighlight
-                                        ? "rgba(51, 92, 255, 0.28)"
+                                        ? "rgb(var(--brand-500)/0.28)"
                                         : TAG_BG,
                                     boxShadow: tagDeleteHighlight
-                                        ? "inset 0 0 0 1.5px #335CFF"
-                                        : "inset 0 0 0 1.5px rgba(51, 92, 255, 0)",
+                                        ? "inset 0 0 0 1.5px rgb(var(--brand-500))"
+                                        : "inset 0 0 0 1.5px rgb(var(--brand-500)/0)",
                                 }}
                                 aria-selected={tagDeleteHighlight}
                             >

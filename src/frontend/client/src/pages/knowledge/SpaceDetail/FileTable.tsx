@@ -38,7 +38,7 @@ const renderHighlightedName = (text: string, keyword?: string) => {
     const lowerKw = kw.toLowerCase();
     return parts.map((part, i) =>
         part.toLowerCase() === lowerKw
-            ? <span key={i} className="text-[#3a74e9]">{part}</span>
+            ? <span key={i} className="text-blue-500">{part}</span>
             : part
     );
 };
@@ -183,7 +183,7 @@ const StatusBadge = ({ status, file }: { status: FileStatus; file?: KnowledgeFil
     type Tone = { bg: string; text: string; dot: string };
     const neutralTone: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
     const errorTone: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
-    const infoTone: Tone = { bg: "bg-[#e8f3ff]", text: "text-[#165dff]", dot: "bg-[#165dff]" };
+    const infoTone: Tone = { bg: "bg-blue-50", text: "text-blue-500", dot: "bg-blue-500" };
     const successTone: Tone = { bg: "bg-[#e8ffea]", text: "text-[#00b42a]", dot: "bg-[#00b42a]" };
 
     const wrapWithReason = (node: React.ReactNode) => {
@@ -851,9 +851,9 @@ function FileRow({
     // 每格统一底色 + 同一套 transition，避免固定列用 group-hover、其余列透出 tr:hover 时不同步闪一下
     // F034: 拖拽悬停的目标文件夹整行高亮（比选中态更深的蓝，明确"放到这里"）
     const rowBg = isFolderDragOver
-        ? "bg-[#bcd4ff] transition-colors duration-150"
+        ? "bg-blue-100 transition-colors duration-150"
         : isSelected
-            ? "bg-[#E6EDFC] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
+            ? "bg-blue-500/[0.07] transition-colors duration-150 group-hover:bg-[#F8F8F8]"
             : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
     const {
         isRenaming,
@@ -1074,7 +1074,7 @@ function FileRow({
                     ) : (
                         <>
                             {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
-                                <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
+                                <span className="flex h-5 shrink-0 items-center justify-center rounded bg-blue-50 px-1.5 text-xs font-medium text-blue-500">
                                     {`V${file.version_no}`}
                                 </span>
                             )}
@@ -1082,7 +1082,7 @@ function FileRow({
                                 className={cn(
                                     "text-sm truncate flex-1",
                                     namePreviewable && !isUploadingFolderPlaceholder
-                                        ? "cursor-pointer text-[#212121] hover:text-[#4080FF]"
+                                        ? "cursor-pointer text-[#212121] hover:text-blue-400"
                                         : "cursor-default text-[#999]",
                                     isUploadingFolderPlaceholder && "opacity-50",
                                 )}
@@ -1166,7 +1166,7 @@ function FileRow({
                                             e.stopPropagation();
                                             onEditTags();
                                         }}
-                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-[#4080FF] group-hover:flex"
+                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-blue-400 group-hover:flex"
                                     >
                                         <Outlined.Edit className="size-3.5" />
                                     </button>
@@ -1205,7 +1205,7 @@ function FileRow({
                                             e.stopPropagation();
                                             onEditEncoding?.(file);
                                         }}
-                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-[#4080FF] group-hover:flex"
+                                        className="hidden cursor-pointer items-center justify-center text-[#212121] transition-colors hover:text-blue-400 group-hover:flex"
                                     >
                                         <Outlined.Edit className="size-3.5" />
                                     </button>

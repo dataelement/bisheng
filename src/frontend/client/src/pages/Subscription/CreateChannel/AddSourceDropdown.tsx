@@ -8,7 +8,8 @@ import { cn } from "~/utils";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm } from "~/Providers";
-import { ChannelBookIcon, ChannelLoadingIcon, ChannelRightSmallUpIcon } from "~/components/icons/channels";
+import { ChannelRightSmallUpIcon } from "~/components/icons/channels";
+import { ListWebLinkIllustration, EmptyStateIllustration, CrawlingIllustration } from "~/components/illustrations";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -49,7 +50,7 @@ function WebsiteSourceLink({
                         (e.currentTarget as HTMLElement).click();
                     }
                 }}
-                className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center text-[#165DFF] cursor-pointer opacity-0 transition-opacity group-hover/link:opacity-100"
+                className="ml-0.5 inline-flex size-4 shrink-0 items-center justify-center text-blue-500 cursor-pointer opacity-0 transition-opacity group-hover/link:opacity-100"
             >
                 <ChannelRightSmallUpIcon className="size-4 shrink-0" />
             </button>
@@ -215,7 +216,7 @@ export function AddSourceDropdown({
                                             ) : (
                                                 <span className="truncate">{truncateName(s.name)}</span>
                                             )}
-                                            <span className="ml-2 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]">
+                                            <span className="ml-2 flex-shrink-0 rounded border border-blue-500 px-0.5 text-[11px] text-blue-500">
                                                 {s.type === "official_account" ? localize("com_subscription.official_account") : localize("com_subscription.website")}
                                             </span>
                                         </span>
@@ -305,7 +306,7 @@ export function AddSourceDropdown({
                                     className={cn(
                                         "pb-2 text-[14px] font-medium border-b-2 -mb-px",
                                         mgr.activeTab === "official_account"
-                                            ? "text-[#165DFF] border-[#165DFF]"
+                                            ? "text-blue-500 border-blue-500"
                                             : "text-[#86909C] border-transparent"
                                     )}
                                 >
@@ -317,7 +318,7 @@ export function AddSourceDropdown({
                                     className={cn(
                                         "pb-2 text-[14px] font-medium border-b-2 -mb-px",
                                         mgr.activeTab === "website"
-                                            ? "text-[#165DFF] border-[#165DFF]"
+                                            ? "text-blue-500 border-blue-500"
                                             : "text-[#86909C] border-transparent"
                                     )}
                                 >
@@ -333,10 +334,10 @@ export function AddSourceDropdown({
                     >
                         {mgr.viewMode === "noResultNonUrl" && (
                             <div className="flex min-h-full flex-col items-center justify-center px-4 py-8 text-center">
-                                <div className="mb-4 rounded-full p-3">
-                                    <ChannelBookIcon className="w-[120px] h-[120px] mb-5" />
+                                <div className="mb-4">
+                                    <ListWebLinkIllustration className="mx-auto block w-[120px] h-[120px]" />
                                 </div>
-                                <p className="text-[14px] leading-6 text-[#4E5969] whitespace-pre-line">
+                                <p className="text-[14px] font-normal leading-6 text-[#999999] whitespace-pre-line">
                                     {localize("com_subscription.no_source_collected") ||
                                         localize("com_subscription.source_not_indexed_try_full_url")}
                                 </p>
@@ -345,13 +346,9 @@ export function AddSourceDropdown({
                         {mgr.viewMode === "noResultUrl" && (
                             <div className="flex min-h-full flex-col items-center justify-center px-4 py-8 text-center">
                                 <div className="mb-4">
-                                    <img
-                                        src={`${__APP_ENV__.BASE_URL}/assets/channel/empty.png`}
-                                        alt=""
-                                        className="w-[120px] h-[120px]"
-                                    />
+                                    <EmptyStateIllustration className="mx-auto block w-[120px] h-[120px]" />
                                 </div>
-                                <p className="text-[14px] text-[#4E5969] mb-5">
+                                <p className="text-[14px] font-normal text-[#999999] mb-5">
                                     {localize("com_subscription.website_not_indexed") || localize("com_subscription.website_not_in_database_crawl")}
                                 </p>
                                 <div className="flex gap-3 justify-center">
@@ -372,7 +369,7 @@ export function AddSourceDropdown({
                                             mgr.handleClearSearch();
                                             mgr.setActiveTab("website");
                                         }}
-                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white bg-[#165DFF] hover:bg-[#4080FF]"
+                                        className="h-8 rounded-[6px] min-w-[74px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white bg-blue-500 hover:bg-blue-400"
                                     >
                                         {localize("com_subscription.confirm_crawl")}
                                     </Button>
@@ -382,9 +379,9 @@ export function AddSourceDropdown({
                         {mgr.viewMode === "wechatProcessing" && (
                             <div className="flex min-h-full flex-col items-center justify-center px-4 py-8 text-center">
                                 <div className="mb-4">
-                                    <ChannelLoadingIcon className="w-[120px] h-[120px]" />
+                                    <CrawlingIllustration className="w-[120px] h-[120px]" />
                                 </div>
-                                <p className="text-[14px] text-[#4E5969] mb-5">
+                                <p className="text-[14px] font-normal text-[#999999] mb-5">
                                     {localize("com_subscription.detect_wechat_link") || localize("com_subscription.official_account_link_detected_adding")}
                                 </p>
                                 <Button
@@ -442,7 +439,7 @@ export function AddSourceDropdown({
                                                         )}
                                                         {mgr.isSearchMode && (
                                                             <span
-                                                                className="ml-2 flex-shrink-0 rounded border border-[#165DFF] px-0.5 text-[11px] text-[#165DFF]"
+                                                                className="ml-2 flex-shrink-0 rounded border border-blue-500 px-0.5 text-[11px] text-blue-500"
                                                             >
                                                                 {source.type === "official_account"
                                                                     ? localize("com_subscription.official_account")
@@ -457,7 +454,7 @@ export function AddSourceDropdown({
                                                         <Checkbox
                                                             checked={sel}
                                                             onCheckedChange={() => !dis && mgr.toggleSource(source)}
-                                                            className="rounded border-[#C9CDD4] data-[state=checked]:bg-[#165DFF] data-[state=checked]:border-[#165DFF]"
+                                                            className="rounded border-[#C9CDD4] data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
                                                         />
                                                     </div>
                                                 </div>
@@ -493,7 +490,7 @@ export function AddSourceDropdown({
                                     size="sm"
                                     onClick={mgr.handleConfirm}
                                     disabled={mgr.pendingSources.length === 0}
-                                    className="bg-[#165DFF] h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
+                                    className="bg-blue-500 h-8 rounded-[6px] inline-flex items-center justify-center leading-none text-[14px] !font-normal text-white disabled:opacity-50 disabled:cursor-not-allowed touch-mobile:flex-1"
                                 >
                                     {localize("com_subscription.confirm_add")}
                                 </Button>

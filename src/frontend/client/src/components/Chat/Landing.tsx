@@ -5,9 +5,16 @@ import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { Constants } from '~/types/chat';
 import ConvoStarter from './ConvoStarter';
 
-export default function Landing({ Header, isNew }: {
+export default function Landing({ Header, isNew, hideSubtitle = false }: {
   Header?: ReactNode;
   isNew?: boolean;
+  /**
+   * Hide the welcome subtitle while the input has a mounted knowledge space /
+   * file. The subtitle's vertical footprint (≈46px) is exactly compensated by
+   * the attachment bar growing the input box upward, so the title and input box
+   * stay put (Figma 12841:46839 vs 12841:47077).
+   */
+  hideSubtitle?: boolean;
 }) {
   const { data: bsConfig } = useGetBsConfig();
   const localize = useLocalize();
@@ -36,9 +43,11 @@ export default function Landing({ Header, isNew }: {
             {bsConfig?.welcomeMessage}
           </h2>
         </div>
-        <div className="max-w-lg touch-mobile:max-w-full text-center mt-3 touch-mobile:mt-3 text-sm touch-mobile:text-[13px] font-normal text-gray-500 touch-mobile:text-[#4e5969] leading-relaxed">
-          {bsConfig?.functionDescription}
-        </div>
+        {!hideSubtitle && (
+          <div className="max-w-lg touch-mobile:max-w-full text-center mt-[26px] touch-mobile:mt-3 text-sm touch-mobile:text-[13px] font-normal text-gray-500 touch-mobile:text-[#4e5969] leading-5 touch-mobile:leading-relaxed">
+            {bsConfig?.functionDescription}
+          </div>
+        )}
 
         {/* Conversation starters */}
         {conversation_starters.length > 0 && (

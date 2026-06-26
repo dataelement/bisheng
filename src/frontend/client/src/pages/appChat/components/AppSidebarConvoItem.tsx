@@ -190,7 +190,7 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
                             <X className="h-4 w-4 text-[#4e5969] transition-colors duration-200 ease-in-out fine-pointer:hover:opacity-70" />
                         </button>
                         <button onClick={submitRename}>
-                            <Check className="h-4 w-4 text-[#165dff] transition-colors duration-200 ease-in-out fine-pointer:hover:opacity-70" />
+                            <Check className="h-4 w-4 text-blue-500 transition-colors duration-200 ease-in-out fine-pointer:hover:opacity-70" />
                         </button>
                     </div>
                 </div>

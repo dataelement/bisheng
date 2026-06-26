@@ -632,6 +632,9 @@
   "com_nav_lang_vietnamese": "Tiếng Việt",
   "com_nav_language": "语言切换",
   "com_nav_language_label": "语言",
+  "com_nav_theme_color": "主题色",
+  "com_nav_theme_color_blue": "蓝色",
+  "com_nav_theme_color_green": "绿色",
   "com_nav_latex_parsing": "解析消息中的 LaTeX（可能会影响性能）",
   "com_nav_log_out": "退出登录",
   "com_nav_long_audio_warning": "较长的文本将需要更长时间来处理。",
@@ -1065,6 +1068,7 @@
   "com_ui_reset_var": "重置{{0}}",
   "com_ui_restart": "重新运行",
   "com_ui_result": "结果",
+  "com_ui_retry": "重试",
   "com_ui_revoke": "撤销",
   "com_ui_revoke_info": "撤销所有用户提供的凭据",
   "com_ui_revoke_key_confirm": "您确定要撤销此密钥吗？",
@@ -1433,6 +1437,12 @@
     "19401": "租户配额已用尽，请联系管理员调整配置",
     "19402": "当前角色配额已用尽，请联系管理员调整配置",
     "19403": "当前企业存储配额已耗尽（{{used_gb}}/{{quota_gb}} GB），请联系平台方进行配额扩容"
+  },
+  "com_app": {
+    "center_title": "应用中心",
+    "empty_go_explore": "暂无使用过的应用，可以前往应用广场",
+    "explore_more": "探索更多应用",
+    "recent_apps_hint": "最近使用过的应用都在这里～"
   },
   "com_knowledge": {
     "add_new": "新增",
@@ -1916,6 +1926,7 @@
     "no_data": "暂无数据",
     "no_matching_knowledge_space": "未找到匹配的知识空间",
     "no_related_content_please": "无相关内容，请",
+    "no_subscription_content_you_can": "暂无订阅内容，您可以",
     "no_related_content": "无相关内容",
     "no_results": "无结果",
     "no_original_link": "暂无原文链接",
@@ -2190,6 +2201,7 @@
   "com_approval_approver_label": "审批人",
   "com_approval_step_submitted": "提交申请",
   "com_approval_step_submitted_desc": "申请已提交",
+  "com_approval_back": "返回",
   "com_approval_my_approval": "我的审批",
   "com_approval_my_approval_desc": "处理需要我审批的业务申请",
   "com_approval_my_requests_desc": "查看我发起的审批申请",

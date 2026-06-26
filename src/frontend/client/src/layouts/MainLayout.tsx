@@ -53,10 +53,10 @@ function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, o
           )}
         >
           {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
-            className: cn(showLabel ? 'size-4' : 'size-5', active ? "text-[#335CFF]" : "text-[#818181]"),
+            className: cn(showLabel ? 'size-4' : 'size-5', active ? "text-blue-500" : "text-[#818181]"),
           })}
           {showLabel ? (
-            <span className={cn('text-[14px] leading-[20px]', active ? 'text-[#335CFF]' : 'text-[#212121]')}>
+            <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-[#212121]')}>
               {label}
             </span>
           ) : null}
@@ -281,18 +281,21 @@ function Sidebar({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 items-center">
+      <div className="flex flex-col items-center">
         {!isMobile && showAdminEntry && (
-          <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer">
-            <div
-              title={localize('com_nav_admin_panel')}
-              className="rounded-lg p-3 transition-colors hover:bg-[#f2f3f5]"
-            >
-              <Outlined.DeviceDesktopExchange className="size-5 text-[#818181]" />
-            </div>
-          </a>
+          <>
+            <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer" className="mb-2">
+              <div
+                title={localize('com_nav_admin_panel')}
+                className="rounded-lg p-3 transition-colors hover:bg-[#f2f3f5]"
+              >
+                <Outlined.DeviceDesktopExchange className="size-5 text-[#818181]" />
+              </div>
+            </a>
+            {/* Divider only makes sense alongside the admin-panel entry; hide both together. */}
+            <div className="mb-4 w-full h-px bg-[#ececec]" />
+          </>
         )}
-        <div className="w-full h-px bg-[#ececec]" />
 
         {/* 用户菜单：应用中心抽屉模式展示整行（含右箭头） */}
         <UserPopMenu variant={showExpandedHubSidebar ? 'drawer' : 'rail'} />

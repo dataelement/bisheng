@@ -253,7 +253,7 @@ export function FilterConditionEditor({
                 <>
                     <button
                         type="button"
-                        className="group/btn absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-[26px] text-[12px] leading-[20px] text-[#666] cursor-pointer hover:text-[#165DFF] transition-colors whitespace-nowrap"
+                        className="group/btn absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-[26px] text-[12px] leading-[20px] text-[#666] cursor-pointer hover:text-blue-500 transition-colors whitespace-nowrap"
                         onClick={toggleRelation}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
@@ -266,7 +266,7 @@ export function FilterConditionEditor({
                         <span className="transition-opacity group-hover/btn:opacity-0">
                             {relationLabel}
                         </span>
-                        <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none text-[#165DFF]" />
+                        <RefreshCcw className="absolute size-3.5 opacity-0 group-hover/btn:opacity-100 transition-opacity pointer-events-none text-blue-500" />
                     </button>
                     {/* 连接线（包住所有条件行） */}
                     <div className="pointer-events-none absolute left-[25px] top-[14px] bottom-[14px] w-[9px] rounded-l-[8px] border-l border-y border-[#C9CDD4]" />
@@ -289,7 +289,7 @@ export function FilterConditionEditor({
                                     className={cn(
                                         "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
                                         cond.include
-                                            ? "bg-[#335CFF26] text-[#335CFF] font-medium"
+                                            ? "bg-blue-500/15 text-blue-500 font-medium"
                                             : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
                                     )}
                                 >
@@ -301,7 +301,7 @@ export function FilterConditionEditor({
                                     className={cn(
                                         "whitespace-nowrap rounded-[4px] px-[12px] py-[2px] text-center text-[14px] leading-[22px] transition-colors",
                                         !cond.include
-                                            ? "bg-[#335CFF26] text-[#335CFF] font-medium"
+                                            ? "bg-blue-500/15 text-blue-500 font-medium"
                                             : "bg-transparent text-[#818181] hover:bg-[#F2F3F5]"
                                     )}
                                 >
