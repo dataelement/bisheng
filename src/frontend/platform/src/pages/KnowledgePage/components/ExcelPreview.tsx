@@ -257,10 +257,12 @@ const ExcelPreview = ({ filePath }) => {
           const sheetNames = wb.SheetNames;
           const parsedData: Record<string, any[][]> = {};
           sheetNames.forEach(sheetName => {
-            const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+            const ws = wb.Sheets[sheetName];
+            const aoa = XLSX.utils.sheet_to_json(ws, {
               header: 1,
               defval: "",
             }) as any[][];
+            fillMergedCells(ws, aoa);
             parsedData[sheetName] = cleanData(aoa);
           });
           setExcelData(parsedData);
@@ -336,6 +338,39 @@ const ExcelPreview = ({ filePath }) => {
       console.error("CSV parsing error:", err);
       return [];
     }
+  };
+
+  // ---------------------- 合并单元格填充 ----------------------
+  // SheetJS 解析时只在合并区左上角保留值,被覆盖的单元格为空,导致预览里出现
+  // 空表头(渲染成 undefined/默认列名)。这里用左上角的值填充整个合并区,
+  // 使合并的多列/多行显示相同内容。
+  const fillMergedCells = (worksheet, aoa) => {
+    const merges = worksheet && worksheet["!merges"];
+    if (!Array.isArray(merges) || merges.length === 0) return aoa;
+
+    // sheet_to_json 生成的 aoa 行列索引以表格使用区(!ref)左上角为原点
+    let originRow = 0;
+    let originCol = 0;
+    if (worksheet["!ref"]) {
+      const range = XLSX.utils.decode_range(worksheet["!ref"]);
+      originRow = range.s.r;
+      originCol = range.s.c;
+    }
+
+    merges.forEach(({ s, e }) => {
+      const value = aoa[s.r - originRow]?.[s.c - originCol];
+      if (value === undefined || value === null || value === "") return;
+
+      for (let r = s.r - originRow; r <= e.r - originRow; r++) {
+        if (!aoa[r]) aoa[r] = [];
+        for (let c = s.c - originCol; c <= e.c - originCol; c++) {
+          if (aoa[r][c] === undefined || aoa[r][c] === null || aoa[r][c] === "") {
+            aoa[r][c] = value;
+          }
+        }
+      }
+    });
+    return aoa;
   };
 
   // ---------------------- Data Cleaning Function ----------------------
