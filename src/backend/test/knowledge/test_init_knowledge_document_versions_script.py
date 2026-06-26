@@ -1,5 +1,8 @@
 """Tests for the historical data initialization script."""
+from unittest.mock import AsyncMock
+
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -13,7 +16,8 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_document_ve
     KnowledgeDocumentVersionRepositoryImpl,
 )
 
-# Script entrypoint we are about to build
+# Script under test
+import scripts.init_knowledge_document_versions as script_mod
 from scripts.init_knowledge_document_versions import backfill
 
 
@@ -27,13 +31,20 @@ async def _seed_space(session: AsyncSession, knowledge_id: int, knowledge_type: 
 async def _seed_file(
     session: AsyncSession, *, file_id: int, knowledge_id: int, status: int = 2, file_type: int = 1,
     file_level_path: str | None = None, level: int = 0,
+    object_name: str | None = None, simhash: str | None = None,
 ) -> None:
     kf = KnowledgeFile(
         id=file_id, knowledge_id=knowledge_id, file_name=f"f{file_id}.pdf",
         file_type=file_type, status=status, file_level_path=file_level_path, level=level,
+        object_name=object_name, simhash=simhash,
     )
     session.add(kf)
     await session.commit()
+
+
+async def _get_file(session: AsyncSession, file_id: int) -> KnowledgeFile:
+    result = await session.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id))
+    return result.scalars().first()
 
 
 @pytest.mark.asyncio
@@ -158,3 +169,108 @@ async def test_backfill_respects_folder_path(async_db_session: AsyncSession):
     docs = await doc_repo.find_by_knowledge_id(1)
     assert docs[0].file_level_path == "/10/20"
     assert docs[0].level == 2
+
+
+# ── SimHash backfill ──────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_backfill_computes_simhash_for_parsed_file_without_one(
+    async_db_session: AsyncSession, monkeypatch,
+):
+    await _seed_space(async_db_session, 1)
+    await _seed_file(
+        async_db_session, file_id=100, knowledge_id=1, status=2,
+        object_name="knowledge/1/100.pdf", simhash=None,
+    )
+    fake = AsyncMock(return_value="abcdef0123456789")
+    monkeypatch.setattr(script_mod, "_extract_file_simhash", fake)
+
+    report = await backfill(async_db_session)
+
+    assert report.simhash_computed == 1
+    fake.assert_awaited_once()
+    kf = await _get_file(async_db_session, 100)
+    assert kf.simhash == "abcdef0123456789"
+
+
+@pytest.mark.asyncio
+async def test_backfill_skips_simhash_when_already_present(
+    async_db_session: AsyncSession, monkeypatch,
+):
+    await _seed_space(async_db_session, 1)
+    await _seed_file(
+        async_db_session, file_id=100, knowledge_id=1, status=2,
+        object_name="knowledge/1/100.pdf", simhash="1111111111111111",
+    )
+    fake = AsyncMock(return_value="abcdef0123456789")
+    monkeypatch.setattr(script_mod, "_extract_file_simhash", fake)
+
+    report = await backfill(async_db_session)
+
+    assert report.simhash_computed == 0
+    assert report.simhash_skipped_has_value == 1
+    fake.assert_not_awaited()
+    kf = await _get_file(async_db_session, 100)
+    assert kf.simhash == "1111111111111111"  # untouched
+
+
+@pytest.mark.asyncio
+async def test_backfill_skips_simhash_for_non_success_file(
+    async_db_session: AsyncSession, monkeypatch,
+):
+    await _seed_space(async_db_session, 1)
+    await _seed_file(
+        async_db_session, file_id=100, knowledge_id=1, status=3,  # FAILED
+        object_name="knowledge/1/100.pdf", simhash=None,
+    )
+    fake = AsyncMock(return_value="abcdef0123456789")
+    monkeypatch.setattr(script_mod, "_extract_file_simhash", fake)
+
+    report = await backfill(async_db_session)
+
+    assert report.simhash_computed == 0
+    assert report.simhash_skipped_not_success == 1
+    fake.assert_not_awaited()
+    kf = await _get_file(async_db_session, 100)
+    assert kf.simhash is None
+
+
+@pytest.mark.asyncio
+async def test_backfill_skip_simhash_flag_disables_computation(
+    async_db_session: AsyncSession, monkeypatch,
+):
+    await _seed_space(async_db_session, 1)
+    await _seed_file(
+        async_db_session, file_id=100, knowledge_id=1, status=2,
+        object_name="knowledge/1/100.pdf", simhash=None,
+    )
+    fake = AsyncMock(return_value="abcdef0123456789")
+    monkeypatch.setattr(script_mod, "_extract_file_simhash", fake)
+
+    report = await backfill(async_db_session, compute_simhash=False)
+
+    assert report.simhash_computed == 0
+    fake.assert_not_awaited()
+    kf = await _get_file(async_db_session, 100)
+    assert kf.simhash is None
+
+
+@pytest.mark.asyncio
+async def test_backfill_dry_run_counts_but_does_not_compute_simhash(
+    async_db_session: AsyncSession, monkeypatch,
+):
+    await _seed_space(async_db_session, 1)
+    await _seed_file(
+        async_db_session, file_id=100, knowledge_id=1, status=2,
+        object_name="knowledge/1/100.pdf", simhash=None,
+    )
+    fake = AsyncMock(return_value="abcdef0123456789")
+    monkeypatch.setattr(script_mod, "_extract_file_simhash", fake)
+
+    report = await backfill(async_db_session, dry_run=True)
+
+    assert report.simhash_computed == 1  # would compute one
+    fake.assert_not_awaited()  # but doesn't read files in dry-run
+    kf = await _get_file(async_db_session, 100)
+    assert kf.simhash is None
