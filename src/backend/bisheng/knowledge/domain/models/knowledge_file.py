@@ -641,6 +641,37 @@ class KnowledgeFileDao(KnowledgeFileBase):
         return rows, int(total)
 
     @classmethod
+    async def aget_references_by_knowledge_id(
+            cls,
+            knowledge_id: int,
+            page: Optional[int] = None,
+            page_size: Optional[int] = None,
+    ) -> tuple[List[KnowledgeFile], int]:
+        """查询某收藏库下的引用型收藏记录（file_source=='favorite_reference'），按 id 倒序。
+
+        不传 page 时返回全部记录 + total；传 page/page_size 时返回该页 + total。
+        A5 复用此方法，签名稳定。
+        """
+        filters = [
+            KnowledgeFile.knowledge_id == knowledge_id,
+            KnowledgeFile.file_source == 'favorite_reference',
+        ]
+        count_statement = select(func.count()).where(*filters)
+        statement = (
+            select(KnowledgeFile)
+            .where(*filters)
+            .order_by(col(KnowledgeFile.id).desc())
+        )
+        if page is not None and page_size is not None:
+            safe_page = max(int(page or 1), 1)
+            safe_page_size = max(int(page_size or 1), 1)
+            statement = statement.offset((safe_page - 1) * safe_page_size).limit(safe_page_size)
+        async with get_async_db_session() as session:
+            total = await session.scalar(count_statement) or 0
+            rows = (await session.exec(statement)).all()
+        return rows, int(total)
+
+    @classmethod
     async def acount_by_file_encoding(cls, file_encoding: str, exclude_id: Optional[int] = None) -> int:
         cleaned = (file_encoding or '').strip()
         if not cleaned:

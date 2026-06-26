@@ -2264,68 +2264,59 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 asyncio.set_event_loop(None)
                 loop.close()
 
+    @staticmethod
+    def _favorite_ref_meta(source_space_id: int, source_file_id: int) -> dict:
+        return {'favorite_reference': {'source_space_id': int(source_space_id), 'source_file_id': int(source_file_id)}}
+
+    async def _find_favorite_reference(self, fav_space_id, source_space_id, source_file_id):
+        rows, _ = await KnowledgeFileDao.aget_references_by_knowledge_id(int(fav_space_id))
+        for row in rows:
+            meta = (row.user_metadata or {}).get('favorite_reference') or {}
+            if int(meta.get('source_space_id') or 0) == int(source_space_id) and \
+               int(meta.get('source_file_id') or 0) == int(source_file_id):
+                return row
+        return None
+
+    async def _create_favorite_reference(self, fav_space, source_space, source_file):
+        ref = KnowledgeFile(
+            knowledge_id=int(fav_space.id),
+            user_id=self.login_user.user_id,
+            file_name=source_file.file_name,
+            file_type=source_file.file_type,
+            md5=source_file.md5,
+            status=KnowledgeFileStatus.SUCCESS.value,
+            file_source='favorite_reference',
+            user_metadata=self._favorite_ref_meta(int(source_space.id), int(source_file.id)),
+        )
+        return await KnowledgeFileDao.aadd_file(ref)
+
     async def create_shougang_portal_favorite(
         self,
         req: ShougangPortalFavoriteCreateReq,
     ) -> ShougangPortalFavoriteCreateResp:
         source_space = await KnowledgeDao.aquery_by_id(req.source_space_id)
-        target_space = await KnowledgeDao.aquery_by_id(req.target_space_id)
         if not source_space or source_space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        if not target_space or target_space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
-
         source_file = await KnowledgeFileDao.query_by_id(req.source_file_id)
         source_file = self._ensure_space_file(source_file, req.source_space_id)
-
         await self._require_permission_id(
-            'knowledge_file',
-            req.source_file_id,
-            'view_file',
-            space_id=req.source_space_id,
-        )
-        if await self._get_space_level(req.target_space_id) != KnowledgeSpaceLevelEnum.PERSONAL:
-            raise SpaceInvalidLevelError(msg='Target space must be a personal knowledge space')
-        await self._require_permission_id('knowledge_space', req.target_space_id, 'upload_file')
+            'knowledge_file', req.source_file_id, 'view_file', space_id=req.source_space_id)
 
-        repeat_file = await KnowledgeFileDao.get_repeat_file(
-            req.target_space_id,
-            md5_=source_file.md5,
-            file_name=source_file.file_name,
-        )
-        if repeat_file:
-            raise SpaceFileDuplicateError()
+        fav_space = await self._ensure_favorite_space()
+        existing = await self._find_favorite_reference(
+            int(fav_space.id), req.source_space_id, req.source_file_id)
+        if existing:
+            title = Path(existing.file_name or source_file.file_name or '').stem
+            return ShougangPortalFavoriteCreateResp(
+                favorite_file_id=int(existing.id), space_id=int(fav_space.id),
+                source_space_id=req.source_space_id, source_file_id=req.source_file_id, title=title)
 
-        extra_user_metadata = {
-            'shougang_portal_favorite': {
-                'source_space_id': req.source_space_id,
-                'source_file_id': req.source_file_id,
-            }
-        }
-        copied_file = await asyncio.to_thread(
-            self._copy_shougang_portal_favorite_file,
-            source_file,
-            source_space,
-            target_space,
-            extra_user_metadata,
-        )
-        if not copied_file or not copied_file.id or copied_file.status == KnowledgeFileStatus.FAILED.value:
-            raise KnowledgeFileFailedError()
-
-        await self._initialize_child_resource_permissions(
-            'knowledge_file',
-            int(copied_file.id),
-            'knowledge_space',
-            req.target_space_id,
-        )
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(req.target_space_id)
-
-        title = Path(copied_file.file_name or source_file.file_name or '').stem
+        ref_file = await self._create_favorite_reference(fav_space, source_space, source_file)
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(int(fav_space.id))
+        title = Path(ref_file.file_name or source_file.file_name or '').stem
         return ShougangPortalFavoriteCreateResp(
-            file_id=int(copied_file.id),
-            space_id=req.target_space_id,
-            title=title,
-        )
+            favorite_file_id=int(ref_file.id), space_id=int(fav_space.id),
+            source_space_id=req.source_space_id, source_file_id=req.source_file_id, title=title)
 
     @staticmethod
     def _enum_value(value) -> str:
