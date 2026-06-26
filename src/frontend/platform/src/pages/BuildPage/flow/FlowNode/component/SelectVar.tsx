@@ -32,32 +32,32 @@ const getSpecialVar = ({ obj, group, onlyImg = false }) => {
         case 'item:form_input':
             return obj.value.reduce((res, item) => {
                 const { file_type, file_parse_mode } = item;
-                // F038: file_parse_mode is now an array of strategies (legacy single
-                // string tolerated). Accumulate the union of exposed variables.
+                // F038 (单选 + 变量联动): file_parse_mode is the option's mode array
+                // ([extract] / [extract,ingest] / [keep_raw]); legacy string tolerated.
+                // Expose by the unified rule: path always, image by upload type,
+                // content when parsing, key (temp KB) when ingesting.
                 const modes = Array.isArray(file_parse_mode)
                     ? file_parse_mode
                     : (file_parse_mode ? [file_parse_mode] : []);
+                const isImageCapable = file_type === 'all' || file_type === 'image';
+                const isParse = modes.includes('extract_text');
+                const isIngest = modes.includes('ingest_to_temp_kb');
 
                 const add = (propKey) => res.push({ label: item[propKey], value: item[propKey] });
-                // 文本use key
+                // 文本 / 下拉 use key
                 if (['select', 'text'].includes(item.type)) {
                     !onlyImg && add('key')
                     return res
                 }
-                // 1. 优先处理图片 (这是唯一在 onlyImg=true 时可能被添加的项)
-                // 当模式包含 keep_raw 且类型不为 file 时，包含图片变量
-                if (modes.includes('keep_raw') && file_type !== 'file') {
+                // 图片变量：上传类型含图片即暴露（不看策略）
+                if (isImageCapable && item.image_file) {
                     add('image_file');
                 }
-
-                // 2. 如果只需要图片，此时直接结束本次循环
                 if (onlyImg) return res;
-
-                // 3. 处理文件/文本逻辑 (已隐含 !onlyImg 条件)；多策略并集累加
-                if (modes.includes('ingest_to_temp_kb')) add('key');
-                if (modes.includes('extract_text')) add('file_content');
-                if (modes.includes('keep_raw')) add('file_path');
-                if (modes.length === 0) add('key'); // 兜底：无策略时退回 key
+                // 解析结果（解析时）/ 临时库名（入库时）/ 文件路径（恒暴露）
+                if (isParse && item.file_content) add('file_content');
+                if (isIngest) add('key');
+                if (item.file_path) add('file_path');
 
                 return res;
             }, []);
@@ -235,18 +235,14 @@ const SelectVar = forwardRef(({
                 }
             }
 
-            // Get the parse mode if it exists in this group.
-            // F038: dialog file_parse_mode is a per-kind map {doc,image} (legacy
-            // single string tolerated). Expose variables by the union of kinds.
+            // F038 (单选 + 变量联动): dialog file_parse_mode is a single string
+            // (extract_text / keep_raw); legacy map/array tolerated. Expose by the
+            // unified rule: path always, image by upload type, content when parsing.
             const parseModeRaw = group.params.find(p => p.key === 'file_parse_mode')?.value;
-            const dialogModes = parseModeRaw && typeof parseModeRaw === 'object'
-                ? Object.values(parseModeRaw)
+            const dialogModes = typeof parseModeRaw === 'object' && parseModeRaw !== null
+                ? (Array.isArray(parseModeRaw) ? parseModeRaw : Object.values(parseModeRaw))
                 : (parseModeRaw ? [parseModeRaw] : []);
-            const anyExtract = dialogModes.includes('extract_text');
-            const anyKeepRaw = dialogModes.includes('keep_raw');
-            const imageKeepRaw = typeof parseModeRaw === 'object' && parseModeRaw !== null
-                ? parseModeRaw.image === 'keep_raw'
-                : parseModeRaw === 'keep_raw';
+            const isExtract = dialogModes.includes('extract_text');
 
             group.params = group.params.filter(param => {
                 // HIGHEST PRIORITY: If the parameter does NOT have 'global', keep it (no filtering)
@@ -258,18 +254,15 @@ const SelectVar = forwardRef(({
 
                 // --- INTERNAL LOGIC: Specific to 'inputfile' group variables ---
                 if (group.groupKey === 'inputfile') {
-                    // Parsed text only when some kind extracts
-                    if (key === 'dialog_files_content' && !anyExtract) {
+                    // Parsed text only when the strategy parses
+                    if (key === 'dialog_files_content' && !isExtract) {
                         return false;
                     }
-                    // Raw file paths only when some kind keeps raw
-                    if (key === 'dialog_file_paths' && !anyKeepRaw) {
+                    // Image variable only when the upload type allows images
+                    if (key === 'dialog_image_files' && acceptType === 'file') {
                         return false;
                     }
-                    // Image variable only when the image kind keeps raw and type allows images
-                    if (key === 'dialog_image_files' && (!imageKeepRaw || acceptType === 'file')) {
-                        return false;
-                    }
+                    // dialog_file_paths is always exposed (path 恒暴露) — never filtered
                 }
 
                 // --- GLOBAL FILTER: Only applies if findInputFileOnly is requested ---

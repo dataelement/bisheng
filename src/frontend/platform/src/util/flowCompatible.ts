@@ -226,8 +226,9 @@ const comptibleInput = (node) => {
         })
         node.v = 2
     }
-    // 2 => 3 (F038): regroup dialog params into the v3 layout and migrate
-    // file_parse_mode to the new multi-strategy shapes (dialog map / form array).
+    // 2 => 3 (F038 单选 + 变量联动): regroup dialog params into the v3 layout and
+    // migrate file_parse_mode — dialog stays a single string; form maps each legacy
+    // single value to its fixed option array (see design §4.4).
     if (node.v == 2) {
         const oldParams = node.group_params[0].params;
         const findParam = (key) => oldParams.find(p => p.key === key);
@@ -239,17 +240,26 @@ const comptibleInput = (node) => {
         const imageFiles = findParam('dialog_image_files');
         const formInput = findParam('form_input');
 
-        // Form file items: legacy single-string strategy -> single-element array.
+        // Form file items: legacy single-string strategy -> fixed option array.
+        //  extract_text      -> [extract_text]                       解析(不入库)
+        //  keep_raw          -> [keep_raw]                           不解析
+        //  ingest_to_temp_kb -> [extract_text, ingest_to_temp_kb]    解析(入库) (PRD 原地重命名)
+        const toFormModes = (mode) => {
+            if (Array.isArray(mode)) {
+                // 上一版自由多选数组：归一到最接近的单选项
+                if (mode.includes('ingest_to_temp_kb')) return ['extract_text', 'ingest_to_temp_kb'];
+                if (mode.includes('extract_text')) return ['extract_text'];
+                if (mode.includes('keep_raw')) return ['keep_raw'];
+                return ['extract_text'];
+            }
+            if (mode === 'ingest_to_temp_kb') return ['extract_text', 'ingest_to_temp_kb'];
+            if (mode === 'keep_raw') return ['keep_raw'];
+            return ['extract_text'];
+        };
         if (formInput && Array.isArray(formInput.value)) {
             formInput.value = formInput.value.map((item) => {
                 if (item.type === 'file') {
-                    const mode = item.file_parse_mode;
-                    return {
-                        ...item,
-                        file_parse_mode: Array.isArray(mode)
-                            ? mode
-                            : (mode ? [mode] : ['extract_text']),
-                    };
+                    return { ...item, file_parse_mode: toFormModes(item.file_parse_mode) };
                 }
                 return item;
             });

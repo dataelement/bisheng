@@ -173,6 +173,8 @@
   "uploadFileTypes": "アップロード可能なファイルタイプ",
   "temporaryKnowledgeBase": "一時ナレッジベースに保存します",
   "parseFile": "ファイル内容を解析します",
+  "parseNoIngest": "ファイル内容を解析（一時ナレッジベースに保存しない）",
+  "parseWithIngest": "ファイル内容を解析（一時ナレッジベースに保存）",
   "notParse": "解析せず（元ファイルのまま）",
   "fileParseResult": "ファイル解析結果",
   "filePath": "ファイルパス",

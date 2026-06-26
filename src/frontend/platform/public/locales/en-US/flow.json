@@ -173,6 +173,8 @@
   "uploadFileTypes": "Upload file types",
   "temporaryKnowledgeBase": "Save to temporary knowledge base",
   "parseFile": "Parse file content",
+  "parseNoIngest": "Parse file content (do not save to temporary knowledge base)",
+  "parseWithIngest": "Parse file content (save to temporary knowledge base)",
   "notParse": "Do not parse (raw file)",
   "fileParseResult": "File parsing results",
   "filePath": "File path",

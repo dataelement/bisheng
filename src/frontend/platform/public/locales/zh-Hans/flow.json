@@ -173,6 +173,8 @@
   "uploadFileTypes": "上传文件类型",
   "temporaryKnowledgeBase": "存入临时知识库",
   "parseFile": "解析文件内容",
+  "parseNoIngest": "解析文件内容（不存入临时知识库）",
+  "parseWithIngest": "解析文件内容（存入临时知识库）",
   "notParse": "不解析（原始文件）",
   "fileParseResult": "文件解析结果",
   "filePath": "文件路径",

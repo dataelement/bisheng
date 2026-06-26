@@ -202,16 +202,23 @@ class InputNode(BaseNode):
                 key_value.pop("dialog_file_paths", None)
             return key_value
 
-        # F038: file_parse_mode is now multi-select (dialog per-type map / form array /
-        # legacy string). Expose the union of variables for all selected modes.
-        active, image_keep_raw = self._active_modes(key_info.get("file_parse_mode"))
+        # F038 (单选 + 输出变量联动): a single chosen strategy exposes the *union* of
+        # useful variables, by one unified rule shared by dialog & form (design §4.3):
+        #   - file_path : always (the original file is always retained)
+        #   - image     : when the upload file type allows images (image / all)
+        #   - content   : when the strategy parses (extract_text active)
+        #   - key (temp KB): when the strategy ingests (ingest_to_temp_kb active)
+        active, _ = self._active_modes(key_info.get("file_parse_mode"))
         ret = {}
+        # raw file path — always exposed
+        ret[key_info["file_path"]] = key_value.get(key_info["file_path"], [])
+        # image variable — driven by upload type only, not by the strategy
+        if key_info.get("file_type") in ["image", "all"]:
+            ret[key_info["image_file"]] = key_value.get(key_info["image_file"], [])
+        # parsed content — when the strategy parses
         if ParseModeEnum.EXTRACT_TEXT.value in active:
             ret[key_info["file_content"]] = key_value.get(key_info["file_content"], "")
-        if ParseModeEnum.KEEP_RAW.value in active:
-            ret[key_info["file_path"]] = key_value.get(key_info["file_path"], [])
-            if image_keep_raw and key_info.get("file_type") in ["image", "all"]:
-                ret[key_info["image_file"]] = key_value.get(key_info["image_file"], [])
+        # temp knowledge base key — when the strategy ingests
         if ParseModeEnum.INGEST_TO_KNOWLEDGE_BASE.value in active:
             ret[key_info["key"]] = key_value.get(key_info["key"], [])
         return ret
