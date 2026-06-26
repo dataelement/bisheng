@@ -12,7 +12,7 @@
 | spec.md | ✅ 已评审 | 2026-06-25 用户确认通过（`/sdd-review spec`）。遗留观察：INV-6 豁免论证（B 组全返回）留待 design 给出；详见评审记录。 |
 | design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
 | tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
-| 实现 | 🔲 未开始 | 0 / N 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | T0 ✅ / 15。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -28,7 +28,7 @@
 
 | # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
 |---|---|---|---|---|---|
-| T0 | 登记 F040 到 `feat/2.6.0` 的 release-contract：表1「无新增领域对象 + 新增对外 API `…/unread-counts`」、表3 依赖 F004·F008·F027·F036·F037、**INV-6 例外条款**（per-user 有界且无深翻可全返回，但 N+1 必批量化）、变更历史。**跨 Feature 影响**：T2/T3/T4 改 `channel_service.py`（F026/F031/F037 邻接）仅改计算机制、不改授权/订阅语义（design §6.3） | `features/v2.6.0/release-contract.md` | 治理 | — | 🔲 |
+| T0 | 登记 F040 到 `feat/2.6.0` 的 release-contract：表1「无新增领域对象 + 新增对外 API `…/unread-counts`」、表3 依赖 F004·F008·F027·F036·F037、**INV-6 例外条款**（per-user 有界且无深翻可全返回，但 N+1 必批量化）、变更历史。**跨 Feature 影响**：T2/T3/T4 改 `channel_service.py`（F026/F031/F037 邻接）仅改计算机制、不改授权/订阅语义（design §6.3） | `features/v2.6.0/release-contract.md` | 治理 | — | ✅ |
 
 ### Wave 1 — 后端基础（基础设施，可并行）
 
