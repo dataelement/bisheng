@@ -2708,13 +2708,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         visibility = await asyncio.gather(*(can_view(item) for item in items))
         return [item for item, allowed in zip(items, visibility) if allowed]
 
-    @staticmethod
-    def _paginate_items(items: list[KnowledgeFile], page: int, page_size: int) -> list[KnowledgeFile]:
-        if not page or not page_size:
-            return items
-        start = (page - 1) * page_size
-        return items[start : start + page_size]
-
     async def _scan_visible_child_items(
         self,
         *,
