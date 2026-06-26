@@ -13,6 +13,7 @@
 | design.md | ✅ 已评审 | 2026-06-26 用户确认通过（`/sdd-review design`）。Constitution C1–C7 门禁 PASS；两条 medium（E 组版本 key 定主选项、§7 性能阈值落数字）已闭环。INV-6 豁免论证见 design §3 决策 3。 |
 | tasks.md | ✅ 已拆解 | 2026-06-26 `/sdd-review tasks` LGTM（21 项检查通过；AC 逐条列举、任务原子化 ≤3 文件、前端 Platform/Client 分区、31 条 AC 全覆盖）。15 个任务 / 5 Wave。 |
 | 实现 | ✅ dev 收尾 | T0~T11 全部 ✅（T8a N/A）；T10 静态扫描 ✅、性能压测交 CI；T1b 关单不做、T5方案2 暂缓（D8）。偏差见下方「实际偏差记录」 |
+| code-review | ✅ PASS | 2026-06-26 `/code-review --base feat/2.6.0`（L2 7 维度 + 3 并行专项 agent）。修 2 项：① 频道详情 membership gating 改 `find_membership_split` 取 highest-ACTIVE（修高阶非活跃行遮蔽 ACTIVE 致 fail-closed 误拒，含回归测试）；② 助手 cursor scan `permission_id` 合并一致化。误报已逐一核实（roster 跨租户/前端 resetKey/admin 文件授权均非真 bug）。零新增回归/lint/TS。判定 **PASS** |
 
 ---
 
