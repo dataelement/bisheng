@@ -1,7 +1,7 @@
-# Tasks: F039 ReBAC 读路径性能范式收尾
+# Tasks: F040 ReBAC 读路径性能范式收尾
 
 **关联规格**: [spec.md](./spec.md) · [design.md](./design.md)
-**版本**: v2.6.0（分支 `feat/v2.6.0/039-rebac-read-path-perf-rollout`，基于 `feat/2.6.0`）
+**版本**: v2.6.0（分支 `feat/v2.6.0/040-rebac-read-path-perf-rollout`，基于 `feat/2.6.0`）
 
 ---
 
@@ -28,7 +28,7 @@
 
 | # | 任务 | 产物 | 覆盖 AC | 依赖 | 状态 |
 |---|---|---|---|---|---|
-| T0 | 登记 F039 到 `feat/2.6.0` 的 release-contract：表1「无新增领域对象 + 新增对外 API `…/unread-counts`」、表3 依赖 F004·F008·F027·F036·F037、**INV-6 例外条款**（per-user 有界且无深翻可全返回，但 N+1 必批量化）、变更历史。**跨 Feature 影响**：T2/T3/T4 改 `channel_service.py`（F026/F031/F037 邻接）仅改计算机制、不改授权/订阅语义（design §6.3） | `features/v2.6.0/release-contract.md` | 治理 | — | 🔲 |
+| T0 | 登记 F040 到 `feat/2.6.0` 的 release-contract：表1「无新增领域对象 + 新增对外 API `…/unread-counts`」、表3 依赖 F004·F008·F027·F036·F037、**INV-6 例外条款**（per-user 有界且无深翻可全返回，但 N+1 必批量化）、变更历史。**跨 Feature 影响**：T2/T3/T4 改 `channel_service.py`（F026/F031/F037 邻接）仅改计算机制、不改授权/订阅语义（design §6.3） | `features/v2.6.0/release-contract.md` | 治理 | — | 🔲 |
 
 ### Wave 1 — 后端基础（基础设施，可并行）
 

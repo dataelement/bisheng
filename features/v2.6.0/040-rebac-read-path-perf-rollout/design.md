@@ -1,11 +1,11 @@
-# Design: F039 ReBAC 读路径性能范式收尾
+# Design: F040 ReBAC 读路径性能范式收尾
 
 > **本文档定位 — 现状快照（Why this How）**
 > spec 回答做什么；本文回答**为什么这么实现**：关键决策、运行时不直观的事实、对外契约。
 > 调整原则见 `docs/SDD-Guide.md` §3-§4：实现变化覆盖更新本文，保留"为什么 + 被否方案"。
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)
-**版本**: v2.6.0（分支 `feat/v2.6.0/039-rebac-read-path-perf-rollout`，基于 `feat/2.6.0`）
+**版本**: v2.6.0（分支 `feat/v2.6.0/040-rebac-read-path-perf-rollout`，基于 `feat/2.6.0`）
 **最后更新**: 2026-06-25（初版）
 
 > 下文 file:line 锚点取自 2026-06-25 探查（部分在 `feat/2.6.0-beta4` 工作树测得）；`feat/2.6.0` 基底行号可能略有漂移，**以函数名为准**，实现时按名定位。
@@ -173,7 +173,7 @@
 
 ### 6.3 领域邻接声明（不越界）
 
-F039 仅改"计算/取数机制"，**不**拥有也不改下列 Feature 的语义：F026（频道授权/`space_channel_member` channel 字段）、F031（`channel_info_source` 订阅生命周期）、F033（部门空间授权收敛）、F037（频道权限上下文 helper 的归属）。A 组读频道详情、B 组读部门空间集，均不改其授权/订阅规则。
+F040 仅改"计算/取数机制"，**不**拥有也不改下列 Feature 的语义：F026（频道授权/`space_channel_member` channel 字段）、F031（`channel_info_source` 订阅生命周期）、F033（部门空间授权收敛）、F037（频道权限上下文 helper 的归属）。A 组读频道详情、B 组读部门空间集，均不改其授权/订阅规则。
 
 ---
 

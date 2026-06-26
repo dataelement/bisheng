@@ -1,4 +1,4 @@
-# Feature: F039-rebac-read-path-perf-rollout（ReBAC 读路径性能范式收尾：频道详情 / 空间广场列表 / 工作台列表）
+# Feature: F040-rebac-read-path-perf-rollout（ReBAC 读路径性能范式收尾：频道详情 / 空间广场列表 / 工作台列表）
 
 > **本文档定位 — 纯 What（需求口径，不随代码漂移）**
 > spec 只回答 **做什么 / 验收标准 / 不做什么**。所有 How（上下文复用怎么传、batch_check 怎么拼、cursor 怎么编、fetch-while-filter 循环怎么写）一律写在 [design.md](./design.md) 与 [tasks.md](./tasks.md)。
