@@ -2236,34 +2236,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return again
             raise
 
-    def _copy_shougang_portal_favorite_file(
-        self,
-        source_file: KnowledgeFile,
-        source_space: Knowledge,
-        target_space: Knowledge,
-        extra_user_metadata: Dict,
-    ) -> Optional[KnowledgeFile]:
-        loop: Optional[asyncio.AbstractEventLoop] = None
-        try:
-            asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        try:
-            return file_worker.copy_normal(
-                source_file,
-                source_space,
-                target_space,
-                self.login_user.user_id,
-                extra_user_metadata=extra_user_metadata,
-                target_level=0,
-                target_file_level_path='',
-            )
-        finally:
-            if loop is not None:
-                asyncio.set_event_loop(None)
-                loop.close()
-
     @staticmethod
     def _favorite_ref_meta(source_space_id: int, source_file_id: int) -> dict:
         return {'favorite_reference': {'source_space_id': int(source_space_id), 'source_file_id': int(source_file_id)}}
