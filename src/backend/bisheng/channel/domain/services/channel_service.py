@@ -49,6 +49,7 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     UpdateChannelRequest,
     UpdateMemberRoleRequest,
 )
+from bisheng.channel.domain.services.article_count_cache import ArticleCountCache
 from bisheng.channel.domain.services.article_es_service import ArticleEsService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.channel import (
@@ -1189,21 +1190,26 @@ class ChannelService:
         # 2. Count total matching channels
         total = await self.channel_repository.count_square_channels(keyword=keyword)
 
-        # 3. Map results to response items
-        # To avoid N+1 ES queries, build a batch request
-        batch_requests = []
-        for row in rows:
-            channel = row[0]
-            main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
-            batch_requests.append(
-                {
-                    "source_ids": channel.source_list or [],
-                    "filter_rules": main_rule_groups if main_rule_groups else None,
-                    "include_article_ids": None,
-                }
-            )
+        # 3. Map results to response items.
+        # F040: main article counts come from a short-TTL Redis cache; only the cache
+        # *misses* go to ES (still batched into one msearch), then are written back.
+        # ``article_counts`` stays a list parallel to ``rows``.
+        channels = [row[0] for row in rows]
+        cached_counts = await ArticleCountCache.get_main_counts([c.id for c in channels])
 
-        article_counts = await self.article_es_service.count_articles_batch(batch_requests)
+        miss_indices = [i for i, c in enumerate(channels) if c.id not in cached_counts]
+        miss_requests = [
+            {
+                "source_ids": channels[i].source_list or [],
+                "filter_rules": self._extract_filter_rule_groups(channels[i], channel_type="main") or None,
+                "include_article_ids": None,
+            }
+            for i in miss_indices
+        ]
+        fresh_counts = await self.article_es_service.count_articles_batch(miss_requests) if miss_requests else []
+        fresh_by_index = {idx: (fresh_counts[j] if j < len(fresh_counts) else 0) for j, idx in enumerate(miss_indices)}
+        await ArticleCountCache.set_main_counts({channels[i].id: fresh_by_index[i] for i in miss_indices})
+        article_counts = [cached_counts.get(c.id, fresh_by_index.get(i, 0)) for i, c in enumerate(channels)]
 
         # Collect top 5 source IDs from all channels for the square
         all_needed_source_ids = set()
@@ -1733,13 +1739,18 @@ class ChannelService:
         # 4. Get Subscriber Count
         subscriber_count = await self.space_channel_member_repository.count_channel_members(channel_id=channel_id)
 
-        # 5. Get Article Count
+        # 5. Get Article Count — F040: served from a short-TTL Redis cache (the main
+        # count is user-independent). On miss / Redis down, fall back to a live ES
+        # count and write it back. ``None`` means miss (a cached 0 is a valid hit).
         main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
 
-        article_count = await self.article_es_service.count_articles(
-            source_ids=channel.source_list,
-            filter_rules=main_rule_groups if main_rule_groups else None,
-        )
+        article_count = await ArticleCountCache.get_main_count(channel_id)
+        if article_count is None:
+            article_count = await self.article_es_service.count_articles(
+                source_ids=channel.source_list,
+                filter_rules=main_rule_groups if main_rule_groups else None,
+            )
+            await ArticleCountCache.set_main_count(channel_id, article_count)
 
         # 5b. Per-sub-channel unread counts (sub-channel name → unread) for this user.
         all_read_ids = []
