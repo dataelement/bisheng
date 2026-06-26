@@ -231,12 +231,12 @@ export default function ExplorePlaza() {
                     {loading ? (
                         <div className="flex flex-col items-center gap-3 text-blue-500">
                             <LoadingIcon className="size-20 text-primary" />
-                            <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
+                            <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     ) : loadingMore ? (
                         <div className="flex items-center gap-2 text-blue-500">
                             <LoadingIcon className="size-6 text-primary" />
-                            <span className="text-sm font-['PingFang_SC']">{localize('com_app_explore_loading_more')}</span>
+                            <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     ) : null}
                     {!hasMore && agents.length > 0 && (

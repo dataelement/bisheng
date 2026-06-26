@@ -89,8 +89,11 @@ export function WorkspacePanel({
                         <button type="button" aria-label={localize('com_linsight_back_to_workspace')} className={iconBtn} onClick={onBack}>
                             <Outlined.ArrowLeft className="size-4" />
                         </button>
-                        <span className="min-w-0 flex-1 truncate text-sm text-[#212121]">
-                            {localize('com_linsight_preview_file')}
+                        <span
+                            className="min-w-0 flex-1 truncate text-sm text-[#212121]"
+                            title={previewFile.file_name}
+                        >
+                            {previewFile.file_name || localize('com_linsight_preview_file')}
                         </span>
                         <button type="button" aria-label={localize('com_linsight_download_to_view')} className={iconBtn} onClick={handleDownload}>
                             <Outlined.Download className="size-4" />

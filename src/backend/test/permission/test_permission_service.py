@@ -195,6 +195,47 @@ class TestPermissionServiceCheck:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_fga_connection_error_degrades_to_owner_fallback(self, mock_login_user_normal):
+        """RB-1: an FGA *connection error* during check() degrades to the
+        owner/implicit level (consistent with the `fga is None` branch and
+        list_accessible_ids) rather than a hard deny — so an owner is not locked
+        out of their own resource during an OpenFGA outage."""
+        from bisheng.core.openfga.exceptions import FGAConnectionError
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        fga = MagicMock()
+        fga.check = AsyncMock(side_effect=FGAConnectionError("down"))
+
+        with (
+            patch.object(PermissionService, "_aget_fga", new_callable=AsyncMock, return_value=fga),
+            patch.object(
+                PermissionService, "_evaluate_tenant_gate", new_callable=AsyncMock, return_value=(False, None)
+            ),
+            patch.object(
+                PermissionService,
+                "_get_implicit_permission_level_after_gate",
+                new_callable=AsyncMock,
+                return_value="can_read",
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_cache.PermissionCache.get_check",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
+            result = await PermissionService.check(
+                user_id=2,
+                relation="can_read",
+                object_type="knowledge_space",
+                object_id="101",
+                login_user=mock_login_user_normal,
+            )
+
+        # Old behavior returned False here (hard fail-closed); RB-1 now honors the
+        # owner/implicit level surfaced by the fallback.
+        assert result is True
+
+    @pytest.mark.asyncio
     async def test_check_knowledge_library_accepts_legacy_knowledge_space_tuple(
         self,
         mock_fga,

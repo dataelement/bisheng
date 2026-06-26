@@ -1372,8 +1372,9 @@ class ChannelService:
         if existing_membership:
             existing_membership.status = status
             await self.space_channel_member_repository.update(existing_membership)
+            member_row = existing_membership
         else:
-            await self.space_channel_member_repository.add_member(
+            member_row = await self.space_channel_member_repository.add_member(
                 business_id=req.channel_id,
                 business_type=BusinessTypeEnum.CHANNEL,
                 user_id=login_user.user_id,
@@ -1416,19 +1417,25 @@ class ChannelService:
                     ip_address=get_request_ip(request) if request else None,
                 )
             )
-            if gate_result.decision == "pass":
-                if existing_membership:
-                    existing_membership.status = MembershipStatusEnum.ACTIVE
-                    await self.space_channel_member_repository.update(existing_membership)
+            if gate_result.decision == ApprovalGateDecision.PASS:
+                # Reuse the membership row created/updated above instead of
+                # re-fetching it. The old re-fetch raced a concurrent unsubscribe
+                # (returned None between create and re-fetch → the just-approved
+                # access was silently dropped, no error). member_row is always set
+                # by the create/update block above.
+                if member_row is not None:
+                    member_row.status = MembershipStatusEnum.ACTIVE
+                    await self.space_channel_member_repository.update(member_row)
                 else:
-                    membership = await self.space_channel_member_repository.find_membership(
+                    # Defensive upsert: the row vanished (concurrent unsubscribe);
+                    # recreate it ACTIVE so an approved subscription is never lost.
+                    await self.space_channel_member_repository.add_member(
                         business_id=req.channel_id,
                         business_type=BusinessTypeEnum.CHANNEL,
                         user_id=login_user.user_id,
+                        role=UserRoleEnum.MEMBER,
+                        status=MembershipStatusEnum.ACTIVE,
                     )
-                    if membership:
-                        membership.status = MembershipStatusEnum.ACTIVE
-                        await self.space_channel_member_repository.update(membership)
                 await self.__class__.sync_direct_channel_user_permissions(
                     req.channel_id,
                     login_user.user_id,
