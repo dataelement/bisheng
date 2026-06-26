@@ -47,6 +47,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceCreateDepartmentDeniedError,
     SpaceNameDuplicateError,
     SpaceTenantMismatchError,
+    FavoriteSpaceProtectedError,
 )
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.schemas.api import PageData, PageInfiniteCursorData
@@ -4303,6 +4304,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
+        if getattr(space, "is_favorite", False):
+            raise FavoriteSpaceProtectedError()
         await self._require_permission_id("knowledge_space", space_id, "delete_space")
         child_resources = await self._list_space_child_resources(space_id)
         original_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
@@ -4379,6 +4382,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
+        if getattr(space, "is_favorite", False):
+            raise FavoriteSpaceProtectedError()
 
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 

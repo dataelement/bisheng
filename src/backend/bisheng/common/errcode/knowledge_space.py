@@ -167,3 +167,8 @@ class VersionLinkSourceFileMissingError(BaseErrorCode):
 class KnowledgeSpaceInvalidCursorError(BaseErrorCode):
     Code: int = 18070
     Msg: str = 'Invalid pagination cursor'
+
+
+class FavoriteSpaceProtectedError(BaseErrorCode):
+    Code: int = 18044
+    Msg: str = '『我的收藏』为系统知识库，不可删除或修改'
